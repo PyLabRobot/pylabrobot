@@ -42,7 +42,12 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U16,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
-from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address, HarpPacket, HoiPacket, IpPacket
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
+  Address,
+  HarpPacket,
+  HoiPacket,
+  IpPacket,
+)
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol, Hoi2Action
 from pylabrobot.liquid_handling.standard import (
   Drop,

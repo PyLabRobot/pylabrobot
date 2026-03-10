@@ -338,7 +338,9 @@ class HamiltonInterfaceResolver:
 
     found = sorted(name for name in self.interfaces if self.has_interface(name))
     optional_missing = sorted(
-      name for name, spec in self.interfaces.items() if not spec.required and not self.has_interface(name)
+      name
+      for name, spec in self.interfaces.items()
+      if not spec.required and not self.has_interface(name)
     )
     logger.info("Interfaces: %s", ", ".join(found))
     if optional_missing:
@@ -700,7 +702,9 @@ class HamiltonTCPClient:
     # Controller module is 2, node is client_id, object 65535 for general addressing
     self.client_address = Address(2, response.client_id, 65535)
 
-    logger.info("Connection initialized (Client ID: %s, Address: %s)", self._client_id, self.client_address)
+    logger.info(
+      "Connection initialized (Client ID: %s, Address: %s)", self._client_id, self.client_address
+    )
 
   async def _register_client(self):
     """Register client using Protocol 3."""
@@ -843,7 +847,6 @@ class HamiltonTCPClient:
     self._global_object_addresses = global_objects
     logger.debug("[DISCOVER_GLOBALS] Found %s global objects", len(global_objects))
 
-
   def _parse_registration_response(self, response: RegistrationResponse) -> list[Address]:
     """Parse registration response options to extract object addresses.
 
@@ -958,7 +961,9 @@ class HamiltonTCPClient:
       try:
         if command.source_address is None:
           if self.client_address is None:
-            raise RuntimeError("Backend not initialized - call setup() first to assign client_address")
+            raise RuntimeError(
+              "Backend not initialized - call setup() first to assign client_address"
+            )
           command.source_address = self.client_address
 
         command.sequence_number = self._allocate_sequence_number(command.dest_address)
@@ -995,9 +1000,7 @@ class HamiltonTCPClient:
                 self._type_registries[error_addr] = await intro.build_type_registry(error_addr)
               except Exception:
                 raise RuntimeError(enriched_msg)
-            diagnostic = await intro.diagnose_error(
-              enriched_msg, self._type_registries[error_addr]
-            )
+            diagnostic = await intro.diagnose_error(enriched_msg, self._type_registries[error_addr])
             raise RuntimeError(diagnostic)
           logger.debug(enriched_msg)
           return None
@@ -1066,5 +1069,3 @@ class HamiltonTCPClient:
       "client_id": self._client_id,
       "registry_paths": list(self._registry._objects.keys()),
     }
-
-

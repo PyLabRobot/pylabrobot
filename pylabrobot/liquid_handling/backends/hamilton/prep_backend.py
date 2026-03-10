@@ -9,7 +9,7 @@ Three-layer design:
   (and optionally port) for default TCP settings, or pass a pre-configured
   HamiltonTCPClient for full control.
 
-- **Command dataclasses** (e.g. ``PrepDropTips``, ``MphPickupTips``): Pure wire shapes.
+- **Command dataclasses** (e.g. ``PrepCmd.PrepDropTips``, ``PrepCmd.MphPickupTips``): Pure wire shapes.
   Defined in ``prep_commands.py``; ``@dataclass`` with ``dest: Address`` +
   ``Annotated`` payload fields; ``build_parameters()`` uses ``HoiParams.from_struct(self)``.
 
@@ -28,7 +28,7 @@ import math
 import random
 from typing import List, Optional, overload, Tuple, Union
 
-from pylabrobot.liquid_handling.backends.hamilton.prep_commands import *  # noqa: F401,F403
+from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
@@ -37,6 +37,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
   HamiltonInterfaceResolver,
   InterfaceSpec,
 )
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -69,7 +70,7 @@ logger = logging.getLogger(__name__)
 
 
 def _effective_radius(resource) -> float:
-  """Effective radius for CommonParameters.tube_radius.
+  """Effective radius for PrepCmd.CommonParameters.tube_radius.
 
   For circular wells uses the actual radius; for rectangular wells computes the
   radius of a circle with equivalent area so tube_radius is meaningful to the
@@ -80,15 +81,15 @@ def _effective_radius(resource) -> float:
   return float(resource.get_size_x() / 2)
 
 
-def _build_container_segments(resource) -> list[SegmentDescriptor]:
-  """Derive SegmentDescriptor list from a Well's geometry for liquid-following.
+def _build_container_segments(resource) -> list[PrepCmd.SegmentDescriptor]:
+  """Derive PrepCmd.SegmentDescriptor list from a Well's geometry for liquid-following.
 
   Each segment is a frustum.  The firmware uses area_bottom/area_top to
   interpolate cross-sectional area A(z) within the segment and computes the
   Z-axis following speed as dz/dt = Q / A(z), where Q is volumetric flow rate.
 
   Returns [] when geometry cannot be determined; the firmware then falls back to
-  the tube_radius / cone model in CommonParameters.
+  the tube_radius / cone model in PrepCmd.CommonParameters.
   """
   if not isinstance(resource, Well):
     return []
@@ -115,7 +116,7 @@ def _build_container_segments(resource) -> list[SegmentDescriptor]:
       return dv / (h_hi - h_lo)
 
     return [
-      SegmentDescriptor(
+      PrepCmd.SegmentDescriptor(
         area_top=float(area_at(heights[i + 1])),
         area_bottom=float(area_at(heights[i])),
         height=float(heights[i + 1] - heights[i]),
@@ -124,7 +125,9 @@ def _build_container_segments(resource) -> list[SegmentDescriptor]:
     ]
 
   # Simple geometry: single segment with constant cross-section.
-  return [SegmentDescriptor(area_top=float(area), area_bottom=float(area), height=float(size_z))]
+  return [
+    PrepCmd.SegmentDescriptor(area_top=float(area), area_bottom=float(area), height=float(size_z))
+  ]
 
 
 def _absolute_z_from_well(op, z_air_margin_mm: float = 2.0):
@@ -153,8 +156,8 @@ def _absolute_z_from_well(op, z_air_margin_mm: float = 2.0):
 # =============================================================================
 
 _CHANNEL_INDEX = {
-  0: ChannelIndex.RearChannel,
-  1: ChannelIndex.FrontChannel,
+  0: PrepCmd.ChannelIndex.RearChannel,
+  1: PrepCmd.ChannelIndex.FrontChannel,
 }
 
 # Channel index -> deck waste resource name (PrepDeck: waste_rear, waste_front, waste_mph)
@@ -182,11 +185,11 @@ class PrepBackend(LiquidHandlerBackend):
 
   # Declare known object paths via InterfaceSpec. deck_config required (key positions, traverse height, deck info).
   _INTERFACES: dict[str, InterfaceSpec] = {
-    "mlprep":        InterfaceSpec("MLPrepRoot.MLPrep", True, True),
-    "pipettor":      InterfaceSpec("MLPrepRoot.PipettorRoot.Pipettor", True, True),
-    "coordinator":   InterfaceSpec("MLPrepRoot.ChannelCoordinator", True, True),
-    "deck_config":   InterfaceSpec("MLPrepRoot.MLPrepCalibration.DeckConfiguration", True, True),
-    "mph":           InterfaceSpec("MLPrepRoot.MphRoot.MPH", False, True),
+    "mlprep": InterfaceSpec("MLPrepRoot.MLPrep", True, True),
+    "pipettor": InterfaceSpec("MLPrepRoot.PipettorRoot.Pipettor", True, True),
+    "coordinator": InterfaceSpec("MLPrepRoot.ChannelCoordinator", True, True),
+    "deck_config": InterfaceSpec("MLPrepRoot.MLPrepCalibration.DeckConfiguration", True, True),
+    "mph": InterfaceSpec("MLPrepRoot.MphRoot.MPH", False, True),
     "mlprep_service": InterfaceSpec("MLPrepRoot.MLPrepService", False, True),
   }
 
@@ -233,7 +236,7 @@ class PrepBackend(LiquidHandlerBackend):
       self.client = HamiltonTCPClient(host=host, port=port)
     else:
       raise TypeError("Provide either host or client")
-    self._config: Optional[InstrumentConfig] = None
+    self._config: Optional[PrepCmd.InstrumentConfig] = None
     self._user_traverse_height: Optional[float] = default_traverse_height
     self._resolver = HamiltonInterfaceResolver(self.client, self._INTERFACES)
     self._num_channels: Optional[int] = None
@@ -260,10 +263,10 @@ class PrepBackend(LiquidHandlerBackend):
     """Resolve and return an interface address, lazy on first call. Raises RuntimeError if not found."""
     return await self._resolver.require(name)
 
-  async def get_present_channels(self) -> Optional[Tuple[ChannelIndex, ...]]:
+  async def get_present_channels(self) -> Optional[Tuple[PrepCmd.ChannelIndex, ...]]:
     """Query which channels are present (GetPresentChannels on MLPrepService).
 
-    Maps raw enum values to ChannelIndex: 0=InvalidIndex, 1=FrontChannel,
+    Maps raw enum values to PrepCmd.ChannelIndex: 0=InvalidIndex, 1=FrontChannel,
     2=RearChannel, 3=MPHChannel. Returns None if MLPrepService is unavailable
     or the command fails (caller should use defaults).
     """
@@ -271,11 +274,11 @@ class PrepBackend(LiquidHandlerBackend):
       return None
     try:
       service_addr = await self._require("mlprep_service")
-      resp = await self.client.send_command(PrepGetPresentChannels(dest=service_addr))
+      resp = await self.client.send_command(PrepCmd.PrepGetPresentChannels(dest=service_addr))
       if resp is None or not getattr(resp, "channels", None):
         return None
       present = tuple(
-        ChannelIndex(v) if v in (0, 1, 2, 3) else ChannelIndex.InvalidIndex
+        PrepCmd.ChannelIndex(v) if v in (0, 1, 2, 3) else PrepCmd.ChannelIndex.InvalidIndex
         for v in resp.channels
       )
       return present
@@ -345,12 +348,12 @@ class PrepBackend(LiquidHandlerBackend):
     self.setup_finished = True
 
   async def _run_initialize(self, smart: bool):
-    """Send PrepInitialize to MLPrep (shared by setup)."""
+    """Send PrepCmd.PrepInitialize to MLPrep (shared by setup)."""
     await self.client.send_command(
-      PrepInitialize(
+      PrepCmd.PrepInitialize(
         dest=await self._require("mlprep"),
         smart=smart,
-        tip_drop_params=InitTipDropParameters(
+        tip_drop_params=PrepCmd.InitTipDropParameters(
           default_values=True,
           x_position=287.0,
           rolloff_distance=3,
@@ -359,28 +362,28 @@ class PrepBackend(LiquidHandlerBackend):
       )
     )
 
-  async def _get_hardware_config(self) -> InstrumentConfig:
+  async def _get_hardware_config(self) -> PrepCmd.InstrumentConfig:
     """Aggregate getters: query MLPrep, DeckConfiguration, and MLPrepService for hardware config.
 
     Includes deck/enclosure, deck sites, waste sites, traverse height, and channel
     configuration (num_channels, has_mph) from GetPresentChannels.
     """
     mlprep = await self._require("mlprep")
-    enc_resp = await self.client.send_command(PrepGetIsEnclosurePresent(dest=mlprep))
-    safe_resp = await self.client.send_command(PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await self.client.send_command(PrepGetDefaultTraverseHeight(dest=mlprep))
+    enc_resp = await self.client.send_command(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
+    safe_resp = await self.client.send_command(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
+    height_resp = await self.client.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
     default_traverse_height = float(height_resp.value) if height_resp else None
 
-    deck_bounds: Optional[DeckBounds] = None
-    deck_sites: Tuple[DeckSiteInfo, ...] = ()
-    waste_sites: Tuple[WasteSiteInfo, ...] = ()
+    deck_bounds: Optional[PrepCmd.DeckBounds] = None
+    deck_sites: Tuple[PrepCmd.DeckSiteInfo, ...] = ()
+    waste_sites: Tuple[PrepCmd.WasteSiteInfo, ...] = ()
     deck_addr = await self._require("deck_config")
 
-    bounds_resp = await self.client.send_command(PrepGetDeckBounds(dest=deck_addr))
+    bounds_resp = await self.client.send_command(PrepCmd.PrepGetDeckBounds(dest=deck_addr))
     if bounds_resp:
-      deck_bounds = DeckBounds(
+      deck_bounds = PrepCmd.DeckBounds(
         min_x=bounds_resp.min_x,
         max_x=bounds_resp.max_x,
         min_y=bounds_resp.min_y,
@@ -389,10 +392,10 @@ class PrepBackend(LiquidHandlerBackend):
         max_z=bounds_resp.max_z,
       )
 
-    sites_resp = await self.client.send_command(PrepGetDeckSiteDefinitions(dest=deck_addr))
+    sites_resp = await self.client.send_command(PrepCmd.PrepGetDeckSiteDefinitions(dest=deck_addr))
     if sites_resp and sites_resp.sites:
       deck_sites = tuple(
-        DeckSiteInfo(
+        PrepCmd.DeckSiteInfo(
           id=int(s.id),
           left_bottom_front_x=float(s.left_bottom_front_x),
           left_bottom_front_y=float(s.left_bottom_front_y),
@@ -405,10 +408,10 @@ class PrepBackend(LiquidHandlerBackend):
       )
       logger.debug("Discovered %d deck sites", len(deck_sites))
 
-    waste_resp = await self.client.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
+    waste_resp = await self.client.send_command(PrepCmd.PrepGetWasteSiteDefinitions(dest=deck_addr))
     if waste_resp and waste_resp.sites:
       waste_sites = tuple(
-        WasteSiteInfo(
+        PrepCmd.WasteSiteInfo(
           index=int(s.index),
           x_position=float(s.x_position),
           y_position=float(s.y_position),
@@ -422,14 +425,18 @@ class PrepBackend(LiquidHandlerBackend):
     # Channel configuration (1 vs 2 dual-channel pipettor, 8MPH) from MLPrepService
     present = await self.get_present_channels()
     if present is not None:
-      dual = [c for c in present if c in (ChannelIndex.FrontChannel, ChannelIndex.RearChannel)]
+      dual = [
+        c
+        for c in present
+        if c in (PrepCmd.ChannelIndex.FrontChannel, PrepCmd.ChannelIndex.RearChannel)
+      ]
       num_channels = len(dual)
-      has_mph = ChannelIndex.MPHChannel in present
+      has_mph = PrepCmd.ChannelIndex.MPHChannel in present
     else:
       num_channels = 2
       has_mph = False
 
-    return InstrumentConfig(
+    return PrepCmd.InstrumentConfig(
       deck_bounds=deck_bounds,
       has_enclosure=has_enclosure,
       safe_speeds_enabled=safe_speeds_enabled,
@@ -487,17 +494,19 @@ class PrepBackend(LiquidHandlerBackend):
 
     Uses MLPrep method from introspection: GetIsInitialized(()) -> value: I64.
     Requires MLPrep to be discovered (e.g. after self.client.setup() and
-    _discover_prep_objects()). Call before or after PrepInitialize to test.
+    _discover_prep_objects()). Call before or after PrepCmd.PrepInitialize to test.
     """
-    result = await self.client.send_command(PrepGetIsInitialized(dest=await self._require("mlprep")))
+    result = await self.client.send_command(
+      PrepCmd.PrepGetIsInitialized(dest=await self._require("mlprep"))
+    )
     if result is None:
       return False
     return bool(result.value)
 
-  async def get_tip_and_needle_definitions(self) -> Tuple[TipDefinition, ...]:
+  async def get_tip_and_needle_definitions(self) -> Tuple[PrepCmd.TipDefinition, ...]:
     """Return tip/needle definitions registered on the instrument (GetTipAndNeedleDefinitions, cmd=11)."""
     result = await self.client.send_command(
-      PrepGetTipAndNeedleDefinitions(dest=await self._require("mlprep"))
+      PrepCmd.PrepGetTipAndNeedleDefinitions(dest=await self._require("mlprep"))
     )
     if result is None or not getattr(result, "definitions", None):
       return ()
@@ -505,14 +514,18 @@ class PrepBackend(LiquidHandlerBackend):
 
   async def is_parked(self) -> bool:
     """Query whether MLPrep is parked (IsParked, cmd=34)."""
-    result = await self.client.send_command(PrepIsParked(dest=await self._require("mlprep")))
+    result = await self.client.send_command(
+      PrepCmd.PrepIsParked(dest=await self._require("mlprep"))
+    )
     if result is None:
       return False
     return bool(result.value)
 
   async def is_spread(self) -> bool:
     """Query whether channels are spread (IsSpread, cmd=35). Pipettor commands typically require spread state."""
-    result = await self.client.send_command(PrepIsSpread(dest=await self._require("mlprep")))
+    result = await self.client.send_command(
+      PrepCmd.PrepIsSpread(dest=await self._require("mlprep"))
+    )
     if result is None:
       return False
     return bool(result.value)
@@ -558,32 +571,34 @@ class PrepBackend(LiquidHandlerBackend):
     resolved_final_z = self._resolve_traverse_height(final_z)
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
-    tip_positions: List[TipPositionParameters] = []
+    tip_positions: List[PrepCmd.TipPositionParameters] = []
     for ch in range(self.num_channels):
       if ch not in indexed_ops:
         continue
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "t")
-      params = TipPositionParameters.for_op(
-        _CHANNEL_INDEX[ch], loc, op.resource.get_tip(),
+      params = PrepCmd.TipPositionParameters.for_op(
+        _CHANNEL_INDEX[ch],
+        loc,
+        op.resource.get_tip(),
         z_seek_offset=z_seek_offset,
       )
       tip_positions.append(params)
 
     assert len(set(op.tip for op in ops)) == 1, "All ops must use the same tip type"
     tip = ops[0].tip
-    tip_definition = TipPickupParameters(
+    tip_definition = PrepCmd.TipPickupParameters(
       default_values=False,
       volume=tip.maximal_volume,
       length=tip.total_tip_length - tip.fitting_depth,
-      tip_type=TipTypes.StandardVolume,
+      tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip.has_filter,
       is_needle=False,
       is_tool=False,
     )
 
     await self.client.send_command(
-      PrepPickUpTips(
+      PrepCmd.PrepPickUpTips(
         dest=await self._require("pipettor"),
         tip_positions=tip_positions,
         final_z=resolved_final_z,
@@ -602,7 +617,7 @@ class PrepBackend(LiquidHandlerBackend):
     final_z: Optional[float] = None,
     seek_speed: float = 30.0,
     z_seek_offset: Optional[float] = None,
-    drop_type: TipDropType = TipDropType.FixedHeight,
+    drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
   ):
     """Drop tips.
@@ -631,17 +646,15 @@ class PrepBackend(LiquidHandlerBackend):
     all_trash = all(isinstance(op.resource, Trash) for op in ops)
     all_tip_spots = all(isinstance(op.resource, TipSpot) for op in ops)
     if not (all_trash or all_tip_spots):
-      raise ValueError(
-        "Cannot mix waste (Trash) and tip spots in a single drop_tips call."
-      )
+      raise ValueError("Cannot mix waste (Trash) and tip spots in a single drop_tips call.")
 
     resolved_final_z = self._resolve_traverse_height(final_z)
     roll_off = 3.0 if (all_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
     # Use Stall when dropping to waste so the pipette detects contact before release.
-    resolved_drop_type = TipDropType.Stall if all_trash else drop_type
+    resolved_drop_type = PrepCmd.TipDropType.Stall if all_trash else drop_type
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
-    tip_positions: List[TipDropParameters] = []
+    tip_positions: List[PrepCmd.TipDropParameters] = []
     for ch in range(self.num_channels):
       if ch not in indexed_ops:
         continue
@@ -657,15 +670,17 @@ class PrepBackend(LiquidHandlerBackend):
         loc = self.deck.get_resource(waste_name).get_absolute_location("c", "c", "t")
       else:
         loc = op.resource.get_absolute_location("c", "c", "t") + op.offset
-      params = TipDropParameters.for_op(
-        _CHANNEL_INDEX[ch], loc, tip,
+      params = PrepCmd.TipDropParameters.for_op(
+        _CHANNEL_INDEX[ch],
+        loc,
+        tip,
         z_seek_offset=z_seek_offset,
         drop_type=resolved_drop_type,
       )
       tip_positions.append(params)
 
     await self.client.send_command(
-      PrepDropTips(
+      PrepCmd.PrepDropTips(
         dest=await self._require("pipettor"),
         tip_positions=tip_positions,
         final_z=resolved_final_z,
@@ -727,22 +742,22 @@ class PrepBackend(LiquidHandlerBackend):
     ref_spot = spots[0]
     tip = ref_spot.get_tip()
     loc = ref_spot.get_absolute_location("c", "c", "t")
-    tip_parameters = TipPositionParameters.for_op(
-      ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
+    tip_parameters = PrepCmd.TipPositionParameters.for_op(
+      PrepCmd.ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
     )
 
-    tip_definition = TipPickupParameters(
+    tip_definition = PrepCmd.TipPickupParameters(
       default_values=False,
       volume=tip.maximal_volume,
       length=tip.total_tip_length - tip.fitting_depth,
-      tip_type=TipTypes.StandardVolume,
+      tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip.has_filter,
       is_needle=False,
       is_tool=False,
     )
 
     await self.client.send_command(
-      MphPickupTips(
+      PrepCmd.MphPickupTips(
         dest=await self._require("mph"),
         tip_parameters=tip_parameters,
         final_z=resolved_final_z,
@@ -761,7 +776,7 @@ class PrepBackend(LiquidHandlerBackend):
     final_z: Optional[float] = None,
     seek_speed: float = 30.0,
     z_seek_offset: Optional[float] = None,
-    drop_type: TipDropType = TipDropType.FixedHeight,
+    drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
   ) -> None:
     """Drop tips held by the MPH head.
@@ -794,14 +809,16 @@ class PrepBackend(LiquidHandlerBackend):
     ref_spot = spots[0]
     tip = ref_spot.get_tip()
     loc = ref_spot.get_absolute_location("c", "c", "t")
-    drop_parameters = TipDropParameters.for_op(
-      ChannelIndex.MPHChannel, loc, tip,
+    drop_parameters = PrepCmd.TipDropParameters.for_op(
+      PrepCmd.ChannelIndex.MPHChannel,
+      loc,
+      tip,
       z_seek_offset=z_seek_offset,
       drop_type=drop_type,
     )
 
     await self.client.send_command(
-      MphDropTips(
+      PrepCmd.MphDropTips(
         dest=await self._require("mph"),
         drop_parameters=drop_parameters,
         final_z=resolved_final_z,
@@ -823,13 +840,15 @@ class PrepBackend(LiquidHandlerBackend):
     prewet_volume: Optional[List[float]] = None,
     z_minimum: Optional[List[float]] = None,
     z_bottom_search_offset: Optional[List[float]] = None,
-    monitoring_mode: MonitoringMode = MonitoringMode.MONITORING,
+    monitoring_mode: PrepCmd.MonitoringMode = PrepCmd.MonitoringMode.MONITORING,
     use_lld: bool = False,
-    lld: Optional[LldParameters] = None,
-    p_lld: Optional[PLldParameters] = None,
-    c_lld: Optional[CLldParameters] = None,
-    tadm: Optional[TadmParameters] = None,
-    container_segments: Optional[List[List[SegmentDescriptor]]] = None, # TODO: Doesn't work with No LLD
+    lld: Optional[PrepCmd.LldParameters] = None,
+    p_lld: Optional[PrepCmd.PLldParameters] = None,
+    c_lld: Optional[PrepCmd.CLldParameters] = None,
+    tadm: Optional[PrepCmd.TadmParameters] = None,
+    container_segments: Optional[
+      List[List[PrepCmd.SegmentDescriptor]]
+    ] = None,  # TODO: Doesn't work with No LLD
     auto_container_geometry: bool = False,
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
@@ -865,11 +884,11 @@ class PrepBackend(LiquidHandlerBackend):
       p_lld: Pressure LLD parameters (LLD variants only).
       c_lld: Capacitive LLD parameters (LLD variants only).
       tadm: TADM parameters (TADM variants only).  Firmware defaults when None.
-      container_segments: Per-channel SegmentDescriptor lists for liquid following.
+      container_segments: Per-channel PrepCmd.SegmentDescriptor lists for liquid following.
         If None and auto_container_geometry=True, derived from well geometry.
       auto_container_geometry: Automatically build container segments from the
         well's cross-section geometry.  Pass False to use empty segments
-        (firmware falls back to the CommonParameters cone model).
+        (firmware falls back to the PrepCmd.CommonParameters cone model).
       hamilton_liquid_classes: None = defaults per op via get_star_liquid_class (same as STAR).
         Else list of Hamilton liquid classes, one per op; length must match len(ops), no None in list.
       disable_volume_correction: Per-op flag to skip volume correction. When None, treated as [False]*n.
@@ -878,7 +897,7 @@ class PrepBackend(LiquidHandlerBackend):
 
       await backend.aspirate(ops, [0], z_final=[95.0], settling_time=[2.0])
       await backend.aspirate(ops, [0], use_lld=True)
-      await backend.aspirate(ops, [0], monitoring_mode=MonitoringMode.TADM)
+      await backend.aspirate(ops, [0], monitoring_mode=PrepCmd.MonitoringMode.TADM)
     """
     assert len(ops) == len(use_channels)
     if use_channels:
@@ -908,7 +927,9 @@ class PrepBackend(LiquidHandlerBackend):
         )
         for op in ops
       ]
-    disable_volume_correction = disable_volume_correction if disable_volume_correction is not None else [False] * n
+    disable_volume_correction = (
+      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    )
     if len(disable_volume_correction) != n:
       raise ValueError(
         f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
@@ -917,9 +938,15 @@ class PrepBackend(LiquidHandlerBackend):
 
     # Default lists from HLC (fallbacks when HLC is None)
     default_settling = [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs]
-    default_transport_air_volume = [hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs]
-    default_z_liquid_exit_speed = [hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
-    default_prewet_volume = [hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs]
+    default_transport_air_volume = [
+      hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    default_z_liquid_exit_speed = [
+      hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs
+    ]
+    default_prewet_volume = [
+      hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
     settling_time = fill_in_defaults(settling_time, default_settling)
     transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air_volume)
     z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_liquid_exit_speed)
@@ -955,10 +982,12 @@ class PrepBackend(LiquidHandlerBackend):
     z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
     z_air = fill_in_defaults(z_air, default_z_air)
     z_final = fill_in_defaults(z_final, default_z_final)
-    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bottom_search_offset)
+    z_bottom_search_offset = fill_in_defaults(
+      z_bottom_search_offset, default_z_bottom_search_offset
+    )
 
     # Build per-channel segment lists.
-    ch_segments: dict[int, list[SegmentDescriptor]] = {}
+    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
     for i, ch in enumerate(use_channels):
       if container_segments is not None and i < len(container_segments):
         ch_segments[ch] = container_segments[i]
@@ -967,14 +996,14 @@ class PrepBackend(LiquidHandlerBackend):
       else:
         ch_segments[ch] = []
 
-    _p_lld = p_lld or PLldParameters.default()
-    _c_lld = c_lld or CLldParameters.default()
-    _tadm = tadm or TadmParameters.default()
+    _p_lld = p_lld or PrepCmd.PLldParameters.default()
+    _c_lld = c_lld or PrepCmd.CLldParameters.default()
+    _tadm = tadm or PrepCmd.TadmParameters.default()
 
-    params_lld_mon: List[AspirateParametersLldAndMonitoring2] = []
-    params_lld_tadm: List[AspirateParametersLldAndTadm2] = []
-    params_nolld_mon: List[AspirateParametersNoLldAndMonitoring2] = []
-    params_nolld_tadm: List[AspirateParametersNoLldAndTadm2] = []
+    params_lld_mon: List[PrepCmd.AspirateParametersLldAndMonitoring2] = []
+    params_lld_tadm: List[PrepCmd.AspirateParametersLldAndTadm2] = []
+    params_nolld_mon: List[PrepCmd.AspirateParametersNoLldAndMonitoring2] = []
+    params_nolld_tadm: List[PrepCmd.AspirateParametersNoLldAndTadm2] = []
 
     for ch in range(self.num_channels):
       if ch not in indexed_ops:
@@ -983,7 +1012,7 @@ class PrepBackend(LiquidHandlerBackend):
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
-      asp = AspirateParameters.for_op(
+      asp = PrepCmd.AspirateParameters.for_op(
         loc,
         op,
         prewet_volume=prewet_volume[idx],
@@ -999,7 +1028,7 @@ class PrepBackend(LiquidHandlerBackend):
 
       if effective_lld and lld is None:
         top_of_well_z = well_geometry[idx][2]
-        _lld = LldParameters(
+        _lld = PrepCmd.LldParameters(
           default_values=False,
           z_seek=top_of_well_z,
           z_seek_speed=0.0,
@@ -1007,9 +1036,9 @@ class PrepBackend(LiquidHandlerBackend):
           z_out_of_liquid=0.0,
         )
       else:
-        _lld = lld or LldParameters.default()
+        _lld = lld or PrepCmd.LldParameters.default()
 
-      common = CommonParameters.for_op(
+      common = PrepCmd.CommonParameters.for_op(
         volumes[idx],
         radius,
         flow_rate=flow_rates[idx],
@@ -1019,66 +1048,88 @@ class PrepBackend(LiquidHandlerBackend):
         transport_air_volume=transport_air_volume[idx],
         settling_time=settling_time[idx],
       )
-      no_lld = NoLldParameters.for_fixed_z(z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch)
+      no_lld = PrepCmd.NoLldParameters.for_fixed_z(
+        z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch
+      )
 
-      if effective_lld and monitoring_mode == MonitoringMode.TADM:
-        params_lld_tadm.append(AspirateParametersLldAndTadm2(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          aspirate=asp,
-          container_description=segs,
-          common=common,
-          lld=_lld, p_lld=_p_lld, c_lld=_c_lld,
-          mix=MixParameters.default(),
-          tadm=_tadm,
-          adc=AdcParameters.default(),
-        ))
+      if effective_lld and monitoring_mode == PrepCmd.MonitoringMode.TADM:
+        params_lld_tadm.append(
+          PrepCmd.AspirateParametersLldAndTadm2(
+            default_values=False,
+            channel=_CHANNEL_INDEX[ch],
+            aspirate=asp,
+            container_description=segs,
+            common=common,
+            lld=_lld,
+            p_lld=_p_lld,
+            c_lld=_c_lld,
+            mix=PrepCmd.MixParameters.default(),
+            tadm=_tadm,
+            adc=PrepCmd.AdcParameters.default(),
+          )
+        )
       elif effective_lld:
-        params_lld_mon.append(AspirateParametersLldAndMonitoring2(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          aspirate=asp,
-          container_description=segs,
-          common=common,
-          lld=_lld, p_lld=_p_lld, c_lld=_c_lld,
-          mix=MixParameters.default(),
-          aspirate_monitoring=AspirateMonitoringParameters.default(),
-          adc=AdcParameters.default(),
-        ))
-      elif monitoring_mode == MonitoringMode.TADM:
-        params_nolld_tadm.append(AspirateParametersNoLldAndTadm2(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          aspirate=asp,
-          container_description=segs,
-          common=common,
-          no_lld=no_lld,
-          mix=MixParameters.default(),
-          adc=AdcParameters.default(),
-          tadm=_tadm,
-        ))
+        params_lld_mon.append(
+          PrepCmd.AspirateParametersLldAndMonitoring2(
+            default_values=False,
+            channel=_CHANNEL_INDEX[ch],
+            aspirate=asp,
+            container_description=segs,
+            common=common,
+            lld=_lld,
+            p_lld=_p_lld,
+            c_lld=_c_lld,
+            mix=PrepCmd.MixParameters.default(),
+            aspirate_monitoring=PrepCmd.AspirateMonitoringParameters.default(),
+            adc=PrepCmd.AdcParameters.default(),
+          )
+        )
+      elif monitoring_mode == PrepCmd.MonitoringMode.TADM:
+        params_nolld_tadm.append(
+          PrepCmd.AspirateParametersNoLldAndTadm2(
+            default_values=False,
+            channel=_CHANNEL_INDEX[ch],
+            aspirate=asp,
+            container_description=segs,
+            common=common,
+            no_lld=no_lld,
+            mix=PrepCmd.MixParameters.default(),
+            adc=PrepCmd.AdcParameters.default(),
+            tadm=_tadm,
+          )
+        )
       else:
-        params_nolld_mon.append(AspirateParametersNoLldAndMonitoring2(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          aspirate=asp,
-          container_description=segs,
-          common=common,
-          no_lld=no_lld,
-          mix=MixParameters.default(),
-          adc=AdcParameters.default(),
-          aspirate_monitoring=AspirateMonitoringParameters.default(),
-        ))
+        params_nolld_mon.append(
+          PrepCmd.AspirateParametersNoLldAndMonitoring2(
+            default_values=False,
+            channel=_CHANNEL_INDEX[ch],
+            aspirate=asp,
+            container_description=segs,
+            common=common,
+            no_lld=no_lld,
+            mix=PrepCmd.MixParameters.default(),
+            adc=PrepCmd.AdcParameters.default(),
+            aspirate_monitoring=PrepCmd.AspirateMonitoringParameters.default(),
+          )
+        )
 
     dest = await self._require("pipettor")
-    if effective_lld and monitoring_mode == MonitoringMode.TADM:
-      await self.client.send_command(PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lld_tadm))
+    if effective_lld and monitoring_mode == PrepCmd.MonitoringMode.TADM:
+      await self.client.send_command(
+        PrepCmd.PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lld_tadm)
+      )
     elif effective_lld:
-      await self.client.send_command(PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lld_mon))
-    elif monitoring_mode == MonitoringMode.TADM:
-      await self.client.send_command(PrepAspirateTadmV2(dest=dest, aspirate_parameters=params_nolld_tadm))
+      await self.client.send_command(
+        PrepCmd.PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lld_mon)
+      )
+    elif monitoring_mode == PrepCmd.MonitoringMode.TADM:
+      await self.client.send_command(
+        PrepCmd.PrepAspirateTadmV2(dest=dest, aspirate_parameters=params_nolld_tadm)
+      )
     else:
-      await self.client.send_command(PrepAspirateNoLldMonitoringV2(dest=dest, aspirate_parameters=params_nolld_mon))
+      await self.client.send_command(
+        PrepCmd.PrepAspirateNoLldMonitoringV2(dest=dest, aspirate_parameters=params_nolld_mon)
+      )
 
   async def dispense(
     self,
@@ -1095,10 +1146,10 @@ class PrepBackend(LiquidHandlerBackend):
     z_minimum: Optional[List[float]] = None,
     z_bottom_search_offset: Optional[List[float]] = None,
     use_lld: bool = False,
-    lld: Optional[LldParameters] = None,
-    c_lld: Optional[CLldParameters] = None,
-    container_segments: Optional[List[List[SegmentDescriptor]]] = None,
-    auto_container_geometry: bool = False, # TODO: Doesn't work with no LLD
+    lld: Optional[PrepCmd.LldParameters] = None,
+    c_lld: Optional[PrepCmd.CLldParameters] = None,
+    container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
+    auto_container_geometry: bool = False,  # TODO: Doesn't work with no LLD
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
   ):
@@ -1128,7 +1179,7 @@ class PrepBackend(LiquidHandlerBackend):
       use_lld: Enable LLD dispense variant.  Also activated if ``lld`` is set.
       lld: LLD seek parameters. When None and use_lld=True, built from labware geometry.
       c_lld: Capacitive LLD parameters (LLD variant only).
-      container_segments: Per-channel SegmentDescriptor lists for liquid following.
+      container_segments: Per-channel PrepCmd.SegmentDescriptor lists for liquid following.
       auto_container_geometry: Automatically build container segments from well geometry.
       hamilton_liquid_classes: None = defaults per op via get_star_liquid_class (same as STAR).
         Else list of Hamilton liquid classes, one per op; length must match len(ops), no None in list.
@@ -1167,7 +1218,9 @@ class PrepBackend(LiquidHandlerBackend):
         )
         for op in ops
       ]
-    disable_volume_correction = disable_volume_correction if disable_volume_correction is not None else [False] * n
+    disable_volume_correction = (
+      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    )
     if len(disable_volume_correction) != n:
       raise ValueError(
         f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
@@ -1176,10 +1229,18 @@ class PrepBackend(LiquidHandlerBackend):
 
     # Default lists from HLC (fallbacks when HLC is None)
     default_settling = [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs]
-    default_transport_air_volume = [hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs]
-    default_z_liquid_exit_speed = [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
-    default_stop_back_volume = [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs]
-    default_cutoff_speed = [hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs]
+    default_transport_air_volume = [
+      hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    default_z_liquid_exit_speed = [
+      hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs
+    ]
+    default_stop_back_volume = [
+      hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    default_cutoff_speed = [
+      hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs
+    ]
     settling_time = fill_in_defaults(settling_time, default_settling)
     transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air_volume)
     z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_liquid_exit_speed)
@@ -1212,9 +1273,11 @@ class PrepBackend(LiquidHandlerBackend):
     z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
     z_air = fill_in_defaults(z_air, default_z_air)
     final_z = fill_in_defaults(final_z, default_final_z)
-    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bottom_search_offset)
+    z_bottom_search_offset = fill_in_defaults(
+      z_bottom_search_offset, default_z_bottom_search_offset
+    )
 
-    ch_segments: dict[int, list[SegmentDescriptor]] = {}
+    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
     for i, ch in enumerate(use_channels):
       if container_segments is not None and i < len(container_segments):
         ch_segments[ch] = container_segments[i]
@@ -1223,10 +1286,10 @@ class PrepBackend(LiquidHandlerBackend):
       else:
         ch_segments[ch] = []
 
-    _c_lld = c_lld or CLldParameters.default()
+    _c_lld = c_lld or PrepCmd.CLldParameters.default()
 
-    params_nolld: List[DispenseParametersNoLld2] = []
-    params_lld: List[DispenseParametersLld2] = []
+    params_nolld: List[PrepCmd.DispenseParametersNoLld2] = []
+    params_lld: List[PrepCmd.DispenseParametersLld2] = []
 
     for ch in range(self.num_channels):
       if ch not in indexed_ops:
@@ -1235,7 +1298,7 @@ class PrepBackend(LiquidHandlerBackend):
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
-      disp = DispenseParameters.for_op(
+      disp = PrepCmd.DispenseParameters.for_op(
         loc,
         stop_back_volume=stop_back_volume[idx],
         cutoff_speed=cutoff_speed[idx],
@@ -1250,7 +1313,7 @@ class PrepBackend(LiquidHandlerBackend):
 
       if effective_lld and lld is None:
         top_of_well_z = well_geometry[idx][2]
-        _lld = LldParameters(
+        _lld = PrepCmd.LldParameters(
           default_values=False,
           z_seek=top_of_well_z,
           z_seek_speed=0.0,
@@ -1258,9 +1321,9 @@ class PrepBackend(LiquidHandlerBackend):
           z_out_of_liquid=0.0,
         )
       else:
-        _lld = lld or LldParameters.default()
+        _lld = lld or PrepCmd.LldParameters.default()
 
-      common = CommonParameters.for_op(
+      common = PrepCmd.CommonParameters.for_op(
         volumes[idx],
         radius,
         flow_rate=flow_rates[idx],
@@ -1272,36 +1335,46 @@ class PrepBackend(LiquidHandlerBackend):
       )
 
       if effective_lld:
-        params_lld.append(DispenseParametersLld2(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          dispense=disp,
-          container_description=segs,
-          common=common,
-          lld=_lld,
-          c_lld=_c_lld,
-          mix=MixParameters.default(),
-          adc=AdcParameters.default(),
-          tadm=TadmParameters.default(),
-        ))
+        params_lld.append(
+          PrepCmd.DispenseParametersLld2(
+            default_values=False,
+            channel=_CHANNEL_INDEX[ch],
+            dispense=disp,
+            container_description=segs,
+            common=common,
+            lld=_lld,
+            c_lld=_c_lld,
+            mix=PrepCmd.MixParameters.default(),
+            adc=PrepCmd.AdcParameters.default(),
+            tadm=PrepCmd.TadmParameters.default(),
+          )
+        )
       else:
-        params_nolld.append(DispenseParametersNoLld2(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          dispense=disp,
-          container_description=segs,
-          common=common,
-          no_lld=NoLldParameters.for_fixed_z(z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch),
-          mix=MixParameters.default(),
-          adc=AdcParameters.default(),
-          tadm=TadmParameters.default(),
-        ))
+        params_nolld.append(
+          PrepCmd.DispenseParametersNoLld2(
+            default_values=False,
+            channel=_CHANNEL_INDEX[ch],
+            dispense=disp,
+            container_description=segs,
+            common=common,
+            no_lld=PrepCmd.NoLldParameters.for_fixed_z(
+              z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch
+            ),
+            mix=PrepCmd.MixParameters.default(),
+            adc=PrepCmd.AdcParameters.default(),
+            tadm=PrepCmd.TadmParameters.default(),
+          )
+        )
 
     dest = await self._require("pipettor")
     if effective_lld:
-      await self.client.send_command(PrepDispenseWithLldV2(dest=dest, dispense_parameters=params_lld))
+      await self.client.send_command(
+        PrepCmd.PrepDispenseWithLldV2(dest=dest, dispense_parameters=params_lld)
+      )
     else:
-      await self.client.send_command(PrepDispenseNoLldV2(dest=dest, dispense_parameters=params_nolld))
+      await self.client.send_command(
+        PrepCmd.PrepDispenseNoLldV2(dest=dest, dispense_parameters=params_nolld)
+      )
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("pick_up_tips96 is not supported on the Prep")
@@ -1314,9 +1387,7 @@ class PrepBackend(LiquidHandlerBackend):
   ):
     raise NotImplementedError("aspirate96 is not supported on the Prep")
 
-  async def dispense96(
-    self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]
-  ):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     raise NotImplementedError("dispense96 is not supported on the Prep")
 
   async def pick_up_tool(
@@ -1329,15 +1400,15 @@ class PrepBackend(LiquidHandlerBackend):
     tool_seek: Optional[float] = None,
     tool_x_radius: float = 2.0,
     tool_y_radius: float = 2.0,
-    tip_definition: Optional[TipPickupParameters] = None,
+    tip_definition: Optional[PrepCmd.TipPickupParameters] = None,
   ) -> None:
-    """Pick up tool from the given position (PrepPickUpTool, cmd=15). Sets _gripper_tool_on and moves channels to safe Z."""
+    """Pick up tool from the given position (PrepCmd.PrepPickUpTool, cmd=15). Sets _gripper_tool_on and moves channels to safe Z."""
     if tool_seek is None:
       tool_seek = tool_position_z + 10.0
     if tip_definition is None:
-      tip_definition = CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
+      tip_definition = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
     await self.client.send_command(
-      PrepPickUpTool(
+      PrepCmd.PrepPickUpTool(
         dest=await self._require("pipettor"),
         tip_definition=tip_definition,
         tool_position_x=tool_position_x,
@@ -1352,22 +1423,16 @@ class PrepBackend(LiquidHandlerBackend):
     self._gripper_tool_on = True
     await self.move_channels_to_safe_z()
 
-  async def drop_tool(
-    self, *, move_to_safe_z_first: bool = True
-  ) -> None:
-    """Drop tool (PrepDropTool, cmd=16). Optionally move channels to safe Z first. Clears _gripper_tool_on."""
+  async def drop_tool(self, *, move_to_safe_z_first: bool = True) -> None:
+    """Drop tool (PrepCmd.PrepDropTool, cmd=16). Optionally move channels to safe Z first. Clears _gripper_tool_on."""
     if move_to_safe_z_first:
       await self.move_channels_to_safe_z()
-    await self.client.send_command(
-      PrepDropTool(dest=await self._require("pipettor"))
-    )
+    await self.client.send_command(PrepCmd.PrepDropTool(dest=await self._require("pipettor")))
     self._gripper_tool_on = False
 
   async def release_plate(self) -> None:
-    """Release plate / open gripper (PrepReleasePlate, cmd=21). No parameters."""
-    await self.client.send_command(
-      PrepReleasePlate(dest=await self._require("pipettor"))
-    )
+    """Release plate / open gripper (PrepCmd.PrepReleasePlate, cmd=21). No parameters."""
+    await self.client.send_command(PrepCmd.PrepReleasePlate(dest=await self._require("pipettor")))
 
   async def pick_up_resource(
     self,
@@ -1380,14 +1445,12 @@ class PrepBackend(LiquidHandlerBackend):
     if self.deck is None:
       raise RuntimeError("deck not set")
     if pickup.direction != GripDirection.FRONT:
-      raise NotImplementedError(
-        "PREP CORE gripper only supports GripDirection.FRONT"
-      )
+      raise NotImplementedError("PREP CORE gripper only supports GripDirection.FRONT")
     resource = pickup.resource
     center = resource.get_location_wrt(self.deck, "c", "c", "t") + pickup.offset
     grip_height = center.z - pickup.pickup_distance_from_top
     # plate_top_center = literal top center of plate (x, y, z_top); grip_height is separate.
-    plate_top_center = XYZCoord(
+    plate_top_center = PrepCmd.XYZCoord(
       default_values=False,
       x_position=center.x,
       y_position=center.y,
@@ -1395,7 +1458,7 @@ class PrepBackend(LiquidHandlerBackend):
     )
     # Grip distance = how far the grippers close from open (travel). Open = labware_y + clearance_y, final = labware_y - squeeze_mm → close by clearance_y + squeeze_mm.
     grip_distance = clearance_y + squeeze_mm
-    plate_dims = PlateDimensions(
+    plate_dims = PrepCmd.PlateDimensions(
       default_values=False,
       length=resource.get_absolute_size_x(),
       width=resource.get_absolute_size_y(),
@@ -1416,7 +1479,7 @@ class PrepBackend(LiquidHandlerBackend):
         tool_seek=loc.z + 10.0,
       )
     await self.client.send_command(
-      PrepPickUpPlate(
+      PrepCmd.PrepPickUpPlate(
         dest=await self._require("pipettor"),
         plate_top_center=plate_top_center,
         plate=plate_dims,
@@ -1436,14 +1499,14 @@ class PrepBackend(LiquidHandlerBackend):
       - Coordinate(z=move.pickup_distance_from_top)
       + move.offset
     )
-    plate_top_center = XYZCoord(
+    plate_top_center = PrepCmd.XYZCoord(
       default_values=False,
       x_position=center.x,
       y_position=center.y,
       z_position=center.z,
     )
     await self.client.send_command(
-      PrepMovePlate(
+      PrepCmd.PrepMovePlate(
         dest=await self._require("pipettor"),
         plate_top_center=plate_top_center,
         acceleration_scale_x=1,
@@ -1460,24 +1523,16 @@ class PrepBackend(LiquidHandlerBackend):
     if self.deck is None:
       raise RuntimeError("deck not set")
     resource = drop.resource
-    dest_center = (
-      drop.destination
-      + resource.get_anchor("c", "c", "t")
-      + drop.offset
-    )
-    place_z = (
-      drop.destination.z
-      + resource.get_absolute_size_z()
-      - drop.pickup_distance_from_top
-    )
-    plate_top_center = XYZCoord(
+    dest_center = drop.destination + resource.get_anchor("c", "c", "t") + drop.offset
+    place_z = drop.destination.z + resource.get_absolute_size_z() - drop.pickup_distance_from_top
+    plate_top_center = PrepCmd.XYZCoord(
       default_values=False,
       x_position=dest_center.x,
       y_position=dest_center.y,
       z_position=place_z,
     )
     await self.client.send_command(
-      PrepDropPlate(
+      PrepCmd.PrepDropPlate(
         dest=await self._require("pipettor"),
         plate_top_center=plate_top_center,
         clearance_y=clearance_y,
@@ -1507,16 +1562,16 @@ class PrepBackend(LiquidHandlerBackend):
 
   async def park(self) -> None:
     """Park the instrument."""
-    await self.client.send_command(PrepPark(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepPark(dest=await self._require("mlprep")))
 
   async def spread(self) -> None:
     """Spread channels."""
-    await self.client.send_command(PrepSpread(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepSpread(dest=await self._require("mlprep")))
 
   async def method_begin(self, automatic_pause: bool = False) -> None:
     """Signal the start of a liquid-handling method."""
     await self.client.send_command(
-      PrepMethodBegin(
+      PrepCmd.PrepMethodBegin(
         dest=await self._require("mlprep"),
         automatic_pause=automatic_pause,
       )
@@ -1524,39 +1579,37 @@ class PrepBackend(LiquidHandlerBackend):
 
   async def method_end(self) -> None:
     """Signal the end of a liquid-handling method."""
-    await self.client.send_command(PrepMethodEnd(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepMethodEnd(dest=await self._require("mlprep")))
 
   async def method_abort(self) -> None:
     """Abort the current method."""
-    await self.client.send_command(PrepMethodAbort(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepMethodAbort(dest=await self._require("mlprep")))
 
   async def power_down_request(self) -> None:
     """Request power down (instrument will prepare for shutdown; use cancel_power_down to abort)."""
-    await self.client.send_command(PrepPowerDownRequest(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepPowerDownRequest(dest=await self._require("mlprep")))
 
   async def confirm_power_down(self) -> None:
     """Confirm power down (completes shutdown; only call when safe to power off)."""
-    await self.client.send_command(PrepConfirmPowerDown(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepConfirmPowerDown(dest=await self._require("mlprep")))
 
   async def cancel_power_down(self) -> None:
     """Cancel a pending power-down request."""
-    await self.client.send_command(PrepCancelPowerDown(dest=await self._require("mlprep")))
+    await self.client.send_command(PrepCmd.PrepCancelPowerDown(dest=await self._require("mlprep")))
 
   async def get_deck_light(self) -> Tuple[int, int, int, int]:
-      """Get the current deck LED colour (white, red, green, blue)."""
-      result = await self.client.send_command(
-        PrepGetDeckLight(dest=await self._require("mlprep"))
-      )
-      if result is None:
-        raise ValueError("No response from GetDeckLight.")
-      return (result.white, result.red, result.green, result.blue)
+    """Get the current deck LED colour (white, red, green, blue)."""
+    result = await self.client.send_command(
+      PrepCmd.PrepGetDeckLight(dest=await self._require("mlprep"))
+    )
+    if result is None:
+      raise ValueError("No response from GetDeckLight.")
+    return (result.white, result.red, result.green, result.blue)
 
-  async def set_deck_light(
-    self, white: int, red: int, green: int, blue: int
-  ) -> None:
+  async def set_deck_light(self, white: int, red: int, green: int, blue: int) -> None:
     """Set the deck LED colour."""
     await self.client.send_command(
-      PrepSetDeckLight(
+      PrepCmd.PrepSetDeckLight(
         dest=await self._require("mlprep"),
         white=white,
         red=red,
@@ -1584,9 +1637,7 @@ class PrepBackend(LiquidHandlerBackend):
   # Pipettor convenience methods
   # ---------------------------------------------------------------------------
 
-  async def move_channels_to_safe_z(
-    self, channels: Optional[List[int]] = None
-  ) -> None:
+  async def move_channels_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
     """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
 
     Use after picking up a tool or before returning a tool to avoid collisions
@@ -1607,7 +1658,7 @@ class PrepBackend(LiquidHandlerBackend):
     )
     channel_enums = [_CHANNEL_INDEX[ch] for ch in channels]
     await self.client.send_command(
-      PrepMoveZUpToSafe(
+      PrepCmd.PrepMoveZUpToSafe(
         dest=await self._require("pipettor"),
         channels=channel_enums,
       )
@@ -1645,19 +1696,19 @@ class PrepBackend(LiquidHandlerBackend):
     if isinstance(z, list):
       assert len(z) == len(channels), "len(z) must equal len(use_channels)"
 
-    axis_parameters: List[ChannelYZMoveParameters] = []
+    axis_parameters: List[PrepCmd.ChannelYZMoveParameters] = []
     for i, ch in enumerate(channels):
       y_i = y if isinstance(y, (int, float)) else y[i]
       z_i = z if isinstance(z, (int, float)) else z[i]
       axis_parameters.append(
-        ChannelYZMoveParameters(
+        PrepCmd.ChannelYZMoveParameters(
           default_values=False,
           channel=_CHANNEL_INDEX[ch],
           y_position=y_i,
           z_position=z_i,
         )
       )
-    move_parameters = GantryMoveXYZParameters(
+    move_parameters = PrepCmd.GantryMoveXYZParameters(
       default_values=False,
       gantry_x_position=x,
       axis_parameters=axis_parameters,
@@ -1665,14 +1716,14 @@ class PrepBackend(LiquidHandlerBackend):
 
     if via_lane:
       await self.client.send_command(
-        PrepMoveToPositionViaLane(
+        PrepCmd.PrepMoveToPositionViaLane(
           dest=await self._require("pipettor"),
           move_parameters=move_parameters,
         )
       )
     else:
       await self.client.send_command(
-        PrepMoveToPosition(
+        PrepCmd.PrepMoveToPosition(
           dest=await self._require("pipettor"),
           move_parameters=move_parameters,
         )

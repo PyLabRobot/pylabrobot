@@ -223,34 +223,44 @@ def inspect_hoi_params(params: bytes) -> List[dict]:
     length = int.from_bytes(params[offset + 2 : offset + 4], "little")
     payload_end = offset + 4 + length
     if payload_end > len(params):
-      out.append({
-        "type_id": type_id,
-        "flags": flags,
-        "length": length,
-        "payload_hex": "<incomplete>",
-        "payload_len": 0,
-        "decoded": f"<buffer end: need {payload_end}, have {len(params)}>",
-      })
+      out.append(
+        {
+          "type_id": type_id,
+          "flags": flags,
+          "length": length,
+          "payload_hex": "<incomplete>",
+          "payload_len": 0,
+          "decoded": f"<buffer end: need {payload_end}, have {len(params)}>",
+        }
+      )
       break
     data = params[offset + 4 : payload_end]
     hex_preview = data.hex() if len(data) <= 40 else data[:40].hex() + "..."
     try:
       decoded = decode_fragment(type_id, data)
       if isinstance(decoded, bytes):
-        decoded = decoded.decode("utf-8", errors="replace").rstrip("\x00") or f"<bytes {len(decoded)}>"
-      decoded_repr = repr(decoded) if not isinstance(decoded, (str, int, float, bool)) else str(decoded)
+        decoded = (
+          decoded.decode("utf-8", errors="replace").rstrip("\x00") or f"<bytes {len(decoded)}>"
+        )
+      decoded_repr = (
+        repr(decoded) if not isinstance(decoded, (str, int, float, bool)) else str(decoded)
+      )
       if isinstance(decoded, list):
-        decoded_repr = f"list[len={len(decoded)}](elem0_type={type(decoded[0]).__name__ if decoded else 'n/a'})"
+        decoded_repr = (
+          f"list[len={len(decoded)}](elem0_type={type(decoded[0]).__name__ if decoded else 'n/a'})"
+        )
     except Exception as e:
       decoded_repr = f"<decode error: {e!r}>"
-    out.append({
-      "type_id": type_id,
-      "flags": flags,
-      "length": length,
-      "payload_hex": hex_preview,
-      "payload_len": len(data),
-      "decoded": decoded_repr,
-    })
+    out.append(
+      {
+        "type_id": type_id,
+        "flags": flags,
+        "length": length,
+        "payload_hex": hex_preview,
+        "payload_len": len(data),
+        "decoded": decoded_repr,
+      }
+    )
     offset = payload_end
   return out
 
@@ -300,7 +310,9 @@ def _parse_hamilton_error_fragments(params: bytes) -> List[str]:
         b = bytes(decoded)
         s = b.decode("utf-8", errors="replace").rstrip("\x00").strip()
         # Strip leading control characters (e.g. length or flags before message text)
-        s = s.lstrip("\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f").strip()
+        s = s.lstrip(
+          "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f"
+        ).strip()
         if s and any(c.isprintable() or c.isspace() for c in s):
           decoded = s
       out.append(f"{type_name}={decoded}")
@@ -356,9 +368,7 @@ def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
             "list of bytes (STRUCTURE_ARRAY). Use get_structs_raw() and "
             "inspect_hoi_params() to see the exact wire format."
           )
-        values[f.name] = [
-          parse_into_struct(HoiParamsParser(p), element_type) for p in raw
-        ]
+        values[f.name] = [parse_into_struct(HoiParamsParser(p), element_type) for p in raw]
       else:
         # Count then N flat fragments (count-prefixed stream)
         count = int(raw)

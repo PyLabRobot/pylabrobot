@@ -452,8 +452,8 @@ class NimbusBackend(LiquidHandlerBackend):
   # Declare known object paths via InterfaceSpec. Optional interfaces (e.g. pipette, door_lock) may be absent on some systems.
   _INTERFACES: dict[str, InterfaceSpec] = {
     "nimbus_core": InterfaceSpec("NimbusCORE", True, True),
-    "pipette":     InterfaceSpec("NimbusCORE.Pipette", False, True),
-    "door_lock":   InterfaceSpec("NimbusCORE.DoorLock", False, True),
+    "pipette": InterfaceSpec("NimbusCORE.Pipette", False, True),
+    "door_lock": InterfaceSpec("NimbusCORE.DoorLock", False, True),
   }
 
   @overload
@@ -1199,7 +1199,7 @@ class NimbusBackend(LiquidHandlerBackend):
       settling_time: Settling time (s), default: [1.0] * n
       transport_air_volume: Transport air volume (uL), default: [5.0] * n
       pre_wetting_volume: Pre-wetting volume (uL), default: [0.0] * n
-      swap_speed: Swap speed on leaving liquid (uL/s), default: [20.0] * n
+      swap_speed: Swap speed on leaving liquid (mm/s), default: [20.0] * n
       mix_position_from_liquid_surface: Mix position from liquid surface (mm), default: [0.0] * n
       limit_curve_index: Limit curve index, default: [0] * n
       tadm_enabled: TADM enabled flag, default: False

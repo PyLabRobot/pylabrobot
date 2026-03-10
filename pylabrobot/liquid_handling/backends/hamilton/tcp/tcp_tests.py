@@ -1020,6 +1020,7 @@ class TestInterpretResponseAutoDecode(unittest.TestCase):
 
   def test_auto_decode_fallback_no_response_class(self):
     """Command without Response returns None when params empty."""
+
     class CommandNoResponse(HamiltonCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 0
@@ -1042,6 +1043,7 @@ class TestInterpretResponseAutoDecode(unittest.TestCase):
 
   def test_auto_decode_fallback_parse_response_parameters(self):
     """Command with parse_response_parameters override but no Response uses override."""
+
     class CommandWithOverride(HamiltonCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
@@ -1318,14 +1320,7 @@ class TestIntrospectionResponseDecode(unittest.TestCase):
     from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetObjectCommand
 
     cmd = GetObjectCommand(Address(0, 0, 0))
-    params = (
-      HoiParams()
-      .add("RootObj", Str)
-      .add("1.0", Str)
-      .add(3, I32)
-      .add(2, I32)
-      .build()
-    )
+    params = HoiParams().add("RootObj", Str).add("1.0", Str).add(3, I32).add(2, I32).build()
     hoi = HoiPacket(
       interface_id=0,
       action_code=Hoi2Action.COMMAND_RESPONSE,

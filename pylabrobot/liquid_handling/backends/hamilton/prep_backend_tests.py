@@ -15,39 +15,7 @@ from pylabrobot.liquid_handling.backends.hamilton.prep_backend import (
   _build_container_segments,
   _effective_radius,
 )
-from pylabrobot.liquid_handling.backends.hamilton.prep_commands import (
-  ChannelIndex,
-  DeckBounds,
-  InstrumentConfig,
-  LldParameters,
-  MphDropTips,
-  MphPickupTips,
-  MonitoringMode,
-  PrepAspirateNoLldMonitoringV2,
-  PrepAspirateWithLldTadmV2,
-  PrepAspirateWithLldV2,
-  PrepAspirateTadmV2,
-  PrepDispenseNoLldV2,
-  PrepDispenseWithLldV2,
-  PrepDropPlate,
-  PrepDropTips,
-  PrepDropTool,
-  PrepMethodBegin,
-  PrepMethodEnd,
-  PrepMethodAbort,
-  PrepMovePlate,
-  PrepMoveToPosition,
-  PrepMoveToPositionViaLane,
-  PrepMoveZUpToSafe,
-  PrepPark,
-  PrepPickUpPlate,
-  PrepPickUpTips,
-  PrepPickUpTool,
-  PrepSetDeckLight,
-  PrepSpread,
-  SegmentDescriptor,
-  TipDropType,
-)
+from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_star_liquid_class
 from pylabrobot.liquid_handling.standard import (
@@ -60,17 +28,22 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
-from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
-from pylabrobot.resources.deck import Deck
-from pylabrobot.resources.hamilton.hamilton_decks import PrepDeck
-from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL_filter
-from pylabrobot.resources.liquid import Liquid
-from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.rotation import Rotation
-from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.well import CrossSectionType, Well
+from pylabrobot.resources import (
+  Coordinate,
+  Cor_96_wellplate_360ul_Fb,
+  CrossSectionType,
+  Deck,
+  HamiltonTip,
+  Liquid,
+  Plate,
+  PrepDeck,
+  Rotation,
+  Trash,
+  Well,
+  hamilton_96_tiprack_300uL_filter,
+  TipPickupMethod,
+  TipSize,
+)
 
 
 # =============================================================================
@@ -93,8 +66,8 @@ def _setup_backend(num_channels: int = 2, has_mph: bool = False) -> PrepBackend:
   backend._num_channels = num_channels
   backend._has_mph = has_mph
   backend._user_traverse_height = _TRAVERSE_HEIGHT
-  backend._config = InstrumentConfig(
-    deck_bounds=DeckBounds(0.0, 300.0, 0.0, 320.0, 0.0, 100.0),
+  backend._config = PrepCmd.InstrumentConfig(
+    deck_bounds=PrepCmd.DeckBounds(0.0, 300.0, 0.0, 320.0, 0.0, 100.0),
     has_enclosure=False,
     safe_speeds_enabled=False,
     deck_sites=(),
@@ -134,11 +107,7 @@ def _setup_backend_with_deck(
 
 def _get_commands(mock_send, cmd_type):
   """Extract sent commands of a specific type from mock call list."""
-  return [
-    call.args[0]
-    for call in mock_send.call_args_list
-    if isinstance(call.args[0], cmd_type)
-  ]
+  return [call.args[0] for call in mock_send.call_args_list if isinstance(call.args[0], cmd_type)]
 
 
 # =============================================================================
@@ -181,6 +150,7 @@ class TestPrepHelperFunctions(unittest.TestCase):
   def test_effective_radius_non_well_uses_size_x(self):
     # For non-Well objects the function falls back to size_x / 2
     from pylabrobot.resources import Resource
+
     resource = Resource(name="r", size_x=10.0, size_y=10.0, size_z=5.0)
     self.assertAlmostEqual(_effective_radius(resource), 5.0)
 
@@ -188,6 +158,7 @@ class TestPrepHelperFunctions(unittest.TestCase):
 
   def test_build_container_segments_non_well(self):
     from pylabrobot.resources import Resource
+
     resource = Resource(name="r", size_x=10.0, size_y=10.0, size_z=5.0)
     segs = _build_container_segments(resource)
     self.assertEqual(segs, [])
@@ -196,8 +167,8 @@ class TestPrepHelperFunctions(unittest.TestCase):
     well = self._make_circular_well(diameter=6.0, height=10.0)
     segs = _build_container_segments(well)
     self.assertEqual(len(segs), 1)
-    expected_area = math.pi * (3.0 ** 2)
-    self.assertIsInstance(segs[0], SegmentDescriptor)
+    expected_area = math.pi * (3.0**2)
+    self.assertIsInstance(segs[0], PrepCmd.SegmentDescriptor)
     self.assertAlmostEqual(segs[0].area_top, expected_area, places=4)
     self.assertAlmostEqual(segs[0].area_bottom, expected_area, places=4)
     self.assertAlmostEqual(segs[0].height, 10.0, places=4)
@@ -212,7 +183,7 @@ class TestPrepHelperFunctions(unittest.TestCase):
 
   def test_build_container_segments_heights_sum_to_size_z(self):
     """Wells with compute_height_volume should produce 10 segments summing to size_z."""
-    area = math.pi * 3.0 ** 2
+    area = math.pi * 3.0**2
     well = Well(
       name="w",
       size_x=6.0,
@@ -230,13 +201,14 @@ class TestPrepHelperFunctions(unittest.TestCase):
   # --- _absolute_z_from_well ---
 
   def test_absolute_z_from_well_geometry(self):
-    well = self._make_circular_well(diameter=6.0, height=10.0)
+    self._make_circular_well(diameter=6.0, height=10.0)
     deck = PrepDeck()
     deck[0] = Cor_96_wellplate_360ul_Fb("p")
     plate = deck[0].resource
     assert plate is not None and isinstance(plate, Plate)
     # Use a plate well with known absolute location
     from pylabrobot.liquid_handling.standard import SingleChannelAspiration
+
     tip = hamilton_96_tiprack_300uL_filter("tr").get_item("A1").get_tip()
     op = SingleChannelAspiration(
       resource=plate.get_item("A1"),
@@ -324,9 +296,13 @@ class TestPrepBackendUnit(unittest.TestCase):
 
   def test_resolve_traverse_height_probed(self):
     backend = PrepBackend(host="localhost", port=2000)
-    backend._config = InstrumentConfig(
-      deck_bounds=None, has_enclosure=False, safe_speeds_enabled=False,
-      deck_sites=(), waste_sites=(), default_traverse_height=75.0,
+    backend._config = PrepCmd.InstrumentConfig(
+      deck_bounds=None,
+      has_enclosure=False,
+      safe_speeds_enabled=False,
+      deck_sites=(),
+      waste_sites=(),
+      default_traverse_height=75.0,
     )
     self.assertAlmostEqual(backend._resolve_traverse_height(None), 75.0)
 
@@ -348,13 +324,18 @@ class TestPrepBackendUnit(unittest.TestCase):
   def test_can_pick_up_tip_hamilton_tip(self):
     backend = _setup_backend()
     tip = HamiltonTip(
-      name="t", has_filter=False, total_tip_length=59.9, maximal_volume=300.0,
-      tip_size=TipSize.STANDARD_VOLUME, pickup_method=TipPickupMethod.OUT_OF_RACK,
+      name="t",
+      has_filter=False,
+      total_tip_length=59.9,
+      maximal_volume=300.0,
+      tip_size=TipSize.STANDARD_VOLUME,
+      pickup_method=TipPickupMethod.OUT_OF_RACK,
     )
     self.assertTrue(backend.can_pick_up_tip(0, tip))
 
   def test_can_pick_up_tip_non_hamilton(self):
     from pylabrobot.resources import Tip
+
     backend = _setup_backend()
     tip = Tip(
       name="generic_tip",
@@ -368,21 +349,30 @@ class TestPrepBackendUnit(unittest.TestCase):
   def test_can_pick_up_tip_xl_rejected(self):
     backend = _setup_backend()
     tip = HamiltonTip(
-      name="t", has_filter=False, total_tip_length=95.0, maximal_volume=5000.0,
-      tip_size=TipSize.XL, pickup_method=TipPickupMethod.OUT_OF_RACK,
+      name="t",
+      has_filter=False,
+      total_tip_length=95.0,
+      maximal_volume=5000.0,
+      tip_size=TipSize.XL,
+      pickup_method=TipPickupMethod.OUT_OF_RACK,
     )
     self.assertFalse(backend.can_pick_up_tip(0, tip))
 
   def test_can_pick_up_tip_channel_out_of_range(self):
     backend = _setup_backend(num_channels=2)
     tip = HamiltonTip(
-      name="t", has_filter=False, total_tip_length=59.9, maximal_volume=300.0,
-      tip_size=TipSize.STANDARD_VOLUME, pickup_method=TipPickupMethod.OUT_OF_RACK,
+      name="t",
+      has_filter=False,
+      total_tip_length=59.9,
+      maximal_volume=300.0,
+      tip_size=TipSize.STANDARD_VOLUME,
+      pickup_method=TipPickupMethod.OUT_OF_RACK,
     )
     self.assertFalse(backend.can_pick_up_tip(2, tip))
 
   def test_not_implemented_96_head_methods(self):
     import asyncio
+
     backend = _setup_backend()
     with self.assertRaises(NotImplementedError):
       asyncio.run(backend.pick_up_tips96(None))  # type: ignore[arg-type]
@@ -410,13 +400,13 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       [Pickup(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
       use_channels=[0],
     )
-    cmds = _get_commands(self.mock_send, PrepPickUpTips)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepPickUpTips)
     self.assertEqual(len(cmds), 1)
     cmd = cmds[0]
     self.assertEqual(cmd.dest, _PIPETTOR_ADDR)
     self.assertEqual(len(cmd.tip_positions), 1)
     tp = cmd.tip_positions[0]
-    self.assertEqual(tp.channel, ChannelIndex.RearChannel)
+    self.assertEqual(tp.channel, PrepCmd.ChannelIndex.RearChannel)
 
     # Verify Z geometry
     loc = tip_spot.get_absolute_location("c", "c", "t")
@@ -437,11 +427,11 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       ],
       use_channels=[0, 1],
     )
-    cmd = _get_commands(self.mock_send, PrepPickUpTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepPickUpTips)[0]
     self.assertEqual(len(cmd.tip_positions), 2)
     channels = [tp.channel for tp in cmd.tip_positions]
-    self.assertIn(ChannelIndex.RearChannel, channels)
-    self.assertIn(ChannelIndex.FrontChannel, channels)
+    self.assertIn(PrepCmd.ChannelIndex.RearChannel, channels)
+    self.assertIn(PrepCmd.ChannelIndex.FrontChannel, channels)
 
   async def test_pick_up_tips_custom_final_z(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -451,7 +441,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       use_channels=[0],
       final_z=55.0,
     )
-    cmd = _get_commands(self.mock_send, PrepPickUpTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepPickUpTips)[0]
     self.assertAlmostEqual(cmd.final_z, 55.0)
 
   async def test_pick_up_tips_default_final_z_from_traverse(self):
@@ -461,7 +451,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       [Pickup(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
       use_channels=[0],
     )
-    cmd = _get_commands(self.mock_send, PrepPickUpTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepPickUpTips)[0]
     self.assertAlmostEqual(cmd.final_z, _TRAVERSE_HEIGHT)
 
   async def test_pick_up_tips_z_seek_offset(self):
@@ -472,7 +462,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       use_channels=[0],
       z_seek_offset=3.0,
     )
-    cmd = _get_commands(self.mock_send, PrepPickUpTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepPickUpTips)[0]
     tp = cmd.tip_positions[0]
     loc = tip_spot.get_absolute_location("c", "c", "t")
     base_z = loc.z + tip.total_tip_length - tip.fitting_depth
@@ -497,7 +487,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       [Drop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
       use_channels=[0],
     )
-    cmd = _get_commands(self.mock_send, PrepDropTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDropTips)[0]
     self.assertEqual(len(cmd.tip_positions), 1)
     dp = cmd.tip_positions[0]
     loc = tip_spot.get_absolute_location("c", "c", "t")
@@ -513,7 +503,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       [Drop(resource=waste, offset=Coordinate.zero(), tip=tip)],
       use_channels=[0],
     )
-    cmd = _get_commands(self.mock_send, PrepDropTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDropTips)[0]
     dp = cmd.tip_positions[0]
     loc = waste.get_absolute_location("c", "c", "t")
     # Waste: same as tip spots — z_position so tip bottom lands at surface; z_seek for approach
@@ -523,7 +513,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(dp.z_seek, expected_z_seek, places=3)
     # Default roll-off when all Trash; use Stall so pipette detects contact before release
     self.assertAlmostEqual(cmd.tip_roll_off_distance, 3.0)
-    self.assertEqual(dp.drop_type, TipDropType.Stall)
+    self.assertEqual(dp.drop_type, PrepCmd.TipDropType.Stall)
 
   async def test_drop_tips_stall_type(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -531,10 +521,10 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
     await self.backend.drop_tips(
       [Drop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
       use_channels=[0],
-      drop_type=TipDropType.Stall,
+      drop_type=PrepCmd.TipDropType.Stall,
     )
-    cmd = _get_commands(self.mock_send, PrepDropTips)[0]
-    self.assertEqual(cmd.tip_positions[0].drop_type, TipDropType.Stall)
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDropTips)[0]
+    self.assertEqual(cmd.tip_positions[0].drop_type, PrepCmd.TipDropType.Stall)
 
   async def test_drop_tips_roll_off_distance(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -544,7 +534,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       use_channels=[0],
       tip_roll_off_distance=2.5,
     )
-    cmd = _get_commands(self.mock_send, PrepDropTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDropTips)[0]
     self.assertAlmostEqual(cmd.tip_roll_off_distance, 2.5)
 
   async def test_drop_tips_all_trash_resolves_to_deck_waste_and_default_roll(self):
@@ -559,7 +549,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
       ],
       use_channels=[0, 1],
     )
-    cmd = _get_commands(self.mock_send, PrepDropTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDropTips)[0]
     self.assertEqual(len(cmd.tip_positions), 2)
     waste_rear = self.deck.get_resource("waste_rear")
     waste_front = self.deck.get_resource("waste_front")
@@ -583,7 +573,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
     trash = Trash(name="trash", size_x=0.0, size_y=0.0, size_z=0.0)
     deck.assign_child_resource(trash, location=Coordinate(287.0, 0.0, 0.0))
     backend._deck = deck
-    backend.client.send_command = unittest.mock.AsyncMock(return_value=None)
+    backend.client.send_command = unittest.mock.AsyncMock(return_value=None)  # type: ignore[method-assign]
     tip = hamilton_96_tiprack_300uL_filter("_tmp").get_item("A1").get_tip()
     with self.assertRaises(ValueError) as ctx:
       await backend.drop_tips(
@@ -624,8 +614,9 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     self.backend.client.send_command = self.mock_send
     self.tip = self.tip_rack.get_item("A1").get_tip()
 
-  def _make_asp(self, well_name="A1", volume=100.0, flow_rate=None,
-                liquid_height=5.0, blow_out_air_volume=0.0):
+  def _make_asp(
+    self, well_name="A1", volume=100.0, flow_rate=None, liquid_height=5.0, blow_out_air_volume=0.0
+  ):
     return SingleChannelAspiration(
       resource=self.plate.get_item(well_name),
       offset=Coordinate.zero(),
@@ -641,35 +632,44 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate_default_sends_nolld_monitoring(self):
     await self.backend.aspirate([self._make_asp()], use_channels=[0])
-    self.assertEqual(len(_get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)), 1)
 
   async def test_aspirate_tadm_mode(self):
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0],
-      monitoring_mode=MonitoringMode.TADM,
+      [self._make_asp()],
+      use_channels=[0],
+      monitoring_mode=PrepCmd.MonitoringMode.TADM,
     )
-    self.assertEqual(len(_get_commands(self.mock_send, PrepAspirateTadmV2)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateTadmV2)), 1)
 
   async def test_aspirate_lld_mode(self):
     await self.backend.aspirate([self._make_asp()], use_channels=[0], use_lld=True)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepAspirateWithLldV2)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldV2)), 1)
 
   async def test_aspirate_lld_tadm_mode(self):
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0],
-      use_lld=True, monitoring_mode=MonitoringMode.TADM,
+      [self._make_asp()],
+      use_channels=[0],
+      use_lld=True,
+      monitoring_mode=PrepCmd.MonitoringMode.TADM,
     )
-    self.assertEqual(len(_get_commands(self.mock_send, PrepAspirateWithLldTadmV2)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldTadmV2)), 1)
 
   async def test_aspirate_implicit_lld_via_lld_param(self):
     """Passing lld= activates LLD path without use_lld=True."""
-    custom_lld = LldParameters(
-      default_values=False, z_seek=90.0, z_seek_speed=5.0, z_submerge=2.0, z_out_of_liquid=1.0,
+    custom_lld = PrepCmd.LldParameters(
+      default_values=False,
+      z_seek=90.0,
+      z_seek_speed=5.0,
+      z_submerge=2.0,
+      z_out_of_liquid=1.0,
     )
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0], lld=custom_lld,
+      [self._make_asp()],
+      use_channels=[0],
+      lld=custom_lld,
     )
-    cmds = _get_commands(self.mock_send, PrepAspirateWithLldV2)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldV2)
     self.assertEqual(len(cmds), 1)
     # Verify the provided LLD parameters are used (not auto-derived)
     lld = cmds[0].aspirate_parameters[0].lld
@@ -677,11 +677,11 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate_lld_auto_seek_z(self):
     """Auto-derived LLD z_seek equals the top-of-well Z."""
-    well = self.plate.get_item("A1")
+    self.plate.get_item("A1")
     op = self._make_asp()
     _, _, top_of_well_z, _ = _absolute_z_from_well(op)
     await self.backend.aspirate([op], use_channels=[0], use_lld=True)
-    cmd = _get_commands(self.mock_send, PrepAspirateWithLldV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldV2)[0]
     lld = cmd.aspirate_parameters[0].lld
     self.assertAlmostEqual(lld.z_seek, top_of_well_z, places=3)
 
@@ -689,23 +689,25 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate_channel_0_is_rear(self):
     await self.backend.aspirate([self._make_asp()], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
-    self.assertEqual(cmd.aspirate_parameters[0].channel, ChannelIndex.RearChannel)
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
+    self.assertEqual(cmd.aspirate_parameters[0].channel, PrepCmd.ChannelIndex.RearChannel)
 
   async def test_aspirate_channel_1_is_front(self):
     await self.backend.aspirate([self._make_asp()], use_channels=[1])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
-    self.assertEqual(cmd.aspirate_parameters[0].channel, ChannelIndex.FrontChannel)
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
+    self.assertEqual(cmd.aspirate_parameters[0].channel, PrepCmd.ChannelIndex.FrontChannel)
 
   async def test_aspirate_two_channels(self):
-    ops = [self._make_asp("A1", volume=100.0, flow_rate=50.0),
-           self._make_asp("B1", volume=150.0, flow_rate=75.0)]
+    ops = [
+      self._make_asp("A1", volume=100.0, flow_rate=50.0),
+      self._make_asp("B1", volume=150.0, flow_rate=75.0),
+    ]
     await self.backend.aspirate(ops, use_channels=[0, 1])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     self.assertEqual(len(cmd.aspirate_parameters), 2)
     channels = {p.channel for p in cmd.aspirate_parameters}
-    self.assertIn(ChannelIndex.RearChannel, channels)
-    self.assertIn(ChannelIndex.FrontChannel, channels)
+    self.assertIn(PrepCmd.ChannelIndex.RearChannel, channels)
+    self.assertIn(PrepCmd.ChannelIndex.FrontChannel, channels)
 
   # --- Volume and flow rate ---
 
@@ -713,15 +715,20 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     """HLC-corrected volume is sent, not raw op.volume."""
     op = self._make_asp(volume=100.0)
     hlc = get_star_liquid_class(
-      tip_volume=self.tip.maximal_volume, is_core=False, is_tip=True,
-      has_filter=self.tip.has_filter, liquid=Liquid.WATER, jet=False, blow_out=False,
+      tip_volume=self.tip.maximal_volume,
+      is_core=False,
+      is_tip=True,
+      has_filter=self.tip.has_filter,
+      liquid=Liquid.WATER,
+      jet=False,
+      blow_out=False,
     )
     if hlc is not None:
       expected_vol = hlc.compute_corrected_volume(100.0)
     else:
       expected_vol = 100.0
     await self.backend.aspirate([op], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     actual_vol = cmd.aspirate_parameters[0].common.liquid_volume
     self.assertAlmostEqual(actual_vol, expected_vol, places=2)
 
@@ -729,58 +736,71 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     """Raw volume used when disable_volume_correction=True."""
     raw_volume = 100.0
     await self.backend.aspirate(
-      [self._make_asp(volume=raw_volume)], use_channels=[0],
+      [self._make_asp(volume=raw_volume)],
+      use_channels=[0],
       disable_volume_correction=[True],
     )
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     actual_vol = cmd.aspirate_parameters[0].common.liquid_volume
     self.assertAlmostEqual(actual_vol, raw_volume, places=2)
 
   async def test_aspirate_explicit_flow_rate(self):
     await self.backend.aspirate([self._make_asp(flow_rate=60.0)], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     self.assertAlmostEqual(cmd.aspirate_parameters[0].common.liquid_speed, 60.0)
 
   async def test_aspirate_flow_rate_from_hlc_default(self):
     """flow_rate=None -> uses HLC aspiration_flow_rate."""
     hlc = get_star_liquid_class(
-      tip_volume=self.tip.maximal_volume, is_core=False, is_tip=True,
-      has_filter=self.tip.has_filter, liquid=Liquid.WATER, jet=False, blow_out=False,
+      tip_volume=self.tip.maximal_volume,
+      is_core=False,
+      is_tip=True,
+      has_filter=self.tip.has_filter,
+      liquid=Liquid.WATER,
+      jet=False,
+      blow_out=False,
     )
     await self.backend.aspirate([self._make_asp(flow_rate=None)], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     expected = hlc.aspiration_flow_rate if hlc is not None else 100.0
     self.assertAlmostEqual(cmd.aspirate_parameters[0].common.liquid_speed, expected, places=2)
 
   async def test_aspirate_explicit_settling_time_override(self):
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0],
+      [self._make_asp()],
+      use_channels=[0],
       settling_time=[2.0],
     )
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     self.assertAlmostEqual(cmd.aspirate_parameters[0].common.settling_time, 2.0)
 
   async def test_aspirate_hlc_settling_time_default(self):
     """Settling time from HLC when not explicitly passed."""
     hlc = get_star_liquid_class(
-      tip_volume=self.tip.maximal_volume, is_core=False, is_tip=True,
-      has_filter=self.tip.has_filter, liquid=Liquid.WATER, jet=False, blow_out=False,
+      tip_volume=self.tip.maximal_volume,
+      is_core=False,
+      is_tip=True,
+      has_filter=self.tip.has_filter,
+      liquid=Liquid.WATER,
+      jet=False,
+      blow_out=False,
     )
     await self.backend.aspirate([self._make_asp()], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     expected = hlc.aspiration_settling_time if hlc is not None else 1.0
     self.assertAlmostEqual(cmd.aspirate_parameters[0].common.settling_time, expected, places=3)
 
   async def test_aspirate_auto_container_geometry(self):
     """auto_container_geometry=True produces non-empty container_description."""
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0],
+      [self._make_asp()],
+      use_channels=[0],
       auto_container_geometry=True,
     )
-    cmd = _get_commands(self.mock_send, PrepAspirateNoLldMonitoringV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)[0]
     segs = cmd.aspirate_parameters[0].container_description
     self.assertGreater(len(segs), 0)
-    self.assertIsInstance(segs[0], SegmentDescriptor)
+    self.assertIsInstance(segs[0], PrepCmd.SegmentDescriptor)
 
 
 # =============================================================================
@@ -797,8 +817,9 @@ class TestPrepBackendDispense(unittest.IsolatedAsyncioTestCase):
     self.backend.client.send_command = self.mock_send
     self.tip = self.tip_rack.get_item("A1").get_tip()
 
-  def _make_disp(self, well_name="A1", volume=100.0, flow_rate=None,
-                 liquid_height=5.0, blow_out_air_volume=0.0):
+  def _make_disp(
+    self, well_name="A1", volume=100.0, flow_rate=None, liquid_height=5.0, blow_out_air_volume=0.0
+  ):
     return SingleChannelDispense(
       resource=self.plate.get_item(well_name),
       offset=Coordinate.zero(),
@@ -812,50 +833,57 @@ class TestPrepBackendDispense(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_default_sends_nolld(self):
     await self.backend.dispense([self._make_disp()], use_channels=[0])
-    self.assertEqual(len(_get_commands(self.mock_send, PrepDispenseNoLldV2)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)), 1)
 
   async def test_dispense_lld_mode(self):
     await self.backend.dispense([self._make_disp()], use_channels=[0], use_lld=True)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepDispenseWithLldV2)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseWithLldV2)), 1)
 
   async def test_dispense_volume_corrected(self):
     hlc = get_star_liquid_class(
-      tip_volume=self.tip.maximal_volume, is_core=False, is_tip=True,
-      has_filter=self.tip.has_filter, liquid=Liquid.WATER, jet=False, blow_out=False,
+      tip_volume=self.tip.maximal_volume,
+      is_core=False,
+      is_tip=True,
+      has_filter=self.tip.has_filter,
+      liquid=Liquid.WATER,
+      jet=False,
+      blow_out=False,
     )
     raw = 100.0
     expected = hlc.compute_corrected_volume(raw) if hlc else raw
     await self.backend.dispense([self._make_disp(volume=raw)], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepDispenseNoLldV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)[0]
     self.assertAlmostEqual(cmd.dispense_parameters[0].common.liquid_volume, expected, places=2)
 
   async def test_dispense_explicit_stop_back_volume(self):
     await self.backend.dispense(
-      [self._make_disp()], use_channels=[0],
+      [self._make_disp()],
+      use_channels=[0],
       stop_back_volume=[3.0],
     )
-    cmd = _get_commands(self.mock_send, PrepDispenseNoLldV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)[0]
     self.assertAlmostEqual(cmd.dispense_parameters[0].dispense.stop_back_volume, 3.0)
 
   async def test_dispense_explicit_cutoff_speed(self):
     await self.backend.dispense(
-      [self._make_disp()], use_channels=[0],
+      [self._make_disp()],
+      use_channels=[0],
       cutoff_speed=[75.0],
     )
-    cmd = _get_commands(self.mock_send, PrepDispenseNoLldV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)[0]
     self.assertAlmostEqual(cmd.dispense_parameters[0].dispense.cutoff_speed, 75.0)
 
   async def test_dispense_two_channels(self):
     ops = [self._make_disp("A1", volume=100.0), self._make_disp("B1", volume=200.0)]
     await self.backend.dispense(ops, use_channels=[0, 1])
-    cmd = _get_commands(self.mock_send, PrepDispenseNoLldV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)[0]
     self.assertEqual(len(cmd.dispense_parameters), 2)
 
   async def test_dispense_z_minimum_from_well_bottom(self):
     op = self._make_disp()
     loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
     await self.backend.dispense([op], use_channels=[0])
-    cmd = _get_commands(self.mock_send, PrepDispenseNoLldV2)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)[0]
     self.assertAlmostEqual(cmd.dispense_parameters[0].common.z_minimum, loc.z, places=3)
 
 
@@ -875,26 +903,26 @@ class TestPrepBackendMPH(unittest.IsolatedAsyncioTestCase):
   async def test_mph_pickup_sends_mph_command(self):
     tip_spot = self.tip_rack.get_item("A1")
     await self.backend.pick_up_tips_mph(tip_spot)
-    self.assertEqual(len(_get_commands(self.mock_send, MphPickupTips)), 1)
-    # Must not send single-channel PrepPickUpTips
-    self.assertEqual(len(_get_commands(self.mock_send, PrepPickUpTips)), 0)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.MphPickupTips)), 1)
+    # Must not send single-channel PrepCmd.PrepPickUpTips
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepPickUpTips)), 0)
 
   async def test_mph_pickup_default_tip_mask(self):
     tip_spot = self.tip_rack.get_item("A1")
     await self.backend.pick_up_tips_mph(tip_spot)
-    cmd = _get_commands(self.mock_send, MphPickupTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.MphPickupTips)[0]
     self.assertEqual(cmd.tip_mask, 0xFF)
 
   async def test_mph_pickup_custom_tip_mask(self):
     tip_spot = self.tip_rack.get_item("A1")
     await self.backend.pick_up_tips_mph(tip_spot, tip_mask=0x0F)
-    cmd = _get_commands(self.mock_send, MphPickupTips)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.MphPickupTips)[0]
     self.assertEqual(cmd.tip_mask, 0x0F)
 
   async def test_mph_drop_sends_mph_command(self):
     tip_spot = self.tip_rack.get_item("A1")
     await self.backend.drop_tips_mph(tip_spot)
-    self.assertEqual(len(_get_commands(self.mock_send, MphDropTips)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.MphDropTips)), 1)
 
   async def test_mph_pickup_raises_when_no_mph(self):
     backend = _setup_backend(has_mph=False)
@@ -951,11 +979,11 @@ class TestPrepBackendGripper(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_auto_picks_up_tool_before_plate(self):
-    """When _gripper_tool_on=False, PrepPickUpTool is sent before PrepPickUpPlate."""
+    """When _gripper_tool_on=False, PrepCmd.PrepPickUpTool is sent before PrepCmd.PrepPickUpPlate."""
     self.assertFalse(self.backend._gripper_tool_on)
     await self.backend.pick_up_resource(self._make_pickup(self.plate))
-    tool_cmds = _get_commands(self.mock_send, PrepPickUpTool)
-    plate_cmds = _get_commands(self.mock_send, PrepPickUpPlate)
+    tool_cmds = _get_commands(self.mock_send, PrepCmd.PrepPickUpTool)
+    plate_cmds = _get_commands(self.mock_send, PrepCmd.PrepPickUpPlate)
     self.assertEqual(len(tool_cmds), 1)
     self.assertEqual(len(plate_cmds), 1)
     # Tool must be picked up before plate
@@ -966,12 +994,12 @@ class TestPrepBackendGripper(unittest.IsolatedAsyncioTestCase):
   async def test_skip_tool_pickup_when_already_holding(self):
     self.backend._gripper_tool_on = True
     await self.backend.pick_up_resource(self._make_pickup(self.plate))
-    self.assertEqual(len(_get_commands(self.mock_send, PrepPickUpTool)), 0)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepPickUpPlate)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepPickUpTool)), 0)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepPickUpPlate)), 1)
 
   async def test_plate_dimensions_from_resource(self):
     await self.backend.pick_up_resource(self._make_pickup(self.plate))
-    cmd = _get_commands(self.mock_send, PrepPickUpPlate)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepPickUpPlate)[0]
     self.assertAlmostEqual(cmd.plate.length, self.plate.get_absolute_size_x(), places=3)
     self.assertAlmostEqual(cmd.plate.width, self.plate.get_absolute_size_y(), places=3)
     self.assertAlmostEqual(cmd.plate.height, self.plate.get_absolute_size_z(), places=3)
@@ -984,7 +1012,7 @@ class TestPrepBackendGripper(unittest.IsolatedAsyncioTestCase):
       clearance_y=clearance_y,
       squeeze_mm=squeeze_mm,
     )
-    cmd = _get_commands(self.mock_send, PrepPickUpPlate)[0]
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepPickUpPlate)[0]
     self.assertAlmostEqual(cmd.grip_distance, clearance_y + squeeze_mm)
 
   async def test_grip_direction_not_front_raises(self):
@@ -1002,8 +1030,8 @@ class TestPrepBackendGripper(unittest.IsolatedAsyncioTestCase):
     plate_loc = self.plate.get_absolute_location()
     drop = self._make_drop(self.plate, destination=plate_loc)
     await self.backend.drop_resource(drop, return_gripper=True)
-    drop_plate_cmds = _get_commands(self.mock_send, PrepDropPlate)
-    drop_tool_cmds = _get_commands(self.mock_send, PrepDropTool)
+    drop_plate_cmds = _get_commands(self.mock_send, PrepCmd.PrepDropPlate)
+    drop_tool_cmds = _get_commands(self.mock_send, PrepCmd.PrepDropTool)
     self.assertEqual(len(drop_plate_cmds), 1)
     self.assertEqual(len(drop_tool_cmds), 1)
     self.assertFalse(self.backend._gripper_tool_on)
@@ -1013,15 +1041,15 @@ class TestPrepBackendGripper(unittest.IsolatedAsyncioTestCase):
     plate_loc = self.plate.get_absolute_location()
     drop = self._make_drop(self.plate, destination=plate_loc)
     await self.backend.drop_resource(drop, return_gripper=False)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepDropTool)), 0)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepDropPlate)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDropTool)), 0)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDropPlate)), 1)
 
   async def test_move_picked_up_resource(self):
     self.backend._gripper_tool_on = True
     dest = Coordinate(100.0, 50.0, 10.0)
     move = self._make_move(self.plate, location=dest)
     await self.backend.move_picked_up_resource(move)
-    cmds = _get_commands(self.mock_send, PrepMovePlate)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepMovePlate)
     self.assertEqual(len(cmds), 1)
 
 
@@ -1040,62 +1068,64 @@ class TestPrepBackendConvenience(unittest.IsolatedAsyncioTestCase):
 
   async def test_park(self):
     await self.backend.park()
-    cmds = _get_commands(self.mock_send, PrepPark)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepPark)
     self.assertEqual(len(cmds), 1)
     self.assertEqual(cmds[0].dest, _MLPREP_ADDR)
 
   async def test_spread(self):
     await self.backend.spread()
-    cmds = _get_commands(self.mock_send, PrepSpread)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepSpread)
     self.assertEqual(len(cmds), 1)
     self.assertEqual(cmds[0].dest, _MLPREP_ADDR)
 
   async def test_method_begin_automatic_pause(self):
     await self.backend.method_begin(automatic_pause=True)
-    cmds = _get_commands(self.mock_send, PrepMethodBegin)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepMethodBegin)
     self.assertEqual(len(cmds), 1)
     self.assertTrue(cmds[0].automatic_pause)
 
   async def test_method_begin_no_automatic_pause(self):
     await self.backend.method_begin(automatic_pause=False)
-    cmds = _get_commands(self.mock_send, PrepMethodBegin)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepMethodBegin)
     self.assertFalse(cmds[0].automatic_pause)
 
   async def test_method_end(self):
     await self.backend.method_end()
-    self.assertEqual(len(_get_commands(self.mock_send, PrepMethodEnd)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepMethodEnd)), 1)
 
   async def test_method_abort(self):
     await self.backend.method_abort()
-    self.assertEqual(len(_get_commands(self.mock_send, PrepMethodAbort)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepMethodAbort)), 1)
 
   async def test_move_to_position(self):
     await self.backend.move_to_position(x=100.0, y=50.0, z=20.0, use_channels=[0])
-    cmds = _get_commands(self.mock_send, PrepMoveToPosition)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepMoveToPosition)
     self.assertEqual(len(cmds), 1)
     cmd = cmds[0]
     self.assertAlmostEqual(cmd.move_parameters.gantry_x_position, 100.0)
     self.assertEqual(len(cmd.move_parameters.axis_parameters), 1)
-    self.assertEqual(cmd.move_parameters.axis_parameters[0].channel, ChannelIndex.RearChannel)
+    self.assertEqual(
+      cmd.move_parameters.axis_parameters[0].channel, PrepCmd.ChannelIndex.RearChannel
+    )
     self.assertAlmostEqual(cmd.move_parameters.axis_parameters[0].y_position, 50.0)
     self.assertAlmostEqual(cmd.move_parameters.axis_parameters[0].z_position, 20.0)
 
   async def test_move_to_position_via_lane(self):
     await self.backend.move_to_position(x=100.0, y=50.0, z=20.0, use_channels=[0], via_lane=True)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepMoveToPositionViaLane)), 1)
-    self.assertEqual(len(_get_commands(self.mock_send, PrepMoveToPosition)), 0)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepMoveToPositionViaLane)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepMoveToPosition)), 0)
 
   async def test_move_channels_to_safe_z_all(self):
     await self.backend.move_channels_to_safe_z()
-    cmds = _get_commands(self.mock_send, PrepMoveZUpToSafe)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepMoveZUpToSafe)
     self.assertEqual(len(cmds), 1)
     channels = cmds[0].channels
-    self.assertIn(ChannelIndex.RearChannel, channels)
-    self.assertIn(ChannelIndex.FrontChannel, channels)
+    self.assertIn(PrepCmd.ChannelIndex.RearChannel, channels)
+    self.assertIn(PrepCmd.ChannelIndex.FrontChannel, channels)
 
   async def test_set_deck_light(self):
     await self.backend.set_deck_light(white=100, red=50, green=25, blue=200)
-    cmds = _get_commands(self.mock_send, PrepSetDeckLight)
+    cmds = _get_commands(self.mock_send, PrepCmd.PrepSetDeckLight)
     self.assertEqual(len(cmds), 1)
     cmd = cmds[0]
     self.assertEqual(cmd.white, 100)
@@ -1105,9 +1135,6 @@ class TestPrepBackendConvenience(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(cmd.dest, _MLPREP_ADDR)
 
   async def test_not_implemented_96_ops(self):
-    from pylabrobot.liquid_handling.standard import (
-      DropTipRack, MultiHeadAspirationPlate, MultiHeadDispensePlate, PickupTipRack,
-    )
     with self.assertRaises(NotImplementedError):
       await self.backend.pick_up_tips96(None)  # type: ignore[arg-type]
     with self.assertRaises(NotImplementedError):

@@ -149,7 +149,28 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
 # 78 = enum (Argument); 60, 64 = struct (ReturnValue) — see _INTROSPECTION_TYPE_NAMES comments
 _ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 78, 82, 102}
 _RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 63, 68, 76}
-_RETURN_VALUE_TYPE_IDS = {25, 26, 27, 28, 29, 30, 31, 32, 36, 44, 48, 52, 56, 60, 64, 69, 81, 85, 104, 105}
+_RETURN_VALUE_TYPE_IDS = {
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  32,
+  36,
+  44,
+  48,
+  52,
+  56,
+  60,
+  64,
+  69,
+  81,
+  85,
+  104,
+  105,
+}
 
 # Complex type sentinels: byte values that begin a 3-byte triple [type_id, source_id, ref_id].
 # The two contexts (method parameterTypes vs struct structureElementTypes) use different sentinels.
@@ -163,6 +184,7 @@ _HC_RESULT_DESCRIPTIONS: Dict[int, str] = {
   0x0000: "success",
   0x0005: "invalid parameter / not supported",
   0x0006: "unknown command",
+  0x0E01: "door unlocked / safety interlock (command not allowed while door open)",
   0x0200: "hardware error",
   0x020A: "hardware not ready / axis error",
 }
@@ -319,7 +341,9 @@ def _parse_type_seq(
         # Store as ParameterType with the base wire type from byte [i+2]
         width = end - i
         base_type = ints[i + 2] if i + 2 < len(ints) else 0
-        result.append(ParameterType(tid, source_id=_INLINE_MARKER, ref_id=base_type, _byte_width=width))
+        result.append(
+          ParameterType(tid, source_id=_INLINE_MARKER, ref_id=base_type, _byte_width=width)
+        )
         i = end
       else:
         # Standard 3-byte reference: [sentinel, source_id, ref_id]
@@ -509,7 +533,7 @@ class StructInfo:
   struct_id: int
   name: str
   fields: Dict[str, "ParameterType"]  # field_name -> ParameterType
-  interface_id: Optional[int] = None    # Interface this struct was defined on
+  interface_id: Optional[int] = None  # Interface this struct was defined on
 
   @property
   def field_type_names(self) -> Dict[str, str]:
@@ -561,9 +585,9 @@ class GlobalTypePool:
     """Print global pool summary."""
     print(f"GlobalTypePool: {len(self.structs)} structs, {len(self.enums)} enums")
     for i, s in enumerate(self.structs):
-      print(f"  struct[{i+1}]: {s.name} ({len(s.fields)} fields)")
+      print(f"  struct[{i + 1}]: {s.name} ({len(s.fields)} fields)")
     for i, e in enumerate(self.enums):
-      print(f"  enum[{i+1}]: {e.name} ({len(e.values)} values)")
+      print(f"  enum[{i + 1}]: {e.name} ({len(e.values)} values)")
 
 
 # GetStructs wire format (device sends 4 separate array fragments):
@@ -663,7 +687,9 @@ class GetMethodCommand(HamiltonCommand):
       # use parse_next_raw() to avoid UTF-8 decode failure on bytes 0x80-0xFF.
       _, flags, _, param_types_payload = parser.parse_next_raw()
       if flags & PADDED_FLAG:
-        param_types_payload = param_types_payload[:-1] if param_types_payload else param_types_payload
+        param_types_payload = (
+          param_types_payload[:-1] if param_types_payload else param_types_payload
+        )
       param_types_payload = param_types_payload.rstrip(b"\x00")  # STRING null terminator
       all_types = _parse_type_ids(param_types_payload)
     else:
@@ -694,7 +720,9 @@ class GetMethodCommand(HamiltonCommand):
         if label:
           return_labels.append(label)
       else:
-        logger.warning("Unknown introspection type category for type_id=%d; treating as parameter", pt.type_id)
+        logger.warning(
+          "Unknown introspection type category for type_id=%d; treating as parameter", pt.type_id
+        )
         parameter_types.append(pt)
         if label:
           parameter_labels.append(label)
@@ -1015,9 +1043,7 @@ class HamiltonIntrospection:
       offset += cnt
     return result
 
-  async def get_structs_raw(
-    self, address: Address, interface_id: int
-  ) -> tuple[bytes, List[dict]]:
+  async def get_structs_raw(self, address: Address, interface_id: int) -> tuple[bytes, List[dict]]:
     """Get raw GetStructs response bytes and a fragment-by-fragment breakdown.
 
     Use this to see exactly what the device sends so response parsing can
@@ -1029,9 +1055,7 @@ class HamiltonIntrospection:
         print(f\"{i}: type_id={f['type_id']} len={f['length']} decoded={f['decoded']!r}\")
     """
     command = GetStructsCommand(address, interface_id)
-    result = await self.backend.send_command(
-      command, ensure_connection=False, return_raw=True
-    )
+    result = await self.backend.send_command(command, ensure_connection=False, return_raw=True)
     (params,) = result
     return params, inspect_hoi_params(params)
 
@@ -1072,8 +1096,8 @@ class HamiltonIntrospection:
     # Walk type_bytes with a byte-level cursor (variable width: 1 byte for simple
     # types, 3 bytes for 0xE8 complex references). field_counts gives the number
     # of *logical* fields per struct, not the number of bytes to consume.
-    byte_offset = 0   # cursor into type_bytes
-    name_offset = 0   # cursor into field_names
+    byte_offset = 0  # cursor into type_bytes
+    name_offset = 0  # cursor into field_names
     result: List[StructInfo] = []
     for i, cnt in enumerate(field_counts):
       name = struct_names[i] if i < len(struct_names) else f"Struct_{i}"
@@ -1255,7 +1279,9 @@ class HamiltonIntrospection:
 
     logger.info(
       "Global type pool built: %d structs, %d enums from %d global objects",
-      len(pool.structs), len(pool.enums), len(global_addresses),
+      len(pool.structs),
+      len(pool.enums),
+      len(global_addresses),
     )
     return pool
 
@@ -1392,6 +1418,7 @@ class HamiltonIntrospection:
     with the instrument's human-readable message. Returns that value or None.
     """
     import re
+
     # Match U8_ARRAY= then either quoted content or rest until "; " or " [" or end
     m = re.search(r"U8_ARRAY=(?:\"([^\"]*)\"|([^;[\]]*?)(?:\s*;\s*|\s*\[|$))", error_string)
     if not m:
@@ -1463,8 +1490,12 @@ class HamiltonIntrospection:
     address, interface_id, method_id, hc_result = parsed
     error_text = self.parse_error_u8_array_message(error_string) or ""
     return await self.resolve_error(
-      address, interface_id, method_id,
-      registry=registry, hc_result=hc_result, error_text=error_text,
+      address,
+      interface_id,
+      method_id,
+      registry=registry,
+      hc_result=hc_result,
+      error_text=error_text,
     )
 
 
@@ -1510,6 +1541,7 @@ def _get_nested_dataclass(annotation):
   if inner_args:
     base_type = inner_args[0]
   import dataclasses
+
   if dataclasses.is_dataclass(base_type):
     return base_type
   return None
@@ -1518,6 +1550,7 @@ def _get_nested_dataclass(annotation):
 @dataclass
 class FieldMismatch:
   """One field-level mismatch between hand-crafted and introspected definitions."""
+
   field_name: str
   issue: str  # e.g. "missing", "extra", "type mismatch", "order mismatch"
   expected: str = ""
@@ -1533,6 +1566,7 @@ class FieldMismatch:
 @dataclass
 class ValidationResult:
   """Result of comparing a hand-crafted dataclass against introspection."""
+
   name: str
   passed: bool = False
   mismatches: List[FieldMismatch] = field(default_factory=list)
@@ -1588,22 +1622,26 @@ def validate_struct(
 
   # 1. Field count
   if len(hand_names) != len(intro_names):
-    mismatches.append(FieldMismatch(
-      field_name="(count)",
-      issue="field count mismatch",
-      expected=str(len(intro_names)),
-      actual=str(len(hand_names)),
-    ))
+    mismatches.append(
+      FieldMismatch(
+        field_name="(count)",
+        issue="field count mismatch",
+        expected=str(len(intro_names)),
+        actual=str(len(hand_names)),
+      )
+    )
 
   # 2. Field names (order-aware)
   for i, (hn_norm, in_norm) in enumerate(zip(hand_norm, intro_norm)):
     if hn_norm != in_norm:
-      mismatches.append(FieldMismatch(
-        field_name=hand_names[i],
-        issue=f"name mismatch at position {i}",
-        expected=intro_names[i],
-        actual=hand_names[i],
-      ))
+      mismatches.append(
+        FieldMismatch(
+          field_name=hand_names[i],
+          issue=f"name mismatch at position {i}",
+          expected=intro_names[i],
+          actual=hand_names[i],
+        )
+      )
 
   # 3. Extra / missing fields
   hand_set = set(hand_norm)
@@ -1618,7 +1656,9 @@ def validate_struct(
     mismatches.append(FieldMismatch(field_name=original_intro, issue="missing in hand-crafted"))
   for extra_norm in hand_set - intro_set:
     original_hand = hand_map[extra_norm]
-    mismatches.append(FieldMismatch(field_name=original_hand, issue="extra in hand-crafted (not in introspection)"))
+    mismatches.append(
+      FieldMismatch(field_name=original_hand, issue="extra in hand-crafted (not in introspection)")
+    )
 
   # 4. Field types (where names match)
   for i, (hand_name, intro_name) in enumerate(zip(hand_names, intro_names)):
@@ -1632,22 +1672,29 @@ def validate_struct(
     if hand_type_id is not None and hand_type_id != intro_pt.type_id:
       try:
         from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import HamiltonDataType
+
         expected_name = HamiltonDataType(intro_pt.type_id).name
         actual_name = HamiltonDataType(hand_type_id).name
       except ValueError:
         expected_name = str(intro_pt.type_id)
         actual_name = str(hand_type_id)
-      mismatches.append(FieldMismatch(
-        field_name=hand_name,
-        issue="type mismatch",
-        expected=expected_name,
-        actual=actual_name,
-      ))
+      mismatches.append(
+        FieldMismatch(
+          field_name=hand_name,
+          issue="type mismatch",
+          expected=expected_name,
+          actual=actual_name,
+        )
+      )
 
     # 5. Recursive validation for nested structs
-    if (pool is not None and intro_pt.is_complex
-        and intro_pt.source_id is not None and intro_pt.ref_id is not None
-        and intro_pt.type_id == 30):  # STRUCTURE
+    if (
+      pool is not None
+      and intro_pt.is_complex
+      and intro_pt.source_id is not None
+      and intro_pt.ref_id is not None
+      and intro_pt.type_id == 30
+    ):  # STRUCTURE
       nested_cls = _get_nested_dataclass(annotation)
       if nested_cls:
         if intro_pt.source_id == 1:
@@ -1655,9 +1702,7 @@ def validate_struct(
           nested_struct = pool.resolve_struct(intro_pt.ref_id)
         elif intro_pt.source_id == 0 and introspected.interface_id is not None:
           # Same-interface ref: look up within that interface's struct group
-          nested_struct = pool.resolve_struct_local(
-            introspected.interface_id, intro_pt.ref_id
-          )
+          nested_struct = pool.resolve_struct_local(introspected.interface_id, intro_pt.ref_id)
         else:
           nested_struct = None
         if nested_struct:
@@ -1696,16 +1741,18 @@ def validate_command(
   result = ValidationResult(name=f"{command_cls.__name__} (cmd={cmd_id})")
 
   if cmd_id is None:
-    result.mismatches.append(FieldMismatch(
-      field_name="(class)", issue="no command_id attribute"))
+    result.mismatches.append(FieldMismatch(field_name="(class)", issue="no command_id attribute"))
     result.passed = False
     return result
 
   # Find matching introspected method
   method = registry.get_method(interface_id, cmd_id)
   if method is None:
-    result.mismatches.append(FieldMismatch(
-      field_name="(method)", issue=f"no introspected method for [{interface_id}:{cmd_id}]"))
+    result.mismatches.append(
+      FieldMismatch(
+        field_name="(method)", issue=f"no introspected method for [{interface_id}:{cmd_id}]"
+      )
+    )
     result.passed = False
     return result
 
@@ -1713,9 +1760,7 @@ def validate_command(
 
   # Get command's payload fields (exclude 'dest' and class-level attrs)
   hints = typing.get_type_hints(command_cls, include_extras=True)
-  payload_fields = [
-    f for f in dc.fields(command_cls) if f.name != "dest"
-  ]
+  payload_fields = [f for f in dc.fields(command_cls) if f.name != "dest"]
 
   # Match struct payload fields to introspected parameter types positionally
   struct_fields = [
@@ -1724,7 +1769,8 @@ def validate_command(
     if _get_nested_dataclass(hints.get(pf.name)) is not None
   ]
   struct_params = [
-    pt for pt in method.parameter_types
+    pt
+    for pt in method.parameter_types
     if pt.is_complex and pt.source_id is not None and pt.ref_id is not None
   ]
 
@@ -1746,4 +1792,3 @@ def validate_command(
 
   result.passed = all(c.passed for c in result.children) and len(result.mismatches) == 0
   return result
-

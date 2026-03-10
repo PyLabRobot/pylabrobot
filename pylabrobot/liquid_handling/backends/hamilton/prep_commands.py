@@ -35,7 +35,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U8Array,
   Enum as WEnum,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import InterfaceSpec
 
 
 # =============================================================================
@@ -73,7 +72,7 @@ class MonitoringMode(IntEnum):
   """Selects aspirate monitoring vs TADM for pipetting commands."""
 
   MONITORING = 0  # AspirateMonitoringParameters (default, matches v1 behavior)
-  TADM = 1        # TadmParameters
+  TADM = 1  # TadmParameters
 
 
 # =============================================================================
@@ -126,7 +125,9 @@ class InstrumentConfig:
   safe_speeds_enabled: bool
   deck_sites: Tuple[DeckSiteInfo, ...]
   waste_sites: Tuple[WasteSiteInfo, ...]
-  default_traverse_height: Optional[float] = None  # None if probe failed; user can set via set_default_traverse_height
+  default_traverse_height: Optional[float] = (
+    None  # None if probe failed; user can set via set_default_traverse_height
+  )
   num_channels: Optional[int] = None  # 1 or 2 dual-channel pipettor; from GetPresentChannels
   has_mph: Optional[bool] = None  # True if 8MPH present; from GetPresentChannels
 
@@ -350,7 +351,9 @@ class LldParameters:
 
   @classmethod
   def default(cls) -> LldParameters:
-    return cls(default_values=True, z_seek=0.0, z_seek_speed=0.0, z_submerge=0.0, z_out_of_liquid=0.0)
+    return cls(
+      default_values=True, z_seek=0.0, z_seek_speed=0.0, z_submerge=0.0, z_out_of_liquid=0.0
+    )
 
 
 @dataclass
@@ -363,7 +366,9 @@ class CLldParameters:
 
   @classmethod
   def default(cls) -> CLldParameters:
-    return cls(default_values=True, sensitivity=1, clot_check_enable=False, z_clot_check=0.0, detect_mode=0)
+    return cls(
+      default_values=True, sensitivity=1, clot_check_enable=False, z_clot_check=0.0, detect_mode=0
+    )
 
 
 @dataclass
@@ -376,7 +381,13 @@ class PLldParameters:
 
   @classmethod
   def default(cls) -> PLldParameters:
-    return cls(default_values=True, sensitivity=1, dispenser_seek_speed=0.0, lld_height_difference=0.0, detect_mode=0)
+    return cls(
+      default_values=True,
+      sensitivity=1,
+      dispenser_seek_speed=0.0,
+      lld_height_difference=0.0,
+      detect_mode=0,
+    )
 
 
 @dataclass
@@ -1727,5 +1738,3 @@ class PrepGetPresentChannels(_PrepStatusQuery):
   @dataclass(frozen=True)
   class Response:
     channels: EnumArray  # list of ints: map to ChannelIndex for present channels
-
-

@@ -660,9 +660,7 @@ class PrepDeck(Deck):
       name=name, size_x=size_x, size_y=size_y, size_z=size_z, origin=origin, category=category
     )
     if with_core_grippers:
-      self.assign_child_resource(
-        prep_core_gripper_mount(), location=Coordinate(290, 266.5, 62.5)
-      )
+      self.assign_child_resource(prep_core_gripper_mount(), location=Coordinate(290, 266.5, 62.5))
     spots_list: List[ResourceHolder] = []
     for column in range(2):
       for row in range(4):
@@ -673,7 +671,9 @@ class PrepDeck(Deck):
           size_x=127.76,
           size_y=92,
           size_z=12.5,
-          child_location=Coordinate(0, 1.5, 3.75), # Adjusted for plastic corner mounts TODO: Validate on other systems
+          child_location=Coordinate(
+            0, 1.5, 3.75
+          ),  # Adjusted for plastic corner mounts TODO: Validate on other systems
         )
         self.assign_child_resource(spot, location=Coordinate(x, y, 0))
         spots_list.append(spot)
