@@ -1,12 +1,14 @@
-from pylabrobot.legacy.tilting import TilterBackend
+"""Legacy. Use pylabrobot.capabilities.tilting instead."""
+
+from pylabrobot.capabilities.tilting import TilterBackend
 
 
 class TilterChatterboxBackend(TilterBackend):
   async def setup(self):
-    print("Setting up tilter.")
+    pass
 
   async def stop(self):
-    print("Stopping tilter.")
+    pass
 
   async def set_angle(self, angle: float):
-    print(f"Setting the angle to {angle}.")
+    pass

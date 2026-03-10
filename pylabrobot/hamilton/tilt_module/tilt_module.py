@@ -1,64 +1,63 @@
-"""Legacy. Use a vendor-specific machine class (e.g. HamiltonTiltModule) instead."""
-
 import math
 from typing import List, Optional
 
-from pylabrobot.capabilities.tilting import TilterBackend, TiltingCapability
+from pylabrobot.capabilities.tilting import TiltingCapability
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.well import CrossSectionType, Well
 
+from .backend import HamiltonTiltModuleBackend
 
-class Tilter(ResourceHolder, Machine):
-  """Legacy tilt module machine. In new code, use the vendor-specific machine class."""
+
+class HamiltonTiltModule(ResourceHolder, Machine):
+  """A Hamilton tilt module."""
 
   def __init__(
     self,
     name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    backend: TilterBackend,
-    hinge_coordinate: Coordinate,
-    child_location: Coordinate,
-    category: Optional[str] = None,
-    model: Optional[str] = None,
+    com_port: str,
+    child_location: Coordinate = Coordinate(1.0, 3.0, 83.55),
+    pedestal_size_z: float = 3.47,
+    write_timeout: float = 3,
+    timeout: float = 3,
   ):
+    backend = HamiltonTiltModuleBackend(
+      com_port=com_port,
+      write_timeout=write_timeout,
+      timeout=timeout,
+    )
     ResourceHolder.__init__(
       self,
       name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      category=category,
-      model=model,
+      size_x=132,
+      size_y=92.57,
+      size_z=85.81,
       child_location=child_location,
+      category="tilter",
+      model="HamiltonTiltModule",
     )
     Machine.__init__(self, backend=backend)
-    self.backend: TilterBackend = backend
-    self._hinge_coordinate = hinge_coordinate
+    self._backend: HamiltonTiltModuleBackend = backend
+    self.pedestal_size_z = pedestal_size_z
+    self._hinge_coordinate = Coordinate(6.18, 0, 72.85)
 
-    self.tilting = TiltingCapability(backend=backend)
-    self._capabilities = [self.tilting]
-
-  @property
-  def absolute_angle(self) -> float:
-    return self.tilting.absolute_angle
+    self.tilter = TiltingCapability(backend=backend)
+    self._capabilities = [self.tilter]
 
   @property
   def hinge_coordinate(self) -> Coordinate:
     return self._hinge_coordinate
 
-  async def set_angle(self, absolute_angle: float):
-    await self.tilting.set_angle(absolute_angle)
-
-  async def tilt(self, relative_angle: float):
-    await self.tilting.tilt(relative_angle)
-
-  def experimental_rotate_coordinate_around_hinge(
+  def rotate_coordinate_around_hinge(
     self, absolute_coordinate: Coordinate, angle: float
   ) -> Coordinate:
+    """Rotate an absolute coordinate around the hinge by a given angle.
+
+    Args:
+      absolute_coordinate: The coordinate to rotate.
+      angle: The angle to rotate by, in degrees. Negative is clockwise.
+    """
     theta = math.radians(angle)
     origin = self.get_absolute_location("l", "f", "b")
 
@@ -73,31 +72,44 @@ class Tilter(ResourceHolder, Machine):
 
     return Coordinate(new_x, absolute_coordinate.y, new_z)
 
-  def experimental_get_plate_drain_offsets(
+  def get_plate_drain_offsets(
     self, plate: Plate, absolute_angle: Optional[float] = None
   ) -> List[Coordinate]:
+    """Get drain edge offsets for all wells in the plate at the given tilt angle.
+
+    Args:
+      plate: The plate to calculate the offsets for.
+      absolute_angle: The absolute angle. If None, uses the current tilt angle.
+    """
     if absolute_angle is None:
-      absolute_angle = self.tilting.absolute_angle
+      absolute_angle = self.tilter.absolute_angle
     angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
     hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
 
     well_drain_offsets = []
     for well in plate.children:
       level_coord = well.get_absolute_location(hinge_side, "c", "b")
-      rotated_coord = self.experimental_rotate_coordinate_around_hinge(level_coord, angle)
+      rotated_coord = self.rotate_coordinate_around_hinge(level_coord, angle)
       offset = rotated_coord - well.get_absolute_location("c", "c", "b")
       well_drain_offsets.append(offset)
 
     return well_drain_offsets
 
-  def experimental_get_well_drain_offsets(
+  def get_well_drain_offsets(
     self,
     wells: List[Well],
     n_tips: int = 1,
     absolute_angle: Optional[float] = None,
   ) -> List[Coordinate]:
+    """Get drain edge offsets for the given wells at the given tilt angle.
+
+    Args:
+      wells: The wells to calculate the offsets for.
+      n_tips: The number of tips per well. Defaults to 1.
+      absolute_angle: The absolute angle. If None, uses the current tilt angle.
+    """
     if absolute_angle is None:
-      absolute_angle = self.tilting.absolute_angle
+      absolute_angle = self.tilter.absolute_angle
     angle = absolute_angle * (-1 if self._hinge_coordinate.x >= self._size_x / 2 else 1)
 
     hinge_on_left = self._hinge_coordinate.x < self._size_x / 2
@@ -128,7 +140,7 @@ class Tilter(ResourceHolder, Machine):
 
       offsets = []
       for tip_coord in tip_coords:
-        rotated_tip = self.experimental_rotate_coordinate_around_hinge(
+        rotated_tip = self.rotate_coordinate_around_hinge(
           well.get_absolute_location("c", "c", "b") + tip_coord,
           angle,
         )

@@ -69,12 +69,12 @@ class Liconic(Resource, Machine):
 
     self.retrieval = AutomatedRetrievalCapability(backend=backend)
     self.tc = TemperatureControlCapability(backend=backend) if liconic_model.has_temperature_control else None
-    self.humidity = HumidityControlCapability(backend=backend) if liconic_model.has_humidity_control else None
+    self.humidity_controller = HumidityControlCapability(backend=backend) if liconic_model.has_humidity_control else None
     self.shaker = ShakingCapability(backend=backend) if has_shaker else None
     self.barcode_scanner = barcode_scanner
 
     self._capabilities = [
-      c for c in [self.retrieval, self.tc, self.humidity, self.shaker, self.barcode_scanner]
+      c for c in [self.retrieval, self.tc, self.humidity_controller, self.shaker, self.barcode_scanner]
       if c is not None
     ]
 
