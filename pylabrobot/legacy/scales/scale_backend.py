@@ -1,31 +1,17 @@
-from abc import ABCMeta, abstractmethod
+"""Legacy. Use pylabrobot.capabilities.weighing.ScaleBackend instead."""
 
-from pylabrobot.machines.backend import MachineBackend
+import warnings
+
+from pylabrobot.capabilities.weighing.backend import ScaleBackend as _NewScaleBackend
 
 
-class ScaleBackend(MachineBackend, metaclass=ABCMeta):
-  """Backend for a scale"""
+class ScaleBackend(_NewScaleBackend):
+  """Legacy. Use pylabrobot.capabilities.weighing.ScaleBackend instead."""
 
-  @abstractmethod
-  async def zero(self): ...
-
-  @abstractmethod
-  async def tare(self): ...
-
-  @abstractmethod
-  async def read_weight(self) -> float:
-    """Read the weight in grams"""
-    ...
-
-  # Deprecated: for backward compatibility
   async def get_weight(self) -> float:
-    """Deprecated: Use read_weight() instead.
-
-    Get the weight in grams"""
-    import warnings
-
+    """Deprecated: Use read_weight() instead."""
     warnings.warn(
-      "get_weight() is deprecated and will be removed in 2026-03. Use read_weight() instead.",
+      "get_weight() is deprecated. Use read_weight() instead.",
       DeprecationWarning,
       stacklevel=2,
     )
