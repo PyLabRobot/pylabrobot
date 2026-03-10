@@ -1,89 +1,78 @@
-import warnings
+"""Legacy. Use pylabrobot.inheco.thermoshake.InhecoThermoshakeBackend instead."""
 
 from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
-from pylabrobot.legacy.temperature_controlling.inheco.temperature_controller import (
-  InhecoTemperatureControllerBackend,
-)
+from pylabrobot.inheco import thermoshake
 
 
-class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerBackend):
-  """Backend for Inheco Thermoshake devices
+class InhecoThermoshakeBackend(HeaterShakerBackend):
+  """Legacy. Use pylabrobot.inheco.InhecoThermoshakeBackend instead."""
 
-  https://www.inheco.com/thermoshake-ac.html
-  """
+  def __init__(self, index: int, control_box):
+    self._new = thermoshake.InhecoThermoshakeBackend(index=index, control_box=control_box)
 
-  async def stop(self):
-    await self.stop_shaking()
-    await super().stop()
+  @property
+  def index(self) -> int:
+    return self._new.index
 
-  async def _start_shaking_command(self):
-    """Send the device command that starts shaking with the configured settings."""
+  @property
+  def interface(self):
+    return self._new.interface
 
-    return await self.interface.send_command(f"{self.index}ASE1")
-
-  async def stop_shaking(self):
-    """Stop shaking the device"""
-
-    return await self.interface.send_command(f"{self.index}ASE0")
-
-  async def set_shaker_speed(self, speed: float):
-    """Set the shaker speed on the device, but do not start shaking yet. Use `start_shaking` for
-    that.
-    """
-
-    # # 60 ... 2000
-    # # Thermoshake and Teleshake
-    assert speed in range(60, 2001), "Speed must be in the range 60 to 2000 RPM"
-
-    # Thermoshake AC, Teleshake95 AC and Teleshake AC
-    # 150 ... 3000
-    # assert speed in range(150, 3001), "Speed must be in the range 150 to 3000 RPM"
-
-    return await self.interface.send_command(f"1SSR{speed}")
-
-  async def set_shaker_shape(self, shape: int):
-    """Set the shape of the figure that should be shaked.
-
-    Args:
-      shape: 0 = Circle anticlockwise, 1 = Circle clockwise, 2 = Up left down right, 3 = Up right
-        down left, 4 = Up-down, 5 = Left-right
-    """
-
-    assert shape in range(6), "Shape must be in the range 0 to 5"
-
-    return await self.interface.send_command(f"1SSS{shape}")
-
-  async def start_shaking(self, speed: float, shape: int = 0):
-    """Start shaking at the given speed.
-
-    Args:
-      speed: Speed of shaking in revolutions per minute (RPM)
-    """
-
-    await self.set_shaker_speed(speed=speed)
-    await self.set_shaker_shape(shape=shape)
-    await self._start_shaking_command()
-
-  async def shake(self, speed: float, shape: int = 0):
-    """Deprecated alias for start_shaking."""
-    warnings.warn(
-      "InhecoThermoshakeBackend.shake() is deprecated and will be removed in a future release. "
-      "Use start_shaking() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    await self.start_shaking(speed=speed, shape=shape)
+  @property
+  def supports_active_cooling(self) -> bool:
+    return self._new.supports_active_cooling
 
   @property
   def supports_locking(self) -> bool:
-    return False
+    return self._new.supports_locking
+
+  async def setup(self):
+    await self._new.setup()
+
+  async def stop(self):
+    await self._new.stop()
+
+  def serialize(self) -> dict:
+    return self._new.serialize()
+
+  async def set_temperature(self, temperature: float):
+    await self._new.set_temperature(temperature)
+
+  async def get_current_temperature(self) -> float:
+    return await self._new.get_current_temperature()
+
+  async def deactivate(self):
+    await self._new.deactivate()
+
+  async def set_target_temperature(self, temperature: float):
+    await self._new.set_target_temperature(temperature)
+
+  async def start_temperature_control(self):
+    return await self._new.start_temperature_control()
+
+  async def stop_temperature_control(self):
+    return await self._new.stop_temperature_control()
+
+  async def get_device_info(self, info_type: int):
+    return await self._new.get_device_info(info_type)
+
+  async def start_shaking(self, speed: float, shape: int = 0):
+    await self._new.start_shaking(speed=speed, shape=shape)
+
+  async def stop_shaking(self):
+    return await self._new.stop_shaking()
+
+  async def set_shaker_speed(self, speed: float):
+    return await self._new.set_shaker_speed(speed)
+
+  async def set_shaker_shape(self, shape: int):
+    return await self._new.set_shaker_shape(shape)
+
+  async def shake(self, speed: float, shape: int = 0):
+    await self._new.shake(speed=speed, shape=shape)
 
   async def lock_plate(self):
-    raise NotImplementedError(
-      "Locking the plate is not implemented yet for Inheco ThermoShake devices. "
-    )
+    await self._new.lock_plate()
 
   async def unlock_plate(self):
-    raise NotImplementedError(
-      "Unlocking the plate is not implemented yet for Inheco ThermoShake devices. "
-    )
+    await self._new.unlock_plate()

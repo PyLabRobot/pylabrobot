@@ -1,32 +1,5 @@
-from abc import ABCMeta, abstractmethod
+"""Legacy re-export. Use pylabrobot.capabilities.shaking.ShakerBackend instead."""
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.capabilities.shaking.backend import ShakerBackend
 
-
-class ShakerBackend(MachineBackend, metaclass=ABCMeta):
-  """Backend for a shaker machine"""
-
-  @abstractmethod
-  async def start_shaking(self, speed: float):
-    """Start shaking at the given speed
-
-    Args:
-      speed: Speed of shaking in revolutions per minute (RPM)
-    """
-
-  @abstractmethod
-  async def stop_shaking(self):
-    """Stop shaking"""
-
-  @property
-  @abstractmethod
-  def supports_locking(self) -> bool:
-    """Check if the shaker supports locking the plate"""
-
-  @abstractmethod
-  async def lock_plate(self):
-    """Lock the plate"""
-
-  @abstractmethod
-  async def unlock_plate(self):
-    """Unlock the plate"""
+__all__ = ["ShakerBackend"]
