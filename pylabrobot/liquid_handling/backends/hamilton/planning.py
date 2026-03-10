@@ -1,13 +1,18 @@
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 from pylabrobot.liquid_handling.utils import MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.resources import Coordinate
 
 
+def _default_min_spacing_between(channel1: int, channel2: int) -> float:
+  """Default minimum spacing between two channels, based on their indices."""
+  return MIN_SPACING_BETWEEN_CHANNELS * abs(channel1 - channel2)
+
+
 def group_by_x_batch_by_xy(
   locations: List[Coordinate],
   use_channels: List[int],
-  channels_minimum_y_spacing: float = MIN_SPACING_BETWEEN_CHANNELS,
+  min_spacing_between_channels: Callable[[int, int], float] = _default_min_spacing_between,
 ) -> Dict[float, List[List[int]]]:
   if len(use_channels) == 0:
     raise ValueError("use_channels must not be empty.")
@@ -49,8 +54,8 @@ def group_by_x_batch_by_xy(
       for batch in y_batches_for_this_x:
         index_min_y = min(batch, key=lambda i: y_pos[i])
         # check min spacing
-        if y_pos[index_min_y] - y < channels_minimum_y_spacing * (
-          use_channels[i] - use_channels[index_min_y]
+        if y_pos[index_min_y] - y < min_spacing_between_channels(
+          use_channels[i], use_channels[index_min_y]
         ):
           continue
         # check if channel is already used in this batch

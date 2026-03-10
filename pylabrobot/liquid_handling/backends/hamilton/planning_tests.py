@@ -18,9 +18,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 200.0, 0),
       Coordinate(100.0, 180.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1])
     # y diff = 20 >= 9*1, fits in one batch
     self.assertEqual(result, {100.0: [[0, 1]]})
 
@@ -29,9 +27,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 200.0, 0),
       Coordinate(100.0, 195.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1])
     # y diff = 5 < 9*1, separate batches
     self.assertEqual(result, {100.0: [[0], [1]]})
 
@@ -40,9 +36,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 200.0, 0),
       Coordinate(200.0, 200.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1])
     self.assertEqual(result, {100.0: [[0]], 200.0: [[1]]})
 
   def test_x_rounding(self):
@@ -50,17 +44,13 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.04, 200.0, 0),
       Coordinate(100.02, 180.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1])
     # Both round to 100.0
     self.assertEqual(result, {100.0: [[0, 1]]})
 
   def test_two_channels_same_x(self):
     locations = [Coordinate(100.0, 200.0, 0), Coordinate(100.0, 180.0, 0)]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1])
     self.assertEqual(result, {100.0: [[0, 1]]})
 
   def test_empty_use_channels_raises(self):
@@ -75,9 +65,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 300.0, 0),
       Coordinate(100.0, 200.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 5], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 5])
     # y diff = 100 >= 9*(5-0) = 45, fits in one batch
     self.assertEqual(result, {100.0: [[0, 1]]})
 
@@ -86,9 +74,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 240.0, 0),
       Coordinate(100.0, 200.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 5], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 5])
     # y diff = 40 < 9*(5-0) = 45, separate batches
     self.assertEqual(result, {100.0: [[0], [1]]})
 
@@ -98,9 +84,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 200.0, 0),
       Coordinate(200.0, 200.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1, 2], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1, 2])
     self.assertEqual(result, {100.0: [[1]], 200.0: [[2]], 300.0: [[0]]})
 
   def test_multiple_batches_in_one_x_group(self):
@@ -110,9 +94,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 194.0, 0),
       Coordinate(100.0, 191.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 1, 2, 3], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 1, 2, 3])
     # Each consecutive pair has y diff = 3 < 9, so each in its own batch
     self.assertEqual(result, {100.0: [[0], [1], [2], [3]]})
 
@@ -121,9 +103,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 200.0, 0),
       Coordinate(100.0, 180.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 0], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 0])
     self.assertEqual(result, {100.0: [[0], [1]]})
 
   def test_duplicate_channels_three_ops(self):
@@ -132,9 +112,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 180.0, 0),
       Coordinate(100.0, 160.0, 0),
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[0, 0, 0], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[0, 0, 0])
     self.assertEqual(result, {100.0: [[0], [1], [2]]})
 
   def test_channels_sorted_by_channel_index_within_x_group(self):
@@ -142,9 +120,7 @@ class TestGroupByXBatchByXY(unittest.TestCase):
       Coordinate(100.0, 180.0, 0),  # channel 2
       Coordinate(100.0, 200.0, 0),  # channel 0
     ]
-    result = group_by_x_batch_by_xy(
-      locations=locations, use_channels=[2, 0], channels_minimum_y_spacing=9.0
-    )
+    result = group_by_x_batch_by_xy(locations=locations, use_channels=[2, 0])
     # Channel 0 (index 1) sorted before channel 2 (index 0)
     self.assertEqual(result, {100.0: [[1, 0]]})
 

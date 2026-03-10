@@ -49,6 +49,7 @@ class XPeelBackend(PeelerBackend):
 
     self._serial_timeout = timeout if timeout is not None else self.response_timeout
     self.io = Serial(
+      human_readable_device_name="XPeel",
       port=self.port,
       baudrate=self.BAUDRATE,
       bytesize=serial.EIGHTBITS,

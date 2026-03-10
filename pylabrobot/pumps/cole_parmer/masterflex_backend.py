@@ -32,6 +32,7 @@ class MasterflexBackend(PumpBackend):
       parity=serial.PARITY_ODD,
       stopbits=serial.STOPBITS_ONE,
       bytesize=serial.SEVENBITS,
+      human_readable_device_name="Masterflex Pump",
     )
 
   async def setup(self):
