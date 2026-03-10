@@ -117,14 +117,7 @@ class InhecoCPAC(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self._backend: InhecoCPACBackend = backend
     self.tc = TemperatureControlCapability(backend=backend)
-
-  async def setup(self, **backend_kwargs):
-    await super().setup(**backend_kwargs)
-    await self.tc._on_setup()
-
-  async def stop(self):
-    await self.tc._on_stop()
-    await super().stop()
+    self._capabilities = [self.tc]
 
   def serialize(self) -> dict:
     return {

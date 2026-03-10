@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import sys
 from abc import ABC
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, List, TypeVar
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.serializer import SerializableMixin
@@ -44,6 +44,7 @@ class Machine(SerializableMixin, ABC):
   def __init__(self, backend: MachineBackend):
     self._backend = backend
     self._setup_finished = False
+    self._capabilities: List[Any] = []
 
   @property
   def setup_finished(self) -> bool:
@@ -62,10 +63,14 @@ class Machine(SerializableMixin, ABC):
 
   async def setup(self, **backend_kwargs):
     await self._backend.setup(**backend_kwargs)
+    for cap in self._capabilities:
+      await cap._on_setup()
     self._setup_finished = True
 
   @need_setup_finished
   async def stop(self):
+    for cap in reversed(self._capabilities):
+      await cap._on_stop()
     await self._backend.stop()
     self._setup_finished = False
 

@@ -101,16 +101,7 @@ class InhecoThermoShake(ResourceHolder, Machine):
     self._backend: InhecoThermoshakeBackend = backend
     self.tc = TemperatureControlCapability(backend=backend)
     self.shaker = ShakingCapability(backend=backend)
-
-  async def setup(self, **backend_kwargs):
-    await super().setup(**backend_kwargs)
-    await self.tc._on_setup()
-    await self.shaker._on_setup()
-
-  async def stop(self):
-    await self.shaker._on_stop()
-    await self.tc._on_stop()
-    await super().stop()
+    self._capabilities = [self.tc, self.shaker]
 
   def serialize(self) -> dict:
     return {

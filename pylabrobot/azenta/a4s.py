@@ -270,16 +270,6 @@ class A4S(PlateHolder, Machine):
     self.tc = TemperatureControlCapability(backend=backend)
     self._capabilities = [self.tc, self.sealer]
 
-  async def setup(self, **backend_kwargs):
-    await super().setup(**backend_kwargs)
-    for cap in self._capabilities:
-      await cap._on_setup()
-
-  async def stop(self):
-    for cap in reversed(self._capabilities):
-      await cap._on_stop()
-    await super().stop()
-
   def serialize(self) -> dict:
     return {
       **Machine.serialize(self),

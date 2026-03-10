@@ -261,17 +261,6 @@ class BioShake(PlateHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self._backend: BioShakeBackend = backend
-    self._capabilities = []
-
-  async def setup(self, **backend_kwargs):
-    await super().setup(**backend_kwargs)
-    for cap in self._capabilities:
-      await cap._on_setup()
-
-  async def stop(self):
-    for cap in reversed(self._capabilities):
-      await cap._on_stop()
-    await super().stop()
 
   def serialize(self) -> dict:
     return {
