@@ -30,6 +30,7 @@ from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   UnlockDoor,
   _get_tip_type_from_tip,
 )
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   HoiParams,
@@ -564,6 +565,13 @@ class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
   async def test_backend_init_default_port(self):
     backend = NimbusBackend(host="192.168.1.100")
     self.assertEqual(backend.client.io._port, 2000)
+
+  async def test_backend_init_with_client(self):
+    """Injected client is stored and used by the backend."""
+    client = HamiltonTCPClient(host="192.168.1.1", port=2000)
+    backend = NimbusBackend(client=client)
+    self.assertIs(backend.client, client)
+    self.assertEqual(backend.client.io._host, "192.168.1.1")
 
   async def test_num_channels_before_setup_raises(self):
     backend = NimbusBackend(host="192.168.1.100")

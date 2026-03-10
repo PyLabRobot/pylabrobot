@@ -803,7 +803,7 @@ class TipDropParameters:
     (None = 0).
     """
     z = loc.z + (tip.total_tip_length - tip.fitting_depth)
-    z_seek = loc.z + tip.total_tip_length + 5.0 + (z_seek_offset or 0.0)
+    z_seek = loc.z + tip.total_tip_length + 10.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
       channel=channel,

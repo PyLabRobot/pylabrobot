@@ -650,7 +650,7 @@ class PrepDeck(Deck):
     self,
     name="deck",
     size_x=300.0,
-    size_y=320.0,
+    size_y=394.0,
     size_z=0,
     origin=Coordinate.zero(),
     category="deck",
@@ -667,21 +667,21 @@ class PrepDeck(Deck):
     for column in range(2):
       for row in range(4):
         x = column * 140
-        y = (row * 95) + 2  # TODO: Check if this offset is valid on other systems (plastic corner stay?)
+        y = row * 95.125
         spot = ResourceHolder(
           name=f"spot_{column}_{row}",
           size_x=127.76,
           size_y=92,
           size_z=12.5,
-          child_location=Coordinate(0, 0, 3.75),
+          child_location=Coordinate(0, 1.5, 3.75), # Adjusted for plastic corner mounts TODO: Validate on other systems
         )
         self.assign_child_resource(spot, location=Coordinate(x, y, 0))
         spots_list.append(spot)
     self.spots: List[ResourceHolder] = spots_list
 
-    trash = Trash(name="trash", size_x=0, size_y=0, size_z=0)
+    trash = Trash(name="trash", size_x=13, size_y=132.7, size_z=73)
     # TODO: y coordinate
-    self.assign_child_resource(trash, location=Coordinate(287.0, 0, 0))
+    self.assign_child_resource(trash, location=Coordinate(280.3, -3, 0))
 
     # Same tip definition as STAR teaching rack: 300uL tip. Backend sends z_position =
     # Slot height=83 mm (measured from tip top); 300uL filter: total_tip_length=59.9 mm + fine adjustment
@@ -705,14 +705,14 @@ class PrepDeck(Deck):
     for waste_name, y_pos in [("waste_rear", 30.0), ("waste_front", 10.0), ("waste_mph", 112.0)]:
       waste = Trash(
         name=waste_name,
-        size_x=0.0,
-        size_y=0.0,
-        size_z=68.4,
+        size_x=6.0,
+        size_y=6.0,
+        size_z=0.0,
         category="waste_position",
       )
       self.assign_child_resource(
         waste,
-        location=Coordinate(x=286.8, y=y_pos, z=0.0),
+        location=Coordinate(x=286.8, y=y_pos, z=68.4),
       )
 
   def __getitem__(self, key: int) -> ResourceHolder:

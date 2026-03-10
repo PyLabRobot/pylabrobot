@@ -20,6 +20,10 @@ Usage (in backends)::
     await self.client.setup()
     await self.client.send_command(SomeCommand(...))
 
+Backends may construct the client with host/port (using this module's defaults)
+or accept a pre-built client from the caller (dependency injection) so TCP
+options stay in one place.
+
 Error handling: By default (detailed_errors=True), command failures include
 Layer A (HC_RESULT enum description) and Layer B (async method signature /
 parameter diagnosis). Set detailed_errors=False to skip Layer B.
@@ -324,13 +328,21 @@ class HamiltonInterfaceResolver:
     for name, spec in self.interfaces.items():
       if spec.required:
         addr = await self.require(name)
-        logger.info("Found interface '%s' (%s) at %s", name, spec.path, addr)
+        logger.debug("Found interface '%s' (%s) at %s", name, spec.path, addr)
       else:
         optional_addr = await self.get(name)
         if optional_addr is not None:
-          logger.info("Found interface '%s' (%s) at %s", name, spec.path, optional_addr)
+          logger.debug("Found interface '%s' (%s) at %s", name, spec.path, optional_addr)
         else:
-          logger.info("Could not find interface '%s' (%s) on instrument.", name, spec.path)
+          logger.debug("Could not find interface '%s' (%s) on instrument.", name, spec.path)
+
+    found = sorted(name for name in self.interfaces if self.has_interface(name))
+    optional_missing = sorted(
+      name for name, spec in self.interfaces.items() if not spec.required and not self.has_interface(name)
+    )
+    logger.info("Interfaces: %s", ", ".join(found))
+    if optional_missing:
+      logger.info("Optional not present: %s", ", ".join(optional_missing))
 
 
 @dataclass
@@ -372,6 +384,11 @@ class HamiltonTCPClient:
   interfaces (RegistryProxy): .address for required paths; .is_available or
   firmware probe for optional; await .resolve() for depth-2+ paths.
   detailed_errors=True (default) enables full diagnosis on command failure.
+  Connection timeout is configurable; when the connection drops, the next
+  send_command (with ensure_connection=True) reconnects and retries once.
+  Backends use composition and optional dependency injection: they may build
+  the client with host and port (using the defaults below) or accept an
+  injected instance for full control.
   """
 
   def __init__(
@@ -383,7 +400,22 @@ class HamiltonTCPClient:
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
     detailed_errors: bool = True,
+    connection_timeout: int = 300,
   ):
+    """Initialize the Hamilton TCP client.
+
+    These arguments are the defaults when backends construct the client with
+    only host and port.
+
+    Args:
+      host: Instrument hostname or IP address.
+      port: TCP port (default 2000).
+      connection_timeout: Idle timeout in seconds sent to the instrument at
+        connection init; if no commands are sent for this long the instrument
+        may close the connection. Default 300 (5 min). If the connection drops,
+        the next send_command (with ensure_connection=True) reconnects and
+        retries that command once.
+    """
     self.io = Socket(
       host=host,
       port=port,
@@ -395,6 +427,7 @@ class HamiltonTCPClient:
     self.auto_reconnect = auto_reconnect
     self.max_reconnect_attempts = max_reconnect_attempts
     self.detailed_errors = detailed_errors
+    self._connection_timeout = connection_timeout
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
     self._sequence_numbers: Dict[Address, int] = {}
@@ -620,7 +653,13 @@ class HamiltonTCPClient:
       root_info.children = {}
       self._registry.register(root_info.name, root_info)
 
-    logger.info(f"Hamilton backend setup complete. Client ID: {self._client_id}")
+    root_name = self.discovered_root_name() if self._registry._objects else "—"
+    logger.info(
+      "Setup complete. Registered as Client ID %s (%s), Root: %s",
+      self._client_id,
+      self.client_address,
+      root_name,
+    )
 
   async def _initialize_connection(self):
     """Initialize connection using Protocol 7 (ConnectionPacket).
@@ -629,14 +668,14 @@ class HamiltonTCPClient:
     and read the response directly (blocking) rather than using the
     normal routing mechanism.
     """
-    logger.info("Initializing Hamilton connection...")
+    logger.debug("Initializing Hamilton connection...")
 
     # Build Protocol 7 ConnectionPacket using new InitMessage
-    packet = InitMessage(timeout=30).build()
+    packet = InitMessage(timeout=self._connection_timeout).build()
 
-    logger.info("[INIT] Sending Protocol 7 initialization packet:")
-    logger.info(f"[INIT]   Length: {len(packet)} bytes")
-    logger.info(f"[INIT]   Hex: {packet.hex(' ')}")
+    logger.debug("[INIT] Sending Protocol 7 initialization packet:")
+    logger.debug("[INIT]   Length: %s bytes", len(packet))
+    logger.debug("[INIT]   Hex: %s", packet.hex(" "))
 
     # Send packet
     await self.write(packet)
@@ -650,9 +689,9 @@ class HamiltonTCPClient:
     payload_data = await self.read_exact(packet_size)
     response_bytes = size_data + payload_data
 
-    logger.info("[INIT] Received response:")
-    logger.info(f"[INIT]   Length: {len(response_bytes)} bytes")
-    logger.info(f"[INIT]   Hex: {response_bytes.hex(' ')}")
+    logger.debug("[INIT] Received response:")
+    logger.debug("[INIT]   Length: %s bytes", len(response_bytes))
+    logger.debug("[INIT]   Hex: %s", response_bytes.hex(" "))
 
     # Parse response using InitResponse
     response = InitResponse.from_bytes(response_bytes)
@@ -661,11 +700,11 @@ class HamiltonTCPClient:
     # Controller module is 2, node is client_id, object 65535 for general addressing
     self.client_address = Address(2, response.client_id, 65535)
 
-    logger.info(f"[INIT] ✓ Client ID: {self._client_id}, Address: {self.client_address}")
+    logger.info("Connection initialized (Client ID: %s, Address: %s)", self._client_id, self.client_address)
 
   async def _register_client(self):
     """Register client using Protocol 3."""
-    logger.info("Registering Hamilton client...")
+    logger.debug("Registering Hamilton client...")
 
     # Registration service address (DLL uses 0:0:65534, Piglet comment confirms)
     registration_service = Address(0, 0, 65534)
@@ -690,10 +729,10 @@ class HamiltonTCPClient:
       harp_response_required=False,  # DLL uses 0x03 (no response flag)
     )
 
-    logger.info("[REGISTER] Sending registration packet:")
-    logger.info(f"[REGISTER]   Length: {len(packet)} bytes, Seq: {seq}")
-    logger.info(f"[REGISTER]   Hex: {packet.hex(' ')}")
-    logger.info(f"[REGISTER]   Src: {self.client_address}, Dst: {registration_service}")
+    logger.debug("[REGISTER] Sending registration packet:")
+    logger.debug("[REGISTER]   Length: %s bytes, Seq: %s", len(packet), seq)
+    logger.debug("[REGISTER]   Hex: %s", packet.hex(" "))
+    logger.debug("[REGISTER]   Src: %s, Dst: %s", self.client_address, registration_service)
 
     # Send registration packet
     await self.write(packet)
@@ -701,15 +740,15 @@ class HamiltonTCPClient:
     # Read response
     response = await self._read_one_message()
 
-    logger.info("[REGISTER] Received response:")
-    logger.info(f"[REGISTER]   Length: {len(response.raw_bytes)} bytes")
-    logger.debug(f"[REGISTER]   Hex: {response.raw_bytes.hex(' ')}")
+    logger.debug("[REGISTER] Received response:")
+    logger.debug("[REGISTER]   Length: %s bytes", len(response.raw_bytes))
+    logger.debug("[REGISTER]   Hex: %s", response.raw_bytes.hex(" "))
 
-    logger.info("[REGISTER] ✓ Registration complete")
+    logger.info("Client registered.")
 
   async def _discover_root(self):
     """Discover root objects via Protocol 3 HARP_PROTOCOL_REQUEST"""
-    logger.info("Discovering Hamilton root objects...")
+    logger.debug("Discovering Hamilton root objects...")
 
     registration_service = Address(0, 0, 65534)
 
@@ -737,9 +776,9 @@ class HamiltonTCPClient:
       harp_response_required=True,  # Request with response
     )
 
-    logger.info("[DISCOVER_ROOT] Sending root object discovery:")
-    logger.info(f"[DISCOVER_ROOT]   Length: {len(packet)} bytes, Seq: {seq}")
-    logger.info(f"[DISCOVER_ROOT]   Hex: {packet.hex(' ')}")
+    logger.debug("[DISCOVER_ROOT] Sending root object discovery:")
+    logger.debug("[DISCOVER_ROOT]   Length: %s bytes, Seq: %s", len(packet), seq)
+    logger.debug("[DISCOVER_ROOT]   Hex: %s", packet.hex(" "))
 
     # Send request
     await self.write(packet)
@@ -748,15 +787,15 @@ class HamiltonTCPClient:
     response = await self._read_one_message()
     assert isinstance(response, RegistrationResponse)
 
-    logger.debug(f"[DISCOVER_ROOT] Received response: {len(response.raw_bytes)} bytes")
+    logger.debug("[DISCOVER_ROOT] Received response: %s bytes", len(response.raw_bytes))
 
     # Parse registration response to extract root object IDs
     root_objects = self._parse_registration_response(response)
-    logger.info(f"[DISCOVER_ROOT] ✓ Found {len(root_objects)} root objects")
+    logger.debug("[DISCOVER_ROOT] Found %s root objects", len(root_objects))
 
     self._registry.set_root_addresses(root_objects)
 
-    logger.info(f"✓ Discovery complete: {len(root_objects)} root objects")
+    logger.debug("Discovery complete: %s root objects", len(root_objects))
 
   async def _discover_globals(self):
     """Discover global objects via Protocol 3 HARP_PROTOCOL_REQUEST.
@@ -765,7 +804,7 @@ class HamiltonTCPClient:
     source_id=1 in method parameter triples. Piglet calls these "globals" and
     uses request_id=2 (GLOBAL_OBJECT_ADDRESS) to discover them.
     """
-    logger.info("Discovering Hamilton global objects...")
+    logger.debug("Discovering Hamilton global objects...")
 
     registration_service = Address(0, 0, 65534)
 
@@ -791,9 +830,9 @@ class HamiltonTCPClient:
       harp_response_required=True,
     )
 
-    logger.info("[DISCOVER_GLOBALS] Sending global object discovery:")
-    logger.info(f"[DISCOVER_GLOBALS]   Length: {len(packet)} bytes, Seq: {seq}")
-    logger.info(f"[DISCOVER_GLOBALS]   Hex: {packet.hex(' ')}")
+    logger.debug("[DISCOVER_GLOBALS] Sending global object discovery:")
+    logger.debug("[DISCOVER_GLOBALS]   Length: %s bytes, Seq: %s", len(packet), seq)
+    logger.debug("[DISCOVER_GLOBALS]   Hex: %s", packet.hex(" "))
 
     await self.write(packet)
 
@@ -802,7 +841,7 @@ class HamiltonTCPClient:
 
     global_objects = self._parse_registration_response(response)
     self._global_object_addresses = global_objects
-    logger.info(f"[DISCOVER_GLOBALS] ✓ Found {len(global_objects)} global objects")
+    logger.debug("[DISCOVER_GLOBALS] Found %s global objects", len(global_objects))
 
 
   def _parse_registration_response(self, response: RegistrationResponse) -> list[Address]:

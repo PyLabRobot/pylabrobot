@@ -5,6 +5,9 @@ Three-layer design:
 - **HamiltonTCPClient** (``self.client``): Transport and introspection.
   All device communication goes through ``self.client.send_command()``.
   Address resolution: ``self.client.interfaces.<path>.address``.
+  The backend composes the client via dependency injection: callers pass host
+  (and optionally port) for default TCP settings, or pass a pre-configured
+  HamiltonTCPClient for full control.
 
 - **Command dataclasses** (e.g. ``PrepDropTips``, ``MphPickupTips``): Pure wire shapes.
   Defined in ``prep_commands.py``; ``@dataclass`` with ``dest: Address`` +
@@ -23,7 +26,7 @@ import asyncio
 import logging
 import math
 import random
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, overload, Tuple, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.prep_commands import *  # noqa: F401,F403
 
@@ -55,7 +58,8 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_star_liquid_class,
 )
 from pylabrobot.resources import Coordinate, Tip
-from pylabrobot.resources.hamilton import HamiltonCoreGrippers, HamiltonTip, TipSize
+from pylabrobot.resources.hamilton import HamiltonTip, TipSize
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trash import Trash
@@ -153,6 +157,13 @@ _CHANNEL_INDEX = {
   1: ChannelIndex.FrontChannel,
 }
 
+# Channel index -> deck waste resource name (PrepDeck: waste_rear, waste_front, waste_mph)
+_CHANNEL_TO_WASTE_NAME = {
+  0: "waste_rear",
+  1: "waste_front",
+  2: "waste_mph",
+}
+
 # Expected root name from discovery; validated at setup().
 _EXPECTED_ROOT = "MLPrepRoot"
 
@@ -163,6 +174,8 @@ class PrepBackend(LiquidHandlerBackend):
   Uses HamiltonTCPClient (self.client) for communication and introspection;
   implements LiquidHandlerBackend for liquid handling.
   Interfaces resolved lazily via _require() on first use.
+  Construction accepts either host (and optionally port) to create the client
+  with defaults, or client to inject a pre-configured HamiltonTCPClient.
 
   On-demand introspection: ``await self.client.introspect(path)``.
   """
@@ -177,25 +190,49 @@ class PrepBackend(LiquidHandlerBackend):
     "mlprep_service": InterfaceSpec("MLPrepRoot.MLPrepService", False, True),
   }
 
+  @overload
   def __init__(
     self,
+    *,
     host: str,
     port: int = 2000,
-    read_timeout: float = 30.0,
-    write_timeout: float = 30.0,
-    auto_reconnect: bool = True,
-    max_reconnect_attempts: int = 3,
     default_traverse_height: Optional[float] = None,
-  ):
+  ) -> None: ...
+
+  @overload
+  def __init__(
+    self,
+    *,
+    client: HamiltonTCPClient,
+    default_traverse_height: Optional[float] = None,
+  ) -> None: ...
+
+  def __init__(
+    self,
+    *,
+    host: Optional[str] = None,
+    port: int = 2000,
+    client: Optional[HamiltonTCPClient] = None,
+    default_traverse_height: Optional[float] = None,
+  ) -> None:
+    """Initialize Prep backend.
+
+    Args:
+      host: Instrument hostname or IP; used when client is not provided.
+      port: TCP port (default 2000).
+      client: Optional pre-configured HamiltonTCPClient (mutually exclusive
+        with host).
+      default_traverse_height: Optional default traverse height in mm.
+    """
     super().__init__()
-    self.client = HamiltonTCPClient(
-      host=host,
-      port=port,
-      read_timeout=read_timeout,
-      write_timeout=write_timeout,
-      auto_reconnect=auto_reconnect,
-      max_reconnect_attempts=max_reconnect_attempts,
-    )
+    if client is not None:
+      if host is not None:
+        raise TypeError("Provide either host or client, not both")
+      self.client = client
+    elif host is not None:
+      self.client = HamiltonTCPClient(host=host, port=port)
+    else:
+      raise TypeError("Provide either host or client")
     self._config: Optional[InstrumentConfig] = None
     self._user_traverse_height: Optional[float] = default_traverse_height
     self._resolver = HamiltonInterfaceResolver(self.client, self._INTERFACES)
@@ -366,7 +403,7 @@ class PrepBackend(LiquidHandlerBackend):
         )
         for s in sites_resp.sites
       )
-      logger.info("Discovered %d deck sites", len(deck_sites))
+      logger.debug("Discovered %d deck sites", len(deck_sites))
 
     waste_resp = await self.client.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
     if waste_resp and waste_resp.sites:
@@ -380,7 +417,7 @@ class PrepBackend(LiquidHandlerBackend):
         )
         for s in waste_resp.sites
       )
-      logger.info("Discovered %d waste sites: %s", len(waste_sites), waste_sites)
+      logger.debug("Discovered %d waste sites: %s", len(waste_sites), waste_sites)
 
     # Channel configuration (1 vs 2 dual-channel pipettor, 8MPH) from MLPrepService
     present = await self.get_present_channels()
@@ -422,7 +459,7 @@ class PrepBackend(LiquidHandlerBackend):
   @property
   def num_arms(self) -> int:
     """Number of resource-handling arms. 1 when deck has core_grippers and 2 channels, else 0."""
-    if self.deck is None or self._num_channels is None or self._num_channels != 2:
+    if self._deck is None or self._num_channels is None or self._num_channels != 2:
       return 0
     try:
       mount = self.deck.get_resource("core_grippers")
@@ -591,7 +628,17 @@ class PrepBackend(LiquidHandlerBackend):
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
 
+    all_trash = all(isinstance(op.resource, Trash) for op in ops)
+    all_tip_spots = all(isinstance(op.resource, TipSpot) for op in ops)
+    if not (all_trash or all_tip_spots):
+      raise ValueError(
+        "Cannot mix waste (Trash) and tip spots in a single drop_tips call."
+      )
+
     resolved_final_z = self._resolve_traverse_height(final_z)
+    roll_off = 3.0 if (all_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
+    # Use Stall when dropping to waste so the pipette detects contact before release.
+    resolved_drop_type = TipDropType.Stall if all_trash else drop_type
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
     tip_positions: List[TipDropParameters] = []
@@ -599,32 +646,22 @@ class PrepBackend(LiquidHandlerBackend):
       if ch not in indexed_ops:
         continue
       op = indexed_ops[ch]
-      loc = op.resource.get_absolute_location("c", "c", "t")
       tip = op.tip
-      # Waste positions (Trash with category waste_position): use drop height directly
-      # (z_position = loc.z) instead of loc.z + tip_length, and z_seek just above.
-      is_waste = (
-        isinstance(op.resource, Trash)
-        and getattr(op.resource, "category", "") == "waste_position"
-      )
-      if is_waste:
-        z_position = loc.z
-        z_seek = loc.z + 10.0 + (z_seek_offset or 0.0)
-        params = TipDropParameters(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          x_position=loc.x,
-          y_position=loc.y,
-          z_position=z_position,
-          z_seek=z_seek,
-          drop_type=drop_type,
-        )
+      if all_trash:
+        waste_name = _CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph")
+        if not self.deck.has_resource(waste_name):
+          raise ValueError(
+            f"Cannot drop tips to waste: deck has no waste position '{waste_name}'. "
+            "Use a deck with waste_rear, waste_front (and waste_mph if using MPH)."
+          )
+        loc = self.deck.get_resource(waste_name).get_absolute_location("c", "c", "t")
       else:
-        params = TipDropParameters.for_op(
-          _CHANNEL_INDEX[ch], loc, tip,
-          z_seek_offset=z_seek_offset,
-          drop_type=drop_type,
-        )
+        loc = op.resource.get_absolute_location("c", "c", "t") + op.offset
+      params = TipDropParameters.for_op(
+        _CHANNEL_INDEX[ch], loc, tip,
+        z_seek_offset=z_seek_offset,
+        drop_type=resolved_drop_type,
+      )
       tip_positions.append(params)
 
     await self.client.send_command(
@@ -633,7 +670,7 @@ class PrepBackend(LiquidHandlerBackend):
         tip_positions=tip_positions,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
-        tip_roll_off_distance=tip_roll_off_distance,
+        tip_roll_off_distance=roll_off,
       )
     )
 

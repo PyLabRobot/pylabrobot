@@ -1,6 +1,8 @@
 """Hamilton Nimbus backend implementation.
 
 NimbusBackend composes HamiltonTCPClient as self.client for TCP and introspection.
+Callers may pass host and optionally port for default TCP settings, or inject a
+pre-configured client (dependency injection).
 Interfaces: self.client.interfaces.<Path>.address for routing. Optional presence
 via .is_available or firmware probe (DoorLock uses .is_available).
 """
@@ -10,7 +12,7 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Dict, List, Optional, overload, Sequence, Tuple, TypeVar, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
@@ -441,6 +443,8 @@ class NimbusBackend(LiquidHandlerBackend):
   Uses HamiltonTCPClient (self.client) for TCP communication and introspection;
   implements LiquidHandlerBackend for liquid handling.
   Interfaces resolved lazily via _require() on first use.
+  Construction accepts either host (and optionally port) or an injected client
+  (dependency injection), same pattern as PrepBackend.
 
   On-demand introspection: ``await self.client.introspect(path)``.
   """
@@ -452,24 +456,36 @@ class NimbusBackend(LiquidHandlerBackend):
     "door_lock":   InterfaceSpec("NimbusCORE.DoorLock", False, True),
   }
 
+  @overload
+  def __init__(self, *, host: str, port: int = 2000) -> None: ...
+
+  @overload
+  def __init__(self, *, client: HamiltonTCPClient) -> None: ...
+
   def __init__(
     self,
-    host: str,
+    *,
+    host: Optional[str] = None,
     port: int = 2000,
-    read_timeout: float = 30.0,
-    write_timeout: float = 30.0,
-    auto_reconnect: bool = True,
-    max_reconnect_attempts: int = 3,
-  ):
+    client: Optional[HamiltonTCPClient] = None,
+  ) -> None:
+    """Initialize Nimbus backend.
+
+    Args:
+      host: Instrument hostname or IP; used when client is not provided.
+      port: TCP port (default 2000).
+      client: Optional pre-configured HamiltonTCPClient (mutually exclusive
+        with host).
+    """
     super().__init__()
-    self.client = HamiltonTCPClient(
-      host=host,
-      port=port,
-      read_timeout=read_timeout,
-      write_timeout=write_timeout,
-      auto_reconnect=auto_reconnect,
-      max_reconnect_attempts=max_reconnect_attempts,
-    )
+    if client is not None:
+      if host is not None:
+        raise TypeError("Provide either host or client, not both")
+      self.client = client
+    elif host is not None:
+      self.client = HamiltonTCPClient(host=host, port=port)
+    else:
+      raise TypeError("Provide either host or client")
 
     self._num_channels: Optional[int] = None
     self._is_initialized: Optional[bool] = None
