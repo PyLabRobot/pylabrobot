@@ -1530,6 +1530,18 @@ class PrepBackend(LiquidHandlerBackend):
     """Abort the current method."""
     await self.client.send_command(PrepMethodAbort(dest=await self._require("mlprep")))
 
+  async def power_down_request(self) -> None:
+    """Request power down (instrument will prepare for shutdown; use cancel_power_down to abort)."""
+    await self.client.send_command(PrepPowerDownRequest(dest=await self._require("mlprep")))
+
+  async def confirm_power_down(self) -> None:
+    """Confirm power down (completes shutdown; only call when safe to power off)."""
+    await self.client.send_command(PrepConfirmPowerDown(dest=await self._require("mlprep")))
+
+  async def cancel_power_down(self) -> None:
+    """Cancel a pending power-down request."""
+    await self.client.send_command(PrepCancelPowerDown(dest=await self._require("mlprep")))
+
   async def get_deck_light(self) -> Tuple[int, int, int, int]:
       """Get the current deck LED colour (white, red, green, blue)."""
       result = await self.client.send_command(
