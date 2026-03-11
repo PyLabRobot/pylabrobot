@@ -1,37 +1,29 @@
-import asyncio
+"""Legacy. Use pylabrobot.hamilton.only_fans.HamiltonHepaFan instead."""
 
+from pylabrobot.capabilities.fan_control import FanControlCapability
 from pylabrobot.machines.machine import Machine
 
 from .backend import FanBackend
 
 
 class Fan(Machine):
-  """
-  Front end for Fans.
-  """
+  """Legacy. Use a vendor-specific machine class instead."""
 
   def __init__(self, backend: FanBackend):
     super().__init__(backend=backend)
-    self.backend: FanBackend = backend  # fix type
+    self._backend: FanBackend = backend
+    self._cap = FanControlCapability(backend=backend)
 
-  async def stop(self):
-    await self.backend.turn_off()
-    await super().stop()
+  async def setup(self, **backend_kwargs):
+    await super().setup(**backend_kwargs)
+    await self._cap._on_setup()
 
   async def turn_on(self, intensity: int, duration=None):
-    """Run the fan
-
-    Args:
-      intensity: integer percent between 0 and 100
-      duration: time to run the fan for. If None, run until `turn_off` is called.
-    """
-
-    await self.backend.turn_on(intensity=intensity)
-
-    if duration is not None:
-      await asyncio.sleep(duration)
-      await self.backend.turn_off()
+    await self._cap.turn_on(intensity=intensity, duration=duration)
 
   async def turn_off(self):
-    """Turn the fan off, but do not close the connection."""
-    await self.backend.turn_off()
+    await self._cap.turn_off()
+
+  async def stop(self):
+    await self._cap._on_stop()
+    await super().stop()
