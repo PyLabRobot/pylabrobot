@@ -9,7 +9,7 @@ from pylabrobot.legacy.centrifuge.standard import (
   LoaderNoPlateError,
   NotAtBucketError,
 )
-from pylabrobot.machines.machine import Machine
+from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import deserialize

@@ -2,7 +2,7 @@ import math
 from typing import List, Optional
 
 from pylabrobot.capabilities.tilting import TiltingCapability
-from pylabrobot.machines import Machine
+from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.well import CrossSectionType, Well
@@ -10,7 +10,7 @@ from pylabrobot.resources.well import CrossSectionType, Well
 from .backend import HamiltonTiltModuleBackend
 
 
-class HamiltonTiltModule(ResourceHolder, Machine):
+class HamiltonTiltModule(ResourceHolder, Device):
   """A Hamilton tilt module."""
 
   def __init__(
@@ -37,7 +37,7 @@ class HamiltonTiltModule(ResourceHolder, Machine):
       category="tilter",
       model="HamiltonTiltModule",
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: HamiltonTiltModuleBackend = backend
     self.pedestal_size_z = pedestal_size_z
     self._hinge_coordinate = Coordinate(6.18, 0, 72.85)

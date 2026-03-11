@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 from .inheco_sila_interface import InhecoSiLAInterface
 
@@ -46,12 +46,12 @@ class SCILABackend(TemperatureControllerBackend):
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
   async def setup(self) -> None:
-    await MachineBackend.setup(self)
+    await DeviceBackend.setup(self)
     await self._sila_interface.setup()
     await self._reset_and_initialize()
 
   async def stop(self) -> None:
-    await MachineBackend.stop(self)
+    await DeviceBackend.stop(self)
     await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:

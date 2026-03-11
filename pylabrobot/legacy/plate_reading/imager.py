@@ -3,7 +3,7 @@ import math
 import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
 
-from pylabrobot.machines import Machine, need_setup_finished
+from pylabrobot.legacy.machines import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend
 from pylabrobot.legacy.plate_reading.standard import (
   AutoExposure,

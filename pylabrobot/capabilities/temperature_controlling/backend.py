@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 
-class TemperatureControllerBackend(MachineBackend, metaclass=ABCMeta):
+class TemperatureControllerBackend(DeviceBackend, metaclass=ABCMeta):
   """Abstract backend for temperature controllers."""
 
   @property

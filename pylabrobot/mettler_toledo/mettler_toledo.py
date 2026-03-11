@@ -7,7 +7,7 @@ from typing import List, Literal, Optional, Union
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.capabilities.weighing import ScaleBackend
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 logger = logging.getLogger("pylabrobot")
 
@@ -166,7 +166,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.io = Serial(port, vid=vid, pid=pid, baudrate=9600, timeout=1)
 
   async def setup(self) -> None:
-    await MachineBackend.setup(self)
+    await DeviceBackend.setup(self)
     await self.io.setup()
 
     # set output unit to grams
@@ -176,7 +176,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.serial_number = await self.request_serial_number()
 
   async def stop(self) -> None:
-    await MachineBackend.stop(self)
+    await DeviceBackend.stop(self)
     await self.io.stop()
 
   def serialize(self) -> dict:

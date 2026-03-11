@@ -6,7 +6,7 @@ from pylabrobot.capabilities.barcode_scanning import BarcodeScanningCapability
 from pylabrobot.capabilities.humidity_controlling import HumidityControlCapability
 from pylabrobot.capabilities.shaking import ShakingCapability
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
-from pylabrobot.machines import Machine
+from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
   Plate,
@@ -24,7 +24,7 @@ class NoFreeSiteError(Exception):
   pass
 
 
-class Liconic(Resource, Machine):
+class Liconic(Resource, Device):
   def __init__(
     self,
     name: str,
@@ -55,7 +55,7 @@ class Liconic(Resource, Machine):
       category=category,
       model=model,
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: LiconicBackend = backend
 
     self.loading_tray = PlateHolder(

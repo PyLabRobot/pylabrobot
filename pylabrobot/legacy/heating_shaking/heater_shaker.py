@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.machines.machine import Machine
+from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.legacy.shaking import Shaker
 from pylabrobot.legacy.temperature_controlling import TemperatureController

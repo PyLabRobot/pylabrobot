@@ -1,13 +1,13 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 
 class TiltModuleError(Exception):
   """Error raised by a tilt module backend."""
 
 
-class TilterBackend(MachineBackend, metaclass=ABCMeta):
+class TilterBackend(DeviceBackend, metaclass=ABCMeta):
   """Abstract backend for tilting devices."""
 
   @abstractmethod

@@ -11,7 +11,7 @@ from pylabrobot.capabilities.humidity_controlling.backend import HumidityControl
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.thermo_fisher.cytomat.constants import (
   ActionRegister,
@@ -91,14 +91,14 @@ class CytomatBackend(
     )
 
   async def setup(self):
-    await MachineBackend.setup(self)
+    await DeviceBackend.setup(self)
     await self.io.setup()
     await self.initialize()
     await self.wait_for_task_completion()
 
   async def stop(self):
     await self.io.stop()
-    await MachineBackend.stop(self)
+    await DeviceBackend.stop(self)
 
   async def set_racks(self, racks: List[PlateCarrier]):
     self._racks = racks
@@ -425,7 +425,7 @@ class CytomatBackend(
 
   def serialize(self) -> dict:
     return {
-      **MachineBackend.serialize(self),
+      **DeviceBackend.serialize(self),
       "model": self.model.value,
       "port": self.io.port,
     }

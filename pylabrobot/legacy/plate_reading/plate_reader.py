@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, List, Optional, cast
 
-from pylabrobot.machines.machine import Machine, need_setup_finished
+from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.legacy.plate_reading.standard import NoPlateError
 from pylabrobot.resources import Coordinate, Plate, Resource, ResourceHolder, Rotation, Well

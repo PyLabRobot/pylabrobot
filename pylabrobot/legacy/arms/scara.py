@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Union
 
 from pylabrobot.legacy.arms.backend import AccessPattern, SCARABackend
 from pylabrobot.legacy.arms.precise_flex.coords import PreciseFlexCartesianCoords
-from pylabrobot.machines.machine import Machine
+from pylabrobot.legacy.machines.machine import Machine
 
 
 class ExperimentalSCARA(Machine):

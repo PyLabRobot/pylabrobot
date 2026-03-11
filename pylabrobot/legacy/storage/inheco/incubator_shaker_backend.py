@@ -21,7 +21,7 @@ from functools import wraps
 from typing import Awaitable, Callable, Dict, List, Literal, Optional, TypeVar, cast
 
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines.machine import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 
 if sys.version_info < (3, 10):
   from typing_extensions import Concatenate, ParamSpec

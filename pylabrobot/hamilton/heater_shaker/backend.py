@@ -5,7 +5,7 @@ from typing import Dict, Literal, Optional
 
 from pylabrobot.capabilities.shaking import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 from .box import HamiltonHeaterShakerInterface
 
@@ -28,17 +28,17 @@ class HamiltonHeaterShakerBackend(TemperatureControllerBackend, ShakerBackend):
     return False
 
   async def setup(self):
-    await MachineBackend.setup(self)
+    await DeviceBackend.setup(self)
     await self._initialize_lock()
     await self._initialize_shaker_drive()
 
   async def stop(self):
-    await MachineBackend.stop(self)
+    await DeviceBackend.stop(self)
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")
     return {
-      **MachineBackend.serialize(self),
+      **DeviceBackend.serialize(self),
       "index": self.index,
       "interface": None,
     }

@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 
 
 class FanBackend(MachineBackend, metaclass=ABCMeta):

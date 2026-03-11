@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.machines.machine import Machine
+from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
 

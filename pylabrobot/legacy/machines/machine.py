@@ -5,7 +5,7 @@ import sys
 from abc import ABC
 from typing import Any, Awaitable, Callable, List, TypeVar
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.serializer import SerializableMixin
 
 if sys.version_info < (3, 10):

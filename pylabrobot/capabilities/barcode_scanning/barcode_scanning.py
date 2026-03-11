@@ -1,4 +1,4 @@
-from pylabrobot.machines.capability import Capability
+from pylabrobot.capabilities.capability import Capability
 from pylabrobot.resources.barcode import Barcode
 
 from .backend import BarcodeScannerBackend

@@ -7,7 +7,7 @@ import serial  # type: ignore
 
 from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines import Machine
+from pylabrobot.device import Device
 
 
 class XPeelBackend(PeelerBackend):
@@ -252,7 +252,7 @@ class XPeelBackend(PeelerBackend):
     return await self._send_command("*movespool", expect_ack=True, wait_for_ready=True)
 
 
-class XPeel(Machine):
+class XPeel(Device):
   """Azenta XPeel automated plate seal remover."""
 
   def __init__(self, name: str, port: str, timeout: Optional[float] = None):

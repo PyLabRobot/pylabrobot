@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Sequence, Union, cast
 
-from pylabrobot.machines.machine import Machine, need_setup_finished
+from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.resources import Powder, Resource
 
 from .backend import PowderDispense, PowderDispenserBackend

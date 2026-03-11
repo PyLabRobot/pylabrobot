@@ -12,8 +12,7 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControllerBackend,
 )
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.machines.machine import Machine
+from pylabrobot.device import Device, DeviceBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 
@@ -36,13 +35,13 @@ class A4SBackend(SealerBackend, TemperatureControllerBackend):
     )
 
   async def setup(self):
-    await MachineBackend.setup(self)
+    await DeviceBackend.setup(self)
     await self.io.setup()
     await self.system_reset()
 
   async def stop(self):
     await self.set_heater(on=False)
-    await MachineBackend.stop(self)
+    await DeviceBackend.stop(self)
     await self.io.stop()
 
   # -- serial protocol --
@@ -234,7 +233,7 @@ class A4SBackend(SealerBackend, TemperatureControllerBackend):
     await self.set_heater(on=False)
 
 
-class A4S(PlateHolder, Machine):
+class A4S(PlateHolder, Device):
   """Azenta a4S automated thermal sealer.
 
   222 x 500 x 276 mm
@@ -264,7 +263,7 @@ class A4S(PlateHolder, Machine):
       category=category,
       model=model,
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: A4SBackend = backend
     self.sealer = SealingCapability(backend=backend)
     self.tc = TemperatureControlCapability(backend=backend)
@@ -272,6 +271,6 @@ class A4S(PlateHolder, Machine):
 
   def serialize(self) -> dict:
     return {
-      **Machine.serialize(self),
+      **Device.serialize(self),
       **PlateHolder.serialize(self),
     }

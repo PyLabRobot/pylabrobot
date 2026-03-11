@@ -33,7 +33,7 @@ from pylabrobot.legacy.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
-from pylabrobot.machines.machine import Machine, need_setup_finished
+from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.resources import (
   Container,

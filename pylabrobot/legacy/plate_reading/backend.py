@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.legacy.plate_reading.standard import (
   Exposure,
   FocalPosition,

@@ -1,10 +1,10 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 from pylabrobot.resources import Plate, PlateHolder
 
 
-class AutomatedRetrievalBackend(MachineBackend, metaclass=ABCMeta):
+class AutomatedRetrievalBackend(DeviceBackend, metaclass=ABCMeta):
   """Abstract backend for automated plate retrieval/storage devices."""
 
   @abstractmethod

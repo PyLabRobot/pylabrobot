@@ -4,7 +4,7 @@ import math
 from typing import List, Optional
 
 from pylabrobot.capabilities.tilting import TilterBackend, TiltingCapability
-from pylabrobot.machines import Machine
+from pylabrobot.legacy.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.well import CrossSectionType, Well

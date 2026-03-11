@@ -1,7 +1,7 @@
 """Legacy. Use pylabrobot.hamilton.only_fans.HamiltonHepaFan instead."""
 
 from pylabrobot.capabilities.fan_control import FanControlCapability
-from pylabrobot.machines.machine import Machine
+from pylabrobot.legacy.machines.machine import Machine
 
 from .backend import FanBackend
 

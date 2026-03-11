@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from pylabrobot.legacy.arms.precise_flex.coords import PreciseFlexCartesianCoords
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 
 
 @dataclass

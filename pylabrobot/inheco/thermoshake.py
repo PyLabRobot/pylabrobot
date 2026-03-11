@@ -3,7 +3,7 @@ from typing import Optional
 
 from pylabrobot.capabilities.shaking import ShakingCapability, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
-from pylabrobot.machines.machine import Machine
+from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
@@ -65,7 +65,7 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     raise NotImplementedError("Unlocking is not supported on Inheco ThermoShake devices.")
 
 
-class InhecoThermoShake(ResourceHolder, Machine):
+class InhecoThermoShake(ResourceHolder, Device):
   """Inheco ThermoShake: combined temperature control and shaking.
 
   Example:
@@ -97,7 +97,7 @@ class InhecoThermoShake(ResourceHolder, Machine):
       category=category,
       model=model,
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: InhecoThermoshakeBackend = backend
     self.tc = TemperatureControlCapability(backend=backend)
     self.shaker = ShakingCapability(backend=backend)
@@ -105,7 +105,7 @@ class InhecoThermoShake(ResourceHolder, Machine):
 
   def serialize(self) -> dict:
     return {
-      **Machine.serialize(self),
+      **Device.serialize(self),
       **ResourceHolder.serialize(self),
     }
 

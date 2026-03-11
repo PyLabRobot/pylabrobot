@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from pylabrobot.io.ftdi import FTDI
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.resources import Plate
 
 from .actions import EL406ActionsMixin

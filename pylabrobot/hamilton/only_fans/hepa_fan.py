@@ -1,12 +1,12 @@
 from typing import Optional
 
 from pylabrobot.capabilities.fan_control import FanControlCapability
-from pylabrobot.machines import Machine
+from pylabrobot.device import Device
 
 from .backend import HamiltonHepaFanBackend
 
 
-class HamiltonHepaFan(Machine):
+class HamiltonHepaFan(Device):
   """Hamilton HEPA fan attachment."""
 
   def __init__(self, name: str, device_id: Optional[str] = None):

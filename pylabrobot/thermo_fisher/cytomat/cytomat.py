@@ -5,7 +5,7 @@ from pylabrobot.capabilities.automated_retrieval import AutomatedRetrievalCapabi
 from pylabrobot.capabilities.humidity_controlling import HumidityControlCapability
 from pylabrobot.capabilities.shaking import ShakingCapability
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
-from pylabrobot.machines import Machine
+from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
   Plate,
@@ -24,7 +24,7 @@ class NoFreeSiteError(Exception):
   pass
 
 
-class Cytomat(Resource, Machine):
+class Cytomat(Resource, Device):
   def __init__(
     self,
     name: str,
@@ -49,7 +49,7 @@ class Cytomat(Resource, Machine):
       category=category,
       model=model,
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: CytomatBackend = backend
 
     self.loading_tray = PlateHolder(
@@ -179,7 +179,7 @@ class Cytomat(Resource, Machine):
   def serialize(self):
     from pylabrobot.serializer import serialize
     return {
-      **Machine.serialize(self),
+      **Device.serialize(self),
       **Resource.serialize(self),
       "racks": [rack.serialize() for rack in self._racks],
       "loading_tray_location": serialize(self.loading_tray.location),

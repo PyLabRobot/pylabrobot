@@ -7,8 +7,7 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControllerBackend,
 )
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.machines.machine import Machine
+from pylabrobot.device import Device, DeviceBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 
@@ -82,7 +81,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
       ) from e
 
   async def setup(self, skip_home: bool = False):
-    await MachineBackend.setup(self)
+    await DeviceBackend.setup(self)
     await self.io.setup()
     if not skip_home:
       await self.reset()
@@ -90,7 +89,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
       await self.home()
 
   async def stop(self):
-    await MachineBackend.stop(self)
+    await DeviceBackend.stop(self)
     await self.io.stop()
 
   async def reset(self):
@@ -229,7 +228,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
     await self._send_command(cmd="tempOff", delay=0.2)
 
 
-class BioShake(PlateHolder, Machine):
+class BioShake(PlateHolder, Device):
   """QInstruments BioShake base class.
 
   Use a subclass for your specific model. Capabilities (``tc``, ``shaker``)
@@ -259,12 +258,12 @@ class BioShake(PlateHolder, Machine):
       category=category,
       model=model,
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: BioShakeBackend = backend
 
   def serialize(self) -> dict:
     return {
-      **Machine.serialize(self),
+      **Device.serialize(self),
       **PlateHolder.serialize(self),
     }
 

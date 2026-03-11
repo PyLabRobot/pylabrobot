@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 
-class PeelerBackend(MachineBackend, metaclass=ABCMeta):
+class PeelerBackend(DeviceBackend, metaclass=ABCMeta):
   """Abstract backend for peeling devices."""
 
   @abstractmethod

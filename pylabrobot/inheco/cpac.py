@@ -6,7 +6,7 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.machines.machine import Machine
+from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
@@ -81,7 +81,7 @@ class InhecoCPACBackend(InhecoTemperatureControllerBackend):
   pass
 
 
-class InhecoCPAC(ResourceHolder, Machine):
+class InhecoCPAC(ResourceHolder, Device):
   """Inheco CPAC temperature controller.
 
   Example:
@@ -114,14 +114,14 @@ class InhecoCPAC(ResourceHolder, Machine):
       category=category,
       model=model,
     )
-    Machine.__init__(self, backend=backend)
+    Device.__init__(self, backend=backend)
     self._backend: InhecoCPACBackend = backend
     self.tc = TemperatureControlCapability(backend=backend)
     self._capabilities = [self.tc]
 
   def serialize(self) -> dict:
     return {
-      **Machine.serialize(self),
+      **Device.serialize(self),
       **ResourceHolder.serialize(self),
     }
 

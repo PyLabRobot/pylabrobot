@@ -1,4 +1,4 @@
-from pylabrobot.machines.capability import Capability
+from pylabrobot.capabilities.capability import Capability
 from pylabrobot.resources import Plate, PlateHolder
 
 from .backend import AutomatedRetrievalBackend

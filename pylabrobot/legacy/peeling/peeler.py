@@ -1,6 +1,6 @@
 """Legacy. Use pylabrobot.azenta.XPeel instead."""
 
-from pylabrobot.machines import Machine
+from pylabrobot.legacy.machines import Machine
 
 from .backend import PeelerBackend
 

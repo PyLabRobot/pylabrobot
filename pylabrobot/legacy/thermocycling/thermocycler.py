@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import List, Optional
 
-from pylabrobot.machines.machine import Machine
+from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step

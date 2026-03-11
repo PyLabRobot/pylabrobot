@@ -3,7 +3,7 @@
 from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.inheco.scila import scila_backend as new_scila
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 
 DrawerStatus = Literal["Opened", "Closed"]
 

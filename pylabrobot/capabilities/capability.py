@@ -5,7 +5,7 @@ import sys
 from abc import ABC
 from typing import Any, Awaitable, Callable, TypeVar
 
-from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.device import DeviceBackend
 
 if sys.version_info < (3, 10):
   from typing_extensions import ParamSpec
@@ -31,21 +31,21 @@ def need_capability_ready(func: Callable[_P, _R]) -> Callable[_P, _R]:
     self = args[0]
 
     if not self.setup_finished:
-      raise RuntimeError("The capability has not been set up. Call setup() on the parent machine.")
+      raise RuntimeError("The capability has not been set up. Call setup() on the parent device.")
     return await func(*args, **kwargs)
 
   return wrapper
 
 
 class Capability(ABC):
-  """Base class for machine capabilities (liquid handling, plate reading, etc.).
+  """Base class for device capabilities.
 
-  Capabilities are owned by a Machine and share its backend. They are not Resources
-  and do not appear in the resource tree. The parent Machine is responsible for calling
+  Capabilities are owned by a Device and share its backend. They are not Resources
+  and do not appear in the resource tree. The parent Device is responsible for calling
   `_on_setup()` and `_on_stop()` during its own setup/stop lifecycle.
   """
 
-  def __init__(self, backend: MachineBackend):
+  def __init__(self, backend: DeviceBackend):
     self.backend = backend
     self._setup_finished = False
 
@@ -54,9 +54,9 @@ class Capability(ABC):
     return self._setup_finished
 
   async def _on_setup(self):
-    """Called by the parent Machine after backend.setup() completes."""
+    """Called by the parent Device after backend.setup() completes."""
     self._setup_finished = True
 
   async def _on_stop(self):
-    """Called by the parent Machine before backend.stop()."""
+    """Called by the parent Device before backend.stop()."""
     self._setup_finished = False
