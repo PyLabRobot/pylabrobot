@@ -1,4 +1,4 @@
-from pylabrobot.resources import CrossSectionType, Plate, Well, WellBottomType
+from pylabrobot.resources import CrossSectionType, Lid, Plate, Well, WellBottomType
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
@@ -27,7 +27,7 @@ def PerkinElmer_96_wellplate_400ul_Fb(name: str) -> Plate:
     size_x=127.76,  # from spec
     size_y=85.47,  # from spec
     size_z=14.60,  # from spec
-    lid=None,
+    lid=Lid(name="lid", size_x=127, size_y=86, size_z=5, nesting_z_height=2),
     model=PerkinElmer_96_wellplate_400ul_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
