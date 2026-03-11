@@ -29,7 +29,10 @@ class HIDCommand(Command):
 
 
 class HID(IOBase):
-  def __init__(self, vid: int, pid: int, serial_number: Optional[str] = None):
+  def __init__(
+    self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None
+  ):
+    self._human_readable_device_name = human_readable_device_name
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
@@ -47,8 +50,8 @@ class HID(IOBase):
     """
     if not USE_HID:
       raise RuntimeError(
-        "This backend requires the `hid` package to be installed."
-        f" Import error: {_HID_IMPORT_ERROR}"
+        "hid is not installed. Install with: pip install pylabrobot[hid]. "
+        f"Import error: {_HID_IMPORT_ERROR}"
       )
 
     # --- 1. Enumerate all HID devices ---
@@ -140,7 +143,8 @@ class HID(IOBase):
     write_data = report_id + data
 
     def _write():
-      assert self.device is not None, "forgot to call setup?"
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
       return self.device.write(write_data)
 
     if self._executor is None:
@@ -156,7 +160,8 @@ class HID(IOBase):
     loop = asyncio.get_running_loop()
 
     def _read():
-      assert self.device is not None, "forgot to call setup?"
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
       try:
         return self.device.read(size, timeout=int(timeout))
       except HIDException as e:
@@ -174,6 +179,7 @@ class HID(IOBase):
 
   def serialize(self):
     return {
+      "human_readable_device_name": self._human_readable_device_name,
       "vid": self.vid,
       "pid": self.pid,
       "serial_number": self.serial_number,
@@ -184,11 +190,17 @@ class HIDValidator(HID):
   def __init__(
     self,
     cr: "CaptureReader",
+    human_readable_device_name: str,
     vid: int = 0x03EB,
     pid: int = 0x2023,
     serial_number: Optional[str] = None,
   ):
-    super().__init__(vid=vid, pid=pid, serial_number=serial_number)
+    super().__init__(
+      human_readable_device_name=human_readable_device_name,
+      vid=vid,
+      pid=pid,
+      serial_number=serial_number,
+    )
     self.cr = cr
 
   async def setup(self):

@@ -21,6 +21,7 @@ class A4SBackend(SealerBackend):
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_NONE,
       stopbits=serial.STOPBITS_ONE,
+      human_readable_device_name="A4S Sealer",
     )
 
   async def setup(self):

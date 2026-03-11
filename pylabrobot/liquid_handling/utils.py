@@ -3,9 +3,10 @@ from typing import List
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
-MIN_SPACING_BETWEEN_CHANNELS = 9
+GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS = 9
+MIN_SPACING_BETWEEN_CHANNELS = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 # minimum spacing between the edge of the container and the center of channel
-MIN_SPACING_EDGE = 1
+MIN_SPACING_EDGE = 1.0
 
 
 def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
@@ -21,6 +22,7 @@ def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing
 def get_wide_single_resource_liquid_op_offsets(
   resource: Resource,
   num_channels: int,
+  min_spacing: float = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
 ) -> List[Coordinate]:
   resource_size = resource.get_absolute_size_y()
   centers = list(
@@ -29,7 +31,7 @@ def get_wide_single_resource_liquid_op_offsets(
         dim_size=resource_size,
         n=num_channels,
         margin=MIN_SPACING_EDGE,
-        min_spacing=MIN_SPACING_BETWEEN_CHANNELS,
+        min_spacing=min_spacing,
       )
     )
   )  # reverse because channels are from back to front
@@ -48,15 +50,17 @@ def get_wide_single_resource_liquid_op_offsets(
 
 
 def get_tight_single_resource_liquid_op_offsets(
-  resource: Resource, num_channels: int
+  resource: Resource,
+  num_channels: int,
+  min_spacing: float = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
 ) -> List[Coordinate]:
-  channel_space = (num_channels - 1) * MIN_SPACING_BETWEEN_CHANNELS
+  channel_space = (num_channels - 1) * min_spacing
 
   min_y = (resource.get_absolute_size_y() - channel_space) / 2
   if min_y < MIN_SPACING_EDGE:
     raise ValueError("Resource is too small to space channels.")
 
-  centers = [min_y + i * MIN_SPACING_BETWEEN_CHANNELS for i in range(num_channels)][::-1]
+  centers = [min_y + i * min_spacing for i in range(num_channels)][::-1]
 
   # offsets are relative to the center of the resource, but above we computed them wrt lfb
   # so we need to subtract the center of the resource

@@ -27,6 +27,7 @@ inconsistence = "inconsistence"
 mis = "mis"
 RHE = "RHE"
 "ASEND" = "ASEND"
+caf = "caf"
 
 [files]
 extend-exclude = [
