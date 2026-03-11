@@ -4,8 +4,6 @@ from typing import Any
 
 from .agilent import (
   BioTekPlateReaderBackend,
-  Cytation5Backend,
-  Cytation5ImagingConfig,
   CytationBackend,
   CytationImagingConfig,
   SynergyH1Backend,

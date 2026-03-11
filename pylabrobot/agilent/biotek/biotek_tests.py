@@ -6,7 +6,7 @@ import unittest
 import unittest.mock
 from typing import Iterator
 
-from pylabrobot.legacy.plate_reading.agilent.biotek_cytation_backend import CytationBackend
+from pylabrobot.agilent.biotek.cytation import CytationBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
@@ -188,17 +188,11 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.1255, 0.0742, 0.0747, 0.0694, 0.1004, 0.09, 0.0659, 0.0858, 0.0876, 0.0815, 0.098, 0.1329],
       [0.1427, 0.1174, 0.0684, 0.0657, 0.0732, 0.067, 0.0602, 0.079, 0.0667, 0.1103, 0.129, 0.1316],
     ]
-    self.assertEqual(
-      resp,
-      [
-        {
-          "wavelength": 580,
-          "data": expected_data,
-          "temperature": 23.6,
-          "time": 12345.6789,
-        }
-      ],
-    )
+    self.assertEqual(len(resp), 1)
+    self.assertEqual(resp[0].wavelength, 580)
+    self.assertEqual(resp[0].data, expected_data)
+    self.assertEqual(resp[0].temperature, 23.6)
+    self.assertEqual(resp[0].timestamp, 12345.6789)
 
   async def test_read_luminescence_partial(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -254,16 +248,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.0, 10.0, 9.0, None, None, None, None, None, None, None, None, None],
       [None, None, None, None, None, None, None, None, None, None, None, None],
     ]
-    self.assertEqual(
-      resp,
-      [
-        {
-          "data": expected_data,
-          "temperature": 23.6,
-          "time": 12345.6789,
-        }
-      ],
-    )
+    self.assertEqual(len(resp), 1)
+    self.assertEqual(resp[0].data, expected_data)
+    self.assertEqual(resp[0].temperature, 23.6)
+    self.assertEqual(resp[0].timestamp, 12345.6789)
 
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -324,18 +312,12 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [653.0, 783.0, 522.0, 536.0, 673.0, 858.0, 526.0, 627.0, 574.0, 1993.0, 712.0, 970.0],
       [1118.0, 742.0, 542.0, 555.0, 622.0, 688.0, 542.0, 697.0, 900.0, 3002.0, 607.0, 523.0],
     ]
-    self.assertEqual(
-      resp,
-      [
-        {
-          "ex_wavelength": 485,
-          "em_wavelength": 528,
-          "data": expected_data,
-          "temperature": 23.6,
-          "time": 12345.6789,
-        }
-      ],
-    )
+    self.assertEqual(len(resp), 1)
+    self.assertEqual(resp[0].excitation_wavelength, 485)
+    self.assertEqual(resp[0].emission_wavelength, 528)
+    self.assertEqual(resp[0].data, expected_data)
+    self.assertEqual(resp[0].temperature, 23.6)
+    self.assertEqual(resp[0].timestamp, 12345.6789)
 
   async def test_parse_body_asterisks_as_nan(self):
     """Unmeasured wells return ******* which should be parsed as NaN."""
