@@ -1,13 +1,14 @@
-"""Hamilton command architecture using new simplified TCP stack.
+"""Command layer for Hamilton TCP.
 
-This module provides the HamiltonCommand base class that uses the new refactored
-architecture: Wire → HoiParams → Packets → Messages → Commands.
+HamiltonCommand base: build_parameters() returns HoiParams; interpret_response()
+auto-decodes success responses via nested Response dataclasses (wire-type
+annotations and parse_into_struct). Wire → HoiParams → Packets → Messages → Commands.
 """
 
 from __future__ import annotations
 
 import inspect
-from typing import Optional
+from typing import Any, Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandMessage,
@@ -38,7 +39,7 @@ class HamiltonCommand:
               self.value = value
 
           def build_parameters(self) -> HoiParams:
-              return HoiParams().i32(self.value)
+              return HoiParams().add(self.value, I32)
 
           @classmethod
           def parse_response_parameters(cls, data: bytes) -> dict:
@@ -150,18 +151,27 @@ class HamiltonCommand:
     # Build final packet
     return msg.build(source, sequence, harp_response_required=response_required)
 
-  def interpret_response(self, response: CommandResponse) -> Optional[dict]:
-    """Interpret success response.
+  def interpret_response(self, response: CommandResponse) -> Any:
+    """Interpret success response (command layer auto-decode).
 
-    This is the new interface used by the backend. Default implementation
-    directly calls parse_response_parameters for efficiency.
+    If the command class defines a nested Response dataclass with wire-type
+    annotations, decode via parse_into_struct and return a Response instance.
+    Otherwise fall back to parse_response_parameters (dict or None).
 
     Args:
       response: CommandResponse from network
 
     Returns:
-      Dictionary with parsed response data, or None if no data to extract
+      Command.Response instance, dict, or None
     """
+    cls = type(self)
+    if hasattr(cls, "Response") and response.hoi.params:
+      from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
+        HoiParamsParser,
+        parse_into_struct,
+      )
+
+      return parse_into_struct(HoiParamsParser(response.hoi.params), cls.Response)
     return self.parse_response_parameters(response.hoi.params)
 
   @classmethod

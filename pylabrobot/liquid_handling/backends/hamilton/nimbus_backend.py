@@ -1,29 +1,40 @@
 """Hamilton Nimbus backend implementation.
 
-This module provides the NimbusBackend class for controlling Hamilton Nimbus
-instruments via TCP communication using the Hamilton protocol.
+NimbusBackend composes HamiltonTCPClient as self.client for TCP and introspection.
+Callers may pass host and optionally port for default TCP settings, or inject a
+pre-configured client (dependency injection).
+Interfaces: self.client.interfaces.<Path>.address for routing. Optional presence
+via .is_available or firmware probe (DoorLock uses .is_available).
 """
 
 from __future__ import annotations
 
 import enum
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union, overload
 
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
-  HamiltonIntrospection,
-)
-from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
-  HoiParams,
-  HoiParamsParser,
-)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
-  HamiltonProtocol,
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  I32,
+  U16,
+  Bool,
+  BoolArray,
+  I16Array,
+  I32Array,
+  U16Array,
+  U32Array,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPBackend
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
+  HamiltonInterfaceResolver,
+  HamiltonTCPClient,
+  InterfaceSpec,
+)
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -144,761 +155,281 @@ def _get_default_flow_rate(tip: Tip, is_aspirate: bool) -> float:
 # ============================================================================
 
 
-class LockDoor(HamiltonCommand):
-  """Lock door command (DoorLock at 1:1:268, interface_id=1, command_id=1)."""
+@dataclass
+class NimbusCommand(HamiltonCommand):
+  """Base for Nimbus commands. Subclasses are dataclasses with dest + Annotated payload fields.
+
+  build_parameters() -> HoiParams.from_struct(self); dest is skipped (no Annotated).
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
+  dest: Address
+
+  def __post_init__(self) -> None:
+    super().__init__(self.dest)
+
+  def build_parameters(self) -> HoiParams:
+    return HoiParams.from_struct(self)
+
+
+@dataclass
+class LockDoor(NimbusCommand):
+  """Lock door command (DoorLock at 1:1:268, interface_id=1, command_id=1)."""
+
   command_id = 1
 
 
-class UnlockDoor(HamiltonCommand):
+@dataclass
+class UnlockDoor(NimbusCommand):
   """Unlock door command (DoorLock at 1:1:268, interface_id=1, command_id=2)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 2
 
 
-class IsDoorLocked(HamiltonCommand):
+@dataclass
+class IsDoorLocked(NimbusCommand):
   """Check if door is locked (DoorLock at 1:1:268, interface_id=1, command_id=3)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 3
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse IsDoorLocked response."""
-    parser = HoiParamsParser(data)
-    _, locked = parser.parse_next()
-    return {"locked": bool(locked)}
+  @dataclass(frozen=True)
+  class Response:
+    locked: Bool
 
 
-class PreInitializeSmart(HamiltonCommand):
+@dataclass
+class PreInitializeSmart(NimbusCommand):
   """Pre-initialize smart command (Pipette at 1:1:257, interface_id=1, command_id=32)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 32
 
 
-class InitializeSmartRoll(HamiltonCommand):
+@dataclass
+class InitializeSmartRoll(NimbusCommand):
   """Initialize smart roll command (NimbusCore at 1:1:48896, interface_id=1, command_id=29)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 29
-
-  def __init__(
-    self,
-    dest: Address,
-    x_positions: List[int],
-    y_positions: List[int],
-    begin_tip_deposit_process: List[int],
-    end_tip_deposit_process: List[int],
-    z_position_at_end_of_a_command: List[int],
-    roll_distances: List[int],
-  ):
-    """Initialize InitializeSmartRoll command.
-
-    Args:
-      dest: Destination address (NimbusCore)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      begin_tip_deposit_process: Z start positions in 0.01mm units
-      end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
-      roll_distances: Roll distances in 0.01mm units
-    """
-    super().__init__(dest)
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.begin_tip_deposit_process = begin_tip_deposit_process
-    self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
-    self.roll_distances = roll_distances
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32_array(self.begin_tip_deposit_process)
-      .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_position_at_end_of_a_command)
-      .i32_array(self.roll_distances)
-    )
+  # All position/distance fields in 0.01 mm units
+  x_positions: I32Array
+  y_positions: I32Array
+  begin_tip_deposit_process: I32Array  # Z start positions
+  end_tip_deposit_process: I32Array  # Z stop positions
+  z_position_at_end_of_a_command: I32Array
+  roll_distances: I32Array
 
 
-class IsInitialized(HamiltonCommand):
+@dataclass
+class IsInitialized(NimbusCommand):
   """Check if instrument is initialized (NimbusCore at 1:1:48896, interface_id=1, command_id=14)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 14
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse IsInitialized response."""
-    parser = HoiParamsParser(data)
-    _, initialized = parser.parse_next()
-    return {"initialized": bool(initialized)}
+  @dataclass(frozen=True)
+  class Response:
+    value: Bool
 
 
-class IsTipPresent(HamiltonCommand):
+@dataclass
+class IsTipPresent(NimbusCommand):
   """Check tip presence (Pipette at 1:1:257, interface_id=1, command_id=16)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 16
   action_code = 0
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse IsTipPresent response - returns List[i16]."""
-    parser = HoiParamsParser(data)
-    # Parse array of i16 values representing tip presence per channel
-    _, tip_presence = parser.parse_next()
-    return {"tip_present": tip_presence}
+  @dataclass(frozen=True)
+  class Response:
+    tip_present: I16Array
 
 
-class GetChannelConfiguration_1(HamiltonCommand):
+@dataclass
+class GetChannelConfiguration_1(NimbusCommand):
   """Get channel configuration (NimbusCore root, interface_id=1, command_id=15)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 15
   action_code = 0
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse GetChannelConfiguration_1 response.
-
-    Returns: (channels: u16, channel_types: List[i16])
-    """
-    parser = HoiParamsParser(data)
-    _, channels = parser.parse_next()
-    _, channel_types = parser.parse_next()
-    return {"channels": channels, "channel_types": channel_types}
+  @dataclass(frozen=True)
+  class Response:
+    channels: U16
+    channel_types: I16Array
 
 
-class SetChannelConfiguration(HamiltonCommand):
+@dataclass
+class SetChannelConfiguration(NimbusCommand):
   """Set channel configuration (Pipette at 1:1:257, interface_id=1, command_id=67)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 67
-
-  def __init__(
-    self,
-    dest: Address,
-    channel: int,
-    indexes: List[int],
-    enables: List[bool],
-  ):
-    """Initialize SetChannelConfiguration command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channel: Channel number (1-based)
-      indexes: List of configuration indexes (e.g., [1, 3, 4])
-        1: Tip Recognition, 2: Aspirate and clot monitoring pLLD,
-        3: Aspirate monitoring with cLLD, 4: Clot monitoring with cLLD
-      enables: List of enable flags (e.g., [True, False, False, False])
-    """
-    super().__init__(dest)
-    self.channel = channel
-    self.indexes = indexes
-    self.enables = enables
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16(self.channel).i16_array(self.indexes).bool_array(self.enables)
+  channel: U16  # Channel number (1-based)
+  indexes: I16Array  # e.g. [1,3,4]: 1=Tip Recognition, 2=pLLD, 3=cLLD aspirate, 4=cLLD clot
+  enables: BoolArray  # Enable flag per index
 
 
-class Park(HamiltonCommand):
+@dataclass
+class Park(NimbusCommand):
   """Park command (NimbusCore at 1:1:48896, interface_id=1, command_id=3)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 3
 
 
-class PickupTips(HamiltonCommand):
+@dataclass
+class PickupTips(NimbusCommand):
   """Pick up tips command (Pipette at 1:1:257, interface_id=1, command_id=4)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 4
-
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    begin_tip_pick_up_process: List[int],
-    end_tip_pick_up_process: List[int],
-    tip_types: List[int],
-  ):
-    """Initialize PickupTips command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      begin_tip_pick_up_process: Z start positions in 0.01mm units
-      end_tip_pick_up_process: Z stop positions in 0.01mm units
-      tip_types: Tip type integers for each channel
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.begin_tip_pick_up_process = begin_tip_pick_up_process
-    self.end_tip_pick_up_process = end_tip_pick_up_process
-    self.tip_types = tip_types
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.begin_tip_pick_up_process)
-      .i32_array(self.end_tip_pick_up_process)
-      .u16_array(self.tip_types)
-    )
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive per channel)
+  x_positions: I32Array  # 0.01 mm
+  y_positions: I32Array  # 0.01 mm
+  minimum_traverse_height_at_beginning_of_a_command: I32  # 0.01 mm
+  begin_tip_pick_up_process: I32Array  # Z start, 0.01 mm
+  end_tip_pick_up_process: I32Array  # Z stop, 0.01 mm
+  tip_types: U16Array  # Tip type id per channel
 
 
-class DropTips(HamiltonCommand):
+@dataclass
+class DropTips(NimbusCommand):
   """Drop tips command (Pipette at 1:1:257, interface_id=1, command_id=5)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 5
-
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    begin_tip_deposit_process: List[int],
-    end_tip_deposit_process: List[int],
-    z_position_at_end_of_a_command: List[int],
-    default_waste: bool,
-  ):
-    """Initialize DropTips command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      begin_tip_deposit_process: Z start positions in 0.01mm units
-      end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
-      default_waste: If True, drop to default waste (positions may be ignored)
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.begin_tip_deposit_process = begin_tip_deposit_process
-    self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
-    self.default_waste = default_waste
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.begin_tip_deposit_process)
-      .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_position_at_end_of_a_command)
-      .bool_value(self.default_waste)
-    )
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive)
+  x_positions: I32Array  # 0.01 mm
+  y_positions: I32Array  # 0.01 mm
+  minimum_traverse_height_at_beginning_of_a_command: I32  # 0.01 mm
+  begin_tip_deposit_process: I32Array  # Z start, 0.01 mm
+  end_tip_deposit_process: I32Array  # Z stop, 0.01 mm
+  z_position_at_end_of_a_command: I32Array  # 0.01 mm
+  default_waste: Bool  # If True, drop to default waste (positions may be ignored)
 
 
-class DropTipsRoll(HamiltonCommand):
+@dataclass
+class DropTipsRoll(NimbusCommand):
   """Drop tips with roll command (Pipette at 1:1:257, interface_id=1, command_id=82)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 82
-
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    begin_tip_deposit_process: List[int],
-    end_tip_deposit_process: List[int],
-    z_position_at_end_of_a_command: List[int],
-    roll_distances: List[int],
-  ):
-    """Initialize DropTipsRoll command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      begin_tip_deposit_process: Z start positions in 0.01mm units
-      end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
-      roll_distances: Roll distance for each channel in 0.01mm units
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.begin_tip_deposit_process = begin_tip_deposit_process
-    self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
-    self.roll_distances = roll_distances
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.begin_tip_deposit_process)
-      .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_position_at_end_of_a_command)
-      .i32_array(self.roll_distances)
-    )
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive)
+  x_positions: I32Array  # 0.01 mm
+  y_positions: I32Array  # 0.01 mm
+  minimum_traverse_height_at_beginning_of_a_command: I32  # 0.01 mm
+  begin_tip_deposit_process: I32Array  # Z start, 0.01 mm
+  end_tip_deposit_process: I32Array  # Z stop, 0.01 mm
+  z_position_at_end_of_a_command: I32Array  # 0.01 mm
+  roll_distances: I32Array  # 0.01 mm per channel
 
 
-class EnableADC(HamiltonCommand):
+@dataclass
+class EnableADC(NimbusCommand):
   """Enable ADC command (Pipette at 1:1:257, interface_id=1, command_id=43)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 43
-
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-  ):
-    """Initialize EnableADC command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16_array(self.channels_involved)
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive)
 
 
-class DisableADC(HamiltonCommand):
+@dataclass
+class DisableADC(NimbusCommand):
   """Disable ADC command (Pipette at 1:1:257, interface_id=1, command_id=44)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 44
-
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-  ):
-    """Initialize DisableADC command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16_array(self.channels_involved)
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive)
 
 
-class GetChannelConfiguration(HamiltonCommand):
+@dataclass
+class GetChannelConfiguration(NimbusCommand):
   """Get channel configuration command (Pipette at 1:1:257, interface_id=1, command_id=66)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 66
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
+  channel: U16  # Channel number (1-based)
+  indexes: I16Array  # e.g. [2] for "Aspirate monitoring with cLLD"
 
-  def __init__(
-    self,
-    dest: Address,
-    channel: int,
-    indexes: List[int],
-  ):
-    """Initialize GetChannelConfiguration command.
-
-    Args:
-      dest: Destination address (Pipette)
-      channel: Channel number (1-based)
-      indexes: List of configuration indexes (e.g., [2] for "Aspirate monitoring with cLLD")
-    """
-    super().__init__(dest)
-    self.channel = channel
-    self.indexes = indexes
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16(self.channel).i16_array(self.indexes)
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse GetChannelConfiguration response.
-
-    Returns: { enabled: List[bool] }
-    """
-    parser = HoiParamsParser(data)
-    _, enabled = parser.parse_next()
-    return {"enabled": enabled}
+  @dataclass(frozen=True)
+  class Response:
+    enabled: BoolArray
 
 
-class Aspirate(HamiltonCommand):
+@dataclass
+class Aspirate(NimbusCommand):
   """Aspirate command (Pipette at 1:1:257, interface_id=1, command_id=6)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 6
-
-  def __init__(
-    self,
-    dest: Address,
-    aspirate_type: List[int],
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    lld_search_height: List[int],
-    liquid_height: List[int],
-    immersion_depth: List[int],
-    surface_following_distance: List[int],
-    minimum_height: List[int],
-    clot_detection_height: List[int],
-    min_z_endpos: int,
-    swap_speed: List[int],
-    blow_out_air_volume: List[int],
-    pre_wetting_volume: List[int],
-    aspirate_volume: List[int],
-    transport_air_volume: List[int],
-    aspiration_speed: List[int],
-    settling_time: List[int],
-    mix_volume: List[int],
-    mix_cycles: List[int],
-    mix_position_from_liquid_surface: List[int],
-    mix_surface_following_distance: List[int],
-    mix_speed: List[int],
-    tube_section_height: List[int],
-    tube_section_ratio: List[int],
-    lld_mode: List[int],
-    gamma_lld_sensitivity: List[int],
-    dp_lld_sensitivity: List[int],
-    lld_height_difference: List[int],
-    tadm_enabled: bool,
-    limit_curve_index: List[int],
-    recording_mode: int,
-  ):
-    """Initialize Aspirate command.
-
-    Args:
-      dest: Destination address (Pipette)
-      aspirate_type: Aspirate type for each channel (List[i16])
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      lld_search_height: LLD search height for each channel in 0.01mm units
-      liquid_height: Liquid height for each channel in 0.01mm units
-      immersion_depth: Immersion depth for each channel in 0.01mm units
-      surface_following_distance: Surface following distance for each channel in 0.01mm units
-      minimum_height: Minimum height for each channel in 0.01mm units
-      clot_detection_height: Clot detection height for each channel in 0.01mm units
-      min_z_endpos: Minimum Z end position in 0.01mm units
-      swap_speed: Swap speed (on leaving liquid) for each channel in 0.1uL/s units
-      blow_out_air_volume: Blowout volume for each channel in 0.1uL units
-      pre_wetting_volume: Pre-wetting volume for each channel in 0.1uL units
-      aspirate_volume: Aspirate volume for each channel in 0.1uL units
-      transport_air_volume: Transport air volume for each channel in 0.1uL units
-      aspiration_speed: Aspirate speed for each channel in 0.1uL/s units
-      settling_time: Settling time for each channel in 0.1s units
-      mix_volume: Mix volume for each channel in 0.1uL units
-      mix_cycles: Mix cycles for each channel
-      mix_position_from_liquid_surface: Mix position from liquid surface for each channel in 0.01mm units
-      mix_surface_following_distance: Mix follow distance for each channel in 0.01mm units
-      mix_speed: Mix speed for each channel in 0.1uL/s units
-      tube_section_height: Tube section height for each channel in 0.01mm units
-      tube_section_ratio: Tube section ratio for each channel
-      lld_mode: LLD mode for each channel (List[i16])
-      gamma_lld_sensitivity: Gamma LLD sensitivity for each channel (List[i16])
-      dp_lld_sensitivity: DP LLD sensitivity for each channel (List[i16])
-      lld_height_difference: LLD height difference for each channel in 0.01mm units
-      tadm_enabled: TADM enabled flag
-      limit_curve_index: Limit curve index for each channel
-      recording_mode: Recording mode (u16)
-    """
-    super().__init__(dest)
-    self.aspirate_type = aspirate_type
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.lld_search_height = lld_search_height
-    self.liquid_height = liquid_height
-    self.immersion_depth = immersion_depth
-    self.surface_following_distance = surface_following_distance
-    self.minimum_height = minimum_height
-    self.clot_detection_height = clot_detection_height
-    self.min_z_endpos = min_z_endpos
-    self.swap_speed = swap_speed
-    self.blow_out_air_volume = blow_out_air_volume
-    self.pre_wetting_volume = pre_wetting_volume
-    self.aspirate_volume = aspirate_volume
-    self.transport_air_volume = transport_air_volume
-    self.aspiration_speed = aspiration_speed
-    self.settling_time = settling_time
-    self.mix_volume = mix_volume
-    self.mix_cycles = mix_cycles
-    self.mix_position_from_liquid_surface = mix_position_from_liquid_surface
-    self.mix_surface_following_distance = mix_surface_following_distance
-    self.mix_speed = mix_speed
-    self.tube_section_height = tube_section_height
-    self.tube_section_ratio = tube_section_ratio
-    self.lld_mode = lld_mode
-    self.gamma_lld_sensitivity = gamma_lld_sensitivity
-    self.dp_lld_sensitivity = dp_lld_sensitivity
-    self.lld_height_difference = lld_height_difference
-    self.tadm_enabled = tadm_enabled
-    self.limit_curve_index = limit_curve_index
-    self.recording_mode = recording_mode
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .i16_array(self.aspirate_type)
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.lld_search_height)
-      .i32_array(self.liquid_height)
-      .i32_array(self.immersion_depth)
-      .i32_array(self.surface_following_distance)
-      .i32_array(self.minimum_height)
-      .i32_array(self.clot_detection_height)
-      .i32(self.min_z_endpos)
-      .u32_array(self.swap_speed)
-      .u32_array(self.blow_out_air_volume)
-      .u32_array(self.pre_wetting_volume)
-      .u32_array(self.aspirate_volume)
-      .u32_array(self.transport_air_volume)
-      .u32_array(self.aspiration_speed)
-      .u32_array(self.settling_time)
-      .u32_array(self.mix_volume)
-      .u32_array(self.mix_cycles)
-      .i32_array(self.mix_position_from_liquid_surface)
-      .i32_array(self.mix_surface_following_distance)
-      .u32_array(self.mix_speed)
-      .i32_array(self.tube_section_height)
-      .i32_array(self.tube_section_ratio)
-      .i16_array(self.lld_mode)
-      .i16_array(self.gamma_lld_sensitivity)
-      .i16_array(self.dp_lld_sensitivity)
-      .i32_array(self.lld_height_difference)
-      .bool_value(self.tadm_enabled)
-      .u32_array(self.limit_curve_index)
-      .u16(self.recording_mode)
-    )
+  aspirate_type: I16Array  # Per channel (I16)
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive)
+  x_positions: I32Array  # 0.01 mm
+  y_positions: I32Array  # 0.01 mm
+  minimum_traverse_height_at_beginning_of_a_command: I32  # 0.01 mm
+  lld_search_height: I32Array  # 0.01 mm
+  liquid_height: I32Array  # 0.01 mm
+  immersion_depth: I32Array  # 0.01 mm
+  surface_following_distance: I32Array  # 0.01 mm
+  minimum_height: I32Array  # 0.01 mm
+  clot_detection_height: I32Array  # 0.01 mm
+  min_z_endpos: I32  # 0.01 mm
+  swap_speed: U32Array  # 0.1 µL/s (on leaving liquid)
+  blow_out_air_volume: U32Array  # 0.1 µL
+  pre_wetting_volume: U32Array  # 0.1 µL
+  aspirate_volume: U32Array  # 0.1 µL
+  transport_air_volume: U32Array  # 0.1 µL
+  aspiration_speed: U32Array  # 0.1 µL/s
+  settling_time: U32Array  # 0.1 s
+  mix_volume: U32Array  # 0.1 µL
+  mix_cycles: U32Array
+  mix_position_from_liquid_surface: I32Array  # 0.01 mm
+  mix_surface_following_distance: I32Array  # 0.01 mm
+  mix_speed: U32Array  # 0.1 µL/s
+  tube_section_height: I32Array  # 0.01 mm
+  tube_section_ratio: I32Array
+  lld_mode: I16Array
+  gamma_lld_sensitivity: I16Array
+  dp_lld_sensitivity: I16Array
+  lld_height_difference: I32Array  # 0.01 mm
+  tadm_enabled: Bool
+  limit_curve_index: U32Array
+  recording_mode: U16
 
 
-class Dispense(HamiltonCommand):
+@dataclass
+class Dispense(NimbusCommand):
   """Dispense command (Pipette at 1:1:257, interface_id=1, command_id=7)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 7
+  dispense_type: I16Array  # Per channel (I16)
+  channels_involved: U16Array  # Tip pattern (1=active, 0=inactive)
+  x_positions: I32Array  # 0.01 mm
+  y_positions: I32Array  # 0.01 mm
+  minimum_traverse_height_at_beginning_of_a_command: I32  # 0.01 mm
+  lld_search_height: I32Array  # 0.01 mm
+  liquid_height: I32Array  # 0.01 mm
+  immersion_depth: I32Array  # 0.01 mm
+  surface_following_distance: I32Array  # 0.01 mm
+  minimum_height: I32Array  # 0.01 mm
+  min_z_endpos: I32  # 0.01 mm
+  swap_speed: U32Array  # 0.1 µL/s (on leaving liquid)
+  transport_air_volume: U32Array  # 0.1 µL
+  dispense_volume: U32Array  # 0.1 µL
+  stop_back_volume: U32Array  # 0.1 µL
+  blow_out_air_volume: U32Array  # 0.1 µL
+  dispense_speed: U32Array  # 0.1 µL/s
+  cut_off_speed: U32Array  # 0.1 µL/s
+  settling_time: U32Array  # 0.1 s
+  mix_volume: U32Array  # 0.1 µL
+  mix_cycles: U32Array
+  mix_position_from_liquid_surface: I32Array  # 0.01 mm
+  mix_surface_following_distance: I32Array  # 0.01 mm
+  mix_speed: U32Array  # 0.1 µL/s
+  side_touch_off_distance: I32  # 0.01 mm
+  dispense_offset: I32Array  # 0.01 mm
+  tube_section_height: I32Array  # 0.01 mm
+  tube_section_ratio: I32Array
+  lld_mode: I16Array
+  gamma_lld_sensitivity: I16Array
+  tadm_enabled: Bool
+  limit_curve_index: U32Array
+  recording_mode: U16
 
-  def __init__(
-    self,
-    dest: Address,
-    dispense_type: List[int],
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    lld_search_height: List[int],
-    liquid_height: List[int],
-    immersion_depth: List[int],
-    surface_following_distance: List[int],
-    minimum_height: List[int],
-    min_z_endpos: int,
-    swap_speed: List[int],
-    transport_air_volume: List[int],
-    dispense_volume: List[int],
-    stop_back_volume: List[int],
-    blow_out_air_volume: List[int],
-    dispense_speed: List[int],
-    cut_off_speed: List[int],
-    settling_time: List[int],
-    mix_volume: List[int],
-    mix_cycles: List[int],
-    mix_position_from_liquid_surface: List[int],
-    mix_surface_following_distance: List[int],
-    mix_speed: List[int],
-    side_touch_off_distance: int,
-    dispense_offset: List[int],
-    tube_section_height: List[int],
-    tube_section_ratio: List[int],
-    lld_mode: List[int],
-    gamma_lld_sensitivity: List[int],
-    tadm_enabled: bool,
-    limit_curve_index: List[int],
-    recording_mode: int,
-  ):
-    """Initialize Dispense command.
 
-    Args:
-      dest: Destination address (Pipette)
-      dispense_type: Dispense type for each channel (List[i16])
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      lld_search_height: LLD search height for each channel in 0.01mm units
-      liquid_height: Liquid height for each channel in 0.01mm units
-      immersion_depth: Immersion depth for each channel in 0.01mm units
-      surface_following_distance: Surface following distance for each channel in 0.01mm units
-      minimum_height: Minimum height for each channel in 0.01mm units
-      min_z_endpos: Minimum Z end position in 0.01mm units
-      swap_speed: Swap speed (on leaving liquid) for each channel in 0.1uL/s units
-      transport_air_volume: Transport air volume for each channel in 0.1uL units
-      dispense_volume: Dispense volume for each channel in 0.1uL units
-      stop_back_volume: Stop back volume for each channel in 0.1uL units
-      blow_out_air_volume: Blowout volume for each channel in 0.1uL units
-      dispense_speed: Dispense speed for each channel in 0.1uL/s units
-      cut_off_speed: Cut off speed for each channel in 0.1uL/s units
-      settling_time: Settling time for each channel in 0.1s units
-      mix_volume: Mix volume for each channel in 0.1uL units
-      mix_cycles: Mix cycles for each channel
-      mix_position_from_liquid_surface: Mix position from liquid surface for each channel in 0.01mm units
-      mix_surface_following_distance: Mix follow distance for each channel in 0.01mm units
-      mix_speed: Mix speed for each channel in 0.1uL/s units
-      side_touch_off_distance: Side touch off distance in 0.01mm units
-      dispense_offset: Dispense offset for each channel in 0.01mm units
-      tube_section_height: Tube section height for each channel in 0.01mm units
-      tube_section_ratio: Tube section ratio for each channel
-      lld_mode: LLD mode for each channel (List[i16])
-      gamma_lld_sensitivity: Gamma LLD sensitivity for each channel (List[i16])
-      tadm_enabled: TADM enabled flag
-      limit_curve_index: Limit curve index for each channel
-      recording_mode: Recording mode (u16)
-    """
-    super().__init__(dest)
-    self.dispense_type = dispense_type
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.lld_search_height = lld_search_height
-    self.liquid_height = liquid_height
-    self.immersion_depth = immersion_depth
-    self.surface_following_distance = surface_following_distance
-    self.minimum_height = minimum_height
-    self.min_z_endpos = min_z_endpos
-    self.swap_speed = swap_speed
-    self.transport_air_volume = transport_air_volume
-    self.dispense_volume = dispense_volume
-    self.stop_back_volume = stop_back_volume
-    self.blow_out_air_volume = blow_out_air_volume
-    self.dispense_speed = dispense_speed
-    self.cut_off_speed = cut_off_speed
-    self.settling_time = settling_time
-    self.mix_volume = mix_volume
-    self.mix_cycles = mix_cycles
-    self.mix_position_from_liquid_surface = mix_position_from_liquid_surface
-    self.mix_surface_following_distance = mix_surface_following_distance
-    self.mix_speed = mix_speed
-    self.side_touch_off_distance = side_touch_off_distance
-    self.dispense_offset = dispense_offset
-    self.tube_section_height = tube_section_height
-    self.tube_section_ratio = tube_section_ratio
-    self.lld_mode = lld_mode
-    self.gamma_lld_sensitivity = gamma_lld_sensitivity
-    self.tadm_enabled = tadm_enabled
-    self.limit_curve_index = limit_curve_index
-    self.recording_mode = recording_mode
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .i16_array(self.dispense_type)
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.lld_search_height)
-      .i32_array(self.liquid_height)
-      .i32_array(self.immersion_depth)
-      .i32_array(self.surface_following_distance)
-      .i32_array(self.minimum_height)
-      .i32(self.min_z_endpos)
-      .u32_array(self.swap_speed)
-      .u32_array(self.transport_air_volume)
-      .u32_array(self.dispense_volume)
-      .u32_array(self.stop_back_volume)
-      .u32_array(self.blow_out_air_volume)
-      .u32_array(self.dispense_speed)
-      .u32_array(self.cut_off_speed)
-      .u32_array(self.settling_time)
-      .u32_array(self.mix_volume)
-      .u32_array(self.mix_cycles)
-      .i32_array(self.mix_position_from_liquid_surface)
-      .i32_array(self.mix_surface_following_distance)
-      .u32_array(self.mix_speed)
-      .i32(self.side_touch_off_distance)
-      .i32_array(self.dispense_offset)
-      .i32_array(self.tube_section_height)
-      .i32_array(self.tube_section_ratio)
-      .i16_array(self.lld_mode)
-      .i16_array(self.gamma_lld_sensitivity)
-      .bool_value(self.tadm_enabled)
-      .u32_array(self.limit_curve_index)
-      .u16(self.recording_mode)
-    )
+# Expected root name from discovery; validated at setup().
+_EXPECTED_ROOT = "NimbusCORE"
 
 
 # ============================================================================
@@ -906,56 +437,79 @@ class Dispense(HamiltonCommand):
 # ============================================================================
 
 
-class NimbusBackend(HamiltonTCPBackend):
+class NimbusBackend(LiquidHandlerBackend):
   """Backend for Hamilton Nimbus liquid handling instruments.
 
-  This backend uses TCP communication with the Hamilton protocol to control
-  Nimbus instruments. It inherits from both TCPBackend (for communication)
-  and LiquidHandlerBackend (for liquid handling interface).
+  Uses HamiltonTCPClient (self.client) for TCP communication and introspection;
+  implements LiquidHandlerBackend for liquid handling.
+  Interfaces resolved lazily via _require() on first use.
+  Construction accepts either host (and optionally port) or an injected client
+  (dependency injection), same pattern as PrepBackend.
 
-  Attributes:
-    _door_lock_available: Whether door lock is available on this instrument.
+  On-demand introspection: ``await self.client.introspect(path)``.
   """
+
+  # Declare known object paths via InterfaceSpec. Optional interfaces (e.g. pipette, door_lock) may be absent on some systems.
+  _INTERFACES: dict[str, InterfaceSpec] = {
+    "nimbus_core": InterfaceSpec("NimbusCORE", True, True),
+    "pipette": InterfaceSpec("NimbusCORE.Pipette", False, True),
+    "door_lock": InterfaceSpec("NimbusCORE.DoorLock", False, True),
+  }
+
+  @overload
+  def __init__(self, *, host: str, port: int = 2000) -> None: ...
+
+  @overload
+  def __init__(self, *, client: HamiltonTCPClient) -> None: ...
 
   def __init__(
     self,
-    host: str,
+    *,
+    host: Optional[str] = None,
     port: int = 2000,
-    read_timeout: float = 30.0,
-    write_timeout: float = 30.0,
-    auto_reconnect: bool = True,
-    max_reconnect_attempts: int = 3,
-  ):
+    client: Optional[HamiltonTCPClient] = None,
+  ) -> None:
     """Initialize Nimbus backend.
 
     Args:
-      host: Hamilton instrument IP address
-      port: Hamilton instrument port (default: 2000)
-      read_timeout: Read timeout in seconds
-      write_timeout: Write timeout in seconds
-      auto_reconnect: Enable automatic reconnection
-      max_reconnect_attempts: Maximum reconnection attempts
+      host: Instrument hostname or IP; used when client is not provided.
+      port: TCP port (default 2000).
+      client: Optional pre-configured HamiltonTCPClient (mutually exclusive
+        with host).
     """
-    super().__init__(
-      host=host,
-      port=port,
-      read_timeout=read_timeout,
-      write_timeout=write_timeout,
-      auto_reconnect=auto_reconnect,
-      max_reconnect_attempts=max_reconnect_attempts,
-    )
+    super().__init__()
+    if client is not None:
+      if host is not None:
+        raise TypeError("Provide either host or client, not both")
+      self.client = client
+    elif host is not None:
+      self.client = HamiltonTCPClient(host=host, port=port)
+    else:
+      raise TypeError("Provide either host or client")
 
     self._num_channels: Optional[int] = None
-    self._pipette_address: Optional[Address] = None
-    self._door_lock_address: Optional[Address] = None
-    self._nimbus_core_address: Optional[Address] = None
     self._is_initialized: Optional[bool] = None
     self._channel_configurations: Optional[Dict[int, Dict[int, bool]]] = None
 
     self._channel_traversal_height: float = 146.0  # Default traversal height in mm
+    self._resolver = HamiltonInterfaceResolver(self.client, self._INTERFACES)
+
+  # ---------------------------------------------------------------------------
+  # Setup & interface resolution
+  # ---------------------------------------------------------------------------
+
+  def _has_interface(self, name: str) -> bool:
+    """Return True if the interface was resolved and is present."""
+    return self._resolver.has_interface(name)
+
+  async def _require(self, name: str) -> Address:
+    """Resolve and return an interface address, lazy on first call. Raises RuntimeError if not found."""
+    return await self._resolver.require(name)
 
   async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
     """Set up the Nimbus backend.
+
+    Interfaces: self.client.interfaces.<path>.address for required paths; optional via _has_interface(name).
 
     This method:
     1. Establishes TCP connection and performs protocol initialization
@@ -963,7 +517,7 @@ class NimbusBackend(HamiltonTCPBackend):
     3. Queries channel configuration to get num_channels
     4. Queries tip presence
     5. Queries initialization status
-    6. Locks door if available
+    6. Locks door if available (when _has_interface(\"door_lock\"))
     7. Conditionally initializes NimbusCore with InitializeSmartRoll (only if not initialized)
     8. Optionally unlocks door after initialization
 
@@ -971,24 +525,27 @@ class NimbusBackend(HamiltonTCPBackend):
       unlock_door: If True, unlock door after initialization (default: False)
       force_initialize: If True, force initialization even if already initialized
     """
-    # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
-    await super().setup()
+    # Call client setup (TCP connection, Protocol 7 init, Protocol 3 registration, depth-1 discovery)
+    await self.client.setup()
 
-    # Discover instrument objects
-    await self._discover_instrument_objects()
+    # Validate discovered root matches this backend
+    discovered = self.client.discovered_root_name()
+    if discovered != _EXPECTED_ROOT:
+      raise RuntimeError(
+        f"Expected root '{_EXPECTED_ROOT}' (Nimbus), but discovered '{discovered}'. Wrong instrument?"
+      ) from None
 
-    # Ensure required objects are discovered
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette object not discovered. Cannot proceed with setup.")
-    if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore root object not discovered. Cannot proceed with setup.")
+    # Resolve all interfaces (required fail-fast; optional log and continue)
+    await self._resolver.run_setup_loop()
 
-    # Query channel configuration to get num_channels (use discovered address only)
+    nimbus_core = await self._require("nimbus_core")
+
+    # Query channel configuration to get num_channels
     try:
-      config = await self.send_command(GetChannelConfiguration_1(self._nimbus_core_address))
+      config = await self.client.send_command(GetChannelConfiguration_1(dest=nimbus_core))
       assert config is not None, "GetChannelConfiguration_1 command returned None"
-      self._num_channels = config["channels"]
-      logger.info(f"Channel configuration: {config['channels']} channels")
+      self._num_channels = config.channels
+      logger.info(f"Channel configuration: {config.channels} channels")
     except Exception as e:
       logger.error(f"Failed to query channel configuration: {e}")
       raise
@@ -1000,11 +557,11 @@ class NimbusBackend(HamiltonTCPBackend):
     except Exception as e:
       logger.warning(f"Failed to query tip presence: {e}")
 
-    # Query initialization status (use discovered address only)
+    # Query initialization status
     try:
-      init_status = await self.send_command(IsInitialized(self._nimbus_core_address))
+      init_status = await self.client.send_command(IsInitialized(dest=nimbus_core))
       assert init_status is not None, "IsInitialized command returned None"
-      self._is_initialized = init_status.get("initialized", False)
+      self._is_initialized = bool(init_status.value)
       logger.info(f"Instrument initialized: {self._is_initialized}")
     except Exception as e:
       logger.error(f"Failed to query initialization status: {e}")
@@ -1012,7 +569,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Lock door if available (optional - no error if not found)
     # This happens before initialization
-    if self._door_lock_address is not None:
+    if self._has_interface("door_lock"):
       try:
         if not await self.is_door_locked():
           await self.lock_door()
@@ -1026,23 +583,26 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Conditional initialization - only if not already initialized
     if not self._is_initialized or force_initialize:
-      # Set channel configuration for each channel (required before InitializeSmartRoll)
-      try:
-        # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
-        # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
-        for channel in range(1, self.num_channels + 1):
-          await self.send_command(
-            SetChannelConfiguration(
-              dest=self._pipette_address,
-              channel=channel,
-              indexes=[1, 3, 4],
-              enables=[True, False, False, False],
+      # Set channel configuration for each channel (when Pipette is present; required before InitializeSmartRoll)
+      if self._has_interface("pipette"):
+        try:
+          # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
+          # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
+          for channel in range(1, self.num_channels + 1):
+            await self.client.send_command(
+              SetChannelConfiguration(
+                dest=await self._require("pipette"),
+                channel=channel,
+                indexes=[1, 3, 4],
+                enables=[True, False, False, False],
+              )
             )
-          )
-        logger.info(f"Channel configuration set for {self.num_channels} channels")
-      except Exception as e:
-        logger.error(f"Failed to set channel configuration: {e}")
-        raise
+          logger.info(f"Channel configuration set for {self.num_channels} channels")
+        except Exception as e:
+          logger.error(f"Failed to set channel configuration: {e}")
+          raise
+      else:
+        logger.info("Skipping channel configuration (no Pipette interface)")
 
       # Initialize NimbusCore with InitializeSmartRoll using waste positions
       try:
@@ -1064,9 +624,9 @@ class NimbusBackend(HamiltonTCPBackend):
           roll_distance=None,  # Will default to 9.0mm
         )
 
-        await self.send_command(
+        await self.client.send_command(
           InitializeSmartRoll(
-            dest=self._nimbus_core_address,
+            dest=nimbus_core,
             x_positions=x_positions_full,
             y_positions=y_positions_full,
             begin_tip_deposit_process=begin_tip_deposit_process_full,
@@ -1084,7 +644,7 @@ class NimbusBackend(HamiltonTCPBackend):
       logger.info("Instrument already initialized, skipping initialization")
 
     # Unlock door if requested (optional - no error if not found)
-    if unlock_door and self._door_lock_address is not None:
+    if unlock_door and self._has_interface("door_lock"):
       try:
         await self.unlock_door()
       except RuntimeError:
@@ -1093,49 +653,7 @@ class NimbusBackend(HamiltonTCPBackend):
       except Exception as e:
         logger.warning(f"Failed to unlock door: {e}")
 
-  async def _discover_instrument_objects(self):
-    """Discover instrument-specific objects using introspection."""
-    introspection = HamiltonIntrospection(self)
-
-    # Get root objects (already discovered in setup)
-    root_objects = self._discovered_objects.get("root", [])
-    if not root_objects:
-      logger.warning("No root objects discovered")
-      return
-
-    # Use first root object as NimbusCore
-    nimbus_core_addr = root_objects[0]
-    self._nimbus_core_address = nimbus_core_addr
-
-    try:
-      # Get NimbusCore object info
-      core_info = await introspection.get_object(nimbus_core_addr)
-
-      # Discover subobjects to find Pipette and DoorLock
-      for i in range(core_info.subobject_count):
-        try:
-          sub_addr = await introspection.get_subobject_address(nimbus_core_addr, i)
-          sub_info = await introspection.get_object(sub_addr)
-
-          # Check if this is the Pipette by interface name
-          if sub_info.name == "Pipette":
-            self._pipette_address = sub_addr
-            logger.info(f"Found Pipette at {sub_addr}")
-
-          # Check if this is the DoorLock by interface name
-          if sub_info.name == "DoorLock":
-            self._door_lock_address = sub_addr
-            logger.info(f"Found DoorLock at {sub_addr}")
-
-        except Exception as e:
-          logger.debug(f"Failed to get subobject {i}: {e}")
-
-    except Exception as e:
-      logger.warning(f"Failed to discover instrument objects: {e}")
-
-    # If door lock not found via introspection, it's not available
-    if self._door_lock_address is None:
-      logger.info("DoorLock not available on this instrument")
+    self.setup_finished = True
 
   def _fill_by_channels(self, values: List[T], use_channels: List[int], default: T) -> List[T]:
     """Returns a full-length list of size `num_channels` where positions in `channels`
@@ -1174,13 +692,10 @@ class NimbusBackend(HamiltonTCPBackend):
     """Park the instrument.
 
     Raises:
-      RuntimeError: If NimbusCore address was not discovered during setup.
+      RuntimeError: If NimbusCORE address was not discovered during setup.
     """
-    if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
-
     try:
-      await self.send_command(Park(self._nimbus_core_address))
+      await self.client.send_command(Park(await self._require("nimbus_core")))
       logger.info("Instrument parked successfully")
     except Exception as e:
       logger.error(f"Failed to park instrument: {e}")
@@ -1190,55 +705,38 @@ class NimbusBackend(HamiltonTCPBackend):
     """Check if the door is locked.
 
     Returns:
-      True if door is locked, False if unlocked.
-
-    Raises:
-      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
+      True if door is locked, False if unlocked or if door lock is not available.
     """
-    if self._door_lock_address is None:
-      raise RuntimeError(
-        "Door lock is not available on this instrument or setup() has not been called."
-      )
+    if not self._has_interface("door_lock"):
+      return False
 
     try:
-      status = await self.send_command(IsDoorLocked(self._door_lock_address))
+      status = await self.client.send_command(IsDoorLocked(await self._require("door_lock")))
       assert status is not None, "IsDoorLocked command returned None"
-      return bool(status["locked"])
+      return bool(status.locked)
     except Exception as e:
       logger.error(f"Failed to check door lock status: {e}")
       raise
 
   async def lock_door(self) -> None:
-    """Lock the door.
-
-    Raises:
-      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
-    """
-    if self._door_lock_address is None:
-      raise RuntimeError(
-        "Door lock is not available on this instrument or setup() has not been called."
-      )
+    """Lock the door. No-op if door lock is not available."""
+    if not self._has_interface("door_lock"):
+      return
 
     try:
-      await self.send_command(LockDoor(self._door_lock_address))
+      await self.client.send_command(LockDoor(await self._require("door_lock")))
       logger.info("Door locked successfully")
     except Exception as e:
       logger.error(f"Failed to lock door: {e}")
       raise
 
   async def unlock_door(self) -> None:
-    """Unlock the door.
-
-    Raises:
-      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
-    """
-    if self._door_lock_address is None:
-      raise RuntimeError(
-        "Door lock is not available on this instrument or setup() has not been called."
-      )
+    """Unlock the door. No-op if door lock is not available."""
+    if not self._has_interface("door_lock"):
+      return
 
     try:
-      await self.send_command(UnlockDoor(self._door_lock_address))
+      await self.client.send_command(UnlockDoor(await self._require("door_lock")))
       logger.info("Door unlocked successfully")
     except Exception as e:
       logger.error(f"Failed to unlock door: {e}")
@@ -1246,7 +744,11 @@ class NimbusBackend(HamiltonTCPBackend):
 
   async def stop(self):
     """Stop the backend and close connection."""
-    await HamiltonTCPBackend.stop(self)
+    await self.client.stop()
+    self.setup_finished = False
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), **self.client.serialize()}
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.
@@ -1255,12 +757,9 @@ class NimbusBackend(HamiltonTCPBackend):
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-    tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+    tip_status = await self.client.send_command(IsTipPresent(await self._require("pipette")))
     assert tip_status is not None, "IsTipPresent command returned None"
-    tip_present = tip_status.get("tip_present", [])
-    return [bool(v) for v in tip_present]
+    return [bool(v) for v in tip_status.tip_present]
 
   def _build_waste_position_params(
     self,
@@ -1469,9 +968,6 @@ class NimbusBackend(HamiltonTCPBackend):
       RuntimeError: If pipette address or deck is not set
       ValueError: If deck is not a NimbusDeck and minimum_traverse_height_at_beginning_of_a_command is not provided
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1514,7 +1010,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Create and send command
     command = PickupTips(
-      dest=self._pipette_address,
+      dest=await self._require("pipette"),
       channels_involved=channels_involved,
       x_positions=x_positions_full,
       y_positions=y_positions_full,
@@ -1525,7 +1021,7 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Picked up tips on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to pick up tips: {e}")
@@ -1566,9 +1062,6 @@ class NimbusBackend(HamiltonTCPBackend):
       RuntimeError: If pipette address or deck is not set
       ValueError: If operations mix waste and regular resources
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1614,7 +1107,7 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
       command = DropTipsRoll(
-        dest=self._pipette_address,
+        dest=await self._require("pipette"),
         channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
@@ -1647,7 +1140,7 @@ class NimbusBackend(HamiltonTCPBackend):
         )
 
       command = DropTips(
-        dest=self._pipette_address,
+        dest=await self._require("pipette"),
         channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
@@ -1659,7 +1152,7 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Dropped tips on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to drop tips: {e}")
@@ -1706,7 +1199,7 @@ class NimbusBackend(HamiltonTCPBackend):
       settling_time: Settling time (s), default: [1.0] * n
       transport_air_volume: Transport air volume (uL), default: [5.0] * n
       pre_wetting_volume: Pre-wetting volume (uL), default: [0.0] * n
-      swap_speed: Swap speed on leaving liquid (uL/s), default: [20.0] * n
+      swap_speed: Swap speed on leaving liquid (mm/s), default: [20.0] * n
       mix_position_from_liquid_surface: Mix position from liquid surface (mm), default: [0.0] * n
       limit_curve_index: Limit curve index, default: [0] * n
       tadm_enabled: TADM enabled flag, default: False
@@ -1714,9 +1207,6 @@ class NimbusBackend(HamiltonTCPBackend):
     Raises:
       RuntimeError: If pipette address or deck is not set
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1732,10 +1222,10 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.send_command(EnableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(EnableADC(await self._require("pipette"), channels_involved))
       logger.info("Enabled ADC before aspirate")
     else:
-      await self.send_command(DisableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(DisableADC(await self._require("pipette"), channels_involved))
       logger.info("Disabled ADC before aspirate")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1744,15 +1234,15 @@ class NimbusBackend(HamiltonTCPBackend):
     for channel_idx in use_channels:
       channel_num = channel_idx + 1  # Convert to 1-based
       try:
-        config = await self.send_command(
+        config = await self.client.send_command(
           GetChannelConfiguration(
-            self._pipette_address,
+            await self._require("pipette"),
             channel=channel_num,
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
         )
         assert config is not None, "GetChannelConfiguration returned None"
-        enabled = config["enabled"][0] if config["enabled"] else False
+        enabled = config.enabled[0] if config.enabled else False
         if channel_num not in self._channel_configurations:
           self._channel_configurations[channel_num] = {}
         self._channel_configurations[channel_num][2] = enabled
@@ -1921,7 +1411,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Create and send Aspirate command
     command = Aspirate(
-      dest=self._pipette_address,
+      dest=await self._require("pipette"),
       aspirate_type=aspirate_type,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
@@ -1958,7 +1448,7 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Aspirated on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to aspirate: {e}")
@@ -2013,9 +1503,6 @@ class NimbusBackend(HamiltonTCPBackend):
     Raises:
       RuntimeError: If pipette address or deck is not set
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -2031,10 +1518,10 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.send_command(EnableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(EnableADC(await self._require("pipette"), channels_involved))
       logger.info("Enabled ADC before dispense")
     else:
-      await self.send_command(DisableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(DisableADC(await self._require("pipette"), channels_involved))
       logger.info("Disabled ADC before dispense")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -2043,15 +1530,15 @@ class NimbusBackend(HamiltonTCPBackend):
     for channel_idx in use_channels:
       channel_num = channel_idx + 1  # Convert to 1-based
       try:
-        config = await self.send_command(
+        config = await self.client.send_command(
           GetChannelConfiguration(
-            self._pipette_address,
+            await self._require("pipette"),
             channel=channel_num,
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
         )
         assert config is not None, "GetChannelConfiguration returned None"
-        enabled = config["enabled"][0] if config["enabled"] else False
+        enabled = config.enabled[0] if config.enabled else False
         if channel_num not in self._channel_configurations:
           self._channel_configurations[channel_num] = {}
         self._channel_configurations[channel_num][2] = enabled
@@ -2223,7 +1710,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Create and send Dispense command
     command = Dispense(
-      dest=self._pipette_address,
+      dest=await self._require("pipette"),
       dispense_type=dispense_type,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
@@ -2260,7 +1747,7 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Dispensed on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to dispense: {e}")

@@ -41,6 +41,8 @@ def get_star_liquid_class(
   tip_volume = int(
     {
       360.0: 300.0,
+      60.0: 50.0,
+      65.0: 50.0,
       1065.0: 1000.0,
       1250.0: 1000.0,
       4367.0: 4000.0,
@@ -1049,7 +1051,6 @@ star_mapping[(50, False, True, False, Liquid.WATER, True, True)] = (
   dispense_stop_flow_rate=1.0,
   dispense_stop_back_volume=0.0,
 )
-
 
 star_mapping[(50, False, True, False, Liquid.WATER, False, True)] = (
   _250ul_Piercing_Tip_Water_DispenseSurface_Empty
@@ -15003,3 +15004,12 @@ star_mapping[(50, False, True, False, Liquid.WATER, False, True)] = (
   dispense_stop_flow_rate=1.0,
   dispense_stop_back_volume=0.0,
 )
+
+# Default (no jet, no blow_out) for 50 µL water: alias to Surface_Empty (closest existing class).
+star_mapping[(50, False, True, False, Liquid.WATER, False, False)] = (
+  Tip_50ul_Water_DispenseSurface
+) = Tip_50ul_Water_DispenseSurface_Empty
+
+star_mapping[(50, False, True, True, Liquid.WATER, False, False)] = (
+  Tip_50ulFilter_Water_DispenseSurface
+) = Tip_50ulFilter_Water_DispenseSurface_Empty
