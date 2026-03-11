@@ -1,8 +1,10 @@
+"""Legacy. Use pylabrobot.molecular_devices.spectramax.SpectraMaxM5Backend instead."""
+
 from .backend import MolecularDevicesBackend
 
 
 class MolecularDevicesSpectraMaxM5Backend(MolecularDevicesBackend):
-  """Backend for Molecular Devices SpectraMax M5 plate readers."""
+  """Legacy. Use pylabrobot.molecular_devices.spectramax.SpectraMaxM5Backend instead."""
 
   def __init__(self, port: str) -> None:
     super().__init__(port)

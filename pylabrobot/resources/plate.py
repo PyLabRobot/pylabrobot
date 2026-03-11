@@ -158,12 +158,16 @@ class Plate(ItemizedResource["Well"]):
 
     return super().get_item(identifier)
 
-  def get_wells(self, identifier: Union[str, Sequence[int]]) -> List["Well"]:
+  def get_wells(self, identifier: Optional[Union[str, Sequence[int]]] = None) -> List["Well"]:
     """Get the wells with the given identifier.
+
+    If no identifier is given, all wells are returned.
 
     See :meth:`~.get_items` for more information.
     """
 
+    if identifier is None:
+      return super().get_items(list(range(self.num_items)))
     return super().get_items(identifier)
 
   def has_lid(self) -> bool:

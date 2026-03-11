@@ -1,8 +1,7 @@
-from .backend import (
+from pylabrobot.molecular_devices.spectramax.backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
-  MolecularDevicesBackend,
   MolecularDevicesError,
   MolecularDevicesFirmwareError,
   MolecularDevicesHardwareError,
@@ -17,6 +16,8 @@ from .backend import (
   ShakeSettings,
   SpectrumSettings,
 )
+
+from .backend import MolecularDevicesBackend
 from .spectramax_384_plus_backend import MolecularDevicesSpectraMax384PlusBackend
 from .spectramax_m5_backend import MolecularDevicesSpectraMaxM5Backend
 
