@@ -83,6 +83,8 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
 
 
 class ImagerBackend(MachineBackend, metaclass=ABCMeta):
+  """Legacy. Use pylabrobot.capabilities.microscopy.MicroscopyBackend instead."""
+
   @abstractmethod
   async def capture(
     self,

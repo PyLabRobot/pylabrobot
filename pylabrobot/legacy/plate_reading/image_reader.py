@@ -7,7 +7,7 @@ from pylabrobot.resources import Rotation
 
 
 class ImageReader(PlateReader, Imager):
-  """Microscope which is also a plate reader"""
+  """Legacy. Microscope which is also a plate reader."""
 
   def __init__(
     self,

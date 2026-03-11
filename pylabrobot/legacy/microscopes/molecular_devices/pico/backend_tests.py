@@ -23,7 +23,9 @@ from pylabrobot.io.sila.grpc import (
   sila_string,
   varint_field,
 )
-from pylabrobot.legacy.microscopes.molecular_devices.pico.backend import (
+from pylabrobot.capabilities.microscopy import ImagingMode, Objective
+from pylabrobot.molecular_devices.pico.backend import (
+  PicoBackend,
   _FC_SVC,
   _HW_SVC,
   _INST_SVC,
@@ -31,12 +33,10 @@ from pylabrobot.legacy.microscopes.molecular_devices.pico.backend import (
   _LOCK_SVC,
   _OBJ_SVC,
   _SNAP_SVC,
-  ExperimentalPicoBackend,
   _decode_intermediate_response,
   _extract_image_buffer,
   _get_image_info,
 )
-from pylabrobot.legacy.plate_reading.standard import ImagingMode, Objective
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -175,9 +175,9 @@ def _make_backend(
   objectives=None,
   filter_cubes=None,
   lock_timeout=3600,
-) -> Tuple[ExperimentalPicoBackend, _MockChannel]:
+) -> Tuple[PicoBackend, _MockChannel]:
   """Create a PicoBackend with a mock channel, bypassing setup()."""
-  backend = ExperimentalPicoBackend(
+  backend = PicoBackend(
     host="127.0.0.1",
     port=8091,
     lock_timeout=lock_timeout,
@@ -218,7 +218,7 @@ def _unwrap_sila_string(data: bytes) -> str:
 class TestSetup(unittest.IsolatedAsyncioTestCase):
   async def test_setup_sends_correct_sequence(self):
     """setup() with no objectives/filter_cubes: unlock stale, lock, query hardware."""
-    backend = ExperimentalPicoBackend(host="127.0.0.1", lock_timeout=120)
+    backend = PicoBackend(host="127.0.0.1", lock_timeout=120)
     channel = _MockChannel()
 
     channel.set_response(f"/{_LOCK_SVC}/UnlockServer", b"")
@@ -249,7 +249,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_configures_objectives_and_filter_cubes(self):
     """When objectives/filter_cubes are specified, setup() calls ChangeHardware."""
-    backend = ExperimentalPicoBackend(
+    backend = PicoBackend(
       host="127.0.0.1",
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
