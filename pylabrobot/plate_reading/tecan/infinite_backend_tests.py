@@ -749,6 +749,28 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_read_absorbance_uses_late_pending_calibration(self):
+    self.backend._ready = True
+    terminal_calls = 0
+
+    async def mock_await(decoder, row_count, mode):
+      for _ in range(row_count):
+        data_len, data_blob = _abs_data_blob(6000, 500, 1000)
+        decoder.feed_bin(data_len, data_blob)
+
+    async def mock_terminal(_saw_terminal):
+      nonlocal terminal_calls
+      terminal_calls += 1
+      if terminal_calls == 2:
+        cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
+        self.backend._pending_bin_events.append((cal_len, cal_blob))
+
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", side_effect=mock_terminal):
+        result = await self.backend.read_absorbance(self.plate, [], wavelength=600)
+
+    self.assertAlmostEqual(result[0]["data"][0][0], 0.3010299956639812)
+
   async def test_read_fluorescence_commands(self):
     """Test that read_fluorescence sends the correct configuration commands."""
     self.backend._ready = True

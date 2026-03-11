@@ -631,6 +631,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         scan_direction="ALTUP",
       )
 
+      self._drain_pending_bin_events(decoder)
       if len(decoder.measurements) != len(scan_wells):
         raise RuntimeError("Absorbance decoder did not complete scan.")
       intensities: List[float] = []
@@ -847,10 +848,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
   ) -> None:
     target = decoder.count + row_count
     start_count = decoder.count
-    if self._pending_bin_events:
-      for payload_len, blob in self._pending_bin_events:
-        decoder.feed_bin(payload_len, blob)
-      self._pending_bin_events.clear()
+    self._drain_pending_bin_events(decoder)
     start = time.monotonic()
     reads = 0
     while decoder.count < target and (time.monotonic() - start) < self._max_row_wait_s:
@@ -865,6 +863,13 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         f"Timed out while parsing {mode.lower()} results "
         f"(decoded {got}/{row_count} measurements in {time.monotonic() - start:.1f}s, {reads} reads)."
       )
+
+  def _drain_pending_bin_events(self, decoder: "_MeasurementDecoder") -> None:
+    if not self._pending_bin_events:
+      return
+    for payload_len, blob in self._pending_bin_events:
+      decoder.feed_bin(payload_len, blob)
+    self._pending_bin_events.clear()
 
   async def _await_scan_terminal(self, saw_terminal: bool) -> None:
     if saw_terminal:
