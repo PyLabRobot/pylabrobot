@@ -300,6 +300,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       return
 
     raise ValueError(f"Unknown or unconfigured pipette_id {pipette_id!r} in _set_tip_state.")
+
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """Pick up tips from the specified resource."""
 
