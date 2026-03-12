@@ -67,7 +67,6 @@ def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
   logger = logging.getLogger("pylabrobot")
   logger.setLevel(level)
 
-  now = datetime.datetime.now().strftime("%Y%m%d")
   # remove existing file handlers (but keep stream handlers like those from verbose())
   for handler in logger.handlers[:]:
     if isinstance(handler, logging.FileHandler):
