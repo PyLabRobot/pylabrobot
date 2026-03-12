@@ -34,8 +34,7 @@ machine-agnostic-features/using-the-visualizer
 machine-agnostic-features/using-trackers
 machine-agnostic-features/writing-robot-agnostic-protocols
 machine-agnostic-features/tip-spot-generators
-machine-agnostic-features/validation
-machine-agnostic-features/error-handling-general
+machine-agnostic-features/logging-and-validation/_logging-and-validation
 machine-agnostic-features/sila-discovery
 ```
 
