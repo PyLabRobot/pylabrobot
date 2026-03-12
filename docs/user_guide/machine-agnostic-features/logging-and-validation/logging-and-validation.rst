@@ -1,7 +1,7 @@
 Logging & Validation
 ====================
 
-When a protocol runs, you want to know what happened, and you want to be able to prove it later. This is called an **audit trail**. The following concepts help you build one:
+When a protocol runs, you may want to see exactly what happens in real time, review it afterwards, or, in regulated environments, prove it later. Together these form an **audit trail**. The following concepts help you build one:
 
 .. code-block:: text
 
@@ -22,11 +22,11 @@ When a protocol runs, you want to know what happened, and you want to be able to
 
 PyLabRobot gives you two tools to support these concepts: **logging** for recording what happens during a run, and **validation** for detecting when protocol behaviour changes between runs. It is up to you to configure them for your environment, and the next pages show you how.
 
-**Logging** shows you what is happening *right now*. It prints messages to the console or writes them to a file as your protocol runs - things like which commands are being sent, what the hardware responds, and where errors occur. Use logging when you are developing, debugging, or monitoring a run.
+:doc:`Logging <logging>` shows you what is happening *right now*. It prints messages to the console or writes them to a file as your protocol runs - things like which commands are being sent, what the hardware responds, and where errors occur. Use logging when you are developing, debugging, or monitoring a run.
 
-**Validation** checks whether a protocol *is going to do the same thing* it did before. It records all communication with the hardware during a known-good run, and replays that recording on future runs to catch any differences. Use validation when you have a working protocol and want to make sure code changes haven't accidentally changed its behaviour.
+:doc:`Validation <validation>` checks whether a protocol *is going to do the same thing* it did before. It records all communication with the hardware during a known-good run, and replays that recording on future runs to catch any differences. Use validation when you have a working protocol and want to make sure code changes haven't accidentally changed its behaviour.
 
-.. warning::
+.. note::
 
    The initial capture requires a real hardware run - validation cannot work from a simulator alone.
 
