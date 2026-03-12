@@ -5,7 +5,7 @@ communication. Useful for testing protocols offline.
 """
 
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsOT2Backend
@@ -15,6 +15,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
+from pylabrobot.resources import Coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -56,27 +57,45 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     if right_pipette_name is not None and right_pipette_name not in pv:
       raise ValueError(f"Unknown right pipette: {right_pipette_name}")
 
+    self._left_pipette_name = left_pipette_name
+    self._right_pipette_name = right_pipette_name
+    self._setup_pipettes()
+
+  def _setup_pipettes(self):
     self.left_pipette = (
-      {"name": left_pipette_name, "pipetteId": "sim-left"} if left_pipette_name else None
+      {"name": self._left_pipette_name, "pipetteId": "sim-left"}
+      if self._left_pipette_name
+      else None
     )
     self.right_pipette = (
-      {"name": right_pipette_name, "pipetteId": "sim-right"} if right_pipette_name else None
+      {"name": self._right_pipette_name, "pipetteId": "sim-right"}
+      if self._right_pipette_name
+      else None
     )
     self.left_pipette_has_tip = False
     self.right_pipette_has_tip = False
+    self.traversal_height = 120
+    self._positions: Dict[str, Coordinate] = {}
+    if self.left_pipette is not None:
+      self._positions["sim-left"] = Coordinate.zero()
+    if self.right_pipette is not None:
+      self._positions["sim-right"] = Coordinate.zero()
 
   def serialize(self) -> dict:
     return {
       **LiquidHandlerBackend.serialize(self),
-      "left_pipette_name": self.left_pipette["name"] if self.left_pipette else None,
-      "right_pipette_name": self.right_pipette["name"] if self.right_pipette else None,
+      "left_pipette_name": self._left_pipette_name,
+      "right_pipette_name": self._right_pipette_name,
     }
 
   async def setup(self, skip_home: bool = False):
     await LiquidHandlerBackend.setup(self)
-    left = self.left_pipette["name"] if self.left_pipette else None
-    right = self.right_pipette["name"] if self.right_pipette else None
-    logger.info("OpentronsOT2Simulator setup: left=%s, right=%s", left, right)
+    self._setup_pipettes()
+    logger.info(
+      "OpentronsOT2Simulator setup: left=%s, right=%s",
+      self._left_pipette_name,
+      self._right_pipette_name,
+    )
     if not skip_home:
       await self.home()
 
@@ -84,11 +103,32 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     logger.info("Homing (simulated).")
 
   async def stop(self):
-    self.left_pipette_has_tip = False
-    self.right_pipette_has_tip = False
     self.left_pipette = None
     self.right_pipette = None
+    self.left_pipette_has_tip = False
+    self.right_pipette_has_tip = False
     logger.info("OpentronsOT2Simulator stopped.")
+
+  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+    pipette_id = self._pipette_id_for_channel(channel)
+    return pipette_id, self._positions.get(pipette_id, Coordinate.zero())
+
+  async def move_pipette_head(
+    self,
+    location: Coordinate,
+    speed: Optional[float] = None,
+    minimum_z_height: Optional[float] = None,
+    pipette_id: Optional[str] = None,
+    force_direct: bool = False,
+  ):
+    if self.left_pipette is not None and pipette_id == "left":
+      pipette_id = self.left_pipette["pipetteId"]
+    elif self.right_pipette is not None and pipette_id == "right":
+      pipette_id = self.right_pipette["pipetteId"]
+    if pipette_id is None:
+      raise ValueError("No pipette id given or left/right pipette not available.")
+    self._positions[pipette_id] = location
+    logger.info("Moved %s to %s (simulated).", pipette_id, location)
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     pipette_id = self._get_pickup_pipette(ops)
