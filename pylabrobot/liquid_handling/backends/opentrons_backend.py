@@ -273,7 +273,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       raise NoChannelError("No pipette channel of right type with tip available.")
     return pipette_id
 
-  def _get_liquid_pipette(self, ops: Union[List[SingleChannelAspiration], List[SingleChannelDispense]]) -> str:
+  def _get_liquid_pipette(
+    self, ops: Union[List[SingleChannelAspiration], List[SingleChannelDispense]]
+  ) -> str:
     """Get the pipette for an aspirate/dispense, or raise."""
     assert len(ops) == 1, "only one channel supported for now"
     pipette_id = self.select_liquid_pipette(ops[0].volume)
