@@ -35,6 +35,7 @@ machine-agnostic-features/using-trackers
 machine-agnostic-features/writing-robot-agnostic-protocols
 machine-agnostic-features/tip-spot-generators
 machine-agnostic-features/logging-and-validation/_logging-and-validation
+machine-agnostic-features/error-handling-general
 machine-agnostic-features/sila-discovery
 ```
 
