@@ -188,12 +188,8 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 def _make_backend_with_pipettes(left_name="p300_single_gen2", right_name="p20_single_gen2"):
   """Create a backend with pipette state set directly (no ot_api needed)."""
   backend = OpentronsOT2Backend.__new__(OpentronsOT2Backend)
-  backend.left_pipette = (
-    {"name": left_name, "pipetteId": "left-id"} if left_name else None
-  )
-  backend.right_pipette = (
-    {"name": right_name, "pipetteId": "right-id"} if right_name else None
-  )
+  backend.left_pipette = {"name": left_name, "pipetteId": "left-id"} if left_name else None
+  backend.right_pipette = {"name": right_name, "pipetteId": "right-id"} if right_name else None
   backend.left_pipette_has_tip = False
   backend.right_pipette_has_tip = False
   return backend
@@ -208,10 +204,20 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
     self.tip_spot = self.tip_rack.get_item("A1")
-    self.tip_20 = Tip(has_filter=True, total_tip_length=39.2, maximal_volume=20,
-                       fitting_depth=8.25, name="test_tip_20")
-    self.tip_300 = Tip(has_filter=False, total_tip_length=51.0, maximal_volume=300,
-                        fitting_depth=8.0, name="test_tip_300")
+    self.tip_20 = Tip(
+      has_filter=True,
+      total_tip_length=39.2,
+      maximal_volume=20,
+      fitting_depth=8.25,
+      name="test_tip_20",
+    )
+    self.tip_300 = Tip(
+      has_filter=False,
+      total_tip_length=51.0,
+      maximal_volume=300,
+      fitting_depth=8.0,
+      name="test_tip_300",
+    )
 
   # -- _get_pickup_pipette --
 
@@ -246,24 +252,51 @@ class OpentronsSharedHelperTests(unittest.TestCase):
   def test_get_liquid_pipette_selects_left_for_large_volume(self):
     self.backend.left_pipette_has_tip = True
     well = Well(name="w", size_x=5, size_y=5, size_z=10, max_volume=350)
-    ops = [SingleChannelAspiration(resource=well, offset=Coordinate.zero(), tip=self.tip_300,
-                                    volume=100, flow_rate=None, liquid_height=None,
-                                    blow_out_air_volume=None, mix=None)]
+    ops = [
+      SingleChannelAspiration(
+        resource=well,
+        offset=Coordinate.zero(),
+        tip=self.tip_300,
+        volume=100,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
+    ]
     self.assertEqual(self.backend._get_liquid_pipette(ops), "left-id")
 
   def test_get_liquid_pipette_selects_right_for_small_volume(self):
     self.backend.right_pipette_has_tip = True
     well = Well(name="w", size_x=5, size_y=5, size_z=10, max_volume=350)
-    ops = [SingleChannelAspiration(resource=well, offset=Coordinate.zero(), tip=self.tip_20,
-                                    volume=5, flow_rate=None, liquid_height=None,
-                                    blow_out_air_volume=None, mix=None)]
+    ops = [
+      SingleChannelAspiration(
+        resource=well,
+        offset=Coordinate.zero(),
+        tip=self.tip_20,
+        volume=5,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
+    ]
     self.assertEqual(self.backend._get_liquid_pipette(ops), "right-id")
 
   def test_get_liquid_pipette_raises_without_tip(self):
     well = Well(name="w", size_x=5, size_y=5, size_z=10, max_volume=350)
-    ops = [SingleChannelAspiration(resource=well, offset=Coordinate.zero(), tip=self.tip_20,
-                                    volume=5, flow_rate=None, liquid_height=None,
-                                    blow_out_air_volume=None, mix=None)]
+    ops = [
+      SingleChannelAspiration(
+        resource=well,
+        offset=Coordinate.zero(),
+        tip=self.tip_20,
+        volume=5,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
+    ]
     with self.assertRaises(NoChannelError):
       self.backend._get_liquid_pipette(ops)
 
