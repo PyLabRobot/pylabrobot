@@ -284,12 +284,22 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return pipette_id
 
   def _set_tip_state(self, pipette_id: str, has_tip: bool):
-    """Update tip-mounted state for the pipette that was used."""
+    """Update tip-mounted state for the pipette that was used.
+
+    This method now validates the provided ``pipette_id`` against both the left
+    and right pipette configurations. It updates the state only if the ID
+    matches a known, configured pipette; otherwise it raises an error to avoid
+    silently putting the backend into an inconsistent state.
+    """
     if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = has_tip
-    else:
-      self.right_pipette_has_tip = has_tip
+      return
 
+    if self.right_pipette is not None and pipette_id == self.right_pipette["pipetteId"]:
+      self.right_pipette_has_tip = has_tip
+      return
+
+    raise ValueError(f"Unknown or unconfigured pipette_id {pipette_id!r} in _set_tip_state.")
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """Pick up tips from the specified resource."""
 
