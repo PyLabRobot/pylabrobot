@@ -86,6 +86,8 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
   async def stop(self):
     self.left_pipette_has_tip = False
     self.right_pipette_has_tip = False
+    self.left_pipette = None
+    self.right_pipette = None
     logger.info("OpentronsOT2Simulator stopped.")
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
