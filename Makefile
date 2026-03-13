@@ -12,6 +12,9 @@ docs-fast:
 	echo "building docs without api for speed"
 	sphinx-build -t no-api -b html docs docs/build/ -j 16 -W
 
+docs-check:
+	sphinx-build -b dummy docs docs/build/ -j 16 -W
+
 clean-docs:
 	rm -rf docs/build
 	rm -rf docs/_autosummary
