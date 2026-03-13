@@ -18,6 +18,7 @@ Examples:
    hamilton-vantage/_hamilton-vantage
    hamilton-prep/_hamilton-prep
    opentrons-ot2/hello-world
+   opentrons-ot2/ot2-simulator
    tecan-evo/_tecan-evo
    plate-washing/plate-washing
    pumps/_pumps
