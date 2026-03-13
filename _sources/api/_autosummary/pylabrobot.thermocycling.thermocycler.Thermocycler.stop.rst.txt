@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.stop
-=======================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.stop

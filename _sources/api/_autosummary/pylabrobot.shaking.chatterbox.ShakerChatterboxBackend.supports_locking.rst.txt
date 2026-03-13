@@ -1,6 +1,0 @@
-pylabrobot.shaking.chatterbox.ShakerChatterboxBackend.supports\_locking
-=======================================================================
-
-.. currentmodule:: pylabrobot.shaking.chatterbox
-
-.. autoproperty:: ShakerChatterboxBackend.supports_locking

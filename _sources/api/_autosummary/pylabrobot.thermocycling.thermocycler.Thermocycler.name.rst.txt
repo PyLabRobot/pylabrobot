@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.name
-=======================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. autoproperty:: Thermocycler.name

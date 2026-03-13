@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend.close
-=======================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.chatterbox
-
-.. automethod:: PlateReaderChatterboxBackend.close

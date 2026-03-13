@@ -1,6 +1,0 @@
-pylabrobot.resources.Trough.at
-==============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Trough.at

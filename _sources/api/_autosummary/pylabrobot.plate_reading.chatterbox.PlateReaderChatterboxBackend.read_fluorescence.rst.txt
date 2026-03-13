@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend.read\_fluorescence
-====================================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.chatterbox
-
-.. automethod:: PlateReaderChatterboxBackend.read_fluorescence

@@ -1,6 +1,0 @@
-pylabrobot.resources.TipRack.get\_location\_wrt
-===============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TipRack.get_location_wrt

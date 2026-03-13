@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.\_\_init\_\_
-================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.__init__

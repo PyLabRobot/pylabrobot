@@ -1,6 +1,0 @@
-pylabrobot.scales.chatterbox.ScaleChatterboxBackend.get\_all\_instances
-=======================================================================
-
-.. currentmodule:: pylabrobot.scales.chatterbox
-
-.. automethod:: ScaleChatterboxBackend.get_all_instances

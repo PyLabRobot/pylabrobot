@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeCarrier.assign\_child\_by\_anchor
-==========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeCarrier.assign_child_by_anchor

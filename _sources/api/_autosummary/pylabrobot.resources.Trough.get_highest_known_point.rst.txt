@@ -1,6 +1,0 @@
-pylabrobot.resources.Trough.get\_highest\_known\_point
-======================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Trough.get_highest_known_point

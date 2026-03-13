@@ -1,6 +1,0 @@
-pylabrobot.pumps.chatterbox.PumpChatterboxBackend.serialize
-===========================================================
-
-.. currentmodule:: pylabrobot.pumps.chatterbox
-
-.. automethod:: PumpChatterboxBackend.serialize

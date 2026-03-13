@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1.is\_profile\_running
-=====================================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.opentrons
-
-.. automethod:: OpentronsThermocyclerModuleV1.is_profile_running

@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.setup\_finished
-==================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. autoproperty:: Thermocycler.setup_finished

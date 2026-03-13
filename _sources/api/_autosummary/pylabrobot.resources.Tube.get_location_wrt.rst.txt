@@ -1,6 +1,0 @@
-pylabrobot.resources.Tube.get\_location\_wrt
-============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Tube.get_location_wrt

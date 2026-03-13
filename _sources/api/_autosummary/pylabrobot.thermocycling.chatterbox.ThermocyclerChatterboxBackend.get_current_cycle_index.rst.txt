@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.get\_current\_cycle\_index
-============================================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.chatterbox
-
-.. automethod:: ThermocyclerChatterboxBackend.get_current_cycle_index

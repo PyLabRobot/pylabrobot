@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.\_\_init\_\_
-==============================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.chatterbox
-
-.. automethod:: ThermocyclerChatterboxBackend.__init__

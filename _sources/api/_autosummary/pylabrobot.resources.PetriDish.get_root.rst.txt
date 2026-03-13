@@ -1,6 +1,0 @@
-pylabrobot.resources.PetriDish.get\_root
-========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PetriDish.get_root

@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.is\_in\_subtree\_of
-=================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.is_in_subtree_of

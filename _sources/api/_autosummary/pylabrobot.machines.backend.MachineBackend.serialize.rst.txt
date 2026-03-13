@@ -1,6 +1,0 @@
-pylabrobot.machines.backend.MachineBackend.serialize
-====================================================
-
-.. currentmodule:: pylabrobot.machines.backend
-
-.. automethod:: MachineBackend.serialize

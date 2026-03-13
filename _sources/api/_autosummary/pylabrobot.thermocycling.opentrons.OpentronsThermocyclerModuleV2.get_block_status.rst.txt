@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV2.get\_block\_status
-===================================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.opentrons
-
-.. automethod:: OpentronsThermocyclerModuleV2.get_block_status

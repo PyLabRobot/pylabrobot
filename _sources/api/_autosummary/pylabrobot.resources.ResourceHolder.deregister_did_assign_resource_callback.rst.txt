@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.deregister\_did\_assign\_resource\_callback
-===============================================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.deregister_did_assign_resource_callback

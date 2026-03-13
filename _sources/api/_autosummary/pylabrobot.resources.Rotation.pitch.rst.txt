@@ -1,6 +1,0 @@
-pylabrobot.resources.Rotation.pitch
-===================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. autoproperty:: Rotation.pitch

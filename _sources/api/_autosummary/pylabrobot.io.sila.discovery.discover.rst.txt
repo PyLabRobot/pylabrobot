@@ -1,6 +1,0 @@
-﻿pylabrobot.io.sila.discovery.discover
-=====================================
-
-.. currentmodule:: pylabrobot.io.sila.discovery
-
-.. autofunction:: discover

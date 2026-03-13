@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.get\_hold\_time
-==================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.get_hold_time

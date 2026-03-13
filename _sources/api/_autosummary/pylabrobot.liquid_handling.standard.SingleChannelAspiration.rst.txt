@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.SingleChannelAspiration
-============================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: SingleChannelAspiration

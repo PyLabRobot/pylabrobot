@@ -1,6 +1,0 @@
-pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend.set\_temperature
-=====================================================================================
-
-.. currentmodule:: pylabrobot.heating_shaking.chatterbox
-
-.. automethod:: HeaterShakerChatterboxBackend.set_temperature

@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1.wait\_for\_lid
-===============================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.opentrons
-
-.. automethod:: OpentronsThermocyclerModuleV1.wait_for_lid

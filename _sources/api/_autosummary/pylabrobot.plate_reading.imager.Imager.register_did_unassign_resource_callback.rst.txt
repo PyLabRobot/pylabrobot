@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.register\_did\_unassign\_resource\_callback
-===================================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.register_did_unassign_resource_callback

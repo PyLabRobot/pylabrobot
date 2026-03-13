@@ -1,6 +1,0 @@
-pylabrobot.resources.TipRack.at
-===============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TipRack.at

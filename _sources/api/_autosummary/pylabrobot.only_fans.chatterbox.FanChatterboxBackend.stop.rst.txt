@@ -1,6 +1,0 @@
-pylabrobot.only\_fans.chatterbox.FanChatterboxBackend.stop
-==========================================================
-
-.. currentmodule:: pylabrobot.only_fans.chatterbox
-
-.. automethod:: FanChatterboxBackend.stop

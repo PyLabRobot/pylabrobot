@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.load\_state
-==============================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.load_state

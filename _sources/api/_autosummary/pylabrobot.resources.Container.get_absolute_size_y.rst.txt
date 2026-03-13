@@ -1,6 +1,0 @@
-pylabrobot.resources.Container.get\_absolute\_size\_y
-=====================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Container.get_absolute_size_y

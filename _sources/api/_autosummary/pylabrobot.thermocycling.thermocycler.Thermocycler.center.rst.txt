@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.center
-=========================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.center

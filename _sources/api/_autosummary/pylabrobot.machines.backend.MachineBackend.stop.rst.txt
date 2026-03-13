@@ -1,6 +1,0 @@
-pylabrobot.machines.backend.MachineBackend.stop
-===============================================
-
-.. currentmodule:: pylabrobot.machines.backend
-
-.. automethod:: MachineBackend.stop

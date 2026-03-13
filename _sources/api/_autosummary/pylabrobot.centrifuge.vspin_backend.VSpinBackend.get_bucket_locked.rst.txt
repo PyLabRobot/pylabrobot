@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.vspin\_backend.VSpinBackend.get\_bucket\_locked
-=====================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.vspin_backend
-
-.. automethod:: VSpinBackend.get_bucket_locked

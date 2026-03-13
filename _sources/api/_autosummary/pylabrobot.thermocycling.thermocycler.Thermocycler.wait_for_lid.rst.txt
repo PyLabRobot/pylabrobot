@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.wait\_for\_lid
-=================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.wait_for_lid

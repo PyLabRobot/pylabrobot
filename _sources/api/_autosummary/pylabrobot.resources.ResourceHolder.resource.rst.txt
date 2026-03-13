@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.resource
-============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. autoproperty:: ResourceHolder.resource

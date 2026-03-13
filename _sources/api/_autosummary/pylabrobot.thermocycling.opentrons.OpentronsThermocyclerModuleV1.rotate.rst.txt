@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1.rotate
-=======================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.opentrons
-
-.. automethod:: OpentronsThermocyclerModuleV1.rotate

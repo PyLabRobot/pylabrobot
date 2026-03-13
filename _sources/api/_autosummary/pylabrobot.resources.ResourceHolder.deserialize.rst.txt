@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.deserialize
-===============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.deserialize

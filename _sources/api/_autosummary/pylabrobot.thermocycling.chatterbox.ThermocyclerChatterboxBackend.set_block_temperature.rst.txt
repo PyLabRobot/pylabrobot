@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.set\_block\_temperature
-=========================================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.chatterbox
-
-.. automethod:: ThermocyclerChatterboxBackend.set_block_temperature

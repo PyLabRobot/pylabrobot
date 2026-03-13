@@ -1,6 +1,0 @@
-pylabrobot.resources.PetriDish.supports\_compute\_height\_volume\_functions
-===========================================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PetriDish.supports_compute_height_volume_functions

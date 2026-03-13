@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.copy
-=======================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.copy

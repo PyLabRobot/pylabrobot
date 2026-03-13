@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.unassign
-===========================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.unassign

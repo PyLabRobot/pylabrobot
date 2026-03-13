@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.get\_column
-=====================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.get_column

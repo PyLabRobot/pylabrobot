@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.save
-=====================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.save

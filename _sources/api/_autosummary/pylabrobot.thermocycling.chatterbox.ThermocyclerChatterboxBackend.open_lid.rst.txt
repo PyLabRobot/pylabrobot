@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.open\_lid
-===========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.chatterbox
-
-.. automethod:: ThermocyclerChatterboxBackend.open_lid

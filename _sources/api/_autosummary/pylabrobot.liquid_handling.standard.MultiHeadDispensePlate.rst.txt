@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.MultiHeadDispensePlate
-===========================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: MultiHeadDispensePlate

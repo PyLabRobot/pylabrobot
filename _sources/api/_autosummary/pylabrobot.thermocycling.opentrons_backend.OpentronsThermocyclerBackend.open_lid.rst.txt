@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend.open\_lid
-==================================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
-
-.. automethod:: OpentronsThermocyclerBackend.open_lid

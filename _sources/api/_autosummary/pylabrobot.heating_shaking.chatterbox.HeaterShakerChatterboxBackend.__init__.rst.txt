@@ -1,6 +1,0 @@
-pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend.\_\_init\_\_
-=================================================================================
-
-.. currentmodule:: pylabrobot.heating_shaking.chatterbox
-
-.. automethod:: HeaterShakerChatterboxBackend.__init__

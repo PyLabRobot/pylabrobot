@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.request\_iswap\_position
-=========================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
-
-.. automethod:: STAR.request_iswap_position

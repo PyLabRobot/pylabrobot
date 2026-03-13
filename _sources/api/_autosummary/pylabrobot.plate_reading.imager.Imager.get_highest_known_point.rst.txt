@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.get\_highest\_known\_point
-==================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.get_highest_known_point

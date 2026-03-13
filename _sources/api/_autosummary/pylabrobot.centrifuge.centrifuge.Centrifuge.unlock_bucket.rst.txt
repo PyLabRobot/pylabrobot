@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.unlock\_bucket
-==========================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.unlock_bucket

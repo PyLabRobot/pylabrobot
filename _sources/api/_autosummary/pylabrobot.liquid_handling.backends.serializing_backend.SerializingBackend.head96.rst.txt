@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.serializing\_backend.SerializingBackend.head96
-===================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.serializing_backend
-
-.. autoproperty:: SerializingBackend.head96

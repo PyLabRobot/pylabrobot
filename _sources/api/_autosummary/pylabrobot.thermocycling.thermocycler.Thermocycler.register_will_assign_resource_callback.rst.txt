@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.register\_will\_assign\_resource\_callback
-=============================================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.register_will_assign_resource_callback

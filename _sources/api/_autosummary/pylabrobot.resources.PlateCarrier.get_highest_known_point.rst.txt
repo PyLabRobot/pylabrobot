@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateCarrier.get\_highest\_known\_point
-============================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateCarrier.get_highest_known_point

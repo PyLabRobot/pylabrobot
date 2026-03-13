@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.serialize\_all\_state
-=================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.serialize_all_state

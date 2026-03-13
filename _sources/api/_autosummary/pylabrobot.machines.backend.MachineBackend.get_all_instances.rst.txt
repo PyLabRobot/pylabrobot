@@ -1,6 +1,0 @@
-pylabrobot.machines.backend.MachineBackend.get\_all\_instances
-==============================================================
-
-.. currentmodule:: pylabrobot.machines.backend
-
-.. automethod:: MachineBackend.get_all_instances

@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.get\_absolute\_size\_y
-====================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.get_absolute_size_y

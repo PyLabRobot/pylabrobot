@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1.resource
-=========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.opentrons
-
-.. autoproperty:: OpentronsThermocyclerModuleV1.resource

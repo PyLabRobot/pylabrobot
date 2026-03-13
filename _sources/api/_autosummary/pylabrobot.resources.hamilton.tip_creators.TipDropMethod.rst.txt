@@ -1,6 +1,0 @@
-pylabrobot.resources.hamilton.tip\_creators.TipDropMethod
-=========================================================
-
-.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
-
-.. autoclass:: TipDropMethod

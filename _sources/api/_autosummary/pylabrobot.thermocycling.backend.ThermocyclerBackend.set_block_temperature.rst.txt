@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.backend.ThermocyclerBackend.set\_block\_temperature
-============================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.backend
-
-.. automethod:: ThermocyclerBackend.set_block_temperature

@@ -1,6 +1,0 @@
-pylabrobot.resources.Coordinate.copy
-====================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Coordinate.copy

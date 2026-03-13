@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.center
-==========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.center

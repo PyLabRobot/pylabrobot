@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.column
-====================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.column

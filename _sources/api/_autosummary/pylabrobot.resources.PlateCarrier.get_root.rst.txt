@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateCarrier.get\_root
-===========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateCarrier.get_root

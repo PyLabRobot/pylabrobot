@@ -1,6 +1,0 @@
-pylabrobot.resources.hamilton.tip\_racks.ST
-===========================================
-
-.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
-
-.. autofunction:: ST

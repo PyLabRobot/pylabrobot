@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.assign\_child\_by\_anchor
-=============================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.assign_child_by_anchor

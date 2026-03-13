@@ -1,6 +1,0 @@
-pylabrobot.pumps.chatterbox.PumpChatterboxBackend.run\_continuously
-===================================================================
-
-.. currentmodule:: pylabrobot.pumps.chatterbox
-
-.. automethod:: PumpChatterboxBackend.run_continuously

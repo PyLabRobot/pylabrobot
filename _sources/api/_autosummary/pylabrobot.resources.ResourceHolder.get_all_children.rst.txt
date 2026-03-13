@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.get\_all\_children
-======================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.get_all_children

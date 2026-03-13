@@ -1,6 +1,0 @@
-pylabrobot.resources.Carrier.get\_free\_sites
-=============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Carrier.get_free_sites

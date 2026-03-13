@@ -1,6 +1,0 @@
-pylabrobot.resources.ItemizedResource.get\_root
-===============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ItemizedResource.get_root

@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceStack.get\_resource\_stack\_edge
-=============================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceStack.get_resource_stack_edge

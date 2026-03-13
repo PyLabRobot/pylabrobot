@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateCarrier.named
-=======================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateCarrier.named

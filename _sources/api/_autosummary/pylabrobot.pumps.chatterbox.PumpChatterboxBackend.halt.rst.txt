@@ -1,6 +1,0 @@
-pylabrobot.pumps.chatterbox.PumpChatterboxBackend.halt
-======================================================
-
-.. currentmodule:: pylabrobot.pumps.chatterbox
-
-.. automethod:: PumpChatterboxBackend.halt

@@ -1,6 +1,0 @@
-pylabrobot.resources.ItemizedResource.get\_child\_column
-========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ItemizedResource.get_child_column

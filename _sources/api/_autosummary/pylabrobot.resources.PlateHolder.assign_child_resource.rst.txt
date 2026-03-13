@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.assign\_child\_resource
-========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.assign_child_resource

@@ -1,6 +1,0 @@
-pylabrobot.resources.Deck.check\_can\_drop\_resource\_here
-==========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Deck.check_can_drop_resource_here

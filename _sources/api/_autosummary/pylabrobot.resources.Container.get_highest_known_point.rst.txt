@@ -1,6 +1,0 @@
-pylabrobot.resources.Container.get\_highest\_known\_point
-=========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Container.get_highest_known_point

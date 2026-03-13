@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.summary
-==================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Plate.summary

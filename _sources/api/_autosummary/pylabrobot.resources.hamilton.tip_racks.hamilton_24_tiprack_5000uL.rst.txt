@@ -1,6 +1,0 @@
-pylabrobot.resources.hamilton.tip\_racks.hamilton\_24\_tiprack\_5000uL
-======================================================================
-
-.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
-
-.. autofunction:: hamilton_24_tiprack_5000uL

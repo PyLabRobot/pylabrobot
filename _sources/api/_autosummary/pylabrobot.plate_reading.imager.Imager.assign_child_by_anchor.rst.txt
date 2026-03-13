@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.assign\_child\_by\_anchor
-=================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.assign_child_by_anchor

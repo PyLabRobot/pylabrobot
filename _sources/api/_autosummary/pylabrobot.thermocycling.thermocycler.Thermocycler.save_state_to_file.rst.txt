@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.save\_state\_to\_file
-========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.save_state_to_file

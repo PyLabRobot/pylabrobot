@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.get\_absolute\_size\_z
-=========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.get_absolute_size_z

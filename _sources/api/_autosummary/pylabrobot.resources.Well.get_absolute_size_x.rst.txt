@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.get\_absolute\_size\_x
-================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.get_absolute_size_x

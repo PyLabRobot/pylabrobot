@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.load\_from\_json\_file
-==================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.load_from_json_file

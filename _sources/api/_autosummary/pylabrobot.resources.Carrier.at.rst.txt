@@ -1,6 +1,0 @@
-pylabrobot.resources.Carrier.at
-===============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Carrier.at

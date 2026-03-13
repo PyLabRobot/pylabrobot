@@ -1,6 +1,0 @@
-pylabrobot.tilting.chatterbox.TilterChatterboxBackend.get\_all\_instances
-=========================================================================
-
-.. currentmodule:: pylabrobot.tilting.chatterbox
-
-.. automethod:: TilterChatterboxBackend.get_all_instances

@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.standard.ImagingResult.\_\_init\_\_
-=============================================================
-
-.. currentmodule:: pylabrobot.plate_reading.standard
-
-.. automethod:: ImagingResult.__init__

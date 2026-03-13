@@ -1,6 +1,0 @@
-pylabrobot.only\_fans.hamilton\_hepa\_fan\_backend.HamiltonHepaFanBackend.turn\_on
-==================================================================================
-
-.. currentmodule:: pylabrobot.only_fans.hamilton_hepa_fan_backend
-
-.. automethod:: HamiltonHepaFanBackend.turn_on

@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.backend.ThermocyclerBackend.get\_total\_cycle\_count
-=============================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.backend
-
-.. automethod:: ThermocyclerBackend.get_total_cycle_count

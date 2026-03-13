@@ -1,6 +1,0 @@
-pylabrobot.resources.hamilton.tip\_racks.STF\_Slim
-==================================================
-
-.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
-
-.. autofunction:: STF_Slim

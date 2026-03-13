@@ -1,6 +1,0 @@
-pylabrobot.tilting.chatterbox.TilterChatterboxBackend.stop
-==========================================================
-
-.. currentmodule:: pylabrobot.tilting.chatterbox
-
-.. automethod:: TilterChatterboxBackend.stop

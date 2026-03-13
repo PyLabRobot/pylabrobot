@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.num\_arms
-================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
-
-.. autoproperty:: Vantage.num_arms

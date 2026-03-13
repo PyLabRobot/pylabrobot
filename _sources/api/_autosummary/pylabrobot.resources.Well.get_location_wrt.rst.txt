@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.get\_location\_wrt
-============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.get_location_wrt

@@ -1,6 +1,0 @@
-pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend.get\_all\_instances
-========================================================================================
-
-.. currentmodule:: pylabrobot.heating_shaking.chatterbox
-
-.. automethod:: HeaterShakerChatterboxBackend.get_all_instances

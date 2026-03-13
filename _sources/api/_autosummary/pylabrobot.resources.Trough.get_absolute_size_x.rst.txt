@@ -1,6 +1,0 @@
-pylabrobot.resources.Trough.get\_absolute\_size\_x
-==================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Trough.get_absolute_size_x

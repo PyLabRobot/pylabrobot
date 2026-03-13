@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.assign\_child\_by\_anchor
-=======================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.assign_child_by_anchor

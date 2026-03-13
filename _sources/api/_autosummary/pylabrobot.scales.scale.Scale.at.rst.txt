@@ -1,6 +1,0 @@
-pylabrobot.scales.scale.Scale.at
-================================
-
-.. currentmodule:: pylabrobot.scales.scale
-
-.. automethod:: Scale.at

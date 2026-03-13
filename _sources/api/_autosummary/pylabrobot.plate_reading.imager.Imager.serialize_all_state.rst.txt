@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.serialize\_all\_state
-=============================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.serialize_all_state

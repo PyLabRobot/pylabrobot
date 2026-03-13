@@ -1,6 +1,0 @@
-pylabrobot.resources.TipCarrier.get\_absolute\_size\_y
-======================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TipCarrier.get_absolute_size_y

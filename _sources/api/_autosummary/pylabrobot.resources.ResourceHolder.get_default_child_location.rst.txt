@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.get\_default\_child\_location
-=================================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.get_default_child_location

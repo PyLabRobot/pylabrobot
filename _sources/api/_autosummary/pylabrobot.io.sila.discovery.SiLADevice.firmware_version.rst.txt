@@ -1,6 +1,0 @@
-pylabrobot.io.sila.discovery.SiLADevice.firmware\_version
-=========================================================
-
-.. currentmodule:: pylabrobot.io.sila.discovery
-
-.. autoattribute:: SiLADevice.firmware_version

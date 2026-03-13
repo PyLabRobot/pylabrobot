@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.core96\_set\_any\_parameter
-==================================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
-
-.. automethod:: Vantage.core96_set_any_parameter

@@ -1,6 +1,0 @@
-pylabrobot.utils.list.chunk\_list
-=================================
-
-.. currentmodule:: pylabrobot.utils.list
-
-.. autofunction:: chunk_list

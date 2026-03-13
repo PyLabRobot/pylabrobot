@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.opentrons\_backend.OpentronsOT2Backend.head96
-==================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.opentrons_backend
-
-.. autoproperty:: OpentronsOT2Backend.head96

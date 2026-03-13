@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.serialize\_state
-====================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.serialize_state

@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend.get\_all\_instances
-=====================================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.chatterbox
-
-.. automethod:: PlateReaderChatterboxBackend.get_all_instances

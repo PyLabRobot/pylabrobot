@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.MultiHeadAspirationContainer
-=================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: MultiHeadAspirationContainer

@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.at
-============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.at

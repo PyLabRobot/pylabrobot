@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend.\_\_init\_\_
-===========================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
-
-.. automethod:: LiquidHandlerChatterboxBackend.__init__

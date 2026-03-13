@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.get\_root
-===================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.get_root

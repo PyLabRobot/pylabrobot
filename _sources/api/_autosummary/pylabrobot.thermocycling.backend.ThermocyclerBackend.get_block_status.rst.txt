@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.backend.ThermocyclerBackend.get\_block\_status
-=======================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.backend
-
-.. automethod:: ThermocyclerBackend.get_block_status

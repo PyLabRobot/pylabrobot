@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.get\_root
-=================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.get_root

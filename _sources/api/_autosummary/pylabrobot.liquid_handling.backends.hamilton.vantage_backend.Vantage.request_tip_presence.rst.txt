@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.request\_tip\_presence
-=============================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
-
-.. automethod:: Vantage.request_tip_presence

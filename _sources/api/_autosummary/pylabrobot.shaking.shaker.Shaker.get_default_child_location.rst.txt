@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.get\_default\_child\_location
-==============================================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. automethod:: Shaker.get_default_child_location

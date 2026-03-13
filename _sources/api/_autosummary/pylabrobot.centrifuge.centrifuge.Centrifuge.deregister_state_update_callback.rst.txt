@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.deregister\_state\_update\_callback
-===============================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.deregister_state_update_callback

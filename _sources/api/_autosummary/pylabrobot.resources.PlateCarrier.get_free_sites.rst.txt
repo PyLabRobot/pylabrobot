@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateCarrier.get\_free\_sites
-==================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateCarrier.get_free_sites

@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.get\_root
-=======================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.get_root

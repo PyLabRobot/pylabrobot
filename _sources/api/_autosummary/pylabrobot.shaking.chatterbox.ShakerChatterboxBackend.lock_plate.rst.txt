@@ -1,6 +1,0 @@
-pylabrobot.shaking.chatterbox.ShakerChatterboxBackend.lock\_plate
-=================================================================
-
-.. currentmodule:: pylabrobot.shaking.chatterbox
-
-.. automethod:: ShakerChatterboxBackend.lock_plate

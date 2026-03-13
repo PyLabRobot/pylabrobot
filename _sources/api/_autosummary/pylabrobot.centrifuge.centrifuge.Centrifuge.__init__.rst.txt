@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.\_\_init\_\_
-========================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.__init__

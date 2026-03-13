@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.resource
-=========================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. autoproperty:: Shaker.resource

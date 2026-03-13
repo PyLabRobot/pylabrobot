@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.at
-=============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Plate.at

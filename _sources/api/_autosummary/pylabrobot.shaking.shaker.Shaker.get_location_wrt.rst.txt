@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.get\_location\_wrt
-===================================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. automethod:: Shaker.get_location_wrt

@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.backend.LiquidHandlerBackend.head
-======================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.backend
-
-.. autoproperty:: LiquidHandlerBackend.head

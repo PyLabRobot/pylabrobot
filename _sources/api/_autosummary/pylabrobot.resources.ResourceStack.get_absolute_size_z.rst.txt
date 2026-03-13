@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceStack.get\_absolute\_size\_z
-=========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceStack.get_absolute_size_z

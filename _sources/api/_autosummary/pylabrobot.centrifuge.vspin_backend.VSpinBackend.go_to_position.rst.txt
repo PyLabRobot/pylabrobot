@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.vspin\_backend.VSpinBackend.go\_to\_position
-==================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.vspin_backend
-
-.. automethod:: VSpinBackend.go_to_position

@@ -1,6 +1,0 @@
-pylabrobot.tilting.chatterbox.TilterChatterboxBackend.\_\_init\_\_
-==================================================================
-
-.. currentmodule:: pylabrobot.tilting.chatterbox
-
-.. automethod:: TilterChatterboxBackend.__init__

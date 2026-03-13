@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.plate\_reader.PlateReader.resource
-============================================================
-
-.. currentmodule:: pylabrobot.plate_reading.plate_reader
-
-.. autoproperty:: PlateReader.resource

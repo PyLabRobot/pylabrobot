@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.serialize
-================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
-
-.. automethod:: Vantage.serialize

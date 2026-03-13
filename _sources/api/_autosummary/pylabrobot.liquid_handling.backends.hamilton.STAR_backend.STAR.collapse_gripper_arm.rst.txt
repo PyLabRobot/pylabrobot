@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.collapse\_gripper\_arm
-=======================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
-
-.. automethod:: STAR.collapse_gripper_arm

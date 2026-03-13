@@ -1,6 +1,0 @@
-pylabrobot.machines.backend.MachineBackend.setup
-================================================
-
-.. currentmodule:: pylabrobot.machines.backend
-
-.. automethod:: MachineBackend.setup

@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.get\_identifier
-=========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.get_identifier

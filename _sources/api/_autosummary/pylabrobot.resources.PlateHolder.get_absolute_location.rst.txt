@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.get\_absolute\_location
-========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.get_absolute_location

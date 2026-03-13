@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.backend.ThermocyclerBackend.set\_lid\_temperature
-==========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.backend
-
-.. automethod:: ThermocyclerBackend.set_lid_temperature

@@ -1,6 +1,0 @@
-pylabrobot.resources.Deck.get\_location\_wrt
-============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Deck.get_location_wrt

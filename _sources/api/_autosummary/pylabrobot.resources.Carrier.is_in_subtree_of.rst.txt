@@ -1,6 +1,0 @@
-pylabrobot.resources.Carrier.is\_in\_subtree\_of
-================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Carrier.is_in_subtree_of

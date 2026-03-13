@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.unassign\_child\_resource
-==========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.unassign_child_resource

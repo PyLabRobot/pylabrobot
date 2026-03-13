@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeCarrier.named
-======================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeCarrier.named

@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.get\_absolute\_rotation
-===================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.get_absolute_rotation

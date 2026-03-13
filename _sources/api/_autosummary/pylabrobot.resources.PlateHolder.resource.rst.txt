@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.resource
-=========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. autoproperty:: PlateHolder.resource

@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.register\_will\_unassign\_resource\_callback
-================================================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.register_will_unassign_resource_callback

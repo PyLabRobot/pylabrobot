@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.copy
-=====================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.copy

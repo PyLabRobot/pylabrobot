@@ -1,6 +1,0 @@
-pylabrobot.resources.Rotation.deserialize
-=========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Rotation.deserialize

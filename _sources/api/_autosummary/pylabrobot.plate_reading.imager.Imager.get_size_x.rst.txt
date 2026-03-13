@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.get\_size\_x
-====================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.get_size_x

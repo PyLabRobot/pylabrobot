@@ -1,6 +1,0 @@
-pylabrobot.resources.Container.named
-====================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Container.named

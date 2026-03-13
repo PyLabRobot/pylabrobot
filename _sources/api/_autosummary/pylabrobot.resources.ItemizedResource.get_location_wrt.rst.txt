@@ -1,6 +1,0 @@
-pylabrobot.resources.ItemizedResource.get\_location\_wrt
-========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ItemizedResource.get_location_wrt

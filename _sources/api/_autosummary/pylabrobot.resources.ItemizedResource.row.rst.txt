@@ -1,6 +1,0 @@
-pylabrobot.resources.ItemizedResource.row
-=========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ItemizedResource.row

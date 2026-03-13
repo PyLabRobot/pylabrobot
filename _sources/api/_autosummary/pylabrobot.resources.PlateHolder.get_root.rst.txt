@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.get\_root
-==========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.get_root

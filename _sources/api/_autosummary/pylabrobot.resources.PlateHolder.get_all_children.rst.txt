@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.get\_all\_children
-===================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.get_all_children

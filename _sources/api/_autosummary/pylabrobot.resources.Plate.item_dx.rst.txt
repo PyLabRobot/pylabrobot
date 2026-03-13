@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.item\_dx
-===================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. autoproperty:: Plate.item_dx

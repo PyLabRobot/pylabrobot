@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.save
-================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.save

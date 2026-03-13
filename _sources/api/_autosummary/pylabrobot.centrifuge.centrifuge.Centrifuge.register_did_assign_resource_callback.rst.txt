@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.register\_did\_assign\_resource\_callback
-=====================================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.register_did_assign_resource_callback

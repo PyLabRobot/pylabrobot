@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.rotate
-==============================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.rotate

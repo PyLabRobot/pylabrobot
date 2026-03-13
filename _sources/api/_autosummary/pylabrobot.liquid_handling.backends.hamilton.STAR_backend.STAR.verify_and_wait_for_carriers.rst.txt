@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.verify\_and\_wait\_for\_carriers
-=================================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
-
-.. automethod:: STAR.verify_and_wait_for_carriers

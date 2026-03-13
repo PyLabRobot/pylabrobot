@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.check\_can\_drop\_resource\_here
-========================================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.check_can_drop_resource_here

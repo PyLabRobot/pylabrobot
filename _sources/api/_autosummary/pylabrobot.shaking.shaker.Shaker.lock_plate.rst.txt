@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.lock\_plate
-============================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. automethod:: Shaker.lock_plate

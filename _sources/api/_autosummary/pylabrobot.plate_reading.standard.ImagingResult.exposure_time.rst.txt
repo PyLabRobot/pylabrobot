@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.standard.ImagingResult.exposure\_time
-===============================================================
-
-.. currentmodule:: pylabrobot.plate_reading.standard
-
-.. autoattribute:: ImagingResult.exposure_time

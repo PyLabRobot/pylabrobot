@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceStack.get\_root
-============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceStack.get_root

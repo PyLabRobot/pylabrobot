@@ -1,6 +1,0 @@
-pylabrobot.resources.tip.Tip.name
-=================================
-
-.. currentmodule:: pylabrobot.resources.tip
-
-.. autoattribute:: Tip.name

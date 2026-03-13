@@ -1,6 +1,0 @@
-pylabrobot.resources.TipRack.get\_root
-======================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TipRack.get_root

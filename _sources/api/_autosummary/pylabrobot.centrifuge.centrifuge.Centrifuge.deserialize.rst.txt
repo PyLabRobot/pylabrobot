@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.deserialize
-=======================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.deserialize

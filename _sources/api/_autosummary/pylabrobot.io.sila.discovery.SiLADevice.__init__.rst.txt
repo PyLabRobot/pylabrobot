@@ -1,6 +1,0 @@
-pylabrobot.io.sila.discovery.SiLADevice.\_\_init\_\_
-====================================================
-
-.. currentmodule:: pylabrobot.io.sila.discovery
-
-.. automethod:: SiLADevice.__init__

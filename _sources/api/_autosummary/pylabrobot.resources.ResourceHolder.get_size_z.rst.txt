@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.get\_size\_z
-================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.get_size_z

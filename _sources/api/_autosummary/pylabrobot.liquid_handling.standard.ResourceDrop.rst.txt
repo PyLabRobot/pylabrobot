@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.ResourceDrop
-=================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: ResourceDrop

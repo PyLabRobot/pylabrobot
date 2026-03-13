@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.at
-===================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. automethod:: Shaker.at

@@ -1,6 +1,0 @@
-pylabrobot.resources.TipCarrier.at
-==================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TipCarrier.at

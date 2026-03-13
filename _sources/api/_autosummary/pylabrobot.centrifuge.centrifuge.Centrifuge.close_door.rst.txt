@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.close\_door
-=======================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.close_door

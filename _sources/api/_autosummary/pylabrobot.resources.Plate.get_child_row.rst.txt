@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.get\_child\_row
-==========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Plate.get_child_row

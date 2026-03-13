@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.get\_resource
-================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.get_resource

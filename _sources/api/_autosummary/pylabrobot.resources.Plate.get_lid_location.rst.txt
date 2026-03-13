@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.get\_lid\_location
-=============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Plate.get_lid_location

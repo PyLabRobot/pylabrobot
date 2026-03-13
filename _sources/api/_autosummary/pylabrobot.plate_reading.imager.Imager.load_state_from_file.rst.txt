@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.load\_state\_from\_file
-===============================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.load_state_from_file

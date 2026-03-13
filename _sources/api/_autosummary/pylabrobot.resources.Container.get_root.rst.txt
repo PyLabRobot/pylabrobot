@@ -1,6 +1,0 @@
-pylabrobot.resources.Container.get\_root
-========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Container.get_root

@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.get\_size\_z
-=============================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.get_size_z

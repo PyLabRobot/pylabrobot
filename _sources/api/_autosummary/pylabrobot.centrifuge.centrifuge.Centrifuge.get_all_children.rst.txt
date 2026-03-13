@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.get\_all\_children
-==============================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.get_all_children

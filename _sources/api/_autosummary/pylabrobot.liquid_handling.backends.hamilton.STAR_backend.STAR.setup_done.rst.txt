@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.setup\_done
-============================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
-
-.. autoproperty:: STAR.setup_done

@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.get\_root
-==========================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. automethod:: Shaker.get_root

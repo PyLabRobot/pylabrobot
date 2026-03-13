@@ -1,6 +1,0 @@
-pylabrobot.resources.ItemizedResource.get\_absolute\_size\_z
-============================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ItemizedResource.get_absolute_size_z

@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.name
-================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. autoproperty:: Centrifuge.name

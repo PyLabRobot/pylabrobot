@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.set\_minimum\_iswap\_traversal\_height
-=======================================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
-
-.. automethod:: STAR.set_minimum_iswap_traversal_height

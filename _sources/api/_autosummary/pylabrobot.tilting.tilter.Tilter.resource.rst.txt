@@ -1,6 +1,0 @@
-pylabrobot.tilting.tilter.Tilter.resource
-=========================================
-
-.. currentmodule:: pylabrobot.tilting.tilter
-
-.. autoproperty:: Tilter.resource

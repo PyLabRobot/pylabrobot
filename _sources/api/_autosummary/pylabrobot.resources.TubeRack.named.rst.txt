@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.named
-===================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.named

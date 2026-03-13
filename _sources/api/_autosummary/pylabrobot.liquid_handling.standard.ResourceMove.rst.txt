@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.ResourceMove
-=================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: ResourceMove

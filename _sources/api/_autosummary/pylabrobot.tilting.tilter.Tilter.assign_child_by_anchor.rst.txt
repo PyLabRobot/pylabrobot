@@ -1,6 +1,0 @@
-pylabrobot.tilting.tilter.Tilter.assign\_child\_by\_anchor
-==========================================================
-
-.. currentmodule:: pylabrobot.tilting.tilter
-
-.. automethod:: Tilter.assign_child_by_anchor

@@ -1,6 +1,0 @@
-pylabrobot.tilting.tilter.Tilter.named
-======================================
-
-.. currentmodule:: pylabrobot.tilting.tilter
-
-.. automethod:: Tilter.named

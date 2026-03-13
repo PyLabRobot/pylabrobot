@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.named
-===============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.named

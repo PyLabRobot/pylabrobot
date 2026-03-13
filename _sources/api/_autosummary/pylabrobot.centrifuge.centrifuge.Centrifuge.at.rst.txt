@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.at
-==============================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.at

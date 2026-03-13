@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.Mix
-========================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: Mix

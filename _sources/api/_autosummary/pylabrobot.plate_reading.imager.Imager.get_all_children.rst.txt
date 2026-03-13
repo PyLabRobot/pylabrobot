@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.get\_all\_children
-==========================================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.get_all_children

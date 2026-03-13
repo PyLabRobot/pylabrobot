@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceStack.get\_location\_wrt
-=====================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceStack.get_location_wrt

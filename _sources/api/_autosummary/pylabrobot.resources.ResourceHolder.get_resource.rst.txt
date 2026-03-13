@@ -1,6 +1,0 @@
-pylabrobot.resources.ResourceHolder.get\_resource
-=================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ResourceHolder.get_resource

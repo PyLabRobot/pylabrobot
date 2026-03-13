@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.get\_absolute\_size\_y
-=================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Plate.get_absolute_size_y

@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.stop
-================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.stop

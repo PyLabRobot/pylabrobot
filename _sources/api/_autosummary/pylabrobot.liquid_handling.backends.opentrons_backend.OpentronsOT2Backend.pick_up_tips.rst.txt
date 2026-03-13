@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.opentrons\_backend.OpentronsOT2Backend.pick\_up\_tips
-==========================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.opentrons_backend
-
-.. automethod:: OpentronsOT2Backend.pick_up_tips

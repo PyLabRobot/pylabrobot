@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeCarrier.get\_free\_sites
-=================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeCarrier.get_free_sites

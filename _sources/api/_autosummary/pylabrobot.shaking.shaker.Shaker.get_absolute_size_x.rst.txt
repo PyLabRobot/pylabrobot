@@ -1,6 +1,0 @@
-pylabrobot.shaking.shaker.Shaker.get\_absolute\_size\_x
-=======================================================
-
-.. currentmodule:: pylabrobot.shaking.shaker
-
-.. automethod:: Shaker.get_absolute_size_x

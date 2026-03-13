@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.lid
-==============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. autoproperty:: Plate.lid

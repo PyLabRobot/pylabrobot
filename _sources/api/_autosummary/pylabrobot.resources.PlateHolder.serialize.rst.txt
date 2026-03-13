@@ -1,6 +1,0 @@
-pylabrobot.resources.PlateHolder.serialize
-==========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: PlateHolder.serialize

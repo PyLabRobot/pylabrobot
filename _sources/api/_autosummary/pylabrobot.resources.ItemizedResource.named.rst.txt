@@ -1,6 +1,0 @@
-pylabrobot.resources.ItemizedResource.named
-===========================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: ItemizedResource.named

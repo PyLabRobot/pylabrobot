@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeCarrier.get\_highest\_known\_point
-===========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeCarrier.get_highest_known_point

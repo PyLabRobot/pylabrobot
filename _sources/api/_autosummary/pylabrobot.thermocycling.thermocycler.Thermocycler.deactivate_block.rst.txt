@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.deactivate\_block
-====================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.deactivate_block

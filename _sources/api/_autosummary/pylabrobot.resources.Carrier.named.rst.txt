@@ -1,6 +1,0 @@
-pylabrobot.resources.Carrier.named
-==================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Carrier.named

@@ -1,6 +1,0 @@
-pylabrobot.resources.TubeRack.get\_highest\_known\_point
-========================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: TubeRack.get_highest_known_point

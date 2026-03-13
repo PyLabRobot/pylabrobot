@@ -1,6 +1,0 @@
-pylabrobot.resources.Plate.named
-================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Plate.named

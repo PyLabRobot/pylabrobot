@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.open\_lid
-============================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.open_lid

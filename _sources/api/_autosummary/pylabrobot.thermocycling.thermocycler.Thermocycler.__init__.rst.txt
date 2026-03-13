@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.\_\_init\_\_
-===============================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.__init__

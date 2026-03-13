@@ -1,6 +1,0 @@
-pylabrobot.plate\_reading.imager.Imager.named
-=============================================
-
-.. currentmodule:: pylabrobot.plate_reading.imager
-
-.. automethod:: Imager.named

@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.get\_row
-==================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.get_row

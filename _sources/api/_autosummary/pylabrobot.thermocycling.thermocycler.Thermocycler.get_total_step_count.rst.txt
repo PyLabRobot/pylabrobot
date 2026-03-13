@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.get\_total\_step\_count
-==========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.get_total_step_count

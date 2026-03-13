@@ -1,6 +1,0 @@
-pylabrobot.tilting.chatterbox.TilterChatterboxBackend.serialize
-===============================================================
-
-.. currentmodule:: pylabrobot.tilting.chatterbox
-
-.. automethod:: TilterChatterboxBackend.serialize

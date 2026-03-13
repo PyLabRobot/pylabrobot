@@ -1,6 +1,0 @@
-pylabrobot.resources.Well.supports\_compute\_height\_volume\_functions
-======================================================================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Well.supports_compute_height_volume_functions

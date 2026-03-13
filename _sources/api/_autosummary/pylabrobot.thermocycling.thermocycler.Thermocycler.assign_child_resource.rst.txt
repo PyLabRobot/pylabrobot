@@ -1,6 +1,0 @@
-pylabrobot.thermocycling.thermocycler.Thermocycler.assign\_child\_resource
-==========================================================================
-
-.. currentmodule:: pylabrobot.thermocycling.thermocycler
-
-.. automethod:: Thermocycler.assign_child_resource

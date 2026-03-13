@@ -1,6 +1,0 @@
-pylabrobot.resources.utils.create\_equally\_spaced\_y
-=====================================================
-
-.. currentmodule:: pylabrobot.resources.utils
-
-.. autofunction:: create_equally_spaced_y

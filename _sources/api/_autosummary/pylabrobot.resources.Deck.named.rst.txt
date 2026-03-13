@@ -1,6 +1,0 @@
-pylabrobot.resources.Deck.named
-===============================
-
-.. currentmodule:: pylabrobot.resources
-
-.. automethod:: Deck.named

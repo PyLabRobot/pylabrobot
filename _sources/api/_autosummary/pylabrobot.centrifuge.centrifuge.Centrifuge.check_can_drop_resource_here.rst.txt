@@ -1,6 +1,0 @@
-pylabrobot.centrifuge.centrifuge.Centrifuge.check\_can\_drop\_resource\_here
-============================================================================
-
-.. currentmodule:: pylabrobot.centrifuge.centrifuge
-
-.. automethod:: Centrifuge.check_can_drop_resource_here

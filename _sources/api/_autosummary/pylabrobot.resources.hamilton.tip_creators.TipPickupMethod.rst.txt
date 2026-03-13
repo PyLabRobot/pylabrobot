@@ -1,6 +1,0 @@
-pylabrobot.resources.hamilton.tip\_creators.TipPickupMethod
-===========================================================
-
-.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
-
-.. autoclass:: TipPickupMethod

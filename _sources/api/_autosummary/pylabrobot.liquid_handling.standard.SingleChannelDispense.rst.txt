@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.standard.SingleChannelDispense
-==========================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.standard
-
-.. autoclass:: SingleChannelDispense

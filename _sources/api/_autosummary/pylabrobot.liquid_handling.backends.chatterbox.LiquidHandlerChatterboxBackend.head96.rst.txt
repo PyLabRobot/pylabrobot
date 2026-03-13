@@ -1,6 +1,0 @@
-pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend.head96
-=====================================================================================
-
-.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
-
-.. autoproperty:: LiquidHandlerChatterboxBackend.head96
