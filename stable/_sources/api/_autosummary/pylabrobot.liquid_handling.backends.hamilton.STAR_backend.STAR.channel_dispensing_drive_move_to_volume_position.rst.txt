@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.channel\_dispensing\_drive\_move\_to\_volume\_position
+=======================================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.channel_dispensing_drive_move_to_volume_position

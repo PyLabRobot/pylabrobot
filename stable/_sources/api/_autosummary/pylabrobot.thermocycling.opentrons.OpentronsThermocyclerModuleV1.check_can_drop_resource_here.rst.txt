@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1.check\_can\_drop\_resource\_here
+=================================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. automethod:: OpentronsThermocyclerModuleV1.check_can_drop_resource_here

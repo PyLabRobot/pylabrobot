@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.serializing\_backend.SerializingBackend.request\_tip\_presence
+===================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.serializing_backend
+
+.. automethod:: SerializingBackend.request_tip_presence

@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.named
+===============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.named

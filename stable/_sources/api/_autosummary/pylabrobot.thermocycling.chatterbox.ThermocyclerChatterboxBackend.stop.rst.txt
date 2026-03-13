@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.stop
+======================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.chatterbox
+
+.. automethod:: ThermocyclerChatterboxBackend.stop

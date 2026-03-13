@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.inheco.thermoshake\_backend.InhecoThermoshakeBackend.\_\_init\_\_
+=============================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco.thermoshake_backend
+
+.. automethod:: InhecoThermoshakeBackend.__init__

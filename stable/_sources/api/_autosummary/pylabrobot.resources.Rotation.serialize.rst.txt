@@ -1,0 +1,6 @@
+pylabrobot.resources.Rotation.serialize
+=======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Rotation.serialize

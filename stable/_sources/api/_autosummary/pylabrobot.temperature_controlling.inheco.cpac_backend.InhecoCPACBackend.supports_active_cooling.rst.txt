@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.cpac\_backend.InhecoCPACBackend.supports\_active\_cooling
+====================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.cpac_backend
+
+.. autoproperty:: InhecoCPACBackend.supports_active_cooling

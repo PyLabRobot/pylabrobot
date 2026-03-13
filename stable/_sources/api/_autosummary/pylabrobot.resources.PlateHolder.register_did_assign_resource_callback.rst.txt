@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.register\_did\_assign\_resource\_callback
+==========================================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.register_did_assign_resource_callback

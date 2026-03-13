@@ -1,0 +1,6 @@
+pylabrobot.resources.utils.sort\_by\_xy\_and\_chunk\_by\_x
+==========================================================
+
+.. currentmodule:: pylabrobot.resources.utils
+
+.. autofunction:: sort_by_xy_and_chunk_by_x

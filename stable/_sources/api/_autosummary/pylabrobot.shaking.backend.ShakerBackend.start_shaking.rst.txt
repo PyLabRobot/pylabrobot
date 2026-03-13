@@ -1,0 +1,6 @@
+pylabrobot.shaking.backend.ShakerBackend.start\_shaking
+=======================================================
+
+.. currentmodule:: pylabrobot.shaking.backend
+
+.. automethod:: ShakerBackend.start_shaking

@@ -1,0 +1,6 @@
+pylabrobot.scales.scale.Scale.assign\_child\_by\_anchor
+=======================================================
+
+.. currentmodule:: pylabrobot.scales.scale
+
+.. automethod:: Scale.assign_child_by_anchor
