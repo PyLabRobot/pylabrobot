@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend.get\_lid\_target\_temperature
+======================================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
+
+.. automethod:: OpentronsThermocyclerBackend.get_lid_target_temperature

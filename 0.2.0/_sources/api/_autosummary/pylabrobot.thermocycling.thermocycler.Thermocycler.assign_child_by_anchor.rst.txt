@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.assign\_child\_by\_anchor
+============================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.assign_child_by_anchor

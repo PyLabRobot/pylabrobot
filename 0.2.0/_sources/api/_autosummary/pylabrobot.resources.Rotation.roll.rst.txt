@@ -1,0 +1,6 @@
+pylabrobot.resources.Rotation.roll
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Rotation.roll

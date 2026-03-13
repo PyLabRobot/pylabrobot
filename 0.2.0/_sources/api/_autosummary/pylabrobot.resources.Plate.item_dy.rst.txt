@@ -1,0 +1,6 @@
+pylabrobot.resources.Plate.item\_dy
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Plate.item_dy
