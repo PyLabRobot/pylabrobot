@@ -45,7 +45,6 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_star_liquid_class,
 )
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
-  X_GROUPING_TOLERANCE_MM,
   ChannelBatch,
   compute_positions,
   compute_single_container_offsets,
@@ -1353,6 +1352,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._iswap_version: Optional[str] = None  # loaded lazily
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
+    self._x_grouping_tolerance_mm: float = 0.1
 
     self._setup_done = False
 
@@ -2075,7 +2075,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plld_foam_search_speed: float = 10.0,
     dispense_back_plld_volume: Optional[float] = None,
     # X grouping tolerance (mm) — containers within this distance share an X group
-    x_grouping_tolerance: float = X_GROUPING_TOLERANCE_MM,
+    x_grouping_tolerance: Optional[float] = None,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -2131,7 +2131,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       plld_foam_search_speed: Foam search speed in mm/s. Default 10.0.
       dispense_back_plld_volume: Volume to dispense back after pLLD in uL. Default None.
       x_grouping_tolerance: Containers within this X distance (mm) are grouped and probed
-        together. Default 0.1 mm.
+        together. Defaults to ``_x_grouping_tolerance_mm`` (0.1 mm).
 
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
@@ -2141,6 +2141,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         duplicates, or if input list lengths don't match.
       RuntimeError: If any specified channel lacks a tip.
     """
+
+    if x_grouping_tolerance is None:
+      x_grouping_tolerance = self._x_grouping_tolerance_mm
 
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")

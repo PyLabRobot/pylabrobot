@@ -24,8 +24,6 @@ from pylabrobot.liquid_handling.utils import (
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 
-X_GROUPING_TOLERANCE_MM = 0.1
-
 
 # --- Data types ---
 
@@ -388,7 +386,7 @@ def plan_batches(
   x_pos: List[float],
   y_pos: List[float],
   channel_spacings: Union[float, List[float]],
-  x_tolerance: float = X_GROUPING_TOLERANCE_MM,
+  x_tolerance: float,
   num_channels: Optional[int] = None,
   max_y: Optional[float] = None,
   min_y: Optional[float] = None,

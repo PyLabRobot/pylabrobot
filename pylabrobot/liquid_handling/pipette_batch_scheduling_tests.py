@@ -36,54 +36,54 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
   # --- X grouping ---
 
   def test_single_x_group(self):
-    batches = plan_batches([0, 1, 2], [100.0] * 3, [270.0, 261.0, 252.0], self.S)
+    batches = plan_batches([0, 1, 2], [100.0] * 3, [270.0, 261.0, 252.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     self.assertAlmostEqual(batches[0].x_position, 100.0)
 
   def test_two_x_groups(self):
     batches = plan_batches(
-      [0, 1, 2, 3], [100.0, 100.0, 200.0, 200.0], [270.0, 261.0, 270.0, 261.0], self.S
+      [0, 1, 2, 3], [100.0, 100.0, 200.0, 200.0], [270.0, 261.0, 270.0, 261.0], self.S, x_tolerance=0.1,
     )
     x_positions = [b.x_position for b in batches]
     self.assertAlmostEqual(x_positions[0], 100.0)
     self.assertAlmostEqual(x_positions[-1], 200.0)
 
   def test_x_groups_sorted_by_ascending_x(self):
-    batches = plan_batches([0, 1, 2], [300.0, 100.0, 200.0], [270.0] * 3, self.S)
+    batches = plan_batches([0, 1, 2], [300.0, 100.0, 200.0], [270.0] * 3, self.S, x_tolerance=0.1)
     x_positions = [b.x_position for b in batches]
     self.assertAlmostEqual(x_positions[0], 100.0)
     self.assertAlmostEqual(x_positions[1], 200.0)
     self.assertAlmostEqual(x_positions[2], 300.0)
 
   def test_x_positions_within_tolerance_grouped(self):
-    batches = plan_batches([0, 1], [100.0, 100.05], [270.0, 261.0], self.S)
+    batches = plan_batches([0, 1], [100.0, 100.05], [270.0, 261.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
 
   def test_x_positions_outside_tolerance_split(self):
-    batches = plan_batches([0, 1], [100.0, 100.2], [270.0, 270.0], self.S)
+    batches = plan_batches([0, 1], [100.0, 100.2], [270.0, 270.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   # --- Y batching ---
 
   def test_consecutive_channels_single_batch(self):
-    batches = plan_batches([0, 1, 2], [100.0] * 3, [270.0, 261.0, 252.0], self.S)
+    batches = plan_batches([0, 1, 2], [100.0] * 3, [270.0, 261.0, 252.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     self.assertEqual(sorted(batches[0].channels), [0, 1, 2])
 
   def test_same_y_forces_serialization(self):
-    batches = plan_batches([0, 1, 2], [100.0] * 3, [200.0] * 3, self.S)
+    batches = plan_batches([0, 1, 2], [100.0] * 3, [200.0] * 3, self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 3)
 
   def test_barely_fitting_spacing(self):
-    batches = plan_batches([0, 1], [100.0] * 2, [209.0, 200.0], self.S)
+    batches = plan_batches([0, 1], [100.0] * 2, [209.0, 200.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
 
   def test_barely_insufficient_spacing(self):
-    batches = plan_batches([0, 1], [100.0] * 2, [208.9, 200.0], self.S)
+    batches = plan_batches([0, 1], [100.0] * 2, [208.9, 200.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   def test_reversed_y_order_splits(self):
-    batches = plan_batches([0, 1], [100.0] * 2, [200.0, 220.0], self.S)
+    batches = plan_batches([0, 1], [100.0] * 2, [200.0, 220.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   # --- Non-consecutive channels ---
@@ -93,13 +93,13 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
       [0, 1, 2, 5, 6, 7],
       [100.0] * 6,
       [300.0, 291.0, 282.0, 255.0, 246.0, 237.0],
-      self.S,
+      self.S, x_tolerance=0.1,
     )
     self.assertEqual(len(batches), 1)
     self.assertEqual(sorted(batches[0].channels), [0, 1, 2, 5, 6, 7])
 
   def test_phantom_channels_interpolated(self):
-    batches = plan_batches([0, 3], [100.0] * 2, [300.0, 273.0], self.S)
+    batches = plan_batches([0, 3], [100.0] * 2, [300.0, 273.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
     self.assertAlmostEqual(y[0], 300.0)
@@ -108,7 +108,7 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
     self.assertAlmostEqual(y[3], 273.0)
 
   def test_phantoms_only_within_batch(self):
-    batches = plan_batches([0, 3], [100.0] * 2, [200.0, 250.0], self.S)
+    batches = plan_batches([0, 3], [100.0] * 2, [200.0, 250.0], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
     for batch in batches:
       self.assertEqual(len(batch.y_positions), 1)
@@ -120,7 +120,7 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
       [0, 1, 2, 3],
       [100.0, 100.0, 200.0, 200.0],
       [200.0, 200.0, 270.0, 261.0],
-      self.S,
+      self.S, x_tolerance=0.1,
     )
     x100 = [b for b in batches if abs(b.x_position - 100.0) < 0.01]
     x200 = [b for b in batches if abs(b.x_position - 200.0) < 0.01]
@@ -131,17 +131,17 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
 
   def test_mismatched_lengths(self):
     with self.assertRaises(ValueError):
-      plan_batches([0, 1], [100.0], [200.0, 200.0], self.S)
+      plan_batches([0, 1], [100.0], [200.0, 200.0], self.S, x_tolerance=0.1)
 
   def test_empty(self):
     with self.assertRaises(ValueError):
-      plan_batches([], [], [], self.S)
+      plan_batches([], [], [], self.S, x_tolerance=0.1)
 
   # --- Index correctness ---
 
   def test_indices_map_back_correctly(self):
     use_channels = [3, 7, 0]
-    batches = plan_batches(use_channels, [100.0] * 3, [261.0, 237.0, 270.0], self.S)
+    batches = plan_batches(use_channels, [100.0] * 3, [261.0, 237.0, 270.0], self.S, x_tolerance=0.1)
     all_indices = [idx for b in batches for idx in b.indices]
     self.assertEqual(sorted(all_indices), [0, 1, 2])
     for batch in batches:
@@ -151,12 +151,12 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
   # --- Realistic ---
 
   def test_8_channels_trough(self):
-    batches = plan_batches(list(range(8)), [100.0] * 8, [300.0 - i * 9.0 for i in range(8)], self.S)
+    batches = plan_batches(list(range(8)), [100.0] * 8, [300.0 - i * 9.0 for i in range(8)], self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     self.assertEqual(len(batches[0].channels), 8)
 
   def test_8_channels_narrow_well(self):
-    batches = plan_batches(list(range(8)), [100.0] * 8, [200.0] * 8, self.S)
+    batches = plan_batches(list(range(8)), [100.0] * 8, [200.0] * 8, self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 8)
 
   def test_channels_0_1_2_5_6_7_phantoms(self):
@@ -164,7 +164,7 @@ class TestPlanBatchesUniformSpacing(unittest.TestCase):
       [0, 1, 2, 5, 6, 7],
       [100.0] * 6,
       [300.0, 291.0, 282.0, 255.0, 246.0, 237.0],
-      self.S,
+      self.S, x_tolerance=0.1,
     )
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
@@ -181,35 +181,35 @@ class TestPlanBatchesMixedSpacing(unittest.TestCase):
   SPACINGS = [8.98, 8.98, 17.96, 17.96]
 
   def test_two_1ml_channels_fit_at_9mm(self):
-    batches = plan_batches([0, 1], [100.0] * 2, [208.98, 200.0], self.SPACINGS)
+    batches = plan_batches([0, 1], [100.0] * 2, [208.98, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
 
   def test_1ml_and_5ml_need_wider_spacing(self):
-    batches = plan_batches([1, 2], [100.0] * 2, [209.0, 200.0], self.SPACINGS)
+    batches = plan_batches([1, 2], [100.0] * 2, [209.0, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   def test_1ml_and_5ml_fit_at_wide_spacing(self):
-    batches = plan_batches([1, 2], [100.0] * 2, [217.96, 200.0], self.SPACINGS)
+    batches = plan_batches([1, 2], [100.0] * 2, [217.96, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
 
   def test_5ml_channels_fit_at_wide_spacing(self):
-    batches = plan_batches([2, 3], [100.0] * 2, [217.96, 200.0], self.SPACINGS)
+    batches = plan_batches([2, 3], [100.0] * 2, [217.96, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
 
   def test_5ml_channels_too_close(self):
-    batches = plan_batches([2, 3], [100.0] * 2, [209.0, 200.0], self.SPACINGS)
+    batches = plan_batches([2, 3], [100.0] * 2, [209.0, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   def test_span_across_1ml_and_5ml(self):
     # Pairwise sum: max(8.98,8.98) + max(8.98,17.96) + max(17.96,17.96) = 44.9
-    batches = plan_batches([0, 3], [100.0] * 2, [244.9, 200.0], self.SPACINGS)
+    batches = plan_batches([0, 3], [100.0] * 2, [244.9, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
-    batches = plan_batches([0, 3], [100.0] * 2, [244.0, 200.0], self.SPACINGS)
+    batches = plan_batches([0, 3], [100.0] * 2, [244.0, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   def test_phantom_channels_use_pairwise_spacing(self):
     # ch0→ch1: max(8.98, 8.98) = 8.98, ch1→ch2: max(8.98, 17.96) = 17.96
-    batches = plan_batches([0, 3], [100.0] * 2, [244.9, 200.0], self.SPACINGS)
+    batches = plan_batches([0, 3], [100.0] * 2, [244.9, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
     self.assertAlmostEqual(y[1], 244.9 - 8.98)
@@ -221,7 +221,7 @@ class TestPlanBatchesMixedSpacing(unittest.TestCase):
       [0, 1, 2, 3],
       [100.0] * 4,
       [300.0, 300.0 - s, 300.0 - 2 * s, 300.0 - 3 * s],
-      self.SPACINGS,
+      self.SPACINGS, x_tolerance=0.1,
     )
     self.assertEqual(len(batches), 1)
 
@@ -229,7 +229,7 @@ class TestPlanBatchesMixedSpacing(unittest.TestCase):
     # With spacings [8.98, 8.98, 17.96, 17.96], spanning ch0→ch3 requires
     # 8.98 + 17.96 + 17.96 = 44.9mm (pairwise sum), NOT 3 * 17.96 = 53.88mm.
     # A gap of 50mm should fit in one batch (pairwise) even though it's less than 53.88.
-    batches = plan_batches([0, 3], [100.0] * 2, [250.0, 200.0], self.SPACINGS)
+    batches = plan_batches([0, 3], [100.0] * 2, [250.0, 200.0], self.SPACINGS, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
 
   def test_mixed_channels_at_1ml_spacing_forces_serialization(self):
@@ -237,7 +237,7 @@ class TestPlanBatchesMixedSpacing(unittest.TestCase):
       [0, 1, 2, 3],
       [100.0] * 4,
       [300.0, 291.0, 282.0, 273.0],
-      self.SPACINGS,
+      self.SPACINGS, x_tolerance=0.1,
     )
     self.assertGreater(len(batches), 1)
 

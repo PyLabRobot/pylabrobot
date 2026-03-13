@@ -13,7 +13,6 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   STARBackend,
 )
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
-  X_GROUPING_TOLERANCE_MM,
   validate_probing_inputs,
 )
 from pylabrobot.resources.container import Container
@@ -367,7 +366,7 @@ class STARChatterboxBackend(STARBackend):
     plld_foam_ad_values: int = 30,
     plld_foam_search_speed: float = 10.0,
     dispense_back_plld_volume: Optional[float] = None,
-    x_grouping_tolerance: float = X_GROUPING_TOLERANCE_MM,
+    x_grouping_tolerance: Optional[float] = None,
   ) -> List[float]:
     """Probe liquid heights by computing from tracked container volumes.
 
