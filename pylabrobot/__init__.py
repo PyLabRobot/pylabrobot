@@ -37,35 +37,48 @@ def project_root() -> Path:
   return Path(__file__).parent.parent
 
 
+LOG_FILE_EXTENSIONS = (".log", ".txt", ".jsonl")
+
+
 def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
   """
   Set up the logger for pylabrobot. If the log_dir does not exist, it will be created.
 
   Args:
-    log_dir: The directory to store the log files. If None, no log files will be created.
+    log_dir: Path to a directory or a file. If it ends in .log, .txt, or .jsonl, it is treated as
+      a file path and logs are written there directly. Otherwise, it is treated as a directory and
+      a date-stamped file (pylabrobot-YYYYMMDD.log) is created inside it. If None, no log files
+      will be created.
     level: The logging level.
   """
-  # Create a logger
+  log_path = None
   if log_dir is not None:
     if isinstance(log_dir, str):
       log_dir = Path(log_dir)
+    if log_dir.suffix in LOG_FILE_EXTENSIONS:
+      log_path = log_dir
+      log_dir = log_path.parent
+    else:
+      now = datetime.datetime.now().strftime("%Y%m%d")
+      log_path = log_dir / f"pylabrobot-{now}.log"
     if not log_dir.exists():
       log_dir.mkdir(parents=True)
+
   logger = logging.getLogger("pylabrobot")
   logger.setLevel(level)
 
-  now = datetime.datetime.now().strftime("%Y%m%d")
-  # remove file handler if it exists
-  if len(logger.handlers) > 0:
-    logger.handlers.clear()
-    # delete empty log file if it has been created
-    log_file = Path(f"pylabrobot-{now}.log")
-    if log_file.exists() and log_file.stat().st_size == 0:
-      log_file.unlink()
+  # remove existing file handlers (but keep stream handlers like those from verbose())
+  for handler in logger.handlers[:]:
+    if isinstance(handler, logging.FileHandler):
+      logger.removeHandler(handler)
+      # delete empty log file if it has been created
+      log_file_path = Path(handler.baseFilename)
+      if log_file_path.exists() and log_file_path.stat().st_size == 0:
+        log_file_path.unlink()
 
   # Add a file handler, if log_dir is not None
-  if log_dir is not None:
-    fh = logging.FileHandler(log_dir / f"pylabrobot-{now}.log")
+  if log_path is not None:
+    fh = logging.FileHandler(log_path)
     fh.setLevel(logging.NOTSET)  # logs everything it receives, but the logger level can filter
     fh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(fh)
@@ -92,10 +105,10 @@ def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
       if handler.stream in (sys.stdout, sys.stderr):
         logger.removeHandler(handler)
   if make_verbose:
-    effective_level = min(logger.level, level) if logger.level != logging.NOTSET else level
-    logger.setLevel(effective_level)
+    logger_level = min(logger.level, level) if logger.level != logging.NOTSET else level
+    logger.setLevel(logger_level)
     handler = logging.StreamHandler()
-    handler.setLevel(effective_level)
+    handler.setLevel(level)
     handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
 
