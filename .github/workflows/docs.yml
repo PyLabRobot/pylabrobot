@@ -37,7 +37,14 @@ jobs:
             echo "slug=dev" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build documentation
+      - name: Check documentation (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          rm -rf docs/build docs/_autosummary
+          make docs-check
+
+      - name: Build documentation (deploy)
+        if: github.event_name == 'push'
         env:
           DOCS_VERSION: ${{ steps.version.outputs.slug }}
         run: |
@@ -45,6 +52,7 @@ jobs:
           make docs
 
       - name: Build LLM docs
+        if: github.event_name == 'push'
         run: make llm-docs
 
       - name: Deploy versioned docs
