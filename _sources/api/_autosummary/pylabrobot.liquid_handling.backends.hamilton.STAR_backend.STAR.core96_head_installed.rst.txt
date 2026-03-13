@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.core96\_head\_installed
+========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. autoproperty:: STAR.core96_head_installed

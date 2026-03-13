@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent.biotek\_synergyh1\_backend.SynergyH1Backend.temperature\_range
+================================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_synergyh1_backend
+
+.. autoproperty:: SynergyH1Backend.temperature_range

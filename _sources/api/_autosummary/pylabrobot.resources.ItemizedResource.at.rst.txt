@@ -1,0 +1,6 @@
+pylabrobot.resources.ItemizedResource.at
+========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ItemizedResource.at

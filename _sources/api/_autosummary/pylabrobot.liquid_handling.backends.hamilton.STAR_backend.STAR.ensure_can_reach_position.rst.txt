@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.ensure\_can\_reach\_position
+=============================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.ensure_can_reach_position

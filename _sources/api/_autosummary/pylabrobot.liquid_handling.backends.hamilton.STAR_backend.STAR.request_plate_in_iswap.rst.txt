@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.request\_plate\_in\_iswap
+==========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.request_plate_in_iswap

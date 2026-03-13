@@ -1,0 +1,324 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "18708b66",
+   "metadata": {},
+   "source": [
+    "# BMG Labtech CLARIOstar (Plus)\n",
+    "\n",
+    "| Summary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Photo                                            |\n",
+    "|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|\n",
+    "| - [OEM Link](https://www.bmglabtech.com/en/clariostar-plus/)<br>- **Communication Protocol / Hardware**: Serial (FTDI)/ USB-A<br>- **Communication Level**: Firmware<br>- **Measurement Modes**: Absorbance, Luminescence, Fluorescence <br>- **Plate Delivery**: Loading tray<br>- **Additional Standard Features**: Temperature sontrol, Shaking<br><br>- **Additional Upgrades**: Injector system, increased max temperature, plate stacking system, ... | ![quadrants](img/bmg-labtech-clariostar-plus.png) |\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "80e2e5dc",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Setup Instructions (Physical)\n",
+    "\n",
+    "The CLARIOstar and CLARIOstar Plus require a minimum of two cable connections to be operational:\n",
+    "1. Power cord (standard IEC C13)\n",
+    "2. USB cable (USB-B with security screws at CLARIOstar end; USB-A at control PC end)\n",
+    "\n",
+    "Optional:\n",
+    "If you have a plate stacking unit to use with the CLARIOstar (Plus), an additional RS-232 port is available on the CLARIOstar (Plus).\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "adb29364",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Setup Instructions (Programmatic)\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "34531f2c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload\n",
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e7a179e9",
+   "metadata": {},
+   "source": [
+    "To control the BMG Labtech CLARIOstar (Plus), generate a `PlateReader` frontend instance that uses a `CLARIOstarBackend` instance as its backend.\n",
+    "\n",
+    "To access the CLARIOstar-specific machine features you can still use the backend directly.\n",
+    "For convenience, it is useful to therefore store the backend instance as a separate `clariostar_backend` variable."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "363b8144",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.plate_reading import PlateReader\n",
+    "\n",
+    "from pylabrobot.plate_reading.clario_star_backend import CLARIOstarBackend\n",
+    "clariostar_backend = CLARIOstarBackend()\n",
+    "\n",
+    "pr = PlateReader(\n",
+    "    name=\"CLARIOstar\",\n",
+    "    backend=clariostar_backend,\n",
+    "    size_x=0.0, # TODO: generate new handling for resources with loading tray \n",
+    "    size_y=0.0,\n",
+    "    size_z=0.0\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "30720acb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await pr.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "65555028",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "Expected behaviour: the machine should perform its initialization routine.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7d2e9ed2",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "\n",
+    "## Usage / Machine Features\n",
+    "\n",
+    "### Loading Tray"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c0834a6e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await pr.open()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "77c3406b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# perform arm movement to move your plate of interest onto the CLARIOstar's loading tray\n",
+    "# this movement can be performed by a human\n",
+    "# or it can be performed by a robotic arm"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "092a02fa",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await pr.close()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9c4d21b7",
+   "metadata": {},
+   "source": [
+    "### Set Temperature\n",
+    "\n",
+    "The CLARIOstar offers a temperature control feature.\n",
+    "Reaching a set temperature is relatively slow compared to standalone temperature controllers.\n",
+    "We therefore recommend setting the temperature early on in your automated Protocol (aP)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "bb2de16b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature exposure in active development"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "bf4840ea",
+   "metadata": {},
+   "source": [
+    "### Set Shaking\n",
+    "\n",
+    "The CLARIOstar offers a shaking feature."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "60b71bea",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature in active development"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c4be6218",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "### Measuring Absorbance\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e23acc3d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature in active development including\n",
+    "# reading subsets of wells\n",
+    "# specifying orbital diameter\n",
+    "# specifying number of technical replicate measurements per well\n",
+    "# specifying start position for reading: topleft, topright, bottomleft, bottomright\n",
+    "# ...\n",
+    "\n",
+    "results_absorbance = await pr.read_absorbance()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d9a13de2",
+   "metadata": {},
+   "source": [
+    "`results` will be a width x height array of absorbance values.\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e57e55de",
+   "metadata": {},
+   "source": [
+    "\n",
+    "#### Performing a Spectral Scan\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8cae50a6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature in active development"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c7a70d7e",
+   "metadata": {},
+   "source": [
+    "### Measuring Luminescence\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c8656ef6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature in active development\n",
+    "\n",
+    "results_luminescence = await pr.read_luminescence()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8554a66c",
+   "metadata": {},
+   "source": [
+    "### Measuring Fluorescence\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "637f06a7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature in active development"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "362dd696",
+   "metadata": {},
+   "source": [
+    "### Using the Injector Needles\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "cd676c58",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# WIP: feature in active development"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "plr",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.11"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

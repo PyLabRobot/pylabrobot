@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.wait\_for\_block
+===================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.wait_for_block
