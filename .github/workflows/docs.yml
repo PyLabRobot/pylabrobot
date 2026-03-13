@@ -2,62 +2,69 @@ name: Build and Publish Documentation
 
 on:
   push:
-    branches: main
+    branches: [main]
+    tags: ['v*']
   pull_request:
-    branches: main
+    branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   build_docs:
     name: Build documentation
     runs-on: ubuntu-latest
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Update packages
-        run: sudo apt-get update
-
       - name: Set up Python 3.11
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: '3.11'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: pip install -e '.[dev]'
 
-      - name: Remove old documentation
+      - name: Determine version slug
+        id: version
         run: |
-          rm -rf docs/build
-          rm -rf docs/_autosummary
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "slug=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "slug=dev" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build new documentation
-        run: make docs
+      - name: Build documentation
+        env:
+          DOCS_VERSION: ${{ steps.version.outputs.slug }}
+        run: |
+          rm -rf docs/build docs/_autosummary
+          make docs
 
-      - name: Combine all docs into markdown file for LLM
+      - name: Build LLM docs
         run: make llm-docs
 
-      - name: Commit generated documentation
+      - name: Deploy versioned docs
         if: github.event_name == 'push'
-        run: |
-          cd docs/build
-          git init
-          touch .nojekyll
-          echo 'docs.pylabrobot.org' > CNAME
-          git add -A
-          git config --local user.name "GitHub Action"
-          git config --local user.email "action@github.com"
-          git commit -m 'deploy docs'
-
-      - name: Push to docs branch
-        if: github.event_name == 'push'
-        uses: ad-m/github-push-action@master
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: docs
-          force: true
-          directory: ./docs/build/
+          publish_dir: ./docs/build
+          destination_dir: ${{ steps.version.outputs.slug }}
+          publish_branch: docs
+          keep_files: true
+          cname: docs.pylabrobot.org
+
+      - name: Deploy stable
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/build
+          destination_dir: stable
+          publish_branch: docs
+          keep_files: true
+          cname: docs.pylabrobot.org
