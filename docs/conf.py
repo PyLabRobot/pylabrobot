@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath(".."))
 sys.path.append(os.path.abspath("./_exts"))
 
 # Read version from version.txt
-with open(os.path.join(os.path.dirname(__file__), "..", "pylabrobot", "version.txt")) as f:
+with open(os.path.join(os.path.dirname(__file__), "..", "pylabrobot", "version.txt"), encoding="utf-8") as f:
   version = f.read().strip()
 release = os.environ.get("DOCS_VERSION", version)
 
@@ -114,7 +114,7 @@ html_theme_options = {
   "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
   "navbar_persistent": ["search-button"],
   "switcher": {
-    "json_url": "https://docs.pylabrobot.org/stable/_static/switcher.json",
+    "json_url": "https://docs.pylabrobot.org/dev/_static/switcher.json",
     "version_match": os.environ.get("DOCS_VERSION", version),
   },
   "show_version_warning_banner": True,
