@@ -1,0 +1,6 @@
+pylabrobot.resources.utils.label\_to\_row\_index
+================================================
+
+.. currentmodule:: pylabrobot.resources.utils
+
+.. autofunction:: label_to_row_index

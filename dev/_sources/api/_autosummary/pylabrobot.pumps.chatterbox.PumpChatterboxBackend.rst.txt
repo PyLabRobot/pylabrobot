@@ -1,0 +1,29 @@
+﻿pylabrobot.pumps.chatterbox.PumpChatterboxBackend
+=================================================
+
+.. currentmodule:: pylabrobot.pumps.chatterbox
+
+.. autoclass:: PumpChatterboxBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PumpChatterboxBackend.__init__
+      ~PumpChatterboxBackend.deserialize
+      ~PumpChatterboxBackend.get_all_instances
+      ~PumpChatterboxBackend.halt
+      ~PumpChatterboxBackend.run_continuously
+      ~PumpChatterboxBackend.run_revolutions
+      ~PumpChatterboxBackend.serialize
+      ~PumpChatterboxBackend.setup
+      ~PumpChatterboxBackend.stop
+   
+   

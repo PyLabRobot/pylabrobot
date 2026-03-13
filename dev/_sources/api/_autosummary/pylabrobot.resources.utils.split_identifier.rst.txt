@@ -1,0 +1,6 @@
+pylabrobot.resources.utils.split\_identifier
+============================================
+
+.. currentmodule:: pylabrobot.resources.utils
+
+.. autofunction:: split_identifier

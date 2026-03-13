@@ -1,0 +1,907 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Using the autoload & 1D barcode reader\n",
+    "\n",
+    "| Summary | Image |\n",
+    "|--------|--------|\n",
+    "| <ul style=\"font-size:15px; line-height:1.6; margin-top:0;\"><li><b>Feature:</b> Autoload with integrated 1D barcode reader</li><li><b>Operation:</b> Automatically loads carriers and plates from the front-loading tray onto the STAR deck.</li><li><b>Barcode Recognition:</b> Scans 1D barcodes on carriers, plates, tube racks, and tip racks to confirm ID and placement.</li><li><b>Purpose:</b> Reduces manual deck verification by ensuring that physically loaded carriers match the expected layout.</li><li><b>Workflow Benefit:</b> Verification + Speeds up run setup through hands-free loading and automatic identification.</li><li><b>Best For:</b> High-throughput or frequently changing deck configurations.</li></ul> | <div style=\"width:320px; text-align:center;\">![real_autoload](img/autoload/hamilton_star_autoload.png)<br><i>Figure: Hamilton STAR Autoload system</i></div> |\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Background: Architecture of Hamilton STAR(let) Autoload\n",
+    "\n",
+    "![hamilton_star_overview](img/autoload/hamilton_autoload_overview.png)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Setup"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.liquid_handling import LiquidHandler, STARBackend\n",
+    "from pylabrobot.resources import STARDeck\n",
+    "from pylabrobot.resources import (\n",
+    "  TIP_CAR_480_A00,\n",
+    "  PLT_CAR_L5AC_A00,\n",
+    "  hamilton_96_tiprack_50uL,\n",
+    "  Cor_96_wellplate_360ul_Fb\n",
+    ")\n",
+    "\n",
+    "star = STARBackend()\n",
+    "lh = LiquidHandler(backend=star, deck=STARDeck())\n",
+    "await lh.setup()\n",
+    "\n",
+    "# assign a tip rack carrier\n",
+    "tip_carrier = TIP_CAR_480_A00(name=\"tip_carrier\")\n",
+    "tip_carrier[1] = tip_rack = hamilton_96_tiprack_50uL(name=\"tip_rack\")\n",
+    "lh.deck.assign_child_resource(tip_carrier, rails=10)\n",
+    "\n",
+    "# assign a plate carrier\n",
+    "plt_carrier = PLT_CAR_L5AC_A00(name=\"plt_carrier\")\n",
+    "plt_carrier[0] = plate = Cor_96_wellplate_360ul_Fb(name=\"plt\")\n",
+    "lh.deck.assign_child_resource(plt_carrier, rails=30)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "Two starting points are possible:\n",
+    "1. Carriers have been moved directly on the deck.\n",
+    "2. Carriers have been left on the loading tray.\n",
+    "\n",
+    "Here we assume we're starting with (1) Carriers have been moved directly on the deck.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Querying autoload state"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "True"
+      ]
+     },
+     "execution_count": 2,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "star.autoload_installed"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "54"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.request_autoload_track()\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'ML-STAR with 1D Barcode Scanner'"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.request_autoload_type()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Sensing carriers\n",
+    "\n",
+    "The autoload sled has a front-facing proximity sensor.\n",
+    "This sensor can be used to scan the entire loading tray to identify whether there are any carriers currently on the loading tray:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[]"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.request_presence_of_carriers_on_loading_tray()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "The autoload detects *only* the right-most track occupied by a carrier!\n",
+    "```\n",
+    "\n",
+    "Similarly, if you only want to investigate a single position this can be done too. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "False"
+      ]
+     },
+     "execution_count": 6,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.request_presence_of_single_carrier_on_loading_tray(\n",
+    "    track=44\n",
+    "    )\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The counterpart to checking for carriers on the loading tray is checking for presence of carriers on the liquid handler's deck:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[15, 35]"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.request_presence_of_carriers_on_deck()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Note that we have assigned the carriers based on the left-most track they are occupying but the `request_presence_of_carriers_on_deck()` detects the right-most track of carriers:\n",
+    "- tip_carrier: left-most track = 10, 6 tracks wide, right-most track  15\n",
+    "- plt_carrier: left-most track = 30, 6 tracks wide, right-most track  35\n",
+    "\n",
+    "```{note}\n",
+    "`.request_presence_of_carriers_on_deck()` is technically not an 'autoload' command.\n",
+    "It uses the presence sensors at the back of the STAR(let) deck to identify whether a carrier is present.\n",
+    "i.e. there is no autoload movement involved, and it therefore works for STAR(let)s without an integrated barcode sensor too.\n",
+    "```\n",
+    "\n",
+    "Together these `STAR` methods enable capturing a full picture of the state of carriers on your liquid handler."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Moving autoload"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'C0IVid0018er00/00'"
+      ]
+     },
+     "execution_count": 8,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# Always ensure the carrier handler is safely tucked away during movement.\n",
+    "await star.move_autoload_to_save_z_position()\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'I0XPid0020er00'"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.move_autoload_to_track(30)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'I0XPid0022er00'"
+      ]
+     },
+     "execution_count": 10,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.park_autoload()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Basic Load & Unload"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'C0CRid0023er00/00'"
+      ]
+     },
+     "execution_count": 11,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.unload_carrier(tip_carrier, park_autoload_after=False)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{'carrier_barcode': Barcode(data='08T0241707', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 'container_barcodes': None}"
+      ]
+     },
+     "execution_count": 12,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.load_carrier(tip_carrier, park_autoload_after=False)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Command Architecture for (Un)Loading & Barcode Reading\n",
+    "\n",
+    "From a firmware-perspective a carrier can be in 3 \"states\":\n",
+    "1. On the deck\n",
+    "2. On the autoload belt\n",
+    "3. On the loading tray\n",
+    "\n",
+    "PyLabRobot enables easy transfer between these 3 states with these `STARBackend` methods:\n",
+    "\n",
+    "![hamilton_star_overview](img/autoload/hamilton_autoload_state_transfer.png)\n",
+    "\n",
+    "```{note}\n",
+    "We could not find a command that enables the movement sequence: deck > autoload_belt > loading_tray yet.\n",
+    "`.unload_carrier_after_carrier_barcode_scanning()` requires `.load_carrier_from_tray_and_scan_carrier_barcode()` to precede it.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1D Barcode reading\n",
+    "\n",
+    "There are 2 main types of 1D barcodes one a classic STAR(let) deck:\n",
+    "1. Carrier barcodes (orientation=vertical; located at the right-back of the carrier)\n",
+    "2. Container barcodes:\n",
+    "    - TipRack barcodes (orientation=horizontal)\n",
+    "    - Plate barcodes (orientation=horizontal)\n",
+    "    - Tube barcodes (orientation=vertical)\n",
+    "\n",
+    "### 1D Barcode Symbologies\n",
+    "\n",
+    "All barcodes must follow a standard encoding scheme, i.e. a \"symbology\".\n",
+    "Before reading barcodes it is important to know what barcode symbology you are expecting to read!\n",
+    "\n",
+    "The following barcode symbologies can be detected by the system:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['ISBT Standard',\n",
+       " 'Code 128 (Subset B and C)',\n",
+       " 'Code 39',\n",
+       " 'Codebar',\n",
+       " 'Code 2of5 Interleaved',\n",
+       " 'UPC A/E',\n",
+       " 'YESN/EAN 8',\n",
+       " 'ANY 1D']"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "list(star.barcode_1d_symbology_dict.keys())\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For the highest reading safety Hamilton recommends to use barcode type `Code128 (subset B and C)`.\n",
+    "\n",
+    "This is the default symbology chosen in PyLabRobot commands:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'Code 128 (Subset B and C)'"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "star._default_1d_symbology\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "However, you can directly set or change the expected barcode symbology:\n",
+    "\n",
+    "\n",
+    "The fastest way to read your barcode *when* your carriers are already on the deck is to move the carrier out to the identification position:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'ISBT Standard'"
+      ]
+     },
+     "execution_count": 15,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.set_1d_barcode_type(\"ISBT Standard\")\n",
+    "\n",
+    "star._default_1d_symbology\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'Code 128 (Subset B and C)'"
+      ]
+     },
+     "execution_count": 16,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.set_1d_barcode_type(\"Code 128 (Subset B and C)\")\n",
+    "\n",
+    "star._default_1d_symbology\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Loading with with Barcode Reading\n",
+    "\n",
+    "1D barcode reading via the autoload can only occur during carrier loading actions.\n",
+    "So let's first unload the carrier:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'C0CRid0029er00/00'"
+      ]
+     },
+     "execution_count": 17,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.unload_carrier(tip_carrier, park_autoload_after=False)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "...and this time activate reading both (1) the carrier barcord and (2) the container barcode:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "barcode_readings = await star.load_carrier(\n",
+    "    carrier=tip_carrier,\n",
+    "    carrier_barcode_reading=True,\n",
+    "    barcode_reading=True,\n",
+    "    # barcode_symbology=\"Code 39\",\n",
+    "    # barcode_reading_direction=\"horizontal\",\n",
+    "    # no_container_per_carrier=5,\n",
+    "    park_autoload_after=False,\n",
+    ")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "This returns a dictionary:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{'carrier_barcode': Barcode(data='08T0241707', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 'container_barcodes': {0: Barcode(data='18235938752776512151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       "  1: Barcode(data='18235938752776527151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       "  2: Barcode(data='18235938752776549151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       "  3: None,\n",
+       "  4: Barcode(data='18235938752776513151', symbology='Code 128 (Subset B and C)', position_on_resource='right')}}"
+      ]
+     },
+     "execution_count": 19,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "barcode_readings"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```{warning}\n",
+    "The default behaviour of the 1D barcode scanner is set to read the standard 5x tip- and plate-carrier positions.\n",
+    "If you are reading barcodes on a different carrier (e.g. tube or trough carrier) you will have to modify the default parameters.\n",
+    "```\n",
+    "\n",
+    "![hamilton_star_overview](img/autoload/hamilton_autoload_correct_1d_barcode_height.png)\n",
+    "\n",
+    "```{warning}\n",
+    "The 1D barcode scanner uses a (class 2) laser targeted to a fixed height.\n",
+    "This is especially important when reading horizontal barcodes.\n",
+    "The z-height of the laser (during horizonatal) barcode reading is `z=219` or 119 mm above the deck surface.\n",
+    "If your 1D barcode is not precisely positioned at this height, the 1D barcode reader cannot read your barcode.\n",
+    "To facilitate this height, use \"DWP\" carriers/MFX plate_holders for plates >40 mm in `size_z`, and \"MP\" carriers/MFX plate_holders for plates ~15 mm in `size_z`.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Advanced 1D Barcode Reading"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'C0CRid0035er00/00'"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.unload_carrier(tip_carrier, park_autoload_after=False)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Loading tray -> Autoload Belt (Carrier Barcode Reading) -> Loading Tray**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "Barcode(data='08T0241707', symbology='Code 128 (Subset B and C)', position_on_resource='right')"
+      ]
+     },
+     "execution_count": 21,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.load_carrier_from_tray_and_scan_carrier_barcode(\n",
+    "    tip_carrier,\n",
+    "    # barcode_position = 4.3,  # mm\n",
+    "    # barcode_reading_window_width = 38.0,  # mm\n",
+    "    # reading_speed = 128.1,  # mm/sec\n",
+    "    )\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'C0CAid0037er00/00'"
+      ]
+     },
+     "execution_count": 22,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.unload_carrier_after_carrier_barcode_scanning()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Loading tray -> Autoload Belt (Carrier Barcode Reading) -> Deck (Container Barcode Reading)**\n",
+    "\n",
+    "-> same as simply `.load_carrier()` but split into separate components"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "Barcode(data='08T0241707', symbology='Code 128 (Subset B and C)', position_on_resource='right')"
+      ]
+     },
+     "execution_count": 23,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.load_carrier_from_tray_and_scan_carrier_barcode(\n",
+    "    tip_carrier\n",
+    "    )"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: Barcode(data='18235938752776512151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 1: Barcode(data='18235938752776527151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 2: Barcode(data='18235938752776549151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 3: None,\n",
+       " 4: Barcode(data='18235938752776513151', symbology='Code 128 (Subset B and C)', position_on_resource='right')}"
+      ]
+     },
+     "execution_count": 24,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "reading = await star.load_carrier_from_autoload_belt(\n",
+    "    barcode_reading=True,\n",
+    "    park_autoload_after=False\n",
+    "    # barcode_reading_direction = \"horizontal\",\n",
+    "    # barcode_symbology = \"Code 128 (Subset B and C)\"\n",
+    "    # reading_position_of_first_barcode = 63.0,  # mm\n",
+    "    # no_container_per_carrier = 5,\n",
+    "    # distance_between_containers = 96.0,  # mm\n",
+    "    # width_of_reading_window = 38.0,  # mm\n",
+    "    # reading_speed = 128.1,  # mm/secs\n",
+    "    )\n",
+    "reading"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Deck -> Autoload Belt -> Deck (with container barcode reading only)**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.take_carrier_out_to_autoload_belt(tip_carrier)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: Barcode(data='18235938752776512151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 1: Barcode(data='18235938752776527151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 2: Barcode(data='18235938752776549151', symbology='Code 128 (Subset B and C)', position_on_resource='right'),\n",
+       " 3: None,\n",
+       " 4: Barcode(data='18235938752776513151', symbology='Code 128 (Subset B and C)', position_on_resource='right')}"
+      ]
+     },
+     "execution_count": 26,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "reading = await star.load_carrier_from_autoload_belt(\n",
+    "    barcode_reading = True,\n",
+    "    park_autoload_after=False,\n",
+    "    )\n",
+    "reading"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 27,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'C0IVid0045er00/00'"
+      ]
+     },
+     "execution_count": 27,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.move_autoload_to_save_z_position()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 28,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'I0XPid0047er00'"
+      ]
+     },
+     "execution_count": 28,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await star.park_autoload()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Close Connection"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 29,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "Someone did not set up the deck according to the definition in the `Setup` section above.\n",
+    "What is different between sensed physical reality and the deck model? ;)\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "plr",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.11"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

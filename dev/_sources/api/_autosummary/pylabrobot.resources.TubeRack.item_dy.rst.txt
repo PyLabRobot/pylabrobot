@@ -1,0 +1,6 @@
+pylabrobot.resources.TubeRack.item\_dy
+======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: TubeRack.item_dy

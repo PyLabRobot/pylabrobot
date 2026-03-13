@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.DISPENSING\_DRIVE\_VOL\_LIMIT\_TOP
+===================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. autoattribute:: STAR.DISPENSING_DRIVE_VOL_LIMIT_TOP

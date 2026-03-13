@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.serialize\_state
+===================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.serialize_state

@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.setup\_finished
+=======================================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. autoproperty:: Imager.setup_finished

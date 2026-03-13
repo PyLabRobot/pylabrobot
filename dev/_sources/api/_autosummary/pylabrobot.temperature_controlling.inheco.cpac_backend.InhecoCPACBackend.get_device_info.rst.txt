@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.cpac\_backend.InhecoCPACBackend.get\_device\_info
+============================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.cpac_backend
+
+.. automethod:: InhecoCPACBackend.get_device_info
