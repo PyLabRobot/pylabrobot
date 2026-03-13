@@ -187,6 +187,9 @@ _HC_RESULT_DESCRIPTIONS: Dict[int, str] = {
   0x0E01: "door unlocked / safety interlock (command not allowed while door open)",
   0x0200: "hardware error",
   0x020A: "hardware not ready / axis error",
+  # Empirically identified — require further validation:
+  0x0F03: "drive initialization failed (reference/homing run failure) [empirical, needs validation]",
+  0x0F08: "tip pickup failed (tip not detected at expected position) [empirical, needs validation]",
 }
 
 
