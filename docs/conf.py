@@ -108,8 +108,6 @@ if "plr_cards.js" not in html_js_files:
 
 html_theme_options = {
   "show_nav_level": 1,
-  "navigation_depth": 2,
-  "collapse_navigation": True,
   "use_edit_page_button": True,
   "navbar_start": ["navbar-logo"],
   "navbar_center": ["navbar-nav"],
@@ -194,6 +192,10 @@ redirects = {
   "tilting.html": "user_guide/tilting.html",
   "heating-shaking.html": "user_guide/heating_shaking.html",
   "fans.html": "user_guide/fans.html",
+}
+
+html_sidebars = {
+  "api/**": ["search-field"],
 }
 
 html_baseurl = "https://docs.pylabrobot.org/"
