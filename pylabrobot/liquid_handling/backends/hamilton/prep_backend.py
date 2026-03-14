@@ -241,6 +241,8 @@ class PrepBackend(LiquidHandlerBackend):
     self._num_channels: Optional[int] = None
     self._has_mph: Optional[bool] = None
     self._gripper_tool_on: bool = False
+    self._channel_sleeve_sensor_addrs: list[Address] = []
+    self._channel_zdrive_addrs: list[Address] = []
 
   def _has_interface(self, name: str) -> bool:
     """Return True if the interface was resolved and is present."""
@@ -313,6 +315,9 @@ class PrepBackend(LiquidHandlerBackend):
     # Resolve all interfaces (required fail-fast; optional log and continue)
     await self._resolver.run_setup_loop()
 
+    # Discover per-channel drive addresses from the object tree.
+    await self._discover_channel_drives()
+
     if force_initialize:
       await self._run_initialize(smart=smart)
       logger.info("Prep initialization complete (force_initialize=True)")
@@ -345,6 +350,84 @@ class PrepBackend(LiquidHandlerBackend):
     )
 
     self.setup_finished = True
+
+  async def _discover_channel_drives(self) -> None:
+    """Walk the MLPrepRoot object tree to find pipettor channel drive addresses by name.
+
+    Walks: MLPrepRoot → "Channel Root" → "Channel" → "Squeeze" → "SDrive" (sleeve sensor)
+           MLPrepRoot → "Channel Root" → "Channel" → "ZAxis" → "ZDrive"
+
+    Populates ``_channel_sleeve_sensor_addrs`` and ``_channel_zdrive_addrs``.
+    All lookups are by object name, not hardcoded object IDs.
+
+    Skips "MPH Channel Root" — only discovers dual-channel pipettor channels ("Channel Root").
+    """
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import HamiltonIntrospection
+
+    self._channel_sleeve_sensor_addrs = []
+    self._channel_zdrive_addrs = []
+
+    intro = HamiltonIntrospection(self.client)
+    root_addrs = self.client._registry.get_root_addresses()
+    if not root_addrs:
+      return
+
+    root_addr = root_addrs[0]
+    root_info = await intro.get_object(root_addr)
+
+    async def find_child_by_name(parent_addr, parent_info, name):
+      """Find a direct child object by name. Returns (address, info) or (None, None)."""
+      for i in range(parent_info.subobject_count):
+        try:
+          child_addr = await intro.get_subobject_address(parent_addr, i)
+          child_info = await intro.get_object(child_addr)
+          if child_info.name == name:
+            return child_addr, child_info
+        except Exception:
+          continue
+      return None, None
+
+    for i in range(root_info.subobject_count):
+      try:
+        sub_addr = await intro.get_subobject_address(root_addr, i)
+        sub_info = await intro.get_object(sub_addr)
+      except Exception:
+        continue
+
+      if sub_info.name != "Channel Root":
+        continue
+
+      # Channel Root → Channel → Squeeze → SDrive
+      channel_addr, channel_info = await find_child_by_name(sub_addr, sub_info, "Channel")
+      if channel_addr is None:
+        logger.warning("Channel Root on node %d has no 'Channel' child, skipping", sub_addr.node)
+        continue
+
+      squeeze_addr, squeeze_info = await find_child_by_name(channel_addr, channel_info, "Squeeze")
+      sdrive_addr = None
+      if squeeze_addr is not None and squeeze_info is not None:
+        sdrive_addr, _ = await find_child_by_name(squeeze_addr, squeeze_info, "SDrive")
+
+      # Channel Root → Channel → ZAxis → ZDrive
+      zaxis_addr, zaxis_info = await find_child_by_name(channel_addr, channel_info, "ZAxis")
+      zdrive_addr = None
+      if zaxis_addr is not None and zaxis_info is not None:
+        zdrive_addr, _ = await find_child_by_name(zaxis_addr, zaxis_info, "ZDrive")
+
+      if sdrive_addr is not None:
+        self._channel_sleeve_sensor_addrs.append(sdrive_addr)
+      else:
+        logger.warning("Channel Root on node %d: could not find Squeeze.SDrive", sub_addr.node)
+
+      if zdrive_addr is not None:
+        self._channel_zdrive_addrs.append(zdrive_addr)
+      else:
+        logger.warning("Channel Root on node %d: could not find ZAxis.ZDrive", sub_addr.node)
+
+      logger.debug("Discovered channel on node %d: sleeve_sensor=%s, ZDrive=%s",
+                    sub_addr.node, sdrive_addr, zdrive_addr)
+
+    logger.info("Discovered %d pipettor channel drive pairs", len(self._channel_sleeve_sensor_addrs))
 
   async def _run_initialize(self, smart: bool):
     """Send PrepCmd.PrepInitialize to MLPrep (shared by setup)."""
@@ -1554,6 +1637,55 @@ class PrepBackend(LiquidHandlerBackend):
     if self._num_channels is not None and channel_idx >= self._num_channels:
       return False
     return True
+
+  # ---------------------------------------------------------------------------
+  # Tip presence sensing
+  # ---------------------------------------------------------------------------
+
+  async def sense_tip_presence(self) -> list[bool]:
+    """Sense whether a tip is physically present on each pipettor channel via the sleeve sensor.
+
+    Reads the physical sleeve displacement sensor (GetTipPresent, cmd=15) on each
+    channel's SDrive sub-object. The sensor responds in real-time to sleeve
+    displacement — verified by manual sleeve push tests without any tip pickup.
+
+    Note: the firmware exposes this sensor through the SDrive (squeezer drive) object
+    at object_id 514, but it reads the sleeve displacement sensor independently of
+    the squeeze motor state.
+
+    Channel addresses are discovered from the object tree at setup time
+    (stored in ``_channel_sleeve_sensor_addrs``), so this works regardless of the
+    node IDs assigned by the firmware on a given instrument.
+
+    Returns:
+      List of bools, one per channel (index 0=rear, 1=front). True if tip detected.
+    """
+    import struct as _struct
+
+    if not self._channel_sleeve_sensor_addrs:
+      raise RuntimeError(
+        "No channel sleeve sensor addresses discovered. Call setup() first."
+      )
+
+    results: list[bool] = []
+    for addr in self._channel_sleeve_sensor_addrs:
+      Cmd = type(
+        "_GetTipPresent",
+        (PrepCmd._PrepStatusQuery,),
+        {"command_id": 15, "__annotations__": {"dest": Address}},
+      )
+      raw = await self.client.send_command(
+        Cmd(dest=addr),
+        return_raw=True,
+        raise_on_error=False,
+      )
+      if raw is None or len(raw[0]) < 8:
+        results.append(False)
+      else:
+        val = _struct.unpack_from("<I", raw[0], 4)[0]
+        results.append(bool(val))
+
+    return results
 
   # ---------------------------------------------------------------------------
   # MLPrep convenience methods
