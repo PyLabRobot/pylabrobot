@@ -39,9 +39,6 @@ dev = [
 ]
 all = ["PyLabRobot[dev]"]
 
-[project.scripts]
-plr-gui = "pylabrobot.gui.gui:main"
-
 [project.urls]
 Homepage = "https://github.com/pylabrobot/pylabrobot"
 
