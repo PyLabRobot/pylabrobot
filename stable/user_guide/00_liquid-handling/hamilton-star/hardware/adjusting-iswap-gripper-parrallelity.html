@@ -482,7 +482,10 @@
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../../../_getting-started/installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../_getting-started/plr-architecture.html">How PLR Works</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../_getting-started/units.html">Default Units</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
@@ -490,20 +493,116 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../machines.html">Supported Machines</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../definitions.html">Definitions</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../_liquid-handling.html">Liquid Handling</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2 current active"><a class="reference internal" href="../_hamilton-star.html">Hamilton STAR</a></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../_hamilton-star.html">Hamilton STAR</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../96head.html">Using the 96 head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoload_and_1d_barcode_reader.html">Using the autoload &amp; 1D barcode reader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../y-probing.html">Y-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 current active has-children"><a class="reference internal" href="index.html">Hamilton STAR Hardware Guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4 current active"><a class="current reference internal" href="#">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="../hamilton-liquid-classes.html">Using “Hamilton Liquid Classes” with Pylabrobot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../core-grippers.html">Co-Re Grippers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../surface-following.html">Surface following</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../opentrons/ot2/ot2.html">Opentrons OT-2</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../opentrons/ot2/ot2.html">Opentrons OT-2</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../opentrons/ot2/hello-world.html">OT-2 Hello World</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../opentrons/ot2/ot2-simulator.html">OT-2 Simulator with Visualizer</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../plate-washing/plate-washing.html">Plate Washing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../pumps/_pumps.html">Pumps</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../plate-washing/plate-washing.html">Plate Washing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../plate-washing/biotek-el406.html">BioTek EL406</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../moving-channels-around.html">Manually moving channels around</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../mixing.html">Mixing</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../01_material-handling/_material-handling.html">Material Handling</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../02_analytical/_analytical.html">Analytical</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../01_material-handling/_material-handling.html">Material Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../01_material-handling/arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html">PreciseFlex PF400 and PF3400 robots</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/centrifuge/_centrifuge.html">Centrifuges</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/heating_shaking/qinstruments.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/fans/fans.html">Fans (Air Filtration Systems)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/fans/hamilton_hepa_scap.html">Hamilton HEPA Fan</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/sealers/a4s.html">Azenta a4S</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/temperature-controllers/temperature-controllers.html">Temperature Controllers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/temperature-controllers/ot-temperature-controller.html">Opentrons Temperature Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/temperature-controllers/hamilton-heater-cooler.html">Hamilton Heater Cooler (HHC)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/temperature-controllers/inheco.html">Hello World, Inheco CPAC!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/storage/storage.html">Storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/storage/cytomat.html">TFS Cytomat Series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/storage/inheco/incubator_shaker.html">Inheco Incubator (Shaker)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/storage/inheco/scila.html">Inheco SCILA</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/storage/liconic.html">Liconic STX Series</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../01_material-handling/tilting.html">Tilting</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../01_material-handling/thermocycling/thermocycling.html">Thermocycling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../01_material-handling/thermocycling/inheco-odtc.html">Inheco ODTC</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../02_analytical/plate-reading/plate-reading.html">Plate reading</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/byonoy.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/cytation.html">Cytation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/pico.html">ImageXpress Pico</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/synergyh1.html">Synergy H1</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../02_analytical/scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/scales/mettler-toledo-WXS205SDU.html">Mettler Toledo Precision Scales</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
 <ul class="nav bd-sidenav">
@@ -511,7 +610,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
 </ul>
