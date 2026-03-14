@@ -73,6 +73,9 @@ jobs:
       - name: Build LLM docs
         run: make llm-docs
 
+      - name: Clean build artifacts
+        run: rm -rf docs/build/.doctrees docs/build/.buildinfo
+
       - name: Deploy versioned docs
         uses: peaceiris/actions-gh-pages@v4
         with:
