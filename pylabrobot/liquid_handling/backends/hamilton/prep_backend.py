@@ -1813,6 +1813,79 @@ class PrepBackend(LiquidHandlerBackend):
     return await self._query_firmware_string(self._module_info_addr, cmd_id=5)
 
   # ---------------------------------------------------------------------------
+  # Object tree inspection
+  # ---------------------------------------------------------------------------
+
+  async def print_firmware_tree(self) -> None:
+    """Walk the full firmware object tree and print a formatted tree representation.
+
+    Each object shows its name, address, firmware version, method count, and child count.
+    Useful for diagnostics and understanding the instrument's firmware topology.
+    """
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import HamiltonIntrospection
+
+    intro = HamiltonIntrospection(self.client)
+    root_addrs = self.client._registry.get_root_addresses()
+    if not root_addrs:
+      return "(no root objects discovered)"
+
+    lines: list[str] = []
+
+    async def walk(addr, prefix="", is_last=True):
+      try:
+        obj = await intro.get_object(addr)
+      except Exception:
+        lines.append(f"{prefix}{'└── ' if is_last else '├── '}? @ {addr} (failed to query)")
+        return
+
+      connector = "└── " if is_last else "├── "
+      version_str = f", version={obj.version}" if obj.version else ""
+      lines.append(
+        f"{prefix}{connector}{obj.name} @ {addr} "
+        f"(methods={obj.method_count}, children={obj.subobject_count}{version_str})"
+      )
+
+      child_prefix = prefix + ("    " if is_last else "│   ")
+      children_found = []
+      for i in range(obj.subobject_count):
+        try:
+          child_addr = await intro.get_subobject_address(addr, i)
+          child_obj = await intro.get_object(child_addr)
+          children_found.append((child_addr, child_obj))
+        except Exception:
+          continue
+
+      for idx, (child_addr, _) in enumerate(children_found):
+        await walk(child_addr, child_prefix, is_last=(idx == len(children_found) - 1))
+
+    for root_idx, root_addr in enumerate(root_addrs):
+      try:
+        root_obj = await intro.get_object(root_addr)
+      except Exception:
+        lines.append(f"? @ {root_addr} (failed to query)")
+        continue
+
+      version_str = f", version={root_obj.version}" if root_obj.version else ""
+      lines.append(
+        f"{root_obj.name} @ {root_addr} "
+        f"(methods={root_obj.method_count}, children={root_obj.subobject_count}{version_str})"
+      )
+
+      children_found = []
+      for i in range(root_obj.subobject_count):
+        try:
+          child_addr = await intro.get_subobject_address(root_addr, i)
+          child_obj = await intro.get_object(child_addr)
+          children_found.append((child_addr, child_obj))
+        except Exception:
+          continue
+
+      for idx, (child_addr, _) in enumerate(children_found):
+        await walk(child_addr, "", is_last=(idx == len(children_found) - 1))
+
+    print("\n".join(lines))
+
+  # ---------------------------------------------------------------------------
   # MLPrep convenience methods
   # ---------------------------------------------------------------------------
 
