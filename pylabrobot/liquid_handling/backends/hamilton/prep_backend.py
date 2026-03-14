@@ -243,6 +243,9 @@ class PrepBackend(LiquidHandlerBackend):
     self._gripper_tool_on: bool = False
     self._channel_sleeve_sensor_addrs: list[Address] = []
     self._channel_zdrive_addrs: list[Address] = []
+    self._channel_node_info_addrs: list[Address] = []
+    self._mlprep_cpu_addr: Optional[Address] = None
+    self._module_info_addr: Optional[Address] = None
 
   def _has_interface(self, name: str) -> bool:
     """Return True if the interface was resolved and is present."""
@@ -352,20 +355,26 @@ class PrepBackend(LiquidHandlerBackend):
     self.setup_finished = True
 
   async def _discover_channel_drives(self) -> None:
-    """Walk the MLPrepRoot object tree to find pipettor channel drive addresses by name.
+    """Walk the MLPrepRoot object tree to discover per-channel and module addresses by name.
 
-    Walks: MLPrepRoot → "Channel Root" → "Channel" → "Squeeze" → "SDrive" (sleeve sensor)
-           MLPrepRoot → "Channel Root" → "Channel" → "ZAxis" → "ZDrive"
+    Channel drives (per pipettor channel, skipping "MPH Channel Root"):
+      MLPrepRoot → "Channel Root" → "Channel" → "Squeeze" → "SDrive" (sleeve sensor)
+      MLPrepRoot → "Channel Root" → "Channel" → "ZAxis" → "ZDrive"
+      MLPrepRoot → "Channel Root" → "NodeInformation"
 
-    Populates ``_channel_sleeve_sensor_addrs`` and ``_channel_zdrive_addrs``.
+    Module-level objects (for firmware version queries):
+      MLPrepRoot → "MLPrepCpu"
+      MLPrepRoot → "PipettorRoot" → "ModuleInformation"
+
     All lookups are by object name, not hardcoded object IDs.
-
-    Skips "MPH Channel Root" — only discovers dual-channel pipettor channels ("Channel Root").
     """
     from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import HamiltonIntrospection
 
     self._channel_sleeve_sensor_addrs = []
     self._channel_zdrive_addrs = []
+    self._channel_node_info_addrs = []
+    self._mlprep_cpu_addr = None
+    self._module_info_addr = None
 
     intro = HamiltonIntrospection(self.client)
     root_addrs = self.client._registry.get_root_addresses()
@@ -394,6 +403,20 @@ class PrepBackend(LiquidHandlerBackend):
       except Exception:
         continue
 
+      # MLPrepCpu — controller firmware version info
+      if sub_info.name == "MLPrepCpu":
+        self._mlprep_cpu_addr = sub_addr
+        logger.debug("Discovered MLPrepCpu at %s", sub_addr)
+        continue
+
+      # PipettorRoot → ModuleInformation
+      if sub_info.name == "PipettorRoot":
+        mod_addr, _ = await find_child_by_name(sub_addr, sub_info, "ModuleInformation")
+        if mod_addr is not None:
+          self._module_info_addr = mod_addr
+          logger.debug("Discovered ModuleInformation at %s", mod_addr)
+        continue
+
       if sub_info.name != "Channel Root":
         continue
 
@@ -414,6 +437,9 @@ class PrepBackend(LiquidHandlerBackend):
       if zaxis_addr is not None and zaxis_info is not None:
         zdrive_addr, _ = await find_child_by_name(zaxis_addr, zaxis_info, "ZDrive")
 
+      # Channel Root → NodeInformation
+      node_info_addr, _ = await find_child_by_name(sub_addr, sub_info, "NodeInformation")
+
       if sdrive_addr is not None:
         self._channel_sleeve_sensor_addrs.append(sdrive_addr)
       else:
@@ -424,8 +450,13 @@ class PrepBackend(LiquidHandlerBackend):
       else:
         logger.warning("Channel Root on node %d: could not find ZAxis.ZDrive", sub_addr.node)
 
-      logger.debug("Discovered channel on node %d: sleeve_sensor=%s, ZDrive=%s",
-                    sub_addr.node, sdrive_addr, zdrive_addr)
+      if node_info_addr is not None:
+        self._channel_node_info_addrs.append(node_info_addr)
+      else:
+        logger.warning("Channel Root on node %d: could not find NodeInformation", sub_addr.node)
+
+      logger.debug("Discovered channel on node %d: sleeve_sensor=%s, ZDrive=%s, NodeInfo=%s",
+                    sub_addr.node, sdrive_addr, zdrive_addr, node_info_addr)
 
     logger.info("Discovered %d pipettor channel drive pairs", len(self._channel_sleeve_sensor_addrs))
 
@@ -1686,6 +1717,100 @@ class PrepBackend(LiquidHandlerBackend):
         results.append(bool(val))
 
     return results
+
+  # ---------------------------------------------------------------------------
+  # Firmware version queries
+  # ---------------------------------------------------------------------------
+
+  @staticmethod
+  def _decode_firmware_string(raw: Optional[tuple]) -> Optional[str]:
+    """Decode a string from a raw HOI response.
+
+    Hamilton string wire format: 0x0F + type_byte + u16 length + chars.
+    type_byte is 0x00 (plain) or 0x01 (with null terminator); both are handled.
+    """
+    if raw is None:
+      return None
+    data = raw[0]
+    i = 0
+    while i < len(data) - 3:
+      if data[i] == 0x0F and data[i + 1] in (0x00, 0x01):
+        slen = int.from_bytes(data[i + 2 : i + 4], "little")
+        if slen > 0 and i + 4 + slen <= len(data):
+          return data[i + 4 : i + 4 + slen].decode("utf-8", errors="replace").rstrip("\x00")
+      i += 1
+    return None
+
+  async def _query_firmware_string(self, addr: Address, cmd_id: int, iface_id: int = 3) -> Optional[str]:
+    """Send a status query and decode the string response."""
+    Cmd = type(
+      "_FWQuery",
+      (PrepCmd._PrepStatusQuery,),
+      {"command_id": cmd_id, "interface_id": iface_id, "__annotations__": {"dest": Address}},
+    )
+    raw = await self.client.send_command(Cmd(dest=addr), return_raw=True, raise_on_error=False)
+    return self._decode_firmware_string(raw)
+
+  async def request_firmware_version(self) -> Optional[str]:
+    """Request the instrument controller firmware version string.
+
+    Returns a string like "MLPrep Runtime V1.2.2.444 99020-02 Rev G",
+    or None if MLPrepCpu was not discovered.
+
+    Analogous to STARBackend.request_firmware_version().
+    """
+    if self._mlprep_cpu_addr is None:
+      return None
+    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=8)
+
+  async def request_device_serial_number(self) -> Optional[str]:
+    """Request the instrument serial number.
+
+    Analogous to STARBackend.request_device_serial_number().
+    """
+    if self._mlprep_cpu_addr is None:
+      return None
+    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=9)
+
+  async def request_bootloader_version(self) -> Optional[str]:
+    """Request the instrument bootloader version string."""
+    if self._mlprep_cpu_addr is None:
+      return None
+    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=2, iface_id=2)
+
+  async def request_pip_channel_version(self, channel: int) -> Optional[str]:
+    """Request the firmware version string for a pipettor channel.
+
+    Args:
+      channel: Channel index (0=rear, 1=front).
+
+    Analogous to STARBackend.request_pip_channel_version().
+    """
+    if channel >= len(self._channel_node_info_addrs):
+      return None
+    return await self._query_firmware_string(self._channel_node_info_addrs[channel], cmd_id=8, iface_id=1)
+
+  async def request_pip_channel_serial_number(self, channel: int) -> Optional[str]:
+    """Request the serial number for a pipettor channel.
+
+    Args:
+      channel: Channel index (0=rear, 1=front).
+    """
+    if channel >= len(self._channel_node_info_addrs):
+      return None
+    return await self._query_firmware_string(self._channel_node_info_addrs[channel], cmd_id=9, iface_id=1)
+
+  async def request_module_version(self) -> Optional[str]:
+    """Request the pipettor module version string (from PipettorRoot.ModuleInformation)."""
+    if self._module_info_addr is None:
+      return None
+    return await self._query_firmware_string(self._module_info_addr, cmd_id=8)
+
+  async def request_module_part_number(self) -> Optional[str]:
+    """Request the firmware part number (from PipettorRoot.ModuleInformation)."""
+    if self._module_info_addr is None:
+      return None
+    return await self._query_firmware_string(self._module_info_addr, cmd_id=5)
 
   # ---------------------------------------------------------------------------
   # MLPrep convenience methods
