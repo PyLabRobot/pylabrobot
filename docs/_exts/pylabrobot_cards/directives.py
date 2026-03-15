@@ -104,6 +104,8 @@ from docutils import nodes
 
 
 def _replace_placeholders(app, doctree, fromdocname):
+    if not hasattr(app.builder, "templates"):
+        return
     env = app.builder.env
     per_page = getattr(env, "plr_cards", {}).get(fromdocname, [])
 
