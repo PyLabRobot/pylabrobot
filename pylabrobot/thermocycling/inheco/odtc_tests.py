@@ -600,19 +600,17 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     self.interface._handle_return_code(3, "Finished", "ExecuteMethod", 123)
 
     # Code 4 should raise
-    with self.assertRaises(RuntimeError) as cm:
+    with self.assertRaises(RuntimeError):
       self.interface._handle_return_code(4, "busy", "ExecuteMethod", 123)
-    self.assertIn("return code 4", str(cm.exception))
 
     # Code 5 should raise
-    with self.assertRaises(RuntimeError) as cm:
+    with self.assertRaises(RuntimeError):
       self.interface._handle_return_code(5, "LockId error", "ExecuteMethod", 123)
-    self.assertIn("return code 5", str(cm.exception))
 
-    # Code 9 should raise
+    # Code 9 should raise with state info
     with self.assertRaises(RuntimeError) as cm:
       self.interface._handle_return_code(9, "Not allowed", "ExecuteMethod", 123)
-    self.assertIn("return code 9", str(cm.exception))
+    self.assertIn(self.interface._current_state.value, str(cm.exception))
 
     # Device error code should transition to InError
     with self.assertRaises(RuntimeError):

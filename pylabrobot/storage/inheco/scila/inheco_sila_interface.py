@@ -280,6 +280,34 @@ class InhecoSiLAInterface:
       raise ValueError(f"returnCode not found in response for {command_name}")
     return return_code, result_level.get("message", "")
 
+  def _handle_return_code(
+    self, return_code: int, message: str, command_name: str, request_id: int
+  ) -> None:
+    """Handle SiLA return codes. Override _handle_device_return_code for device-specific codes (1000+)."""
+    if return_code in (1, 2, 3):
+      return
+    if return_code == 4:
+      raise SiLAError(4, "Device is busy", command_name)
+    if return_code == 5:
+      raise SiLAError(5, "LockId mismatch", command_name)
+    if return_code == 6:
+      raise SiLAError(6, "Invalid or duplicate requestId", command_name)
+    if return_code == 9:
+      raise SiLAError(9, "Command not allowed in current state", command_name)
+    if return_code == 11:
+      raise SiLAError(11, f"Invalid parameter: {message}", command_name)
+    if return_code == 12:
+      self._logger.warning(f"Command {command_name} finished with warning: {message}")
+      return
+    if return_code >= 1000:
+      self._handle_device_return_code(return_code, message, command_name)
+      return
+    raise SiLAError(return_code, message, command_name)
+
+  def _handle_device_return_code(self, return_code: int, message: str, command_name: str) -> None:
+    """Handle device-specific return codes (1000+). Override in subclasses."""
+    raise SiLAError(return_code, f"Device error: {message}", command_name)
+
   async def setup(self) -> None:
     await self.start()
 
@@ -328,17 +356,17 @@ class InhecoSiLAInterface:
             return resp.read()  # type: ignore
 
         body = await asyncio.to_thread(_do_request)
-        return_code, message = self._get_return_code_and_message(
-          command, soap_decode(body.decode("utf-8"))
-        )
-        if return_code == 1:  # success
-          return soap_decode(body.decode("utf-8"))
-        elif return_code == 2:  # concurrent command
+        decoded = soap_decode(body.decode("utf-8"))
+        return_code, message = self._get_return_code_and_message(command, decoded)
+        self._handle_return_code(return_code, message, command, request_id)
+        if return_code == 1:
+          return decoded
+        elif return_code == 2:
           fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
           self._pending = InhecoSiLAInterface._SiLACommand(
             name=command, request_id=request_id, fut=fut
           )
-          return await fut  # wait for response to be handled in _on_http
+          return await fut
         else:
           raise RuntimeError(f"command {command} failed: {return_code} {message}")
       finally:

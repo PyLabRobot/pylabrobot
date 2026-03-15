@@ -20,7 +20,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Set
 
-from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.storage.inheco.scila.inheco_sila_interface import (
+  SOAP_RESPONSE_DataEventResponse,
+  SOAP_RESPONSE_ResponseEventResponse,
+  SOAP_RESPONSE_StatusEventResponse,
+  InhecoSiLAInterface,
+)
 from pylabrobot.storage.inheco.scila.soap import XSI, soap_decode, soap_encode
 
 from .odtc_model import ODTCProgress
@@ -49,52 +54,6 @@ class FirstEventTimeout(SiLAError):
 
   pass
 
-
-# -----------------------------------------------------------------------------
-# SOAP responses for events
-# -----------------------------------------------------------------------------
-
-SOAP_RESPONSE_ResponseEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-    <ResponseEventResponse xmlns="http://sila.coop">
-      <ResponseEventResult>
-        <returnCode>1</returnCode>
-        <message>Success</message>
-        <duration>PT0.0006262S</duration>
-        <deviceClass>0</deviceClass>
-      </ResponseEventResult>
-    </ResponseEventResponse>
-  </s:Body>
-</s:Envelope>"""
-
-SOAP_RESPONSE_StatusEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-    <StatusEventResponse xmlns="http://sila.coop">
-      <StatusEventResult>
-        <returnCode>1</returnCode>
-        <message>Success</message>
-        <duration>PT0.0005967S</duration>
-        <deviceClass>0</deviceClass>
-      </StatusEventResult>
-    </StatusEventResponse>
-  </s:Body>
-</s:Envelope>"""
-
-SOAP_RESPONSE_DataEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-    <DataEventResponse xmlns="http://sila.coop">
-      <DataEventResult>
-        <returnCode>1</returnCode>
-        <message>Success</message>
-        <duration>PT0.0005967S</duration>
-        <deviceClass>0</deviceClass>
-      </DataEventResult>
-    </DataEventResponse>
-  </s:Body>
-</s:Envelope>"""
 
 SOAP_RESPONSE_ErrorEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
   <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -597,69 +556,28 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
   def _handle_return_code(
     self, return_code: int, message: str, command_name: str, request_id: int
   ) -> None:
-    """Handle return code and update state accordingly.
-
-    Args:
-      return_code: Return code from device.
-      message: Return message.
-      command_name: Name of the command.
-      request_id: Request ID of the command.
-
-    Raises:
-      RuntimeError: For error return codes.
-    """
-    if return_code == 1:
-      # Success (synchronous commands)
-      return
-    elif return_code == 2:
-      # Asynchronous command accepted
-      return
-    elif return_code == 3:
-      # Asynchronous command finished (success) - handled in ResponseEvent
-      return
-    elif return_code == 4:
-      raise SiLAError(f"Command {command_name} rejected: Device is busy (return code 4)", code=4)
-    elif return_code == 5:
-      raise SiLAError(f"Command {command_name} rejected: LockId mismatch (return code 5)", code=5)
-    elif return_code == 6:
-      raise SiLAError(
-        f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)", code=6
-      )
-    elif return_code == 9:
+    """Override to include current state in code-9 error message."""
+    if return_code == 9:
       raise SiLAError(
         f"Command {command_name} not allowed in state {self._current_state.value} (return code 9)",
         code=9,
       )
-    elif return_code == 11:
+    super()._handle_return_code(return_code, message, command_name, request_id)
+
+  def _handle_device_return_code(self, return_code: int, message: str, command_name: str) -> None:
+    """Handle ODTC device-specific return codes (1000+)."""
+    if return_code in self.DEVICE_ERROR_CODES:
+      self._current_state = SiLAState.INERROR
       raise SiLAError(
-        f"Command {command_name} rejected: Invalid parameter (return code 11): {message}", code=11
+        f"Command {command_name} failed with device error (return code {return_code}): {message}",
+        code=return_code,
       )
-    elif return_code == 12:
-      # Finished with warning
-      self._logger.warning(
-        f"Command {command_name} finished with warning (return code 12): {message}"
-      )
-      return
-    elif return_code >= 1000:
-      # Device-specific return code
-      if return_code in self.DEVICE_ERROR_CODES:
-        self._current_state = SiLAState.INERROR
-        raise SiLAError(
-          f"Command {command_name} failed with device error (return code {return_code}): {message}",
-          code=return_code,
-        )
-      else:
-        # Warning or recoverable error
-        self._logger.warning(
-          f"Command {command_name} returned device-specific code {return_code}: {message}"
-        )
-        # May transition to ErrorHandling if recoverable
-        if return_code not in {2005, 2006, 2008, 2009, 2010}:  # These are warnings, not errors
-          # Recoverable error - transition to ErrorHandling
-          self._current_state = SiLAState.ERRORHANDLING
-    else:
-      # Unknown return code
-      raise SiLAError(f"Command {command_name} returned unknown code {return_code}: {message}")
+    # Warning or recoverable error
+    self._logger.warning(
+      f"Command {command_name} returned device-specific code {return_code}: {message}"
+    )
+    if return_code not in {2005, 2006, 2008, 2009, 2010}:
+      self._current_state = SiLAState.ERRORHANDLING
 
   async def _on_http(self, req: InhecoSiLAInterface._HTTPRequest) -> bytes:
     """Handle incoming HTTP requests from device (events).
