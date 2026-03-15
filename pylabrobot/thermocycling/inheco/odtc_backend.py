@@ -1155,7 +1155,6 @@ class ODTCBackend(ThermocyclerBackend):
       name: Name of the stored protocol (method) to run.
       wait: If False (default), start and return handle. If True, block until
           completion then return the (completed) handle.
-      **kwargs: Ignored (for API compatibility with base backend).
 
     Returns:
       Execution handle (completed if wait=True).
@@ -1322,7 +1321,6 @@ class ODTCBackend(ThermocyclerBackend):
       wait: If True, block until set. If False (default), return execution handle.
       debug_xml: If True, log generated XML at DEBUG.
       xml_output_path: Optional path to save MethodSet XML.
-      **kwargs: Ignored (for API compatibility).
 
     Returns:
       If wait=True: None. If wait=False: execution handle.
