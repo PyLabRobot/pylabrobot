@@ -280,136 +280,40 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
   }
 
   # State allowability table from ODTC doc section 4
-  # Format: {command: {state: True if allowed}}
-  STATE_ALLOWABILITY: Dict[str, Dict[SiLAState, bool]] = {
-    "Abort": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "CloseDoor": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "DoContinue": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "ExecuteMethod": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "GetConfiguration": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: True,
-      SiLAState.IDLE: False,
-      SiLAState.BUSY: False,
-    },
-    "GetParameters": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
+  STATE_ALLOWABILITY: Dict[str, Set[SiLAState]] = {
+    "Abort": {SiLAState.IDLE, SiLAState.BUSY},
+    "CloseDoor": {SiLAState.IDLE, SiLAState.BUSY},
+    "DoContinue": {SiLAState.IDLE, SiLAState.BUSY},
+    "ExecuteMethod": {SiLAState.IDLE, SiLAState.BUSY},
+    "GetConfiguration": {SiLAState.STANDBY},
+    "GetParameters": {SiLAState.IDLE, SiLAState.BUSY},
     "GetDeviceIdentification": {
-      SiLAState.STARTUP: True,
-      SiLAState.STANDBY: True,
-      SiLAState.INITIALIZING: True,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
+      SiLAState.STARTUP,
+      SiLAState.STANDBY,
+      SiLAState.INITIALIZING,
+      SiLAState.IDLE,
+      SiLAState.BUSY,
     },
-    "GetLastData": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
+    "GetLastData": {SiLAState.IDLE, SiLAState.BUSY},
     "GetStatus": {
-      SiLAState.STARTUP: True,
-      SiLAState.STANDBY: True,
-      SiLAState.INITIALIZING: True,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
+      SiLAState.STARTUP,
+      SiLAState.STANDBY,
+      SiLAState.INITIALIZING,
+      SiLAState.IDLE,
+      SiLAState.BUSY,
     },
-    "Initialize": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: True,
-      SiLAState.IDLE: False,
-      SiLAState.BUSY: False,
-    },
-    "LockDevice": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: True,
-      SiLAState.IDLE: False,
-      SiLAState.BUSY: False,
-    },
-    "OpenDoor": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "Pause": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "PrepareForInput": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "PrepareForOutput": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "ReadActualTemperature": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "Reset": {
-      SiLAState.STARTUP: True,
-      SiLAState.STANDBY: True,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "SetConfiguration": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: True,
-      SiLAState.IDLE: False,
-      SiLAState.BUSY: False,
-    },
-    "SetParameters": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "StopMethod": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: False,
-      SiLAState.IDLE: True,
-      SiLAState.BUSY: True,
-    },
-    "UnlockDevice": {
-      SiLAState.STARTUP: False,
-      SiLAState.STANDBY: True,
-      SiLAState.IDLE: False,
-      SiLAState.BUSY: False,
-    },
+    "Initialize": {SiLAState.STANDBY},
+    "LockDevice": {SiLAState.STANDBY},
+    "OpenDoor": {SiLAState.IDLE, SiLAState.BUSY},
+    "Pause": {SiLAState.IDLE, SiLAState.BUSY},
+    "PrepareForInput": {SiLAState.IDLE, SiLAState.BUSY},
+    "PrepareForOutput": {SiLAState.IDLE, SiLAState.BUSY},
+    "ReadActualTemperature": {SiLAState.IDLE, SiLAState.BUSY},
+    "Reset": {SiLAState.STARTUP, SiLAState.STANDBY, SiLAState.IDLE, SiLAState.BUSY},
+    "SetConfiguration": {SiLAState.STANDBY},
+    "SetParameters": {SiLAState.IDLE, SiLAState.BUSY},
+    "StopMethod": {SiLAState.IDLE, SiLAState.BUSY},
+    "UnlockDevice": {SiLAState.STANDBY},
   }
 
   # Synchronous commands (return code 1, no ResponseEvent)
@@ -485,11 +389,8 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       True if command is allowed, False otherwise.
     """
     if command not in self.STATE_ALLOWABILITY:
-      # Unknown command - allow it (might be device-specific)
       return True
-
-    state_rules = self.STATE_ALLOWABILITY[command]
-    return state_rules.get(self._current_state, False)
+    return self._current_state in self.STATE_ALLOWABILITY[command]
 
   def _check_parallelism(self, command: str) -> bool:
     """Check if command can run in parallel with currently executing commands.
