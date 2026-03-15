@@ -2,7 +2,7 @@ Analytical
 ==========   
 
 Everything whose primary function is to measure something.
-This includes flow cytometers, plate readers, and scales. 
+This includes flow cytometers, plate readers, rack readers, and scales. 
 
 
 
@@ -14,6 +14,6 @@ This includes flow cytometers, plate readers, and scales.
 
    flow-cytometers/_flow-cytometers
    plate-reading/plate-reading
+   rack-reading/_rack-reading
    scales/scales
-
 
