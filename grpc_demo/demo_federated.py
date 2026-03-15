@@ -67,10 +67,10 @@ def main():
     trash = Resource("trash", size_x=50, size_y=50, size_z=80)
     root.assign_child_resource(trash, location=Coordinate(900, 0, 0))
 
-    remote_hamilton = RemoteResource("hamilton", target="localhost:50061")
+    remote_hamilton = RemoteResource.from_target("localhost:50061")
     root.assign_child_resource(remote_hamilton, location=Coordinate(0, 0, 0))
 
-    remote_odtc = RemoteResource("odtc_unit", target="localhost:50062")
+    remote_odtc = RemoteResource.from_target("localhost:50062")
     root.assign_child_resource(remote_odtc, location=Coordinate(200, 0, 0))
 
     print("\n=== Initial tree (workers are empty) ===")
