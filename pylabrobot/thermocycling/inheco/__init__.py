@@ -21,13 +21,20 @@ Alternative: use generic Thermocycler with ODTCBackend (e.g. for custom backend)
     child_location=...,
   )
 
-Variant accepts 96, 384 or device codes (960000, 384000). Use tc.run_protocol(protocol,
-block_max_volume) for in-memory protocols; tc.run_stored_protocol("my_pcr") for
-stored-by-name (ODTC only).
+Variant accepts 96 or 384 (device codes like 960000 also accepted and normalized).
+Use tc.run_protocol(protocol, block_max_volume) for in-memory protocols;
+tc.run_stored_protocol("my_pcr") for stored-by-name (ODTC only).
 """
 
 from .odtc_backend import ODTCBackend, ODTCExecution
-from .odtc_model import ODTC_DIMENSIONS, ODTCProgress, ODTCProtocol, ProtocolList, normalize_variant
+from .odtc_model import (
+  ODTC_DIMENSIONS,
+  ODTCProgress,
+  ODTCProtocol,
+  ODTCVariant,
+  ProtocolList,
+  normalize_variant,
+)
 from .odtc_thermocycler import ODTCThermocycler
 
 # Backward-compat aliases (single execution handle type)
@@ -43,6 +50,7 @@ __all__ = [
   "ODTCProgress",
   "ODTCProtocol",
   "ODTCThermocycler",
+  "ODTCVariant",
   "ProtocolList",
   "normalize_variant",
 ]

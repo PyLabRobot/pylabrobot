@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+ODTCVariant = Literal[96, 384]
 
 # =============================================================================
 # Scratch Method Names
@@ -111,7 +112,7 @@ class ODTCHardwareConstraints:
   Note: Actual achievable rates may vary based on fluid quantity and target temperature.
   """
 
-  variant: int
+  variant: ODTCVariant
   variant_name: str
   min_block_temp: float = 4.0
   max_block_temp: float = 99.0
@@ -126,7 +127,7 @@ class ODTCHardwareConstraints:
 
 
 ODTC_96_CONSTRAINTS = ODTCHardwareConstraints(
-  variant=960000,
+  variant=96,
   variant_name="ODTC 96",
   max_heating_slope=4.4,
   max_lid_temp=110.0,
@@ -134,7 +135,7 @@ ODTC_96_CONSTRAINTS = ODTCHardwareConstraints(
 )
 
 ODTC_384_CONSTRAINTS = ODTCHardwareConstraints(
-  variant=384000,
+  variant=384,
   variant_name="ODTC 384",
   max_heating_slope=5.0,
   max_lid_temp=115.0,
@@ -142,18 +143,17 @@ ODTC_384_CONSTRAINTS = ODTCHardwareConstraints(
   valid_plate_types=(0, 2),  # Only 0 observed in XML samples
 )
 
-_CONSTRAINTS_MAP: Dict[int, ODTCHardwareConstraints] = {
-  960000: ODTC_96_CONSTRAINTS,
-  384000: ODTC_384_CONSTRAINTS,
-  3840000: ODTC_384_CONSTRAINTS,  # Alias
+_CONSTRAINTS_MAP: Dict[ODTCVariant, ODTCHardwareConstraints] = {
+  96: ODTC_96_CONSTRAINTS,
+  384: ODTC_384_CONSTRAINTS,
 }
 
 
-def get_constraints(variant: int) -> ODTCHardwareConstraints:
+def get_constraints(variant: ODTCVariant) -> ODTCHardwareConstraints:
   """Get hardware constraints for a variant.
 
   Args:
-    variant: ODTC variant code (960000 for 96-well, 384000 for 384-well).
+    variant: 96 or 384.
 
   Returns:
     ODTCHardwareConstraints for the specified variant.
@@ -166,31 +166,30 @@ def get_constraints(variant: int) -> ODTCHardwareConstraints:
   return _CONSTRAINTS_MAP[variant]
 
 
-_VALID_VARIANTS = (96, 384, 960000, 384000, 3840000)
-
-
-def normalize_variant(variant: int) -> int:
-  """Normalize variant to ODTC device code.
+def normalize_variant(variant: int) -> ODTCVariant:
+  """Normalize variant to 96 or 384.
 
   Accepts well count (96, 384) or device codes (960000, 384000, 3840000).
-  Maps 96 -> 960000, 384 -> 384000; passes through 960000, 384000, 3840000 unchanged.
 
   Args:
-    variant: Well count (96, 384) or ODTC variant code (960000, 384000, 3840000).
+    variant: Well count or ODTC device code.
 
   Returns:
-    ODTC variant code: 960000 or 384000.
+    96 or 384.
 
   Raises:
-    ValueError: If variant is not one of 96, 384, 960000, 384000, 3840000.
+    ValueError: If variant is not recognized.
   """
-  if variant == 96:
-    return 960000
-  if variant in (384, 3840000):
-    return 384000
-  if variant in (960000, 384000):
-    return variant
-  raise ValueError(f"Unknown variant {variant}. Valid: {list(_VALID_VARIANTS)}")
+  if variant in (96, 960000):
+    return 96
+  if variant in (384, 384000, 3840000):
+    return 384
+  raise ValueError(f"Unknown variant {variant}. Expected 96, 384, 960000, 384000, or 3840000.")
+
+
+def _variant_to_device_code(variant: ODTCVariant) -> int:
+  """Convert variant (96/384) to ODTC device code for XML serialization."""
+  return {96: 960000, 384: 384000}[variant]
 
 
 # =============================================================================
@@ -589,7 +588,7 @@ class ODTCConfig:
 
   # Device calibration
   fluid_quantity: int = 1  # -1=verification, 0=10-29ul, 1=30-74ul, 2=75-100ul
-  variant: int = 960000  # 96-well ODTC
+  variant: ODTCVariant = 96
   plate_type: int = 0
 
   # Temperature settings
@@ -726,7 +725,7 @@ class ODTCProtocol(Protocol):
   datetime: Optional[str] = None
   target_block_temperature: float = 0.0
   target_lid_temperature: float = 0.0
-  variant: int = 960000
+  variant: ODTCVariant = 96
   plate_type: int = 0
   fluid_quantity: int = 0
   post_heating: bool = False
@@ -1115,7 +1114,7 @@ def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   creator = _read_opt_attr(elem, "creator")
   description = _read_opt_attr(elem, "description")
   datetime_ = _read_opt_attr(elem, "dateTime")
-  variant = int(float(_read_opt_elem(elem, "Variant") or 960000))
+  variant = normalize_variant(int(float(_read_opt_elem(elem, "Variant") or 960000)))
   plate_type = int(float(_read_opt_elem(elem, "PlateType") or 0))
   fluid_quantity = int(float(_read_opt_elem(elem, "FluidQuantity") or 0))
   post_heating = (_read_opt_elem(elem, "PostHeating") or "false").lower() == "true"
@@ -1200,7 +1199,7 @@ def _odtc_protocol_to_method_xml(odtc: ODTCProtocol, parent: ET.Element) -> ET.E
     elem.set("description", odtc.description)
   if odtc.datetime:
     elem.set("dateTime", odtc.datetime)
-  ET.SubElement(elem, "Variant").text = str(odtc.variant)
+  ET.SubElement(elem, "Variant").text = str(_variant_to_device_code(odtc.variant))
   ET.SubElement(elem, "PlateType").text = str(odtc.plate_type)
   ET.SubElement(elem, "FluidQuantity").text = str(odtc.fluid_quantity)
   ET.SubElement(elem, "PostHeating").text = "true" if odtc.post_heating else "false"

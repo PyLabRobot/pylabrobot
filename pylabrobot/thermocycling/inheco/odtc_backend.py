@@ -332,14 +332,14 @@ class ODTCBackend(ThermocyclerBackend):
   state management, and lockId validation.
 
   ODTC dimensions for Thermocycler: size_x=156.5, size_y=248, size_z=124.3 (mm).
-  Construct: backend = ODTCBackend(odtc_ip="...", variant=384000); then
+  Construct: backend = ODTCBackend(odtc_ip="...", variant=384); then
   Thermocycler(name="odtc1", size_x=156.5, size_y=248, size_z=124.3, backend=backend, ...).
   """
 
   def __init__(
     self,
     odtc_ip: str,
-    variant: int = 960000,
+    variant: int = 96,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
     poll_interval: float = 5.0,
@@ -354,9 +354,8 @@ class ODTCBackend(ThermocyclerBackend):
 
     Args:
       odtc_ip: IP address of the ODTC device.
-      variant: Well count (96, 384) or ODTC variant code (960000, 384000, 3840000).
-        Accepted 96/384 are normalized to 960000/384000. Used for default config
-        and constraints (e.g. max slopes, lid temp).
+      variant: Well count (96 or 384). Device codes (960000, 384000, 3840000)
+        are also accepted and normalized to 96/384.
       client_ip: IP address of this client (auto-detected if None).
       logger: Logger instance (creates one if None).
       poll_interval: Seconds between GetStatus calls in the async completion polling fallback (SiLA2 subscribe_by_polling style). Default 5.0.
@@ -402,7 +401,7 @@ class ODTCBackend(ThermocyclerBackend):
 
   @property
   def variant(self) -> int:
-    """ODTC variant code (960000 or 384000)."""
+    """ODTC variant (96 or 384)."""
     return self._variant
 
   @property

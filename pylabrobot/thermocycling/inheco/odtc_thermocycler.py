@@ -11,15 +11,6 @@ from .odtc_backend import ODTCBackend
 from .odtc_model import ODTC_DIMENSIONS, ODTCConfig, ODTCHardwareConstraints
 
 
-def _model_from_variant(variant: int) -> str:
-  """Return model string from ODTC variant code."""
-  if variant == 960000:
-    return "ODTC 96"
-  if variant == 384000:
-    return "ODTC 384"
-  return "ODTC"
-
-
 class ODTCThermocycler(Thermocycler):
   """Inheco ODTC thermocycler resource.
 
@@ -31,7 +22,7 @@ class ODTCThermocycler(Thermocycler):
     self,
     name: str,
     odtc_ip: str,
-    variant: int = 384,
+    variant: int = 384,  # 96 or 384; device codes (960000, etc.) also accepted
     child_location: Coordinate = Coordinate.zero(),
     child: Optional[ItemizedResource] = None,
     backend: Optional[ODTCBackend] = None,
@@ -42,8 +33,8 @@ class ODTCThermocycler(Thermocycler):
     Args:
       name: Human-readable name.
       odtc_ip: IP address of the ODTC device.
-      variant: Well count (96, 384) or ODTC variant code (960000, 384000, 3840000).
-        Normalized via backend; default 384.
+      variant: Well count (96 or 384). Device codes (960000, 384000, 3840000)
+        also accepted and normalized. Default 384.
       child_location: Position where a plate sits on the block.
       child: Optional plate/rack already loaded on the module.
       backend: Optional pre-constructed ODTCBackend; if None, one is created
@@ -52,7 +43,6 @@ class ODTCThermocycler(Thermocycler):
         logger, poll_interval, lifetime_of_execution, on_response_event_missing).
     """
     backend = backend or ODTCBackend(odtc_ip=odtc_ip, variant=variant, **backend_kwargs)
-    model = _model_from_variant(backend.variant)
     super().__init__(
       name=name,
       size_x=ODTC_DIMENSIONS.x,
@@ -61,7 +51,7 @@ class ODTCThermocycler(Thermocycler):
       backend=backend,
       child_location=child_location,
       category="thermocycler",
-      model=model,
+      model=f"ODTC {backend.variant}",
     )
     self.backend: ODTCBackend = backend
     self.child = child
@@ -87,9 +77,7 @@ class ODTCThermocycler(Thermocycler):
   @property
   def well_count(self) -> int:
     """Well count (96 or 384) from backend variant."""
-    if self.backend.variant == 960000:
-      return 96
-    return 384
+    return self.backend.variant
 
   async def is_profile_running(self, **backend_kwargs: Any) -> bool:
     """Return True if a profile (method) is still running.

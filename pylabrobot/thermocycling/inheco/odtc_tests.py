@@ -18,7 +18,6 @@ from pylabrobot.thermocycling.inheco.odtc_model import (
   ODTCStep,
   estimate_method_duration_seconds,
   method_set_to_xml,
-  normalize_variant,
   odtc_protocol_to_protocol,
   parse_method_set,
 )
@@ -92,25 +91,6 @@ def _data_event_payload_with_elapsed_and_temps(
     "requestId": request_id,
     "dataValue": f"<r><AnyData>{escaped}</AnyData></r>",
   }
-
-
-class TestNormalizeVariant(unittest.TestCase):
-  """Tests for normalize_variant (96/384 -> 960000/384000)."""
-
-  def test_96_maps_to_960000(self):
-    self.assertEqual(normalize_variant(96), 960000)
-
-  def test_384_maps_to_384000(self):
-    self.assertEqual(normalize_variant(384), 384000)
-
-  def test_3840000_normalizes_to_384000(self):
-    self.assertEqual(normalize_variant(3840000), 384000)
-
-  def test_invalid_raises(self):
-    with self.assertRaises(ValueError) as cm:
-      normalize_variant(123)
-    self.assertIn("123", str(cm.exception))
-    self.assertIn("Valid", str(cm.exception))
 
 
 class TestODTCProgressFromDataEventPayload(unittest.TestCase):
@@ -781,8 +761,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.odtc_ip, "192.168.1.100")
 
   def test_backend_variant_property(self):
-    """Backend.variant returns normalized variant (default 960000)."""
-    self.assertEqual(self.backend.variant, 960000)
+    """Backend.variant returns normalized variant (default 96)."""
+    self.assertEqual(self.backend.variant, 96)
 
   async def test_setup(self):
     """Test backend setup (full path)."""
@@ -1414,7 +1394,7 @@ class TestODTCThermocycler(unittest.TestCase):
         child_location=Coordinate.zero(),
       )
     self.assertIsInstance(tc.backend, ODTCBackend)
-    self.assertEqual(tc.backend.variant, 384000)
+    self.assertEqual(tc.backend.variant, 384)
     self.assertEqual(tc.get_size_x(), ODTC_DIMENSIONS.x)
     self.assertEqual(tc.get_size_y(), ODTC_DIMENSIONS.y)
     self.assertEqual(tc.get_size_z(), ODTC_DIMENSIONS.z)
@@ -1424,7 +1404,7 @@ class TestODTCThermocycler(unittest.TestCase):
     """Constructing with variant=96 sets model ODTC 96."""
     with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
       tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=96)
-    self.assertEqual(tc.backend.variant, 960000)
+    self.assertEqual(tc.backend.variant, 96)
     self.assertEqual(tc.model, "ODTC 96")
 
   def test_serialize_includes_odtc_ip_and_variant(self):
@@ -1439,14 +1419,14 @@ class TestODTCThermocycler(unittest.TestCase):
       tc.backend._sila._machine_ip = "192.168.1.50"
     data = tc.serialize()
     self.assertEqual(data["odtc_ip"], "192.168.1.50")
-    self.assertEqual(data["variant"], 384000)
+    self.assertEqual(data["variant"], 384)
 
   def test_get_default_config_delegates_to_backend(self):
     """get_default_config returns backend.get_default_config()."""
     with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
       tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
     config = tc.get_default_config(name="MyPCR")
-    self.assertEqual(config.variant, 384000)
+    self.assertEqual(config.variant, 384)
     self.assertEqual(config.name, "MyPCR")
 
   def test_get_constraints_delegates_to_backend(self):
@@ -1454,17 +1434,17 @@ class TestODTCThermocycler(unittest.TestCase):
     with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
       tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
     constraints = tc.get_constraints()
-    self.assertEqual(constraints.variant, 384000)
+    self.assertEqual(constraints.variant, 384)
     self.assertEqual(constraints.variant_name, "ODTC 384")
 
   def test_well_count_96(self):
-    """well_count is 96 when backend variant is 960000."""
+    """well_count is 96 when variant is 96."""
     with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
       tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=96)
     self.assertEqual(tc.well_count, 96)
 
   def test_well_count_384(self):
-    """well_count is 384 when backend variant is 384000."""
+    """well_count is 384 when variant is 384."""
     with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
       tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
     self.assertEqual(tc.well_count, 384)
@@ -1644,7 +1624,7 @@ class TestODTCStageAndRoundTrip(unittest.TestCase):
     odtc = ODTCProtocol(
       kind="method",
       name="FromStages",
-      variant=960000,
+      variant=96,
       start_block_temperature=25.0,
       start_lid_temperature=110.0,
       steps=[],  # No steps; serialization will use stages
