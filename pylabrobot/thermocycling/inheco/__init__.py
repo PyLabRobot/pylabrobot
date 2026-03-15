@@ -1,16 +1,5 @@
 """Inheco ODTC thermocycler implementation.
 
-Preferred: use ODTCThermocycler (owns connection params and dimensions):
-
-  tc = ODTCThermocycler(
-    name="odtc1",
-    odtc_ip="192.168.1.100",
-    variant=384,
-    child_location=Coordinate.zero(),
-  )
-
-Alternative: use generic Thermocycler with ODTCBackend (e.g. for custom backend):
-
   backend = ODTCBackend(odtc_ip="192.168.1.100", variant=384)
   tc = Thermocycler(
     name="odtc1",
@@ -35,7 +24,6 @@ from .odtc_model import (
   ProtocolList,
   normalize_variant,
 )
-from .odtc_thermocycler import ODTCThermocycler
 
 # Backward-compat aliases (single execution handle type)
 CommandExecution = ODTCExecution
@@ -49,7 +37,6 @@ __all__ = [
   "ODTCExecution",
   "ODTCProgress",
   "ODTCProtocol",
-  "ODTCThermocycler",
   "ODTCVariant",
   "ProtocolList",
   "normalize_variant",

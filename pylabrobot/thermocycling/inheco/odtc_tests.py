@@ -6,10 +6,8 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling.inheco.odtc_backend import ODTCBackend, ODTCExecution
 from pylabrobot.thermocycling.inheco.odtc_model import (
-  ODTC_DIMENSIONS,
   PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ODTCMethodSet,
   ODTCProgress,
@@ -28,7 +26,6 @@ from pylabrobot.thermocycling.inheco.odtc_sila_interface import (
   SiLAState,
   SiLATimeoutError,
 )
-from pylabrobot.thermocycling.inheco.odtc_thermocycler import ODTCThermocycler
 
 
 def _minimal_data_event_payload(remaining_s: float = 300.0) -> Dict[str, Any]:
@@ -1379,113 +1376,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     ):
       await self.backend.run_stored_protocol("MyMethod", wait=True)
     self.backend.execute_method.assert_called_once_with("MyMethod", wait=True, protocol=None)
-
-
-class TestODTCThermocycler(unittest.TestCase):
-  """Tests for ODTCThermocycler resource."""
-
-  def test_construct_creates_backend_and_uses_dimensions(self):
-    """Constructing with odtc_ip and variant creates ODTCBackend and ODTC dimensions."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(
-        name="odtc1",
-        odtc_ip="192.168.1.100",
-        variant=384,
-        child_location=Coordinate.zero(),
-      )
-    self.assertIsInstance(tc.backend, ODTCBackend)
-    self.assertEqual(tc.backend.variant, 384)
-    self.assertEqual(tc.get_size_x(), ODTC_DIMENSIONS.x)
-    self.assertEqual(tc.get_size_y(), ODTC_DIMENSIONS.y)
-    self.assertEqual(tc.get_size_z(), ODTC_DIMENSIONS.z)
-    self.assertEqual(tc.model, "ODTC 384")
-
-  def test_construct_variant_96_model(self):
-    """Constructing with variant=96 sets model ODTC 96."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=96)
-    self.assertEqual(tc.backend.variant, 96)
-    self.assertEqual(tc.model, "ODTC 96")
-
-  def test_serialize_includes_odtc_ip_and_variant(self):
-    """serialize() includes odtc_ip and variant from backend."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(
-        name="odtc1",
-        odtc_ip="192.168.1.50",
-        variant=384,
-        child_location=Coordinate.zero(),
-      )
-      tc.backend._sila._machine_ip = "192.168.1.50"
-    data = tc.serialize()
-    self.assertEqual(data["odtc_ip"], "192.168.1.50")
-    self.assertEqual(data["variant"], 384)
-
-  def test_get_default_config_delegates_to_backend(self):
-    """get_default_config returns backend.get_default_config()."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
-    config = tc.get_default_config(name="MyPCR")
-    self.assertEqual(config.variant, 384)
-    self.assertEqual(config.name, "MyPCR")
-
-  def test_get_constraints_delegates_to_backend(self):
-    """get_constraints returns backend.get_constraints()."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
-    constraints = tc.get_constraints()
-    self.assertEqual(constraints.variant, 384)
-    self.assertEqual(constraints.variant_name, "ODTC 384")
-
-  def test_well_count_96(self):
-    """well_count is 96 when variant is 96."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=96)
-    self.assertEqual(tc.well_count, 96)
-
-  def test_well_count_384(self):
-    """well_count is 384 when variant is 384."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
-    self.assertEqual(tc.well_count, 384)
-
-  def test_is_profile_running_delegates_to_backend(self):
-    """is_profile_running delegates to backend.is_method_running()."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
-      tc.backend.is_method_running = AsyncMock(return_value=False)  # type: ignore[method-assign]
-    result = asyncio.run(tc.is_profile_running())
-    self.assertFalse(result)
-    tc.backend.is_method_running.assert_called_once()
-
-  def test_wait_for_profile_completion_delegates_to_backend(self):
-    """wait_for_profile_completion delegates to backend.wait_for_method_completion()."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
-      tc.backend.wait_for_method_completion = AsyncMock()  # type: ignore[method-assign]
-    asyncio.run(tc.wait_for_profile_completion(poll_interval=5.0))
-    tc.backend.wait_for_method_completion.assert_called_once_with(
-      poll_interval=5.0,
-      timeout=None,
-    )
-
-  def test_backend_provided_uses_it_dimensions_from_constant(self):
-    """When backend= is provided, that backend is used; dimensions still from ODTC_DIMENSIONS."""
-    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
-      backend = ODTCBackend(odtc_ip="10.0.0.1", variant=384)
-      backend._sila = MagicMock(spec=ODTCSiLAInterface)
-      backend._sila._machine_ip = "10.0.0.1"
-    tc = ODTCThermocycler(
-      name="odtc1",
-      odtc_ip="192.168.1.1",
-      variant=384,
-      backend=backend,
-      child_location=Coordinate.zero(),
-    )
-    self.assertIs(tc.backend, backend)
-    self.assertEqual(tc.get_size_x(), ODTC_DIMENSIONS.x)
-    self.assertEqual(tc.get_size_y(), ODTC_DIMENSIONS.y)
-    self.assertEqual(tc.get_size_z(), ODTC_DIMENSIONS.z)
 
 
 class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):

@@ -7,7 +7,7 @@ Interface for Inheco ODTC thermocyclers via SiLA (SOAP over HTTP). Asynchronous 
 - **Primary API:** Run protocols by name: `run_stored_protocol(name)`. Protocol is already on the device; no editing.
 - **Secondary:** (1) **Edited ODTCProtocol** — get from device, change only **hold times and cycle count**; upload and run by name. Do not change temperature setpoints (overshoots are temperature- and ramp-specific). (2) **Protocol + ODTCConfig** — custom run: `protocol_to_odtc_protocol(protocol, config=get_default_config())`, then `run_protocol(odtc, block_max_volume)`.
 
-**Architecture:** `ODTCSiLAInterface` (SiLA SOAP, state machine; stores raw DataEvent payloads) → `ODTCBackend` (method execution, protocol conversion; builds **ODTCProgress** from latest payload + protocol) → `ODTCThermocycler` (resource; preferred) or generic `Thermocycler` with `ODTCBackend`. Types in `odtc_model.py`.
+**Architecture:** `ODTCSiLAInterface` (SiLA SOAP, state machine; stores raw DataEvent payloads) → `ODTCBackend` (method execution, protocol conversion; builds **ODTCProgress** from latest payload + protocol) → `Thermocycler` with `ODTCBackend`. Types in `odtc_model.py`.
 
 **Progress:** One type — **ODTCProgress**. Built from raw DataEvent payload + optional protocol via `ODTCProgress.from_data_event(payload, odtc)`. Provides elapsed_s, temperatures, step/cycle/hold (from protocol when registered), and **estimated_duration_s** / **remaining_duration_s** (we compute these; device does not send them). Use `get_progress_snapshot()`, `get_hold_time()`, `get_current_step_index()`, `get_current_cycle_index()`; callback: `ODTCBackend(..., progress_callback=...)` receives ODTCProgress.
 
@@ -15,22 +15,22 @@ Interface for Inheco ODTC thermocyclers via SiLA (SOAP over HTTP). Asynchronous 
 
 ## Setup
 
-**Preferred: ODTCThermocycler** (owns dimensions and backend):
-
 ```python
 from pylabrobot.resources import Coordinate
-from pylabrobot.thermocycling.inheco import ODTCThermocycler
+from pylabrobot.thermocycling.inheco import ODTCBackend, ODTC_DIMENSIONS
+from pylabrobot.thermocycling.thermocycler import Thermocycler
 
-tc = ODTCThermocycler(
+backend = ODTCBackend(odtc_ip="192.168.1.100", variant=96)  # or 384
+tc = Thermocycler(
     name="odtc",
-    odtc_ip="192.168.1.100",
-    variant=96,  # or 384; or 960000 / 384000
+    size_x=ODTC_DIMENSIONS.x,
+    size_y=ODTC_DIMENSIONS.y,
+    size_z=ODTC_DIMENSIONS.z,
+    backend=backend,
     child_location=Coordinate(0, 0, 0),
 )
 await tc.setup()  # HTTP event receiver + Reset + Initialize → idle
 ```
-
-**Alternative:** Generic `Thermocycler` with `ODTCBackend(odtc_ip=..., variant=...)` for custom dimensions.
 
 **Duration:** Device does not return duration. We set **estimated_duration_s** (PreMethod = 10 min; Method = from protocol or device; fallback = effective lifetime). **remaining_duration_s** = max(0, estimated_duration_s - elapsed_s). Used for `handle.estimated_remaining_time` and progress.
 
@@ -214,11 +214,17 @@ During method execution the device sends **DataEvent** messages (raw payloads). 
 
 ```python
 from pylabrobot.resources import Coordinate
-from pylabrobot.thermocycling.inheco import ODTCThermocycler
+from pylabrobot.thermocycling.inheco import ODTCBackend, ODTC_DIMENSIONS
 from pylabrobot.thermocycling.inheco.odtc_model import protocol_to_odtc_protocol
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.thermocycling.thermocycler import Thermocycler
 
-tc = ODTCThermocycler(name="odtc", odtc_ip="192.168.1.100", variant=96, child_location=Coordinate(0, 0, 0))
+backend = ODTCBackend(odtc_ip="192.168.1.100", variant=96)
+tc = Thermocycler(
+    name="odtc",
+    size_x=ODTC_DIMENSIONS.x, size_y=ODTC_DIMENSIONS.y, size_z=ODTC_DIMENSIONS.z,
+    backend=backend, child_location=Coordinate(0, 0, 0),
+)
 await tc.setup()
 
 # Run modified ODTCProtocol without saving a new template (run_protocol uploads to scratch, runs, no overwrite of stored methods)
