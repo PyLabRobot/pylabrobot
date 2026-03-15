@@ -113,7 +113,6 @@ class ODTCHardwareConstraints:
   """
 
   variant: ODTCVariant
-  variant_name: str
   min_block_temp: float = 4.0
   max_block_temp: float = 99.0
   min_lid_temp: float = 30.0
@@ -128,7 +127,6 @@ class ODTCHardwareConstraints:
 
 ODTC_96_CONSTRAINTS = ODTCHardwareConstraints(
   variant=96,
-  variant_name="ODTC 96",
   max_heating_slope=4.4,
   max_lid_temp=110.0,
   valid_fluid_quantities=(-1, 0, 1, 2),
@@ -136,7 +134,6 @@ ODTC_96_CONSTRAINTS = ODTCHardwareConstraints(
 
 ODTC_384_CONSTRAINTS = ODTCHardwareConstraints(
   variant=384,
-  variant_name="ODTC 384",
   max_heating_slope=5.0,
   max_lid_temp=115.0,
   valid_fluid_quantities=(-1, 0, 1, 2),  # Same as 96-well per XML samples
@@ -634,33 +631,33 @@ class ODTCConfig:
     # Validate fluid_quantity
     if c.valid_fluid_quantities and self.fluid_quantity not in c.valid_fluid_quantities:
       errors.append(
-        f"fluid_quantity={self.fluid_quantity} invalid for {c.variant_name}. "
+        f"fluid_quantity={self.fluid_quantity} invalid for {c.variant}. "
         f"Valid: {c.valid_fluid_quantities}"
       )
 
     # Validate plate_type
     if self.plate_type not in c.valid_plate_types:
       errors.append(
-        f"plate_type={self.plate_type} invalid for {c.variant_name}. Valid: {c.valid_plate_types}"
+        f"plate_type={self.plate_type} invalid for {c.variant}. Valid: {c.valid_plate_types}"
       )
 
     # Validate lid_temperature
     if not c.min_lid_temp <= self.lid_temperature <= c.max_lid_temp:
       errors.append(
         f"lid_temperature={self.lid_temperature}°C outside range "
-        f"[{c.min_lid_temp}, {c.max_lid_temp}] for {c.variant_name}"
+        f"[{c.min_lid_temp}, {c.max_lid_temp}] for {c.variant}"
       )
 
     # Validate default slopes
     if self.default_heating_slope > c.max_heating_slope:
       errors.append(
         f"default_heating_slope={self.default_heating_slope}°C/s exceeds max "
-        f"{c.max_heating_slope}°C/s for {c.variant_name}"
+        f"{c.max_heating_slope}°C/s for {c.variant}"
       )
     if self.default_cooling_slope > c.max_cooling_slope:
       errors.append(
         f"default_cooling_slope={self.default_cooling_slope}°C/s exceeds max "
-        f"{c.max_cooling_slope}°C/s for {c.variant_name}"
+        f"{c.max_cooling_slope}°C/s for {c.variant}"
       )
 
     # Validate step_settings
