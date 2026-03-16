@@ -1,22 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import http.server
 import logging
 import random
 import socket
 import socketserver
+import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from enum import Enum
+from typing import Any, Dict, Optional, Tuple
 
 from pylabrobot.storage.inheco.scila.soap import (
   XSI,
-  _localname,
-  soap_body_payload,
   soap_decode,
   soap_encode,
 )
@@ -66,6 +65,21 @@ SOAP_RESPONSE_DataEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap
 </s:Envelope>"""
 
 
+SOAP_RESPONSE_ErrorEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <ErrorEventResponse xmlns="http://sila.coop">
+      <ErrorEventResult>
+        <returnCode>1</returnCode>
+        <message>Success</message>
+        <duration>PT0.0005967S</duration>
+        <deviceClass>0</deviceClass>
+      </ErrorEventResult>
+    </ErrorEventResponse>
+  </s:Body>
+</s:Envelope>"""
+
+
 def _get_local_ip(machine_ip: str) -> str:
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   try:
@@ -77,6 +91,19 @@ def _get_local_ip(machine_ip: str) -> str:
   finally:
     s.close()
   return local_ip
+
+
+class SiLAState(str, Enum):
+  """SiLA device states per specification."""
+
+  STARTUP = "startup"
+  STANDBY = "standby"
+  INITIALIZING = "initializing"
+  IDLE = "idle"
+  BUSY = "busy"
+  PAUSED = "paused"
+  ERRORHANDLING = "errorHandling"
+  INERROR = "inError"
 
 
 class SiLAError(RuntimeError):
@@ -113,11 +140,10 @@ class InhecoSiLAInterface:
     self._machine_ip = machine_ip
     self._logger = logger or logging.getLogger(__name__)
 
-    # single "in-flight token"
-    self._making_request = asyncio.Lock()
+    self._current_state: SiLAState = SiLAState.STARTUP
 
-    # pending command information
-    self._pending: Optional[InhecoSiLAInterface._SiLACommand] = None
+    # pending commands by request_id (supports multiple in-flight)
+    self._pending_by_id: Dict[int, InhecoSiLAInterface._SiLACommand] = {}
 
     # server plumbing
     self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -219,58 +245,111 @@ class InhecoSiLAInterface:
     self._httpd = None
     self._server_task = None
 
+  def _complete_pending(
+    self,
+    request_id: int,
+    result: Any = None,
+    exception: Optional[BaseException] = None,
+  ) -> None:
+    """Pop pending command by request_id and resolve its future."""
+    pending = self._pending_by_id.pop(request_id, None)
+    if pending is None or pending.fut.done():
+      return
+    if exception is not None:
+      pending.fut.set_exception(exception)
+    else:
+      pending.fut.set_result(result)
+
   async def _on_http(self, req: _HTTPRequest) -> bytes:
-    """
-    Called on the asyncio loop for every incoming HTTP request.
-    If there's a pending command, try to match and resolve it.
-    """
-
-    cmd = self._pending
-
+    """Dispatch incoming device events to handler methods."""
     try:
-      xml_str = req.body.decode("utf-8")
-      payload = soap_body_payload(xml_str)
-      tag_local = _localname(payload.tag)
+      decoded = soap_decode(req.body.decode("utf-8"))
 
-      if cmd is not None and not cmd.fut.done() and tag_local == "ResponseEvent":
-        response_event = soap_decode(xml_str)
-        if response_event["ResponseEvent"].get("requestId") == cmd.request_id:
-          ret = response_event["ResponseEvent"].get("returnValue", {})
-          rc = ret.get("returnCode")
-          if rc != 3:  # 3=Success
-            cmd.fut.set_exception(
-              SiLAError(rc, ret.get("message", "").replace(chr(10), " "), cmd.name, details=ret)
-            )
-          else:
-            cmd.fut.set_result(
-              ET.fromstring(d)
-              if (d := response_event["ResponseEvent"].get("responseData"))
-              else ET.Element("EmptyResponse")
-            )
+      if "ResponseEvent" in decoded:
+        self._on_response_event(decoded["ResponseEvent"])
+        return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
-      if tag_local == "DataEvent":
-        try:
-          raw = next(e.text for e in payload.iter() if _localname(e.tag) == "dataValue")
-          any_data_elem = ET.fromstring(raw).find(".//AnyData")  # type: ignore[arg-type]
-          assert any_data_elem is not None and any_data_elem.text is not None
-          series = ET.fromstring(any_data_elem.text).findall(".//dataSeries")
-          data = {}
-          for s in series:
-            val = s.findall(".//integerValue")[-1].text
-            unit = s.get("unit")
-            data[s.get("nameId")] = f"{val} {unit}" if unit else val
-          print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] [SiLA DataEvent] {data}")
-        except Exception:
-          pass
+      if "StatusEvent" in decoded:
+        self._on_status_event(decoded["StatusEvent"])
+        return SOAP_RESPONSE_StatusEventResponse.encode("utf-8")
+
+      if "DataEvent" in decoded:
+        self._on_data_event(decoded["DataEvent"])
         return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
 
-      if tag_local == "StatusEvent":
-        return SOAP_RESPONSE_StatusEventResponse.encode("utf-8")
+      if "ErrorEvent" in decoded:
+        self._on_error_event(decoded["ErrorEvent"])
+        return SOAP_RESPONSE_ErrorEventResponse.encode("utf-8")
+
+      self._logger.warning("Unknown event type received")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
     except Exception as e:
       self._logger.error(f"Error handling event: {e}")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
+
+  def _on_response_event(self, response_event: dict) -> None:
+    request_id = response_event.get("requestId")
+    if request_id is None:
+      self._logger.warning("ResponseEvent missing requestId")
+      return
+
+    pending = self._pending_by_id.get(request_id)
+    if pending is None:
+      self._logger.warning(f"ResponseEvent for unknown requestId: {request_id}")
+      return
+    if pending.fut.done():
+      self._logger.warning(f"ResponseEvent for already-completed requestId: {request_id}")
+      return
+
+    return_value = response_event.get("returnValue", {})
+    return_code = return_value.get("returnCode")
+
+    if return_code == 3:
+      response_data = response_event.get("responseData", "")
+      if response_data and response_data.strip():
+        try:
+          self._complete_pending(request_id, result=ET.fromstring(response_data))
+        except ET.ParseError as e:
+          self._logger.error(f"Failed to parse ResponseEvent responseData: {e}")
+          self._complete_pending(
+            request_id, exception=RuntimeError(f"Failed to parse response data: {e}")
+          )
+      else:
+        self._complete_pending(request_id, result=None)
+    else:
+      message = return_value.get("message", "")
+      err_msg = message.replace("\n", " ") if message else f"Unknown error (code {return_code})"
+      self._complete_pending(
+        request_id,
+        exception=SiLAError(return_code, err_msg, pending.name),
+      )
+
+  def _on_status_event(self, status_event: dict) -> None:
+    event_description = status_event.get("eventDescription", {})
+    device_state = event_description.get("DeviceState")
+    if device_state:
+      self._update_state_from_status(device_state)
+
+  def _on_data_event(self, data_event: dict) -> None:
+    """Override in subclasses to store/process DataEvents."""
+
+  def _on_error_event(self, error_event: dict) -> None:
+    req_id = error_event.get("requestId")
+    return_value = error_event.get("returnValue", {})
+    return_code = return_value.get("returnCode")
+    message = return_value.get("message", "")
+
+    self._logger.error(f"ErrorEvent for requestId {req_id}: code {return_code}, message: {message}")
+    self._current_state = SiLAState.ERRORHANDLING
+
+    err_msg = message.replace("\n", " ") if message else f"Error (code {return_code})"
+    if req_id is not None:
+      pending = self._pending_by_id.get(req_id)
+      if pending and not pending.fut.done():
+        self._complete_pending(
+          req_id, exception=RuntimeError(f"Command {pending.name} error: '{err_msg}'")
+        )
 
   def _get_return_code_and_message(self, command_name: str, response: Any) -> Tuple[int, str]:
     resp_level = response.get(f"{command_name}Response", {})  # first level
@@ -314,15 +393,8 @@ class InhecoSiLAInterface:
   def _make_request_id(self):
     return random.randint(1, 2**31 - 1)
 
-  async def send_command(
-    self,
-    command: str,
-    **kwargs,
-  ) -> Any:
-    if self._closed:
-      raise RuntimeError("Bridge is closed")
-
-    request_id = self._make_request_id()
+  async def _post_command(self, command: str, request_id: int, **kwargs: Any) -> Tuple[Any, int]:
+    """POST a SOAP command to the device. Returns (decoded_response, return_code)."""
     cmd_xml = soap_encode(
       command,
       {"requestId": request_id, **kwargs},
@@ -330,7 +402,6 @@ class InhecoSiLAInterface:
       extra_method_xmlns={"i": XSI},
     )
 
-    # make POST request to machine
     url = f"http://{self._machine_ip}:8080/"
     req = urllib.request.Request(
       url=url,
@@ -345,29 +416,70 @@ class InhecoSiLAInterface:
       },
     )
 
-    if self._making_request.locked():
-      raise RuntimeError("can't send multiple commands at the same time")
+    def _do_request() -> bytes:
+      with urllib.request.urlopen(req) as resp:
+        return resp.read()  # type: ignore
 
-    async with self._making_request:
-      try:
+    body = await asyncio.to_thread(_do_request)
+    decoded = soap_decode(body.decode("utf-8"))
+    return_code, message = self._get_return_code_and_message(command, decoded)
+    self._handle_return_code(return_code, message, command, request_id)
+    return decoded, return_code
 
-        def _do_request() -> bytes:
-          with urllib.request.urlopen(req) as resp:
-            return resp.read()  # type: ignore
+  def _update_state_from_status(self, state_str: str) -> None:
+    if not state_str:
+      return
+    try:
+      self._current_state = SiLAState(state_str)
+    except ValueError:
+      self._logger.warning(
+        f"Unknown state received: {state_str!r}, keeping current state {self._current_state.value}"
+      )
 
-        body = await asyncio.to_thread(_do_request)
-        decoded = soap_decode(body.decode("utf-8"))
-        return_code, message = self._get_return_code_and_message(command, decoded)
-        self._handle_return_code(return_code, message, command, request_id)
-        if return_code == 1:
-          return decoded
-        elif return_code == 2:
-          fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
-          self._pending = InhecoSiLAInterface._SiLACommand(
-            name=command, request_id=request_id, fut=fut
-          )
-          return await fut
-        else:
-          raise RuntimeError(f"command {command} failed: {return_code} {message}")
-      finally:
-        self._pending = None
+  async def send_command(
+    self,
+    command: str,
+    **kwargs,
+  ) -> Any:
+    if self._closed:
+      raise RuntimeError("Bridge is closed")
+
+    request_id = self._make_request_id()
+    decoded, return_code = await self._post_command(command, request_id, **kwargs)
+    if return_code == 1:
+      if command == "GetStatus" and isinstance(decoded, dict):
+        state = decoded.get("GetStatusResponse", {}).get("state")
+        if state:
+          self._update_state_from_status(state)
+      return decoded
+    if return_code == 2:
+      fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+      self._pending_by_id[request_id] = InhecoSiLAInterface._SiLACommand(
+        name=command, request_id=request_id, fut=fut
+      )
+      return await fut
+    raise RuntimeError(f"command {command} failed: {return_code}")
+
+  async def start_command(
+    self,
+    command: str,
+    **kwargs,
+  ) -> Tuple[asyncio.Future[Any], int, float]:
+    """Start an async command and return (future, request_id, started_at) without awaiting."""
+    if self._closed:
+      raise RuntimeError("Bridge is closed")
+
+    request_id = self._make_request_id()
+    decoded, return_code = await self._post_command(command, request_id, **kwargs)
+    if return_code == 2:
+      fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+      started_at = time.time()
+      self._pending_by_id[request_id] = InhecoSiLAInterface._SiLACommand(
+        name=command, request_id=request_id, fut=fut
+      )
+      return fut, request_id, started_at
+    if return_code == 1:
+      raise ValueError(
+        "start_command is for async commands only; device returned sync response (return_code 1)"
+      )
+    raise RuntimeError(f"command {command} failed: {return_code}")

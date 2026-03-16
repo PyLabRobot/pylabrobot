@@ -7,7 +7,7 @@ import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
@@ -38,13 +38,13 @@ from .odtc_model import (
   validate_volume_fluid_quantity,
   volume_to_fluid_quantity,
 )
+from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
+
 from .odtc_sila_interface import (
   DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS,
   DEFAULT_LIFETIME_OF_EXECUTION,
   POLLING_START_BUFFER,
-  FirstEventType,
   ODTCSiLAInterface,
-  SiLAState,
 )
 
 # Buffer (seconds) added to device remaining duration (ExecuteMethod) or first_event_timeout (status commands) for timeout cap (fail faster than full lifetime).
@@ -342,9 +342,7 @@ class ODTCBackend(ThermocyclerBackend):
     variant: int = 96,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
-    poll_interval: float = 5.0,
     lifetime_of_execution: Optional[float] = None,
-    on_response_event_missing: Literal["warn_and_continue", "error"] = "warn_and_continue",
     progress_log_interval: Optional[float] = 150.0,
     progress_callback: Optional[Callable[..., None]] = None,
     data_event_log_path: Optional[str] = None,
@@ -358,9 +356,7 @@ class ODTCBackend(ThermocyclerBackend):
         are also accepted and normalized to 96/384.
       client_ip: IP address of this client (auto-detected if None).
       logger: Logger instance (creates one if None).
-      poll_interval: Seconds between GetStatus calls in the async completion polling fallback (SiLA2 subscribe_by_polling style). Default 5.0.
       lifetime_of_execution: Max seconds to wait for async command completion (SiLA2 deadline). If None, uses 3 hours. Protocol execution is always bounded.
-      on_response_event_missing: When completion is detected via polling but ResponseEvent was not received: "warn_and_continue" (resolve with None, log warning) or "error" (set exception). Default "warn_and_continue".
       progress_log_interval: Seconds between progress log lines during wait. None or 0 to disable. Default 150.0 (2.5 min); suitable for protocols from minutes to 1–2+ hours.
       progress_callback: Optional callback(ODTCProgress) called each progress_log_interval during wait.
       data_event_log_path: Optional path to append full DataEvent payloads (one JSON line per event) for debugging and API discovery.
@@ -377,9 +373,7 @@ class ODTCBackend(ThermocyclerBackend):
       machine_ip=odtc_ip,
       client_ip=client_ip,
       logger=logger,
-      poll_interval=poll_interval,
       lifetime_of_execution=lifetime_of_execution,
-      on_response_event_missing=on_response_event_missing,
     )
     self._sila.data_event_log_path = data_event_log_path
     self._first_event_timeout_seconds = first_event_timeout_seconds
@@ -557,11 +551,9 @@ class ODTCBackend(ThermocyclerBackend):
       return None
     fut, request_id, started_at = await self._sila.start_command(command_name, **send_kwargs)
     effective = self._get_effective_lifetime()
-    event_type = self._sila.get_first_event_type_for_command(command_name)
-
-    if event_type == FirstEventType.DATA_EVENT:
-      first_payload = await self._sila.wait_for_first_event(
-        request_id, FirstEventType.DATA_EVENT, self._first_event_timeout_seconds
+    if command_name == "ExecuteMethod":
+      first_payload = await self._sila.wait_for_first_data_event(
+        request_id, self._first_event_timeout_seconds
       )
       progress = ODTCProgress.from_data_event(first_payload, None)
       if estimated_duration_s is not None and estimated_duration_s > 0:
@@ -570,7 +562,6 @@ class ODTCBackend(ThermocyclerBackend):
       else:
         eta = effective
         lifetime = effective
-      self._sila.set_estimated_remaining_time(request_id, eta)
       return ODTCExecution(
         request_id=request_id,
         command_name=command_name,
@@ -587,7 +578,6 @@ class ODTCBackend(ThermocyclerBackend):
       self._first_event_timeout_seconds + LIFETIME_BUFFER_SECONDS,
       effective,
     )
-    self._sila.set_estimated_remaining_time(request_id, eta)
     return ODTCExecution(
       request_id=request_id,
       command_name=command_name,
@@ -634,11 +624,11 @@ class ODTCBackend(ThermocyclerBackend):
       params: dict = {"lockId": lock_id, "PMSId": "PyLabRobot"}
       if kwargs.get("lock_timeout") is not None:
         params["lockTimeout"] = kwargs["lock_timeout"]
-      return await self._run_async_command("LockDevice", wait, lock_id=lock_id, **params)
+      return await self._run_async_command("LockDevice", wait, **params)
     if command == ODTCCommand.UNLOCK_DEVICE:
       if self._sila._lock_id is None:
         raise RuntimeError("Device is not locked")
-      return await self._run_async_command("UnlockDevice", wait, lock_id=self._sila._lock_id)
+      return await self._run_async_command("UnlockDevice", wait)
     if command == ODTCCommand.EXECUTE_METHOD:
       method_name = kwargs.get("method_name")
       if not method_name:

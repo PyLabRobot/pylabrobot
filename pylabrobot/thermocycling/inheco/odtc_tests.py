@@ -19,12 +19,10 @@ from pylabrobot.thermocycling.inheco.odtc_model import (
   odtc_protocol_to_protocol,
   parse_method_set,
 )
+from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
 from pylabrobot.thermocycling.inheco.odtc_sila_interface import (
   FirstEventTimeout,
-  FirstEventType,
   ODTCSiLAInterface,
-  SiLAState,
-  SiLATimeoutError,
 )
 
 
@@ -544,23 +542,6 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     # ExecuteMethod executing - ReadActualTemperature can run in parallel (P)
     self.assertTrue(self.interface._check_parallelism("ReadActualTemperature"))
 
-  def test_validate_lock_id(self):
-    """Test lockId validation."""
-    # Device not locked - any lockId (including None) is fine
-    self.interface._lock_id = None
-    self.interface._validate_lock_id(None)  # Should not raise
-    self.interface._validate_lock_id("some_id")  # Should not raise
-
-    # Device locked - must provide matching lockId
-    self.interface._lock_id = "locked_id"
-    self.interface._validate_lock_id("locked_id")  # Should not raise
-    with self.assertRaises(RuntimeError) as cm:
-      self.interface._validate_lock_id("wrong_id")
-    # Check that error mentions lockId mismatch
-    error_msg = str(cm.exception)
-    self.assertIn("locked", error_msg.lower())
-    self.assertIn("5", error_msg)  # Return code 5
-
   def test_update_state_from_status(self):
     """Test state updates from status strings - exact matching only."""
     # Test lowercase enum values (exact match required)
@@ -616,125 +597,6 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(RuntimeError):
       self.interface._handle_return_code(1000, "Device error", "ExecuteMethod", 123)
     self.assertEqual(self.interface._current_state, SiLAState.INERROR)
-
-  def test_get_terminal_state(self):
-    """Test terminal state map for polling fallback."""
-    self.assertEqual(self.interface._get_terminal_state("Reset"), "standby")
-    self.assertEqual(self.interface._get_terminal_state("Initialize"), "idle")
-    self.assertEqual(self.interface._get_terminal_state("LockDevice"), "standby")
-    self.assertEqual(self.interface._get_terminal_state("UnlockDevice"), "standby")
-    self.assertEqual(self.interface._get_terminal_state("OpenDoor"), "idle")
-    self.assertEqual(self.interface._get_terminal_state("ExecuteMethod"), "idle")
-
-
-# Minimal SOAP responses for dual-track tests (return_code 2 = async accepted; no duration = poll immediately).
-_OPEN_DOOR_ASYNC_RESPONSE = b"""<?xml version="1.0"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body>
-    <OpenDoorResponse xmlns="http://sila.coop">
-      <OpenDoorResult>
-        <returnCode>2</returnCode>
-        <message>Accepted</message>
-      </OpenDoorResult>
-    </OpenDoorResponse>
-  </s:Body>
-</s:Envelope>"""
-
-_GET_STATUS_IDLE_RESPONSE = b"""<?xml version="1.0"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body>
-    <GetStatusResponse xmlns="http://sila.coop">
-      <state>idle</state>
-      <GetStatusResult>
-        <returnCode>1</returnCode>
-        <message>Success</message>
-      </GetStatusResult>
-    </GetStatusResponse>
-  </s:Body>
-</s:Envelope>"""
-
-_GET_STATUS_BUSY_RESPONSE = b"""<?xml version="1.0"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body>
-    <GetStatusResponse xmlns="http://sila.coop">
-      <state>busy</state>
-      <GetStatusResult>
-        <returnCode>1</returnCode>
-        <message>Success</message>
-      </GetStatusResult>
-    </GetStatusResponse>
-  </s:Body>
-</s:Envelope>"""
-
-
-class TestODTCSiLADualTrack(unittest.IsolatedAsyncioTestCase):
-  """Tests for dual-track async completion (ResponseEvent + polling fallback)."""
-
-  async def test_polling_fallback_completes_when_no_response_event(self):
-    """When ResponseEvent never arrives, polling sees idle and completes Future (warn_and_continue)."""
-    call_count = 0
-
-    def mock_urlopen(req):
-      nonlocal call_count
-      call_count += 1
-      body = _OPEN_DOOR_ASYNC_RESPONSE if call_count == 1 else _GET_STATUS_IDLE_RESPONSE
-      resp = MagicMock()
-      resp.read.return_value = body
-      cm = MagicMock()
-      cm.__enter__.return_value = resp
-      cm.__exit__.return_value = None
-      return cm
-
-    with (
-      patch("urllib.request.urlopen", side_effect=mock_urlopen),
-      patch("pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.05),
-    ):
-      # Short POLLING_START_BUFFER in test so we don't wait 10s; lifetime still allows polling to run.
-      interface = ODTCSiLAInterface(
-        machine_ip="192.168.1.100",
-        client_ip="127.0.0.1",
-        poll_interval=0.02,
-        lifetime_of_execution=2.0,
-        on_response_event_missing="warn_and_continue",
-      )
-      interface._current_state = SiLAState.IDLE
-      # Do not call setup() so we avoid binding the HTTP server (sandbox/CI friendly).
-      result = await interface.send_command("OpenDoor")
-      self.assertIsNone(result)
-      self.assertGreaterEqual(call_count, 2)
-
-  async def test_lifetime_of_execution_exceeded_raises(self):
-    """When lifetime_of_execution is exceeded before terminal state, Future gets timeout exception."""
-    call_count = 0
-
-    def mock_urlopen(req):
-      nonlocal call_count
-      call_count += 1
-      body = _OPEN_DOOR_ASYNC_RESPONSE if call_count == 1 else _GET_STATUS_BUSY_RESPONSE
-      resp = MagicMock()
-      resp.read.return_value = body
-      cm = MagicMock()
-      cm.__enter__.return_value = resp
-      cm.__exit__.return_value = None
-      return cm
-
-    with (
-      patch("urllib.request.urlopen", side_effect=mock_urlopen),
-      patch("pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.02),
-    ):
-      # Short POLLING_START_BUFFER so timeout (0.5s) is hit quickly instead of waiting 10s.
-      interface = ODTCSiLAInterface(
-        machine_ip="192.168.1.100",
-        client_ip="127.0.0.1",
-        poll_interval=0.05,
-        lifetime_of_execution=0.2,
-        on_response_event_missing="warn_and_continue",
-      )
-      interface._current_state = SiLAState.IDLE
-      # Do not call setup() so we avoid binding the HTTP server (sandbox/CI friendly).
-      with self.assertRaises(SiLATimeoutError) as cm:
-        await interface.send_command("OpenDoor")
-      self.assertIn("lifetime_of_execution", str(cm.exception))
 
 
 class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
@@ -892,18 +754,15 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(sensor_values.lid, 25.75, places=2)  # 2575 * 0.01
 
   async def test_execute_method(self):
-    """Test execute_method with wait=True; event-driven: wait_for_first_event then handle with eta from DataEvent."""
+    """Test execute_method with wait=True; event-driven: wait_for_first_data_event then handle with eta from DataEvent."""
     self.backend.list_methods = AsyncMock(return_value=([], []))  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.get_first_event_type_for_command = MagicMock(  # type: ignore[method-assign]
-      return_value=FirstEventType.DATA_EVENT
-    )
     self.backend._sila.start_command = AsyncMock(  # type: ignore[method-assign]
       return_value=(fut, 12345, 0.0)
     )
-    self.backend._sila.wait_for_first_event = AsyncMock(  # type: ignore[method-assign]
+    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       return_value=_minimal_data_event_payload(remaining_s=300.0)
     )
     result = await self.backend.execute_method("MyMethod", wait=True)
@@ -928,7 +787,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     await self.backend.lock_device("my_lock_id")
     self.backend._sila.send_command.assert_called_once()
     call_kwargs = self.backend._sila.send_command.call_args[1]
-    self.assertEqual(call_kwargs["lock_id"], "my_lock_id")
+    self.assertEqual(call_kwargs["lockId"], "my_lock_id")
     self.assertEqual(call_kwargs["PMSId"], "PyLabRobot")
 
   async def test_unlock_device(self):
@@ -936,7 +795,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend._sila._lock_id = "my_lock_id"
     self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.unlock_device()
-    self.backend._sila.send_command.assert_called_once_with("UnlockDevice", lock_id="my_lock_id")
+    self.backend._sila.send_command.assert_called_once_with("UnlockDevice")
 
   async def test_unlock_device_not_locked(self):
     """Test unlock_device when device is not locked."""
@@ -1052,11 +911,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.get_first_event_type_for_command = MagicMock(  # type: ignore[method-assign]
-      return_value=FirstEventType.DATA_EVENT
-    )
     self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, 0.0))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_event = AsyncMock(  # type: ignore[method-assign]
+    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       return_value=_minimal_data_event_payload(remaining_s=300.0)
     )
     execution = await self.backend.execute_method("PCR_30cycles", wait=False)
@@ -1084,11 +940,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.get_first_event_type_for_command = MagicMock(  # type: ignore[method-assign]
-      return_value=FirstEventType.DATA_EVENT
-    )
     self.backend._sila.start_command = AsyncMock(return_value=(fut, 99999, 0.0))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_event = AsyncMock(  # type: ignore[method-assign]
+    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       return_value=_minimal_data_event_payload(remaining_s=300.0)
     )
     execution = await self.backend.execute_method("Pre37", wait=False)
@@ -1107,11 +960,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.get_first_event_type_for_command = MagicMock(  # type: ignore[method-assign]
-      return_value=FirstEventType.DATA_EVENT
-    )
     self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, 0.0))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_event = AsyncMock(  # type: ignore[method-assign]
+    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       side_effect=FirstEventTimeout("No DataEvent received for request_id 12345 within 60.0s")
     )
     with self.assertRaises(FirstEventTimeout) as cm:
