@@ -81,6 +81,36 @@ class TestContainer(unittest.TestCase):
     self.assertEqual(c.compute_volume_from_height(5), 4995)
     self.assertEqual(c.compute_height_from_volume(50), 5)
 
+  def test_height_volume_data_with_explicit_functions_serialize_deserialize_roundtrip(self):
+    def compute_volume_from_height(height):
+      # Distinct behavior from height_volume_data interpolation to ensure explicit function is used.
+      return height * 999
+
+    def compute_height_from_volume(volume):
+      return volume / 999
+
+    c = Container(
+      name="c",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      height_volume_data={0: 0, 10: 100},
+      compute_volume_from_height=compute_volume_from_height,
+      compute_height_from_volume=compute_height_from_volume,
+    )
+
+    serialized = c.serialize()
+    # Explicit functions should still be serialized when height_volume_data is present.
+    self.assertIsNotNone(serialized["compute_volume_from_height"])
+    self.assertIsNotNone(serialized["compute_height_from_volume"])
+    # height_volume_data should be preserved as well.
+    self.assertEqual(serialized["height_volume_data"], {0: 0, 10: 100})
+
+    d = Container.deserialize(serialized, allow_marshal=True)
+    # After roundtrip, explicit functions should still be used, not the data-derived ones.
+    self.assertEqual(d.compute_volume_from_height(5), 4995)
+    self.assertEqual(d.compute_height_from_volume(4995), 5)
+
   def test_height_volume_data_serialize_deserialize_roundtrip(self):
     c = Container(
       name="c",
