@@ -459,14 +459,6 @@ class ODTCBackend(ThermocyclerBackend):
   async def _setup_full_path(self, simulation_mode: bool) -> None:
     """Run the full connection path: event receiver, Reset, Initialize, verify idle."""
     await self._sila.setup()
-
-    # Wait for device to leave startup (boot takes a few seconds after power cycle)
-    for _ in range(30):
-      status = await self.get_status()
-      if status != SiLAState.STARTUP.value:
-        break
-      await asyncio.sleep(1)
-
     await self.reset(simulation_mode=simulation_mode)
 
     status = await self.get_status()

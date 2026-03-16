@@ -671,26 +671,22 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(self.backend.simulation_mode)
 
   async def test_setup_retries_with_backoff(self):
-    """Test setup(full=True, max_attempts=3) retries on failure with backoff."""
+    """Test setup retries when reset fails transiently."""
     self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
-    self.backend.reset = AsyncMock()  # type: ignore[method-assign]
-    call_count = 0
+    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
+    reset_count = 0
 
-    async def mock_get_status():
-      nonlocal call_count
-      call_count += 1
-      if call_count < 3:
+    async def mock_reset(**kwargs):
+      nonlocal reset_count
+      reset_count += 1
+      if reset_count < 3:
         raise RuntimeError("transient")
-      return "idle"
 
-    self.backend.get_status = AsyncMock(side_effect=mock_get_status)  # type: ignore[method-assign]
+    self.backend.reset = AsyncMock(side_effect=mock_reset)  # type: ignore[method-assign]
     with patch("asyncio.sleep", new_callable=AsyncMock):
       await self.backend.setup(full=True, max_attempts=3)
-    # Calls: attempt 1 startup poll (fail), attempt 2 startup poll (fail),
-    # attempt 3 startup poll (ok) + post-reset status (ok) = 4
-    self.assertEqual(call_count, 4)
+    self.assertEqual(reset_count, 3)
     self.assertEqual(self.backend._sila.setup.call_count, 3)
-    self.assertEqual(self.backend.reset.call_count, 1)
 
   async def test_setup_raises_when_all_attempts_fail(self):
     """Test setup(full=True, max_attempts=2) raises when all attempts fail."""

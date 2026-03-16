@@ -215,12 +215,10 @@ class InhecoSiLAInterface:
         fut = asyncio.run_coroutine_threadsafe(outer._on_http(req), outer._loop)
         try:
           resp_body = fut.result()
-          status = 200
-        except Exception as e:
-          resp_body = f"Internal Server Error: {type(e).__name__}: {e}\n".encode()
-          status = 500
+        except Exception:
+          resp_body = SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
-        self.send_response(status)
+        self.send_response(200)
         self.send_header("Content-Type", "text/xml; charset=utf-8")
         self.send_header("Content-Length", str(len(resp_body)))
         self.end_headers()

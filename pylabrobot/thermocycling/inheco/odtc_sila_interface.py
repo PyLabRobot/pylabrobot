@@ -166,13 +166,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     "PrepareForInput": {SiLAState.IDLE, SiLAState.BUSY},
     "PrepareForOutput": {SiLAState.IDLE, SiLAState.BUSY},
     "ReadActualTemperature": {SiLAState.IDLE, SiLAState.BUSY},
-    "Reset": {
-      SiLAState.STANDBY,
-      SiLAState.IDLE,
-      SiLAState.BUSY,
-      SiLAState.ERRORHANDLING,
-      SiLAState.INERROR,
-    },
+    "Reset": set(SiLAState),
     "SetConfiguration": {SiLAState.STANDBY},
     "SetParameters": {SiLAState.IDLE, SiLAState.BUSY},
     "StopMethod": {SiLAState.IDLE, SiLAState.BUSY},
@@ -369,7 +363,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       self._check_state_allowability(command)
       return await super().send_command(command, **kwargs)
     fut, _, _ = await self.start_command(command, **kwargs)
-    timeout = self._lifetime_of_execution or DEFAULT_LIFETIME_OF_EXECUTION
+    timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
+    if command == "ExecuteMethod":
+      timeout = self._lifetime_of_execution or DEFAULT_LIFETIME_OF_EXECUTION
     try:
       return await asyncio.wait_for(fut, timeout=timeout)
     except asyncio.TimeoutError:
