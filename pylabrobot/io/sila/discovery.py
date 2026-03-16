@@ -92,7 +92,7 @@ def _interface_name_for_ip_sync(ip: str) -> Optional[str]:
           parts = line.split()
           if len(parts) >= 2:
             return parts[1].rstrip(":")
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
       pass
   else:
     # macOS/BSD: parse ifconfig
@@ -109,7 +109,7 @@ def _interface_name_for_ip_sync(ip: str) -> Optional[str]:
           current_iface = line.split(":")[0]
         elif ip_pattern.search(line) and current_iface is not None:
           return current_iface
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
       pass
 
   return None
@@ -258,15 +258,15 @@ async def _arp_scan_bsd(interface: str) -> dict[str, str]:
       stdout=asyncio.subprocess.PIPE,
       stderr=asyncio.subprocess.DEVNULL,
     )
-    stdout, _ = await proc.communicate()
-  except FileNotFoundError:
+    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+  except (FileNotFoundError, asyncio.TimeoutError):
     return {}
 
   results: dict[str, str] = {}
   for line in stdout.decode(errors="replace").splitlines():
     if "incomplete" in line:
       continue
-    if f"on {iface_name} " not in line:
+    if f"on {iface_name} " not in line and not line.endswith(f"on {iface_name}"):
       continue
     m = re.search(r"\((\d+\.\d+\.\d+\.\d+)\)", line)
     if not m:
@@ -347,8 +347,8 @@ async def _arp_scan_windows(interface: str) -> dict[str, str]:
       stdout=asyncio.subprocess.PIPE,
       stderr=asyncio.subprocess.DEVNULL,
     )
-    stdout, _ = await proc.communicate()
-  except FileNotFoundError:
+    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+  except (FileNotFoundError, asyncio.TimeoutError):
     return {}
 
   results: dict[str, str] = {}
@@ -490,6 +490,9 @@ async def _discover_sila1(
     logger.debug("no interface provided for SiLA 1 discovery, skipping")
     return []
 
+  loop = asyncio.get_running_loop()
+  deadline = loop.time() + timeout
+
   # Run host discovery methods in parallel.
   # Cap NetBIOS at 3s — any device that responds will do so within a second or two.
   netbios_task = asyncio.ensure_future(_netbios_scan(interface, timeout=min(timeout, 3.0)))
@@ -508,9 +511,10 @@ async def _discover_sila1(
   if not hosts:
     return []
 
+  remaining = max(0.01, deadline - loop.time())
   devices: list[SiLADevice] = []
   coros = [
-    _get_device_identification(ip, port, interface=interface, timeout=timeout) for ip in hosts
+    _get_device_identification(ip, port, interface=interface, timeout=remaining) for ip in hosts
   ]
   results = await asyncio.gather(*coros, return_exceptions=True)
   for r in results:
@@ -613,6 +617,8 @@ async def discover_iter(
   finally:
     for t in pending:
       t.cancel()
+    if pending:
+      await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def discover(
