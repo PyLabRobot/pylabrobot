@@ -70,20 +70,6 @@ def generate_odtc_timestamp() -> str:
   return datetime.now().isoformat(timespec="microseconds")
 
 
-def resolve_protocol_name(name: Optional[str]) -> str:
-  """Resolve protocol name, using scratch name if not provided.
-
-  Args:
-    name: Protocol name (may be None or empty string).
-
-  Returns:
-    Resolved name. If name is None or empty, returns scratch name.
-  """
-  if not name:  # None or empty string
-    return SCRATCH_PROTOCOL_NAME
-  return name
-
-
 # =============================================================================
 # Hardware Constraints
 # =============================================================================
@@ -112,7 +98,6 @@ class ODTCHardwareConstraints:
   Note: Actual achievable rates may vary based on fluid quantity and target temperature.
   """
 
-  variant: ODTCVariant
   min_block_temp: float = 4.0
   max_block_temp: float = 99.0
   min_lid_temp: float = 30.0
@@ -125,42 +110,14 @@ class ODTCHardwareConstraints:
   max_steps_per_method: int = 100
 
 
-ODTC_96_CONSTRAINTS = ODTCHardwareConstraints(
-  variant=96,
-  max_heating_slope=4.4,
-  max_lid_temp=110.0,
-  valid_fluid_quantities=(-1, 0, 1, 2),
-)
-
-ODTC_384_CONSTRAINTS = ODTCHardwareConstraints(
-  variant=384,
-  max_heating_slope=5.0,
-  max_lid_temp=115.0,
-  valid_fluid_quantities=(-1, 0, 1, 2),  # Same as 96-well per XML samples
-  valid_plate_types=(0, 2),  # Only 0 observed in XML samples
-)
-
-_CONSTRAINTS_MAP: Dict[ODTCVariant, ODTCHardwareConstraints] = {
-  96: ODTC_96_CONSTRAINTS,
-  384: ODTC_384_CONSTRAINTS,
-}
-
-
 def get_constraints(variant: ODTCVariant) -> ODTCHardwareConstraints:
-  """Get hardware constraints for a variant.
-
-  Args:
-    variant: 96 or 384.
-
-  Returns:
-    ODTCHardwareConstraints for the specified variant.
-
-  Raises:
-    ValueError: If variant is unknown.
-  """
-  if variant not in _CONSTRAINTS_MAP:
-    raise ValueError(f"Unknown variant {variant}. Valid: {list(_CONSTRAINTS_MAP.keys())}")
-  return _CONSTRAINTS_MAP[variant]
+  if variant == 96:
+    return ODTCHardwareConstraints(max_heating_slope=4.4, max_lid_temp=110.0)
+  if variant == 384:
+    return ODTCHardwareConstraints(
+      max_heating_slope=5.0, max_lid_temp=115.0, valid_plate_types=(0, 2)
+    )
+  raise ValueError(f"Unknown variant {variant}. Valid: [96, 384]")
 
 
 def normalize_variant(variant: int) -> ODTCVariant:
@@ -631,33 +588,33 @@ class ODTCConfig:
     # Validate fluid_quantity
     if c.valid_fluid_quantities and self.fluid_quantity not in c.valid_fluid_quantities:
       errors.append(
-        f"fluid_quantity={self.fluid_quantity} invalid for {c.variant}. "
+        f"fluid_quantity={self.fluid_quantity} invalid for {self.variant}. "
         f"Valid: {c.valid_fluid_quantities}"
       )
 
     # Validate plate_type
     if self.plate_type not in c.valid_plate_types:
       errors.append(
-        f"plate_type={self.plate_type} invalid for {c.variant}. Valid: {c.valid_plate_types}"
+        f"plate_type={self.plate_type} invalid for {self.variant}. Valid: {c.valid_plate_types}"
       )
 
     # Validate lid_temperature
     if not c.min_lid_temp <= self.lid_temperature <= c.max_lid_temp:
       errors.append(
         f"lid_temperature={self.lid_temperature}°C outside range "
-        f"[{c.min_lid_temp}, {c.max_lid_temp}] for {c.variant}"
+        f"[{c.min_lid_temp}, {c.max_lid_temp}] for {self.variant}"
       )
 
     # Validate default slopes
     if self.default_heating_slope > c.max_heating_slope:
       errors.append(
         f"default_heating_slope={self.default_heating_slope}°C/s exceeds max "
-        f"{c.max_heating_slope}°C/s for {c.variant}"
+        f"{c.max_heating_slope}°C/s for {self.variant}"
       )
     if self.default_cooling_slope > c.max_cooling_slope:
       errors.append(
         f"default_cooling_slope={self.default_cooling_slope}°C/s exceeds max "
-        f"{c.max_cooling_slope}°C/s for {c.variant}"
+        f"{c.max_cooling_slope}°C/s for {self.variant}"
       )
 
     # Validate step_settings
@@ -716,7 +673,7 @@ class ODTCProtocol(Protocol):
   """
 
   kind: Literal["method", "premethod"] = "method"
-  name: str = ""
+  name: str = SCRATCH_PROTOCOL_NAME
   creator: Optional[str] = None
   description: Optional[str] = None
   datetime: Optional[str] = None
@@ -846,8 +803,7 @@ def protocol_to_odtc_protocol(
     else config.lid_temperature
   )
 
-  # Resolve method name (use scratch name if not provided)
-  resolved_name = resolve_protocol_name(config.name)
+  resolved_name = config.name
 
   # Generate timestamp if not already set
   resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()

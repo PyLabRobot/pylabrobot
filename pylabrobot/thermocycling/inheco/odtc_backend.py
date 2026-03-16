@@ -34,7 +34,6 @@ from .odtc_model import (
   parse_method_set_file,
   parse_sensor_values,
   protocol_to_odtc_protocol,
-  resolve_protocol_name,
   validate_volume_fluid_quantity,
   volume_to_fluid_quantity,
 )
@@ -601,8 +600,8 @@ class ODTCBackend(ThermocyclerBackend):
         protocol_to_register = resolved
     elif protocol is not None:
       config = self.get_default_config()
-      odtc = protocol_to_odtc_protocol(protocol, config=config)
-      estimated_duration_s = estimate_odtc_protocol_duration_seconds(odtc)
+      odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
+      estimated_duration_s = estimate_odtc_protocol_duration_seconds(odtc_protocol)
       protocol_to_register = protocol
     else:
       fetched = await self.get_protocol(method_name)
@@ -991,7 +990,7 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       ODTCExecution if execute=True and wait=False; None otherwise.
     """
-    resolved_name = resolve_protocol_name(odtc.name)
+    resolved_name = odtc.name
     is_scratch = not odtc.name or odtc.name == ""
     resolved_datetime = odtc.datetime or generate_odtc_timestamp()
 
@@ -1017,7 +1016,7 @@ class ODTCBackend(ThermocyclerBackend):
     )
 
     if execute:
-      handle = await self.execute_method(resolved_name, wait=wait)
+      handle = await self.execute_method(odtc.name, wait=wait)
       protocol_view = odtc_protocol_to_protocol(odtc_copy)[0]
       self._protocol_by_request_id[handle.request_id] = protocol_view
       return handle
@@ -1056,7 +1055,9 @@ class ODTCBackend(ThermocyclerBackend):
       ValueError: If block_max_volume > 100 µL.
     """
     if isinstance(protocol, ODTCProtocol):
-      odtc = replace(protocol, name=name or protocol.name) if name is not None else protocol
+      odtc_protocol = (
+        replace(protocol, name=name or protocol.name) if name is not None else protocol
+      )
     else:
       if config is None:
         if block_max_volume is not None and block_max_volume > 0 and block_max_volume <= 100:
@@ -1070,16 +1071,16 @@ class ODTCBackend(ThermocyclerBackend):
         )
       if name is not None:
         config = replace(config, name=name)
-      odtc = protocol_to_odtc_protocol(protocol, config=config)
+      odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
 
     await self._upload_odtc_protocol(
-      odtc,
+      odtc_protocol,
       allow_overwrite=allow_overwrite,
       execute=False,
       debug_xml=debug_xml,
       xml_output_path=xml_output_path,
     )
-    return resolve_protocol_name(odtc.name)
+    return odtc_protocol.name
 
   async def run_stored_protocol(self, name: str, wait: bool = False, **kwargs) -> ODTCExecution:
     """Execute a stored protocol by name (single SiLA ExecuteMethod call).
@@ -1270,25 +1271,23 @@ class ODTCBackend(ThermocyclerBackend):
       constraints = self.get_constraints()
       target_lid_temp = constraints.max_lid_temp
 
-    resolved_name = resolve_protocol_name(None)
-    odtc = ODTCProtocol(
+    protocol = ODTCProtocol(
       stages=[],
       kind="premethod",
-      name=resolved_name,
       target_block_temperature=block_temp,
       target_lid_temperature=target_lid_temp,
       datetime=generate_odtc_timestamp(),
     )
     await self._upload_odtc_protocol(
-      odtc,
+      protocol,
       allow_overwrite=True,
       debug_xml=debug_xml,
       xml_output_path=xml_output_path,
     )
-    handle = await self.execute_method(resolved_name, wait=wait)
+    handle = await self.execute_method(protocol.name, wait=wait)
     # Register ODTCProtocol so progress shows correct target_block_temperature
     # (device DataEvent often reports current setpoint during premethod ramp, not final target).
-    self._protocol_by_request_id[handle.request_id] = odtc
+    self._protocol_by_request_id[handle.request_id] = protocol
     return handle
 
   async def set_lid_temperature(self, temperature: List[float]) -> None:
@@ -1344,8 +1343,8 @@ class ODTCBackend(ThermocyclerBackend):
       wait_for_profile_completion() to block until done.
     """
     if isinstance(protocol, ODTCProtocol):
-      odtc = protocol
-      if odtc.kind != "method":
+      odtc_protocol = protocol
+      if odtc_protocol.kind != "method":
         raise ValueError("run_protocol requires a method (ODTCProtocol with kind='method')")
     else:
       config = kwargs.pop("config", None)
@@ -1364,12 +1363,12 @@ class ODTCBackend(ThermocyclerBackend):
           validate_volume_fluid_quantity(
             block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
           )
-      odtc = protocol_to_odtc_protocol(protocol, config=config)
+      odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
 
-    await self._upload_odtc_protocol(odtc, allow_overwrite=True, execute=False)
-    resolved_name = resolve_protocol_name(odtc.name)
+    await self._upload_odtc_protocol(odtc_protocol, allow_overwrite=True, execute=False)
+    resolved_name = odtc_protocol.name
     handle = await self.execute_method(resolved_name, wait=False)
-    protocol_view = odtc_protocol_to_protocol(odtc)[0]
+    protocol_view = odtc_protocol_to_protocol(odtc_protocol)[0]
     self._protocol_by_request_id[handle.request_id] = protocol_view
     return handle
 
@@ -1534,8 +1533,8 @@ class ODTCBackend(ThermocyclerBackend):
     events_dict = await self.get_data_events(request_id)
     events = events_dict.get(request_id, [])
     payload = events[-1] if events else None
-    odtc = self._stored_to_odtc_protocol(stored)
-    return ODTCProgress.from_data_event(payload, odtc=odtc)
+    protocol = self._stored_to_odtc_protocol(stored)
+    return ODTCProgress.from_data_event(payload, odtc=protocol)
 
   def _request_id_for_get_progress(self) -> Optional[int]:
     """Request ID of current execution for get_* methods; None if none or done."""
