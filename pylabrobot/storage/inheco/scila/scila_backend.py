@@ -46,9 +46,11 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:
-    event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"
     await self._sila_interface.send_command(
-      command="Reset", deviceId="MyController", eventReceiverURI=event_uri, simulationMode=False
+      command="Reset",
+      deviceId="MyController",
+      eventReceiverURI=self._sila_interface.event_receiver_uri,
+      simulationMode=False,
     )
 
     await self._sila_interface.send_command("Initialize")

@@ -393,6 +393,10 @@ class InhecoSiLAInterface:
   def _make_request_id(self):
     return random.randint(1, 2**31 - 1)
 
+  @property
+  def event_receiver_uri(self) -> str:
+    return f"http://{self._client_ip}:{self.bound_port}/"
+
   async def _post_command(self, command: str, request_id: int, **kwargs: Any) -> Tuple[Any, int]:
     """POST a SOAP command to the device. Returns (decoded_response, return_code)."""
     cmd_xml = soap_encode(

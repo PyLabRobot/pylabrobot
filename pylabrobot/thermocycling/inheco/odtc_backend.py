@@ -52,8 +52,6 @@ LIFETIME_BUFFER_SECONDS: float = 60.0
 
 
 class ODTCCommand(str, Enum):
-  """SiLA async command identifier for execute()."""
-
   INITIALIZE = "Initialize"
   RESET = "Reset"
   LOCK_DEVICE = "LockDevice"
@@ -78,11 +76,11 @@ class _NormalizedSiLAResponse:
 
   def __init__(
     self,
-    command_name: str,
+    command: str,
     _dict: Optional[Dict[str, Any]] = None,
     _et_root: Optional[ET.Element] = None,
   ) -> None:
-    self._command_name = command_name
+    self._command = command
     self._dict = _dict
     self._et_root = _et_root
     if _dict is not None and _et_root is not None:
@@ -94,28 +92,26 @@ class _NormalizedSiLAResponse:
   def from_raw(
     cls,
     raw: Union[Dict[str, Any], ET.Element, None],
-    command_name: str,
+    command: str,
   ) -> "_NormalizedSiLAResponse":
     """Build from send_command return value (dict for sync, ET root for async)."""
     if raw is None:
-      return cls(command_name=command_name, _dict={})
+      return cls(command=command, _dict={})
     if isinstance(raw, dict):
-      return cls(command_name=command_name, _dict=raw)
-    return cls(command_name=command_name, _et_root=raw)
+      return cls(command=command, _dict=raw)
+    return cls(command=command, _et_root=raw)
 
   def get_value(self, *path: str, required: bool = True) -> Any:
     """Get nested value from dict response by key path. Only for dict (sync) responses."""
     if self._dict is None:
-      raise ValueError(
-        f"{self._command_name}: get_value() only supported for dict (sync) responses"
-      )
+      raise ValueError(f"{self._command}: get_value() only supported for dict (sync) responses")
     value: Any = self._dict
     path_list = list(path)
     for key in path_list:
       if not isinstance(value, dict):
         if required:
           raise ValueError(
-            f"{self._command_name}: Expected dict at path {path_list}, got {type(value).__name__}"
+            f"{self._command}: Expected dict at path {path_list}, got {type(value).__name__}"
           )
         return None
       value = value.get(key, {})
@@ -123,7 +119,7 @@ class _NormalizedSiLAResponse:
     if value is None or (isinstance(value, dict) and not value and required):
       if required:
         raise ValueError(
-          f"{self._command_name}: Could not find value at path {path_list}. Response: {self._dict}"
+          f"{self._command}: Could not find value at path {path_list}. Response: {self._dict}"
         )
       return None
     return value
@@ -136,7 +132,7 @@ class _NormalizedSiLAResponse:
     """Get Parameter[@name=name]/String value (dict or ET response)."""
     if self._dict is not None:
       response_data_path: List[str] = [
-        f"{self._command_name}Response",
+        f"{self._command}Response",
         "ResponseData",
       ]
       response_data = self._get_dict_path(response_data_path, required=True)
@@ -148,7 +144,7 @@ class _NormalizedSiLAResponse:
       else:
         found = None
       if found is None:
-        raise ValueError(f"Parameter '{name}' not found in {self._command_name} response")
+        raise ValueError(f"Parameter '{name}' not found in {self._command} response")
       value = found.get("String")
       if value is None:
         raise ValueError(f"String element not found in {name} parameter")
@@ -156,7 +152,7 @@ class _NormalizedSiLAResponse:
 
     resp = self._et_root
     if resp is None:
-      raise ValueError(f"Empty response from {self._command_name}")
+      raise ValueError(f"Empty response from {self._command}")
 
     param = None
     if resp.tag == "Parameter" and resp.get("name") == name:
@@ -170,33 +166,33 @@ class _NormalizedSiLAResponse:
     if param is None:
       xml_str = ET.tostring(resp, encoding="unicode")
       raise ValueError(
-        f"Parameter '{name}' not found in {self._command_name} response. "
+        f"Parameter '{name}' not found in {self._command} response. "
         f"Root element tag: {resp.tag}\nFull XML response:\n{xml_str}"
       )
 
     string_elem = param.find("String")
     if string_elem is None or string_elem.text is None:
-      raise ValueError(f"String element not found in {self._command_name} Parameter response")
+      raise ValueError(f"String element not found in {self._command} Parameter response")
     return str(string_elem.text)
 
   def _get_dict_path(self, path: List[str], required: bool = True) -> Any:
     """Internal: traverse dict by path."""
     if self._dict is None:
       if required:
-        raise ValueError(f"{self._command_name}: response is not dict")
+        raise ValueError(f"{self._command}: response is not dict")
       return None
     value: Any = self._dict
     for key in path:
       if not isinstance(value, dict):
         if required:
           raise ValueError(
-            f"{self._command_name}: Expected dict at path {path}, got {type(value).__name__}"
+            f"{self._command}: Expected dict at path {path}, got {type(value).__name__}"
           )
         return None
       value = value.get(key, {})
     if value is None or (isinstance(value, dict) and not value and required):
       if required:
-        raise ValueError(f"{self._command_name}: Could not find value at path {path}")
+        raise ValueError(f"{self._command}: Could not find value at path {path}")
       return None
     return value
 
@@ -218,7 +214,7 @@ class ODTCExecution:
   """
 
   request_id: int
-  command_name: str
+  command: str
   _future: asyncio.Future[Any]
   backend: "ODTCBackend"
   estimated_remaining_time: Optional[float] = None
@@ -246,7 +242,7 @@ class ODTCExecution:
   def _log_wait_info(self) -> None:
     import time
 
-    name = f"{self.method_name} ({self.command_name})" if self.method_name else self.command_name
+    name = f"{self.method_name} ({self.command})" if self.method_name else self.command
     lifetime = (
       self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
     )
@@ -313,14 +309,14 @@ class ODTCExecution:
     return events_dict.get(self.request_id, [])
 
   async def is_running(self) -> bool:
-    """True if device is busy (only meaningful when command_name == 'ExecuteMethod')."""
-    if self.command_name != "ExecuteMethod":
+    """True if device is busy (only meaningful when command == 'ExecuteMethod')."""
+    if self.command != "ExecuteMethod":
       return not self._future.done()
     return await self.backend.is_method_running()
 
   async def stop(self) -> None:
-    """Stop the running method (no-op unless command_name == 'ExecuteMethod')."""
-    if self.command_name == "ExecuteMethod":
+    """Stop the running method (no-op unless command == 'ExecuteMethod')."""
+    if self.command == "ExecuteMethod":
       await self.backend.stop_method()
 
 
@@ -478,13 +474,7 @@ class ODTCBackend(ThermocyclerBackend):
   async def _setup_full_path(self, simulation_mode: bool) -> None:
     """Run the full connection path: event receiver, Reset, Initialize, verify idle."""
     await self._sila.setup()
-
-    event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
-    await self.reset(
-      device_id="ODTC",
-      event_receiver_uri=event_receiver_uri,
-      simulation_mode=simulation_mode,
-    )
+    await self.reset(simulation_mode=simulation_mode)
 
     status = await self.get_status()
     self.logger.info(f"GetStatus returned raw state: {status!r} (type: {type(status).__name__})")
@@ -539,7 +529,7 @@ class ODTCBackend(ThermocyclerBackend):
 
   async def _run_async_command(
     self,
-    command_name: str,
+    command: ODTCCommand,
     wait: bool,
     method_name: Optional[str] = None,
     estimated_duration_s: Optional[float] = None,
@@ -547,11 +537,11 @@ class ODTCBackend(ThermocyclerBackend):
   ) -> Optional[ODTCExecution]:
     """Run an async SiLA command; return None if wait else execution handle."""
     if wait:
-      await self._sila.send_command(command_name, **send_kwargs)
+      await self._sila.send_command(command, **send_kwargs)
       return None
-    fut, request_id, started_at = await self._sila.start_command(command_name, **send_kwargs)
+    fut, request_id, started_at = await self._sila.start_command(command, **send_kwargs)
     effective = self._get_effective_lifetime()
-    if command_name == "ExecuteMethod":
+    if command == ODTCCommand.EXECUTE_METHOD:
       first_payload = await self._sila.wait_for_first_data_event(
         request_id, self._first_event_timeout_seconds
       )
@@ -564,7 +554,7 @@ class ODTCBackend(ThermocyclerBackend):
         lifetime = effective
       return ODTCExecution(
         request_id=request_id,
-        command_name=command_name,
+        command=command,
         _future=fut,
         backend=self,
         estimated_remaining_time=eta,
@@ -580,7 +570,7 @@ class ODTCBackend(ThermocyclerBackend):
     )
     return ODTCExecution(
       request_id=request_id,
-      command_name=command_name,
+      command=command,
       _future=fut,
       backend=self,
       estimated_remaining_time=eta,
@@ -588,92 +578,55 @@ class ODTCBackend(ThermocyclerBackend):
       lifetime=lifetime,
     )
 
-  async def execute(
+  async def _execute_method_impl(
     self,
-    command: ODTCCommand,
-    wait: bool = True,
-    **kwargs: Any,
-  ) -> Optional[ODTCExecution]:
-    """Run an async SiLA command. All commands are fire-and-forget; wait controls whether we block or return a handle.
+    method_name: str,
+    wait: bool,
+    priority: Optional[int] = None,
+    protocol: Optional[Protocol] = None,
+  ) -> ODTCExecution:
+    """Internal: run ExecuteMethod, register protocol, return handle."""
+    self._current_execution = None
+    params: Dict[str, Any] = {"methodName": method_name}
+    if priority is not None:
+      params["priority"] = priority
 
-    Args:
-      command: ODTCCommand (INITIALIZE, RESET, LOCK_DEVICE, UNLOCK_DEVICE, OPEN_DOOR, CLOSE_DOOR, STOP_METHOD, EXECUTE_METHOD).
-      wait: If True, block until completion and return None. If False, return execution handle.
-      **kwargs: Command-specific params. RESET: device_id, event_receiver_uri, simulation_mode.
-        LOCK_DEVICE: lock_id (required), lock_timeout. EXECUTE_METHOD: method_name (required), priority, protocol.
-
-    Returns:
-      If wait=True: None. If wait=False: execution handle (awaitable). EXECUTE_METHOD always returns handle (never None).
-    """
-    if command == ODTCCommand.RESET:
-      self._simulation_mode = kwargs.get("simulation_mode", False)
-      event_receiver_uri = kwargs.get("event_receiver_uri")
-      if event_receiver_uri is None:
-        event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
-      return await self._run_async_command(
-        "Reset",
-        wait,
-        deviceId=kwargs.get("device_id", "ODTC"),
-        eventReceiverURI=event_receiver_uri,
-        simulationMode=self._simulation_mode,
-      )
-    if command == ODTCCommand.LOCK_DEVICE:
-      lock_id = kwargs.get("lock_id")
-      if lock_id is None:
-        raise ValueError("lock_id required for LOCK_DEVICE")
-      params: dict = {"lockId": lock_id, "PMSId": "PyLabRobot"}
-      if kwargs.get("lock_timeout") is not None:
-        params["lockTimeout"] = kwargs["lock_timeout"]
-      return await self._run_async_command("LockDevice", wait, **params)
-    if command == ODTCCommand.UNLOCK_DEVICE:
-      if self._sila._lock_id is None:
-        raise RuntimeError("Device is not locked")
-      return await self._run_async_command("UnlockDevice", wait)
-    if command == ODTCCommand.EXECUTE_METHOD:
-      method_name = kwargs.get("method_name")
-      if not method_name:
-        raise ValueError("method_name required for EXECUTE_METHOD")
-      self._current_execution = None
-      params = {"methodName": method_name}
-      if kwargs.get("priority") is not None:
-        params["priority"] = kwargs["priority"]
-      protocol_to_register: Optional[Union[Protocol, ODTCProtocol]] = None
-      _, premethods = await self.list_methods()
-      if method_name in premethods:
-        estimated_duration_s = PREMETHOD_ESTIMATED_DURATION_SECONDS
-        method_set = await self.get_method_set()
-        resolved = get_method_by_name(method_set, method_name)
-        if resolved is not None:
-          protocol_to_register = resolved
-      elif kwargs.get("protocol") is not None:
-        protocol = kwargs["protocol"]
-        config = self.get_default_config()
-        odtc = protocol_to_odtc_protocol(protocol, config=config)
-        estimated_duration_s = estimate_odtc_protocol_duration_seconds(odtc)
-        protocol_to_register = protocol
+    protocol_to_register: Optional[Union[Protocol, ODTCProtocol]] = None
+    _, premethods = await self.list_methods()
+    if method_name in premethods:
+      estimated_duration_s = PREMETHOD_ESTIMATED_DURATION_SECONDS
+      method_set = await self.get_method_set()
+      resolved = get_method_by_name(method_set, method_name)
+      if resolved is not None:
+        protocol_to_register = resolved
+    elif protocol is not None:
+      config = self.get_default_config()
+      odtc = protocol_to_odtc_protocol(protocol, config=config)
+      estimated_duration_s = estimate_odtc_protocol_duration_seconds(odtc)
+      protocol_to_register = protocol
+    else:
+      fetched = await self.get_protocol(method_name)
+      if fetched is not None:
+        estimated_duration_s = estimate_odtc_protocol_duration_seconds(fetched)
+        protocol_to_register = fetched
       else:
-        fetched = await self.get_protocol(method_name)
-        if fetched is not None:
-          estimated_duration_s = estimate_odtc_protocol_duration_seconds(fetched)
-          protocol_to_register = fetched
-        else:
-          estimated_duration_s = self._get_effective_lifetime()
-      handle = await self._run_async_command(
-        "ExecuteMethod",
-        False,
-        method_name=method_name,
-        estimated_duration_s=estimated_duration_s,
-        **params,
-      )
-      assert handle is not None
-      handle._future.add_done_callback(lambda _: self._clear_execution_state_for_handle(handle))
-      if protocol_to_register is not None:
-        self._protocol_by_request_id[handle.request_id] = protocol_to_register
-      self._current_execution = handle
-      if wait:
-        await handle.wait()
-      return handle
-    return await self._run_async_command(command.value, wait)
+        estimated_duration_s = self._get_effective_lifetime()
+
+    handle = await self._run_async_command(
+      ODTCCommand.EXECUTE_METHOD,
+      False,
+      method_name=method_name,
+      estimated_duration_s=estimated_duration_s,
+      **params,
+    )
+    assert handle is not None
+    handle._future.add_done_callback(lambda _: self._clear_execution_state_for_handle(handle))
+    if protocol_to_register is not None:
+      self._protocol_by_request_id[handle.request_id] = protocol_to_register
+    self._current_execution = handle
+    if wait:
+      await handle.wait()
+    return handle
 
   # ============================================================================
   # Request + normalized response
@@ -707,23 +660,22 @@ class ODTCBackend(ThermocyclerBackend):
     return str(state)
 
   async def initialize(self, wait: bool = True) -> Optional[ODTCExecution]:
-    """Initialize the device (SiLA command: standby -> idle). See execute(ODTCCommand.INITIALIZE)."""
-    return await self.execute(ODTCCommand.INITIALIZE, wait=wait)
+    """Initialize the device (SiLA: standby -> idle)."""
+    return await self._run_async_command(ODTCCommand.INITIALIZE, wait)
 
   async def reset(
     self,
-    device_id: str = "ODTC",
-    event_receiver_uri: Optional[str] = None,
     simulation_mode: bool = False,
     wait: bool = True,
   ) -> Optional[ODTCExecution]:
-    """Reset the device (SiLA: startup -> standby, register event receiver). See execute(ODTCCommand.RESET)."""
-    return await self.execute(
+    """Reset the device (SiLA: startup -> standby, register event receiver)."""
+    self._simulation_mode = simulation_mode
+    return await self._run_async_command(
       ODTCCommand.RESET,
-      wait=wait,
-      device_id=device_id,
-      event_receiver_uri=event_receiver_uri,
-      simulation_mode=simulation_mode,
+      wait,
+      deviceId="ODTC",
+      eventReceiverURI=self._sila.event_receiver_uri,
+      simulationMode=simulation_mode,
     )
 
   async def get_device_identification(self) -> dict:
@@ -743,23 +695,25 @@ class ODTCBackend(ThermocyclerBackend):
   async def lock_device(
     self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True
   ) -> Optional[ODTCExecution]:
-    """Lock the device for exclusive access (SiLA: LockDevice). See execute(ODTCCommand.LOCK_DEVICE)."""
-    return await self.execute(
-      ODTCCommand.LOCK_DEVICE, wait=wait, lock_id=lock_id, lock_timeout=lock_timeout
-    )
+    """Lock the device for exclusive access (SiLA: LockDevice)."""
+    params: Dict[str, Any] = {"lockId": lock_id, "PMSId": "PyLabRobot"}
+    if lock_timeout is not None:
+      params["lockTimeout"] = lock_timeout
+    return await self._run_async_command(ODTCCommand.LOCK_DEVICE, wait, **params)
 
   async def unlock_device(self, wait: bool = True) -> Optional[ODTCExecution]:
-    """Unlock the device (SiLA: UnlockDevice). See execute(ODTCCommand.UNLOCK_DEVICE)."""
-    return await self.execute(ODTCCommand.UNLOCK_DEVICE, wait=wait)
+    """Unlock the device (SiLA: UnlockDevice)."""
+    if self._sila._lock_id is None:
+      raise RuntimeError("Device is not locked")
+    return await self._run_async_command(ODTCCommand.UNLOCK_DEVICE, wait)
 
-  # Door control commands (SiLA: OpenDoor, CloseDoor; thermocycler: lid)
   async def open_door(self, wait: bool = True) -> Optional[ODTCExecution]:
-    """Open the door (thermocycler lid). SiLA: OpenDoor. See execute(ODTCCommand.OPEN_DOOR)."""
-    return await self.execute(ODTCCommand.OPEN_DOOR, wait=wait)
+    """Open the door (thermocycler lid)."""
+    return await self._run_async_command(ODTCCommand.OPEN_DOOR, wait)
 
   async def close_door(self, wait: bool = True) -> Optional[ODTCExecution]:
-    """Close the door (thermocycler lid). SiLA: CloseDoor. See execute(ODTCCommand.CLOSE_DOOR)."""
-    return await self.execute(ODTCCommand.CLOSE_DOOR, wait=wait)
+    """Close the door (thermocycler lid)."""
+    return await self._run_async_command(ODTCCommand.CLOSE_DOOR, wait)
 
   async def read_temperatures(self) -> ODTCSensorValues:
     """Read all temperature sensors.
@@ -790,20 +744,12 @@ class ODTCBackend(ThermocyclerBackend):
     wait: bool = False,
     protocol: Optional[Protocol] = None,
   ) -> ODTCExecution:
-    """Execute a method or premethod by name (SiLA: ExecuteMethod). See execute(ODTCCommand.EXECUTE_METHOD)."""
-    result = await self.execute(
-      ODTCCommand.EXECUTE_METHOD,
-      wait=wait,
-      method_name=method_name,
-      priority=priority,
-      protocol=protocol,
-    )
-    assert result is not None
-    return result
+    """Execute a method or premethod by name (SiLA: ExecuteMethod)."""
+    return await self._execute_method_impl(method_name, wait, priority=priority, protocol=protocol)
 
   async def stop_method(self, wait: bool = True) -> Optional[ODTCExecution]:
-    """Stop the currently running method (SiLA: StopMethod). See execute(ODTCCommand.STOP_METHOD)."""
-    return await self.execute(ODTCCommand.STOP_METHOD, wait=wait)
+    """Stop the currently running method (SiLA: StopMethod)."""
+    return await self._run_async_command(ODTCCommand.STOP_METHOD, wait)
 
   # --- Method running and completion ---
 

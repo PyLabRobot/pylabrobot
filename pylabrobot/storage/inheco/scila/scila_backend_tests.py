@@ -13,6 +13,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.mock_sila_interface = AsyncMock(spec=InhecoSiLAInterface)
     self.mock_sila_interface.bound_port = 80
     self.mock_sila_interface.client_ip = "127.0.0.1"
+    self.mock_sila_interface.event_receiver_uri = "http://127.0.0.1:80/"
     self.MockInhecoSiLAInterface.return_value = self.mock_sila_interface
     self.backend = SCILABackend(scila_ip="127.0.0.1")
 

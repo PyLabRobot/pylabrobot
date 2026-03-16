@@ -612,6 +612,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       self.backend._sila._lock_id = None
       self.backend._sila._lifetime_of_execution = None
       self.backend._sila._client_ip = "127.0.0.1"
+      self.backend._sila.event_receiver_uri = "http://127.0.0.1:8080/"
 
   def test_backend_odtc_ip_property(self):
     """Backend.odtc_ip returns machine IP from sila."""
@@ -846,7 +847,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut: asyncio.Future[Any] = asyncio.Future()
     self.backend._current_execution = ODTCExecution(
       request_id=request_id,
-      command_name="ExecuteMethod",
+      command="ExecuteMethod",
       _future=fut,
       backend=self.backend,
       estimated_remaining_time=600.0,
@@ -886,7 +887,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut: asyncio.Future[Any] = asyncio.Future()
     self.backend._current_execution = ODTCExecution(
       request_id=request_id,
-      command_name="ExecuteMethod",
+      command="ExecuteMethod",
       _future=fut,
       backend=self.backend,
       estimated_remaining_time=600.0,
@@ -975,7 +976,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut.set_result("success")
     execution = ODTCExecution(
       request_id=12345,
-      command_name="ExecuteMethod",
+      command="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend,
@@ -989,7 +990,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut: asyncio.Future[Any] = asyncio.Future()
     execution = ODTCExecution(
       request_id=12345,
-      command_name="ExecuteMethod",
+      command="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend,
@@ -1003,7 +1004,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut: asyncio.Future[Any] = asyncio.Future()
     execution = ODTCExecution(
       request_id=12345,
-      command_name="ExecuteMethod",
+      command="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend,
@@ -1018,12 +1019,12 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut.set_result(None)
     execution = ODTCExecution(
       request_id=12345,
-      command_name="ExecuteMethod",
+      command="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend,
     )
-    self.assertEqual(execution.command_name, "ExecuteMethod")
+    self.assertEqual(execution.command, "ExecuteMethod")
     self.assertEqual(execution.method_name, "PCR_30cycles")
 
   async def test_command_execution_awaitable(self):
@@ -1032,7 +1033,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut.set_result("success")
     execution = ODTCExecution(
       request_id=12345,
-      command_name="OpenDoor",
+      command="OpenDoor",
       _future=fut,
       backend=self.backend,
     )
@@ -1046,7 +1047,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut.set_result(None)
     execution = ODTCExecution(
       request_id=12345,
-      command_name="OpenDoor",
+      command="OpenDoor",
       _future=fut,
       backend=self.backend,
     )
@@ -1067,7 +1068,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, ODTCExecution)
     self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "OpenDoor")
+    self.assertEqual(execution.command, "OpenDoor")
     self.backend._sila.start_command.assert_called_once()
     self.assertEqual(self.backend._sila.start_command.call_args[0][0], "OpenDoor")
     self.assertNotIn("estimated_duration_seconds", self.backend._sila.start_command.call_args[1])
@@ -1083,7 +1084,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, ODTCExecution)
     self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "Reset")
+    self.assertEqual(execution.command, "Reset")
     self.backend._sila.start_command.assert_called_once()
     call_kwargs = self.backend._sila.start_command.call_args[1]
     self.assertEqual(call_kwargs["deviceId"], "ODTC")
