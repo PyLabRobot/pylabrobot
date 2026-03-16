@@ -190,6 +190,9 @@ _HC_RESULT_DESCRIPTIONS: Dict[int, str] = {
   # Empirically identified — require further validation:
   0x0011: "parameter value out of valid range [empirical, needs validation]",
   0x0F03: "drive initialization failed (reference/homing run failure) [empirical, needs validation]",
+  0x0F04: "X position out of allowed movement range [empirical, needs validation]",
+  0x0F05: "Y position out of allowed movement range [empirical, needs validation]",
+  0x0F06: "Z position out of allowed movement range [empirical, needs validation]",
   0x0F08: "tip pickup failed (tip not detected at expected position) [empirical, needs validation]",
 }
 
