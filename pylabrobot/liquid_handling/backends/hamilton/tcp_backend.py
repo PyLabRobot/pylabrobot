@@ -564,7 +564,9 @@ class HamiltonTCPClient:
     """Check if the connection is currently established."""
     return self._connected
 
-  async def _read_one_message(self) -> Union[RegistrationResponse, CommandResponse]:
+  async def _read_one_message(
+    self, timeout: Optional[float] = None
+  ) -> Union[RegistrationResponse, CommandResponse]:
     """Read one complete Hamilton packet and parse based on protocol.
 
     Hamilton packets are length-prefixed:
@@ -573,6 +575,9 @@ class HamiltonTCPClient:
 
     The method inspects the IP protocol field and, for Protocol 6 (HARP),
     also checks the HARP protocol field to dispatch correctly.
+
+    Args:
+      timeout: Read timeout in seconds. If None, uses the client's default.
 
     Returns:
       Union[RegistrationResponse, CommandResponse]: Parsed response
@@ -584,11 +589,11 @@ class HamiltonTCPClient:
     """
 
     # Read packet size (2 bytes, little-endian)
-    size_data = await self.read_exact(2)
+    size_data = await self.read_exact(2, timeout=timeout)
     packet_size = Reader(size_data).u16()
 
     # Read packet payload
-    payload_data = await self.read_exact(packet_size)
+    payload_data = await self.read_exact(packet_size, timeout=timeout)
     complete_data = size_data + payload_data
 
     # Parse IP packet to get protocol field (byte 2)
@@ -912,6 +917,7 @@ class HamiltonTCPClient:
     ensure_connection: bool = True,
     return_raw: bool = False,
     raise_on_error: bool = True,
+    read_timeout: Optional[float] = None,
   ) -> Any:
     """Send Hamilton command and wait for response.
 
@@ -974,7 +980,7 @@ class HamiltonTCPClient:
         logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
 
         await self.write(message)
-        response_message = await self._read_one_message()
+        response_message = await self._read_one_message(timeout=read_timeout)
         assert isinstance(response_message, CommandResponse)
 
         action = Hoi2Action(response_message.hoi.action_code)
