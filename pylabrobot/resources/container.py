@@ -46,15 +46,19 @@ class Container(Resource):
       model=model,
     )
     self._material_z_thickness = material_z_thickness
-    self.height_volume_data = height_volume_data
+    self.height_volume_data = (
+      {float(h): float(v) for h, v in height_volume_data.items()}
+      if height_volume_data is not None
+      else None
+    )
 
     # Auto-generate volume/height functions from height_volume_data if not explicitly provided.
-    if height_volume_data is not None:
-      volume_height_data = {v: h for h, v in height_volume_data.items()}
+    if self.height_volume_data is not None:
+      volume_height_data = {v: h for h, v in self.height_volume_data.items()}
 
       if compute_volume_from_height is None:
         def compute_volume_from_height(h: float) -> float:
-          return interpolate_1d(h, height_volume_data, bounds_handling="error")
+          return interpolate_1d(h, self.height_volume_data, bounds_handling="error")
 
       if compute_height_from_volume is None:
         def compute_height_from_volume(v: float) -> float:
