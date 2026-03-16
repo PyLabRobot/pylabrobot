@@ -496,14 +496,6 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     """Set up test fixtures."""
     self.interface = ODTCSiLAInterface(machine_ip="192.168.1.100", client_ip="127.0.0.1")
 
-  def test_normalize_command_name(self):
-    """Test command name normalization for aliases."""
-    self.assertEqual(self.interface._normalize_command_name("OpenDoor"), "OpenDoor")
-    self.assertEqual(self.interface._normalize_command_name("PrepareForOutput"), "OpenDoor")
-    self.assertEqual(self.interface._normalize_command_name("CloseDoor"), "CloseDoor")
-    self.assertEqual(self.interface._normalize_command_name("PrepareForInput"), "CloseDoor")
-    self.assertEqual(self.interface._normalize_command_name("ExecuteMethod"), "ExecuteMethod")
-
   def test_check_parallelism(self):
     """Test parallelism checking."""
     # No commands executing - should allow

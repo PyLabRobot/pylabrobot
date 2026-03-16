@@ -161,8 +161,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     "LockDevice": {SiLAState.STANDBY},
     "OpenDoor": {SiLAState.IDLE, SiLAState.BUSY},
     "Pause": {SiLAState.IDLE, SiLAState.BUSY},
-    "PrepareForInput": {SiLAState.IDLE, SiLAState.BUSY},
-    "PrepareForOutput": {SiLAState.IDLE, SiLAState.BUSY},
     "ReadActualTemperature": {SiLAState.IDLE, SiLAState.BUSY},
     "Reset": set(SiLAState),
     "SetConfiguration": {SiLAState.STANDBY},
@@ -211,48 +209,18 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if not self._executing_commands:
       return True
 
-    # Normalize the new command name
-    new_cmd = self._normalize_command_name(command)
-
-    # Check against each executing command
-    # The parallelism table is keyed by the EXECUTING command, then lists what can run in parallel
     for executing_cmd in self._executing_commands:
-      # Normalize executing command name
-      exec_cmd = self._normalize_command_name(executing_cmd)
-
-      # Check parallelism table from the perspective of the EXECUTING command
-      if exec_cmd in self.PARALLELISM_TABLE:
-        if new_cmd in self.PARALLELISM_TABLE[exec_cmd]:
-          if self.PARALLELISM_TABLE[exec_cmd][new_cmd] == "S":
-            return False  # Sequential required
-          # If "P" (parallel), continue checking other executing commands
+      if executing_cmd in self.PARALLELISM_TABLE:
+        if command in self.PARALLELISM_TABLE[executing_cmd]:
+          if self.PARALLELISM_TABLE[executing_cmd][command] == "S":
+            return False
         else:
-          # New command not in executing command's table - default to sequential for safety
           return False
       else:
-        # Executing command not in parallelism table - default to sequential
         return False
 
     # All checks passed - can run in parallel with all executing commands
     return True
-
-  def _normalize_command_name(self, command: str) -> str:
-    """Normalize command name for parallelism table lookup.
-
-    Handles command aliases (OpenDoor/PrepareForOutput, CloseDoor/PrepareForInput).
-
-    Args:
-      command: Command name.
-
-    Returns:
-      Normalized command name for table lookup.
-    """
-    # Handle aliases per ODTC doc section 8
-    if command in ("PrepareForOutput", "OpenDoor"):
-      return "OpenDoor"
-    if command in ("PrepareForInput", "CloseDoor"):
-      return "CloseDoor"
-    return command
 
   async def wait_for_first_data_event(
     self,
@@ -297,8 +265,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     else:
       self._pending_lock_ids.pop(request_id, None)
 
-    normalized_cmd = self._normalize_command_name(pending.name)
-    self._executing_commands.discard(normalized_cmd)
+    self._executing_commands.discard(pending.name)
 
     super()._complete_pending(request_id, result=result, exception=exception)
 
@@ -347,9 +314,8 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
   async def start_command(
     self, command: str, **kwargs: Any
   ) -> Tuple[asyncio.Future[Any], int, float]:
-    normalized = self._normalize_command_name(command)
-    if normalized in self.PARALLELISM_TABLE:
-      if not self._check_parallelism(normalized):
+    if command in self.PARALLELISM_TABLE:
+      if not self._check_parallelism(command):
         raise SiLAError(4, "Cannot run in parallel with currently executing commands", command)
     elif self._executing_commands:
       raise SiLAError(4, "Not in parallelism table and device is busy", command)
@@ -360,7 +326,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     fut, request_id, started_at = await super().start_command(command, **kwargs)
 
-    self._executing_commands.add(normalized)
+    self._executing_commands.add(command)
     if command == "LockDevice" and "lockId" in kwargs:
       self._pending_lock_ids[request_id] = kwargs["lockId"]
 
