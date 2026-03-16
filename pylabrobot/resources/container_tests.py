@@ -126,3 +126,15 @@ class TestContainer(unittest.TestCase):
     d = Container.deserialize(serialized, allow_marshal=True)
     self.assertEqual(d.compute_volume_from_height(10), 20)
     self.assertEqual(d.compute_height_from_volume(20), 10)
+
+  def test_height_volume_data_validates_monotonicity(self):
+    with self.assertRaises(ValueError):
+      Container(
+        name="c", size_x=10, size_y=10, size_z=10, height_volume_data={0: 0, 5: 100, 10: 50}
+      )  # non-monotonic volumes
+
+  def test_height_volume_data_validates_minimum_points(self):
+    with self.assertRaises(ValueError):
+      Container(
+        name="c", size_x=10, size_y=10, size_z=10, height_volume_data={0: 0}
+      )  # only 1 point

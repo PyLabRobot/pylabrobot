@@ -55,6 +55,12 @@ class Container(Resource):
     # Auto-generate volume/height functions from height_volume_data if not explicitly provided.
     if self.height_volume_data is not None:
       hvd = self.height_volume_data
+      sorted_heights = sorted(hvd.keys())
+      sorted_volumes = [hvd[h] for h in sorted_heights]
+      if len(sorted_heights) < 2:
+        raise ValueError("height_volume_data must contain at least 2 points.")
+      if any(sorted_volumes[i] >= sorted_volumes[i + 1] for i in range(len(sorted_volumes) - 1)):
+        raise ValueError("height_volume_data volumes must be strictly increasing with height.")
       volume_height_data = {v: h for h, v in hvd.items()}
 
       if compute_volume_from_height is None:
