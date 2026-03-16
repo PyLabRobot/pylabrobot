@@ -1,8 +1,7 @@
-"""ODTC-specific SiLA interface with parallelism, state management, and lockId validation.
+"""ODTC-specific SiLA interface with parallelism, lockId validation, and return code handling.
 
 This module extends InhecoSiLAInterface to support ODTC-specific requirements:
 - Multiple in-flight commands with parallelism enforcement
-- State machine tracking and command allowability checks
 - LockId validation (defaults to None, validates when device is locked)
 - Proper return code handling (including device-specific codes)
 - All event types (ResponseEvent, StatusEvent, DataEvent, ErrorEvent)
@@ -43,11 +42,10 @@ POLLING_START_BUFFER: float = 10.0
 
 
 class ODTCSiLAInterface(InhecoSiLAInterface):
-  """ODTC-specific SiLA interface with parallelism, state tracking, and lockId validation.
+  """ODTC-specific SiLA interface with parallelism, lockId validation, and return code handling.
 
   Extends InhecoSiLAInterface to support:
   - Multiple in-flight commands with parallelism enforcement per ODTC doc section 3
-  - State machine tracking and command allowability per ODTC doc section 4
   - LockId validation (defaults to None, validates when device is locked)
   - Proper return code handling including device-specific codes (1000-2010)
   - All event types: ResponseEvent, StatusEvent, DataEvent, ErrorEvent
@@ -140,7 +138,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     },
   }
 
-  # State allowability table from ODTC doc section 4
+  # State allowability table from ODTC doc section 4 (reference only; device enforces this)
   STATE_ALLOWABILITY: Dict[str, Set[SiLAState]] = {
     "Abort": {SiLAState.IDLE, SiLAState.BUSY},
     "CloseDoor": {SiLAState.IDLE, SiLAState.BUSY},
@@ -168,7 +166,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     "ReadActualTemperature": {SiLAState.IDLE, SiLAState.BUSY},
     "Reset": set(SiLAState),
     "SetConfiguration": {SiLAState.STANDBY},
-    "SetParameters": {SiLAState.IDLE, SiLAState.BUSY},
+    "SetParameters": {SiLAState.STANDBY, SiLAState.IDLE, SiLAState.BUSY},
     "StopMethod": {SiLAState.IDLE, SiLAState.BUSY},
     "UnlockDevice": {SiLAState.STANDBY},
   }
@@ -199,17 +197,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # DataEvent storage by request_id
     self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
-
-  def _check_state_allowability(self, command: str) -> None:
-    """Raise SiLAError(9) if command is not allowed in current state."""
-    if (
-      command in self.STATE_ALLOWABILITY
-      and self._current_state not in self.STATE_ALLOWABILITY[command]
-    ):
-      msg = f"Not allowed in state {self._current_state.value}"
-      if self._current_state == SiLAState.INERROR:
-        msg += ". Device requires a power cycle to recover."
-      raise SiLAError(9, msg, command)
 
   def _check_parallelism(self, command: str) -> bool:
     """Check if command can run in parallel with currently executing commands.
@@ -290,7 +277,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     result: Any = None,
     exception: Optional[BaseException] = None,
   ) -> None:
-    """ODTC cleanup (lock state, executing commands, BUSY->IDLE) then delegate to base."""
+    """ODTC cleanup (lock state, executing commands) then delegate to base."""
     pending = self._pending_by_id.get(request_id)
     if pending is None or pending.fut.done():
       return
@@ -313,31 +300,16 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     normalized_cmd = self._normalize_command_name(pending.name)
     self._executing_commands.discard(normalized_cmd)
 
-    if not self._executing_commands and self._current_state == SiLAState.BUSY:
-      self._current_state = SiLAState.IDLE
-
     super()._complete_pending(request_id, result=result, exception=exception)
-
-  def _handle_return_code(
-    self, return_code: int, message: str, command_name: str, request_id: int
-  ) -> None:
-    """Override to include current state in code-9 error message."""
-    if return_code == 9:
-      self._check_state_allowability(command_name)
-      raise SiLAError(9, f"Not allowed in state {self._current_state.value}", command_name)
-    super()._handle_return_code(return_code, message, command_name, request_id)
 
   def _handle_device_return_code(self, return_code: int, message: str, command_name: str) -> None:
     """Handle ODTC device-specific return codes (1000+)."""
     if return_code in self.DEVICE_ERROR_CODES:
-      self._current_state = SiLAState.INERROR
       raise SiLAError(return_code, f"Device error: {message}", command_name)
     # Warning or recoverable error
     self._logger.warning(
       f"Command {command_name} returned device-specific code {return_code}: {message}"
     )
-    if return_code not in {2005, 2006, 2008, 2009, 2010}:
-      self._current_state = SiLAState.ERRORHANDLING
 
   def _on_data_event(self, data_event: dict) -> None:
     request_id = data_event.get("requestId")
@@ -360,7 +332,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
   async def send_command(self, command: str, **kwargs: Any) -> Any:
     if command in self.SYNCHRONOUS_COMMANDS:
-      self._check_state_allowability(command)
       return await super().send_command(command, **kwargs)
     fut, _, _ = await self.start_command(command, **kwargs)
     timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
@@ -370,14 +341,12 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       return await asyncio.wait_for(fut, timeout=timeout)
     except asyncio.TimeoutError:
       raise SiLATimeoutError(
-        f"Command {command} timed out after {timeout}s waiting for ResponseEvent"
+        f"Timed out after {timeout}s waiting for ResponseEvent", command=command
       ) from None
 
   async def start_command(
     self, command: str, **kwargs: Any
   ) -> Tuple[asyncio.Future[Any], int, float]:
-    self._check_state_allowability(command)
-
     normalized = self._normalize_command_name(command)
     if normalized in self.PARALLELISM_TABLE:
       if not self._check_parallelism(normalized):
@@ -392,8 +361,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     fut, request_id, started_at = await super().start_command(command, **kwargs)
 
     self._executing_commands.add(normalized)
-    if self._current_state == SiLAState.IDLE:
-      self._current_state = SiLAState.BUSY
     if command == "LockDevice" and "lockId" in kwargs:
       self._pending_lock_ids[request_id] = kwargs["lockId"]
 

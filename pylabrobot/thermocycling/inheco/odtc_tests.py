@@ -504,32 +504,6 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.interface._normalize_command_name("PrepareForInput"), "CloseDoor")
     self.assertEqual(self.interface._normalize_command_name("ExecuteMethod"), "ExecuteMethod")
 
-  def test_check_state_allowability(self):
-    """Test state allowability checking."""
-    from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAError
-
-    # GetStatus allowed in all states
-    self.interface._current_state = SiLAState.STARTUP
-    self.interface._check_state_allowability("GetStatus")  # should not raise
-
-    self.interface._current_state = SiLAState.STANDBY
-    self.interface._check_state_allowability("GetStatus")
-    self.interface._check_state_allowability("Initialize")
-    with self.assertRaises(SiLAError):
-      self.interface._check_state_allowability("ExecuteMethod")
-
-    # GetStatus allowed during initializing
-    self.interface._current_state = SiLAState.INITIALIZING
-    self.interface._check_state_allowability("GetStatus")
-    self.interface._check_state_allowability("GetDeviceIdentification")
-    with self.assertRaises(SiLAError):
-      self.interface._check_state_allowability("ExecuteMethod")
-
-    self.interface._current_state = SiLAState.IDLE
-    self.interface._check_state_allowability("ExecuteMethod")
-    with self.assertRaises(SiLAError):
-      self.interface._check_state_allowability("Initialize")
-
   def test_check_parallelism(self):
     """Test parallelism checking."""
     # No commands executing - should allow
@@ -547,61 +521,36 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     # ExecuteMethod executing - ReadActualTemperature can run in parallel (P)
     self.assertTrue(self.interface._check_parallelism("ReadActualTemperature"))
 
-  def test_update_state_from_status(self):
-    """Test state updates from status strings - exact matching only."""
-    # Test lowercase enum values (exact match required)
-    self.interface._update_state_from_status("idle")
-    self.assertEqual(self.interface._current_state, SiLAState.IDLE)
-
-    self.interface._update_state_from_status("busy")
-    self.assertEqual(self.interface._current_state, SiLAState.BUSY)
-
-    self.interface._update_state_from_status("standby")
-    self.assertEqual(self.interface._current_state, SiLAState.STANDBY)
-
-    # Test camelCase enum values (exact match required)
-    self.interface._update_state_from_status("inError")
-    self.assertEqual(self.interface._current_state, SiLAState.INERROR)
-
-    self.interface._update_state_from_status("errorHandling")
-    self.assertEqual(self.interface._current_state, SiLAState.ERRORHANDLING)
-
-    # Test that case mismatches are NOT accepted (exact matching only)
-    # These should keep the current state and log a warning
-    initial_state = self.interface._current_state
-    self.interface._update_state_from_status("Idle")  # Wrong case
-    self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
-
-    self.interface._update_state_from_status("BUSY")  # Wrong case
-    self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
-
-    self.interface._update_state_from_status("INERROR")  # Wrong case
-    self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
-
-  def test_handle_return_code(self):
+  async def test_handle_return_code(self):
     """Test return code handling."""
     # Code 1, 2, 3 should not raise
-    self.interface._handle_return_code(1, "Success", "GetStatus", 123)
-    self.interface._handle_return_code(2, "Accepted", "ExecuteMethod", 123)
-    self.interface._handle_return_code(3, "Finished", "ExecuteMethod", 123)
+    await self.interface._handle_return_code(1, "Success", "GetStatus", 123)
+    await self.interface._handle_return_code(2, "Accepted", "ExecuteMethod", 123)
+    await self.interface._handle_return_code(3, "Finished", "ExecuteMethod", 123)
 
     # Code 4 should raise
     with self.assertRaises(RuntimeError):
-      self.interface._handle_return_code(4, "busy", "ExecuteMethod", 123)
+      await self.interface._handle_return_code(4, "busy", "ExecuteMethod", 123)
 
     # Code 5 should raise
     with self.assertRaises(RuntimeError):
-      self.interface._handle_return_code(5, "LockId error", "ExecuteMethod", 123)
+      await self.interface._handle_return_code(5, "LockId error", "ExecuteMethod", 123)
 
     # Code 9 should raise with state info
+    self.interface.request_status = AsyncMock(return_value=SiLAState.IDLE)  # type: ignore[method-assign]
     with self.assertRaises(RuntimeError) as cm:
-      self.interface._handle_return_code(9, "Not allowed", "ExecuteMethod", 123)
-    self.assertIn(self.interface._current_state.value, str(cm.exception))
+      await self.interface._handle_return_code(9, "Not allowed", "ExecuteMethod", 123)
+    self.assertIn("idle", str(cm.exception))
 
-    # Device error code should transition to InError
+    # Code 9 with inError should hint power cycle
+    self.interface.request_status = AsyncMock(return_value=SiLAState.INERROR)  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError) as cm:
+      await self.interface._handle_return_code(9, "Not allowed", "ExecuteMethod", 123)
+    self.assertIn("power cycle", str(cm.exception))
+
+    # Device error code should raise
     with self.assertRaises(RuntimeError):
-      self.interface._handle_return_code(1000, "Device error", "ExecuteMethod", 123)
-    self.assertEqual(self.interface._current_state, SiLAState.INERROR)
+      await self.interface._handle_return_code(1000, "Device error", "ExecuteMethod", 123)
 
 
 class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
@@ -633,7 +582,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend._sila._client_ip = "192.168.1.1"  # type: ignore[attr-defined]
     setattr(self.backend._sila, "bound_port", 8080)  # type: ignore[misc]
     self.backend.reset = AsyncMock()  # type: ignore[method-assign]
-    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(return_value=SiLAState.IDLE)  # type: ignore[method-assign]
     await self.backend.setup()
     self.backend._sila.setup.assert_called_once()
     self.backend.reset.assert_called_once()
@@ -644,17 +593,17 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test setup(full=False) only calls _sila.setup(), not reset or initialize."""
     self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
     self.backend.reset = AsyncMock()  # type: ignore[method-assign]
-    self.backend.get_status = AsyncMock()  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock()  # type: ignore[method-assign]
     await self.backend.setup(full=False)
     self.backend._sila.setup.assert_called_once()
     self.backend.reset.assert_not_called()
-    self.backend.get_status.assert_not_called()
+    self.backend.request_status.assert_not_called()
 
   async def test_setup_simulation_mode_passed_to_reset(self):
     """Test setup(simulation_mode=True) passes simulation_mode to reset."""
     self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
     self.backend.reset = AsyncMock()  # type: ignore[method-assign]
-    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(return_value=SiLAState.IDLE)  # type: ignore[method-assign]
     await self.backend.setup(simulation_mode=True)
     self.backend.reset.assert_called_once()
     self.assertTrue(self.backend.reset.call_args[1]["simulation_mode"])
@@ -673,7 +622,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_setup_retries_with_backoff(self):
     """Test setup retries when reset fails transiently."""
     self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
-    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(return_value=SiLAState.IDLE)  # type: ignore[method-assign]
     reset_count = 0
 
     async def mock_reset(**kwargs):
@@ -692,7 +641,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test setup(full=True, max_attempts=2) raises when all attempts fail."""
     self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
     self.backend.reset = AsyncMock()  # type: ignore[method-assign]
-    self.backend.get_status = AsyncMock(side_effect=RuntimeError("fail"))  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(side_effect=RuntimeError("fail"))  # type: ignore[method-assign]
     with patch("asyncio.sleep", new_callable=AsyncMock), self.assertRaises(RuntimeError) as cm:
       await self.backend.setup(full=True, max_attempts=2)
     self.assertIn("fail", str(cm.exception))
@@ -703,19 +652,12 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     await self.backend.stop()
     self.backend._sila.close.assert_called_once()
 
-  async def test_get_status(self):
-    """Test get_status."""
-    self.backend._sila.send_command = AsyncMock(  # type: ignore[method-assign]
-      return_value={
-        "GetStatusResponse": {
-          "state": "idle",
-          "GetStatusResult": {"returnCode": 1, "message": "Success."},
-        }
-      }
-    )
-    status = await self.backend.get_status()
-    self.assertEqual(status, "idle")
-    self.backend._sila.send_command.assert_called_once_with("GetStatus")
+  async def test_request_status(self):
+    """Test request_status."""
+    self.backend._sila.request_status = AsyncMock(return_value=SiLAState.IDLE)  # type: ignore[method-assign]
+    status = await self.backend.request_status()
+    self.assertEqual(status, SiLAState.IDLE)
+    self.backend._sila.request_status.assert_called_once()
 
   async def test_open_door(self):
     """Test open_door."""
@@ -997,7 +939,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       _future=fut,
       backend=self.backend,
     )
-    self.backend.get_status = AsyncMock(return_value="busy")  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(return_value=SiLAState.BUSY)  # type: ignore[method-assign]
     is_running = await execution.is_running()
     self.assertTrue(is_running)
 
@@ -1096,34 +1038,34 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_is_method_running(self):
     """Test is_method_running()."""
-    with patch.object(ODTCBackend, "get_status", new_callable=AsyncMock, return_value="busy"):
+    with patch.object(
+      ODTCBackend, "request_status", new_callable=AsyncMock, return_value=SiLAState.BUSY
+    ):
       self.assertTrue(await self.backend.is_method_running())
 
-    with patch.object(ODTCBackend, "get_status", new_callable=AsyncMock, return_value="idle"):
-      self.assertFalse(await self.backend.is_method_running())
-
-    with patch.object(ODTCBackend, "get_status", new_callable=AsyncMock, return_value="BUSY"):
-      # Backend compares to SiLAState.BUSY.value ("busy"), so uppercase is False
+    with patch.object(
+      ODTCBackend, "request_status", new_callable=AsyncMock, return_value=SiLAState.IDLE
+    ):
       self.assertFalse(await self.backend.is_method_running())
 
   async def test_wait_for_method_completion(self):
     """Test wait_for_method_completion()."""
     call_count = 0
 
-    async def mock_get_status():
+    async def mock_request_status():
       nonlocal call_count
       call_count += 1
       if call_count < 3:
-        return "busy"
-      return "idle"
+        return SiLAState.BUSY
+      return SiLAState.IDLE
 
-    self.backend.get_status = AsyncMock(side_effect=mock_get_status)  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(side_effect=mock_request_status)  # type: ignore[method-assign]
     await self.backend.wait_for_method_completion(poll_interval=0.1)
     self.assertEqual(call_count, 3)
 
   async def test_wait_for_method_completion_timeout(self):
     """Test wait_for_method_completion() with timeout."""
-    self.backend.get_status = AsyncMock(return_value="busy")  # type: ignore[method-assign]
+    self.backend.request_status = AsyncMock(return_value=SiLAState.BUSY)  # type: ignore[method-assign]
     with self.assertRaises(TimeoutError):
       await self.backend.wait_for_method_completion(poll_interval=0.1, timeout=0.3)
 

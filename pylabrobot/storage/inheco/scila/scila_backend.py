@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAState
 
 
 def _parse_scalar(text: Optional[str], tag: str) -> object:
@@ -55,11 +55,8 @@ class SCILABackend(MachineBackend):
 
     await self._sila_interface.send_command("Initialize")
 
-  async def request_status(self) -> str:
-    # GetStatus returns synchronously (return_code 1 = immediate dict), unlike other commands
-    # which return asynchronously (return_code 2 = XML via callback).
-    resp = await self._sila_interface.send_command("GetStatus")
-    return resp.get("GetStatusResponse", {}).get("state", "Unknown")  # type: ignore
+  async def request_status(self) -> SiLAState:
+    return await self._sila_interface.request_status()
 
   async def request_liquid_level(self) -> str:
     root = await self._sila_interface.send_command("GetLiquidLevel")

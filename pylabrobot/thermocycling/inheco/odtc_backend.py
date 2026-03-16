@@ -296,7 +296,7 @@ class ODTCExecution:
       estimated_remaining_time=self.estimated_remaining_time,
       lifetime=lifetime,
       poll_interval=poll_interval,
-      terminal_state="idle",
+      terminal_state=SiLAState.IDLE,
       progress_log_interval=self.backend.progress_log_interval,
       progress_callback=self.backend.progress_callback,
     )
@@ -408,7 +408,7 @@ class ODTCBackend(ThermocyclerBackend):
     self,
     full: bool = True,
     simulation_mode: bool = False,
-    max_attempts: int = 3,
+    max_attempts: int = 10,
     retry_backoff_base_seconds: float = 1.0,
   ) -> None:
     """Prepare the ODTC connection.
@@ -461,27 +461,28 @@ class ODTCBackend(ThermocyclerBackend):
     await self._sila.setup()
     await self.reset(simulation_mode=simulation_mode)
 
-    status = await self.get_status()
-    self.logger.info(f"GetStatus returned raw state: {status!r} (type: {type(status).__name__})")
+    status = await self.request_status()
+    self.logger.info(f"GetStatus returned state: {status.value!r}")
 
-    if status == SiLAState.STANDBY.value:
+    if status == SiLAState.STANDBY:
       self.logger.info("Device is in standby state, calling Initialize...")
       await self.initialize()
 
-      status_after_init = await self.get_status()
+      status_after_init = await self.request_status()
 
-      if status_after_init == SiLAState.IDLE.value:
+      if status_after_init == SiLAState.IDLE:
         self.logger.info("Device successfully initialized and is in idle state")
       else:
         raise RuntimeError(
           f"Device is not in idle state after Initialize. Expected {SiLAState.IDLE.value!r}, "
-          f"but got {status_after_init!r}."
+          f"but got {status_after_init.value!r}."
         )
-    elif status == SiLAState.IDLE.value:
+    elif status == SiLAState.IDLE:
       self.logger.info("Device already in idle state after Reset")
     else:
       raise RuntimeError(
-        f"Unexpected device state after Reset: {status!r}. Expected {SiLAState.STANDBY.value!r} or {SiLAState.IDLE.value!r}."
+        f"Unexpected device state after Reset: {status.value!r}. "
+        f"Expected {SiLAState.STANDBY.value!r} or {SiLAState.IDLE.value!r}."
       )
 
   async def stop(self) -> None:
@@ -631,18 +632,9 @@ class ODTCBackend(ThermocyclerBackend):
   # Basic ODTC Commands
   # ============================================================================
 
-  async def get_status(self) -> str:
-    """Get device status state.
-
-    Returns:
-      Device state string (e.g., "idle", "busy", "standby").
-
-    Raises:
-      ValueError: If response format is unexpected and state cannot be extracted.
-    """
-    resp = await self._request("GetStatus")
-    state = resp.get_value("GetStatusResponse", "state")
-    return str(state)
+  async def request_status(self) -> SiLAState:
+    """Get device status state."""
+    return await self._sila.request_status()
 
   async def initialize(self, wait: bool = True) -> Optional[ODTCExecution]:
     """Initialize the device (SiLA: standby -> idle)."""
@@ -747,8 +739,8 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       True if method is running (state is 'busy'), False otherwise.
     """
-    status = await self.get_status()
-    return status == SiLAState.BUSY.value
+    status = await self.request_status()
+    return status == SiLAState.BUSY
 
   async def wait_for_method_completion(
     self,
@@ -790,7 +782,7 @@ class ODTCBackend(ThermocyclerBackend):
     estimated_remaining_time: Optional[float],
     lifetime: float,
     poll_interval: float = 5.0,
-    terminal_state: str = "idle",
+    terminal_state: SiLAState = SiLAState.IDLE,
     progress_log_interval: Optional[float] = None,
     progress_callback: Optional[Callable[..., None]] = None,
   ) -> None:
@@ -839,7 +831,7 @@ class ODTCBackend(ThermocyclerBackend):
 
       # From here: poll until terminal_state or timeout; progress via same loop as wait()
       async def _is_done() -> bool:
-        status = await self.get_status()
+        status = await self.request_status()
         return status == terminal_state or (time.time() - started_at) >= lifetime
 
       progress_task: Optional[asyncio.Task[None]] = None
@@ -849,7 +841,7 @@ class ODTCBackend(ThermocyclerBackend):
         )
       try:
         while True:
-          status = await self.get_status()
+          status = await self.request_status()
           if status == terminal_state:
             return
           if (time.time() - started_at) >= lifetime:
@@ -1227,7 +1219,7 @@ class ODTCBackend(ThermocyclerBackend):
   async def set_block_temperature(
     self,
     temperature: List[float],
-    lid_temperature: Optional[float] = None,
+    lid_temperature: Optional[List[float]] = None,
     wait: bool = False,
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
@@ -1252,7 +1244,7 @@ class ODTCBackend(ThermocyclerBackend):
       raise ValueError("At least one block temperature required")
     block_temp = temperature[0]
     if lid_temperature is not None:
-      target_lid_temp = lid_temperature
+      target_lid_temp = lid_temperature[0]
     else:
       constraints = self.get_constraints()
       target_lid_temp = constraints.max_lid_temp

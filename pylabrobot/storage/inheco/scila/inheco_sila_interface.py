@@ -127,8 +127,8 @@ class SiLAError(RuntimeError):
 class SiLATimeoutError(SiLAError):
   """Command timed out: lifetime_of_execution exceeded or ResponseEvent not received."""
 
-  def __init__(self, message: str):
-    super().__init__(code=0, message=message, command="")
+  def __init__(self, message: str, command: str = ""):
+    super().__init__(code=0, message=message, command=command)
 
 
 class InhecoSiLAInterface:
@@ -155,8 +155,6 @@ class InhecoSiLAInterface:
     self._client_ip = client_ip or _get_local_ip(machine_ip)
     self._machine_ip = machine_ip
     self._logger = logger or logging.getLogger(__name__)
-
-    self._current_state: SiLAState = SiLAState.STARTUP
 
     # pending commands by request_id (supports multiple in-flight)
     self._pending_by_id: Dict[int, InhecoSiLAInterface._SiLACommand] = {}
@@ -285,16 +283,14 @@ class InhecoSiLAInterface:
         ("ErrorEvent", self._on_error_event, SOAP_RESPONSE_ErrorEventResponse),
       ):
         if event_type in decoded:
-          payload = decoded[event_type]
-          if isinstance(payload, dict):
-            handler(payload)
+          handler(decoded[event_type])
           return response.encode("utf-8")
 
       self._logger.warning("Unknown event type received")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
     except Exception as e:
-      self._logger.error(f"Error handling event: {e}")
+      self._logger.error(f"Error handling event: {e}\nRaw body: {req.body[:500]}")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
   def _on_response_event(self, response_event: dict) -> None:
@@ -336,9 +332,16 @@ class InhecoSiLAInterface:
 
   def _on_status_event(self, status_event: dict) -> None:
     event_description = status_event.get("eventDescription", {})
-    device_state = event_description.get("DeviceState")
+    if isinstance(event_description, dict):
+      device_state = event_description.get("DeviceState")
+    elif isinstance(event_description, str) and "<DeviceState>" in event_description:
+      root = ET.fromstring(event_description)
+      device_state = root.text if root.tag == "DeviceState" else root.findtext("DeviceState")
+    else:
+      self._logger.warning(f"StatusEvent with unparsable eventDescription: {event_description!r}")
+      return
     if device_state:
-      self._update_state_from_status(device_state)
+      self._logger.debug(f"StatusEvent device state: {device_state}")
 
   def _on_data_event(self, data_event: dict) -> None:
     """Override in subclasses to store/process DataEvents."""
@@ -350,7 +353,6 @@ class InhecoSiLAInterface:
     message = return_value.get("message", "")
 
     self._logger.error(f"ErrorEvent for requestId {req_id}: code {return_code}, message: {message}")
-    self._current_state = SiLAState.ERRORHANDLING
 
     err_msg = message.replace("\n", " ") if message else f"Error (code {return_code})"
     if req_id is not None:
@@ -368,7 +370,19 @@ class InhecoSiLAInterface:
       raise ValueError(f"returnCode not found in response for {command_name}")
     return return_code, result_level.get("message", "")
 
-  def _handle_return_code(
+  async def request_status(self) -> SiLAState:
+    """Query the device for its current state via GetStatus."""
+    decoded = await self.send_command("GetStatus")
+    state_str = decoded.get("GetStatusResponse", {}).get("state", "")
+    try:
+      return SiLAState(state_str)
+    except ValueError:
+      for s in SiLAState:
+        if s.value.lower() == state_str.lower():
+          return s
+      raise ValueError(f"Unknown device state: {state_str!r}")
+
+  async def _handle_return_code(
     self, return_code: int, message: str, command_name: str, request_id: int
   ) -> None:
     """Handle SiLA return codes. Override _handle_device_return_code for device-specific codes (1000+)."""
@@ -381,7 +395,14 @@ class InhecoSiLAInterface:
     if return_code == 6:
       raise SiLAError(6, "Invalid or duplicate requestId", command_name)
     if return_code == 9:
-      raise SiLAError(9, "Command not allowed in current state", command_name)
+      try:
+        state = await self.request_status()
+      except Exception:
+        state = None
+      msg = f"{message} (state: {state.value})" if state else message
+      if state == SiLAState.INERROR:
+        msg += ". Device requires a power cycle to recover."
+      raise SiLAError(9, msg, command_name)
     if return_code == 11:
       raise SiLAError(11, f"Invalid parameter: {message}", command_name)
     if return_code == 12:
@@ -430,24 +451,14 @@ class InhecoSiLAInterface:
     )
 
     def _do_request() -> bytes:
-      with urllib.request.urlopen(req) as resp:
+      with urllib.request.urlopen(req, timeout=5) as resp:
         return resp.read()  # type: ignore
 
     body = await asyncio.to_thread(_do_request)
     decoded = soap_decode(body.decode("utf-8"))
     return_code, message = self._get_return_code_and_message(command, decoded)
-    self._handle_return_code(return_code, message, command, request_id)
+    await self._handle_return_code(return_code, message, command, request_id)
     return decoded, return_code
-
-  def _update_state_from_status(self, state_str: str) -> None:
-    if not state_str:
-      return
-    try:
-      self._current_state = SiLAState(state_str)
-    except ValueError:
-      self._logger.warning(
-        f"Unknown state received: {state_str!r}, keeping current state {self._current_state.value}"
-      )
 
   async def send_command(
     self,
@@ -460,10 +471,6 @@ class InhecoSiLAInterface:
     request_id = self._make_request_id()
     decoded, return_code = await self._post_command(command, request_id, **kwargs)
     if return_code == 1:
-      if command == "GetStatus" and isinstance(decoded, dict):
-        state = decoded.get("GetStatusResponse", {}).get("state")
-        if state:
-          self._update_state_from_status(state)
       return decoded
     if return_code == 2:
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()

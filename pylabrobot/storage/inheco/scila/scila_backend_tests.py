@@ -2,7 +2,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAState
 from pylabrobot.storage.inheco.scila.scila_backend import SCILABackend
 
 
@@ -36,10 +36,10 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.mock_sila_interface.close.assert_called_once()
 
   async def test_request_status(self):
-    self.mock_sila_interface.send_command.return_value = {"GetStatusResponse": {"state": "standBy"}}
+    self.mock_sila_interface.request_status = AsyncMock(return_value=SiLAState.STANDBY)
     status = await self.backend.request_status()
-    self.assertEqual(status, "standBy")
-    self.mock_sila_interface.send_command.assert_called_with("GetStatus")
+    self.assertEqual(status, SiLAState.STANDBY)
+    self.mock_sila_interface.request_status.assert_called_once()
 
   async def test_request_liquid_level(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
