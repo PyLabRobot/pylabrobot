@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, Optional
 
 from pylabrobot.serializer import serialize
+from pylabrobot.utils.interpolation import interpolate_1d
 
 from .coordinate import Coordinate
 from .resource import Resource
@@ -22,6 +23,7 @@ class Container(Resource):
     model: Optional[str] = None,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
+    height_volume_data: Optional[Dict[float, float]] = None,
   ):
     """Create a new container.
 
@@ -29,6 +31,10 @@ class Container(Resource):
       material_z_thickness: Container cavity base to the (outer) base of the container object. If
         `None`, certain operations may not be supported.
       max_volume: Maximum volume of the container. If `None`, will be inferred from resource size.
+      height_volume_data: Optional dict mapping height (mm) to volume (uL). When provided,
+        ``compute_volume_from_height`` and ``compute_height_from_volume`` are auto-generated
+        via piecewise-linear interpolation if not explicitly passed. The data is also available
+        for direct use (e.g. building firmware segments from calibration knots).
     """
 
     super().__init__(
@@ -40,6 +46,20 @@ class Container(Resource):
       model=model,
     )
     self._material_z_thickness = material_z_thickness
+    self.height_volume_data = height_volume_data
+
+    # Auto-generate volume/height functions from height_volume_data if not explicitly provided.
+    if height_volume_data is not None:
+      volume_height_data = {v: h for h, v in height_volume_data.items()}
+
+      if compute_volume_from_height is None:
+        def compute_volume_from_height(h: float) -> float:
+          return interpolate_1d(h, height_volume_data, bounds_handling="error")
+
+      if compute_height_from_volume is None:
+        def compute_height_from_volume(v: float) -> float:
+          return interpolate_1d(v, volume_height_data, bounds_handling="error")
+
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
@@ -59,8 +79,11 @@ class Container(Resource):
       **super().serialize(),
       "max_volume": serialize(self.max_volume),
       "material_z_thickness": self._material_z_thickness,
-      "compute_volume_from_height": serialize(self._compute_volume_from_height),
-      "compute_height_from_volume": serialize(self._compute_height_from_volume),
+      "compute_volume_from_height": None if self.height_volume_data is not None
+        else serialize(self._compute_volume_from_height),
+      "compute_height_from_volume": None if self.height_volume_data is not None
+        else serialize(self._compute_height_from_volume),
+      "height_volume_data": self.height_volume_data,
     }
 
   def serialize_state(self) -> Dict[str, Any]:
