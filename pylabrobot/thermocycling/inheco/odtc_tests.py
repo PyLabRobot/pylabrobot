@@ -424,7 +424,7 @@ class TestODTCProgress(unittest.TestCase):
       target_block_temperature=37.0,
       stages=[],
     )
-    progress = ODTCProgress.from_data_event(payload, odtc=premethod)
+    progress = ODTCProgress.from_data_event(payload, odtc_protocol=premethod)
     self.assertIsInstance(progress, ODTCProgress)
     self.assertEqual(progress.elapsed_s, 100.0)
     self.assertEqual(progress.current_step_index, 0)
@@ -461,7 +461,7 @@ class TestODTCProgress(unittest.TestCase):
       ],
       stages=[],
     )
-    progress = ODTCProgress.from_data_event(payload, odtc=odtc)
+    progress = ODTCProgress.from_data_event(payload, odtc_protocol=odtc)
     self.assertIsInstance(progress, ODTCProgress)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
@@ -1210,7 +1210,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(result, ODTCProtocol)
     assert result is not None  # narrow for type checker
     self.assertEqual(result.name, "PCR_30")
-    protocol, _ = odtc_protocol_to_protocol(result)
+    protocol = odtc_protocol_to_protocol(result)
     self.assertEqual(len(protocol.stages), 1)
     self.assertEqual(len(protocol.stages[0].steps), 1)
 
@@ -1322,7 +1322,7 @@ class TestODTCStageAndRoundTrip(unittest.TestCase):
     method_set = parse_method_set(_minimal_method_xml_with_nested_loops())
     self.assertEqual(len(method_set.methods), 1)
     odtc = method_set.methods[0]
-    protocol, _ = odtc_protocol_to_protocol(odtc)
+    protocol = odtc_protocol_to_protocol(odtc)
     stages = protocol.stages
     self.assertGreater(len(stages), 0)
     # Top level: we expect at least one ODTCStage with inner_stages (outer 1-5, inner 2-4)
@@ -1387,7 +1387,7 @@ class TestODTCStageAndRoundTrip(unittest.TestCase):
     """Flat method (single loop 1-2 x 3) produces flat list of stages (regression)."""
     method_set = parse_method_set(_minimal_method_xml_flat_loop())
     odtc = method_set.methods[0]
-    protocol, _ = odtc_protocol_to_protocol(odtc)
+    protocol = odtc_protocol_to_protocol(odtc)
     stages = protocol.stages
     self.assertEqual(len(stages), 1)
     self.assertEqual(len(stages[0].steps), 2)

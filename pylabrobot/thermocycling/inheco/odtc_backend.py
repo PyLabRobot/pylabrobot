@@ -21,12 +21,10 @@ from .odtc_model import (
   ODTCProtocol,
   ODTCSensorValues,
   ProtocolList,
-  estimate_odtc_protocol_duration_seconds,
+  estimate_method_duration_seconds,
   generate_odtc_timestamp,
   get_constraints,
   get_method_by_name,
-  list_method_names,
-  list_premethod_names,
   method_set_to_xml,
   normalize_variant,
   odtc_protocol_to_protocol,
@@ -601,12 +599,12 @@ class ODTCBackend(ThermocyclerBackend):
     elif protocol is not None:
       config = self.get_default_config()
       odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
-      estimated_duration_s = estimate_odtc_protocol_duration_seconds(odtc_protocol)
+      estimated_duration_s = estimate_method_duration_seconds(odtc_protocol)
       protocol_to_register = protocol
     else:
       fetched = await self.get_protocol(method_name)
       if fetched is not None:
-        estimated_duration_s = estimate_odtc_protocol_duration_seconds(fetched)
+        estimated_duration_s = estimate_method_duration_seconds(fetched)
         protocol_to_register = fetched
       else:
         estimated_duration_s = self._get_effective_lifetime()
@@ -938,8 +936,8 @@ class ODTCBackend(ThermocyclerBackend):
     """
     method_set = await self.get_method_set()
     return ProtocolList(
-      methods=list_method_names(method_set),
-      premethods=list_premethod_names(method_set),
+      methods=[m.name for m in method_set.methods],
+      premethods=[p.name for p in method_set.premethods],
     )
 
   async def list_methods(self) -> Tuple[List[str], List[str]]:
@@ -950,7 +948,7 @@ class ODTCBackend(ThermocyclerBackend):
       premethods are setup-only (e.g. set block/lid temperature).
     """
     method_set = await self.get_method_set()
-    return (list_method_names(method_set), list_premethod_names(method_set))
+    return ([m.name for m in method_set.methods], [p.name for p in method_set.premethods])
 
   def get_default_config(self, **kwargs) -> ODTCConfig:
     """Get a default ODTCConfig with variant set to this backend's variant.
@@ -1017,7 +1015,7 @@ class ODTCBackend(ThermocyclerBackend):
 
     if execute:
       handle = await self.execute_method(odtc.name, wait=wait)
-      protocol_view = odtc_protocol_to_protocol(odtc_copy)[0]
+      protocol_view = odtc_protocol_to_protocol(odtc_copy)
       self._protocol_by_request_id[handle.request_id] = protocol_view
       return handle
     return None
@@ -1098,7 +1096,7 @@ class ODTCBackend(ThermocyclerBackend):
     """
     method_set = await self.get_method_set()
     resolved = get_method_by_name(method_set, name)
-    protocol_view = odtc_protocol_to_protocol(resolved)[0] if resolved else None
+    protocol_view = odtc_protocol_to_protocol(resolved) if resolved else None
     return await self.execute_method(name, wait=wait, protocol=protocol_view)
 
   async def upload_method_set(
@@ -1368,7 +1366,7 @@ class ODTCBackend(ThermocyclerBackend):
     await self._upload_odtc_protocol(odtc_protocol, allow_overwrite=True, execute=False)
     resolved_name = odtc_protocol.name
     handle = await self.execute_method(resolved_name, wait=False)
-    protocol_view = odtc_protocol_to_protocol(odtc_protocol)[0]
+    protocol_view = odtc_protocol_to_protocol(odtc_protocol)
     self._protocol_by_request_id[handle.request_id] = protocol_view
     return handle
 
@@ -1515,26 +1513,19 @@ class ODTCBackend(ThermocyclerBackend):
     """Total expanded step count from Protocol (for display when device does not send it)."""
     return sum(len(stage.steps) * stage.repeats for stage in protocol.stages)
 
-  def _stored_to_odtc_protocol(
-    self, stored: Union[Protocol, ODTCProtocol]
-  ) -> Optional[ODTCProtocol]:
-    """Normalize stored protocol to ODTCProtocol for position lookup."""
-    if isinstance(stored, ODTCProtocol):
-      return stored
-    if isinstance(stored, Protocol):
-      return protocol_to_odtc_protocol(stored, self.get_default_config())
-    return None
-
   async def _get_progress(self, request_id: int) -> Optional[ODTCProgress]:
     """Get progress from latest DataEvent (elapsed, temps, step/cycle/hold). Returns None if no protocol registered."""
     stored = self._protocol_by_request_id.get(request_id)
     if stored is None:
       return None
+    if isinstance(stored, ODTCProtocol):
+      odtc_protocol = stored
+    else:
+      odtc_protocol = protocol_to_odtc_protocol(stored, self.get_default_config())
     events_dict = await self.get_data_events(request_id)
     events = events_dict.get(request_id, [])
     payload = events[-1] if events else None
-    protocol = self._stored_to_odtc_protocol(stored)
-    return ODTCProgress.from_data_event(payload, odtc=protocol)
+    return ODTCProgress.from_data_event(payload, odtc_protocol=odtc_protocol)
 
   def _request_id_for_get_progress(self) -> Optional[int]:
     """Request ID of current execution for get_* methods; None if none or done."""
