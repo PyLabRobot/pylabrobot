@@ -506,24 +506,29 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
 
   def test_check_state_allowability(self):
     """Test state allowability checking."""
+    from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAError
+
     # GetStatus allowed in all states
     self.interface._current_state = SiLAState.STARTUP
-    self.assertTrue(self.interface._check_state_allowability("GetStatus"))
+    self.interface._check_state_allowability("GetStatus")  # should not raise
 
     self.interface._current_state = SiLAState.STANDBY
-    self.assertTrue(self.interface._check_state_allowability("GetStatus"))
-    self.assertTrue(self.interface._check_state_allowability("Initialize"))
-    self.assertFalse(self.interface._check_state_allowability("ExecuteMethod"))
+    self.interface._check_state_allowability("GetStatus")
+    self.interface._check_state_allowability("Initialize")
+    with self.assertRaises(SiLAError):
+      self.interface._check_state_allowability("ExecuteMethod")
 
-    # GetStatus allowed during initializing (needed for polling and post-Initialize verification)
+    # GetStatus allowed during initializing
     self.interface._current_state = SiLAState.INITIALIZING
-    self.assertTrue(self.interface._check_state_allowability("GetStatus"))
-    self.assertTrue(self.interface._check_state_allowability("GetDeviceIdentification"))
-    self.assertFalse(self.interface._check_state_allowability("ExecuteMethod"))
+    self.interface._check_state_allowability("GetStatus")
+    self.interface._check_state_allowability("GetDeviceIdentification")
+    with self.assertRaises(SiLAError):
+      self.interface._check_state_allowability("ExecuteMethod")
 
     self.interface._current_state = SiLAState.IDLE
-    self.assertTrue(self.interface._check_state_allowability("ExecuteMethod"))
-    self.assertFalse(self.interface._check_state_allowability("Initialize"))
+    self.interface._check_state_allowability("ExecuteMethod")
+    with self.assertRaises(SiLAError):
+      self.interface._check_state_allowability("Initialize")
 
   def test_check_parallelism(self):
     """Test parallelism checking."""
@@ -681,10 +686,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend.get_status = AsyncMock(side_effect=mock_get_status)  # type: ignore[method-assign]
     with patch("asyncio.sleep", new_callable=AsyncMock):
       await self.backend.setup(full=True, max_attempts=3)
-    self.assertEqual(call_count, 3)
-    # Full path runs 3 times (fail twice, succeed on third)
+    # Calls: attempt 1 startup poll (fail), attempt 2 startup poll (fail),
+    # attempt 3 startup poll (ok) + post-reset status (ok) = 4
+    self.assertEqual(call_count, 4)
     self.assertEqual(self.backend._sila.setup.call_count, 3)
-    self.assertEqual(self.backend.reset.call_count, 3)
+    self.assertEqual(self.backend.reset.call_count, 1)
 
   async def test_setup_raises_when_all_attempts_fail(self):
     """Test setup(full=True, max_attempts=2) raises when all attempts fail."""

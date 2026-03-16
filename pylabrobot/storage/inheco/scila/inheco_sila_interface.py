@@ -81,9 +81,18 @@ SOAP_RESPONSE_ErrorEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoa
 
 
 def _get_local_ip(machine_ip: str) -> str:
+  from pylabrobot.io.sila.discovery import _get_link_local_interfaces
+
+  # Link-local (169.254.x.x): the UDP routing trick picks the wrong interface
+  # on multi-homed hosts. Enumerate local link-local addresses instead.
+  if machine_ip.startswith("169.254."):
+    interfaces = _get_link_local_interfaces()
+    if interfaces:
+      return interfaces[0]
+    raise RuntimeError(f"No link-local interface found for device at {machine_ip}")
+
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   try:
-    # Doesn't actually connect, just determines the route
     s.connect((machine_ip, 1))
     local_ip: str = s.getsockname()[0]  # type: ignore
     if local_ip is None or local_ip.startswith("127."):
@@ -113,6 +122,13 @@ class SiLAError(RuntimeError):
     self.command = command
     self.details = details or {}
     super().__init__(f"Command {command} failed with code {code}: '{message}'")
+
+
+class SiLATimeoutError(SiLAError):
+  """Command timed out: lifetime_of_execution exceeded or ResponseEvent not received."""
+
+  def __init__(self, message: str):
+    super().__init__(code=0, message=message, command="")
 
 
 class InhecoSiLAInterface:
@@ -264,22 +280,17 @@ class InhecoSiLAInterface:
     """Dispatch incoming device events to handler methods."""
     try:
       decoded = soap_decode(req.body.decode("utf-8"))
-
-      if "ResponseEvent" in decoded:
-        self._on_response_event(decoded["ResponseEvent"])
-        return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
-
-      if "StatusEvent" in decoded:
-        self._on_status_event(decoded["StatusEvent"])
-        return SOAP_RESPONSE_StatusEventResponse.encode("utf-8")
-
-      if "DataEvent" in decoded:
-        self._on_data_event(decoded["DataEvent"])
-        return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
-
-      if "ErrorEvent" in decoded:
-        self._on_error_event(decoded["ErrorEvent"])
-        return SOAP_RESPONSE_ErrorEventResponse.encode("utf-8")
+      for event_type, handler, response in (
+        ("ResponseEvent", self._on_response_event, SOAP_RESPONSE_ResponseEventResponse),
+        ("StatusEvent", self._on_status_event, SOAP_RESPONSE_StatusEventResponse),
+        ("DataEvent", self._on_data_event, SOAP_RESPONSE_DataEventResponse),
+        ("ErrorEvent", self._on_error_event, SOAP_RESPONSE_ErrorEventResponse),
+      ):
+        if event_type in decoded:
+          payload = decoded[event_type]
+          if isinstance(payload, dict):
+            handler(payload)
+          return response.encode("utf-8")
 
       self._logger.warning("Unknown event type received")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")

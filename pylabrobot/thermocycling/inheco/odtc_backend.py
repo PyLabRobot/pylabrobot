@@ -338,7 +338,6 @@ class ODTCBackend(ThermocyclerBackend):
     lifetime_of_execution: Optional[float] = None,
     progress_log_interval: Optional[float] = 150.0,
     progress_callback: Optional[Callable[..., None]] = None,
-    data_event_log_path: Optional[str] = None,
     first_event_timeout_seconds: float = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS,
   ):
     """Initialize ODTC backend.
@@ -352,7 +351,6 @@ class ODTCBackend(ThermocyclerBackend):
       lifetime_of_execution: Max seconds to wait for async command completion (SiLA2 deadline). If None, uses 3 hours. Protocol execution is always bounded.
       progress_log_interval: Seconds between progress log lines during wait. None or 0 to disable. Default 150.0 (2.5 min); suitable for protocols from minutes to 1–2+ hours.
       progress_callback: Optional callback(ODTCProgress) called each progress_log_interval during wait.
-      data_event_log_path: Optional path to append full DataEvent payloads (one JSON line per event) for debugging and API discovery.
       first_event_timeout_seconds: Timeout for waiting for first DataEvent (ExecuteMethod) and default lifetime/eta for status-driven commands (e.g. OpenDoor). Default 60 s.
     """
     super().__init__()
@@ -368,7 +366,6 @@ class ODTCBackend(ThermocyclerBackend):
       logger=logger,
       lifetime_of_execution=lifetime_of_execution,
     )
-    self._sila.data_event_log_path = data_event_log_path
     self._first_event_timeout_seconds = first_event_timeout_seconds
     self.logger = logger or logging.getLogger(__name__)
 
@@ -376,15 +373,6 @@ class ODTCBackend(ThermocyclerBackend):
   def odtc_ip(self) -> str:
     """IP address of the ODTC device."""
     return self._sila._machine_ip
-
-  @property
-  def data_event_log_path(self) -> Optional[str]:
-    """Path where full DataEvent payloads are appended (one JSON line per event); None to disable."""
-    return self._sila.data_event_log_path
-
-  @data_event_log_path.setter
-  def data_event_log_path(self, path: Optional[str]) -> None:
-    self._sila.data_event_log_path = path
 
   @property
   def variant(self) -> int:
@@ -471,6 +459,14 @@ class ODTCBackend(ThermocyclerBackend):
   async def _setup_full_path(self, simulation_mode: bool) -> None:
     """Run the full connection path: event receiver, Reset, Initialize, verify idle."""
     await self._sila.setup()
+
+    # Wait for device to leave startup (boot takes a few seconds after power cycle)
+    for _ in range(30):
+      status = await self.get_status()
+      if status != SiLAState.STARTUP.value:
+        break
+      await asyncio.sleep(1)
+
     await self.reset(simulation_mode=simulation_mode)
 
     status = await self.get_status()
