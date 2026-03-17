@@ -1929,6 +1929,59 @@ class PrepBackend(LiquidHandlerBackend):
     return z
 
   # ---------------------------------------------------------------------------
+  # Per-axis channel movement
+  # ---------------------------------------------------------------------------
+
+  async def move_channel_x(self, channel_idx: int, x: float) -> None:
+    """Move the gantry X axis to a position (in mm).
+
+    On the Prep, X is shared across all channels (single gantry). The channel_idx
+    parameter is accepted for STAR API compatibility but does not affect which
+    channel moves — all channels move together in X.
+
+    Analogous to STARBackend.move_channel_x().
+
+    Args:
+      channel_idx: Channel index (0=rearmost). Used to read current Y/Z.
+      x: Target X position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    await self.move_to_position(x, positions[channel_idx].y, positions[channel_idx].z,
+                                use_channels=channel_idx)
+
+  async def move_channel_y(self, channel_idx: int, y: float) -> None:
+    """Move a channel in the Y direction (in mm).
+
+    Analogous to STARBackend.move_channel_y().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+      y: Target Y position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    await self.move_to_position(positions[channel_idx].x, y, positions[channel_idx].z,
+                                use_channels=channel_idx)
+
+  async def move_channel_z(self, channel_idx: int, z: float) -> None:
+    """Move a channel in the Z direction (in mm).
+
+    Analogous to STARBackend.move_channel_z().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+      z: Target Z position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    await self.move_to_position(positions[channel_idx].x, positions[channel_idx].y, z,
+                                use_channels=channel_idx)
+
+  # ---------------------------------------------------------------------------
   # Tip presence sensing
   # ---------------------------------------------------------------------------
 
