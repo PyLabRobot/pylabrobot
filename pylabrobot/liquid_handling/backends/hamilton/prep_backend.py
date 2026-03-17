@@ -2031,6 +2031,68 @@ class PrepBackend(LiquidHandlerBackend):
     return results
 
   # ---------------------------------------------------------------------------
+  # Capacitance-based probing (cLLD)
+  # ---------------------------------------------------------------------------
+
+  async def clld_probe_x_position_using_channel(self, *args, **kwargs):
+    """Probe X position using capacitive LLD. Not yet implemented for the Prep.
+
+    TODO: Investigate ChannelCoordinator [1:17] MoveChannelAxisAbsolute and
+    [1:18] MoveChannelAxisRelative for X-axis probing with cLLD feedback.
+    The ChannelCoordinator also has [1:19] YSeekLldPosition which may have
+    an X equivalent, though none was found in introspection.
+    """
+    raise NotImplementedError("clld_probe_x_position_using_channel is not yet implemented for PrepBackend.")
+
+  async def clld_probe_y_position_using_channel(self, *args, **kwargs):
+    """Probe Y position using capacitive LLD. Not yet implemented for the Prep.
+
+    TODO: Investigate ChannelCoordinator [1:19] YSeekLldPosition(seekParameters)
+    which takes a YLLDSeekParameters struct and returns SeekResultParameters.
+    Also Channel [1:11] LeakCheck has ySeekDistance/yPreloadDistance params
+    which suggest Y-axis seeking capability.
+    """
+    raise NotImplementedError("clld_probe_y_position_using_channel is not yet implemented for PrepBackend.")
+
+  async def clld_probe_z_height_using_channel(self, *args, **kwargs):
+    """Probe Z-height using capacitive LLD. Not yet implemented for the Prep.
+
+    TODO: Implement using the standalone ZSeekLldPosition command:
+    - Pipettor [1:29] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
+    - ChannelCoordinator [1:20] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
+    Previously returned HC_RESULT=0x0F06 which was assumed to be "LLD not supported".
+    Now identified as "Z position out of allowed movement range" — the Z parameters
+    in LLDChannelSeekParameters were out of bounds. Retry with valid Z values
+    within deck_bounds (min_z=18.03, max_z=167.5).
+
+    Findings from testing:
+    - cLLD DOES work through the aspirate path (aspirate with use_lld=True and
+      default_values=False on both LldParameters and CLldParameters).
+    - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
+    - The aspirate-based approach is a workaround, not a proper standalone probe.
+
+    Also investigate ZAxis-level alternatives:
+    - ZAxis.SeekCapacitiveLld [1:12] (returns 0x0207 when called directly)
+    - ZAxis.SeekCapacitiveLldTip [1:13] (returns 0x0207 when called directly)
+    - ZAxis.LiquidStatus [1:16] for reading last detection results
+    - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
+    """
+    raise NotImplementedError("clld_probe_z_height_using_channel is not yet implemented for PrepBackend.")
+
+  async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
+    """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.
+
+    TODO: Investigate force-based Z probing commands:
+    - ZAxis.SeekObstacle [1:14] SeekObstacle(startPosition, endPosition, finalPosition, velocity)
+      Currently returns 0x0207 when called directly — needs coordinator routing.
+    - Calibration.ZTouchoff [1:8] — runs a Z touchoff calibration (force-based).
+    - The STAR implements this via a dedicated "ZH" firmware command with PWM-based
+      force detection. The Prep may have an equivalent through the ChannelCoordinator
+      but it was not found in introspection.
+    """
+    raise NotImplementedError("ztouch_probe_z_height_using_channel is not yet implemented for PrepBackend.")
+
+  # ---------------------------------------------------------------------------
   # Firmware version queries
   # ---------------------------------------------------------------------------
 
