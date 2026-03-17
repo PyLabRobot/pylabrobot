@@ -21,7 +21,6 @@ from .odtc_model import (
   ODTCProgress,
   ODTCProtocol,
   ODTCVariant,
-  ProtocolList,
   normalize_variant,
 )
 
@@ -38,6 +37,5 @@ __all__ = [
   "ODTCProgress",
   "ODTCProtocol",
   "ODTCVariant",
-  "ProtocolList",
   "normalize_variant",
 ]

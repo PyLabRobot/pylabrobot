@@ -7,7 +7,7 @@ import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
@@ -20,11 +20,9 @@ from .odtc_model import (
   ODTCProgress,
   ODTCProtocol,
   ODTCSensorValues,
-  ProtocolList,
   estimate_method_duration_seconds,
   generate_odtc_timestamp,
   get_constraints,
-  get_method_by_name,
   method_set_to_xml,
   normalize_variant,
   odtc_protocol_to_protocol,
@@ -578,13 +576,11 @@ class ODTCBackend(ThermocyclerBackend):
       params["priority"] = priority
 
     protocol_to_register: Optional[Union[Protocol, ODTCProtocol]] = None
-    _, premethods = await self.list_methods()
-    if method_name in premethods:
+    method_set = await self.get_method_set()
+    resolved = method_set.get(method_name)
+    if resolved is not None and resolved.kind == "premethod":
       estimated_duration_s = PREMETHOD_ESTIMATED_DURATION_SECONDS
-      method_set = await self.get_method_set()
-      resolved = get_method_by_name(method_set, method_name)
-      if resolved is not None:
-        protocol_to_register = resolved
+      protocol_to_register = resolved
     elif protocol is not None:
       config = self.get_default_config()
       odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
@@ -901,34 +897,10 @@ class ODTCBackend(ThermocyclerBackend):
       ODTCProtocol if a runnable method exists, None otherwise.
     """
     method_set = await self.get_method_set()
-    resolved = get_method_by_name(method_set, name)
+    resolved = method_set.get(name)
     if resolved is None or resolved.kind == "premethod":
       return None
     return resolved
-
-  async def list_protocols(self) -> ProtocolList:
-    """List all protocol names (methods and premethods) on the device.
-
-    Returns:
-      ProtocolList with .methods, .premethods, .all (flat list), and a __str__
-      that prints Methods and PreMethods in clear sections. Iteration yields
-      all names (methods then premethods).
-    """
-    method_set = await self.get_method_set()
-    return ProtocolList(
-      methods=[m.name for m in method_set.methods],
-      premethods=[p.name for p in method_set.premethods],
-    )
-
-  async def list_methods(self) -> Tuple[List[str], List[str]]:
-    """List method names and premethod names separately.
-
-    Returns:
-      Tuple of (method_names, premethod_names). Methods are runnable protocols;
-      premethods are setup-only (e.g. set block/lid temperature).
-    """
-    method_set = await self.get_method_set()
-    return ([m.name for m in method_set.methods], [p.name for p in method_set.premethods])
 
   def get_default_config(self, **kwargs) -> ODTCConfig:
     """Get a default ODTCConfig with variant set to this backend's variant.
@@ -1075,7 +1047,7 @@ class ODTCBackend(ThermocyclerBackend):
       Execution handle (completed if wait=True).
     """
     method_set = await self.get_method_set()
-    resolved = get_method_by_name(method_set, name)
+    resolved = method_set.get(name)
     protocol_view = odtc_protocol_to_protocol(resolved) if resolved else None
     return await self.execute_method(name, wait=wait, protocol=protocol_view)
 
@@ -1112,7 +1084,7 @@ class ODTCBackend(ThermocyclerBackend):
 
       # Check all method names (unified search)
       for method in method_set.methods:
-        existing_method = get_method_by_name(existing_method_set, method.name)
+        existing_method = existing_method_set.get(method.name)
         if existing_method is not None:
           conflicts.append(
             f"Method '{method.name}' already exists as {_existing_item_type(existing_method)}"
@@ -1120,7 +1092,7 @@ class ODTCBackend(ThermocyclerBackend):
 
       # Check all premethod names (unified search)
       for premethod in method_set.premethods:
-        existing_method = get_method_by_name(existing_method_set, premethod.name)
+        existing_method = existing_method_set.get(premethod.name)
         if existing_method is not None:
           conflicts.append(
             f"Method '{premethod.name}' already exists as {_existing_item_type(existing_method)}"

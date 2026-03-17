@@ -692,7 +692,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_execute_method(self):
     """Test execute_method with wait=True; event-driven: wait_for_first_data_event then handle with eta from DataEvent."""
-    self.backend.list_methods = AsyncMock(return_value=([], []))  # type: ignore[method-assign]
+    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
@@ -844,7 +844,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_execute_method_wait_false(self):
     """Test execute_method with wait=False (returns handle); eta from our estimated_duration_s - elapsed_s (no device remaining)."""
-    self.backend.list_methods = AsyncMock(return_value=([], []))  # type: ignore[method-assign]
+    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
@@ -873,7 +873,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       stages=[],
     )
     method_set = ODTCMethodSet(methods=[], premethods=[premethod])
-    self.backend.list_methods = AsyncMock(return_value=([], ["Pre37"]))  # type: ignore[method-assign]
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
@@ -893,7 +892,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_execute_method_first_event_timeout(self):
     """Test execute_method propagates FirstEventTimeout when no DataEvent received in time."""
-    self.backend.list_methods = AsyncMock(return_value=([], []))  # type: ignore[method-assign]
+    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
@@ -1082,35 +1081,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     events = await self.backend.get_data_events(request_id=99999)
     self.assertEqual(len(events), 1)
     self.assertEqual(len(events[99999]), 0)
-
-  async def test_list_protocols(self):
-    """Test list_protocols returns method and premethod names."""
-    method_set = ODTCMethodSet(
-      methods=[ODTCProtocol(kind="method", name="PCR_30", stages=[])],
-      premethods=[ODTCProtocol(kind="premethod", name="Pre25", stages=[])],
-    )
-    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
-    names = await self.backend.list_protocols()
-    self.assertEqual(names.all, ["PCR_30", "Pre25"])
-
-  async def test_list_methods(self):
-    """Test list_methods returns (method_names, premethod_names) and matches list_protocols."""
-    method_set = ODTCMethodSet(
-      methods=[
-        ODTCProtocol(kind="method", name="PCR_30", stages=[]),
-        ODTCProtocol(kind="method", name="PCR_35", stages=[]),
-      ],
-      premethods=[
-        ODTCProtocol(kind="premethod", name="Pre25", stages=[]),
-        ODTCProtocol(kind="premethod", name="Pre37", stages=[]),
-      ],
-    )
-    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
-    methods, premethods = await self.backend.list_methods()
-    self.assertEqual(methods, ["PCR_30", "PCR_35"])
-    self.assertEqual(premethods, ["Pre25", "Pre37"])
-    protocol_list = await self.backend.list_protocols()
-    self.assertEqual(methods + premethods, protocol_list.all)
 
   async def test_get_protocol_returns_none_for_missing(self):
     """Test get_protocol returns None when name not found."""

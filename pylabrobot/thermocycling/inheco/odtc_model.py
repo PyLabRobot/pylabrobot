@@ -19,7 +19,6 @@ from typing import (
   TYPE_CHECKING,
   Any,
   Dict,
-  Iterator,
   List,
   Literal,
   Optional,
@@ -342,6 +341,28 @@ class ODTCMethodSet:
   delete_all_methods: bool = False
   premethods: List[ODTCProtocol] = field(default_factory=list)
   methods: List[ODTCProtocol] = field(default_factory=list)
+
+  def get(self, name: str) -> Optional[ODTCProtocol]:
+    """Find a method or premethod by name. Returns ODTCProtocol or None."""
+    return next((p for p in self.methods + self.premethods if p.name == name), None)
+
+  def __str__(self) -> str:
+    lines: List[str] = ["Methods (runnable protocols):"]
+    if self.methods:
+      for m in self.methods:
+        lines.append(f"  - {m.name} ({len(m.steps)} steps)")
+    else:
+      lines.append("  (none)")
+    lines.append("PreMethods (setup-only):")
+    if self.premethods:
+      for p in self.premethods:
+        lines.append(
+          f"  - {p.name} (block={p.target_block_temperature:.1f}°C,"
+          f" lid={p.target_lid_temperature:.1f}°C)"
+        )
+    else:
+      lines.append("  (none)")
+    return "\n".join(lines)
 
 
 @dataclass
@@ -1217,54 +1238,6 @@ def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
   """Parse SensorValues XML string."""
   root = ET.fromstring(xml_str)
   return from_xml(root, ODTCSensorValues)
-
-
-# =============================================================================
-# Method Lookup Helpers
-# =============================================================================
-
-
-def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
-  """Find a method or premethod by name. Returns ODTCProtocol or None."""
-  return next((p for p in method_set.methods + method_set.premethods if p.name == name), None)
-
-
-class ProtocolList:
-  """Result of list_protocols(): methods and premethods with nice __str__ and backward-compat .all / iteration."""
-
-  def __init__(self, methods: List[str], premethods: List[str]) -> None:
-    self.methods = list(methods)
-    self.premethods = list(premethods)
-
-  @property
-  def all(self) -> List[str]:
-    """Flat list of all protocol names (methods then premethods), for backward compatibility."""
-    return self.methods + self.premethods
-
-  def __iter__(self) -> Iterator[str]:
-    yield from self.all
-
-  def __str__(self) -> str:
-    lines: List[str] = ["Methods (runnable protocols):"]
-    if self.methods:
-      for name in self.methods:
-        lines.append(f"  - {name}")
-    else:
-      lines.append("  (none)")
-    lines.append("PreMethods (setup-only, e.g. set temperature):")
-    if self.premethods:
-      for name in self.premethods:
-        lines.append(f"  - {name}")
-    else:
-      lines.append("  (none)")
-    return "\n".join(lines)
-
-  def __eq__(self, other: object) -> bool:
-    if isinstance(other, list):
-      return self.all == other
-    if isinstance(other, ProtocolList):
-      return self.methods == other.methods and self.premethods == other.premethods
-    return NotImplemented
 
 
 # =============================================================================
