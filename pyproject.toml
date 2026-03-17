@@ -16,7 +16,7 @@ serial = ["pyserial"]
 usb = ["pyusb", "libusb-package"]
 ftdi = ["pylibftdi", "pyusb"]
 hid = ["hid"]
-modbus = ["pymodbus"]
+modbus = ["pymodbus>=3.0.0,<4.0.0"]
 opentrons = ["opentrons-http-api-client==0.2.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
 dev = [
