@@ -15,7 +15,7 @@ Use tc.run_protocol(protocol, block_max_volume) for in-memory protocols;
 tc.run_stored_protocol("my_pcr") for stored-by-name (ODTC only).
 """
 
-from .odtc_backend import ODTCBackend, ODTCExecution
+from .odtc_backend import ODTCBackend
 from .odtc_model import (
   ODTC_DIMENSIONS,
   ODTCProgress,
@@ -24,16 +24,9 @@ from .odtc_model import (
   normalize_variant,
 )
 
-# Backward-compat aliases (single execution handle type)
-CommandExecution = ODTCExecution
-MethodExecution = ODTCExecution
-
 __all__ = [
-  "CommandExecution",
-  "MethodExecution",
   "ODTCBackend",
   "ODTC_DIMENSIONS",
-  "ODTCExecution",
   "ODTCProgress",
   "ODTCProtocol",
   "ODTCVariant",

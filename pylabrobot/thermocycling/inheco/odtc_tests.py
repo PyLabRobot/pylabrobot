@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.thermocycling.inheco.odtc_backend import ODTCBackend, ODTCExecution
+from pylabrobot.thermocycling.inheco.odtc_backend import ODTCBackend
 from pylabrobot.thermocycling.inheco.odtc_model import (
   PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ODTCMethodSet,
@@ -21,7 +21,6 @@ from pylabrobot.thermocycling.inheco.odtc_model import (
 )
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
 from pylabrobot.thermocycling.inheco.odtc_sila_interface import (
-  FirstEventTimeout,
   ODTCSiLAInterface,
 )
 
@@ -667,23 +666,18 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(sensor_values.lid, 25.75, places=2)  # 2575 * 0.01
 
   async def test_execute_method(self):
-    """Test execute_method with wait=True; event-driven: wait_for_first_data_event then handle with eta from DataEvent."""
+    """Test execute_method sends ExecuteMethod via send_command_async."""
     self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
-      return_value=_minimal_data_event_payload(remaining_s=300.0)
-    )
-    result = await self.backend.execute_method("MyMethod", wait=True)
-    self.assertIsInstance(result, ODTCExecution)
-    self.assertEqual(result.method_name, "MyMethod")
-    self.assertEqual(result.request_id, 12345)
+    self.backend.is_method_running = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    await self.backend.execute_method("MyMethod", wait=True)
     self.backend._sila.send_command_async.assert_called_once()
     call_kwargs = self.backend._sila.send_command_async.call_args[1]
     self.assertEqual(call_kwargs["methodName"], "MyMethod")
-    self.assertEqual(result.estimated_remaining_time, self.backend._get_effective_lifetime())
+    self.assertEqual(self.backend._current_request_id, 12345)
 
   async def test_stop_method(self):
     """Test stop_method."""
@@ -726,36 +720,18 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       target_block_temperature=37.0,
       stages=[],
     )
-    self.backend._protocol_by_request_id[request_id] = premethod
+    self.backend._current_request_id = request_id
+    self.backend._current_protocol = premethod
     self.backend._sila._data_events_by_request_id = {  # type: ignore[attr-defined]
       request_id: [_data_event_payload_with_elapsed(100.0, request_id)],
     }
-    fut: asyncio.Future[Any] = asyncio.Future()
-    self.backend._current_execution = ODTCExecution(
-      request_id=request_id,
-      command="ExecuteMethod",
-      _future=fut,
-      backend=self.backend,
-      estimated_remaining_time=600.0,
-      started_at=0.0,
-      lifetime=660.0,
-      method_name="Pre37",
-    )
-    try:
-      progress = await self.backend.get_progress_snapshot()
-      self.assertIsNotNone(progress)
-      assert progress is not None
-      self.assertIsInstance(progress, ODTCProgress)
-      self.assertEqual(progress.elapsed_s, 100.0)
-      self.assertEqual(progress.current_step_index, 0)
-      self.assertEqual(progress.current_cycle_index, 0)
-      self.assertGreater(progress.remaining_hold_s or 0, 0)
-      self.assertEqual(progress.target_temp_c, 37.0)
-      self.assertEqual(progress.estimated_duration_s, PREMETHOD_ESTIMATED_DURATION_SECONDS)
-      self.assertAlmostEqual(progress.remaining_duration_s or 0, 500.0, delta=1.0)  # 600 - 100
-    finally:
-      self.backend._current_execution = None
-      self.backend._protocol_by_request_id.pop(request_id, None)
+    progress = await self.backend.get_progress_snapshot()
+    self.assertIsNotNone(progress)
+    assert progress is not None
+    self.assertIsInstance(progress, ODTCProgress)
+    self.assertEqual(progress.elapsed_s, 100.0)
+    self.assertEqual(progress.current_step_index, 0)
+    self.assertEqual(progress.target_temp_c, 37.0)
 
   async def test_get_current_step_index_and_get_hold_time_with_registered_protocol(self):
     """With protocol registered and DataEvent, get_current_step_index and get_hold_time return values."""
@@ -766,54 +742,20 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       target_block_temperature=37.0,
       stages=[],
     )
-    self.backend._protocol_by_request_id[request_id] = premethod
+    self.backend._current_request_id = request_id
+    self.backend._current_protocol = premethod
     self.backend._sila._data_events_by_request_id = {  # type: ignore[attr-defined]
       request_id: [_data_event_payload_with_elapsed(50.0, request_id)],
     }
-    fut: asyncio.Future[Any] = asyncio.Future()
-    self.backend._current_execution = ODTCExecution(
-      request_id=request_id,
-      command="ExecuteMethod",
-      _future=fut,
-      backend=self.backend,
-      estimated_remaining_time=600.0,
-      started_at=0.0,
-      lifetime=660.0,
-      method_name="Pre37",
-    )
-    try:
-      step_idx = await self.backend.get_current_step_index()
-      self.assertEqual(step_idx, 0)
-      hold_s = await self.backend.get_hold_time()
-      self.assertGreaterEqual(hold_s, 0)
-      cycle_idx = await self.backend.get_current_cycle_index()
-      self.assertEqual(cycle_idx, 0)
-    finally:
-      self.backend._current_execution = None
-      self.backend._protocol_by_request_id.pop(request_id, None)
+    step_idx = await self.backend.get_current_step_index()
+    self.assertEqual(step_idx, 0)
+    hold_s = await self.backend.get_hold_time()
+    self.assertGreaterEqual(hold_s, 0)
+    cycle_idx = await self.backend.get_current_cycle_index()
+    self.assertEqual(cycle_idx, 0)
 
-  async def test_execute_method_wait_false(self):
-    """Test execute_method with wait=False (returns handle); eta from our estimated_duration_s - elapsed_s (no device remaining)."""
-    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
-    self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
-      return_value=_minimal_data_event_payload(remaining_s=300.0)
-    )
-    execution = await self.backend.execute_method("PCR_30cycles", wait=False)
-    assert execution is not None  # Type narrowing
-    self.assertIsInstance(execution, ODTCExecution)
-    self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.method_name, "PCR_30cycles")
-    self.backend._sila.send_command_async.assert_called_once()
-    call_kwargs = self.backend._sila.send_command_async.call_args[1]
-    self.assertEqual(call_kwargs["methodName"], "PCR_30cycles")
-    self.assertEqual(execution.estimated_remaining_time, self.backend._get_effective_lifetime())
-
-  async def test_execute_method_premethod_registers_protocol(self):
-    """When executing a premethod, protocol is registered so progress/step/cycle/hold work."""
+  async def test_execute_method_premethod_stores_protocol(self):
+    """When executing a premethod, _current_protocol is set."""
     premethod = ODTCProtocol(
       kind="premethod",
       name="Pre37",
@@ -825,122 +767,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 99999))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
-      return_value=_minimal_data_event_payload(remaining_s=300.0)
-    )
-    execution = await self.backend.execute_method("Pre37", wait=False)
-    assert execution is not None
-    self.assertIn(execution.request_id, self.backend._protocol_by_request_id)
-    registered = self.backend._protocol_by_request_id[execution.request_id]
-    self.assertIsInstance(registered, ODTCProtocol)
-    reg_odtc = cast(ODTCProtocol, registered)
-    self.assertEqual(reg_odtc.kind, "premethod")
-    self.assertEqual(reg_odtc.name, "Pre37")
-    self.assertEqual(reg_odtc.target_block_temperature, 37.0)
-
-  async def test_execute_method_first_event_timeout(self):
-    """Test execute_method propagates FirstEventTimeout when no DataEvent received in time."""
-    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
-    self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
-    self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
-      side_effect=FirstEventTimeout("No DataEvent received for request_id 12345 within 60.0s")
-    )
-    with self.assertRaises(FirstEventTimeout) as cm:
-      await self.backend.execute_method("MyMethod", wait=False)
-    self.assertIn("12345", str(cm.exception))
-    self.assertIn("60", str(cm.exception))
-
-  async def test_method_execution_awaitable(self):
-    """Test that ODTCExecution is awaitable and wait() completes (returns None)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result("success")
-    execution = ODTCExecution(
-      request_id=12345,
-      command="ExecuteMethod",
-      method_name="PCR_30cycles",
-      _future=fut,
-      backend=self.backend,
-    )
-    result = await execution
-    self.assertIsNone(result)
-    await execution.wait()  # Should not raise
-
-  async def test_method_execution_is_running(self):
-    """Test ODTCExecution.is_running() for ExecuteMethod."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    execution = ODTCExecution(
-      request_id=12345,
-      command="ExecuteMethod",
-      method_name="PCR_30cycles",
-      _future=fut,
-      backend=self.backend,
-    )
-    self.backend.request_status = AsyncMock(return_value=SiLAState.BUSY)  # type: ignore[method-assign]
-    is_running = await execution.is_running()
-    self.assertTrue(is_running)
-
-  async def test_method_execution_stop(self):
-    """Test ODTCExecution.stop() for ExecuteMethod."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    execution = ODTCExecution(
-      request_id=12345,
-      command="ExecuteMethod",
-      method_name="PCR_30cycles",
-      _future=fut,
-      backend=self.backend,
-    )
-    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
-    await execution.stop()
-    self.backend._sila.send_command.assert_called_once_with("StopMethod")
-
-  async def test_odtc_execution_has_command_and_method(self):
-    """Test ODTCExecution has command_name and method_name when ExecuteMethod."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    execution = ODTCExecution(
-      request_id=12345,
-      command="ExecuteMethod",
-      method_name="PCR_30cycles",
-      _future=fut,
-      backend=self.backend,
-    )
-    self.assertEqual(execution.command, "ExecuteMethod")
-    self.assertEqual(execution.method_name, "PCR_30cycles")
-
-  async def test_command_execution_awaitable(self):
-    """Test that ODTCExecution is awaitable and wait() completes (returns None)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result("success")
-    execution = ODTCExecution(
-      request_id=12345,
-      command="OpenDoor",
-      _future=fut,
-      backend=self.backend,
-    )
-    result = await execution
-    self.assertIsNone(result)
-    await execution.wait()  # Should not raise
-
-  async def test_command_execution_get_data_events(self):
-    """Test ODTCExecution.get_data_events() method."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    execution = ODTCExecution(
-      request_id=12345,
-      command="OpenDoor",
-      _future=fut,
-      backend=self.backend,
-    )
-    self.backend._sila._data_events_by_request_id = {
-      12345: [{"requestId": 12345, "data": "test1"}, {"requestId": 12345, "data": "test2"}],
-      67890: [{"requestId": 67890, "data": "test3"}],
-    }
-    events = await execution.get_data_events()
-    self.assertEqual(len(events), 2)
-    self.assertEqual(events[0]["requestId"], 12345)
+    await self.backend.execute_method("Pre37", wait=False)
+    self.assertIsInstance(self.backend._current_protocol, ODTCProtocol)
+    self.assertEqual(self.backend._current_request_id, 99999)
 
   async def test_is_method_running(self):
     """Test is_method_running()."""

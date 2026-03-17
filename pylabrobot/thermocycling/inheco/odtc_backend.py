@@ -6,21 +6,19 @@ import asyncio
 import logging
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 from .odtc_model import (
-  PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ODTCConfig,
   ODTCHardwareConstraints,
   ODTCMethodSet,
   ODTCProgress,
   ODTCProtocol,
   ODTCSensorValues,
-  estimate_method_duration_seconds,
   generate_odtc_timestamp,
   get_constraints,
   method_set_to_xml,
@@ -43,7 +41,6 @@ from .odtc_sila_interface import (
 )
 
 # Buffer (seconds) added to device remaining duration (ExecuteMethod) or first_event_timeout (status commands) for timeout cap (fail faster than full lifetime).
-LIFETIME_BUFFER_SECONDS: float = 60.0
 
 
 # =============================================================================
@@ -189,121 +186,6 @@ class _NormalizedSiLAResponse:
     return {}
 
 
-@dataclass
-class ODTCExecution:
-  """Handle for an executing async command (SiLA return_code 2). Returned when wait=False.
-
-  Provides: awaitable interface, request_id, done/status, wait/wait_resumable,
-  get_data_events. For ExecuteMethod: method_name, is_running(), stop().
-  """
-
-  request_id: int
-  command: str
-  _future: asyncio.Future[Any]
-  backend: "ODTCBackend"
-  estimated_remaining_time: Optional[float] = None
-  started_at: Optional[float] = None
-  lifetime: Optional[float] = None
-  method_name: Optional[str] = None  # set for ExecuteMethod
-
-  def __await__(self):
-    return self.wait().__await__()
-
-  @property
-  def done(self) -> bool:
-    return self._future.done()
-
-  @property
-  def status(self) -> str:
-    if not self._future.done():
-      return "running"
-    try:
-      self._future.result()
-      return "success"
-    except Exception:
-      return "error"
-
-  def _log_wait_info(self) -> None:
-    import time
-
-    name = f"{self.method_name} ({self.command})" if self.method_name else self.command
-    lifetime = (
-      self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
-    )
-    started_at = self.started_at if self.started_at is not None else time.time()
-    remaining = max(0.0, lifetime - (time.time() - started_at)) if lifetime is not None else None
-    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    lines = [
-      f"[{ts}] Waiting for command",
-      f"  Command: {name}",
-      f"  Duration (timeout): {lifetime}s",
-    ]
-    if remaining is not None:
-      lines.append(f"  Remaining: {remaining:.0f}s")
-    self.backend.logger.info("\n".join(lines))
-
-  async def _is_done(self) -> bool:
-    return self._future.done()
-
-  async def wait(self) -> None:
-    if not self._future.done():
-      self._log_wait_info()
-    interval = self.backend.progress_log_interval
-    if interval and interval > 0:
-      task = asyncio.create_task(
-        self.backend._run_progress_loop_until(
-          self.request_id,
-          interval,
-          self._is_done,
-          self.backend.progress_callback,
-        )
-      )
-      try:
-        await self._future
-      finally:
-        task.cancel()
-        try:
-          await task
-        except asyncio.CancelledError:
-          pass
-    else:
-      await self._future
-
-  async def wait_resumable(self, poll_interval: float = 5.0) -> None:
-    import time
-
-    self._log_wait_info()
-    started_at = self.started_at if self.started_at is not None else time.time()
-    lifetime = (
-      self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
-    )
-    await self.backend.wait_for_completion_by_time(
-      request_id=self.request_id,
-      started_at=started_at,
-      estimated_remaining_time=self.estimated_remaining_time,
-      lifetime=lifetime,
-      poll_interval=poll_interval,
-      terminal_state=SiLAState.IDLE,
-      progress_log_interval=self.backend.progress_log_interval,
-      progress_callback=self.backend.progress_callback,
-    )
-
-  async def get_data_events(self) -> List[Dict[str, Any]]:
-    events_dict = await self.backend.get_data_events(self.request_id)
-    return events_dict.get(self.request_id, [])
-
-  async def is_running(self) -> bool:
-    """True if device is busy (only meaningful when command == 'ExecuteMethod')."""
-    if self.command != "ExecuteMethod":
-      return not self._future.done()
-    return await self.backend.is_method_running()
-
-  async def stop(self) -> None:
-    """Stop the running method (no-op unless command == 'ExecuteMethod')."""
-    if self.command == "ExecuteMethod":
-      await self.backend.stop_method()
-
-
 class ODTCBackend(ThermocyclerBackend):
   """ODTC backend using ODTC-specific SiLA interface.
 
@@ -342,9 +224,9 @@ class ODTCBackend(ThermocyclerBackend):
     """
     super().__init__()
     self._variant = normalize_variant(variant)
-    self._current_execution: Optional[ODTCExecution] = None
     self._simulation_mode: bool = False
-    self._protocol_by_request_id: Dict[int, Union[Protocol, ODTCProtocol]] = {}
+    self._current_request_id: Optional[int] = None
+    self._current_protocol: Optional[Union[Protocol, ODTCProtocol]] = None
     self.progress_log_interval: Optional[float] = progress_log_interval
     self.progress_callback: Optional[Callable[..., None]] = progress_callback
     self._sila = ODTCSiLAInterface(
@@ -367,11 +249,6 @@ class ODTCBackend(ThermocyclerBackend):
     return self._variant
 
   @property
-  def current_execution(self) -> Optional[ODTCExecution]:
-    """Current method execution handle (set when a method is started with wait=False or wait=True)."""
-    return self._current_execution
-
-  @property
   def simulation_mode(self) -> bool:
     """Whether the device is in simulation mode (from the last reset() call).
 
@@ -381,15 +258,10 @@ class ODTCBackend(ThermocyclerBackend):
     """
     return self._simulation_mode
 
-  def _clear_current_execution_if(self, handle: ODTCExecution) -> None:
-    """Clear _current_execution only if it still refers to the given handle."""
-    if self._current_execution is handle:
-      self._current_execution = None
-
-  def _clear_execution_state_for_handle(self, handle: ODTCExecution) -> None:
-    """Clear current execution and protocol cache for this handle."""
-    self._clear_current_execution_if(handle)
-    self._protocol_by_request_id.pop(handle.request_id, None)
+  def _clear_execution_state(self) -> None:
+    """Clear current execution state."""
+    self._current_request_id = None
+    self._current_protocol = None
 
   async def setup(
     self,
@@ -506,66 +378,32 @@ class ODTCBackend(ThermocyclerBackend):
     wait: bool,
     priority: Optional[int] = None,
     protocol: Optional[Protocol] = None,
-  ) -> ODTCExecution:
-    """Internal: run ExecuteMethod, register protocol, return handle."""
-    self._current_execution = None
+  ) -> None:
+    """Internal: run ExecuteMethod, track state on backend."""
+    self._clear_execution_state()
     params: Dict[str, Any] = {"methodName": method_name}
     if priority is not None:
       params["priority"] = priority
 
-    protocol_to_register: Optional[Union[Protocol, ODTCProtocol]] = None
+    # Resolve protocol for progress tracking
     method_set = await self.get_method_set()
     resolved = method_set.get(method_name)
     if resolved is not None and resolved.kind == "premethod":
-      estimated_duration_s = PREMETHOD_ESTIMATED_DURATION_SECONDS
-      protocol_to_register = resolved
+      self._current_protocol = resolved
     elif protocol is not None:
-      config = self.get_default_config()
-      odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
-      estimated_duration_s = estimate_method_duration_seconds(odtc_protocol)
-      protocol_to_register = protocol
+      self._current_protocol = protocol
     else:
       fetched = await self.get_protocol(method_name)
       if fetched is not None:
-        estimated_duration_s = estimate_method_duration_seconds(fetched)
-        protocol_to_register = fetched
-      else:
-        estimated_duration_s = self._get_effective_lifetime()
+        self._current_protocol = fetched
 
-    # Send the command without waiting for completion
-    started_at = time.time()
-    task, request_id = await self._sila.send_command_async("ExecuteMethod", **params)
+    # Send the command (fire-and-forget)
+    fut, request_id = await self._sila.send_command_async("ExecuteMethod", **params)
+    self._current_request_id = request_id
+    fut.add_done_callback(lambda _: self._clear_execution_state())
 
-    # Wait for first DataEvent to confirm execution started and get progress
-    first_payload = await self._sila.wait_for_first_data_event(
-      request_id, self._first_event_timeout_seconds
-    )
-    progress = ODTCProgress.from_data_event(first_payload, None)
-    effective = self._get_effective_lifetime()
-    if estimated_duration_s is not None and estimated_duration_s > 0:
-      eta = max(0.0, estimated_duration_s - progress.elapsed_s)
-      lifetime = min(eta + LIFETIME_BUFFER_SECONDS, effective)
-    else:
-      eta = effective
-      lifetime = effective
-
-    handle = ODTCExecution(
-      request_id=request_id,
-      command="ExecuteMethod",
-      _future=task,
-      backend=self,
-      estimated_remaining_time=eta,
-      started_at=started_at,
-      lifetime=lifetime,
-      method_name=method_name,
-    )
-    handle._future.add_done_callback(lambda _: self._clear_execution_state_for_handle(handle))
-    if protocol_to_register is not None:
-      self._protocol_by_request_id[handle.request_id] = protocol_to_register
-    self._current_execution = handle
     if wait:
-      await handle.wait()
-    return handle
+      await self.wait_for_method_completion()
 
   # ============================================================================
   # Request + normalized response
@@ -654,9 +492,9 @@ class ODTCBackend(ThermocyclerBackend):
     priority: Optional[int] = None,
     wait: bool = False,
     protocol: Optional[Protocol] = None,
-  ) -> ODTCExecution:
+  ) -> None:
     """Execute a method or premethod by name (SiLA: ExecuteMethod)."""
-    return await self._execute_method_impl(method_name, wait, priority=priority, protocol=protocol)
+    await self._execute_method_impl(method_name, wait, priority=priority, protocol=protocol)
 
   async def stop_method(self) -> None:
     """Stop the currently running method (SiLA: StopMethod)."""
@@ -681,32 +519,11 @@ class ODTCBackend(ThermocyclerBackend):
     poll_interval: float = 5.0,
     timeout: Optional[float] = None,
   ) -> None:
-    """Wait until method execution completes.
-
-    Uses current execution handle (lifetime/eta) when present; otherwise
-    polls GetStatus at poll_interval until state returns to 'idle'.
-
-    Args:
-      poll_interval: Seconds between status checks (used by handle.wait_resumable
-        or fallback poll). Default 5.0.
-      timeout: Maximum seconds to wait (fallback poll only). None for no timeout.
-
-    Raises:
-      TimeoutError: If timeout is exceeded (fallback poll only).
-    """
-    import time
-
-    if self._current_execution is not None:
-      if self._current_execution.done:
-        return
-      await self._current_execution.wait_resumable(poll_interval=poll_interval)
-      return
-    start_time = time.time()
+    """Wait until method execution completes by polling device status."""
+    started = time.time()
     while await self.is_method_running():
-      if timeout is not None:
-        elapsed = time.time() - start_time
-        if elapsed > timeout:
-          raise TimeoutError(f"Method execution did not complete within {timeout}s")
+      if timeout is not None and time.time() - started > timeout:
+        raise TimeoutError(f"Method execution did not complete within {timeout}s")
       await asyncio.sleep(poll_interval)
 
   async def wait_for_completion_by_time(
@@ -869,15 +686,8 @@ class ODTCBackend(ThermocyclerBackend):
     wait: bool = True,
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
-  ) -> Optional[ODTCExecution]:
-    """Upload a single ODTCProtocol (method or premethod) and optionally execute.
-
-    Internal single entrypoint: builds one-item ODTCMethodSet and calls
-    upload_method_set, then execute_method if execute=True.
-
-    Returns:
-      ODTCExecution if execute=True and wait=False; None otherwise.
-    """
+  ) -> None:
+    """Upload a single ODTCProtocol (method or premethod) and optionally execute."""
     resolved_name = odtc.name
     is_scratch = not odtc.name or odtc.name == ""
     resolved_datetime = odtc.datetime or generate_odtc_timestamp()
@@ -904,11 +714,8 @@ class ODTCBackend(ThermocyclerBackend):
     )
 
     if execute:
-      handle = await self.execute_method(odtc.name, wait=wait)
       protocol_view = odtc_protocol_to_protocol(odtc_copy)
-      self._protocol_by_request_id[handle.request_id] = protocol_view
-      return handle
-    return None
+      await self.execute_method(odtc.name, wait=wait, protocol=protocol_view)
 
   async def upload_protocol(
     self,
@@ -970,24 +777,12 @@ class ODTCBackend(ThermocyclerBackend):
     )
     return odtc_protocol.name
 
-  async def run_stored_protocol(self, name: str, wait: bool = False, **kwargs) -> ODTCExecution:
-    """Execute a stored protocol by name (single SiLA ExecuteMethod call).
-
-    No fetch or round-trip; calls the instrument execute-by-name directly.
-    Handle lifetime/ETA are event-driven (first DataEvent).
-
-    Args:
-      name: Name of the stored protocol (method) to run.
-      wait: If False (default), start and return handle. If True, block until
-          completion then return the (completed) handle.
-
-    Returns:
-      Execution handle (completed if wait=True).
-    """
+  async def run_stored_protocol(self, name: str, wait: bool = False) -> None:
+    """Execute a stored protocol by name."""
     method_set = await self.get_method_set()
     resolved = method_set.get(name)
     protocol_view = odtc_protocol_to_protocol(resolved) if resolved else None
-    return await self.execute_method(name, wait=wait, protocol=protocol_view)
+    await self.execute_method(name, wait=wait, protocol=protocol_view)
 
   async def upload_method_set(
     self,
@@ -1172,11 +967,7 @@ class ODTCBackend(ThermocyclerBackend):
       debug_xml=debug_xml,
       xml_output_path=xml_output_path,
     )
-    handle = await self.execute_method(protocol.name, wait=wait)
-    # Register ODTCProtocol so progress shows correct target_block_temperature
-    # (device DataEvent often reports current setpoint during premethod ramp, not final target).
-    self._protocol_by_request_id[handle.request_id] = protocol
-    return handle
+    await self.execute_method(protocol.name, wait=wait)
 
   async def set_lid_temperature(self, temperature: List[float]) -> None:
     """Set lid temperature.
@@ -1210,26 +1001,8 @@ class ODTCBackend(ThermocyclerBackend):
     protocol: Union[Protocol, ODTCProtocol],
     block_max_volume: float,
     **kwargs: Any,
-  ) -> ODTCExecution:
-    """Execute thermocycler protocol (convert if needed, upload, execute).
-
-    Accepts Protocol or ODTCProtocol. Converts Protocol to ODTCProtocol when
-    needed, uploads, then executes by name. Always returns immediately with a
-    Execution handle; to block until completion, await handle.wait() or
-    use wait_for_profile_completion(). Config is derived from block_max_volume
-    and backend variant when protocol is Protocol and config is not provided.
-
-    Args:
-      protocol: Protocol or ODTCProtocol to execute.
-      block_max_volume: Maximum block volume (µL) for safety; used to set
-        fluid_quantity when protocol is Protocol and config is None.
-      **kwargs: Backend-specific options. ODTC accepts ``config`` (ODTCConfig,
-        optional); used only when protocol is Protocol.
-
-    Returns:
-      Execution handle. Caller can await handle.wait() or
-      wait_for_profile_completion() to block until done.
-    """
+  ) -> None:
+    """Execute thermocycler protocol (convert if needed, upload, execute). Returns immediately."""
     if isinstance(protocol, ODTCProtocol):
       odtc_protocol = protocol
       if odtc_protocol.kind != "method":
@@ -1254,11 +1027,8 @@ class ODTCBackend(ThermocyclerBackend):
       odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
 
     await self._upload_odtc_protocol(odtc_protocol, allow_overwrite=True, execute=False)
-    resolved_name = odtc_protocol.name
-    handle = await self.execute_method(resolved_name, wait=False)
     protocol_view = odtc_protocol_to_protocol(odtc_protocol)
-    self._protocol_by_request_id[handle.request_id] = protocol_view
-    return handle
+    await self.execute_method(odtc_protocol.name, wait=False, protocol=protocol_view)
 
   # --- Temperatures and lid/block status ---
 
@@ -1366,7 +1136,7 @@ class ODTCBackend(ThermocyclerBackend):
   ) -> None:
     """Fetch latest DataEvent for request_id, update snapshot, and log or invoke progress_callback.
 
-    Used by wait_for_completion_by_time and by ODTCExecution.wait() (background task).
+    Used by wait_for_completion_by_time for progress logging.
     No-op if _get_progress returns None (e.g. non-method command).
     callback: Override for this call; if None, uses self.progress_callback.
     """
@@ -1404,25 +1174,21 @@ class ODTCBackend(ThermocyclerBackend):
     return sum(len(stage.steps) * stage.repeats for stage in protocol.stages)
 
   async def _get_progress(self, request_id: int) -> Optional[ODTCProgress]:
-    """Get progress from latest DataEvent (elapsed, temps, step/cycle/hold). Returns None if no protocol registered."""
-    stored = self._protocol_by_request_id.get(request_id)
-    if stored is None:
+    """Get progress from latest DataEvent. Returns None if no protocol registered."""
+    if self._current_protocol is None:
       return None
-    if isinstance(stored, ODTCProtocol):
-      odtc_protocol = stored
+    if isinstance(self._current_protocol, ODTCProtocol):
+      odtc_protocol = self._current_protocol
     else:
-      odtc_protocol = protocol_to_odtc_protocol(stored, self.get_default_config())
+      odtc_protocol = protocol_to_odtc_protocol(self._current_protocol, self.get_default_config())
     events_dict = await self.get_data_events(request_id)
     events = events_dict.get(request_id, [])
     payload = events[-1] if events else None
     return ODTCProgress.from_data_event(payload, odtc_protocol=odtc_protocol)
 
   def _request_id_for_get_progress(self) -> Optional[int]:
-    """Request ID of current execution for get_* methods; None if none or done."""
-    ex = self._current_execution
-    if ex is None or ex.done:
-      return None
-    return ex.request_id
+    """Request ID of current execution for get_* methods; None if not running."""
+    return self._current_request_id
 
   async def get_progress_snapshot(self) -> Optional[ODTCProgress]:
     """Get progress from the latest DataEvent for the current run (elapsed, temperatures, step/cycle/hold).
