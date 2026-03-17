@@ -182,10 +182,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     super().__init__(machine_ip=machine_ip, client_ip=client_ip, logger=logger)
 
     self._lifetime_of_execution = lifetime_of_execution
-    self._lock_id: Optional[str] = None  # None = unlocked, str = locked with this ID
-
-    # Lock ID tracking per pending request (for LockDevice)
-    self._pending_lock_ids: Dict[int, str] = {}
 
     # DataEvent storage by request_id
     self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
@@ -206,34 +202,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           f"No DataEvent received for request_id {request_id} within {timeout_seconds}s"
         )
       await asyncio.sleep(0.2)
-
-  def _complete_pending(
-    self,
-    request_id: int,
-    result: Any = None,
-    exception: Optional[BaseException] = None,
-  ) -> None:
-    """ODTC cleanup (lock state) then delegate to base."""
-    pending = self._pending_by_id.get(request_id)
-    if pending is None or pending.fut.done():
-      return
-
-    # Update lock state only on success
-    if exception is None:
-      lock_id = self._pending_lock_ids.pop(request_id, None)
-      if pending.name == "LockDevice" and lock_id is not None:
-        self._lock_id = lock_id
-        self._logger.info(f"Device locked with lockId: {self._lock_id}")
-      elif pending.name == "UnlockDevice":
-        self._lock_id = None
-        self._logger.info("Device unlocked")
-      elif pending.name == "Reset":
-        self._lock_id = None
-        self._logger.info("Device reset (unlocked)")
-    else:
-      self._pending_lock_ids.pop(request_id, None)
-
-    super()._complete_pending(request_id, result=result, exception=exception)
 
   def _handle_device_error_code(self, return_code: int, message: str, command_name: str) -> None:
     """Handle ODTC device-specific return codes (1000+)."""
@@ -262,25 +230,3 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       progress.target_temp_c or 0.0,
       progress.lid_temp_c or 0.0,
     )
-
-  async def send_command(
-    self,
-    command: str,
-    request_id: Optional[int] = None,
-    timeout: Optional[float] = None,
-    **kwargs: Any,
-  ) -> Any:
-    # Auto-inject lockId when device is locked
-    if self._lock_id is not None and "lockId" not in kwargs:
-      kwargs["lockId"] = self._lock_id
-
-    if timeout is None:
-      timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
-    try:
-      return await asyncio.wait_for(
-        super().send_command(command, request_id=request_id, **kwargs), timeout=timeout
-      )
-    except asyncio.TimeoutError:
-      raise SiLATimeoutError(
-        f"Timed out after {timeout}s waiting for ResponseEvent", command=command
-      ) from None

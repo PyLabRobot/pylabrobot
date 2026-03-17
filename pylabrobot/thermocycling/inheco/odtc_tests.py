@@ -535,7 +535,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       self.backend._sila._machine_ip = "192.168.1.100"
       self.backend._sila._lock_id = None
       self.backend._sila._lifetime_of_execution = None
-      self.backend._sila._pending_lock_ids = {}
       self.backend._sila._client_ip = "127.0.0.1"
       self.backend._sila.event_receiver_uri = "http://127.0.0.1:8080/"
 
@@ -671,8 +670,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test execute_method with wait=True; event-driven: wait_for_first_data_event then handle with eta from DataEvent."""
     self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    self.backend._sila._make_request_id = MagicMock(return_value=12345)  # type: ignore[method-assign]
-    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    fut: asyncio.Future[Any] = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       return_value=_minimal_data_event_payload(remaining_s=300.0)
     )
@@ -680,10 +680,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(result, ODTCExecution)
     self.assertEqual(result.method_name, "MyMethod")
     self.assertEqual(result.request_id, 12345)
-    self.backend._sila.send_command.assert_called_once()
-    call_kwargs = self.backend._sila.send_command.call_args[1]
+    self.backend._sila.send_command_async.assert_called_once()
+    call_kwargs = self.backend._sila.send_command_async.call_args[1]
     self.assertEqual(call_kwargs["methodName"], "MyMethod")
-    # Device does not send remaining duration; we use estimated_duration_s - elapsed_s (get_protocol returns None so effective lifetime).
     self.assertEqual(result.estimated_remaining_time, self.backend._get_effective_lifetime())
 
   async def test_stop_method(self):
@@ -691,29 +690,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.stop_method()
     self.backend._sila.send_command.assert_called_once_with("StopMethod")
-
-  async def test_lock_device(self):
-    """Test lock_device."""
-    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
-    await self.backend.lock_device("my_lock_id")
-    self.backend._sila.send_command.assert_called_once()
-    call_kwargs = self.backend._sila.send_command.call_args[1]
-    self.assertEqual(call_kwargs["lockId"], "my_lock_id")
-    self.assertEqual(call_kwargs["PMSId"], "PyLabRobot")
-
-  async def test_unlock_device(self):
-    """Test unlock_device."""
-    self.backend._sila._lock_id = "my_lock_id"
-    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
-    await self.backend.unlock_device()
-    self.backend._sila.send_command.assert_called_once_with("UnlockDevice")
-
-  async def test_unlock_device_not_locked(self):
-    """Test unlock_device when device is not locked."""
-    self.backend._sila._lock_id = None
-    with self.assertRaises(RuntimeError) as cm:
-      await self.backend.unlock_device()
-    self.assertIn("not locked", str(cm.exception))
 
   async def test_get_block_current_temperature(self):
     """Test get_block_current_temperature."""
@@ -820,8 +796,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test execute_method with wait=False (returns handle); eta from our estimated_duration_s - elapsed_s (no device remaining)."""
     self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    self.backend._sila._make_request_id = MagicMock(return_value=12345)  # type: ignore[method-assign]
-    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    fut: asyncio.Future[Any] = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       return_value=_minimal_data_event_payload(remaining_s=300.0)
     )
@@ -830,10 +807,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(execution, ODTCExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.method_name, "PCR_30cycles")
-    self.backend._sila.send_command.assert_called_once()
-    call_kwargs = self.backend._sila.send_command.call_args[1]
+    self.backend._sila.send_command_async.assert_called_once()
+    call_kwargs = self.backend._sila.send_command_async.call_args[1]
     self.assertEqual(call_kwargs["methodName"], "PCR_30cycles")
-    # get_protocol returns None so we use effective lifetime for eta (device does not send remaining).
     self.assertEqual(execution.estimated_remaining_time, self.backend._get_effective_lifetime())
 
   async def test_execute_method_premethod_registers_protocol(self):
@@ -846,8 +822,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     )
     method_set = ODTCMethodSet(methods=[], premethods=[premethod])
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
-    self.backend._sila._make_request_id = MagicMock(return_value=99999)  # type: ignore[method-assign]
-    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    fut: asyncio.Future[Any] = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 99999))  # type: ignore[method-assign]
     self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       return_value=_minimal_data_event_payload(remaining_s=300.0)
     )
@@ -865,8 +842,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test execute_method propagates FirstEventTimeout when no DataEvent received in time."""
     self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
     self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    self.backend._sila._make_request_id = MagicMock(return_value=12345)  # type: ignore[method-assign]
-    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    fut: asyncio.Future[Any] = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     self.backend._sila.wait_for_first_data_event = AsyncMock(  # type: ignore[method-assign]
       side_effect=FirstEventTimeout("No DataEvent received for request_id 12345 within 60.0s")
     )

@@ -233,5 +233,33 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 
 
+class TestInhecoSiLAInterfaceLocking(unittest.IsolatedAsyncioTestCase):
+  """Tests for lock_device / unlock_device on InhecoSiLAInterface."""
+
+  def setUp(self):
+    self.interface = InhecoSiLAInterface(machine_ip="192.168.1.100", client_ip="127.0.0.1")
+
+  async def test_lock_device(self):
+    self.interface.send_command = AsyncMock()  # type: ignore[method-assign]
+    await self.interface.lock_device("my_lock_id")
+    self.interface.send_command.assert_called_once()
+    call_kwargs = self.interface.send_command.call_args[1]
+    self.assertEqual(call_kwargs["lockId"], "my_lock_id")
+    self.assertEqual(self.interface._lock_id, "my_lock_id")
+
+  async def test_unlock_device(self):
+    self.interface._lock_id = "my_lock_id"
+    self.interface.send_command = AsyncMock()  # type: ignore[method-assign]
+    await self.interface.unlock_device()
+    self.interface.send_command.assert_called_once_with("UnlockDevice")
+    self.assertIsNone(self.interface._lock_id)
+
+  async def test_unlock_device_not_locked(self):
+    self.interface._lock_id = None
+    with self.assertRaises(RuntimeError) as cm:
+      await self.interface.unlock_device()
+    self.assertIn("not locked", str(cm.exception))
+
+
 if __name__ == "__main__":
   unittest.main()

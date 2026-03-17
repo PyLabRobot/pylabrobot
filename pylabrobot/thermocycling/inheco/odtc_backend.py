@@ -532,17 +532,9 @@ class ODTCBackend(ThermocyclerBackend):
       else:
         estimated_duration_s = self._get_effective_lifetime()
 
-    # Fire the command without waiting for completion
-    request_id = self._sila._make_request_id()
+    # Send the command without waiting for completion
     started_at = time.time()
-    task = asyncio.create_task(
-      self._sila.send_command(
-        "ExecuteMethod",
-        request_id=request_id,
-        timeout=self._sila._lifetime_of_execution or DEFAULT_LIFETIME_OF_EXECUTION,
-        **params,
-      )
-    )
+    task, request_id = await self._sila.send_command_async("ExecuteMethod", **params)
 
     # Wait for first DataEvent to confirm execution started and get progress
     first_payload = await self._sila.wait_for_first_data_event(
@@ -610,6 +602,7 @@ class ODTCBackend(ThermocyclerBackend):
       eventReceiverURI=self._sila.event_receiver_uri,
       simulationMode=simulation_mode,
     )
+    self._sila._lock_id = None
 
   async def get_device_identification(self) -> dict:
     """Get device identification information.
@@ -624,21 +617,6 @@ class ODTCBackend(ThermocyclerBackend):
       required=False,
     )
     return result if isinstance(result, dict) else {}
-
-  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None) -> None:
-    """Lock the device for exclusive access (SiLA: LockDevice)."""
-    request_id = self._sila._make_request_id()
-    self._sila._pending_lock_ids[request_id] = lock_id
-    params: Dict[str, Any] = {"lockId": lock_id, "PMSId": "PyLabRobot"}
-    if lock_timeout is not None:
-      params["lockTimeout"] = lock_timeout
-    await self._sila.send_command("LockDevice", request_id=request_id, **params)
-
-  async def unlock_device(self) -> None:
-    """Unlock the device (SiLA: UnlockDevice)."""
-    if self._sila._lock_id is None:
-      raise RuntimeError("Device is not locked")
-    await self._sila.send_command("UnlockDevice")
 
   async def open_door(self) -> None:
     """Open the door (thermocycler lid)."""

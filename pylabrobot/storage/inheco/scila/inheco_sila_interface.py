@@ -158,6 +158,9 @@ class InhecoSiLAInterface:
     # pending commands by request_id (supports multiple in-flight)
     self._pending_by_id: Dict[int, InhecoSiLAInterface._SiLACommand] = {}
 
+    # lock state
+    self._lock_id: Optional[str] = None
+
     # server plumbing
     self._loop: Optional[asyncio.AbstractEventLoop] = None
     self._httpd: Optional[socketserver.TCPServer] = None
@@ -458,35 +461,63 @@ class InhecoSiLAInterface:
     return_code, message = self._get_return_code_and_message(command, decoded)
     return decoded, return_code, message
 
-  async def send_command(
+  async def send_command_async(
     self,
     command: str,
-    request_id: Optional[int] = None,
     **kwargs,
-  ) -> Any:
+  ) -> Tuple[asyncio.Future[Any], int]:
+    """Send command, return (future, request_id). Future is already resolved for sync commands."""
     if self._closed:
       raise RuntimeError("Bridge is closed")
 
-    if request_id is None:
-      request_id = self._make_request_id()
+    if self._lock_id is not None and "lockId" not in kwargs:
+      kwargs["lockId"] = self._lock_id
+
+    request_id = self._make_request_id()
     decoded, return_code, message = await self._post_command(command, request_id, **kwargs)
 
-    # Success: synchronous response
-    if return_code == 1:
-      return decoded
-
-    # Success: async command accepted, wait for ResponseEvent
-    if return_code == 2:
+    if return_code in (1, 3):
+      if return_code == 3:
+        self._logger.warning(f"Command {command} accepted with warning: {message}")
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+      fut.set_result(decoded)
+      return fut, request_id
+
+    if return_code == 2:
+      fut = asyncio.get_running_loop().create_future()
       self._pending_by_id[request_id] = InhecoSiLAInterface._SiLACommand(
         name=command, request_id=request_id, fut=fut
       )
-      return await fut
+      return fut, request_id
 
-    # Accepted with warning
-    if return_code == 3:
-      self._logger.warning(f"Command {command} accepted with warning: {message}")
-      return decoded
-
-    # Errors
     await self._handle_error_code(return_code, message, command, request_id)
+    raise RuntimeError(f"command {command} failed: {return_code}")
+
+  async def send_command(
+    self,
+    command: str,
+    timeout: Optional[float] = None,
+    **kwargs,
+  ) -> Any:
+    """Send command and wait for completion."""
+    fut, _ = await self.send_command_async(command, **kwargs)
+    if timeout is None:
+      timeout = 60.0
+    try:
+      return await asyncio.wait_for(fut, timeout=timeout)
+    except asyncio.TimeoutError:
+      raise SiLATimeoutError(
+        f"Timed out after {timeout}s waiting for ResponseEvent", command=command
+      ) from None
+
+  async def lock_device(self, lock_id: str, **kwargs: Any) -> None:
+    """Lock the device for exclusive access."""
+    await self.send_command("LockDevice", lockId=lock_id, **kwargs)
+    self._lock_id = lock_id
+
+  async def unlock_device(self) -> None:
+    """Unlock the device."""
+    if self._lock_id is None:
+      raise RuntimeError("Device is not locked")
+    await self.send_command("UnlockDevice")
+    self._lock_id = None
