@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
-from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -44,17 +44,6 @@ from .odtc_sila_interface import (
 
 # Buffer (seconds) added to device remaining duration (ExecuteMethod) or first_event_timeout (status commands) for timeout cap (fail faster than full lifetime).
 LIFETIME_BUFFER_SECONDS: float = 60.0
-
-
-class ODTCCommand(str, Enum):
-  INITIALIZE = "Initialize"
-  RESET = "Reset"
-  LOCK_DEVICE = "LockDevice"
-  UNLOCK_DEVICE = "UnlockDevice"
-  OPEN_DOOR = "OpenDoor"
-  CLOSE_DOOR = "CloseDoor"
-  STOP_METHOD = "StopMethod"
-  EXECUTE_METHOD = "ExecuteMethod"
 
 
 # =============================================================================
@@ -511,57 +500,6 @@ class ODTCBackend(ThermocyclerBackend):
       return self._sila._lifetime_of_execution
     return DEFAULT_LIFETIME_OF_EXECUTION
 
-  async def _run_async_command(
-    self,
-    command: ODTCCommand,
-    wait: bool,
-    method_name: Optional[str] = None,
-    estimated_duration_s: Optional[float] = None,
-    **send_kwargs: Any,
-  ) -> Optional[ODTCExecution]:
-    """Run an async SiLA command; return None if wait else execution handle."""
-    if wait:
-      await self._sila.send_command(command, **send_kwargs)
-      return None
-    fut, request_id, started_at = await self._sila.start_command(command, **send_kwargs)
-    effective = self._get_effective_lifetime()
-    if command == ODTCCommand.EXECUTE_METHOD:
-      first_payload = await self._sila.wait_for_first_data_event(
-        request_id, self._first_event_timeout_seconds
-      )
-      progress = ODTCProgress.from_data_event(first_payload, None)
-      if estimated_duration_s is not None and estimated_duration_s > 0:
-        eta = max(0.0, estimated_duration_s - progress.elapsed_s)
-        lifetime = min(eta + LIFETIME_BUFFER_SECONDS, effective)
-      else:
-        eta = effective
-        lifetime = effective
-      return ODTCExecution(
-        request_id=request_id,
-        command=command,
-        _future=fut,
-        backend=self,
-        estimated_remaining_time=eta,
-        started_at=started_at,
-        lifetime=lifetime,
-        method_name=method_name or "",
-      )
-
-    eta = self._first_event_timeout_seconds
-    lifetime = min(
-      self._first_event_timeout_seconds + LIFETIME_BUFFER_SECONDS,
-      effective,
-    )
-    return ODTCExecution(
-      request_id=request_id,
-      command=command,
-      _future=fut,
-      backend=self,
-      estimated_remaining_time=eta,
-      started_at=started_at,
-      lifetime=lifetime,
-    )
-
   async def _execute_method_impl(
     self,
     method_name: str,
@@ -594,14 +532,41 @@ class ODTCBackend(ThermocyclerBackend):
       else:
         estimated_duration_s = self._get_effective_lifetime()
 
-    handle = await self._run_async_command(
-      ODTCCommand.EXECUTE_METHOD,
-      False,
-      method_name=method_name,
-      estimated_duration_s=estimated_duration_s,
-      **params,
+    # Fire the command without waiting for completion
+    request_id = self._sila._make_request_id()
+    started_at = time.time()
+    task = asyncio.create_task(
+      self._sila.send_command(
+        "ExecuteMethod",
+        request_id=request_id,
+        timeout=self._sila._lifetime_of_execution or DEFAULT_LIFETIME_OF_EXECUTION,
+        **params,
+      )
     )
-    assert handle is not None
+
+    # Wait for first DataEvent to confirm execution started and get progress
+    first_payload = await self._sila.wait_for_first_data_event(
+      request_id, self._first_event_timeout_seconds
+    )
+    progress = ODTCProgress.from_data_event(first_payload, None)
+    effective = self._get_effective_lifetime()
+    if estimated_duration_s is not None and estimated_duration_s > 0:
+      eta = max(0.0, estimated_duration_s - progress.elapsed_s)
+      lifetime = min(eta + LIFETIME_BUFFER_SECONDS, effective)
+    else:
+      eta = effective
+      lifetime = effective
+
+    handle = ODTCExecution(
+      request_id=request_id,
+      command="ExecuteMethod",
+      _future=task,
+      backend=self,
+      estimated_remaining_time=eta,
+      started_at=started_at,
+      lifetime=lifetime,
+      method_name=method_name,
+    )
     handle._future.add_done_callback(lambda _: self._clear_execution_state_for_handle(handle))
     if protocol_to_register is not None:
       self._protocol_by_request_id[handle.request_id] = protocol_to_register
@@ -632,20 +597,15 @@ class ODTCBackend(ThermocyclerBackend):
     """Get device status state."""
     return await self._sila.request_status()
 
-  async def initialize(self, wait: bool = True) -> Optional[ODTCExecution]:
+  async def initialize(self) -> None:
     """Initialize the device (SiLA: standby -> idle)."""
-    return await self._run_async_command(ODTCCommand.INITIALIZE, wait)
+    await self._sila.send_command("Initialize")
 
-  async def reset(
-    self,
-    simulation_mode: bool = False,
-    wait: bool = True,
-  ) -> Optional[ODTCExecution]:
+  async def reset(self, simulation_mode: bool = False) -> None:
     """Reset the device (SiLA: startup -> standby, register event receiver)."""
     self._simulation_mode = simulation_mode
-    return await self._run_async_command(
-      ODTCCommand.RESET,
-      wait,
+    await self._sila.send_command(
+      "Reset",
       deviceId="ODTC",
       eventReceiverURI=self._sila.event_receiver_uri,
       simulationMode=simulation_mode,
@@ -665,28 +625,28 @@ class ODTCBackend(ThermocyclerBackend):
     )
     return result if isinstance(result, dict) else {}
 
-  async def lock_device(
-    self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True
-  ) -> Optional[ODTCExecution]:
+  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None) -> None:
     """Lock the device for exclusive access (SiLA: LockDevice)."""
+    request_id = self._sila._make_request_id()
+    self._sila._pending_lock_ids[request_id] = lock_id
     params: Dict[str, Any] = {"lockId": lock_id, "PMSId": "PyLabRobot"}
     if lock_timeout is not None:
       params["lockTimeout"] = lock_timeout
-    return await self._run_async_command(ODTCCommand.LOCK_DEVICE, wait, **params)
+    await self._sila.send_command("LockDevice", request_id=request_id, **params)
 
-  async def unlock_device(self, wait: bool = True) -> Optional[ODTCExecution]:
+  async def unlock_device(self) -> None:
     """Unlock the device (SiLA: UnlockDevice)."""
     if self._sila._lock_id is None:
       raise RuntimeError("Device is not locked")
-    return await self._run_async_command(ODTCCommand.UNLOCK_DEVICE, wait)
+    await self._sila.send_command("UnlockDevice")
 
-  async def open_door(self, wait: bool = True) -> Optional[ODTCExecution]:
+  async def open_door(self) -> None:
     """Open the door (thermocycler lid)."""
-    return await self._run_async_command(ODTCCommand.OPEN_DOOR, wait)
+    await self._sila.send_command("OpenDoor")
 
-  async def close_door(self, wait: bool = True) -> Optional[ODTCExecution]:
+  async def close_door(self) -> None:
     """Close the door (thermocycler lid)."""
-    return await self._run_async_command(ODTCCommand.CLOSE_DOOR, wait)
+    await self._sila.send_command("CloseDoor")
 
   async def read_temperatures(self) -> ODTCSensorValues:
     """Read all temperature sensors.
@@ -720,9 +680,9 @@ class ODTCBackend(ThermocyclerBackend):
     """Execute a method or premethod by name (SiLA: ExecuteMethod)."""
     return await self._execute_method_impl(method_name, wait, priority=priority, protocol=protocol)
 
-  async def stop_method(self, wait: bool = True) -> Optional[ODTCExecution]:
+  async def stop_method(self) -> None:
     """Stop the currently running method (SiLA: StopMethod)."""
-    return await self._run_async_command(ODTCCommand.STOP_METHOD, wait)
+    await self._sila.send_command("StopMethod")
 
   # --- Method running and completion ---
 
@@ -1180,13 +1140,13 @@ class ODTCBackend(ThermocyclerBackend):
   # ThermocyclerBackend Abstract Methods
   # ============================================================================
 
-  async def open_lid(self, wait: bool = True, **kwargs: Any):
+  async def open_lid(self, **kwargs: Any):
     """Open the thermocycler lid (ODTC SiLA: OpenDoor)."""
-    return await self.open_door(wait=wait)
+    await self.open_door()
 
-  async def close_lid(self, wait: bool = True, **kwargs: Any):
+  async def close_lid(self, **kwargs: Any):
     """Close the thermocycler lid (ODTC SiLA: CloseDoor)."""
-    return await self.close_door(wait=wait)
+    await self.close_door()
 
   async def set_block_temperature(
     self,

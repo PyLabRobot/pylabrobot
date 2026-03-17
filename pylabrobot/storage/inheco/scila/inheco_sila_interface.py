@@ -6,7 +6,6 @@ import logging
 import random
 import socket
 import socketserver
-import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -463,12 +462,14 @@ class InhecoSiLAInterface:
   async def send_command(
     self,
     command: str,
+    request_id: Optional[int] = None,
     **kwargs,
   ) -> Any:
     if self._closed:
       raise RuntimeError("Bridge is closed")
 
-    request_id = self._make_request_id()
+    if request_id is None:
+      request_id = self._make_request_id()
     decoded, return_code = await self._post_command(command, request_id, **kwargs)
     if return_code == 1:
       return decoded
@@ -478,28 +479,4 @@ class InhecoSiLAInterface:
         name=command, request_id=request_id, fut=fut
       )
       return await fut
-    raise RuntimeError(f"command {command} failed: {return_code}")
-
-  async def start_command(
-    self,
-    command: str,
-    **kwargs,
-  ) -> Tuple[asyncio.Future[Any], int, float]:
-    """Start an async command and return (future, request_id, started_at) without awaiting."""
-    if self._closed:
-      raise RuntimeError("Bridge is closed")
-
-    request_id = self._make_request_id()
-    decoded, return_code = await self._post_command(command, request_id, **kwargs)
-    if return_code == 2:
-      fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
-      started_at = time.time()
-      self._pending_by_id[request_id] = InhecoSiLAInterface._SiLACommand(
-        name=command, request_id=request_id, fut=fut
-      )
-      return fut, request_id, started_at
-    if return_code == 1:
-      raise ValueError(
-        "start_command is for async commands only; device returned sync response (return_code 1)"
-      )
     raise RuntimeError(f"command {command} failed: {return_code}")

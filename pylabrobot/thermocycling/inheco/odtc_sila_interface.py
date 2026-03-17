@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import (
   InhecoSiLAInterface,
@@ -169,9 +169,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     "UnlockDevice": {SiLAState.STANDBY},
   }
 
-  # Synchronous commands (return code 1, no ResponseEvent)
-  SYNCHRONOUS_COMMANDS: Set[str] = {"GetStatus", "GetDeviceIdentification"}
-
   # Device-specific return codes that indicate DeviceError (InError state)
   DEVICE_ERROR_CODES: Set[int] = {1000, 2000, 2001, 2007}
 
@@ -297,23 +294,14 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       progress.lid_temp_c or 0.0,
     )
 
-  async def send_command(self, command: str, **kwargs: Any) -> Any:
-    if command in self.SYNCHRONOUS_COMMANDS:
-      return await super().send_command(command, **kwargs)
-    fut, _, _ = await self.start_command(command, **kwargs)
-    timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
-    if command == "ExecuteMethod":
-      timeout = self._lifetime_of_execution or DEFAULT_LIFETIME_OF_EXECUTION
-    try:
-      return await asyncio.wait_for(fut, timeout=timeout)
-    except asyncio.TimeoutError:
-      raise SiLATimeoutError(
-        f"Timed out after {timeout}s waiting for ResponseEvent", command=command
-      ) from None
-
-  async def start_command(
-    self, command: str, **kwargs: Any
-  ) -> Tuple[asyncio.Future[Any], int, float]:
+  async def send_command(
+    self,
+    command: str,
+    request_id: Optional[int] = None,
+    timeout: Optional[float] = None,
+    **kwargs: Any,
+  ) -> Any:
+    # Parallelism check
     if command in self.PARALLELISM_TABLE:
       if not self._check_parallelism(command):
         raise SiLAError(4, "Cannot run in parallel with currently executing commands", command)
@@ -324,10 +312,19 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if self._lock_id is not None and "lockId" not in kwargs:
       kwargs["lockId"] = self._lock_id
 
-    fut, request_id, started_at = await super().start_command(command, **kwargs)
-
     self._executing_commands.add(command)
-    if command == "LockDevice" and "lockId" in kwargs:
-      self._pending_lock_ids[request_id] = kwargs["lockId"]
-
-    return fut, request_id, started_at
+    try:
+      if timeout is None:
+        timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
+      return await asyncio.wait_for(
+        super().send_command(command, request_id=request_id, **kwargs), timeout=timeout
+      )
+    except asyncio.TimeoutError:
+      raise SiLATimeoutError(
+        f"Timed out after {timeout}s waiting for ResponseEvent", command=command
+      ) from None
+    finally:
+      # Sync commands (return_code 1) complete immediately and don't go through
+      # _complete_pending, so clean them up here. Async commands get cleaned up
+      # by _complete_pending when the ResponseEvent arrives.
+      self._executing_commands.discard(command)
