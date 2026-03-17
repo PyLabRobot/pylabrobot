@@ -18,7 +18,6 @@ Examples:
    hamilton-vantage/_hamilton-vantage
    hamilton-prep/_hamilton-prep
    hamilton-nimbus/_hamilton-nimbus
-   opentrons-ot2/hello-world
    opentrons/ot2/ot2
    tecan-evo/_tecan-evo
    plate-washing/plate-washing

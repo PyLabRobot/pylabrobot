@@ -23,6 +23,7 @@ Standalone access: ``lh.backend.client.interfaces.MLPrepRoot.MphRoot.MPH.address
 from __future__ import annotations
 
 import asyncio
+import enum
 import logging
 import math
 import random
@@ -182,6 +183,22 @@ class PrepBackend(LiquidHandlerBackend):
   On-demand introspection: ``await self.client.introspect(path)``.
   """
 
+  class LLDMode(enum.Enum):
+    """Liquid level detection mode.
+
+    Same numbering as STARBackend.LLDMode for cross-backend compatibility.
+    CAPACITIVE (value=1) is named GAMMA on the STAR — CAPACITIVE is the correct term.
+    The Prep firmware uses separate command variants for LLD vs no-LLD, so all
+    channels in a single aspirate/dispense call must use the same mode category
+    (any LLD mode, or OFF). Mixing OFF with CAPACITIVE/PRESSURE in one call is
+    not supported and will raise ValueError.
+    """
+
+    OFF = 0
+    CAPACITIVE = 1  # STARBackend.LLDMode.GAMMA — capacitive (cLLD)
+    PRESSURE = 2  # pressure-based (pLLD)
+    DUAL = 3  # both capacitive and pressure
+
   # Declare known object paths via InterfaceSpec. deck_config required (key positions, traverse height, deck info).
   _INTERFACES: dict[str, InterfaceSpec] = {
     "mlprep": InterfaceSpec("MLPrepRoot.MLPrep", True, True),
@@ -319,9 +336,6 @@ class PrepBackend(LiquidHandlerBackend):
     # Resolve all interfaces (required fail-fast; optional log and continue)
     await self._resolver.run_setup_loop()
 
-    # Discover per-channel drive addresses from the object tree.
-    await self._discover_channel_drives()
-
     if force_initialize:
       await self._run_initialize(smart=smart)
       logger.info("Prep initialization complete (force_initialize=True)")
@@ -353,14 +367,19 @@ class PrepBackend(LiquidHandlerBackend):
       self._config.has_mph,
     )
 
-    # Cache per-channel movement bounds from firmware (required for move validation)
-    self._channel_bounds = await self.request_channel_bounds()
-    if not self._channel_bounds:
-      raise RuntimeError(
-        "Failed to query channel movement bounds (GetChannelBounds). "
-        "Cannot validate movement commands without bounds."
-      )
-    logger.info("Channel bounds: %s", self._channel_bounds)
+    # Discover per-channel drive addresses from the object tree (after init).
+    await self._discover_channel_drives()
+
+    # Cache per-channel movement bounds from firmware
+    try:
+      self._channel_bounds = await self.request_channel_bounds()
+    except Exception as e:
+      logger.warning("Failed to query channel bounds: %s", e)
+      self._channel_bounds = []
+    if self._channel_bounds:
+      logger.info("Channel bounds: %s", self._channel_bounds)
+    else:
+      logger.warning("Channel bounds not available — move_to_position will skip validation")
 
     self.setup_finished = True
 
@@ -465,10 +484,17 @@ class PrepBackend(LiquidHandlerBackend):
       else:
         logger.warning("Channel Root on node %d: could not find NodeInformation", sub_addr.node)
 
-      logger.debug("Discovered channel on node %d: sleeve_sensor=%s, ZDrive=%s, NodeInfo=%s",
-                    sub_addr.node, sdrive_addr, zdrive_addr, node_info_addr)
+      logger.debug(
+        "Discovered channel on node %d: sleeve_sensor=%s, ZDrive=%s, NodeInfo=%s",
+        sub_addr.node,
+        sdrive_addr,
+        zdrive_addr,
+        node_info_addr,
+      )
 
-    logger.info("Discovered %d pipettor channel drive pairs", len(self._channel_sleeve_sensor_addrs))
+    logger.info(
+      "Discovered %d pipettor channel drive pairs", len(self._channel_sleeve_sensor_addrs)
+    )
 
   async def _run_initialize(self, smart: bool):
     """Send PrepCmd.PrepInitialize to MLPrep (shared by setup)."""
@@ -964,6 +990,7 @@ class PrepBackend(LiquidHandlerBackend):
     z_minimum: Optional[List[float]] = None,
     z_bottom_search_offset: Optional[List[float]] = None,
     monitoring_mode: PrepCmd.MonitoringMode = PrepCmd.MonitoringMode.MONITORING,
+    lld_mode: Optional[List[LLDMode]] = None,
     use_lld: bool = False,
     lld: Optional[PrepCmd.LldParameters] = None,
     p_lld: Optional[PrepCmd.PLldParameters] = None,
@@ -975,10 +1002,11 @@ class PrepBackend(LiquidHandlerBackend):
     auto_container_geometry: bool = False,
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
+    read_timeout: Optional[float] = None,
   ):
     """Aspirate using v2 commands, dispatching to the appropriate variant.
 
-    Selects the command variant based on ``use_lld`` / ``lld`` (LLD on/off) and
+    Selects the command variant based on ``lld_mode`` (LLD on/off) and
     ``monitoring_mode`` (Monitoring vs TADM).  Z/geometry parameters (z_final,
     z_fluid, z_air, z_minimum, z_bottom_search_offset): None = use defaults for all
     channels (derived from well geometry, STAR-aligned). Otherwise pass a list of
@@ -1001,25 +1029,24 @@ class PrepBackend(LiquidHandlerBackend):
       z_minimum: Minimum Z (well floor) per channel. None = defaults for all; else list of len(ops).
       z_bottom_search_offset: Bottom search offset (mm) per channel. None = defaults for all; else list of len(ops).
       monitoring_mode: Select TADM or Monitoring (default: Monitoring).
-      use_lld: Enable LLD aspirate variant.  Also activated if ``lld`` is set.
-      lld: LLD seek parameters. When None and use_lld=True, built from labware geometry
-        (z_seek = top of well; z_submerge/z_out_of_liquid = relative offsets).
+      lld_mode: Per-channel LLD mode list. Any non-OFF mode activates the LLD
+        command variant. All channels must use the same category (all LLD or all OFF).
+      use_lld: Enable LLD aspirate variant. Deprecated — use ``lld_mode`` instead.
+      lld: LLD seek parameters. When None and LLD active, built from labware geometry.
       p_lld: Pressure LLD parameters (LLD variants only).
       c_lld: Capacitive LLD parameters (LLD variants only).
-      tadm: TADM parameters (TADM variants only).  Firmware defaults when None.
-      container_segments: Per-channel PrepCmd.SegmentDescriptor lists for liquid following.
-        If None and auto_container_geometry=True, derived from well geometry.
-      auto_container_geometry: Automatically build container segments from the
-        well's cross-section geometry.  Pass False to use empty segments
-        (firmware falls back to the PrepCmd.CommonParameters cone model).
-      hamilton_liquid_classes: None = defaults per op via get_star_liquid_class (same as STAR).
-        Else list of Hamilton liquid classes, one per op; length must match len(ops), no None in list.
-      disable_volume_correction: Per-op flag to skip volume correction. When None, treated as [False]*n.
+      tadm: TADM parameters (TADM variants only). Firmware defaults when None.
+      container_segments: Per-channel SegmentDescriptor lists for liquid following.
+      auto_container_geometry: Build container segments from well geometry.
+      hamilton_liquid_classes: Per-op Hamilton liquid classes. None = auto from tip/liquid.
+      disable_volume_correction: Per-op flag to skip volume correction.
+      read_timeout: Override read timeout (seconds) for this command. When None,
+        auto-calculated from LLD seek distance/speed + 5s buffer.
 
     Example::
 
       await backend.aspirate(ops, [0], z_final=[95.0], settling_time=[2.0])
-      await backend.aspirate(ops, [0], use_lld=True)
+      await backend.aspirate(ops, [0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
       await backend.aspirate(ops, [0], monitoring_mode=PrepCmd.MonitoringMode.TADM)
     """
     assert len(ops) == len(use_channels)
@@ -1088,7 +1115,23 @@ class PrepBackend(LiquidHandlerBackend):
       for op, hlc in zip(ops, hlcs)
     ]
 
-    effective_lld = use_lld or (lld is not None)
+    # Resolve LLD mode: lld_mode list takes precedence, then use_lld bool,
+    # then lld parameter presence. The Prep firmware uses separate command variants
+    # for LLD vs no-LLD, so all channels must agree on LLD on/off.
+    if lld_mode is not None:
+      if len(lld_mode) != n:
+        raise ValueError(f"lld_mode length must match len(ops): {len(lld_mode)} != {n}")
+      lld_on = [m != self.LLDMode.OFF for m in lld_mode]
+      if any(lld_on) and not all(lld_on):
+        raise ValueError(
+          "Prep firmware requires all channels to use the same LLD mode category. "
+          "Cannot mix LLDMode.OFF with CAPACITIVE/PRESSURE/DUAL in one call. "
+          "Split into separate calls for channels with different LLD modes."
+        )
+      effective_lld = all(lld_on)
+    else:
+      effective_lld = use_lld or (lld is not None)
+
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
 
     # Precompute well geometry once (used for default Z lists and for LLD in the loop).
@@ -1119,8 +1162,27 @@ class PrepBackend(LiquidHandlerBackend):
       else:
         ch_segments[ch] = []
 
-    _p_lld = p_lld or PrepCmd.PLldParameters.default()
-    _c_lld = c_lld or PrepCmd.CLldParameters.default()
+    # For LLD to actually trigger, both LldParameters and CLldParameters must use
+    # default_values=False. With default_values=True the firmware silently skips LLD.
+    # Empirically validated: sensitivity=4, detect_mode=0 triggers cLLD on the Prep.
+    if effective_lld:
+      _p_lld = p_lld or PrepCmd.PLldParameters(
+        default_values=False,
+        sensitivity=1,
+        dispenser_seek_speed=0.0,
+        lld_height_difference=0.0,
+        detect_mode=0,
+      )
+      _c_lld = c_lld or PrepCmd.CLldParameters(
+        default_values=False,
+        sensitivity=4,
+        clot_check_enable=False,
+        z_clot_check=0.0,
+        detect_mode=0,
+      )
+    else:
+      _p_lld = p_lld or PrepCmd.PLldParameters.default()
+      _c_lld = c_lld or PrepCmd.CLldParameters.default()
     _tadm = tadm or PrepCmd.TadmParameters.default()
 
     params_lld_mon: List[PrepCmd.AspirateParametersLldAndMonitoring2] = []
@@ -1154,7 +1216,7 @@ class PrepBackend(LiquidHandlerBackend):
         _lld = PrepCmd.LldParameters(
           default_values=False,
           z_seek=top_of_well_z,
-          z_seek_speed=0.0,
+          z_seek_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
           z_submerge=2.0,
           z_out_of_liquid=0.0,
         )
@@ -1237,13 +1299,25 @@ class PrepBackend(LiquidHandlerBackend):
         )
 
     dest = await self._require("pipettor")
+
+    # For LLD aspirates, auto-calculate read_timeout from seek distance and speed
+    # to prevent connection timeout during slow descents.
+    # Explicit read_timeout from caller takes precedence.
+    lld_read_timeout = read_timeout
+    if lld_read_timeout is None and effective_lld and _lld.z_seek_speed > 0:
+      seek_distance = _lld.z_seek - min(z_minimum)
+      if seek_distance > 0:
+        lld_read_timeout = seek_distance / _lld.z_seek_speed + 5.0
+
     if effective_lld and monitoring_mode == PrepCmd.MonitoringMode.TADM:
       await self.client.send_command(
-        PrepCmd.PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lld_tadm)
+        PrepCmd.PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lld_tadm),
+        read_timeout=lld_read_timeout,
       )
     elif effective_lld:
       await self.client.send_command(
-        PrepCmd.PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lld_mon)
+        PrepCmd.PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lld_mon),
+        read_timeout=lld_read_timeout,
       )
     elif monitoring_mode == PrepCmd.MonitoringMode.TADM:
       await self.client.send_command(
@@ -1268,6 +1342,7 @@ class PrepBackend(LiquidHandlerBackend):
     cutoff_speed: Optional[List[float]] = None,
     z_minimum: Optional[List[float]] = None,
     z_bottom_search_offset: Optional[List[float]] = None,
+    lld_mode: Optional[List[LLDMode]] = None,
     use_lld: bool = False,
     lld: Optional[PrepCmd.LldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
@@ -1299,19 +1374,20 @@ class PrepBackend(LiquidHandlerBackend):
       cutoff_speed: Cutoff/stop flow rate (µL/s) per channel. None = defaults for all; else list of len(ops).
       z_minimum: Minimum Z (well floor) per channel. None = defaults for all; else list of len(ops).
       z_bottom_search_offset: Bottom search offset (mm) per channel. None = defaults for all; else list of len(ops).
-      use_lld: Enable LLD dispense variant.  Also activated if ``lld`` is set.
-      lld: LLD seek parameters. When None and use_lld=True, built from labware geometry.
+      lld_mode: Per-channel LLD mode list. Only CAPACITIVE or OFF supported for
+        dispense (pressure LLD is physically impossible during dispense).
+      use_lld: Enable LLD dispense variant. Deprecated — use ``lld_mode`` instead.
+      lld: LLD seek parameters. When None and LLD active, built from labware geometry.
       c_lld: Capacitive LLD parameters (LLD variant only).
-      container_segments: Per-channel PrepCmd.SegmentDescriptor lists for liquid following.
-      auto_container_geometry: Automatically build container segments from well geometry.
-      hamilton_liquid_classes: None = defaults per op via get_star_liquid_class (same as STAR).
-        Else list of Hamilton liquid classes, one per op; length must match len(ops), no None in list.
-      disable_volume_correction: Per-op flag to skip volume correction. When None, treated as [False]*n.
+      container_segments: Per-channel SegmentDescriptor lists for liquid following.
+      auto_container_geometry: Build container segments from well geometry.
+      hamilton_liquid_classes: Per-op Hamilton liquid classes. None = auto from tip/liquid.
+      disable_volume_correction: Per-op flag to skip volume correction.
 
     Example::
 
       await backend.dispense(ops, [0], final_z=[95.0], settling_time=[0.5])
-      await backend.dispense(ops, [0], use_lld=True)
+      await backend.dispense(ops, [0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
     """
     assert len(ops) == len(use_channels)
     if use_channels:
@@ -1379,7 +1455,28 @@ class PrepBackend(LiquidHandlerBackend):
       for op, hlc in zip(ops, hlcs)
     ]
 
-    effective_lld = use_lld or (lld is not None)
+    # Resolve LLD mode — same structure as aspirate(), but dispense only supports
+    # capacitive LLD (pressure LLD is physically impossible during dispense).
+    if lld_mode is not None:
+      if len(lld_mode) != n:
+        raise ValueError(f"lld_mode length must match len(ops): {len(lld_mode)} != {n}")
+      for m in lld_mode:
+        if m in (self.LLDMode.PRESSURE, self.LLDMode.DUAL):
+          raise ValueError(
+            f"Dispense does not support {m.name} LLD — only CAPACITIVE or OFF. "
+            "Pressure-based LLD requires aspiration (plunger movement)."
+          )
+      lld_on = [m != self.LLDMode.OFF for m in lld_mode]
+      if any(lld_on) and not all(lld_on):
+        raise ValueError(
+          "Prep firmware requires all channels to use the same LLD mode category. "
+          "Cannot mix LLDMode.OFF with CAPACITIVE in one call. "
+          "Split into separate calls for channels with different LLD modes."
+        )
+      effective_lld = all(lld_on)
+    else:
+      effective_lld = use_lld or (lld is not None)
+
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
 
     # Precompute well geometry once (used for default Z lists and for LLD in the loop).
@@ -1409,7 +1506,17 @@ class PrepBackend(LiquidHandlerBackend):
       else:
         ch_segments[ch] = []
 
-    _c_lld = c_lld or PrepCmd.CLldParameters.default()
+    # See aspirate() comment — default_values=False required for LLD to trigger.
+    if effective_lld:
+      _c_lld = c_lld or PrepCmd.CLldParameters(
+        default_values=False,
+        sensitivity=4,
+        clot_check_enable=False,
+        z_clot_check=0.0,
+        detect_mode=0,
+      )
+    else:
+      _c_lld = c_lld or PrepCmd.CLldParameters.default()
 
     params_nolld: List[PrepCmd.DispenseParametersNoLld2] = []
     params_lld: List[PrepCmd.DispenseParametersLld2] = []
@@ -1439,7 +1546,7 @@ class PrepBackend(LiquidHandlerBackend):
         _lld = PrepCmd.LldParameters(
           default_values=False,
           z_seek=top_of_well_z,
-          z_seek_speed=0.0,
+          z_seek_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
           z_submerge=2.0,
           z_out_of_liquid=0.0,
         )
@@ -1730,7 +1837,7 @@ class PrepBackend(LiquidHandlerBackend):
         ch_idx = _CHANNEL_ENUM_TO_IDX.get(ch_val)
 
         j = i + 8
-        floats = []
+        floats: list[float] = []
         while len(floats) < 6 and j < len(data) - 7:
           if data[j] == 0x28 and data[j + 1] == 0x00:
             floats.append(_struct.unpack_from("<f", data, j + 4)[0])
@@ -1739,11 +1846,19 @@ class PrepBackend(LiquidHandlerBackend):
             j += 1
 
         if ch_idx is not None and len(floats) == 6:
-          indexed.append((ch_idx, {
-            "x_min": floats[0], "x_max": floats[1],
-            "y_min": floats[2], "y_max": floats[3],
-            "z_min": floats[4], "z_max": floats[5],
-          }))
+          indexed.append(
+            (
+              ch_idx,
+              {
+                "x_min": floats[0],
+                "x_max": floats[1],
+                "y_min": floats[2],
+                "y_max": floats[3],
+                "z_min": floats[4],
+                "z_max": floats[5],
+              },
+            )
+          )
         i = j
       else:
         i += 1
@@ -1910,6 +2025,7 @@ class PrepBackend(LiquidHandlerBackend):
       )
       if raw is not None:
         import struct as _struct
+
         data = raw[0]
         # TipDefinition struct: default_values, id, volume(F32), length(F32), ...
         # The second F32 is the tip extension length
@@ -1948,8 +2064,9 @@ class PrepBackend(LiquidHandlerBackend):
     positions = await self.request_channel_positions()
     if channel_idx >= len(positions):
       raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    await self.move_to_position(x, positions[channel_idx].y, positions[channel_idx].z,
-                                use_channels=channel_idx)
+    await self.move_to_position(
+      x, positions[channel_idx].y, positions[channel_idx].z, use_channels=channel_idx
+    )
 
   async def move_channel_y(self, channel_idx: int, y: float) -> None:
     """Move a channel in the Y direction (in mm).
@@ -1963,8 +2080,9 @@ class PrepBackend(LiquidHandlerBackend):
     positions = await self.request_channel_positions()
     if channel_idx >= len(positions):
       raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    await self.move_to_position(positions[channel_idx].x, y, positions[channel_idx].z,
-                                use_channels=channel_idx)
+    await self.move_to_position(
+      positions[channel_idx].x, y, positions[channel_idx].z, use_channels=channel_idx
+    )
 
   async def move_channel_z(self, channel_idx: int, z: float) -> None:
     """Move a channel in the Z direction (in mm).
@@ -1978,8 +2096,9 @@ class PrepBackend(LiquidHandlerBackend):
     positions = await self.request_channel_positions()
     if channel_idx >= len(positions):
       raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    await self.move_to_position(positions[channel_idx].x, positions[channel_idx].y, z,
-                                use_channels=channel_idx)
+    await self.move_to_position(
+      positions[channel_idx].x, positions[channel_idx].y, z, use_channels=channel_idx
+    )
 
   # ---------------------------------------------------------------------------
   # Tip presence sensing
@@ -2006,9 +2125,7 @@ class PrepBackend(LiquidHandlerBackend):
     import struct as _struct
 
     if not self._channel_sleeve_sensor_addrs:
-      raise RuntimeError(
-        "No channel sleeve sensor addresses discovered. Call setup() first."
-      )
+      raise RuntimeError("No channel sleeve sensor addresses discovered. Call setup() first.")
 
     results: list[bool] = []
     for addr in self._channel_sleeve_sensor_addrs:
@@ -2042,7 +2159,9 @@ class PrepBackend(LiquidHandlerBackend):
     The ChannelCoordinator also has [1:19] YSeekLldPosition which may have
     an X equivalent, though none was found in introspection.
     """
-    raise NotImplementedError("clld_probe_x_position_using_channel is not yet implemented for PrepBackend.")
+    raise NotImplementedError(
+      "clld_probe_x_position_using_channel is not yet implemented for PrepBackend."
+    )
 
   async def clld_probe_y_position_using_channel(self, *args, **kwargs):
     """Probe Y position using capacitive LLD. Not yet implemented for the Prep.
@@ -2052,7 +2171,9 @@ class PrepBackend(LiquidHandlerBackend):
     Also Channel [1:11] LeakCheck has ySeekDistance/yPreloadDistance params
     which suggest Y-axis seeking capability.
     """
-    raise NotImplementedError("clld_probe_y_position_using_channel is not yet implemented for PrepBackend.")
+    raise NotImplementedError(
+      "clld_probe_y_position_using_channel is not yet implemented for PrepBackend."
+    )
 
   async def clld_probe_z_height_using_channel(self, *args, **kwargs):
     """Probe Z-height using capacitive LLD. Not yet implemented for the Prep.
@@ -2077,7 +2198,9 @@ class PrepBackend(LiquidHandlerBackend):
     - ZAxis.LiquidStatus [1:16] for reading last detection results
     - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
     """
-    raise NotImplementedError("clld_probe_z_height_using_channel is not yet implemented for PrepBackend.")
+    raise NotImplementedError(
+      "clld_probe_z_height_using_channel is not yet implemented for PrepBackend."
+    )
 
   async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
     """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.
@@ -2090,7 +2213,9 @@ class PrepBackend(LiquidHandlerBackend):
       force detection. The Prep may have an equivalent through the ChannelCoordinator
       but it was not found in introspection.
     """
-    raise NotImplementedError("ztouch_probe_z_height_using_channel is not yet implemented for PrepBackend.")
+    raise NotImplementedError(
+      "ztouch_probe_z_height_using_channel is not yet implemented for PrepBackend."
+    )
 
   # ---------------------------------------------------------------------------
   # Firmware version queries
@@ -2105,7 +2230,7 @@ class PrepBackend(LiquidHandlerBackend):
     """
     if raw is None:
       return None
-    data = raw[0]
+    data: bytes = raw[0]
     i = 0
     while i < len(data) - 3:
       if data[i] == 0x0F and data[i + 1] in (0x00, 0x01):
@@ -2115,14 +2240,18 @@ class PrepBackend(LiquidHandlerBackend):
       i += 1
     return None
 
-  async def _query_firmware_string(self, addr: Address, cmd_id: int, iface_id: int = 3) -> Optional[str]:
+  async def _query_firmware_string(
+    self, addr: Address, cmd_id: int, iface_id: int = 3
+  ) -> Optional[str]:
     """Send a status query and decode the string response."""
     Cmd = type(
       "_FWQuery",
       (PrepCmd._PrepStatusQuery,),
       {"command_id": cmd_id, "interface_id": iface_id, "__annotations__": {"dest": Address}},
     )
-    raw = await self.client.send_command(Cmd(dest=addr), return_raw=True, raise_on_error=False)
+    raw: Optional[tuple] = await self.client.send_command(
+      Cmd(dest=addr), return_raw=True, raise_on_error=False
+    )
     return self._decode_firmware_string(raw)
 
   async def request_firmware_version(self) -> Optional[str]:
@@ -2162,7 +2291,9 @@ class PrepBackend(LiquidHandlerBackend):
     """
     if channel >= len(self._channel_node_info_addrs):
       return None
-    return await self._query_firmware_string(self._channel_node_info_addrs[channel], cmd_id=8, iface_id=1)
+    return await self._query_firmware_string(
+      self._channel_node_info_addrs[channel], cmd_id=8, iface_id=1
+    )
 
   async def request_pip_channel_serial_number(self, channel: int) -> Optional[str]:
     """Request the serial number for a pipettor channel.
@@ -2172,7 +2303,9 @@ class PrepBackend(LiquidHandlerBackend):
     """
     if channel >= len(self._channel_node_info_addrs):
       return None
-    return await self._query_firmware_string(self._channel_node_info_addrs[channel], cmd_id=9, iface_id=1)
+    return await self._query_firmware_string(
+      self._channel_node_info_addrs[channel], cmd_id=9, iface_id=1
+    )
 
   async def request_module_version(self) -> Optional[str]:
     """Request the pipettor module version string (from PipettorRoot.ModuleInformation)."""
@@ -2201,7 +2334,8 @@ class PrepBackend(LiquidHandlerBackend):
     intro = HamiltonIntrospection(self.client)
     root_addrs = self.client._registry.get_root_addresses()
     if not root_addrs:
-      return "(no root objects discovered)"
+      print("(no root objects discovered)")
+      return
 
     lines: list[str] = []
 
@@ -2409,7 +2543,9 @@ class PrepBackend(LiquidHandlerBackend):
         if not b["x_min"] <= x <= b["x_max"]:
           raise ValueError(f"x={x} outside channel {ch} range [{b['x_min']:.1f}, {b['x_max']:.1f}]")
         if not b["y_min"] <= y_i <= b["y_max"]:
-          raise ValueError(f"y={y_i} outside channel {ch} range [{b['y_min']:.1f}, {b['y_max']:.1f}]")
+          raise ValueError(
+            f"y={y_i} outside channel {ch} range [{b['y_min']:.1f}, {b['y_max']:.1f}]"
+          )
         if z_i > b["z_max"]:
           raise ValueError(f"z={z_i} above channel {ch} maximum {b['z_max']:.1f}")
 
