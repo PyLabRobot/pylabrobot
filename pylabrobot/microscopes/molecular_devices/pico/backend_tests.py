@@ -14,6 +14,10 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.mock import patch
 
+import pytest
+
+pytest.importorskip("numpy")
+
 import numpy as np
 
 from pylabrobot.io.sila.grpc import (

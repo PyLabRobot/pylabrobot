@@ -2,19 +2,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from .agilent import (
-  BioTekPlateReaderBackend,
-  Cytation5Backend,
-  Cytation5ImagingConfig,
-  CytationBackend,
-  CytationImagingConfig,
-  SynergyH1Backend,
-)
+try:
+  from .agilent import (
+    BioTekPlateReaderBackend,
+    Cytation5Backend,
+    Cytation5ImagingConfig,
+    CytationBackend,
+    CytationImagingConfig,
+    SynergyH1Backend,
+  )
+except ImportError:
+  pass
 from .bmg_labtech import CLARIOstarBackend
-from .byonoy import (
-  ByonoyAbsorbance96AutomateBackend,
-  ByonoyLuminescence96AutomateBackend,
-)
+try:
+  from .byonoy import (
+    ByonoyAbsorbance96AutomateBackend,
+    ByonoyLuminescence96AutomateBackend,
+  )
+except ImportError:
+  pass
 from .chatterbox import PlateReaderChatterboxBackend
 from .image_reader import ImageReader
 from .imager import Imager
