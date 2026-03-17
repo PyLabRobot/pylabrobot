@@ -24,7 +24,7 @@ dev = [
   "numpy",
   "pytest",
   "pytest-timeout",
-  "mypy",
+  "mypy==1.18.2",
   "sphinx-reredirects",
   "ruff==0.15.4",
   "nbconvert",
