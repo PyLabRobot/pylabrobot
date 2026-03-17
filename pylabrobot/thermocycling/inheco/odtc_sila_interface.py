@@ -266,7 +266,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     super()._complete_pending(request_id, result=result, exception=exception)
 
-  def _handle_device_return_code(self, return_code: int, message: str, command_name: str) -> None:
+  def _handle_device_error_code(self, return_code: int, message: str, command_name: str) -> None:
     """Handle ODTC device-specific return codes (1000+)."""
     if return_code in self.DEVICE_ERROR_CODES:
       raise SiLAError(return_code, f"Device error: {message}", command_name)

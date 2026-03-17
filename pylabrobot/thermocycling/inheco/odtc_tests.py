@@ -513,36 +513,31 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     # ExecuteMethod executing - ReadActualTemperature can run in parallel (P)
     self.assertTrue(self.interface._check_parallelism("ReadActualTemperature"))
 
-  async def test_handle_return_code(self):
-    """Test return code handling."""
-    # Code 1, 2, 3 should not raise
-    await self.interface._handle_return_code(1, "Success", "GetStatus", 123)
-    await self.interface._handle_return_code(2, "Accepted", "ExecuteMethod", 123)
-    await self.interface._handle_return_code(3, "Finished", "ExecuteMethod", 123)
-
+  async def test_handle_error_code(self):
+    """Test return code handling (codes 1, 2, 3 are handled by send_command, not _handle_error_code)."""
     # Code 4 should raise
     with self.assertRaises(RuntimeError):
-      await self.interface._handle_return_code(4, "busy", "ExecuteMethod", 123)
+      await self.interface._handle_error_code(4, "busy", "ExecuteMethod", 123)
 
     # Code 5 should raise
     with self.assertRaises(RuntimeError):
-      await self.interface._handle_return_code(5, "LockId error", "ExecuteMethod", 123)
+      await self.interface._handle_error_code(5, "LockId error", "ExecuteMethod", 123)
 
     # Code 9 should raise with state info
     self.interface.request_status = AsyncMock(return_value=SiLAState.IDLE)  # type: ignore[method-assign]
     with self.assertRaises(RuntimeError) as cm:
-      await self.interface._handle_return_code(9, "Not allowed", "ExecuteMethod", 123)
+      await self.interface._handle_error_code(9, "Not allowed", "ExecuteMethod", 123)
     self.assertIn("idle", str(cm.exception))
 
     # Code 9 with inError should hint power cycle
     self.interface.request_status = AsyncMock(return_value=SiLAState.INERROR)  # type: ignore[method-assign]
     with self.assertRaises(RuntimeError) as cm:
-      await self.interface._handle_return_code(9, "Not allowed", "ExecuteMethod", 123)
+      await self.interface._handle_error_code(9, "Not allowed", "ExecuteMethod", 123)
     self.assertIn("power cycle", str(cm.exception))
 
     # Device error code should raise
     with self.assertRaises(RuntimeError):
-      await self.interface._handle_return_code(1000, "Device error", "ExecuteMethod", 123)
+      await self.interface._handle_error_code(1000, "Device error", "ExecuteMethod", 123)
 
 
 class TestODTCBackend(unittest.IsolatedAsyncioTestCase):

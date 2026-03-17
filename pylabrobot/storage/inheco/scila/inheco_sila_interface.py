@@ -381,12 +381,10 @@ class InhecoSiLAInterface:
           return s
       raise ValueError(f"Unknown device state: {state_str!r}")
 
-  async def _handle_return_code(
+  async def _handle_error_code(
     self, return_code: int, message: str, command_name: str, request_id: int
   ) -> None:
-    """Handle SiLA return codes. Override _handle_device_return_code for device-specific codes (1000+)."""
-    if return_code in (1, 2, 3):
-      return
+    """Handle error return codes (called by send_command for codes other than 1, 2, 3)."""
     if return_code == 4:
       raise SiLAError(4, "Device is busy", command_name)
     if return_code == 5:
@@ -408,11 +406,11 @@ class InhecoSiLAInterface:
       self._logger.warning(f"Command {command_name} finished with warning: {message}")
       return
     if return_code >= 1000:
-      self._handle_device_return_code(return_code, message, command_name)
+      self._handle_device_error_code(return_code, message, command_name)
       return
     raise SiLAError(return_code, message, command_name)
 
-  def _handle_device_return_code(self, return_code: int, message: str, command_name: str) -> None:
+  def _handle_device_error_code(self, return_code: int, message: str, command_name: str) -> None:
     """Handle device-specific return codes (1000+). Override in subclasses."""
     raise SiLAError(return_code, f"Device error: {message}", command_name)
 
@@ -426,8 +424,10 @@ class InhecoSiLAInterface:
   def event_receiver_uri(self) -> str:
     return f"http://{self._client_ip}:{self.bound_port}/"
 
-  async def _post_command(self, command: str, request_id: int, **kwargs: Any) -> Tuple[Any, int]:
-    """POST a SOAP command to the device. Returns (decoded_response, return_code)."""
+  async def _post_command(
+    self, command: str, request_id: int, **kwargs: Any
+  ) -> Tuple[Any, int, str]:
+    """POST a SOAP command to the device. Returns (decoded_response, return_code, message)."""
     cmd_xml = soap_encode(
       command,
       {"requestId": request_id, **kwargs},
@@ -456,8 +456,7 @@ class InhecoSiLAInterface:
     body = await asyncio.to_thread(_do_request)
     decoded = soap_decode(body.decode("utf-8"))
     return_code, message = self._get_return_code_and_message(command, decoded)
-    await self._handle_return_code(return_code, message, command, request_id)
-    return decoded, return_code
+    return decoded, return_code, message
 
   async def send_command(
     self,
@@ -470,13 +469,24 @@ class InhecoSiLAInterface:
 
     if request_id is None:
       request_id = self._make_request_id()
-    decoded, return_code = await self._post_command(command, request_id, **kwargs)
+    decoded, return_code, message = await self._post_command(command, request_id, **kwargs)
+
+    # Success: synchronous response
     if return_code == 1:
       return decoded
+
+    # Success: async command accepted, wait for ResponseEvent
     if return_code == 2:
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
       self._pending_by_id[request_id] = InhecoSiLAInterface._SiLACommand(
         name=command, request_id=request_id, fut=fut
       )
       return await fut
-    raise RuntimeError(f"command {command} failed: {return_code}")
+
+    # Accepted with warning
+    if return_code == 3:
+      self._logger.warning(f"Command {command} accepted with warning: {message}")
+      return decoded
+
+    # Errors
+    await self._handle_error_code(return_code, message, command, request_id)
