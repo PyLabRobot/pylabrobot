@@ -471,6 +471,20 @@ class AdcParameters:
 
 
 @dataclass
+class ChannelBoundsParameters:
+  """Per-channel movement bounds returned by PipettorService.GetChannelBounds."""
+
+  default_values: PaddedBool
+  channel: WEnum
+  x_min: F32
+  x_max: F32
+  y_min: F32
+  y_max: F32
+  z_min: F32
+  z_max: F32
+
+
+@dataclass
 class ChannelXYZPositionParameters:
   default_values: PaddedBool
   channel: WEnum
@@ -1276,6 +1290,22 @@ class PrepMoveToPositionViaLane(PrepCommand):
 
 
 @dataclass
+class PrepGetPositions(PrepCommand):
+  """GetPositions (cmd=25, dest=Pipettor).
+
+  Returns the current XYZ position of each channel as a StructArray of
+  ChannelXYZPositionParameters.
+  """
+
+  command_id = 25
+  action_code = 0  # STATUS_REQUEST
+
+  @dataclass(frozen=True)
+  class Response:
+    positions: Annotated[list[ChannelXYZPositionParameters], StructArray()]
+
+
+@dataclass
 class PrepMoveZUpToSafe(PrepCommand):
   """Move Z axes up to safe height (cmd=28, dest=Pipettor)."""
 
@@ -1723,6 +1753,22 @@ class PrepGetWasteSiteDefinitions(_PrepStatusQuery):
   @dataclass(frozen=True)
   class Response:
     sites: Annotated[list[_WasteSiteDefinitionWire], StructArray()]
+
+
+@dataclass
+class PrepGetChannelBounds(PrepCommand):
+  """GetChannelBounds (cmd=10, dest=PipettorService).
+
+  Returns per-channel movement bounds (x_min, x_max, y_min, y_max, z_min, z_max)
+  as a StructArray of ChannelBoundsParameters.
+  """
+
+  command_id = 10
+  action_code = 0  # STATUS_REQUEST
+
+  @dataclass(frozen=True)
+  class Response:
+    bounds: Annotated[list[ChannelBoundsParameters], StructArray()]
 
 
 @dataclass

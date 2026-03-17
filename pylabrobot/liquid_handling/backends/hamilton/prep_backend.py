@@ -246,6 +246,7 @@ class PrepBackend(LiquidHandlerBackend):
     self._channel_node_info_addrs: list[Address] = []
     self._mlprep_cpu_addr: Optional[Address] = None
     self._module_info_addr: Optional[Address] = None
+    self._channel_bounds: list[dict] = []
 
   def _has_interface(self, name: str) -> bool:
     """Return True if the interface was resolved and is present."""
@@ -351,6 +352,15 @@ class PrepBackend(LiquidHandlerBackend):
       self._config.num_channels,
       self._config.has_mph,
     )
+
+    # Cache per-channel movement bounds from firmware (required for move validation)
+    self._channel_bounds = await self.request_channel_bounds()
+    if not self._channel_bounds:
+      raise RuntimeError(
+        "Failed to query channel movement bounds (GetChannelBounds). "
+        "Cannot validate movement commands without bounds."
+      )
+    logger.info("Channel bounds: %s", self._channel_bounds)
 
     self.setup_finished = True
 
@@ -1670,6 +1680,255 @@ class PrepBackend(LiquidHandlerBackend):
     return True
 
   # ---------------------------------------------------------------------------
+  # Channel position queries
+  # ---------------------------------------------------------------------------
+
+  async def request_channel_bounds(self) -> list[dict]:
+    """Request per-channel movement bounds from the firmware.
+
+    Queries PipettorService.GetChannelBounds (cmd=10). Returns one entry per
+    channel, ordered by channel index. Each entry is a dict with keys:
+    x_min, x_max, y_min, y_max, z_min, z_max (all in mm).
+
+    These are the firmware-enforced limits — positions outside these ranges
+    will be rejected with 0x0F04 (X), 0x0F05 (Y), or 0x0F06 (Z).
+    Z bounds are for empty channels; with a tip attached the effective Z
+    minimum is higher.
+
+    Returns:
+      List of dicts, one per channel. Each dict has keys:
+      x_min, x_max, y_min, y_max, z_min, z_max (all in mm).
+    """
+    import struct as _struct
+
+    # GetChannelBounds is on PipettorService (child of Pipettor), not MLPrepService
+    try:
+      await self.client.interfaces["MLPrepRoot.PipettorRoot.Pipettor.PipettorService"].resolve()
+      pip_svc = self.client.interfaces["MLPrepRoot.PipettorRoot.Pipettor.PipettorService"].address
+    except KeyError:
+      return []
+
+    raw = await self.client.send_command(
+      PrepCmd.PrepGetChannelBounds(dest=pip_svc),
+      return_raw=True,
+      raise_on_error=False,
+    )
+    if raw is None:
+      return []
+
+    # Parse per-channel bounds from raw response.
+    # Each channel block: channel_enum (u32 at 0x20), then 6× f32 (at 0x28):
+    # x_min, x_max, y_min, y_max, z_min, z_max
+    data = raw[0]
+    _CHANNEL_ENUM_TO_IDX = {v: k for k, v in _CHANNEL_INDEX.items()}
+    indexed = []
+
+    i = 0
+    while i < len(data) - 20:
+      if data[i] == 0x20 and data[i + 1] == 0x00 and data[i + 2] == 0x04:
+        ch_val = _struct.unpack_from("<I", data, i + 4)[0]
+        ch_idx = _CHANNEL_ENUM_TO_IDX.get(ch_val)
+
+        j = i + 8
+        floats = []
+        while len(floats) < 6 and j < len(data) - 7:
+          if data[j] == 0x28 and data[j + 1] == 0x00:
+            floats.append(_struct.unpack_from("<f", data, j + 4)[0])
+            j += 8
+          else:
+            j += 1
+
+        if ch_idx is not None and len(floats) == 6:
+          indexed.append((ch_idx, {
+            "x_min": floats[0], "x_max": floats[1],
+            "y_min": floats[2], "y_max": floats[3],
+            "z_min": floats[4], "z_max": floats[5],
+          }))
+        i = j
+      else:
+        i += 1
+
+    indexed.sort(key=lambda pair: pair[0])
+    return [bounds for _, bounds in indexed]
+
+  async def request_channel_positions(self) -> list[Coordinate]:
+    """Request the current XYZ positions of all pipettor channels.
+
+    Queries Pipettor.GetPositions (cmd=25). Returns one Coordinate per channel,
+    ordered by channel index (0=rearmost).
+
+    Uses the typed PrepGetPositions command with ChannelXYZPositionParameters
+    response struct for reliable parsing across firmware versions.
+
+    Returns:
+      List of Coordinate, one per channel.
+    """
+    resp = await self.client.send_command(
+      PrepCmd.PrepGetPositions(dest=await self._require("pipettor")),
+      raise_on_error=False,
+    )
+    if resp is None or not resp.positions:
+      return []
+
+    _CHANNEL_ENUM_TO_IDX = {v: k for k, v in _CHANNEL_INDEX.items()}
+    indexed = []
+    for p in resp.positions:
+      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
+      if ch_idx is not None:
+        indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
+
+    indexed.sort(key=lambda pair: pair[0])
+    return [coord for _, coord in indexed]
+
+  async def request_x_pos_channel_n(self, channel_idx: int = 0) -> float:
+    """Request X position of pipettor channel n (in mm).
+
+    Analogous to STARBackend.request_x_pos_channel_n().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      X position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    return positions[channel_idx].x
+
+  async def request_y_pos_channel_n(self, channel_idx: int) -> float:
+    """Request Y position of pipettor channel n (in mm).
+
+    Analogous to STARBackend.request_y_pos_channel_n().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Y position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    return positions[channel_idx].y
+
+  async def request_z_pos_channel_n(self, channel_idx: int) -> float:
+    """Request Z position of pipettor channel n (in mm).
+
+    Analogous to STARBackend.request_z_pos_channel_n().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Z position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    return positions[channel_idx].z
+
+  async def get_channels_y_positions(self) -> dict[int, float]:
+    """Request Y positions of all channels.
+
+    Analogous to STARBackend.get_channels_y_positions().
+
+    Returns:
+      Dict mapping channel index (0=rearmost) to Y position in mm.
+    """
+    positions = await self.request_channel_positions()
+    return {i: coord.y for i, coord in enumerate(positions)}
+
+  async def get_channels_z_positions(self) -> dict[int, float]:
+    """Request Z positions of all channels.
+
+    Analogous to STARBackend.get_channels_z_positions().
+
+    Returns:
+      Dict mapping channel index (0=rearmost) to Z position in mm.
+    """
+    positions = await self.request_channel_positions()
+    return {i: coord.z for i, coord in enumerate(positions)}
+
+  async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
+    """Request the Z position of the tip bottom on the specified channel.
+
+    GetPositions returns tip-adjusted Z when a tip is mounted — the reported Z
+    is the tip bottom position, not the channel head. Verified empirically:
+    channel at traverse (167.5mm) with 50uL NTR tip (extension 42.4mm) reports
+    Z=125.1mm = 167.5 - 42.4.
+
+    Requires a tip to be mounted (verified via sleeve sensor).
+
+    Analogous to STARBackend.request_tip_bottom_z_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Tip bottom Z position in mm.
+
+    Raises:
+      RuntimeError: If no tip is present on the channel.
+    """
+    tip_presence = await self.sense_tip_presence()
+    if channel_idx >= len(tip_presence) or not tip_presence[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
+
+    return await self.request_z_pos_channel_n(channel_idx)
+
+  async def request_probe_z_position(self, channel_idx: int) -> float:
+    """Request the Z position of the channel probe/head (excluding tip).
+
+    Since GetPositions returns tip-adjusted Z when a tip is mounted, this
+    method queries the firmware's held tip definition (GetTipDefinitionHeld,
+    Pipettor cmd=13) to get the tip length and adds it back.
+
+    When no tip is mounted, returns the same value as request_z_pos_channel_n().
+
+    Analogous to STARBackend.request_probe_z_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Channel head Z position in mm (excluding tip).
+    """
+    z = await self.request_z_pos_channel_n(channel_idx)
+    tip_presence = await self.sense_tip_presence()
+    if channel_idx < len(tip_presence) and tip_presence[channel_idx]:
+      # Query firmware for the held tip definition to get tip length
+      Cmd = type(
+        "_GetTipDefHeld",
+        (PrepCmd._PrepStatusQuery,),
+        {"command_id": 13, "__annotations__": {"dest": Address}},
+      )
+      raw = await self.client.send_command(
+        Cmd(dest=await self._require("pipettor")),
+        return_raw=True,
+        raise_on_error=False,
+      )
+      if raw is not None:
+        import struct as _struct
+        data = raw[0]
+        # TipDefinition struct: default_values, id, volume(F32), length(F32), ...
+        # The second F32 is the tip extension length
+        f32_count = 0
+        i = 0
+        while i < len(data) - 7:
+          if data[i] == 0x28 and data[i + 1] == 0x00:
+            f32_count += 1
+            if f32_count == 2:  # second F32 = length
+              tip_length = _struct.unpack_from("<f", data, i + 4)[0]
+              if tip_length > 0:
+                z += tip_length
+              break
+            i += 8
+          else:
+            i += 1
+    return z
+
+  # ---------------------------------------------------------------------------
   # Tip presence sensing
   # ---------------------------------------------------------------------------
 
@@ -1689,7 +1948,7 @@ class PrepBackend(LiquidHandlerBackend):
     node IDs assigned by the firmware on a given instrument.
 
     Returns:
-      List of bools, one per channel (index 0=rear, 1=front). True if tip detected.
+      List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
     import struct as _struct
 
@@ -1782,7 +2041,7 @@ class PrepBackend(LiquidHandlerBackend):
     """Request the firmware version string for a pipettor channel.
 
     Args:
-      channel: Channel index (0=rear, 1=front).
+      channel: Channel index (0=rearmost).
 
     Analogous to STARBackend.request_pip_channel_version().
     """
@@ -1794,7 +2053,7 @@ class PrepBackend(LiquidHandlerBackend):
     """Request the serial number for a pipettor channel.
 
     Args:
-      channel: Channel index (0=rear, 1=front).
+      channel: Channel index (0=rearmost).
     """
     if channel >= len(self._channel_node_info_addrs):
       return None
@@ -1974,7 +2233,7 @@ class PrepBackend(LiquidHandlerBackend):
     no height parameter is sent.
 
     Args:
-      channels: Channel indices to move (0=rear, 1=front). None = all channels.
+      channels: Channel indices to move (0=rearmost). None = all channels.
     """
     if channels is None:
       channels = list(range(self.num_channels))
@@ -2024,6 +2283,20 @@ class PrepBackend(LiquidHandlerBackend):
       assert len(y) == len(channels), "len(y) must equal len(use_channels)"
     if isinstance(z, list):
       assert len(z) == len(channels), "len(z) must equal len(use_channels)"
+
+    # Validate against per-channel movement bounds (cached from firmware at setup).
+    y_vals = y if isinstance(y, list) else [y] * len(channels)
+    z_vals = z if isinstance(z, list) else [z] * len(channels)
+    for i, (y_i, z_i) in enumerate(zip(y_vals, z_vals)):
+      ch = channels[i]
+      if ch < len(self._channel_bounds):
+        b = self._channel_bounds[ch]
+        if not b["x_min"] <= x <= b["x_max"]:
+          raise ValueError(f"x={x} outside channel {ch} range [{b['x_min']:.1f}, {b['x_max']:.1f}]")
+        if not b["y_min"] <= y_i <= b["y_max"]:
+          raise ValueError(f"y={y_i} outside channel {ch} range [{b['y_min']:.1f}, {b['y_max']:.1f}]")
+        if z_i > b["z_max"]:
+          raise ValueError(f"z={z_i} above channel {ch} maximum {b['z_max']:.1f}")
 
     axis_parameters: List[PrepCmd.ChannelYZMoveParameters] = []
     for i, ch in enumerate(channels):
