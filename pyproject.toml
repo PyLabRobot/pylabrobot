@@ -19,11 +19,9 @@ hid = ["hid==1.0.8"]
 modbus = ["pymodbus==3.6.8"]
 opentrons = ["opentrons-http-api-client==0.2.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
-dev = [
+all = [
   "PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila]",
   "numpy",
-  "pytest==8.4.2",
-  "pytest-timeout==2.4.0",
   "mypy==1.18.2",
   "sphinx-reredirects==0.1.6",
   "ruff==0.15.4",
@@ -33,7 +31,11 @@ dev = [
   "myst_nb==1.3.0",
   "sphinx_copybutton==0.5.2",
 ]
-all = ["PyLabRobot[dev]"]
+test = [
+  "pytest==8.4.2",
+  "pytest-timeout==2.4.0",
+]
+dev = ["PyLabRobot[all,test]"]
 
 [project.urls]
 Homepage = "https://github.com/pylabrobot/pylabrobot"
