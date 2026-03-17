@@ -184,40 +184,11 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     self._lifetime_of_execution = lifetime_of_execution
     self._lock_id: Optional[str] = None  # None = unlocked, str = locked with this ID
 
-    # Track currently executing commands for parallelism checking
-    self._executing_commands: Set[str] = set()
-
     # Lock ID tracking per pending request (for LockDevice)
     self._pending_lock_ids: Dict[int, str] = {}
 
     # DataEvent storage by request_id
     self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
-
-  def _check_parallelism(self, command: str) -> bool:
-    """Check if command can run in parallel with currently executing commands.
-
-    Args:
-      command: Command name to check.
-
-    Returns:
-      True if command can run in parallel, False if it conflicts.
-    """
-    # If no commands executing, allow it
-    if not self._executing_commands:
-      return True
-
-    for executing_cmd in self._executing_commands:
-      if executing_cmd in self.PARALLELISM_TABLE:
-        if command in self.PARALLELISM_TABLE[executing_cmd]:
-          if self.PARALLELISM_TABLE[executing_cmd][command] == "S":
-            return False
-        else:
-          return False
-      else:
-        return False
-
-    # All checks passed - can run in parallel with all executing commands
-    return True
 
   async def wait_for_first_data_event(
     self,
@@ -242,7 +213,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     result: Any = None,
     exception: Optional[BaseException] = None,
   ) -> None:
-    """ODTC cleanup (lock state, executing commands) then delegate to base."""
+    """ODTC cleanup (lock state) then delegate to base."""
     pending = self._pending_by_id.get(request_id)
     if pending is None or pending.fut.done():
       return
@@ -261,8 +232,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         self._logger.info("Device reset (unlocked)")
     else:
       self._pending_lock_ids.pop(request_id, None)
-
-    self._executing_commands.discard(pending.name)
 
     super()._complete_pending(request_id, result=result, exception=exception)
 
@@ -301,21 +270,13 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     timeout: Optional[float] = None,
     **kwargs: Any,
   ) -> Any:
-    # Parallelism check
-    if command in self.PARALLELISM_TABLE:
-      if not self._check_parallelism(command):
-        raise SiLAError(4, "Cannot run in parallel with currently executing commands", command)
-    elif self._executing_commands:
-      raise SiLAError(4, "Not in parallelism table and device is busy", command)
-
     # Auto-inject lockId when device is locked
     if self._lock_id is not None and "lockId" not in kwargs:
       kwargs["lockId"] = self._lock_id
 
-    self._executing_commands.add(command)
+    if timeout is None:
+      timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
     try:
-      if timeout is None:
-        timeout = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
       return await asyncio.wait_for(
         super().send_command(command, request_id=request_id, **kwargs), timeout=timeout
       )
@@ -323,8 +284,3 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       raise SiLATimeoutError(
         f"Timed out after {timeout}s waiting for ResponseEvent", command=command
       ) from None
-    finally:
-      # Sync commands (return_code 1) complete immediately and don't go through
-      # _complete_pending, so clean them up here. Async commands get cleaned up
-      # by _complete_pending when the ResponseEvent arrives.
-      self._executing_commands.discard(command)

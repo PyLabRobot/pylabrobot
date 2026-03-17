@@ -496,23 +496,6 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     """Set up test fixtures."""
     self.interface = ODTCSiLAInterface(machine_ip="192.168.1.100", client_ip="127.0.0.1")
 
-  def test_check_parallelism(self):
-    """Test parallelism checking."""
-    # No commands executing - should allow
-    self.assertTrue(self.interface._check_parallelism("ReadActualTemperature"))
-
-    # SetParameters executing - ReadActualTemperature can run in parallel
-    self.interface._executing_commands.add("SetParameters")
-    self.assertTrue(self.interface._check_parallelism("ReadActualTemperature"))
-
-    # ExecuteMethod executing - SetParameters cannot run in parallel (S)
-    self.interface._executing_commands.clear()
-    self.interface._executing_commands.add("ExecuteMethod")
-    self.assertFalse(self.interface._check_parallelism("SetParameters"))
-
-    # ExecuteMethod executing - ReadActualTemperature can run in parallel (P)
-    self.assertTrue(self.interface._check_parallelism("ReadActualTemperature"))
-
   async def test_handle_error_code(self):
     """Test return code handling (codes 1, 2, 3 are handled by send_command, not _handle_error_code)."""
     # Code 4 should raise
