@@ -3,13 +3,15 @@
 import warnings
 
 from pylabrobot.resources.trough import Trough, TroughBottomType
-from pylabrobot.utils.interpolation import interpolate_1d
 
 # --------------------------------------------------------------------------- #
 # Hamilton 1-trough 60 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_60ml_Vb_height_to_volume_measurements = {
+# Calibration data: height (mm) → volume (µL).
+# Obtained via ztouch probing of cavity_bottom, manual addition of known volumes,
+# and LLD measurement of liquid height relative to cavity_bottom.
+_hamilton_1_trough_60ml_Vb_height_volume_data = {
   0.0: 0.0,
   2.2: 500.0,
   3.5: 1_000.0,
@@ -34,39 +36,6 @@ _hamilton_1_trough_60ml_Vb_height_to_volume_measurements = {
   52.13: 70_000.0,
   58.5: 80_000.0,
 }
-_hamilton_1_trough_60ml_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_60ml_Vb_height_to_volume_measurements.items()
-}
-
-
-def _compute_volume_from_height_hamilton_1_trough_60ml_Vb(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Hamilton 1-trough 60 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 65.5 * 1.05:
-    raise ValueError(f"Height {h} is too large for Hamilton_1_trough_60ml_Vb.")
-
-  vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_60ml_Vb_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_hamilton_1_trough_60ml_Vb(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Hamilton 1-trough 60 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_60ml_Vb_volume_to_height_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, h_mm), 3)
 
 
 def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
@@ -90,8 +59,7 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
     max_volume=60_000,  # units: µL
     model=hamilton_1_trough_60ml_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_60ml_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_60ml_Vb,
+    height_volume_data=_hamilton_1_trough_60ml_Vb_height_volume_data,
   )
 
 
@@ -99,7 +67,7 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
 # Hamilton 1-trough 120 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_120mL_Vb_height_to_volume_measurements = {
+_hamilton_1_trough_120mL_Vb_height_volume_data = {
   0.0: 0.0,
   5.85: 4_000.0,
   6.3: 6_000.0,
@@ -117,39 +85,6 @@ _hamilton_1_trough_120mL_Vb_height_to_volume_measurements = {
   70.62: 140_000.0,
   80.0: 160_000.0,
 }
-_hamilton_1_trough_120mL_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_120mL_Vb_height_to_volume_measurements.items()
-}
-
-
-def _compute_volume_from_height_hamilton_1_trough_120mL_Vb(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Hamilton 1-trough 120 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 80.0 * 1.05:
-    raise ValueError(f"Height {h} is too large for hamilton_1_trough_120ml_Vb.")
-
-  vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_120mL_Vb_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_hamilton_1_trough_120mL_Vb(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Hamilton 1-trough 120 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_120mL_Vb_volume_to_height_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, h_mm), 3)
 
 
 def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
@@ -174,8 +109,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
     max_volume=120_000,  # units: µL
     model=hamilton_1_trough_120mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_120mL_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_120mL_Vb,
+    height_volume_data=_hamilton_1_trough_120mL_Vb_height_volume_data,
   )
 
 
@@ -183,7 +117,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
 # Hamilton 1-trough 200 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_200ml_Vb_height_to_volume_measurements = {
+_hamilton_1_trough_200ml_Vb_height_volume_data = {
   0.0: 0.0,
   5.8: 6_000.0,
   7.4: 10_000.0,
@@ -195,39 +129,6 @@ _hamilton_1_trough_200ml_Vb_height_to_volume_measurements = {
   72.6: 240_000.0,
   88.4: 300_000.0,
 }
-_hamilton_1_trough_200ml_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_200ml_Vb_height_to_volume_measurements.items()
-}
-
-
-def _compute_volume_from_height_hamilton_1_trough_200ml_Vb(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Hamilton 1-trough 200 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 95 * 1.05:
-    raise ValueError(f"Height {h} is too large for Hamilton_1_trough_200ml_Vb.")
-
-  vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_200ml_Vb_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_hamilton_1_trough_200ml_Vb(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Hamilton 1-trough 200 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_200ml_Vb_volume_to_height_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, h_mm), 3)
 
 
 def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
@@ -246,8 +147,7 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
     max_volume=200_000,  # units: µL
     model=hamilton_1_trough_200ml_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_200ml_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_200ml_Vb,
+    height_volume_data=_hamilton_1_trough_200ml_Vb_height_volume_data,
   )
 
 

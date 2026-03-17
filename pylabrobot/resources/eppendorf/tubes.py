@@ -3,7 +3,6 @@
 import warnings
 
 from pylabrobot.resources.tube import Tube, TubeBottomType
-from pylabrobot.utils.interpolation import interpolate_1d
 
 # --------------------------------------------------------------------------- #
 # 1.5 mL Eppendorf Tubes
@@ -112,61 +111,29 @@ def Eppendorf_DNA_LoBind_2ml_Ub(name: str) -> Tube:
 # 5 mL Eppendorf Tubes
 # --------------------------------------------------------------------------- #
 
-_eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements = {
+# Calibration data: height (mm) → volume (µL).
+# Obtained via ztouch probing of cavity_bottom, manual addition of known volumes,
+# and LLD measurement of liquid height relative to cavity_bottom.
+_eppendorf_tube_5mL_Vb_snapcap_height_volume_data = {
   0.0: 0.0,
-  5.0: 1.342,
-  10.0: 1.875,
-  50.0: 4.975,
-  100.0: 6.975,
-  200.0: 9.909,
-  400.0: 13.742,
-  600.0: 16.242,
-  800.0: 18.375,
-  1000.0: 20.142,
-  1200.0: 21.809,
-  1500.0: 23.842,
-  2000.0: 27.242,
-  3000.0: 34.242,
-  4000.0: 41.009,
-  4500.0: 44.175,
-  5000.0: 47.509,
-  5500.0: 50.675,
+  1.342: 5.0,
+  1.875: 10.0,
+  4.975: 50.0,
+  6.975: 100.0,
+  9.909: 200.0,
+  13.742: 400.0,
+  16.242: 600.0,
+  18.375: 800.0,
+  20.142: 1000.0,
+  21.809: 1200.0,
+  23.842: 1500.0,
+  27.242: 2000.0,
+  34.242: 3000.0,
+  41.009: 4000.0,
+  44.175: 4500.0,
+  47.509: 5000.0,
+  50.675: 5500.0,
 }
-_eppendorf_tube_5mL_Vb_snapcap_volume_to_height_measurements = {
-  v: k for k, v in _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements.items()
-}
-
-
-def _compute_volume_from_height_eppendorf_tube_5mL_Vb_snapcap(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Eppendorf 5 mL V-bottom snap-cap tube,
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 55.4 * 1.05:  # well cavity height + 5% tolerance
-    raise ValueError(f"Height {h} is too large for eppendorf_tube_5mL_Vb_snapcap.")
-
-  vol_ul = interpolate_1d(
-    h, data=_eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_eppendorf_tube_5mL_Vb_snapcap(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Eppendorf 5 mL V-bottom snap-cap tube,
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul,
-    data=_eppendorf_tube_5mL_Vb_snapcap_volume_to_height_measurements,
-    bounds_handling="error",
-  )
-  return round(max(0.0, h_mm), 3)
 
 
 def eppendorf_tube_5mL_Vb_snapcap(name: str) -> Tube:
@@ -197,6 +164,5 @@ def eppendorf_tube_5mL_Vb_snapcap(name: str) -> Tube:
     max_volume=5_000,  # units: ul
     material_z_thickness=1.2,
     bottom_type=TubeBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_eppendorf_tube_5mL_Vb_snapcap,
-    compute_height_from_volume=_compute_height_from_volume_eppendorf_tube_5mL_Vb_snapcap,
+    height_volume_data=_eppendorf_tube_5mL_Vb_snapcap_height_volume_data,
   )

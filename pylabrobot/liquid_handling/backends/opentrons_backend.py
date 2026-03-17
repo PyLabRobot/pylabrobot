@@ -253,18 +253,59 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     self._tip_racks[tip_rack.name] = slot
 
-  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-    """Pick up tips from the specified resource."""
-
+  def _get_pickup_pipette(self, ops: List[Pickup]) -> str:
+    """Get the pipette for a tip pick-up, or raise."""
     assert len(ops) == 1, "only one channel supported for now"
-    op = ops[0]  # for channel in channels
-    # this feels wrong, why should backends check?
+    op = ops[0]
     assert op.resource.parent is not None, "must not be a floating resource"
-
-    # labware_id = self.defined_labware[op.resource.parent.name]  # get name of tip rack
     pipette_id = self.select_tip_pipette(op.tip, with_tip=False)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
+    return pipette_id
+
+  def _get_drop_pipette(self, ops: List[Drop]) -> str:
+    """Get the pipette for a tip drop, or raise."""
+    assert len(ops) == 1, "only one channel supported for now"
+    op = ops[0]
+    assert op.resource.parent is not None, "must not be a floating resource"
+    pipette_id = self.select_tip_pipette(op.tip, with_tip=True)
+    if not pipette_id:
+      raise NoChannelError("No pipette channel of right type with tip available.")
+    return pipette_id
+
+  def _get_liquid_pipette(
+    self, ops: Union[List[SingleChannelAspiration], List[SingleChannelDispense]]
+  ) -> str:
+    """Get the pipette for an aspirate/dispense, or raise."""
+    assert len(ops) == 1, "only one channel supported for now"
+    pipette_id = self.select_liquid_pipette(ops[0].volume)
+    if pipette_id is None:
+      raise NoChannelError("No pipette channel of right type with tip available.")
+    return pipette_id
+
+  def _set_tip_state(self, pipette_id: str, has_tip: bool):
+    """Update tip-mounted state for the pipette that was used.
+
+    This method now validates the provided ``pipette_id`` against both the left
+    and right pipette configurations. It updates the state only if the ID
+    matches a known, configured pipette; otherwise it raises an error to avoid
+    silently putting the backend into an inconsistent state.
+    """
+    if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
+      self.left_pipette_has_tip = has_tip
+      return
+
+    if self.right_pipette is not None and pipette_id == self.right_pipette["pipetteId"]:
+      self.right_pipette_has_tip = has_tip
+      return
+
+    raise ValueError(f"Unknown or unconfigured pipette_id {pipette_id!r} in _set_tip_state.")
+
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+    """Pick up tips from the specified resource."""
+
+    pipette_id = self._get_pickup_pipette(ops)
+    op = ops[0]
 
     offset_x, offset_y, offset_z = (
       op.offset.x,
@@ -289,21 +330,13 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       offset_z=offset_z,
     )
 
-    if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
-      self.left_pipette_has_tip = True
-    else:
-      self.right_pipette_has_tip = True
+    self._set_tip_state(pipette_id, True)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """Drop tips from the specified resource."""
 
-    # right now we get the tip rack, and then identifier within that tip rack?
-    # how do we do that with trash, assuming we don't want to have a child for the trash?
-
-    assert len(ops) == 1  # only one channel supported for now
-    op = ops[0]  # for channel in channels
-    # this feels wrong, why should backends check?
-    assert op.resource.parent is not None, "must not be a floating resource"
+    pipette_id = self._get_drop_pipette(ops)
+    op = ops[0]
 
     use_fixed_trash = (
       cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
@@ -317,9 +350,6 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       if tip_rack.name not in self._tip_racks:
         await self._assign_tip_rack(tip_rack, op.tip)
       labware_id = self.get_ot_name(tip_rack.name)
-    pipette_id = self.select_tip_pipette(op.tip, with_tip=True)
-    if not pipette_id:
-      raise NoChannelError("No pipette channel of right type with tip available.")
 
     offset_x, offset_y, offset_z = (
       op.offset.x,
@@ -348,10 +378,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         offset_z=offset_z,
       )
 
-    if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
-      self.left_pipette_has_tip = False
-    else:
-      self.right_pipette_has_tip = False
+    self._set_tip_state(pipette_id, False)
 
   def select_liquid_pipette(self, volume: float) -> Optional[str]:
     """Select a pipette based on volume for an aspiration or dispense.
@@ -413,14 +440,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     """Aspirate liquid from the specified resource using pip."""
 
-    assert len(ops) == 1, "only one channel supported for now"
+    pipette_id = self._get_liquid_pipette(ops)
     op = ops[0]
-
     volume = op.volume
-
-    pipette_id = self.select_liquid_pipette(volume)
-    if pipette_id is None:
-      raise NoChannelError("No pipette channel of right type with tip available.")
 
     pipette_name = self.get_pipette_name(pipette_id)
     flow_rate = op.flow_rate or self._get_default_aspiration_flow_rate(pipette_name)
@@ -493,14 +515,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified resource using pip."""
 
-    assert len(ops) == 1, "only one channel supported for now"
+    pipette_id = self._get_liquid_pipette(ops)
     op = ops[0]
-
     volume = op.volume
-
-    pipette_id = self.select_liquid_pipette(volume)
-    if pipette_id is None:
-      raise NoChannelError("No pipette channel of right type with tip available.")
 
     pipette_name = self.get_pipette_name(pipette_id)
     flow_rate = op.flow_rate or self._get_default_dispense_flow_rate(pipette_name)
