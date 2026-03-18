@@ -5,10 +5,6 @@ import time
 import warnings
 from typing import List, Optional, Tuple, Union
 
-import pytest
-
-pytest.importorskip("serial")
-
 import serial
 
 from pylabrobot.barcode_scanners import BarcodeScanner

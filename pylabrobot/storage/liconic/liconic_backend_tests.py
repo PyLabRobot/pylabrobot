@@ -3,6 +3,10 @@
 import unittest
 from unittest.mock import AsyncMock
 
+import pytest
+
+pytest.importorskip("serial")
+
 from pylabrobot.resources import PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.liconic.constants import LiconicType
