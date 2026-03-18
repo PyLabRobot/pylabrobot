@@ -19,6 +19,7 @@ hid = ["hid"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
 opentrons = ["opentrons-http-api-client==0.2.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
+microscopy = ["numpy>=1.26", "opencv-python"]
 all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila]"]
 test = [
   "pytest",
@@ -26,10 +27,13 @@ test = [
 ]
 dev = [
   "PyLabRobot[all,test]",
-  "numpy",
+
+  # lint/type
   "mypy==1.18.2",
-  "sphinx-reredirects",
   "ruff==0.15.4",
+
+  # docs
+  "sphinx-reredirects",
   "nbconvert",
   "sphinx-sitemap",
   "pydata-sphinx-theme",

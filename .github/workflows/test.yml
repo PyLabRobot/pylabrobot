@@ -32,9 +32,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        extra: ["<none>", serial, usb, ftdi, hid, modbus, opentrons, sila]
+        extra: ["<none>", serial, usb, ftdi, hid, modbus, opentrons, sila, microscopy]
 
-    name: Tests (${{ matrix.extra }}, py3.14)
+    name: Tests (${{ matrix.extra }}, py3.12)
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -43,5 +43,5 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/run-tests
         with:
-          version: "3.14"
+          version: "3.12"
           extra: ${{ matrix.extra }}
