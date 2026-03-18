@@ -17,6 +17,7 @@ from unittest.mock import patch
 import pytest
 
 pytest.importorskip("numpy")
+pytest.importorskip("grpc")
 
 import numpy as np  # type: ignore[import-not-found]
 

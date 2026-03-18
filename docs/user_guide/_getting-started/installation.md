@@ -50,7 +50,8 @@ Different machines use different communication modes. Replace `[usb]` with one o
 | `modbus` | pymodbus | Modbus devices: e.g. Agrow Pump Array |
 | `opentrons` | opentrons-http-api-client | e.g. Opentrons backend |
 | `microscopy` | numpy (1.26), opencv-python | e.g. Cytation imager |
-| `sila` | zeroconf, grpcio | Sila devices: e.g. imageXpress Pico |
+| `sila` | zeroconf, grpcio | SiLA devices |
+| `pico` | microscopy + sila | ImageXpress Pico microscope |
 | `dev` | All of the above + testing/linting tools | Development |
 
 Or install all dependencies:
