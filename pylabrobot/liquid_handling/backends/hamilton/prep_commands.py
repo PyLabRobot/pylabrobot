@@ -345,15 +345,19 @@ class NoLldParameters:
 @dataclass
 class LldParameters:
   default_values: PaddedBool
-  z_seek: F32
-  z_seek_speed: F32
+  search_start_position: F32
+  channel_speed: F32
   z_submerge: F32
   z_out_of_liquid: F32
 
   @classmethod
   def default(cls) -> LldParameters:
     return cls(
-      default_values=True, z_seek=0.0, z_seek_speed=0.0, z_submerge=0.0, z_out_of_liquid=0.0
+      default_values=True,
+      search_start_position=0.0,
+      channel_speed=0.0,
+      z_submerge=0.0,
+      z_out_of_liquid=0.0,
     )
 
 

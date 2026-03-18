@@ -1215,8 +1215,8 @@ class PrepBackend(LiquidHandlerBackend):
         top_of_well_z = well_geometry[idx][2]
         _lld = PrepCmd.LldParameters(
           default_values=False,
-          z_seek=top_of_well_z,
-          z_seek_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
+          search_start_position=top_of_well_z,
+          channel_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
           z_submerge=2.0,
           z_out_of_liquid=0.0,
         )
@@ -1304,10 +1304,10 @@ class PrepBackend(LiquidHandlerBackend):
     # to prevent connection timeout during slow descents.
     # Explicit read_timeout from caller takes precedence.
     lld_read_timeout = read_timeout
-    if lld_read_timeout is None and effective_lld and _lld.z_seek_speed > 0:
-      seek_distance = _lld.z_seek - min(z_minimum)
+    if lld_read_timeout is None and effective_lld and _lld.channel_speed > 0:
+      seek_distance = _lld.search_start_position - min(z_minimum)
       if seek_distance > 0:
-        lld_read_timeout = seek_distance / _lld.z_seek_speed + 5.0
+        lld_read_timeout = seek_distance / _lld.channel_speed + 5.0
 
     if effective_lld and monitoring_mode == PrepCmd.MonitoringMode.TADM:
       await self.client.send_command(
@@ -1545,8 +1545,8 @@ class PrepBackend(LiquidHandlerBackend):
         top_of_well_z = well_geometry[idx][2]
         _lld = PrepCmd.LldParameters(
           default_values=False,
-          z_seek=top_of_well_z,
-          z_seek_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
+          search_start_position=top_of_well_z,
+          channel_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
           z_submerge=2.0,
           z_out_of_liquid=0.0,
         )

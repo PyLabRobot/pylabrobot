@@ -666,8 +666,8 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     """Passing lld= activates LLD path without use_lld=True."""
     custom_lld = PrepCmd.LldParameters(
       default_values=False,
-      z_seek=90.0,
-      z_seek_speed=5.0,
+      search_start_position=90.0,
+      channel_speed=5.0,
       z_submerge=2.0,
       z_out_of_liquid=1.0,
     )
@@ -680,17 +680,17 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(cmds), 1)
     # Verify the provided LLD parameters are used (not auto-derived)
     lld = cmds[0].aspirate_parameters[0].lld
-    self.assertAlmostEqual(lld.z_seek, 90.0)
+    self.assertAlmostEqual(lld.search_start_position, 90.0)
 
   async def test_aspirate_lld_auto_seek_z(self):
-    """Auto-derived LLD z_seek equals the top-of-well Z."""
+    """Auto-derived LLD search_start_position equals the top-of-well Z."""
     self.plate.get_item("A1")
     op = self._make_asp()
     _, _, top_of_well_z, _ = _absolute_z_from_well(op)
     await self.backend.aspirate([op], use_channels=[0], use_lld=True)
     cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldV2)[0]
     lld = cmd.aspirate_parameters[0].lld
-    self.assertAlmostEqual(lld.z_seek, top_of_well_z, places=3)
+    self.assertAlmostEqual(lld.search_start_position, top_of_well_z, places=3)
 
   # --- Channel mapping ---
 
