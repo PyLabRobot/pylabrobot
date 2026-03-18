@@ -1,9 +1,6 @@
 import unittest
 from unittest.mock import AsyncMock, call
 
-import pytest
-
-pytest.importorskip("pymodbus")
 
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 

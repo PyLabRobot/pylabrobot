@@ -14,9 +14,6 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.mock import patch
 
-import pytest
-
-pytest.importorskip("numpy")
 
 import numpy as np
 
