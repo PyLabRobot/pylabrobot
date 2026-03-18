@@ -1,6 +1,10 @@
 import unittest
 from unittest.mock import patch
 
+import pytest
+
+pytest.importorskip("ot_api")
+
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend import (
   OpentronsOT2Backend,

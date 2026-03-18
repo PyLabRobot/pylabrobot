@@ -4,7 +4,13 @@ import time
 import warnings
 from typing import List, Literal, Optional, Union, cast
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
@@ -49,6 +55,11 @@ class CytomatBackend(IncubatorBackend):
   serial_message_encoding = "utf-8"
 
   def __init__(self, model: Union[CytomatType, str], port: str):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
 
     supported_models = [
