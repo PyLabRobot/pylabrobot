@@ -14,8 +14,10 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.mock import patch
 
-
-import numpy as np
+try:
+  import numpy as np
+except ImportError:
+  raise unittest.SkipTest("numpy not installed")
 
 from pylabrobot.io.sila.grpc import (
   decode_fields,

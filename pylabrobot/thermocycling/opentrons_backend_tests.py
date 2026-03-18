@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch
 
-
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.thermocycling.opentrons import OpentronsThermocyclerModuleV1
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend

@@ -1,8 +1,15 @@
 import unittest
 from unittest.mock import AsyncMock, call
 
+try:
+  from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
-from pymodbus.client import AsyncModbusSerialClient  # type: ignore
+  HAS_PYMODBUS = True
+except ImportError:
+  HAS_PYMODBUS = False
+
+if not HAS_PYMODBUS:
+  raise unittest.SkipTest("pymodbus not installed")
 
 from pylabrobot.pumps import PumpArray
 from pylabrobot.pumps.agrowpumps import AgrowPumpArrayBackend

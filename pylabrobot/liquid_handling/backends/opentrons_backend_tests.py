@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch
 
-
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend import (
   OpentronsOT2Backend,
