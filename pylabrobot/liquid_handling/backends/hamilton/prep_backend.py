@@ -1787,6 +1787,108 @@ class PrepBackend(LiquidHandlerBackend):
     return True
 
   # ---------------------------------------------------------------------------
+  # Firmware version queries
+  # ---------------------------------------------------------------------------
+
+  @staticmethod
+  def _decode_firmware_string(raw: Optional[tuple]) -> Optional[str]:
+    """Decode a string from a raw HOI response.
+
+    Hamilton string wire format: 0x0F + type_byte + u16 length + chars.
+    type_byte is 0x00 (plain) or 0x01 (with null terminator); both are handled.
+    """
+    if raw is None:
+      return None
+    data: bytes = raw[0]
+    i = 0
+    while i < len(data) - 3:
+      if data[i] == 0x0F and data[i + 1] in (0x00, 0x01):
+        slen = int.from_bytes(data[i + 2 : i + 4], "little")
+        if slen > 0 and i + 4 + slen <= len(data):
+          return data[i + 4 : i + 4 + slen].decode("utf-8", errors="replace").rstrip("\x00")
+      i += 1
+    return None
+
+  async def _query_firmware_string(
+    self, addr: Address, cmd_id: int, iface_id: int = 3
+  ) -> Optional[str]:
+    """Send a status query and decode the string response."""
+    Cmd = type(
+      "_FWQuery",
+      (PrepCmd._PrepStatusQuery,),
+      {"command_id": cmd_id, "interface_id": iface_id, "__annotations__": {"dest": Address}},
+    )
+    raw: Optional[tuple] = await self.client.send_command(
+      Cmd(dest=addr), return_raw=True, raise_on_error=False
+    )
+    return self._decode_firmware_string(raw)
+
+  async def request_firmware_version(self) -> Optional[str]:
+    """Request the instrument controller firmware version string.
+
+    Returns a string like "MLPrep Runtime V1.2.2.444 99020-02 Rev G",
+    or None if MLPrepCpu was not discovered.
+
+    Analogous to STARBackend.request_firmware_version().
+    """
+    if self._mlprep_cpu_addr is None:
+      return None
+    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=8)
+
+  async def request_device_serial_number(self) -> Optional[str]:
+    """Request the instrument serial number.
+
+    Analogous to STARBackend.request_device_serial_number().
+    """
+    if self._mlprep_cpu_addr is None:
+      return None
+    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=9)
+
+  async def request_bootloader_version(self) -> Optional[str]:
+    """Request the instrument bootloader version string."""
+    if self._mlprep_cpu_addr is None:
+      return None
+    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=2, iface_id=2)
+
+  async def request_pip_channel_version(self, channel: int) -> Optional[str]:
+    """Request the firmware version string for a pipettor channel.
+
+    Args:
+      channel: Channel index (0=rearmost).
+
+    Analogous to STARBackend.request_pip_channel_version().
+    """
+    if channel >= len(self._channel_node_info_addrs):
+      return None
+    return await self._query_firmware_string(
+      self._channel_node_info_addrs[channel], cmd_id=8, iface_id=1
+    )
+
+  async def request_pip_channel_serial_number(self, channel: int) -> Optional[str]:
+    """Request the serial number for a pipettor channel.
+
+    Args:
+      channel: Channel index (0=rearmost).
+    """
+    if channel >= len(self._channel_node_info_addrs):
+      return None
+    return await self._query_firmware_string(
+      self._channel_node_info_addrs[channel], cmd_id=9, iface_id=1
+    )
+
+  async def request_module_version(self) -> Optional[str]:
+    """Request the pipettor module version string (from PipettorRoot.ModuleInformation)."""
+    if self._module_info_addr is None:
+      return None
+    return await self._query_firmware_string(self._module_info_addr, cmd_id=8)
+
+  async def request_module_part_number(self) -> Optional[str]:
+    """Request the firmware part number (from PipettorRoot.ModuleInformation)."""
+    if self._module_info_addr is None:
+      return None
+    return await self._query_firmware_string(self._module_info_addr, cmd_id=5)
+
+  # ---------------------------------------------------------------------------
   # Channel position queries
   # ---------------------------------------------------------------------------
 
@@ -2216,108 +2318,6 @@ class PrepBackend(LiquidHandlerBackend):
     raise NotImplementedError(
       "ztouch_probe_z_height_using_channel is not yet implemented for PrepBackend."
     )
-
-  # ---------------------------------------------------------------------------
-  # Firmware version queries
-  # ---------------------------------------------------------------------------
-
-  @staticmethod
-  def _decode_firmware_string(raw: Optional[tuple]) -> Optional[str]:
-    """Decode a string from a raw HOI response.
-
-    Hamilton string wire format: 0x0F + type_byte + u16 length + chars.
-    type_byte is 0x00 (plain) or 0x01 (with null terminator); both are handled.
-    """
-    if raw is None:
-      return None
-    data: bytes = raw[0]
-    i = 0
-    while i < len(data) - 3:
-      if data[i] == 0x0F and data[i + 1] in (0x00, 0x01):
-        slen = int.from_bytes(data[i + 2 : i + 4], "little")
-        if slen > 0 and i + 4 + slen <= len(data):
-          return data[i + 4 : i + 4 + slen].decode("utf-8", errors="replace").rstrip("\x00")
-      i += 1
-    return None
-
-  async def _query_firmware_string(
-    self, addr: Address, cmd_id: int, iface_id: int = 3
-  ) -> Optional[str]:
-    """Send a status query and decode the string response."""
-    Cmd = type(
-      "_FWQuery",
-      (PrepCmd._PrepStatusQuery,),
-      {"command_id": cmd_id, "interface_id": iface_id, "__annotations__": {"dest": Address}},
-    )
-    raw: Optional[tuple] = await self.client.send_command(
-      Cmd(dest=addr), return_raw=True, raise_on_error=False
-    )
-    return self._decode_firmware_string(raw)
-
-  async def request_firmware_version(self) -> Optional[str]:
-    """Request the instrument controller firmware version string.
-
-    Returns a string like "MLPrep Runtime V1.2.2.444 99020-02 Rev G",
-    or None if MLPrepCpu was not discovered.
-
-    Analogous to STARBackend.request_firmware_version().
-    """
-    if self._mlprep_cpu_addr is None:
-      return None
-    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=8)
-
-  async def request_device_serial_number(self) -> Optional[str]:
-    """Request the instrument serial number.
-
-    Analogous to STARBackend.request_device_serial_number().
-    """
-    if self._mlprep_cpu_addr is None:
-      return None
-    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=9)
-
-  async def request_bootloader_version(self) -> Optional[str]:
-    """Request the instrument bootloader version string."""
-    if self._mlprep_cpu_addr is None:
-      return None
-    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=2, iface_id=2)
-
-  async def request_pip_channel_version(self, channel: int) -> Optional[str]:
-    """Request the firmware version string for a pipettor channel.
-
-    Args:
-      channel: Channel index (0=rearmost).
-
-    Analogous to STARBackend.request_pip_channel_version().
-    """
-    if channel >= len(self._channel_node_info_addrs):
-      return None
-    return await self._query_firmware_string(
-      self._channel_node_info_addrs[channel], cmd_id=8, iface_id=1
-    )
-
-  async def request_pip_channel_serial_number(self, channel: int) -> Optional[str]:
-    """Request the serial number for a pipettor channel.
-
-    Args:
-      channel: Channel index (0=rearmost).
-    """
-    if channel >= len(self._channel_node_info_addrs):
-      return None
-    return await self._query_firmware_string(
-      self._channel_node_info_addrs[channel], cmd_id=9, iface_id=1
-    )
-
-  async def request_module_version(self) -> Optional[str]:
-    """Request the pipettor module version string (from PipettorRoot.ModuleInformation)."""
-    if self._module_info_addr is None:
-      return None
-    return await self._query_firmware_string(self._module_info_addr, cmd_id=8)
-
-  async def request_module_part_number(self) -> Optional[str]:
-    """Request the firmware part number (from PipettorRoot.ModuleInformation)."""
-    if self._module_info_addr is None:
-      return None
-    return await self._query_firmware_string(self._module_info_addr, cmd_id=5)
 
   # ---------------------------------------------------------------------------
   # Object tree inspection
