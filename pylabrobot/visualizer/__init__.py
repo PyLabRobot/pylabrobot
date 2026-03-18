@@ -1,4 +1,1 @@
-try:
-  from pylabrobot.visualizer.visualizer import Visualizer
-except ImportError:
-  pass
+from pylabrobot.visualizer.visualizer import Visualizer

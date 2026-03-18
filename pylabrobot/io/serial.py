@@ -49,6 +49,11 @@ class Serial(IOBase):
     rtscts: bool = False,
     dsrdtr: bool = False,
   ):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     self._human_readable_device_name = human_readable_device_name
     self._port = port
     self._vid = vid
@@ -114,12 +119,6 @@ class Serial(IOBase):
     After successful completion, `self._ser` is an open `serial.Serial`
     instance and `self._port` is updated to the resolved port path.
     """
-
-    if not HAS_SERIAL:
-      raise RuntimeError(
-        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
-        f"Import error: {_SERIAL_IMPORT_ERROR}"
-      )
 
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)

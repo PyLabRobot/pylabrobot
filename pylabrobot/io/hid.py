@@ -32,6 +32,11 @@ class HID(IOBase):
   def __init__(
     self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None
   ):
+    if not USE_HID:
+      raise RuntimeError(
+        "hid is not installed. Install with: pip install pylabrobot[hid]. "
+        f"Import error: {_HID_IMPORT_ERROR}"
+      )
     self._human_readable_device_name = human_readable_device_name
     self.vid = vid
     self.pid = pid
@@ -48,12 +53,6 @@ class HID(IOBase):
     Sets up the HID device by enumerating connected devices, matching the specified
     VID, PID, and optional serial number, and opening a connection to the device.
     """
-    if not USE_HID:
-      raise RuntimeError(
-        "hid is not installed. Install with: pip install pylabrobot[hid]. "
-        f"Import error: {_HID_IMPORT_ERROR}"
-      )
-
     # --- 1. Enumerate all HID devices ---
     all_devices = hid.enumerate()
     candidates = [

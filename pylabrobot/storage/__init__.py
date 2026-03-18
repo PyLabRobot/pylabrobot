@@ -1,15 +1,6 @@
 from .backend import IncubatorBackend
 from .chatterbox import IncubatorChatterboxBackend
-try:
-  from .cytomat import CytomatBackend
-except ImportError:
-  pass
+from .cytomat import CytomatBackend
 from .incubator import Incubator
-try:
-  from .inheco.scila import SCILABackend
-except ImportError:
-  pass
-try:
-  from .liconic import ExperimentalLiconicBackend
-except ImportError:
-  pass
+from .inheco.scila import SCILABackend
+from .liconic import ExperimentalLiconicBackend

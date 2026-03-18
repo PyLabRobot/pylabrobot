@@ -1,12 +1,6 @@
-try:
-  from .agrowpumps import AgrowPumpArray
-except ImportError:
-  pass
+from .agrowpumps import AgrowPumpArray
 from .calibration import PumpCalibration
-try:
-  from .cole_parmer import MasterflexBackend
-except ImportError:
-  pass
+from .cole_parmer import MasterflexBackend
 from .errors import NotCalibratedError
 from .pump import Pump
 from .pumparray import PumpArray

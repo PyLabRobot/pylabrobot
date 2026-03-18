@@ -67,6 +67,13 @@ class USB(IOBase):
       write_timeout: The timeout for writing to the machine in seconds.
     """
 
+    if not USE_USB:
+      raise RuntimeError(
+        "pyusb/libusb is not installed. Install with: pip install pylabrobot[usb]. "
+        f"Import error: {_USB_IMPORT_ERROR}. "
+        "https://docs.pylabrobot.org/installation.html"
+      )
+
     super().__init__()
 
     if get_capture_or_validation_active():
@@ -335,13 +342,6 @@ class USB(IOBase):
       # or we are re-initializing the device.
       logger.warning("USB device already connected. Closing previous connection.")
       await self.stop()
-
-    if not USE_USB:
-      raise RuntimeError(
-        "pyusb/libusb is not installed. Install with: pip install pylabrobot[usb]. "
-        f"Import error: {_USB_IMPORT_ERROR}. "
-        "https://docs.pylabrobot.org/installation.html"
-      )
 
     logger.info("Finding USB device...")
 

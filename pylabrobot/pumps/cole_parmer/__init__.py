@@ -1,4 +1,1 @@
-try:
-  from .masterflex_backend import MasterflexBackend
-except ImportError:
-  pass
+from .masterflex_backend import MasterflexBackend
