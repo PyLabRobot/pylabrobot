@@ -2,6 +2,7 @@ from typing import List
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.trash import Trash
 
 GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS = 9
 MIN_SPACING_BETWEEN_CHANNELS = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
@@ -73,3 +74,14 @@ def get_tight_single_resource_liquid_op_offsets(
     )
     for c in centers
   ]
+
+
+def get_waste_positions_for_n_channels(positions: List[Trash], n: int) -> List[Trash]:
+  """Return n waste positions from the deck's list: repeat if single, else subset evenly."""
+  if len(positions) == 1:
+    return [positions[0]] * n
+  if n > len(positions):
+    raise ValueError(f"Requested {n} waste positions but deck only has {len(positions)}.")
+  M = len(positions)
+  indices = [i * (M // n) for i in range(n)]
+  return [positions[j] for j in indices]
