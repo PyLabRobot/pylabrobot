@@ -743,7 +743,19 @@ python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </s
 <td><p>opentrons-http-api-client</p></td>
 <td><p>e.g. Opentrons backend</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dev</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">microscopy</span></code></p></td>
+<td><p>numpy (1.26), opencv-python</p></td>
+<td><p>e.g. Cytation imager</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sila</span></code></p></td>
+<td><p>zeroconf, grpcio</p></td>
+<td><p>SiLA devices</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pico</span></code></p></td>
+<td><p>microscopy + sila</p></td>
+<td><p>ImageXpress Pico microscope</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dev</span></code></p></td>
 <td><p>All of the above + testing/linting tools</p></td>
 <td><p>Development</p></td>
 </tr>
@@ -754,6 +766,7 @@ python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </s
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;pylabrobot[all]&#39;</span>
 </pre></div>
 </div>
+<p>Microscopy is not included in the <code class="docutils literal notranslate"><span class="pre">all</span></code> group because it requires an older version of numpy. If you want to use microscopy features, you need to install those dependencies separately through <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;pylabrobot[microscopy]&quot;</span></code>.</p>
 </section>
 <section id="from-source">
 <h3>From source<a class="headerlink" href="#from-source" title="Link to this heading">#</a></h3>

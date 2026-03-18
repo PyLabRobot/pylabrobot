@@ -49,6 +49,9 @@ Different machines use different communication modes. Replace `[usb]` with one o
 | `hid` | hid | HID devices: e.g. Inheco Incubator/Shaker (HID mode) |
 | `modbus` | pymodbus | Modbus devices: e.g. Agrow Pump Array |
 | `opentrons` | opentrons-http-api-client | e.g. Opentrons backend |
+| `microscopy` | numpy (1.26), opencv-python | e.g. Cytation imager |
+| `sila` | zeroconf, grpcio | SiLA devices |
+| `pico` | microscopy + sila | ImageXpress Pico microscope |
 | `dev` | All of the above + testing/linting tools | Development |
 
 Or install all dependencies:
@@ -56,6 +59,8 @@ Or install all dependencies:
 ```bash
 pip install 'pylabrobot[all]'
 ```
+
+Microscopy is not included in the `all` group because it requires an older version of numpy. If you want to use microscopy features, you need to install those dependencies separately through `pip install "pylabrobot[microscopy]"`.
 
 ### From source
 
