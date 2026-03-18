@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 from unittest.mock import patch
 
 try:
-  import numpy as np
+  import numpy as np  # type: ignore[import-not-found]
 except ImportError:
   raise unittest.SkipTest("numpy not installed")
 
