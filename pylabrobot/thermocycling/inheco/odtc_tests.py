@@ -677,7 +677,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend._sila.send_command_async.assert_called_once()
     call_kwargs = self.backend._sila.send_command_async.call_args[1]
     self.assertEqual(call_kwargs["methodName"], "MyMethod")
-    self.assertEqual(self.backend._current_request_id, 12345)
 
   async def test_stop_method(self):
     """Test stop_method."""

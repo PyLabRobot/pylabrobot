@@ -697,7 +697,7 @@ class ODTCProtocol(Protocol):
   name: str = SCRATCH_PROTOCOL_NAME
   creator: Optional[str] = None
   description: Optional[str] = None
-  datetime: Optional[str] = None
+  datetime: str = field(default_factory=generate_odtc_timestamp)
   target_block_temperature: float = 0.0
   target_lid_temperature: float = 0.0
   variant: ODTCVariant = 96
@@ -824,7 +824,7 @@ def protocol_to_odtc_protocol(
     else config.lid_temperature
   )
 
-  resolved_name = config.name
+  resolved_name = config.name or SCRATCH_PROTOCOL_NAME
 
   # Generate timestamp if not already set
   resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()
@@ -1058,10 +1058,10 @@ def _read_opt_elem(
 
 def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   """Parse a <Method> element into ODTCProtocol (kind='method', stages=[]). No nested-loop validation."""
-  name = elem.attrib.get("methodName") or ""
+  name = elem.attrib["methodName"]
   creator = elem.attrib.get("creator")
   description = elem.attrib.get("description")
-  datetime_ = elem.attrib.get("dateTime")
+  datetime_ = elem.attrib["dateTime"]
   variant = normalize_variant(int(float(_read_opt_elem(elem, "Variant") or 960000)))
   plate_type = int(float(_read_opt_elem(elem, "PlateType") or 0))
   fluid_quantity = int(float(_read_opt_elem(elem, "FluidQuantity") or 0))

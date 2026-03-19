@@ -13,13 +13,13 @@ from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 from .odtc_model import (
+  SCRATCH_PROTOCOL_NAME,
   ODTCConfig,
   ODTCHardwareConstraints,
   ODTCMethodSet,
   ODTCProgress,
   ODTCProtocol,
   ODTCSensorValues,
-  generate_odtc_timestamp,
   get_constraints,
   method_set_to_xml,
   normalize_variant,
@@ -403,7 +403,8 @@ class ODTCBackend(ThermocyclerBackend):
     fut.add_done_callback(lambda _: self._clear_execution_state())
 
     if wait:
-      await self.wait_for_method_completion()
+      timeout = self._sila._lifetime_of_execution or DEFAULT_LIFETIME_OF_EXECUTION
+      await asyncio.wait_for(fut, timeout=timeout)
 
   # ============================================================================
   # Request + normalized response
@@ -688,19 +689,9 @@ class ODTCBackend(ThermocyclerBackend):
     xml_output_path: Optional[str] = None,
   ) -> None:
     """Upload a single ODTCProtocol (method or premethod) and optionally execute."""
-    resolved_name = odtc.name
-    is_scratch = not odtc.name or odtc.name == ""
-    resolved_datetime = odtc.datetime or generate_odtc_timestamp()
-
-    if is_scratch and allow_overwrite is False:
+    if odtc.name == SCRATCH_PROTOCOL_NAME:
       allow_overwrite = True
-      if not odtc.name:
-        self.logger.warning(
-          "ODTCProtocol name resolved to scratch name '%s'. Auto-enabling allow_overwrite=True.",
-          resolved_name,
-        )
-
-    odtc_copy = replace(odtc, name=resolved_name, datetime=resolved_datetime)
+    odtc_copy = odtc
     if odtc.kind == "method":
       method_set = ODTCMethodSet(methods=[odtc_copy], premethods=[])
     else:
@@ -913,11 +904,11 @@ class ODTCBackend(ThermocyclerBackend):
   # ThermocyclerBackend Abstract Methods
   # ============================================================================
 
-  async def open_lid(self, **kwargs: Any):
+  async def open_lid(self):
     """Open the thermocycler lid (ODTC SiLA: OpenDoor)."""
     await self.open_door()
 
-  async def close_lid(self, **kwargs: Any):
+  async def close_lid(self):
     """Close the thermocycler lid (ODTC SiLA: CloseDoor)."""
     await self.close_door()
 
@@ -928,7 +919,6 @@ class ODTCBackend(ThermocyclerBackend):
     wait: bool = False,
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
-    **kwargs: Any,
   ):
     """Set block (mount) temperature and hold it via PreMethod.
 
@@ -941,9 +931,6 @@ class ODTCBackend(ThermocyclerBackend):
       wait: If True, block until set. If False (default), return execution handle.
       debug_xml: If True, log generated XML at DEBUG.
       xml_output_path: Optional path to save MethodSet XML.
-
-    Returns:
-      If wait=True: None. If wait=False: execution handle.
     """
     if not temperature:
       raise ValueError("At least one block temperature required")
@@ -959,7 +946,6 @@ class ODTCBackend(ThermocyclerBackend):
       kind="premethod",
       target_block_temperature=block_temp,
       target_lid_temperature=target_lid_temp,
-      datetime=generate_odtc_timestamp(),
     )
     await self._upload_odtc_protocol(
       protocol,
@@ -1026,9 +1012,17 @@ class ODTCBackend(ThermocyclerBackend):
           )
       odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
 
+    # Set block/lid to the method's start temperatures and wait for stabilization
+    await self.set_block_temperature(
+      temperature=[odtc_protocol.start_block_temperature],
+      lid_temperature=[odtc_protocol.start_lid_temperature],
+      wait=True,
+    )
+
     await self._upload_odtc_protocol(odtc_protocol, allow_overwrite=True, execute=False)
+    resolved_name = odtc_protocol.name
     protocol_view = odtc_protocol_to_protocol(odtc_protocol)
-    await self.execute_method(odtc_protocol.name, wait=False, protocol=protocol_view)
+    await self.execute_method(resolved_name, wait=False, protocol=protocol_view)
 
   # --- Temperatures and lid/block status ---
 
