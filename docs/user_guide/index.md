@@ -143,6 +143,7 @@ Check out [the list of supported machines](/user_guide/machines).
   <!-- <tr><td>        ├── Gel Imagers</td></tr> -->
   <!-- <tr><td>        ├── Microarray Scanners</td></tr> -->
   <tr><td>    │   ├── Plate Readers</td></tr>
+  <tr><td>    │   ├── Rack Readers</td></tr>
   <!-- <tr><td>        ├── qPCR Machines</td></tr> -->
   <!-- <tr><td>        ├── Sequencers (DNA / RNA / Protein)</td></tr> -->
   <tr><td>    │   └── Spectrophotometers</td></tr>

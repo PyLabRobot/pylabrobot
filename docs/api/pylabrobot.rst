@@ -15,6 +15,7 @@ Subpackages
     pylabrobot.heating_shaking
     pylabrobot.liquid_handling
     pylabrobot.plate_reading
+    pylabrobot.rack_reading
     pylabrobot.pumps
     pylabrobot.only_fans
     pylabrobot.resources

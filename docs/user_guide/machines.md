@@ -168,6 +168,12 @@ tr > td:nth-child(5) { width: 15%; }
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
 | Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/pico.html) / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
 
+### Rack Readers
+
+| Manufacturer | Machine | Features | PLR-Support | Links |
+|--------------|---------|----------|-------------|--------|
+| Micronic | Code Reader Software / IO Monitor HTTP server | rack code reading | Basics | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/rack-reading/micronic.html) |
+
 
 ### Flow Cytometers
 
