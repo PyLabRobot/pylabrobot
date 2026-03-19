@@ -1801,6 +1801,7 @@ class PlateAdapter extends Resource {
             ],
             stroke: colors.outerStroke,
             strokeWidth: 1,
+            listening: false,
           }));
         } else {
           group.add(new Konva.Circle({
@@ -1810,6 +1811,7 @@ class PlateAdapter extends Resource {
             fill: colors.outerFill,
             stroke: colors.outerStroke,
             strokeWidth: 1,
+            listening: false,
           }));
         }
 
@@ -1837,6 +1839,7 @@ class PlateAdapter extends Resource {
             fill: colors.innerFill,
             stroke: colors.innerStroke,
             strokeWidth: 0.8,
+            listening: false,
           }));
         }
 
@@ -1849,6 +1852,7 @@ class PlateAdapter extends Resource {
           angle: 150,
           rotation: 185,
           fill: colors.arcFill,
+          listening: false,
         }));
       }
     }
