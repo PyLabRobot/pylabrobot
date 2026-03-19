@@ -11,7 +11,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.storage.inheco.scila.soap import (
   XSI,
@@ -160,6 +160,9 @@ class InhecoSiLAInterface:
 
     # lock state
     self._lock_id: Optional[str] = None
+
+    # DataEvent storage by request_id
+    self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
 
     # server plumbing
     self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -346,7 +349,17 @@ class InhecoSiLAInterface:
       self._logger.debug(f"StatusEvent device state: {device_state}")
 
   def _on_data_event(self, data_event: dict) -> None:
-    """Override in subclasses to store/process DataEvents."""
+    """Store DataEvent. Override in subclasses for additional processing."""
+    request_id = data_event.get("requestId")
+    if request_id is None:
+      return
+    if request_id not in self._data_events_by_request_id:
+      self._data_events_by_request_id[request_id] = []
+    self._data_events_by_request_id[request_id].append(data_event)
+
+  def get_data_events(self, request_id: int) -> List[Dict[str, Any]]:
+    """Get collected DataEvents for a request_id."""
+    return self._data_events_by_request_id.get(request_id, [])
 
   def _on_error_event(self, error_event: dict) -> None:
     req_id = error_event.get("requestId")

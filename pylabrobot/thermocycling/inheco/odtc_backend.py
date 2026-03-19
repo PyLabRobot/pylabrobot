@@ -19,13 +19,18 @@ from .odtc_model import (
   ODTCVariant,
   ODTCSensorValues,
   get_constraints,
-  method_set_to_xml,
   normalize_variant,
+  volume_to_fluid_quantity,
+)
+from .odtc_protocol import (
+  build_progress_from_data_event,
+  protocol_to_odtc_protocol,
+)
+from .odtc_xml import (
+  method_set_to_xml,
   parse_method_set,
   parse_method_set_file,
   parse_sensor_values,
-  protocol_to_odtc_protocol,
-  volume_to_fluid_quantity,
 )
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
 
@@ -450,25 +455,6 @@ class ODTCBackend(ThermocyclerBackend):
     status = await self.request_status()
     return status == SiLAState.BUSY
 
-  async def get_data_events(
-    self, request_id: Optional[int] = None
-  ) -> Dict[int, List[Dict[str, Any]]]:
-    """Get collected DataEvents.
-
-    Args:
-      request_id: If provided, return events for this request_id only.
-          If None, return all collected events.
-
-    Returns:
-      Dict mapping request_id to list of DataEvent payloads.
-    """
-    all_events = self._sila._data_events_by_request_id.copy()
-
-    if request_id is not None:
-      return {request_id: all_events.get(request_id, [])}
-
-    return all_events
-
   async def get_method_set(self) -> ODTCMethodSet:
     """Get the full MethodSet from the device.
 
@@ -804,10 +790,10 @@ class ODTCBackend(ThermocyclerBackend):
     """Get progress from latest DataEvent. Returns None if no protocol registered."""
     if self._current_protocol is None:
       return None
-    events_dict = await self.get_data_events(request_id)
-    events = events_dict.get(request_id, [])
-    payload = events[-1] if events else None
-    return ODTCProgress.from_data_event(payload, odtc_protocol=self._current_protocol)
+    events = self._sila.get_data_events(request_id)
+    if not events:
+      return None
+    return build_progress_from_data_event(events[-1], odtc_protocol=self._current_protocol)
 
   async def get_progress_snapshot(self) -> Optional[ODTCProgress]:
     """Get current run progress. Returns None if no method is running."""

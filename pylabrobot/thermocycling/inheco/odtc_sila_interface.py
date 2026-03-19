@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Optional, Set
 
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import (
   InhecoSiLAInterface,
@@ -21,7 +21,7 @@ from pylabrobot.storage.inheco.scila.inheco_sila_interface import (
   SiLATimeoutError,
 )
 
-from .odtc_model import ODTCProgress
+from .odtc_protocol import build_progress_from_data_event
 
 
 class FirstEventTimeout(SiLATimeoutError):
@@ -180,9 +180,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
   ) -> None:
     super().__init__(machine_ip=machine_ip, client_ip=client_ip, logger=logger)
 
-    # DataEvent storage by request_id
-    self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
-
   async def wait_for_first_data_event(
     self,
     request_id: int,
@@ -210,18 +207,11 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     )
 
   def _on_data_event(self, data_event: dict) -> None:
-    request_id = data_event.get("requestId")
-    if request_id is None:
-      return
-
-    if request_id not in self._data_events_by_request_id:
-      self._data_events_by_request_id[request_id] = []
-    self._data_events_by_request_id[request_id].append(data_event)
-
-    progress = ODTCProgress.from_data_event(data_event, None)
+    super()._on_data_event(data_event)
+    progress = build_progress_from_data_event(data_event, None)
     self._logger.debug(
       "DataEvent requestId %s: elapsed %.0fs, block %.1f°C, target %.1f°C, lid %.1f°C",
-      request_id,
+      data_event.get("requestId"),
       progress.elapsed_s,
       progress.current_temp_c or 0.0,
       progress.target_temp_c or 0.0,

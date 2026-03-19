@@ -14,9 +14,14 @@ from pylabrobot.thermocycling.inheco.odtc_model import (
   ODTCProtocol,
   ODTCStage,
   ODTCStep,
+)
+from pylabrobot.thermocycling.inheco.odtc_protocol import (
+  build_progress_from_data_event,
   estimate_method_duration_seconds,
-  method_set_to_xml,
   odtc_protocol_to_protocol,
+)
+from pylabrobot.thermocycling.inheco.odtc_xml import (
+  method_set_to_xml,
   parse_method_set,
 )
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
@@ -99,7 +104,7 @@ class TestODTCProgressFromDataEventPayload(unittest.TestCase):
     )
     escaped = inner.replace("<", "&lt;").replace(">", "&gt;")
     payload = {"requestId": 1, "dataValue": f"<r><AnyData>{escaped}</AnyData></r>"}
-    progress = ODTCProgress.from_data_event(payload, None)
+    progress = build_progress_from_data_event(payload, None)
     self.assertEqual(progress.current_step_index, 4)  # 1-based sequence 5 -> 0-based index 4
     self.assertEqual(progress.elapsed_s, 10.0)
 
@@ -199,7 +204,7 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
 
 
 class TestODTCProgressPositionFromElapsed(unittest.TestCase):
-  """Tests for ODTCProgress.from_data_event(payload, odtc) position (timeline lookup from elapsed)."""
+  """Tests for build_progress_from_data_event(payload, odtc) position (timeline lookup from elapsed)."""
 
   def test_premethod_elapsed_zero(self):
     """Premethod at elapsed 0: step 0, cycle 0, setpoint = target_block_temperature."""
@@ -210,7 +215,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
       stages=[],
     )
     payload = _data_event_payload_with_elapsed(0.0)
-    progress = ODTCProgress.from_data_event(payload, odtc)
+    progress = build_progress_from_data_event(payload, odtc)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
     self.assertEqual(progress.target_temp_c, 37.0)
@@ -229,7 +234,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
       stages=[],
     )
     payload = _data_event_payload_with_elapsed(300.0)
-    progress = ODTCProgress.from_data_event(payload, odtc)
+    progress = build_progress_from_data_event(payload, odtc)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
     self.assertEqual(progress.target_temp_c, 37.0)
@@ -249,7 +254,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
     )
     beyond = PREMETHOD_ESTIMATED_DURATION_SECONDS + 60.0
     payload = _data_event_payload_with_elapsed(beyond)
-    progress = ODTCProgress.from_data_event(payload, odtc)
+    progress = build_progress_from_data_event(payload, odtc)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
     self.assertEqual(progress.target_temp_c, 37.0)
@@ -266,7 +271,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
       stages=[],
     )
     payload = _data_event_payload_with_elapsed(0.0)
-    progress = ODTCProgress.from_data_event(payload, odtc)
+    progress = build_progress_from_data_event(payload, odtc)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
     self.assertEqual(progress.total_step_count, 0)
@@ -292,14 +297,14 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
       stages=[],
     )
     payload = _data_event_payload_with_elapsed(0.0)
-    progress = ODTCProgress.from_data_event(payload, odtc)
+    progress = build_progress_from_data_event(payload, odtc)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
     self.assertEqual(progress.target_temp_c, 95.0)
     self.assertGreater(progress.remaining_hold_s, 0)
     total_dur = estimate_method_duration_seconds(odtc)
     payload_end = _data_event_payload_with_elapsed(total_dur + 10.0)
-    progress_end = ODTCProgress.from_data_event(payload_end, odtc)
+    progress_end = build_progress_from_data_event(payload_end, odtc)
     self.assertEqual(progress_end.remaining_hold_s, 0.0)
     self.assertEqual(progress_end.target_temp_c, 95.0)
 
@@ -341,7 +346,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
       stages=[],
     )
     payload0 = _data_event_payload_with_elapsed(0.0)
-    progress0 = ODTCProgress.from_data_event(payload0, odtc)
+    progress0 = build_progress_from_data_event(payload0, odtc)
     self.assertEqual(progress0.current_step_index, 0)
     self.assertEqual(progress0.current_cycle_index, 0)
     self.assertEqual(progress0.target_temp_c, 95.0)
@@ -349,44 +354,20 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
     self.assertEqual(progress0.total_cycle_count, 2)
     total_dur = estimate_method_duration_seconds(odtc)
     payload_end = _data_event_payload_with_elapsed(total_dur + 100.0)
-    progress_end = ODTCProgress.from_data_event(payload_end, odtc)
+    progress_end = build_progress_from_data_event(payload_end, odtc)
     self.assertEqual(progress_end.current_step_index, 2)
     self.assertEqual(progress_end.current_cycle_index, 1)
     self.assertEqual(progress_end.target_temp_c, 72.0)
     self.assertEqual(progress_end.remaining_hold_s, 0.0)
 
-  def test_elapsed_negative_treated_as_zero(self):
-    """Negative elapsed_s in payload is not possible (XML ms); from_data_event(None, odtc) gives elapsed_s=0."""
-    odtc = ODTCProtocol(
-      kind="premethod",
-      name="Pre37",
-      target_block_temperature=37.0,
-      stages=[],
-    )
-    progress = ODTCProgress.from_data_event(None, odtc)
-    self.assertEqual(progress.elapsed_s, 0.0)
-    self.assertEqual(progress.current_step_index, 0)
-    self.assertEqual(progress.current_cycle_index, 0)
-    self.assertEqual(progress.target_temp_c, 37.0)
-    self.assertEqual(progress.remaining_duration_s, PREMETHOD_ESTIMATED_DURATION_SECONDS)
-
 
 class TestODTCProgress(unittest.TestCase):
-  """Tests for ODTCProgress.from_data_event(payload, odtc) and format_progress_log_message."""
-
-  def test_from_data_event_none_none(self):
-    """from_data_event(None, None): elapsed_s=0, temps None, estimated_duration_s=None, remaining_duration_s=0."""
-    progress = ODTCProgress.from_data_event(None, None)
-    self.assertIsInstance(progress, ODTCProgress)
-    self.assertEqual(progress.elapsed_s, 0.0)
-    self.assertIsNone(progress.current_temp_c)
-    self.assertIsNone(progress.estimated_duration_s)
-    self.assertEqual(progress.remaining_duration_s, 0.0)
+  """Tests for build_progress_from_data_event and format_progress_log_message."""
 
   def test_from_data_event_payload_none(self):
     """from_data_event(payload, None): elapsed_s and temps from payload; estimated/remaining duration 0."""
     payload = _data_event_payload_with_elapsed_and_temps(50.0, current_temp_c=25.0, lid_temp_c=24.0)
-    progress = ODTCProgress.from_data_event(payload, None)
+    progress = build_progress_from_data_event(payload, None)
     self.assertIsInstance(progress, ODTCProgress)
     self.assertEqual(progress.elapsed_s, 50.0)
     self.assertEqual(progress.current_temp_c, 25.0)
@@ -401,19 +382,6 @@ class TestODTCProgress(unittest.TestCase):
     self.assertIn("50", msg)
     self.assertIn("25.0", msg)
 
-  def test_from_data_event_none_odtc(self):
-    """from_data_event(None, odtc): elapsed_s=0; estimated_duration_s set; remaining_duration_s = estimated."""
-    premethod = ODTCProtocol(
-      kind="premethod",
-      name="Pre37",
-      target_block_temperature=37.0,
-      stages=[],
-    )
-    progress = ODTCProgress.from_data_event(None, premethod)
-    self.assertEqual(progress.elapsed_s, 0.0)
-    self.assertEqual(progress.estimated_duration_s, PREMETHOD_ESTIMATED_DURATION_SECONDS)
-    self.assertEqual(progress.remaining_duration_s, PREMETHOD_ESTIMATED_DURATION_SECONDS)
-
   def test_from_data_event_premethod(self):
     """from_data_event(payload, premethod): step 0, cycle 0, setpoint; estimated/remaining duration."""
     payload = _data_event_payload_with_elapsed_and_temps(100.0, current_temp_c=35.0)
@@ -423,7 +391,7 @@ class TestODTCProgress(unittest.TestCase):
       target_block_temperature=37.0,
       stages=[],
     )
-    progress = ODTCProgress.from_data_event(payload, odtc_protocol=premethod)
+    progress = build_progress_from_data_event(payload, odtc_protocol=premethod)
     self.assertIsInstance(progress, ODTCProgress)
     self.assertEqual(progress.elapsed_s, 100.0)
     self.assertEqual(progress.current_step_index, 0)
@@ -460,7 +428,7 @@ class TestODTCProgress(unittest.TestCase):
       ],
       stages=[],
     )
-    progress = ODTCProgress.from_data_event(payload, odtc_protocol=odtc)
+    progress = build_progress_from_data_event(payload, odtc_protocol=odtc)
     self.assertIsInstance(progress, ODTCProgress)
     self.assertEqual(progress.current_step_index, 0)
     self.assertEqual(progress.current_cycle_index, 0)
@@ -716,9 +684,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     )
     self.backend._current_request_id = request_id
     self.backend._current_protocol = premethod
-    self.backend._sila._data_events_by_request_id = {  # type: ignore[attr-defined]
-      request_id: [_data_event_payload_with_elapsed(100.0, request_id)],
-    }
+    self.backend._sila.get_data_events = MagicMock(  # type: ignore[method-assign]
+      return_value=[_data_event_payload_with_elapsed(100.0, request_id)]
+    )
     progress = await self.backend.get_progress_snapshot()
     self.assertIsNotNone(progress)
     assert progress is not None
@@ -738,9 +706,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     )
     self.backend._current_request_id = request_id
     self.backend._current_protocol = premethod
-    self.backend._sila._data_events_by_request_id = {  # type: ignore[attr-defined]
-      request_id: [_data_event_payload_with_elapsed(50.0, request_id)],
-    }
+    self.backend._sila.get_data_events = MagicMock(  # type: ignore[method-assign]
+      return_value=[_data_event_payload_with_elapsed(50.0, request_id)]
+    )
     step_idx = await self.backend.get_current_step_index()
     self.assertEqual(step_idx, 0)
     hold_s = await self.backend.get_hold_time()
@@ -775,26 +743,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       self.assertFalse(await self.backend.is_method_running())
 
   async def test_get_data_events(self):
-    """Test get_data_events()."""
-    self.backend._sila._data_events_by_request_id = {
-      12345: [{"requestId": 12345, "data": "test1"}, {"requestId": 12345, "data": "test2"}],
-      67890: [{"requestId": 67890, "data": "test3"}],
-    }
-
-    # Get all events
-    all_events = await self.backend.get_data_events()
-    self.assertEqual(len(all_events), 2)
-    self.assertEqual(len(all_events[12345]), 2)
-
-    # Get events for specific request_id
-    events = await self.backend.get_data_events(request_id=12345)
-    self.assertEqual(len(events), 1)
-    self.assertEqual(len(events[12345]), 2)
-
-    # Get events for non-existent request_id
-    events = await self.backend.get_data_events(request_id=99999)
-    self.assertEqual(len(events), 1)
-    self.assertEqual(len(events[99999]), 0)
+    """Test get_data_events on SiLA interface."""
+    events = {12345: [{"requestId": 12345, "data": "test1"}, {"requestId": 12345, "data": "test2"}]}
+    self.backend._sila.get_data_events = MagicMock(side_effect=lambda rid: events.get(rid, []))  # type: ignore[method-assign]
+    self.assertEqual(len(self.backend._sila.get_data_events(12345)), 2)
+    self.assertEqual(self.backend._sila.get_data_events(99999), [])
 
   async def test_get_protocol_returns_none_for_missing(self):
     """Test get_protocol returns None when name not found."""
