@@ -167,47 +167,6 @@ def volume_to_fluid_quantity(volume_ul: float) -> int:
   return 2  # 75-100ul
 
 
-def validate_volume_fluid_quantity(
-  volume_ul: float,
-  fluid_quantity: int,
-  is_premethod: bool = False,
-  logger: Optional[logging.Logger] = None,
-) -> None:
-  """Validate that volume matches fluid_quantity and warn if mismatch.
-
-  Args:
-    volume_ul: Volume in microliters.
-    fluid_quantity: ODTC fluid_quantity code (0, 1, or 2).
-    is_premethod: If True, suppress warnings for volume=0 (premethods don't need volume).
-    logger: Logger for warnings (uses module logger if None).
-  """
-  log = logger if logger is not None else logging.getLogger(__name__)
-  if volume_ul <= 0:
-    if not is_premethod:
-      log.warning(
-        "block_max_volume=%s µL is invalid. Using default fluid_quantity=1 (30-74ul). "
-        "Please provide a valid volume for accurate thermal calibration.",
-        volume_ul,
-      )
-    return
-  if volume_ul > 100:
-    raise ValueError(
-      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. Please use a volume between 0-100 µL."
-    )
-  expected = volume_to_fluid_quantity(volume_ul)
-  if fluid_quantity != expected:
-    volume_ranges = {0: "10-29 µL", 1: "30-74 µL", 2: "75-100 µL"}
-    log.warning(
-      "Volume mismatch: block_max_volume=%s µL suggests fluid_quantity=%s (%s), "
-      "but config has fluid_quantity=%s (%s). This may affect thermal calibration accuracy.",
-      volume_ul,
-      expected,
-      volume_ranges[expected],
-      fluid_quantity,
-      volume_ranges.get(fluid_quantity, "unknown"),
-    )
-
-
 # =============================================================================
 # XML Field Metadata
 # =============================================================================
@@ -537,7 +496,7 @@ class ODTCStepSettings:
   pid_number: Optional[int] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class ODTCConfig:
   """ODTC-specific configuration for running a Protocol.
 
@@ -545,8 +504,6 @@ class ODTCConfig:
     1. When creating new protocols: Specify ODTC-specific parameters
     2. When extracting from ODTCProtocol: Captures all params for lossless round-trip
 
-  Validation is performed on construction by default. Set _validate=False to skip
-  validation (useful when reading data from a trusted source like the device).
   """
 
   # Method identification/metadata
@@ -576,29 +533,9 @@ class ODTCConfig:
   # Per-step overrides/captures (keyed by step index, 0-based)
   step_settings: Dict[int, ODTCStepSettings] = field(default_factory=dict)
 
-  # Validation control - set to False to skip validation on construction
-  _validate: bool = field(default=True, repr=False)
-
   def __post_init__(self):
-    if self._validate:
-      self.validate()
-
-  @property
-  def constraints(self) -> ODTCHardwareConstraints:
-    """Get hardware constraints for this config's variant."""
-    return get_constraints(self.variant)
-
-  def validate(self) -> List[str]:
-    """Validate config against hardware constraints.
-
-    Returns:
-      List of validation error messages (empty if valid).
-
-    Raises:
-      ValueError: If any validation fails.
-    """
     errors: List[str] = []
-    c = self.constraints
+    c = get_constraints(self.variant)
 
     # Validate fluid_quantity
     if c.valid_fluid_quantities and self.fluid_quantity not in c.valid_fluid_quantities:
@@ -651,8 +588,6 @@ class ODTCConfig:
 
     if errors:
       raise ValueError("ODTCConfig validation failed:\n  - " + "\n  - ".join(errors))
-
-    return errors
 
 
 # =============================================================================
@@ -736,20 +671,18 @@ class ODTCProtocol(Protocol):
 
 def protocol_to_odtc_protocol(
   protocol: "Protocol",
-  config: Optional[ODTCConfig] = None,
+  config: ODTCConfig = ODTCConfig(),
 ) -> ODTCProtocol:
   """Convert a standard Protocol to ODTCProtocol (kind='method').
 
   Args:
     protocol: Standard Protocol with stages and steps.
-    config: Optional ODTC config; if None, defaults are used.
+    config: ODTC config for variant, fluid_quantity, slopes, etc.
 
   Returns:
     ODTCProtocol (kind='method') ready for upload or run. Steps are authoritative;
     stages=[] so the stage view is derived via odtc_protocol_to_protocol(odtc) when needed.
   """
-  if config is None:
-    config = ODTCConfig()
 
   odtc_steps: List[ODTCStep] = []
   step_number = 1
@@ -822,7 +755,7 @@ def protocol_to_odtc_protocol(
   # Generate timestamp if not already set
   resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()
 
-  return ODTCProtocol(
+  odtc_protocol = ODTCProtocol(
     kind="method",
     variant=config.variant,
     plate_type=config.plate_type,
@@ -835,8 +768,12 @@ def protocol_to_odtc_protocol(
     creator=config.creator,
     description=config.description,
     datetime=resolved_datetime,
-    stages=[],  # Steps are authoritative; stage view via odtc_protocol_to_protocol(odtc)
+    stages=[],
   )
+  if config.name is not None:
+    odtc_protocol.name = config.name
+    odtc_protocol.is_scratch = False
+  return odtc_protocol
 
 
 def odtc_protocol_to_protocol(odtc_protocol: ODTCProtocol) -> "Protocol":

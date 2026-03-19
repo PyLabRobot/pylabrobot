@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import xml.etree.ElementTree as ET
-from dataclasses import replace
 from typing import Any, Dict, List, Optional, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -17,16 +16,15 @@ from .odtc_model import (
   ODTCMethodSet,
   ODTCProgress,
   ODTCProtocol,
+  ODTCVariant,
   ODTCSensorValues,
   get_constraints,
   method_set_to_xml,
   normalize_variant,
-  odtc_protocol_to_protocol,
   parse_method_set,
   parse_method_set_file,
   parse_sensor_values,
   protocol_to_odtc_protocol,
-  validate_volume_fluid_quantity,
   volume_to_fluid_quantity,
 )
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
@@ -215,10 +213,10 @@ class ODTCBackend(ThermocyclerBackend):
       first_event_timeout_seconds: Timeout for waiting for first DataEvent. Default 60s.
     """
     super().__init__()
-    self._variant = normalize_variant(variant)
+    self._variant: ODTCVariant = normalize_variant(variant)
     self._simulation_mode: bool = False
     self._current_request_id: Optional[int] = None
-    self._current_protocol: Optional[Union[Protocol, ODTCProtocol]] = None
+    self._current_protocol: Optional[ODTCProtocol] = None
     self._timeout = timeout
     self._sila = ODTCSiLAInterface(
       machine_ip=odtc_ip,
@@ -355,39 +353,6 @@ class ODTCBackend(ThermocyclerBackend):
       pass
     return out
 
-  async def _execute_method_impl(
-    self,
-    method_name: str,
-    wait: bool,
-    priority: Optional[int] = None,
-    protocol: Optional[Protocol] = None,
-  ) -> None:
-    """Internal: run ExecuteMethod, track state on backend."""
-    self._clear_execution_state()
-    params: Dict[str, Any] = {"methodName": method_name}
-    if priority is not None:
-      params["priority"] = priority
-
-    # Resolve protocol for progress tracking
-    method_set = await self.get_method_set()
-    resolved = method_set.get(method_name)
-    if resolved is not None and resolved.kind == "premethod":
-      self._current_protocol = resolved
-    elif protocol is not None:
-      self._current_protocol = protocol
-    else:
-      fetched = await self.get_protocol(method_name)
-      if fetched is not None:
-        self._current_protocol = fetched
-
-    # Send the command (fire-and-forget)
-    fut, request_id = await self._sila.send_command_async("ExecuteMethod", **params)
-    self._current_request_id = request_id
-    fut.add_done_callback(lambda _: self._clear_execution_state())
-
-    if wait:
-      await asyncio.wait_for(fut, timeout=self._timeout)
-
   # ============================================================================
   # Request + normalized response
   # ============================================================================
@@ -455,16 +420,17 @@ class ODTCBackend(ThermocyclerBackend):
     """Get temperature trace of last executed method"""
     return await self._request("GetLastData")
 
-  # Method control commands (SiLA: ExecuteMethod; method = runnable protocol)
-  async def execute_method(
-    self,
-    method_name: str,
-    priority: Optional[int] = None,
-    wait: bool = False,
-    protocol: Optional[Protocol] = None,
-  ) -> None:
-    """Execute a method or premethod by name (SiLA: ExecuteMethod)."""
-    await self._execute_method_impl(method_name, wait, priority=priority, protocol=protocol)
+  async def execute_method(self, protocol: ODTCProtocol, wait: bool = False) -> None:
+    """Execute a method or premethod on the device."""
+    self._clear_execution_state()
+    self._current_protocol = protocol
+
+    fut, request_id = await self._sila.send_command_async("ExecuteMethod", methodName=protocol.name)
+    self._current_request_id = request_id
+    fut.add_done_callback(lambda _: self._clear_execution_state())
+
+    if wait:
+      await asyncio.wait_for(fut, timeout=self._timeout)
 
   async def stop_method(self) -> None:
     """Stop the currently running method (SiLA: StopMethod)."""
@@ -533,17 +499,6 @@ class ODTCBackend(ThermocyclerBackend):
       return None
     return resolved
 
-  def get_default_config(self, **kwargs) -> ODTCConfig:
-    """Get a default ODTCConfig with variant set to this backend's variant.
-
-    Args:
-      **kwargs: Additional parameters to override defaults (e.g. name, lid_temperature).
-
-    Returns:
-      ODTCConfig with variant matching this backend (96 or 384-well).
-    """
-    return ODTCConfig(variant=self._variant, **kwargs)
-
   def get_constraints(self) -> ODTCHardwareConstraints:
     """Get hardware constraints for this backend's variant.
 
@@ -554,24 +509,20 @@ class ODTCBackend(ThermocyclerBackend):
 
   # --- Protocol upload and run ---
 
-  async def _upload_odtc_protocol(
+  async def upload_protocol(
     self,
-    odtc: ODTCProtocol,
+    protocol: ODTCProtocol,
     allow_overwrite: bool = False,
-    execute: bool = False,
-    wait: bool = True,
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
   ) -> None:
-    """Upload a single ODTCProtocol (method or premethod) and optionally execute."""
-    if odtc.is_scratch:
+    """Upload an ODTCProtocol to the device."""
+    if protocol.is_scratch:
       allow_overwrite = True
-    odtc_copy = odtc
-    if odtc.kind == "method":
-      method_set = ODTCMethodSet(methods=[odtc_copy], premethods=[])
+    if protocol.kind == "method":
+      method_set = ODTCMethodSet(methods=[protocol], premethods=[])
     else:
-      method_set = ODTCMethodSet(methods=[], premethods=[odtc_copy])
-
+      method_set = ODTCMethodSet(methods=[], premethods=[protocol])
     await self.upload_method_set(
       method_set,
       allow_overwrite=allow_overwrite,
@@ -579,76 +530,13 @@ class ODTCBackend(ThermocyclerBackend):
       xml_output_path=xml_output_path,
     )
 
-    if execute:
-      protocol_view = odtc_protocol_to_protocol(odtc_copy)
-      await self.execute_method(odtc.name, wait=wait, protocol=protocol_view)
-
-  async def upload_protocol(
-    self,
-    protocol: Union[Protocol, ODTCProtocol],
-    name: Optional[str] = None,
-    config: Optional[ODTCConfig] = None,
-    block_max_volume: Optional[float] = None,
-    allow_overwrite: bool = False,
-    debug_xml: bool = False,
-    xml_output_path: Optional[str] = None,
-  ) -> str:
-    """Upload a Protocol or ODTCProtocol to the device.
-
-    Args:
-      protocol: PyLabRobot Protocol or ODTCProtocol to upload.
-      name: Method name. If None, uses scratch name "plr_currentProtocol".
-      config: Optional ODTCConfig (used only when protocol is Protocol). If None,
-        uses variant-aware defaults; if block_max_volume is provided and in 0–100 µL,
-        sets fluid_quantity from it.
-      block_max_volume: Optional volume in µL. If provided and config is None,
-        used to set fluid_quantity. If config is provided, validates volume
-        matches fluid_quantity.
-      allow_overwrite: If False, raise ValueError if method name already exists.
-      debug_xml: If True, log generated XML at DEBUG.
-      xml_output_path: Optional path to save MethodSet XML.
-
-    Returns:
-      Resolved method name (string).
-
-    Raises:
-      ValueError: If allow_overwrite=False and method name already exists.
-      ValueError: If block_max_volume > 100 µL.
-    """
-    if isinstance(protocol, ODTCProtocol):
-      odtc_protocol = (
-        replace(protocol, name=name or protocol.name) if name is not None else protocol
-      )
-    else:
-      if config is None:
-        if block_max_volume is not None and block_max_volume > 0 and block_max_volume <= 100:
-          fluid_quantity = volume_to_fluid_quantity(block_max_volume)
-          config = self.get_default_config(fluid_quantity=fluid_quantity)
-        else:
-          config = self.get_default_config()
-      elif block_max_volume is not None and block_max_volume > 0:
-        validate_volume_fluid_quantity(
-          block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
-        )
-      if name is not None:
-        config = replace(config, name=name)
-      odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
-
-    await self._upload_odtc_protocol(
-      odtc_protocol,
-      allow_overwrite=allow_overwrite,
-      execute=False,
-      debug_xml=debug_xml,
-      xml_output_path=xml_output_path,
-    )
-    return odtc_protocol.name
-
   async def run_stored_protocol(self, name: str, wait: bool = False) -> None:
     """Execute a stored protocol by name."""
     method_set = await self.get_method_set()
     resolved = method_set.get(name)
-    protocol_view = odtc_protocol_to_protocol(resolved) if resolved else None
-    await self.execute_method(name, wait=wait, protocol=protocol_view)
+    if resolved is None:
+      raise ValueError(f"Protocol '{name}' not found on device")
+    await self.execute_method(resolved, wait=wait)
 
   async def upload_method_set(
     self,
@@ -820,13 +708,10 @@ class ODTCBackend(ThermocyclerBackend):
       target_block_temperature=block_temp,
       target_lid_temperature=target_lid_temp,
     )
-    await self._upload_odtc_protocol(
-      protocol,
-      allow_overwrite=True,
-      debug_xml=debug_xml,
-      xml_output_path=xml_output_path,
+    await self.upload_protocol(
+      protocol, allow_overwrite=True, debug_xml=debug_xml, xml_output_path=xml_output_path
     )
-    await self.execute_method(protocol.name, wait=wait)
+    await self.execute_method(protocol, wait=wait)
 
   async def set_lid_temperature(self, temperature: List[float]) -> None:
     """Not supported by ODTC. Use set_block_temperature(lid_temperature=...) instead."""
@@ -844,30 +729,15 @@ class ODTCBackend(ThermocyclerBackend):
     self,
     protocol: Union[Protocol, ODTCProtocol],
     block_max_volume: float,
-    **kwargs: Any,
   ) -> None:
-    """Execute thermocycler protocol (convert if needed, upload, execute). Returns immediately."""
+    """Execute thermocycler protocol. Converts to ODTCProtocol if needed, uploads, and executes."""
     if isinstance(protocol, ODTCProtocol):
       odtc_protocol = protocol
-      if odtc_protocol.kind != "method":
-        raise ValueError("run_protocol requires a method (ODTCProtocol with kind='method')")
     else:
-      config = kwargs.pop("config", None)
-      if config is None:
-        if block_max_volume > 0 and block_max_volume <= 100:
-          fluid_quantity = volume_to_fluid_quantity(block_max_volume)
-          config = self.get_default_config(fluid_quantity=fluid_quantity)
-        else:
-          config = self.get_default_config()
-        if block_max_volume > 0 and block_max_volume <= 100:
-          validate_volume_fluid_quantity(
-            block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
-          )
-      else:
-        if block_max_volume > 0:
-          validate_volume_fluid_quantity(
-            block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
-          )
+      fluid_quantity = (
+        volume_to_fluid_quantity(block_max_volume) if 0 < block_max_volume <= 100 else 1
+      )
+      config = ODTCConfig(variant=self._variant, fluid_quantity=fluid_quantity)
       odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
 
     # Set block/lid to the method's start temperatures and wait for stabilization
@@ -877,10 +747,8 @@ class ODTCBackend(ThermocyclerBackend):
       wait=True,
     )
 
-    await self._upload_odtc_protocol(odtc_protocol, allow_overwrite=True, execute=False)
-    resolved_name = odtc_protocol.name
-    protocol_view = odtc_protocol_to_protocol(odtc_protocol)
-    await self.execute_method(resolved_name, wait=False, protocol=protocol_view)
+    await self.upload_protocol(odtc_protocol, allow_overwrite=True)
+    await self.execute_method(odtc_protocol, wait=False)
 
   # --- Temperatures and lid/block status ---
 
@@ -936,14 +804,10 @@ class ODTCBackend(ThermocyclerBackend):
     """Get progress from latest DataEvent. Returns None if no protocol registered."""
     if self._current_protocol is None:
       return None
-    if isinstance(self._current_protocol, ODTCProtocol):
-      odtc_protocol = self._current_protocol
-    else:
-      odtc_protocol = protocol_to_odtc_protocol(self._current_protocol, self.get_default_config())
     events_dict = await self.get_data_events(request_id)
     events = events_dict.get(request_id, [])
     payload = events[-1] if events else None
-    return ODTCProgress.from_data_event(payload, odtc_protocol=odtc_protocol)
+    return ODTCProgress.from_data_event(payload, odtc_protocol=self._current_protocol)
 
   async def get_progress_snapshot(self) -> Optional[ODTCProgress]:
     """Get current run progress. Returns None if no method is running."""

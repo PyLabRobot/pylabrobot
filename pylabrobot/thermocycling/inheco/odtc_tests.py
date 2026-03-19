@@ -664,13 +664,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_execute_method(self):
     """Test execute_method sends ExecuteMethod via send_command_async."""
-    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
-    self.backend.get_protocol = AsyncMock(return_value=None)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
-    self.backend.is_method_running = AsyncMock(return_value=False)  # type: ignore[method-assign]
-    await self.backend.execute_method("MyMethod", wait=True)
+    protocol = ODTCProtocol(kind="method", name="MyMethod", stages=[])
+    await self.backend.execute_method(protocol, wait=True)
     self.backend._sila.send_command_async.assert_called_once()
     call_kwargs = self.backend._sila.send_command_async.call_args[1]
     self.assertEqual(call_kwargs["methodName"], "MyMethod")
@@ -758,14 +756,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       target_block_temperature=37.0,
       stages=[],
     )
-    method_set = ODTCMethodSet(methods=[], premethods=[premethod])
-    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 99999))  # type: ignore[method-assign]
-    await self.backend.execute_method("Pre37", wait=False)
-    self.assertIsInstance(self.backend._current_protocol, ODTCProtocol)
-    self.assertEqual(self.backend._current_request_id, 99999)
+    await self.backend.execute_method(premethod, wait=False)
+    self.assertEqual(self.backend._current_protocol, premethod)
 
   async def test_is_method_running(self):
     """Test is_method_running()."""
@@ -840,16 +835,13 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(protocol.stages[0].steps), 1)
 
   async def test_run_stored_protocol_calls_execute_method(self):
-    """Test run_stored_protocol calls execute_method with name, wait, protocol (no estimated_duration_seconds)."""
+    """Test run_stored_protocol calls execute_method with resolved protocol."""
+    method = ODTCProtocol(kind="method", name="MyMethod", stages=[])
+    method_set = ODTCMethodSet(methods=[method])
     self.backend.execute_method = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    with (
-      patch.object(self.backend, "get_protocol", new_callable=AsyncMock, return_value=None),
-      patch.object(
-        self.backend, "get_method_set", new_callable=AsyncMock, return_value=ODTCMethodSet()
-      ),
-    ):
-      await self.backend.run_stored_protocol("MyMethod", wait=True)
-    self.backend.execute_method.assert_called_once_with("MyMethod", wait=True, protocol=None)
+    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
+    await self.backend.run_stored_protocol("MyMethod", wait=True)
+    self.backend.execute_method.assert_called_once_with(method, wait=True)
 
 
 class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
