@@ -11,7 +11,7 @@ from pylabrobot.resources.trough import Trough, TroughBottomType
 # Calibration data: height (mm) → volume (µL).
 # Obtained via ztouch probing of cavity_bottom, manual addition of known volumes,
 # and LLD measurement of liquid height relative to cavity_bottom.
-_hamilton_1_trough_60ml_Vb_height_volume_data = {
+_hamilton_1_trough_60mL_Vb_height_volume_data = {
   0.0: 0.0,
   2.2: 500.0,
   3.5: 1_000.0,
@@ -38,14 +38,14 @@ _hamilton_1_trough_60ml_Vb_height_volume_data = {
 }
 
 
-def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
+def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 56694-01 (white/translucent), 56694-02 (black/conductive)
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
   Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
   """
   warnings.warn(
-    "hamilton_1_trough_60ml_Vb has a center support that can interfere with pipetting.\
+    "hamilton_1_trough_60mL_Vb has a center support that can interfere with pipetting.\
      If using an odd number of channels, use spread='custom' and define offsets for each channel to avoid collision."
   )
 
@@ -57,9 +57,9 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
     material_z_thickness=1.58,
     through_base_to_container_base=1.0,
     max_volume=60_000,  # units: µL
-    model=hamilton_1_trough_60ml_Vb.__name__,
+    model=hamilton_1_trough_60mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    height_volume_data=_hamilton_1_trough_60ml_Vb_height_volume_data,
+    height_volume_data=_hamilton_1_trough_60mL_Vb_height_volume_data,
   )
 
 
@@ -169,3 +169,18 @@ def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-01
     stacklevel=2,
   )
   return hamilton_1_trough_200ml_Vb(name)
+
+
+def hamilton_1_trough_60ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_60mL_Vb().
+
+  This alias will be removed after 2026-07. Use
+  `hamilton_1_trough_60mL_Vb()` instead (note capital L in 'mL').
+  """
+  warnings.warn(
+    "hamilton_1_trough_60ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_60mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_1_trough_60mL_Vb(name)

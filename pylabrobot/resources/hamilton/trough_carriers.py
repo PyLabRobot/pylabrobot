@@ -45,7 +45,7 @@ def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
   """Hamilton cat. no.: 53646-01
   Hamilton name: 'RGT_CAR5X60'.
   Trough carrier for 5x 60ml troughs. 1 tracks(T) wide.
-  Carries hamilton_1_trough_60ml_Vb
+  Carries hamilton_1_trough_60mL_Vb
   """
   return TroughCarrier(
     name=name,
