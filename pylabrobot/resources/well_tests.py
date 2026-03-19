@@ -38,6 +38,7 @@ class TestWell(unittest.TestCase):
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "compute_volume_from_height": None,
         "compute_height_from_volume": None,
+        "height_volume_data": None,
       },
     )
 

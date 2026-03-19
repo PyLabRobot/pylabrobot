@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.io.sila.discovery import (
+  HAS_ZEROCONF,
   SiLADevice,
   _arp_scan_bsd,
   _arp_scan_linux,
@@ -245,9 +246,9 @@ class TestDiscoverSila2(unittest.TestCase):
     devices = asyncio.run(_discover_sila2(timeout=0.1))
     self.assertEqual(devices, [])
 
-  @patch("pylabrobot.io.sila.discovery.HAS_ZEROCONF", True)
-  @patch("pylabrobot.io.sila.discovery.Zeroconf")
-  @patch("pylabrobot.io.sila.discovery.ServiceBrowser")
+  @unittest.skipIf(not HAS_ZEROCONF, "zeroconf not installed")
+  @patch("pylabrobot.io.sila.discovery.Zeroconf", create=True)
+  @patch("pylabrobot.io.sila.discovery.ServiceBrowser", create=True)
   def test_discovers_device(self, mock_browser_cls, mock_zc_cls):
     mock_zc = MagicMock()
     mock_zc_cls.return_value = mock_zc
