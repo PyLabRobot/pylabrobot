@@ -43,12 +43,6 @@ T = TypeVar("T")
 
 ODTCVariant = Literal[96, 384]
 
-# =============================================================================
-# Scratch Method Names
-# =============================================================================
-
-SCRATCH_PROTOCOL_NAME = "plr_currentProtocol"
-
 
 # =============================================================================
 # Timestamp Generation
@@ -694,7 +688,8 @@ class ODTCProtocol(Protocol):
   """
 
   kind: Literal["method", "premethod"] = "method"
-  name: str = SCRATCH_PROTOCOL_NAME
+  name: str = "plr_currentProtocol"
+  is_scratch: bool = True
   creator: Optional[str] = None
   description: Optional[str] = None
   datetime: str = field(default_factory=generate_odtc_timestamp)
@@ -824,14 +819,11 @@ def protocol_to_odtc_protocol(
     else config.lid_temperature
   )
 
-  resolved_name = config.name or SCRATCH_PROTOCOL_NAME
-
   # Generate timestamp if not already set
   resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()
 
   return ODTCProtocol(
     kind="method",
-    name=resolved_name,
     variant=config.variant,
     plate_type=config.plate_type,
     fluid_quantity=config.fluid_quantity,
@@ -1078,6 +1070,7 @@ def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   return ODTCProtocol(
     kind="method",
     name=name,
+    is_scratch=False,
     creator=creator,
     description=description,
     datetime=datetime_,
@@ -1104,6 +1097,7 @@ def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   return ODTCProtocol(
     kind="premethod",
     name=name,
+    is_scratch=False,
     creator=creator,
     description=description,
     datetime=datetime_,

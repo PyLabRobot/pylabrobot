@@ -96,20 +96,20 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def get_hold_time(self) -> float:
-    """Get remaining hold time in seconds."""
+    """Get remaining hold time in seconds. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_current_cycle_index(self) -> int:
-    """Get the zero-based index of the current cycle."""
+    """Get the zero-based index of the current cycle. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_total_cycle_count(self) -> int:
-    """Get the total cycle count."""
+    """Get the total cycle count. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_current_step_index(self) -> int:
-    """Get the zero-based index of the current step within the cycle."""
+    """Get the zero-based index of the current step within the cycle. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_total_step_count(self) -> int:
-    """Get the total number of steps in the current cycle."""
+    """Get the total number of steps in the current cycle. Return 0 when no profile is running."""

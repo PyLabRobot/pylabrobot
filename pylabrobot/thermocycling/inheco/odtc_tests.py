@@ -533,7 +533,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       self.backend._sila.bound_port = 8080
       self.backend._sila._machine_ip = "192.168.1.100"
       self.backend._sila._lock_id = None
-      self.backend._sila._lifetime_of_execution = None
       self.backend._sila._client_ip = "127.0.0.1"
       self.backend._sila.event_receiver_uri = "http://127.0.0.1:8080/"
 
@@ -626,16 +625,14 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(status, SiLAState.IDLE)
     self.backend._sila.request_status.assert_called_once()
 
-  async def test_open_door(self):
-    """Test open_door."""
+  async def test_open_lid(self):
     self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
-    await self.backend.open_door()
+    await self.backend.open_lid()
     self.backend._sila.send_command.assert_called_once_with("OpenDoor")
 
-  async def test_close_door(self):
-    """Test close_door."""
+  async def test_close_lid(self):
     self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
-    await self.backend.close_door()
+    await self.backend.close_lid()
     self.backend._sila.send_command.assert_called_once_with("CloseDoor")
 
   async def test_read_temperatures(self):
@@ -661,7 +658,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     string_elem.text = sensor_xml
 
     self.backend._sila.send_command = AsyncMock(return_value=root)  # type: ignore[method-assign]
-    sensor_values = await self.backend.read_temperatures()
+    sensor_values = await self.backend.request_temperatures()
     self.assertAlmostEqual(sensor_values.mount, 24.63, places=2)  # 2463 * 0.01
     self.assertAlmostEqual(sensor_values.lid, 25.75, places=2)  # 2575 * 0.01
 
@@ -781,27 +778,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       ODTCBackend, "request_status", new_callable=AsyncMock, return_value=SiLAState.IDLE
     ):
       self.assertFalse(await self.backend.is_method_running())
-
-  async def test_wait_for_method_completion(self):
-    """Test wait_for_method_completion()."""
-    call_count = 0
-
-    async def mock_request_status():
-      nonlocal call_count
-      call_count += 1
-      if call_count < 3:
-        return SiLAState.BUSY
-      return SiLAState.IDLE
-
-    self.backend.request_status = AsyncMock(side_effect=mock_request_status)  # type: ignore[method-assign]
-    await self.backend.wait_for_method_completion(poll_interval=0.1)
-    self.assertEqual(call_count, 3)
-
-  async def test_wait_for_method_completion_timeout(self):
-    """Test wait_for_method_completion() with timeout."""
-    self.backend.request_status = AsyncMock(return_value=SiLAState.BUSY)  # type: ignore[method-assign]
-    with self.assertRaises(TimeoutError):
-      await self.backend.wait_for_method_completion(poll_interval=0.1, timeout=0.3)
 
   async def test_get_data_events(self):
     """Test get_data_events()."""

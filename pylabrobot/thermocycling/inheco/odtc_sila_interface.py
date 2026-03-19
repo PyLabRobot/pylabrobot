@@ -177,11 +177,8 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     machine_ip: str,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
-    lifetime_of_execution: Optional[float] = None,
   ) -> None:
     super().__init__(machine_ip=machine_ip, client_ip=client_ip, logger=logger)
-
-    self._lifetime_of_execution = lifetime_of_execution
 
     # DataEvent storage by request_id
     self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
