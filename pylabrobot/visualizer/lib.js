@@ -16,6 +16,8 @@ const RESOURCE_COLORS = {
   TubeRack: "#122D42",
   ResourceHolder: "#5B6277",
   PlateHolder: "#8D99AE",
+  PlateAdapter: "#7A8088",
+  PlateAdapterHole: "#A8AEB4",
   ContainerBackground: "#E0EAEE"
 };
 
@@ -1662,6 +1664,211 @@ class TubeRack extends Resource {
 
 class PlateHolder extends ResourceHolder {}
 
+class PlateAdapter extends Resource {
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+    this.dx = resourceData.dx;
+    this.dy = resourceData.dy;
+    this.dz = resourceData.dz;
+    this.adapter_hole_size_x = resourceData.adapter_hole_size_x;
+    this.adapter_hole_size_y = resourceData.adapter_hole_size_y;
+    this.adapter_hole_dx = resourceData.adapter_hole_dx;
+    this.adapter_hole_dy = resourceData.adapter_hole_dy;
+    this.plate_z_offset = resourceData.plate_z_offset;
+    this.model = resourceData.model || "";
+    const id = (this.name + " " + this.model).toLowerCase();
+    this.isMagnetic = id.includes("magn");
+  }
+
+  drawMainShape() {
+    const group = new Konva.Group({});
+
+    if (this.isMagnetic) {
+      return this._drawMagneticShape(group);
+    }
+    return this._drawStandardShape(group);
+  }
+
+  _drawStandardShape(group) {
+    // Adapter body — brushed metal with gradient sheen
+    group.add(new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fillLinearGradientStartPoint: { x: 0, y: 0 },
+      fillLinearGradientEndPoint: { x: this.size_x, y: this.size_y },
+      fillLinearGradientColorStops: [
+        0, "#8E949C",
+        0.3, "#7A8088",
+        0.5, "#90969E",
+        0.7, "#7A8088",
+        1, "#6E747C",
+      ],
+      stroke: "#4A5058",
+      strokeWidth: 1.2,
+      cornerRadius: 4,
+    }));
+
+    // Inner bevel — machined edge inset
+    const bevel = 2;
+    group.add(new Konva.Rect({
+      x: bevel,
+      y: bevel,
+      width: this.size_x - 2 * bevel,
+      height: this.size_y - 2 * bevel,
+      stroke: "#9EA4AC",
+      strokeWidth: 0.8,
+      cornerRadius: 3,
+    }));
+
+    this._drawHoles(group, {
+      outerFill: RESOURCE_COLORS["PlateAdapterHole"],
+      outerStroke: "#8A9098",
+      innerFill: "#C0C4CA",
+      innerStroke: "#B0B4BA",
+      arcFill: "#D0D4DA",
+    });
+
+    return group;
+  }
+
+  _drawMagneticShape(group) {
+    // Magnetic body — light blue with subtle gradient
+    group.add(new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fillLinearGradientStartPoint: { x: 0, y: 0 },
+      fillLinearGradientEndPoint: { x: this.size_x, y: this.size_y },
+      fillLinearGradientColorStops: [
+        0, "#7BA4CC",
+        0.3, "#6B94BE",
+        0.5, "#7EA8D0",
+        0.7, "#6B94BE",
+        1, "#5B84AE",
+      ],
+      stroke: "#4A6E8E",
+      strokeWidth: 1.2,
+      cornerRadius: 4,
+    }));
+
+    // Inner bevel
+    const bevel = 2;
+    group.add(new Konva.Rect({
+      x: bevel,
+      y: bevel,
+      width: this.size_x - 2 * bevel,
+      height: this.size_y - 2 * bevel,
+      stroke: "#8EB4D0",
+      strokeWidth: 0.8,
+      cornerRadius: 3,
+    }));
+
+    // Holes with bright silver metallic gradient
+    this._drawHoles(group, {
+      outerStroke: "#B8C0C8",
+      innerFill: "#C8CED6",
+      innerStroke: "#B0B8C0",
+      arcFill: "#D8DEE4",
+      useMetalGradient: true,
+    });
+
+    return group;
+  }
+
+  _drawHoles(group, colors) {
+    const numCols = Math.round((this.size_x - 2 * this.dx - this.adapter_hole_size_x) / this.adapter_hole_dx) + 1;
+    const numRows = Math.round((this.size_y - 2 * this.dy - this.adapter_hole_size_y) / this.adapter_hole_dy) + 1;
+
+    for (let col = 0; col < numCols; col++) {
+      for (let row = 0; row < numRows; row++) {
+        const cx = this.dx + col * this.adapter_hole_dx + this.adapter_hole_size_x / 2;
+        const cy = this.dy + row * this.adapter_hole_dy + this.adapter_hole_size_y / 2;
+        const r = Math.min(this.adapter_hole_size_x, this.adapter_hole_size_y) / 2;
+
+        // Outer rim
+        if (colors.useMetalGradient) {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r,
+            fillLinearGradientStartPoint: { x: -r, y: -r },
+            fillLinearGradientEndPoint: { x: r, y: r },
+            fillLinearGradientColorStops: [
+              0, "#C8CED6",
+              0.3, "#B8C0C8",
+              0.5, "#D0D6DE",
+              0.7, "#B8C0C8",
+              1, "#AAB2BA",
+            ],
+            stroke: colors.outerStroke,
+            strokeWidth: 1,
+          }));
+        } else {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r,
+            fill: colors.outerFill,
+            stroke: colors.outerStroke,
+            strokeWidth: 1,
+          }));
+        }
+
+        // Inner shadow
+        if (colors.useMetalGradient) {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r * 0.75,
+            fillLinearGradientStartPoint: { x: -r, y: -r },
+            fillLinearGradientEndPoint: { x: r, y: r },
+            fillLinearGradientColorStops: [
+              0, "#BCC4CC",
+              0.5, "#D0D6DE",
+              1, "#AAB2BA",
+            ],
+            stroke: colors.innerStroke,
+            strokeWidth: 0.8,
+          }));
+        } else {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r * 0.75,
+            fill: colors.innerFill,
+            stroke: colors.innerStroke,
+            strokeWidth: 0.8,
+          }));
+        }
+
+        // Bottom highlight arc
+        group.add(new Konva.Arc({
+          x: cx,
+          y: cy,
+          innerRadius: r * 0.6,
+          outerRadius: r * 0.75,
+          angle: 150,
+          rotation: 185,
+          fill: colors.arcFill,
+        }));
+      }
+    }
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      dx: this.dx,
+      dy: this.dy,
+      dz: this.dz,
+      adapter_hole_size_x: this.adapter_hole_size_x,
+      adapter_hole_size_y: this.adapter_hole_size_y,
+      adapter_hole_dx: this.adapter_hole_dx,
+      adapter_hole_dy: this.adapter_hole_dy,
+      plate_z_offset: this.plate_z_offset,
+    };
+  }
+}
+
 // Track the currently open pipette info panel so it can be refreshed on state updates.
 var _pipetteInfoState = null; // { ch, kind ("channel"|"tip"), anchorDropdown }
 
@@ -2532,6 +2739,8 @@ function classForResourceType(type, category) {
       return TubeRack;
     case "Tube":
       return Tube;
+    case "PlateAdapter":
+      return PlateAdapter;
     default:
       break;
   }
@@ -2569,6 +2778,8 @@ function classForResourceType(type, category) {
       return TubeRack;
     case "tube":
       return Tube;
+    case "plate_adapter":
+      return PlateAdapter;
     case "container":
     case "trough":
       return Container;
@@ -3007,6 +3218,13 @@ function getResourceSummary(resource) {
       return `${vol.toFixed(1)} \u00B5L`;
     }
     return "";
+  }
+
+  if (resource instanceof PlateAdapter || resource.category === "plate_adapter") {
+    if (resource.children.length > 0) {
+      return resource.children[0].name;
+    }
+    return "empty";
   }
 
   if (isCarrierLike(resource)) {
@@ -4201,6 +4419,13 @@ function getUmlAttributes(resource) {
   // HamiltonSTARDeck
   if (resource instanceof HamiltonSTARDeck) {
     attrs.push({ key: "num_rails", value: resource.num_rails });
+  }
+  // PlateAdapter
+  if (resource instanceof PlateAdapter) {
+    attrs.push({ key: "adapter_hole_size", value: resource.adapter_hole_size_x + " x " + resource.adapter_hole_size_y });
+    attrs.push({ key: "hole_spacing", value: resource.adapter_hole_dx + " x " + resource.adapter_hole_dy });
+    attrs.push({ key: "hole_offset (dx,dy,dz)", value: resource.dx + ", " + resource.dy + ", " + resource.dz });
+    attrs.push({ key: "plate_z_offset", value: resource.plate_z_offset });
   }
 
   return attrs;
