@@ -1830,6 +1830,7 @@ class PlateAdapter extends Resource {
             ],
             stroke: colors.innerStroke,
             strokeWidth: 0.8,
+            listening: false,
           }));
         } else {
           group.add(new Konva.Circle({
@@ -1869,6 +1870,7 @@ class PlateAdapter extends Resource {
       adapter_hole_dx: this.adapter_hole_dx,
       adapter_hole_dy: this.adapter_hole_dy,
       plate_z_offset: this.plate_z_offset,
+      model: this.model,
     };
   }
 }
