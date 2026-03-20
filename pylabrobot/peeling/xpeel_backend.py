@@ -3,7 +3,13 @@ import time
 from dataclasses import dataclass
 from typing import List, Literal, Tuple
 
-import serial  # type: ignore
+try:
+  import serial  # type: ignore
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.peeling.backend import PeelerBackend
@@ -43,6 +49,11 @@ class XPeelBackend(PeelerBackend):
   }
 
   def __init__(self, port: str, logger=None, timeout=None):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     self.logger = logger or logging.getLogger(__name__)
     self.port = port
     self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT

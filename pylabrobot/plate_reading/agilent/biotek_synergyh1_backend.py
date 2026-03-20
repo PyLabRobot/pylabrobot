@@ -3,7 +3,13 @@ import logging
 import time
 from typing import Optional
 
-from pylibftdi import FtdiError
+try:
+  from pylibftdi import FtdiError
+
+  HAS_PYLIBFTDI = True
+except ImportError:
+  HAS_PYLIBFTDI = False
+  FtdiError = Exception  # type: ignore[misc,assignment]
 
 from pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 
