@@ -4,7 +4,13 @@ import time
 import warnings
 from typing import List, Tuple
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
@@ -31,6 +37,11 @@ class HeraeusCytomatBackend(IncubatorBackend):
   poll_interval = 0.2
 
   def __init__(self, port: str):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
     self.io = Serial(
       port=port,
