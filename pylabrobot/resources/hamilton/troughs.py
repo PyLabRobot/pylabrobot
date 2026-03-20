@@ -159,8 +159,8 @@ def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
 def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
   """Deprecated alias for hamilton_1_trough_200mL_Vb().
 
-  This alias will be removed after 2026-07. Use
-  `hamilton_1_trough_200mL_Vb()` instead.
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_200mL_Vb()` instead.
   """
   warnings.warn(
     "Hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-07. "
@@ -174,8 +174,8 @@ def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
 def hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
   """Deprecated alias for hamilton_1_trough_200mL_Vb().
 
-  This alias will be removed after 2026-07. Use
-  `hamilton_1_trough_200mL_Vb()` instead (note capital L in 'mL').
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_200mL_Vb()` instead (note capital L in 'mL').
   """
   warnings.warn(
     "hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-07. "
@@ -189,8 +189,8 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
 def hamilton_1_trough_60ml_Vb(name: str) -> Trough:  # remove 2026-07
   """Deprecated alias for hamilton_1_trough_60mL_Vb().
 
-  This alias will be removed after 2026-07. Use
-  `hamilton_1_trough_60mL_Vb()` instead (note capital L in 'mL').
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_60mL_Vb()` instead (note capital L in 'mL').
   """
   warnings.warn(
     "hamilton_1_trough_60ml_Vb() is deprecated and will be removed after 2026-07. "
