@@ -14,14 +14,10 @@ from pylabrobot.resources.well import (
 
 # # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
 
-# Pre-calculated height (mm) -> volume (uL) from tech drawing frustum geometry.
 # Well tapers from 6.35 mm (bottom) to 6.86 mm (top) over 10.67 mm depth.
-# Volumes chosen for easy pipetting; first non-zero point is the dead volume
-# (covers full flat bottom + LLD-detectable).
-# TODO: replace with empirical LLD measurements.
 _cor_96_wellplate_360ul_Fb_height_volume_data = {
   0.0: 0.0,
-  0.45: 20.0,  # dead volume
+  0.45: 20.0,  # "dead volume" to cover the full flat bottom and ensure LLD detectability
   1.69: 50.0,
   3.22: 100.0,
   4.72: 150.0,
