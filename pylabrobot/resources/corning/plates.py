@@ -26,7 +26,8 @@ _cor_96_wellplate_360ul_Fb_height_volume_data = {
   8.99: 300.0,
   10.62: 350.0,
   10.95: 360.0,
-  }
+}
+
 
 def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
   """
