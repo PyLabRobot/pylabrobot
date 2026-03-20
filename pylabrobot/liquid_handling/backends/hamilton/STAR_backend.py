@@ -2253,10 +2253,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
         prev_batch = batch
 
-    except Exception:
+    except Exception:  # firmware errors, RuntimeError, etc.
       await self.move_all_channels_in_z_safety()
       raise
-    except BaseException:
+    except BaseException:  # KeyboardInterrupt, SystemExit — still must raise channels
       await self.move_all_channels_in_z_safety()
       raise
 
