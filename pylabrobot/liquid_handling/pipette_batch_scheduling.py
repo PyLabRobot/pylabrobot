@@ -427,12 +427,16 @@ def plan_batches(
   if len(use_channels) == 0:
     raise ValueError("use_channels must not be empty.")
 
-  # Normalize scalar spacing to per-channel list
+  # Normalize scalar spacing to per-channel list.
+  # Size must cover all channels up to num_channels (if provided) for transition optimization.
   max_ch = max(use_channels)
+  min_len = max(max_ch + 1, num_channels or 0)
   if isinstance(channel_spacings, (int, float)):
-    spacings: List[float] = [float(channel_spacings)] * (max_ch + 1)
+    spacings: List[float] = [float(channel_spacings)] * min_len
   else:
-    spacings = channel_spacings
+    spacings = list(channel_spacings)
+    if len(spacings) < min_len:
+      spacings.extend([spacings[-1]] * (min_len - len(spacings)))
 
   # Group indices by X position (preserving first-appearance order).
   # Uses floor-based bucketing to avoid Python's banker's rounding at boundaries.
