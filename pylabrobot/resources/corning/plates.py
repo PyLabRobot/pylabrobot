@@ -21,16 +21,16 @@ from pylabrobot.resources.well import (
 # TODO: replace with empirical LLD measurements.
 _cor_96_wellplate_360ul_Fb_height_volume_data = {
   0.0: 0.0,
-  0.63: 20.0,
-  1.56: 50.0,
-  3.09: 100.0,
-  4.58: 150.0,
-  6.04: 200.0,
-  7.47: 250.0,
-  8.87: 300.0,
-  10.24: 350.0,
-}
-
+  0.45: 20.0,  # dead volume
+  1.69: 50.0,
+  3.22: 100.0,
+  4.72: 150.0,
+  6.19: 200.0,
+  7.72: 250.0,
+  8.99: 300.0,
+  10.62: 350.0,
+  10.95: 360.0,
+  }
 
 def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
   """
