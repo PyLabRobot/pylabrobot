@@ -1,9 +1,7 @@
 """Corning plates."""
 
 from pylabrobot.resources.height_volume_functions import (
-  calculate_liquid_height_container_1segment_round_fbottom,
   calculate_liquid_height_in_container_2segments_square_vbottom,
-  calculate_liquid_volume_container_1segment_round_fbottom,
   calculate_liquid_volume_container_2segments_square_vbottom,
 )
 from pylabrobot.resources.plate import Lid, Plate
@@ -15,6 +13,23 @@ from pylabrobot.resources.well import (
 )
 
 # # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
+
+# Pre-calculated height (mm) -> volume (uL) from tech drawing frustum geometry.
+# Well tapers from 6.35 mm (bottom) to 6.86 mm (top) over 10.67 mm depth.
+# Volumes chosen for easy pipetting; first non-zero point is the dead volume
+# (covers full flat bottom + LLD-detectable).
+# TODO: replace with empirical LLD measurements.
+_cor_96_wellplate_360ul_Fb_height_volume_data = {
+  0.0: 0.0,
+  0.63: 20.0,
+  1.56: 50.0,
+  3.09: 100.0,
+  4.58: 150.0,
+  6.04: 200.0,
+  7.47: 250.0,
+  8.87: 300.0,
+  10.24: 350.0,
+}
 
 
 def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
@@ -60,8 +75,7 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
-      compute_volume_from_height=_compute_volume_from_height_Cor_96_wellplate_360ul_Fb,
-      compute_height_from_volume=_compute_height_from_volume_Cor_96_wellplate_360ul_Fb,
+      height_volume_data=_cor_96_wellplate_360ul_Fb_height_volume_data,
     ),
   )
 
@@ -78,19 +92,6 @@ def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
     size_z=8.9,  # measure the total z height
     nesting_z_height=7.6,  # measure overlap between lid and plate
     model="Cor_96_wellplate_360ul_Fb_Lid",
-  )
-
-
-# Volume-height functions
-def _compute_volume_from_height_Cor_96_wellplate_360ul_Fb(h: float) -> float:
-  return calculate_liquid_volume_container_1segment_round_fbottom(
-    d=6.86, h_cylinder=10.67, liquid_height=h
-  )
-
-
-def _compute_height_from_volume_Cor_96_wellplate_360ul_Fb(liquid_volume: float) -> float:
-  return calculate_liquid_height_container_1segment_round_fbottom(
-    d=6.86, h_cylinder=10.67, liquid_volume=liquid_volume
   )
 
 
