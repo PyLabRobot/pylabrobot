@@ -220,15 +220,64 @@ async def _netbios_scan(interface: str, timeout: float = 3.0) -> dict[str, str]:
   return results
 
 
-async def _arp_scan(interface: str) -> dict[str, str]:
-  """Read the system ARP table for link-local hosts reachable via the same interface.
+async def _ping_broadcast(interface: str) -> None:
+  """Ping the link-local broadcast address to populate the ARP table.
 
-  This is a fallback for devices that don't respond to NetBIOS but are present
-  in the OS ARP cache (e.g. because they responded to a prior ARP request).
+  Many devices won't respond to NetBIOS but will respond to ARP requests
+  triggered by a broadcast ping. We send the ping and wait briefly for
+  responses so that the subsequent ARP table read finds them.
+
+  On macOS, ``ping -b <iface_name>`` is required to bind to the correct
+  interface — without it the broadcast goes out on the default route.
+  On Linux, ``ping -I <iface_name>`` serves the same purpose.
+  """
+  loop = asyncio.get_running_loop()
+  parts = interface.split(".")
+  broadcast = f"{parts[0]}.{parts[1]}.255.255"
+
+  if sys.platform == "win32":
+    cmd = ["ping", "-n", "3", "-w", "1000", broadcast]
+  elif sys.platform == "linux":
+    iface_name = await loop.run_in_executor(None, _interface_name_for_ip_sync, interface)
+    if iface_name:
+      cmd = ["ping", "-c", "3", "-W", "1", "-I", iface_name, broadcast]
+    else:
+      cmd = ["ping", "-c", "3", "-W", "1", broadcast]
+  else:
+    # macOS / BSD: -b binds to a named interface
+    iface_name = await loop.run_in_executor(None, _interface_name_for_ip_sync, interface)
+    if iface_name:
+      cmd = ["ping", "-c", "3", "-W", "1", "-b", iface_name, broadcast]
+    else:
+      cmd = ["ping", "-c", "3", "-W", "1", broadcast]
+
+  try:
+    proc = await asyncio.create_subprocess_exec(
+      *cmd,
+      stdout=asyncio.subprocess.DEVNULL,
+      stderr=asyncio.subprocess.DEVNULL,
+    )
+    await asyncio.wait_for(proc.wait(), timeout=5)
+  except (FileNotFoundError, asyncio.TimeoutError):
+    pass
+
+  # Give devices a moment to respond so ARP entries are populated.
+  await asyncio.sleep(0.5)
+
+
+async def _arp_scan(interface: str) -> dict[str, str]:
+  """Ping the link-local broadcast, then read the ARP table for live hosts.
+
+  First sends a broadcast ping to force ARP resolution for all devices on the
+  subnet, then reads the OS ARP table. This ensures devices that don't respond
+  to NetBIOS are still discoverable.
+
   Returns a dict mapping IP -> hostname (or empty string if unknown).
 
   Works on macOS (``arp -an``), Linux (``/proc/net/arp``), and Windows (``arp -a``).
   """
+  await _ping_broadcast(interface)
+
   if sys.platform == "linux":
     return await _arp_scan_linux(interface)
   elif sys.platform == "win32":
@@ -513,13 +562,19 @@ async def _discover_sila1(
 
   remaining = max(0.01, deadline - loop.time())
   devices: list[SiLADevice] = []
+  host_list = [ip for ip in hosts if not ip.endswith(".255")]
   coros = [
-    _get_device_identification(ip, port, interface=interface, timeout=remaining) for ip in hosts
+    _get_device_identification(ip, port, interface=interface, timeout=remaining) for ip in host_list
   ]
   results = await asyncio.gather(*coros, return_exceptions=True)
-  for r in results:
+  for ip, r in zip(host_list, results):
     if isinstance(r, SiLADevice):
       devices.append(r)
+    else:
+      # Host is reachable but didn't respond to GetDeviceIdentification.
+      # Include it with whatever we know (name from NetBIOS, or just the IP).
+      name = hosts.get(ip, "") or ip
+      devices.append(SiLADevice(host=ip, port=port, name=name, sila_version=1))
 
   return devices
 
