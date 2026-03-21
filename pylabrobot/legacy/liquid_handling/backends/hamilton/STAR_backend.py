@@ -1346,6 +1346,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
+    from pylabrobot.hamilton.liquid_handlers.star.core import CoreGripper
+
+    self._new_iswap = iSWAP(interface=self)
+    self._new_core = CoreGripper(interface=self)
+
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
     self._setup_done = False
@@ -1482,10 +1488,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return self._core_parked is True
 
   async def get_iswap_version(self) -> str:
-    """Lazily load the iSWAP version. Use cached value if available."""
-    if self._iswap_version is None:
-      self._iswap_version = await self.request_iswap_version()
-    return self._iswap_version
+    """Legacy. Use self._new_iswap.version instead."""
+    return self._new_iswap.version
 
   async def request_pip_channel_version(self, channel: int) -> str:
     return cast(
@@ -4054,45 +4058,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     y_gripping_speed: float = 5.0,
     front_channel: int = 7,
   ):
-    """Pick up resource with CoRe gripper tool
-    Low level component of :meth:`move_resource`
+    """Legacy. Use CoreGripper.pick_up_at_location instead."""
+    from pylabrobot.hamilton.liquid_handlers.star.core import CoreGripper
 
-    Args:
-      resource: Resource to pick up.
-      offset: Offset from resource position in mm.
-      pickup_distance_from_top: Distance from top of resource to pick up.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
-        between 0 and 360.
-      grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
-      z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
-      y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
-      front_channel: Channel 1. Must be between 1 and self._num_channels - 1. Default 7.
-    """
-
-    # Get center of source plate. Also gripping height and plate width.
     center = resource.get_location_wrt(self.deck, x="c", y="c", z="b") + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    grip_width = resource.get_absolute_size_y()  # grip width is y size of resource
+    grip_width = resource.get_absolute_size_y()
 
     if self.core_parked:
       await self.pick_up_core_gripper_tools(front_channel=front_channel)
 
-    await self.core_get_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_gripping_speed=round(y_gripping_speed * 10),
-      z_position=round(grip_height * 10),
-      z_speed=round(z_speed * 10),
-      open_gripper_position=round(grip_width * 10) + 30,
-      plate_width=round(grip_width * 10) - 30,
-      grip_strength=grip_strength,
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
-      ),
-      minimum_z_position_at_the_command_end=round(
-        (minimum_z_position_at_the_command_end or self._iswap_traversal_height) * 10
+    await self._new_core.pick_up_at_location(
+      location=Coordinate(center.x, center.y, grip_height),
+      resource_width=grip_width,
+      backend_params=CoreGripper.PickUpParams(
+        grip_strength=grip_strength,
+        y_gripping_speed=y_gripping_speed,
+        z_speed=z_speed,
+        minimum_traverse_height=(
+          minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+        ),
+        z_position_at_end=(minimum_z_position_at_the_command_end or self._iswap_traversal_height),
       ),
     )
 
@@ -4103,29 +4089,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_index: int = 4,
     z_speed: float = 50.0,
   ):
-    """After a resource is picked up, move it to a new location but don't release it yet.
-    Low level component of :meth:`move_resource`
+    """Legacy. Use CoreGripper.move_to_location instead."""
+    from pylabrobot.hamilton.liquid_handlers.star.core import CoreGripper
 
-    Args:
-      location: Location to move to.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
-        between 0 and 3600. Default 3600.
-      acceleration_index: Acceleration index (0 = 0.1 mm/s2, 1 = 0.2 mm/s2, 2 = 0.5 mm/s2,
-        3 = 1.0 mm/s2, 4 = 2.0 mm/s2, 5 = 5.0 mm/s2, 6 = 10.0 mm/s2, 7 = 20.0 mm/s2). Must be
-        between 0 and 7. Default 4.
-      z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
-    """
-
-    await self.core_move_plate_to_position(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      x_acceleration_index=acceleration_index,
-      y_position=round(center.y * 10),
-      z_position=round(center.z * 10),
-      z_speed=round(z_speed * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
+    await self._new_core.move_to_location(
+      location=center,
+      backend_params=CoreGripper.MoveToLocationParams(
+        acceleration_index=acceleration_index,
+        z_speed=z_speed,
+        minimum_traverse_height=(
+          minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+        ),
       ),
     )
 
@@ -4138,41 +4112,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_position_at_the_command_end: Optional[float] = None,
     return_tool: bool = True,
   ):
-    """Place resource with CoRe gripper tool
-    Low level component of :meth:`move_resource`
+    """Legacy. Use CoreGripper.drop_at_location instead."""
+    from pylabrobot.hamilton.liquid_handlers.star.core import CoreGripper
 
-    Args:
-      resource: Location to place.
-      pickup_distance_from_top: Distance from top of resource to place.
-      offset: Offset from resource position in mm.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
-        between 0 and 360.0.
-      z_position_at_the_command_end: Minimum z-Position at end of a command [mm] (refers to all
-        channels independent of tip pattern parameter 'tm'). Must be between 0 and 360.0
-      return_tool: Return tool to wasteblock mount after placing. Default True.
-    """
-
-    # Get center of destination location. Also gripping height and plate width.
     grip_height = location.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()
 
-    await self.core_put_plate(
-      x_position=round(location.x * 10),
-      x_direction=0,
-      y_position=round(location.y * 10),
-      z_position=round(grip_height * 10),
-      z_press_on_distance=0,
-      z_speed=500,
-      open_gripper_position=round(grip_width * 10) + 30,
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
+    await self._new_core.drop_at_location(
+      location=Coordinate(location.x, location.y, grip_height),
+      resource_width=grip_width,
+      backend_params=CoreGripper.DropParams(
+        minimum_traverse_height=(
+          minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+        ),
+        z_position_at_end=(z_position_at_the_command_end or self._iswap_traversal_height),
       ),
-      z_position_at_the_command_end=round(
-        (z_position_at_the_command_end or self._iswap_traversal_height) * 10
-      ),
-      return_tool=return_tool,
     )
+
+    if return_tool:
+      await self.return_core_gripper_tools()
 
   async def pick_up_resource(
     self,
@@ -6290,13 +6248,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     front_offset: Optional[Coordinate] = None,
     back_offset: Optional[Coordinate] = None,
   ):
-    """Get CoRe gripper tool from wasteblock mount."""
+    """Legacy. Tool management will be migrated in a future commit."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
     back_channel = front_channel - 1
 
-    # Only enforce x equality if both offsets are explicitly provided.
     if front_offset is not None and back_offset is not None and front_offset.x != back_offset.x:
       raise ValueError("front_offset.x and back_offset.x must be the same")
 
@@ -6311,25 +6268,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if front_offset is not None and back_offset is not None and front_offset.z != back_offset.z:
       raise ValueError("front_offset.z and back_offset.z must be the same")
     z_offset = 0 if front_offset is None else front_offset.z
+
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
-
-    command_output = await self.send_command(
+    await self.send_command(
       module="C0",
       command="ZT",
       xs=f"{round(xs * 10):05}",
       xd="0",
       ya=f"{round(back_channel_y_center * 10):04}",
       yb=f"{round(front_channel_y_center * 10):04}",
-      pa=f"{back_channel + 1:02}",  # star is 1-indexed
-      pb=f"{front_channel + 1:02}",  # star is 1-indexed
+      pa=f"{back_channel + 1:02}",
+      pb=f"{front_channel + 1:02}",
       tp=f"{round(begin_z_coord * 10):04}",
       tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
     self._core_parked = False
-    return command_output
 
   async def put_core(self):
     warnings.warn("Deprecated. Use return_core_gripper_tools instead.", DeprecationWarning)
@@ -6341,9 +6297,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     front_offset: Optional[Coordinate] = None,
     back_offset: Optional[Coordinate] = None,
   ):
-    """Put CoRe gripper tool at wasteblock mount."""
+    """Legacy. Tool management will be migrated in a future commit."""
 
-    # Only enforce x equality if both offsets are explicitly provided.
     if front_offset is not None and back_offset is not None and back_offset.x != front_offset.x:
       raise ValueError("back_offset.x and front_offset.x must be the same")
 
@@ -6361,7 +6316,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(215.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(205.0 + self.core_adjustment.z + z_offset)
 
-    command_output = await self.send_command(
+    await self.send_command(
       module="C0",
       command="ZS",
       xs=f"{round(xs * 10):05}",
@@ -6374,11 +6329,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       te=round(self._iswap_traversal_height * 10),
     )
     self._core_parked = True
-    return command_output
 
   async def core_open_gripper(self):
-    """Open CoRe gripper tool."""
-    return await self.send_command(module="C0", command="ZO")
+    """Legacy. Use CoreGripper.open_gripper instead."""
+    await self._new_core.open_gripper(gripper_width=0)
 
   @need_iswap_parked
   async def core_get_plate(
@@ -6395,7 +6349,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_traverse_height_at_beginning_of_a_command: int = 2750,
     minimum_z_position_at_the_command_end: int = 2750,
   ):
-    """Get plate with CoRe gripper tool from wasteblock mount."""
+    """Legacy. Use CoreGripper.pick_up_at_location instead."""
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
@@ -6445,7 +6399,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_position_at_the_command_end: int = 2750,
     return_tool: bool = True,
   ):
-    """Put plate with CoRe gripper tool and return to wasteblock mount."""
+    """Legacy. Use CoreGripper.drop_at_location instead."""
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
@@ -6491,7 +6445,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_speed: int = 500,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
   ):
-    """Move a plate with CoRe gripper tool."""
+    """Legacy. Use CoreGripper.move_to_location instead."""
 
     command_output = await self.send_command(
       module="C0",
@@ -9454,20 +9408,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="GI")
 
   async def iswap_open_gripper(self, open_position: Optional[float] = None):
-    """Open gripper
-
-    Args:
-      open_position: Open position [mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
-                     Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
-                     910 for iSWAP 3 (portrait).
-    """
-
+    """Legacy. Use self._new_iswap.open_gripper instead."""
     if open_position is None:
-      open_position = 91.0 if (await self.get_iswap_version()).startswith("3") else 132.0
-
-    assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
-
-    return await self.send_command(module="C0", command="GF", go=f"{round(open_position * 10):04}")
+      open_position = 91.0 if self._new_iswap.version.startswith("3") else 132.0
+    return await self._new_iswap.open_gripper(gripper_width=open_position)
 
   async def iswap_close_gripper(
     self,
@@ -9475,26 +9419,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plate_width: float = 0,
     plate_width_tolerance: float = 0,
   ):
-    """Close gripper
+    """Legacy. Use self._new_iswap.close_gripper instead."""
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
 
-    The gripper should be at the position plate_width+plate_width_tolerance+2.0mm before sending this command.
-
-    Args:
-      grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
-      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0 and 9.9. Default 2.0.
-    """
-
-    assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
-    assert 0 <= plate_width <= 999.9, "plate_width must be between 0 and 999.9"
-    assert 0 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0 and 9.9"
-
-    return await self.send_command(
-      module="C0",
-      command="GC",
-      gw=grip_strength,
-      gb=f"{round(plate_width * 10):04}",
-      gt=f"{round(plate_width_tolerance * 10):02}",
+    return await self._new_iswap.close_gripper(
+      gripper_width=plate_width,
+      backend_params=iSWAP.CloseGripperParams(
+        grip_strength=grip_strength,
+        plate_width_tolerance=plate_width_tolerance,
+      ),
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------
@@ -9546,82 +9479,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_index_low_acc: int = 1,
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
-    """Get plate using iswap.
+    """Legacy. Use self._new_iswap.pick_up_at_location instead."""
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
 
-    Args:
-      x_position: Plate center in X direction  [0.1mm]. Must be between 0 and 30000. Default 0.
-      x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      y_position: Plate center in Y direction [0.1mm]. Must be between 0 and 6500. Default 0.
-      y_direction: Y-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      z_position: Plate gripping height in Z direction. Must be between 0 and 3600. Default 0.
-      z_direction: Z-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      grip_direction: Grip direction. 1 = negative Y, 2 = positive X, 3 = positive Y,
-            4 =negative X. Must be between 1 and 4. Default 1.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
-            a command 0.1mm]. Must be between 0 and 3600. Default 3600.
-      z_position_at_the_command_end: Z-Position at the command end [0.1mm]. Must be between 0
-            and 3600. Default 3600.
-      grip_strength: Grip strength 0 = low .. 9 = high. Must be between 1 and 9. Default 5.
-      open_gripper_position: Open gripper position [0.1mm]. Must be between 0 and 9999.
-            Default 860.
-      plate_width: plate width [0.1mm]. Must be between 0 and 9999. Default 860.
-      plate_width_tolerance: plate width tolerance [0.1mm]. Must be between 0 and 99. Default 860.
-      collision_control_level: collision control level 1 = high 0 = low. Must be between 0 and 1.
-                               Default 1.
-      acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4. Default 4.
-      acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
-    """
-
-    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
-    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
-    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
-    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
-    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
-    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
-    assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    # Convert 0.1mm increments + direction flags to signed mm
+    x_mm = x_position / 10.0 * (-1 if x_direction else 1)
+    y_mm = y_position / 10.0 * (-1 if y_direction else 1)
+    z_mm = z_position / 10.0 * (-1 if z_direction else 1)
+    # Convert grip_direction 1-4 to degrees: 1→0, 2→90, 3→180, 4→270
+    direction_deg = (grip_direction - 1) * 90.0
+    # plate_width arrives pre-adjusted (-33 in 0.1mm units) from legacy callers.
+    # The new iSWAP backend applies that adjustment internally, so we reverse it here.
+    raw_plate_width_mm = (plate_width + 33) / 10.0
+    result = await self._new_iswap.pick_up_at_location(
+      location=Coordinate(x_mm, y_mm, z_mm),
+      direction=direction_deg,
+      resource_width=raw_plate_width_mm,
+      backend_params=iSWAP.PickUpParams(
+        minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command / 10.0,
+        z_position_at_end=z_position_at_the_command_end / 10.0,
+        grip_strength=grip_strength,
+        plate_width_tolerance=plate_width_tolerance / 10.0,
+        collision_control_level=collision_control_level,
+        acceleration_index_high_acc=acceleration_index_high_acc,
+        acceleration_index_low_acc=acceleration_index_low_acc,
+        fold_up_at_end=iswap_fold_up_sequence_at_the_end_of_process,
+      ),
     )
-    assert 0 <= z_position_at_the_command_end <= 3600, (
-      "z_position_at_the_command_end must be between 0 and 3600"
-    )
-    assert 1 <= grip_strength <= 9, "grip_strength must be between 1 and 9"
-    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
-    assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
-    assert 0 <= plate_width_tolerance <= 99, "plate_width_tolerance must be between 0 and 99"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
-    assert 0 <= acceleration_index_high_acc <= 4, (
-      "acceleration_index_high_acc must be between 0 and 4"
-    )
-    assert 0 <= acceleration_index_low_acc <= 4, (
-      "acceleration_index_low_acc must be between 0 and 4"
-    )
-
-    command_output = await self.send_command(
-      module="C0",
-      command="PP",
-      xs=f"{x_position:05}",
-      xd=x_direction,
-      yj=f"{y_position:04}",
-      yd=y_direction,
-      zj=f"{z_position:04}",
-      zd=z_direction,
-      gr=grip_direction,
-      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      te=f"{z_position_at_the_command_end:04}",
-      gw=grip_strength,
-      go=f"{open_gripper_position:04}",
-      gb=f"{plate_width:04}",
-      gt=f"{plate_width_tolerance:02}",
-      ga=collision_control_level,
-      # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
-      gc=iswap_fold_up_sequence_at_the_end_of_process,
-    )
-
-    # Once the command has completed successfully, set _iswap_parked to false
     self._iswap_parked = False
-    return command_output
+    return result
 
   async def iswap_put_plate(
     self,
@@ -9640,75 +9526,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_index_low_acc: int = 1,
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
-    """put plate
+    """Legacy. Use self._new_iswap.drop_at_location instead."""
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
 
-    Args:
-      x_position: Plate center in X direction  [0.1mm]. Must be between 0 and 30000. Default 0.
-      x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      y_position: Plate center in Y direction [0.1mm]. Must be between 0 and 6500. Default 0.
-      y_direction: Y-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      z_position: Plate gripping height in Z direction. Must be between 0 and 3600. Default 0.
-      z_direction: Z-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      grip_direction: Grip direction. 1 = negative Y, 2 = positive X, 3 = positive Y, 4 = negative
-            X. Must be between 1 and 4. Default 1.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-            command 0.1mm]. Must be between 0 and 3600. Default 3600.
-      z_position_at_the_command_end: Z-Position at the command end [0.1mm]. Must be between 0 and
-            3600. Default 3600.
-      open_gripper_position: Open gripper position [0.1mm]. Must be between 0 and 9999. Default
-            860.
-      collision_control_level: collision control level 1 = high 0 = low. Must be between 0 and 1.
-            Default 1.
-      acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4.
-            Default 4.
-      acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4.
-            Default 1.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
-    """
-
-    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
-    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
-    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
-    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
-    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
-    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
-    assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    x_mm = x_position / 10.0 * (-1 if x_direction else 1)
+    y_mm = y_position / 10.0 * (-1 if y_direction else 1)
+    z_mm = z_position / 10.0 * (-1 if z_direction else 1)
+    direction_deg = (grip_direction - 1) * 90.0
+    # open_gripper_position is now computed as resource_width + 3.0 inside the new backend.
+    # Legacy callers pass open_gripper_position = (plate_width + 3) * 10, so derive resource_width.
+    resource_width_mm = open_gripper_position / 10.0 - 3.0
+    result = await self._new_iswap.drop_at_location(
+      location=Coordinate(x_mm, y_mm, z_mm),
+      direction=direction_deg,
+      resource_width=resource_width_mm,
+      backend_params=iSWAP.DropParams(
+        minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command / 10.0,
+        z_position_at_end=z_position_at_the_command_end / 10.0,
+        collision_control_level=collision_control_level,
+        acceleration_index_high_acc=acceleration_index_high_acc,
+        acceleration_index_low_acc=acceleration_index_low_acc,
+        fold_up_at_end=iswap_fold_up_sequence_at_the_end_of_process,
+      ),
     )
-    assert 0 <= z_position_at_the_command_end <= 3600, (
-      "z_position_at_the_command_end must be between 0 and 3600"
-    )
-    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
-    assert 0 <= acceleration_index_high_acc <= 4, (
-      "acceleration_index_high_acc must be between 0 and 4"
-    )
-    assert 0 <= acceleration_index_low_acc <= 4, (
-      "acceleration_index_low_acc must be between 0 and 4"
-    )
-
-    command_output = await self.send_command(
-      module="C0",
-      command="PR",
-      xs=f"{x_position:05}",
-      xd=x_direction,
-      yj=f"{y_position:04}",
-      yd=y_direction,
-      zj=f"{z_position:04}",
-      zd=z_direction,
-      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      te=f"{z_position_at_the_command_end:04}",
-      gr=grip_direction,
-      go=f"{open_gripper_position:04}",
-      ga=collision_control_level,
-      # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
-      gc=iswap_fold_up_sequence_at_the_end_of_process,
-    )
-
-    # Once the command has completed successfully, set _iswap_parked to false
     self._iswap_parked = False
-    return command_output
+    return result
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Query the iSWAP rotation drive position (units: increments) from the firmware."""
@@ -10101,14 +9943,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="RG", fmt="rg#")
 
   async def request_plate_in_iswap(self) -> bool:
-    """Request plate in iSWAP
-
-    Returns:
-      True if holding a plate, False otherwise.
-    """
-
-    resp = await self.send_command(module="C0", command="QP", fmt="ph#")
-    return resp is not None and resp["ph"] == 1
+    """Legacy. Use self._new_iswap.is_gripper_closed instead."""
+    return await self._new_iswap.is_gripper_closed()
 
   async def request_iswap_position(self) -> Coordinate:
     """Request iSWAP position ( grip center )
@@ -10149,7 +9985,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_iswap_version(self) -> str:
     """Firmware command for getting iswap version"""
-    return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
+    return self._new_iswap.version
 
   # -------------- 3.18 Cover and port control --------------
 
