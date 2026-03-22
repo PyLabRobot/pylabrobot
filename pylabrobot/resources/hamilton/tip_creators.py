@@ -90,7 +90,7 @@ class HamiltonTip(Tip):
 
   def serialize(self):
     super_serialized = super().serialize()
-    del super_serialized["fitting_depth"]  # inferred from tip size
+    super_serialized.pop("fitting_depth", None)  # inferred from tip size
     return {
       **super_serialized,
       "pickup_method": self.pickup_method.name,
