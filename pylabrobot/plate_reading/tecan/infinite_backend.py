@@ -604,9 +604,19 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._await_scan_terminal(decoder.pop_terminal())
 
   async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int, flashes: int = 25
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+    flashes: int = 25,
+    bandwidth: Optional[float] = None,
   ) -> List[Dict]:
-    """Queue and execute an absorbance scan."""
+    """Queue and execute an absorbance scan.
+
+    Args:
+      bandwidth: Excitation bandwidth in nm. If None, auto-selected (9 nm for >315 nm, 5 nm
+        otherwise).
+    """
 
     if not 230 <= wavelength <= 1_000:
       raise ValueError("Absorbance wavelength must be between 230 nm and 1000 nm.")
@@ -617,7 +627,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._begin_run()
     try:
-      await self._configure_absorbance(wavelength, flashes=flashes)
+      await self._configure_absorbance(wavelength, flashes=flashes, bandwidth=bandwidth)
       await self._run_scan(
         ordered_wells=ordered_wells,
         decoder=decoder,
@@ -662,9 +672,12 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("POSITION CLEAR", allow_timeout=True)
     await self._send_command("MIRROR CLEAR", allow_timeout=True)
 
-  async def _configure_absorbance(self, wavelength_nm: int, *, flashes: int) -> None:
+  async def _configure_absorbance(
+    self, wavelength_nm: int, *, flashes: int, bandwidth: Optional[float] = None,
+  ) -> None:
     wl_decitenth = int(round(wavelength_nm * 10))
-    bw_decitenth = int(round(self._auto_bandwidth(wavelength_nm) * 10))
+    bw = bandwidth if bandwidth is not None else self._auto_bandwidth(wavelength_nm)
+    bw_decitenth = int(round(bw * 10))
     reads_number = max(1, flashes)
 
     await self._send_command("MODE ABS")
@@ -701,8 +714,19 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     focal_height: float = 20.0,
     flashes: int = 25,
     integration_us: int = 20,
+    gain: int = 100,
+    excitation_bandwidth: int = 50,
+    emission_bandwidth: int = 200,
+    lag_us: int = 0,
   ) -> List[Dict]:
-    """Queue and execute a fluorescence scan."""
+    """Queue and execute a fluorescence scan.
+
+    Args:
+      gain: PMT gain value (0-255).
+      excitation_bandwidth: Excitation filter bandwidth in deci-tenths of nm.
+      emission_bandwidth: Emission filter bandwidth in deci-tenths of nm.
+      lag_us: Lag time in microseconds between excitation and measurement.
+    """
 
     if not 230 <= excitation_wavelength <= 850:
       raise ValueError("Excitation wavelength must be between 230 nm and 850 nm.")
@@ -718,7 +742,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     try:
       await self._configure_fluorescence(
         excitation_wavelength, emission_wavelength, focal_height,
-        flashes=flashes, integration_us=integration_us,
+        flashes=flashes, integration_us=integration_us, gain=gain,
+        excitation_bandwidth=excitation_bandwidth, emission_bandwidth=emission_bandwidth,
+        lag_us=lag_us,
       )
       decoder = _FluorescenceRunDecoder(len(scan_wells))
 
@@ -753,7 +779,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _configure_fluorescence(
     self, excitation_nm: int, emission_nm: int, focal_height: float,
-    *, flashes: int, integration_us: int,
+    *, flashes: int, integration_us: int, gain: int,
+    excitation_bandwidth: int, emission_bandwidth: int, lag_us: int,
   ) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
     em_decitenth = int(round(emission_nm * 10))
@@ -765,23 +792,27 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     for _ in range(2):
       await self._send_command("MODE FI.TOP", allow_timeout=True)
       await self._clear_mode_settings(excitation=True, emission=True)
-      await self._send_command(f"EXCITATION 0,FI,{ex_decitenth},50,0", allow_timeout=True)
-      await self._send_command(f"EMISSION 0,FI,{em_decitenth},200,0", allow_timeout=True)
+      await self._send_command(
+        f"EXCITATION 0,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True)
+      await self._send_command(
+        f"EMISSION 0,FI,{em_decitenth},{emission_bandwidth},0", allow_timeout=True)
       await self._send_command(f"TIME 0,INTEGRATION={integration_us}", allow_timeout=True)
-      await self._send_command("TIME 0,LAG=0", allow_timeout=True)
+      await self._send_command(f"TIME 0,LAG={lag_us}", allow_timeout=True)
       await self._send_command("TIME 0,READDELAY=0", allow_timeout=True)
-      await self._send_command("GAIN 0,VALUE=100", allow_timeout=True)
+      await self._send_command(f"GAIN 0,VALUE={gain}", allow_timeout=True)
       await self._send_command(f"POSITION 0,Z={z_position}", allow_timeout=True)
       await self._send_command(f"BEAM DIAMETER={beam_diameter}", allow_timeout=True)
       await self._send_command("SCAN DIRECTION=UP", allow_timeout=True)
       await self._send_command("RATIO LABELS=1", allow_timeout=True)
       await self._send_command(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
-      await self._send_command(f"EXCITATION 1,FI,{ex_decitenth},50,0", allow_timeout=True)
-      await self._send_command(f"EMISSION 1,FI,{em_decitenth},200,0", allow_timeout=True)
+      await self._send_command(
+        f"EXCITATION 1,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True)
+      await self._send_command(
+        f"EMISSION 1,FI,{em_decitenth},{emission_bandwidth},0", allow_timeout=True)
       await self._send_command(f"TIME 1,INTEGRATION={integration_us}", allow_timeout=True)
-      await self._send_command("TIME 1,LAG=0", allow_timeout=True)
+      await self._send_command(f"TIME 1,LAG={lag_us}", allow_timeout=True)
       await self._send_command("TIME 1,READDELAY=0", allow_timeout=True)
-      await self._send_command("GAIN 1,VALUE=100", allow_timeout=True)
+      await self._send_command(f"GAIN 1,VALUE={gain}", allow_timeout=True)
       await self._send_command(f"POSITION 1,Z={z_position}", allow_timeout=True)
       await self._send_command(f"READS 1,NUMBER={reads_number}", allow_timeout=True)
     await self._send_command("PREPARE REF", allow_timeout=True, read_response=False)
