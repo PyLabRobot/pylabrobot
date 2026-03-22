@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.plate_reading.tecan.spark20m.spark_backend import SparkBackend
+from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 
@@ -36,6 +37,12 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.mock_process_fluorescence = self.fluo_proc_patcher.start()
 
     self.backend = SparkBackend()
+    # Populate devices so device-connected checks pass
+    self.backend.reader.devices = {
+      SparkDevice.ABSORPTION: MagicMock(),
+      SparkDevice.FLUORESCENCE: MagicMock(),
+      SparkDevice.PLATE_TRANSPORT: MagicMock(),
+    }
 
   async def asyncTearDown(self) -> None:
     self.reader_patcher.stop()

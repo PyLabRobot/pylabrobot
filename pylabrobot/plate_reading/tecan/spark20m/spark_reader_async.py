@@ -66,6 +66,7 @@ class SparkReaderAsync:
         reader = USB(
           id_vendor=self.vid,
           id_product=device_type.value,
+          human_readable_device_name=f"Tecan Spark {device_type.name}",
           configuration_callback=configure,
           max_workers=16,
           read_endpoint_address=endpoints["read_status"].value,
