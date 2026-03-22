@@ -905,7 +905,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         else:
           eta_str = "   --- "
 
-        sys.stdout.write(f"\r[{bar}] {current_temp:.2f} °C  " f"(Δ={diff:.2f} °C | ETA: {eta_str})")
+        sys.stdout.write(f"\r[{bar}] {current_temp:.2f} °C  (Δ={diff:.2f} °C | ETA: {eta_str})")
         sys.stdout.flush()
 
       if diff <= tolerance:

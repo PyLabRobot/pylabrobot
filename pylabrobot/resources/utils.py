@@ -176,7 +176,7 @@ def create_ordered_items_2d(
     item_dy=item_dy,
     **kwargs,
   )
-  keys = [f"{LETTERS[j]}{i+1}" for i in range(num_items_x) for j in range(num_items_y)]
+  keys = [f"{LETTERS[j]}{i + 1}" for i in range(num_items_x) for j in range(num_items_y)]
   for key, item in zip(keys, (item for sublist in items for item in sublist)):
     item.name = f"{klass.__name__.lower()}_{key}"
   return dict(zip(keys, [item for sublist in items for item in sublist]))

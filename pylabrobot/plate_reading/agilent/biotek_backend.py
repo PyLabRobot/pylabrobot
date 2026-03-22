@@ -413,9 +413,9 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     integration_time_milliseconds = integration_time - int(integration_time)
     # TODO: I don't know if the multiple of 0.2 is a firmware requirement, but it's what gen5.exe requires.
     # round because of floating point precision issues
-    assert (
-      round(integration_time_milliseconds * 10) % 2 == 0
-    ), "Integration time milliseconds must be a multiple of 0.2"
+    assert round(integration_time_milliseconds * 10) % 2 == 0, (
+      "Integration time milliseconds must be a multiple of 0.2"
+    )
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 

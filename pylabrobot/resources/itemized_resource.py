@@ -198,12 +198,12 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         identifier = list(self._ordering.keys()).index(identifier)
       except ValueError as e:
         raise IndexError(
-          f"Item with identifier '{identifier}' does not exist on " f"resource '{self.name}'."
+          f"Item with identifier '{identifier}' does not exist on resource '{self.name}'."
         ) from e
 
     if not 0 <= identifier < self.num_items:
       raise IndexError(
-        f"Item with identifier '{identifier}' does not exist on " f"resource '{self.name}'."
+        f"Item with identifier '{identifier}' does not exist on resource '{self.name}'."
       )
 
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
@@ -396,7 +396,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     # Create the header row with numbers aligned to the columns.
     # Use right-alignment specifier.
-    header_row = "    " + " ".join(f"{i+1:<{max_digits}}" for i in range(self.num_items_x))
+    header_row = "    " + " ".join(f"{i + 1:<{max_digits}}" for i in range(self.num_items_x))
 
     # Create the item grid with resource absence/presence information.
     item_grid = [

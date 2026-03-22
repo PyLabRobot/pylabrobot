@@ -1,4 +1,4 @@
-""" Corning-Falcon Plates"""
+"""Corning-Falcon Plates"""
 
 from typing import Optional
 

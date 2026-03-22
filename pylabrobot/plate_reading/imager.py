@@ -251,9 +251,9 @@ class Imager(Resource, Machine):
       )
 
     if isinstance(focal_height, AutoFocus):
-      assert isinstance(
-        exposure_time, (int, float)
-      ), "Exposure time must be specified for auto focus"
+      assert isinstance(exposure_time, (int, float)), (
+        "Exposure time must be specified for auto focus"
+      )
       assert gain != "machine-auto", "Gain must be specified for auto focus"
       return await self._capture_auto_focus(
         well=well,

@@ -166,11 +166,11 @@ class TestIpPacket(unittest.TestCase):
     self.assertEqual(packet.options, b"")
 
   def test_ip_packet_with_options(self):
-    packet = IpPacket(protocol=6, payload=b"\x01", options=b"\xAB\xCD")
+    packet = IpPacket(protocol=6, payload=b"\x01", options=b"\xab\xcd")
     packed = packet.pack()
     # Size = 1 + 1 + 2 + 2 (opts) + 1 (payload) = 7
     self.assertEqual(packed[4:6], b"\x02\x00")  # options length = 2
-    self.assertEqual(packed[6:8], b"\xAB\xCD")  # options
+    self.assertEqual(packed[6:8], b"\xab\xcd")  # options
     self.assertEqual(packed[8:], b"\x01")  # payload
 
   def test_ip_packet_roundtrip(self):
@@ -217,7 +217,7 @@ class TestHarpPacket(unittest.TestCase):
       seq=5,
       protocol=2,
       action_code=3,
-      payload=b"\xFF",
+      payload=b"\xff",
       response_required=True,
     )
     packed = packet.pack()
@@ -279,7 +279,7 @@ class TestHoiPacket(unittest.TestCase):
 
     self.assertEqual(packed[0], 1)  # interface_id
     self.assertEqual(packed[1], 0x03)  # action
-    self.assertEqual(packed[2:4], b"\x2A\x00")  # action_id = 42 (little-endian)
+    self.assertEqual(packed[2:4], b"\x2a\x00")  # action_id = 42 (little-endian)
     self.assertEqual(packed[4], 0)  # version byte
     self.assertEqual(packed[5], 0)  # num_fragments
 
@@ -324,7 +324,7 @@ class TestRegistrationPacket(unittest.TestCase):
     )
     packed = packet.pack()
 
-    self.assertEqual(packed[0:2], b"\x0C\x00")  # action_code = 12
+    self.assertEqual(packed[0:2], b"\x0c\x00")  # action_code = 12
     self.assertEqual(packed[2:4], b"\x00\x00")  # response_code = 0
 
   def test_registration_packet_roundtrip(self):
@@ -384,12 +384,12 @@ class TestHoiParams(unittest.TestCase):
   def test_u16(self):
     params = HoiParams().u16(65535).build()
     self.assertEqual(params[0], HamiltonDataType.U16)
-    self.assertEqual(params[4:6], b"\xFF\xFF")
+    self.assertEqual(params[4:6], b"\xff\xff")
 
   def test_u32(self):
     params = HoiParams().u32(0xDEADBEEF).build()
     self.assertEqual(params[0], HamiltonDataType.U32)
-    self.assertEqual(params[4:8], b"\xEF\xBE\xAD\xDE")
+    self.assertEqual(params[4:8], b"\xef\xbe\xad\xde")
 
   def test_u64(self):
     params = HoiParams().u64(0xDEADBEEFCAFEBABE).build()
@@ -424,7 +424,7 @@ class TestHoiParams(unittest.TestCase):
   def test_i32_array(self):
     params = HoiParams().i32_array([1, 2, 3]).build()
     self.assertEqual(params[0], HamiltonDataType.I32_ARRAY)
-    self.assertEqual(params[2:4], b"\x0C\x00")  # length = 12 (3 * 4)
+    self.assertEqual(params[2:4], b"\x0c\x00")  # length = 12 (3 * 4)
 
   def test_u16_array(self):
     params = HoiParams().u16_array([100, 200, 300]).build()
@@ -434,7 +434,7 @@ class TestHoiParams(unittest.TestCase):
   def test_f32_array(self):
     params = HoiParams().f32_array([1.0, 2.0, 3.0]).build()
     self.assertEqual(params[0], HamiltonDataType.F32_ARRAY)
-    self.assertEqual(params[2:4], b"\x0C\x00")  # length = 12 (3 * 4)
+    self.assertEqual(params[2:4], b"\x0c\x00")  # length = 12 (3 * 4)
 
   def test_bool_array(self):
     params = HoiParams().bool_array([True, False, True]).build()
