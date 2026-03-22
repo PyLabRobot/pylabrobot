@@ -41,9 +41,9 @@ from .STAR_backend import (
   parse_star_fw_string,
 )
 from .STAR_chatterbox import (
-  STARChatterboxBackend,
   _DEFAULT_EXTENDED_CONFIGURATION,
   _DEFAULT_MACHINE_CONFIGURATION,
+  STARChatterboxBackend,
 )
 
 
@@ -1584,35 +1584,48 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
       self.STAR, "_move_z_drive_to_liquid_surface_using_clld", detect_side_effect
     )
     mocks["plld"] = unittest.mock.patch.object(
-      self.STAR, "_search_for_surface_using_plld",
-      new_callable=unittest.mock.AsyncMock, return_value=None,
+      self.STAR,
+      "_search_for_surface_using_plld",
+      new_callable=unittest.mock.AsyncMock,
+      return_value=None,
     )
     mocks["pip_height"] = unittest.mock.patch.object(
-      self.STAR, "request_pip_height_last_lld",
-      new_callable=unittest.mock.AsyncMock, return_value=list(range(12)),
+      self.STAR,
+      "request_pip_height_last_lld",
+      new_callable=unittest.mock.AsyncMock,
+      return_value=list(range(12)),
     )
     mocks["tip_len"] = unittest.mock.patch.object(
-      self.STAR, "request_tip_len_on_channel",
-      new_callable=unittest.mock.AsyncMock, return_value=59.9,
+      self.STAR,
+      "request_tip_len_on_channel",
+      new_callable=unittest.mock.AsyncMock,
+      return_value=59.9,
     )
     mocks["tip_presence"] = unittest.mock.patch.object(
-      self.STAR, "request_tip_presence",
-      new_callable=unittest.mock.AsyncMock, return_value={i: True for i in range(8)},
+      self.STAR,
+      "request_tip_presence",
+      new_callable=unittest.mock.AsyncMock,
+      return_value={i: True for i in range(8)},
     )
     mocks["z_safety"] = unittest.mock.patch.object(
-      self.STAR, "move_all_channels_in_z_safety",
+      self.STAR,
+      "move_all_channels_in_z_safety",
       new_callable=unittest.mock.AsyncMock,
     )
     mocks["move_x"] = unittest.mock.patch.object(
-      self.STAR, "move_channel_x",
+      self.STAR,
+      "move_channel_x",
       new_callable=unittest.mock.AsyncMock,
     )
     mocks["pos_y"] = unittest.mock.patch.object(
-      self.STAR, "position_channels_in_y_direction",
+      self.STAR,
+      "position_channels_in_y_direction",
       new_callable=unittest.mock.AsyncMock,
     )
     mocks["backmost_y"] = unittest.mock.patch.object(
-      self.STAR.extended_conf, "pip_maximal_y_position", 606.5,
+      self.STAR.extended_conf,
+      "pip_maximal_y_position",
+      606.5,
     )
     return mocks
 
@@ -1638,9 +1651,7 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     mocks = self._standard_mocks(detect_side_effect=mock_detect)
     with contextlib.ExitStack() as stack:
       entered = {k: stack.enter_context(v) for k, v in mocks.items()}
-      await self.STAR.probe_liquid_heights(
-        containers=[well], use_channels=[0], n_replicates=3
-      )
+      await self.STAR.probe_liquid_heights(containers=[well], use_channels=[0], n_replicates=3)
 
     self.assertEqual(mock_detect.await_count, 3)
 
@@ -1703,9 +1714,7 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     with contextlib.ExitStack() as stack:
       entered = {k: stack.enter_context(v) for k, v in mocks.items()}
       with self.assertRaises(RuntimeError):
-        await self.STAR.probe_liquid_heights(
-          containers=[well], use_channels=[0], n_replicates=2
-        )
+        await self.STAR.probe_liquid_heights(containers=[well], use_channels=[0], n_replicates=2)
 
   async def test_pressure_lld_mode(self):
     well = self.plate.get_item("A1")

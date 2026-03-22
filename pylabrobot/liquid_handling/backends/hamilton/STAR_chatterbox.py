@@ -13,7 +13,9 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   STARBackend,
 )
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
-  validate_probing_inputs,
+  plan_batches,
+  print_batches,
+  validate_channel_selections,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -351,6 +353,7 @@ class STARChatterboxBackend(STARBackend):
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use (0-indexed). Defaults to ``[0, ..., len(containers)-1]``.
+      resource_offsets: Passed to ``plan_batches`` for auto-spreading. See ``plan_batches``.
       All other parameters: Accepted for API compatibility but unused in mock.
 
     Returns:
@@ -361,7 +364,10 @@ class STARChatterboxBackend(STARBackend):
         ``containers`` and ``use_channels`` have different lengths.
       NoTipError: If any specified channel lacks a tip.
     """
-    use_channels = validate_probing_inputs(
+    if x_grouping_tolerance is None:
+      x_grouping_tolerance = self._x_grouping_tolerance_mm
+
+    use_channels = validate_channel_selections(
       containers=containers,
       use_channels=use_channels,
       num_channels=self.num_channels,
@@ -371,6 +377,18 @@ class STARChatterboxBackend(STARBackend):
     for ch in use_channels:
       self.head[ch].get_tip()  # Raises NoTipError if no tip
 
+    batches = plan_batches(
+      use_channels=use_channels,
+      targets=containers,
+      channel_spacings=self._channels_minimum_y_spacing,
+      x_tolerance=x_grouping_tolerance,
+      wrt_resource=self.deck,
+      resource_offsets=resource_offsets,
+    )
+
+    print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
+
+    # Compute heights from volume trackers
     heights: List[float] = []
     for container in containers:
       volume = container.tracker.get_used_volume()
@@ -380,6 +398,5 @@ class STARChatterboxBackend(STARBackend):
         height = container.compute_height_from_volume(volume)
         heights.append(height)
 
-    print(f"probe_liquid_heights: {[f'{h:.2f}' for h in heights]} mm")
+    print(f"  heights: {[f'{h:.2f}' for h in heights]} mm")
     return heights
-
