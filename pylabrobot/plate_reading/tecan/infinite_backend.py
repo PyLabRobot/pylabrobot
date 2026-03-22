@@ -512,6 +512,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self.io = USB(
       id_vendor=self.VENDOR_ID,
       id_product=self.PRODUCT_ID,
+      human_readable_device_name="Tecan Infinite 200 PRO",
       packet_read_timeout=3,
       read_timeout=30,
     )
