@@ -41,13 +41,30 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Deactivate thermocycler lid."""
 
   @abstractmethod
-  async def run_protocol(self, protocol: Protocol, block_max_volume: float):
+  async def run_protocol(
+    self,
+    protocol: Protocol,
+    block_max_volume: float,
+  ):
     """Execute thermocycler protocol run.
 
     Args:
       protocol: Protocol object containing stages with steps and repeats.
       block_max_volume: Maximum block volume (µL) for safety.
     """
+
+  async def run_stored_protocol(self, name: str, wait: bool = False):
+    """Execute a stored protocol by name (optional; backends that support it override).
+
+    Args:
+      name: Name of the stored protocol to run.
+      wait: If False (default), start and return an execution handle. If True,
+        block until done then return the (completed) handle.
+
+    Raises:
+      NotImplementedError: This backend does not support running stored protocols by name.
+    """
+    raise NotImplementedError("This backend does not support running stored protocols by name.")
 
   @abstractmethod
   async def get_block_current_temperature(self) -> List[float]:
@@ -79,20 +96,20 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def get_hold_time(self) -> float:
-    """Get remaining hold time in seconds."""
+    """Get remaining hold time in seconds. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_current_cycle_index(self) -> int:
-    """Get the zero-based index of the current cycle."""
+    """Get the zero-based index of the current cycle. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_total_cycle_count(self) -> int:
-    """Get the total cycle count."""
+    """Get the total cycle count. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_current_step_index(self) -> int:
-    """Get the zero-based index of the current step within the cycle."""
+    """Get the zero-based index of the current step within the cycle. Return 0 when no profile is running."""
 
   @abstractmethod
   async def get_total_step_count(self) -> int:
-    """Get the total number of steps in the current cycle."""
+    """Get the total number of steps in the current cycle. Return 0 when no profile is running."""
