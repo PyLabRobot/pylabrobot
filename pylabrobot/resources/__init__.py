@@ -2,6 +2,7 @@
 from .agenbio import *
 from .agilent import *
 from .alpaqua import *
+from .applied_biosystems import *
 from .azenta import *
 from .biorad import *
 from .boekel import *
