@@ -3,8 +3,8 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.plate_reading.tecan.spark20m.spark_backend import SparkBackend
 from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice
+from pylabrobot.plate_reading.tecan.spark20m.spark_backend import SparkBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 
