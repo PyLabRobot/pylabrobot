@@ -43,7 +43,6 @@ from .STAR_backend import (
 from .STAR_chatterbox import (
   _DEFAULT_EXTENDED_CONFIGURATION,
   _DEFAULT_MACHINE_CONFIGURATION,
-  STARChatterboxBackend,
 )
 
 
@@ -1635,7 +1634,8 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
 
     mocks = self._standard_mocks()
     with contextlib.ExitStack() as stack:
-      entered = {k: stack.enter_context(v) for k, v in mocks.items()}
+      for v in mocks.values():
+        stack.enter_context(v)
       result = await self.STAR.probe_liquid_heights(containers=[well], use_channels=[0])
 
     # request_pip_height_last_lld returns list(range(12)), so channel 0 gets height 0.
@@ -1650,7 +1650,8 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     mock_detect = unittest.mock.AsyncMock(return_value=None)
     mocks = self._standard_mocks(detect_side_effect=mock_detect)
     with contextlib.ExitStack() as stack:
-      entered = {k: stack.enter_context(v) for k, v in mocks.items()}
+      for v in mocks.values():
+        stack.enter_context(v)
       await self.STAR.probe_liquid_heights(containers=[well], use_channels=[0], n_replicates=3)
 
     self.assertEqual(mock_detect.await_count, 3)
@@ -1678,7 +1679,8 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
       detect_side_effect=unittest.mock.AsyncMock(side_effect=raise_error)
     )
     with contextlib.ExitStack() as stack:
-      entered = {k: stack.enter_context(v) for k, v in mocks.items()}
+      for v in mocks.values():
+        stack.enter_context(v)
       result = await self.STAR.probe_liquid_heights(containers=[well], use_channels=[0])
 
     self.assertEqual(result[0], 0.0)
@@ -1712,7 +1714,8 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
       detect_side_effect=unittest.mock.AsyncMock(side_effect=side_effect)
     )
     with contextlib.ExitStack() as stack:
-      entered = {k: stack.enter_context(v) for k, v in mocks.items()}
+      for v in mocks.values():
+        stack.enter_context(v)
       with self.assertRaises(RuntimeError):
         await self.STAR.probe_liquid_heights(containers=[well], use_channels=[0], n_replicates=2)
 
