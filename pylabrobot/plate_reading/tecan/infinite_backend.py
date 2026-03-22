@@ -427,7 +427,7 @@ class _MeasurementDecoder(ABC):
     return None
 
 
-class TecanInfinite200ProBackend(PlateReaderBackend):
+class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   """Backend shell for the Infinite 200 PRO."""
 
   _MODE_CAPABILITY_COMMANDS: Dict[str, List[str]] = {
@@ -1309,5 +1309,5 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
 
 
 __all__ = [
-  "TecanInfinite200ProBackend",
+  "ExperimentalTecanInfinite200ProBackend",
 ]

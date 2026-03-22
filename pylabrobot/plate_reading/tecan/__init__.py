@@ -1,1 +1,1 @@
-from .infinite_backend import TecanInfinite200ProBackend
+from .infinite_backend import ExperimentalTecanInfinite200ProBackend

@@ -48,8 +48,5 @@ from .standard import (
   ImagingResult,
   Objective,
 )
-<<<<<<< tecan-microplate-reader
-from .tecan import TecanInfinite200ProBackend
-=======
+from .tecan import ExperimentalTecanInfinite200ProBackend
 from .tecan.spark20m.spark_backend import ExperimentalSparkBackend
->>>>>>> main

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.tecan.infinite_backend import (
-  TecanInfinite200ProBackend,
+  ExperimentalTecanInfinite200ProBackend,
   _absorbance_od_calibrated,
   _AbsorbanceRunDecoder,
   _consume_leading_ascii_frame,
@@ -500,7 +500,7 @@ def _egg_grid():
 
 class TestTecanInfiniteDecoders(unittest.TestCase):
   def setUp(self):
-    self.backend = TecanInfinite200ProBackend()
+    self.backend = ExperimentalTecanInfinite200ProBackend()
     self.plate = Plate_384_Well(name="plate")
     self.grid = _egg_grid()
     self.max_intensity = max(max(row) for row in self.grid)
@@ -592,7 +592,7 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
 
 class TestTecanInfiniteScanGeometry(unittest.TestCase):
   def setUp(self):
-    self.backend = TecanInfinite200ProBackend(
+    self.backend = ExperimentalTecanInfinite200ProBackend(
       counts_per_mm_x=1, counts_per_mm_y=1
     )
     self.plate = _make_test_plate()
@@ -625,22 +625,22 @@ class TestTecanInfiniteScanGeometry(unittest.TestCase):
 
 class TestTecanInfiniteAscii(unittest.TestCase):
   def test_frame_command(self):
-    framed = TecanInfinite200ProBackend._frame_command("A")
+    framed = ExperimentalTecanInfinite200ProBackend._frame_command("A")
     self.assertEqual(framed, b"\x02A\x03\x00\x00\x01\x40\x0d")
 
   def test_consume_leading_ascii_frame(self):
-    buffer = bytearray(TecanInfinite200ProBackend._frame_command("ST") + b"XYZ")
+    buffer = bytearray(ExperimentalTecanInfinite200ProBackend._frame_command("ST") + b"XYZ")
     consumed, text = _consume_leading_ascii_frame(buffer)
     self.assertTrue(consumed)
     self.assertEqual(text, "ST")
     self.assertEqual(buffer, bytearray(b"XYZ"))
 
   def test_terminal_frames(self):
-    self.assertTrue(TecanInfinite200ProBackend._is_terminal_frame("ST"))
-    self.assertTrue(TecanInfinite200ProBackend._is_terminal_frame("+"))
-    self.assertTrue(TecanInfinite200ProBackend._is_terminal_frame("-"))
-    self.assertTrue(TecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
-    self.assertFalse(TecanInfinite200ProBackend._is_terminal_frame("OK"))
+    self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("ST"))
+    self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("+"))
+    self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("-"))
+    self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
+    self.assertFalse(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("OK"))
 
 
 class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
@@ -661,7 +661,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.mock_usb_class = patcher.start()
     self.addCleanup(patcher.stop)
 
-    self.backend = TecanInfinite200ProBackend(
+    self.backend = ExperimentalTecanInfinite200ProBackend(
       counts_per_mm_x=1000, counts_per_mm_y=1000
     )
     self.plate = _make_test_plate()
@@ -669,7 +669,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
   def _frame(self, command: str) -> bytes:
     """Helper to frame a command."""
-    return TecanInfinite200ProBackend._frame_command(command)
+    return ExperimentalTecanInfinite200ProBackend._frame_command(command)
 
   async def test_open(self):
     self.backend._ready = True
