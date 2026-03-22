@@ -32,7 +32,7 @@ from .spark_reader_async import SparkReaderAsync
 logger = logging.getLogger(__name__)
 
 
-class SparkBackend(PlateReaderBackend):
+class ExperimentalSparkBackend(PlateReaderBackend):
   """Backend for Tecan Spark plate reader."""
 
   def __init__(self, vid: int = 0x0C47) -> None:
