@@ -48,4 +48,8 @@ from .standard import (
   ImagingResult,
   Objective,
 )
-from .tecan.spark20m.spark_backend import SparkBackend
+
+try:
+  from .tecan.spark20m.spark_backend import SparkBackend
+except ImportError:
+  pass

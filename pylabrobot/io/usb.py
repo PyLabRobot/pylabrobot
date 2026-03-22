@@ -418,8 +418,9 @@ class USB(IOBase):
     else:
       self.write_endpoint = usb.util.find_descriptor(
         intf,
-        custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-        == usb.util.ENDPOINT_OUT,
+        custom_match=lambda e: (
+          usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+        ),
       )
 
     if self.read_endpoint_address is not None:
@@ -430,8 +431,9 @@ class USB(IOBase):
     else:
       self.read_endpoint = usb.util.find_descriptor(
         intf,
-        custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-        == usb.util.ENDPOINT_IN,
+        custom_match=lambda e: (
+          usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+        ),
       )
 
     logger.info(

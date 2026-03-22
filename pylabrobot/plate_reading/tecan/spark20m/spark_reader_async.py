@@ -3,8 +3,11 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-import usb.core
-import usb.util
+try:
+  import usb.core
+  import usb.util
+except ImportError:
+  pass
 
 from pylabrobot.io.usb import USB
 
