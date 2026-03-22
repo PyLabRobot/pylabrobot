@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 from pylabrobot.arms.arm import Arm
 from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.joint_arm import JointArm
-from pylabrobot.arms.backend import ArmBackend, OrientableArmBackend, JointArmBackend
+from pylabrobot.arms.backend import (
+  GripperArmBackend,
+  OrientableGripperArmBackend,
+  JointGripperArmBackend,
+)
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
@@ -42,7 +46,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
   """Test Arm (ArmBackend, no rotation). E.g. Hamilton core grippers."""
 
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=ArmBackend)
+    self.mock_backend = MagicMock(spec=GripperArmBackend)
     for method_name in [
       "pick_up_at_location",
       "drop_at_location",
@@ -123,7 +127,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
   """Test OrientableArm coordinate computation with fictional resources."""
 
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=OrientableArmBackend)
+    self.mock_backend = MagicMock(spec=OrientableGripperArmBackend)
     for method_name in [
       "pick_up_at_location",
       "drop_at_location",
@@ -181,7 +185,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
 class TestJointArm(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=JointArmBackend)
+    self.mock_backend = MagicMock(spec=JointGripperArmBackend)
     for method_name in [
       "get_joint_position",
       "get_cartesian_position",

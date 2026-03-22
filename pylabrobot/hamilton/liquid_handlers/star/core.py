@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.backend import GripperArmBackend
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
 from pylabrobot.serializer import SerializableMixin
 
 
-class CoreGripper(ArmBackend):
+class CoreGripper(GripperArmBackend):
   """Backend for Hamilton CoRe gripper tools.
 
   The CoRe gripper uses two pipetting channels to grip plates along the Y axis.

@@ -250,10 +250,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new.are_grippers_closed()
 
   async def freedrive_mode(self, free_axes: List[int]) -> None:
-    await self._new.freedrive_mode(free_axes)
+    await self._new.start_freedrive_mode(free_axes)
 
   async def end_freedrive_mode(self) -> None:
-    await self._new.end_freedrive_mode()
+    await self._new.stop_freedrive_mode()
 
   async def set_base(
     self, x_offset: float, y_offset: float, z_offset: float, z_rotation: float
@@ -327,28 +327,61 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new.get_version()
 
   async def get_location_angles(self, location_index):
-    return await self._new.get_location_angles(location_index)
+    data = await self.send_command(f"locAngles {location_index}")
+    parts = data.split(" ")
+    type_code = int(parts[0])
+    if type_code != 1:
+      raise _new_module.PreciseFlexError(-1, "Location is not of angles type.")
+    station_index = int(parts[1])
+    angles = self._parse_angles_response(parts[2:])
+    return (type_code, station_index, angles)
 
   async def set_joint_angles(self, location_index, joint_position):
-    await self._new.set_joint_angles(location_index, joint_position)
+    await self._new._set_joint_angles(location_index, joint_position)
 
   async def get_location_xyz(self, location_index):
-    return await self._new.get_location_xyz(location_index)
+    data = await self.send_command(f"locXyz {location_index}")
+    parts = data.split(" ")
+    type_code = int(parts[0])
+    if type_code != 0:
+      raise _new_module.PreciseFlexError(-1, "Location is not of Cartesian type.")
+    if len(parts) != 8:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from locXyz command.")
+    station_index = int(parts[1])
+    x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[2:8])
+    return (type_code, station_index, x, y, z, yaw, pitch, roll)
 
   async def set_location_xyz(self, location_index, cartesian_position):
-    await self._new.set_location_xyz(location_index, _to_new_coords(cartesian_position))
+    await self._new._set_location_xyz(location_index, _to_new_coords(cartesian_position))
 
   async def get_location_z_clearance(self, location_index):
-    return await self._new.get_location_z_clearance(location_index)
+    data = await self.send_command(f"locZClearance {location_index}")
+    parts = data.split(" ")
+    if len(parts) != 3:
+      raise _new_module.PreciseFlexError(
+        -1, "Unexpected response format from locZClearance command."
+      )
+    station_index = int(parts[0])
+    z_clearance = float(parts[1])
+    z_world = float(parts[2]) != 0
+    return (station_index, z_clearance, z_world)
 
   async def set_location_z_clearance(self, location_index, z_clearance, z_world=None):
-    await self._new.set_location_z_clearance(location_index, z_clearance, z_world)
+    if z_world is None:
+      await self.send_command(f"locZClearance {location_index} {z_clearance}")
+    else:
+      z_world_int = 1 if z_world else 0
+      await self.send_command(f"locZClearance {location_index} {z_clearance} {z_world_int}")
 
   async def get_location_config(self, location_index):
-    return await self._new.get_location_config(location_index)
+    data = await self.send_command(f"locConfig {location_index}")
+    parts = data.split(" ")
+    if len(parts) != 2:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from locConfig command.")
+    return (int(parts[0]), int(parts[1]))
 
   async def set_location_config(self, location_index, config_value):
-    await self._new.set_location_config(location_index, config_value)
+    await self._new._set_location_config(location_index, config_value)
 
   async def dest_c(self, arg1=0):
     return await self._new.dest_c(arg1)
@@ -438,22 +471,25 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new.get_motion_profile_values(profile)
 
   async def move_to_stored_location(self, location_index, profile_index):
-    await self._new.move_to_stored_location(location_index, profile_index)
+    await self._new._move_to_stored_location(location_index, profile_index)
 
   async def move_to_stored_location_appro(self, location_index, profile_index):
-    await self._new.move_to_stored_location_appro(location_index, profile_index)
+    await self._new._move_to_stored_location_appro(location_index, profile_index)
 
   async def move_extra_axis(self, axis1_position, axis2_position=None):
-    await self._new.move_extra_axis(axis1_position, axis2_position)
+    if axis2_position is None:
+      await self.send_command(f"moveExtraAxis {axis1_position}")
+    else:
+      await self.send_command(f"moveExtraAxis {axis1_position} {axis2_position}")
 
   async def move_one_axis(self, axis_number, destination_position, profile_index):
-    await self._new.move_one_axis(axis_number, destination_position, profile_index)
+    await self.send_command(f"moveOneAxis {axis_number} {destination_position} {profile_index}")
 
   async def move_c(self, profile_index, cartesian_coords):
-    await self._new.move_c(profile_index, _to_new_coords(cartesian_coords))
+    await self._new._move_c(profile_index, _to_new_coords(cartesian_coords))
 
   async def move_j(self, profile_index, joint_coords):
-    await self._new.move_j(profile_index, joint_coords)
+    await self._new._move_j(profile_index, joint_coords)
 
   async def release_brake(self, axis):
     await self._new.release_brake(axis)
@@ -465,7 +501,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new.state()
 
   async def wait_for_eom(self):
-    await self._new.wait_for_eom()
+    await self._new._wait_for_eom()
 
   async def zero_torque(self, enable, axis_mask=1):
     await self._new.zero_torque(enable, axis_mask)
@@ -477,10 +513,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new.change_config2(grip_mode)
 
   async def get_grasp_data(self):
-    return await self._new.get_grasp_data()
+    return await self._new._get_grasp_data()
 
   async def set_grasp_data(self, plate_width, finger_speed_percent, grasp_force):
-    await self._new.set_grasp_data(plate_width, finger_speed_percent, grasp_force)
+    await self._new._set_grasp_data(plate_width, finger_speed_percent, grasp_force)
 
   async def _get_grip_close_pos(self):
     return await self._new._get_grip_close_pos()
@@ -495,104 +531,189 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new._set_grip_open_pos(open_position)
 
   async def move_rail(self, station_id=None, mode=0, rail_destination=None):
-    await self._new.move_rail(station_id, mode, rail_destination)
+    if rail_destination is not None:
+      await self.send_command(f"MoveRail {station_id or ''} {mode} {rail_destination}")
+    elif station_id is not None:
+      await self.send_command(f"MoveRail {station_id} {mode}")
+    else:
+      await self.send_command(f"MoveRail {mode}")
 
   async def get_pallet_index(self, station_id):
-    return await self._new.get_pallet_index(station_id)
+    data = await self.send_command(f"PalletIndex {station_id}")
+    parts = data.split()
+    if len(parts) != 4:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from PalletIndex command.")
+    return (int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
 
   async def set_pallet_index(
     self, station_id, pallet_index_x=0, pallet_index_y=0, pallet_index_z=0
   ):
-    await self._new.set_pallet_index(station_id, pallet_index_x, pallet_index_y, pallet_index_z)
+    await self.send_command(
+      f"PalletIndex {station_id} {pallet_index_x} {pallet_index_y} {pallet_index_z}"
+    )
 
   async def get_pallet_origin(self, station_id):
-    return await self._new.get_pallet_origin(station_id)
+    data = await self.send_command(f"PalletOrigin {station_id}")
+    parts = data.split()
+    if len(parts) != 8:
+      raise _new_module.PreciseFlexError(
+        -1, "Unexpected response format from PalletOrigin command."
+      )
+    return (
+      int(parts[0]),
+      float(parts[1]),
+      float(parts[2]),
+      float(parts[3]),
+      float(parts[4]),
+      float(parts[5]),
+      float(parts[6]),
+      int(parts[7]),
+    )
 
   async def set_pallet_origin(self, station_id, cartesian_coords):
-    await self._new.set_pallet_origin(station_id, _to_new_coords(cartesian_coords))
+    cmd = (
+      f"PalletOrigin {station_id} "
+      f"{cartesian_coords.location.x} "
+      f"{cartesian_coords.location.y} "
+      f"{cartesian_coords.location.z} "
+      f"{cartesian_coords.rotation.yaw} "
+      f"{cartesian_coords.rotation.pitch} "
+      f"{cartesian_coords.rotation.roll} "
+    )
+    if cartesian_coords.orientation is not None:
+      config_int = self._convert_orientation_enum_to_int(cartesian_coords.orientation)
+      cmd += f"{config_int}"
+    await self.send_command(cmd)
 
   async def get_pallet_x(self, station_id):
-    return await self._new.get_pallet_x(station_id)
+    data = await self.send_command(f"PalletX {station_id}")
+    parts = data.split()
+    if len(parts) != 5:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from PalletX command.")
+    return (int(parts[0]), int(parts[1]), float(parts[2]), float(parts[3]), float(parts[4]))
 
   async def set_pallet_x(self, station_id, x_position_count, world_x, world_y, world_z):
-    await self._new.set_pallet_x(station_id, x_position_count, world_x, world_y, world_z)
+    await self.send_command(
+      f"PalletX {station_id} {x_position_count} {world_x} {world_y} {world_z}"
+    )
 
   async def get_pallet_y(self, station_id):
-    return await self._new.get_pallet_y(station_id)
+    data = await self.send_command(f"PalletY {station_id}")
+    parts = data.split()
+    if len(parts) != 5:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from PalletY command.")
+    return (int(parts[0]), int(parts[1]), float(parts[2]), float(parts[3]), float(parts[4]))
 
   async def set_pallet_y(self, station_id, y_position_count, world_x, world_y, world_z):
-    await self._new.set_pallet_y(station_id, y_position_count, world_x, world_y, world_z)
+    await self.send_command(
+      f"PalletY {station_id} {y_position_count} {world_x} {world_y} {world_z}"
+    )
 
   async def get_pallet_z(self, station_id):
-    return await self._new.get_pallet_z(station_id)
+    data = await self.send_command(f"PalletZ {station_id}")
+    parts = data.split()
+    if len(parts) != 5:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from PalletZ command.")
+    return (int(parts[0]), int(parts[1]), float(parts[2]), float(parts[3]), float(parts[4]))
 
   async def set_pallet_z(self, station_id, z_position_count, world_x, world_y, world_z):
-    await self._new.set_pallet_z(station_id, z_position_count, world_x, world_y, world_z)
+    await self.send_command(
+      f"PalletZ {station_id} {z_position_count} {world_x} {world_y} {world_z}"
+    )
 
   async def pick_plate_station(
     self, station_id, horizontal_compliance=False, horizontal_compliance_torque=0
   ):
-    return await self._new.pick_plate_station(
-      station_id, horizontal_compliance, horizontal_compliance_torque
+    horizontal_compliance_int = 1 if horizontal_compliance else 0
+    ret_code = await self.send_command(
+      f"PickPlate {station_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
     )
+    return ret_code != "0"
 
   async def place_plate_station(
     self, station_id, horizontal_compliance=False, horizontal_compliance_torque=0
   ):
-    await self._new.place_plate_station(
-      station_id, horizontal_compliance, horizontal_compliance_torque
+    horizontal_compliance_int = 1 if horizontal_compliance else 0
+    await self.send_command(
+      f"PlacePlate {station_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
     )
 
   async def get_rail_position(self, station_id):
-    return await self._new.get_rail_position(station_id)
+    data = await self.send_command(f"Rail {station_id}")
+    return float(data)
 
   async def set_rail_position(self, station_id, rail_position):
-    await self._new.set_rail_position(station_id, rail_position)
+    await self.send_command(f"Rail {station_id} {rail_position}")
 
   async def teach_plate_station(self, station_id, z_clearance=50.0):
-    await self._new.teach_plate_station(station_id, z_clearance)
+    await self.send_command(f"TeachPlate {station_id} {z_clearance}")
 
   async def get_station_type(self, station_id):
-    return await self._new.get_station_type(station_id)
+    data = await self.send_command(f"StationType {station_id}")
+    parts = data.split()
+    if len(parts) != 6:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from StationType command.")
+    return (
+      int(parts[0]),
+      int(parts[1]),
+      int(parts[2]),
+      float(parts[3]),
+      float(parts[4]),
+      float(parts[5]),
+    )
 
   async def set_station_type(
     self, station_id, access_type, location_type, z_clearance, z_above, z_grasp_offset
   ):
-    await self._new.set_station_type(
-      station_id, access_type, location_type, z_clearance, z_above, z_grasp_offset
+    await self.send_command(
+      f"StationType {station_id} {access_type} {location_type} {z_clearance} {z_above} {z_grasp_offset}"
     )
 
   async def home_all_if_no_plate(self):
-    return await self._new.home_all_if_no_plate()
+    response = await self.send_command("HomeAll_IfNoPlate")
+    return int(response)
 
   async def _grasp_plate(self, plate_width_mm, finger_speed_percent, grasp_force):
-    return await self._new._grasp_plate(plate_width_mm, finger_speed_percent, grasp_force)
+    response = await self.send_command(
+      f"GraspPlate {plate_width_mm} {finger_speed_percent} {grasp_force}"
+    )
+    return int(response)
 
   async def _release_plate(self, open_width_mm, finger_speed_percent, in_range=0.0):
-    await self._new._release_plate(open_width_mm, finger_speed_percent, in_range)
+    await self.send_command(f"ReleasePlate {open_width_mm} {finger_speed_percent} {in_range}")
 
   async def set_active_gripper(self, gripper_id, spin_mode=0, profile_index=None):
-    await self._new.set_active_gripper(gripper_id, spin_mode, profile_index)
+    if profile_index is not None:
+      await self.send_command(f"SetActiveGripper {gripper_id} {spin_mode} {profile_index}")
+    else:
+      await self.send_command(f"SetActiveGripper {gripper_id} {spin_mode}")
 
   async def get_active_gripper(self):
-    return await self._new.get_active_gripper()
+    response = await self.send_command("GetActiveGripper")
+    return int(response)
 
   async def pick_plate_from_stored_position(
     self, position_id, horizontal_compliance=False, horizontal_compliance_torque=0
   ):
-    await self._new.pick_plate_from_stored_position(
-      position_id, horizontal_compliance, horizontal_compliance_torque
+    horizontal_compliance_int = 1 if horizontal_compliance else 0
+    ret_code = await self.send_command(
+      f"pickplate {position_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
     )
+    if ret_code == "0":
+      raise _new_module.PreciseFlexError(
+        -1, "the force-controlled gripper detected no plate present."
+      )
 
   async def place_plate_to_stored_position(
     self, position_id, horizontal_compliance=False, horizontal_compliance_torque=0
   ):
-    await self._new.place_plate_to_stored_position(
-      position_id, horizontal_compliance, horizontal_compliance_torque
+    horizontal_compliance_int = 1 if horizontal_compliance else 0
+    await self.send_command(
+      f"placeplate {position_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
     )
 
   async def teach_position(self, position_id, z_clearance=50.0):
-    await self._new.teach_position(position_id, z_clearance)
+    await self.send_command(f"teachplate {position_id} {z_clearance}")
 
   def _parse_xyz_response(self, parts):
     return self._new._parse_xyz_response(parts)

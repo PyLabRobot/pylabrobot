@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, cast
 
-from pylabrobot.arms.backend import OrientableArmBackend
+from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
 from pylabrobot.serializer import SerializableMixin
@@ -20,7 +20,7 @@ def _direction_degrees_to_grip_direction(degrees: float) -> int:
   return mapping[normalized]
 
 
-class iSWAP(OrientableArmBackend):
+class iSWAP(OrientableGripperArmBackend):
   def __init__(self, interface: HamiltonLiquidHandler):
     self.interface = interface
     self._version: Optional[str] = None

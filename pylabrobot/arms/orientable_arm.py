@@ -1,19 +1,33 @@
-from typing import List, Optional, Union
+from typing import Optional, Union
 
-from pylabrobot.arms.arm import _BaseArm, _PickedUpState, _resolve_direction, GripOrientation
-from pylabrobot.arms.backend import OrientableArmBackend
+from pylabrobot.arms.arm import _BaseArm, _PickedUpState, GripOrientation
+from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder, ResourceStack
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import SerializableMixin
 
 
+_GRIP_DIRECTION_TO_DEGREES = {
+  GripDirection.FRONT: 0.0,
+  GripDirection.RIGHT: 90.0,
+  GripDirection.BACK: 180.0,
+  GripDirection.LEFT: 270.0,
+}
+
+
+def _resolve_direction(direction: GripOrientation) -> float:
+  if isinstance(direction, GripDirection):
+    return _GRIP_DIRECTION_TO_DEGREES[direction]
+  return direction
+
+
 class OrientableArm(_BaseArm):
   """An arm with rotation capability. E.g. Hamilton iSWAP."""
 
-  def __init__(self, backend: OrientableArmBackend, reference_resource: Resource):
+  def __init__(self, backend: OrientableGripperArmBackend, reference_resource: Resource):
     super().__init__(backend=backend, reference_resource=reference_resource)
-    self.backend: OrientableArmBackend = backend  # type: ignore[assignment]
+    self.backend: OrientableGripperArmBackend = backend  # type: ignore # Union, any OrientableArmBackend
 
   @staticmethod
   def _resource_width_for_direction(resource: Resource, direction: float) -> float:
@@ -52,7 +66,10 @@ class OrientableArm(_BaseArm):
     )
     dir_degrees = _resolve_direction(direction)
     resource_width = self._resource_width_for_direction(resource, dir_degrees)
+    # if gripper:
     await self.pick_up_at_location(location, resource_width, dir_degrees, backend_params)
+    # if suction:
+    # TODO:
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
@@ -125,33 +142,4 @@ class OrientableArm(_BaseArm):
     )
     await self.backend.move_to_location(
       location=location, direction=dir_degrees, backend_params=backend_params
-    )
-
-  async def move_resource(
-    self,
-    resource: Resource,
-    to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
-    intermediate_locations: Optional[List[Coordinate]] = None,
-    pickup_offset: Coordinate = Coordinate.zero(),
-    destination_offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
-    pickup_direction: GripOrientation = GripDirection.FRONT,
-    drop_direction: GripOrientation = GripDirection.FRONT,
-    pickup_backend_params: Optional[SerializableMixin] = None,
-    drop_backend_params: Optional[SerializableMixin] = None,
-  ):
-    await self.pick_up_resource(
-      resource=resource,
-      offset=pickup_offset,
-      pickup_distance_from_top=pickup_distance_from_top,
-      direction=pickup_direction,
-      backend_params=pickup_backend_params,
-    )
-    for loc in intermediate_locations or []:
-      await self.move_picked_up_resource(to=loc)
-    await self.drop_resource(
-      destination=to,
-      offset=destination_offset,
-      direction=drop_direction,
-      backend_params=drop_backend_params,
     )

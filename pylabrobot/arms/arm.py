@@ -3,7 +3,7 @@ from typing import List, Literal, Optional, Tuple, Union
 
 import logging
 
-from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.backend import _BaseArmBackend, GripperArmBackend
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.device import Device
 from pylabrobot.resources import (
@@ -25,19 +25,6 @@ logger = logging.getLogger(__name__)
 
 GripOrientation = Union[GripDirection, float]
 
-_GRIP_DIRECTION_TO_DEGREES = {
-  GripDirection.FRONT: 0.0,
-  GripDirection.RIGHT: 90.0,
-  GripDirection.BACK: 180.0,
-  GripDirection.LEFT: 270.0,
-}
-
-
-def _resolve_direction(direction: GripOrientation) -> float:
-  if isinstance(direction, GripDirection):
-    return _GRIP_DIRECTION_TO_DEGREES[direction]
-  return direction
-
 
 @dataclass
 class _PickedUpState:
@@ -53,6 +40,7 @@ class _BaseArm(Device):
 
   def __init__(self, backend, reference_resource: Resource):
     super().__init__(backend=backend)
+    self.backend: _BaseArmBackend = backend
     self._reference_resource = reference_resource
     self._picked_up: Optional[_PickedUpState] = None
     self._holding_resource_width: Optional[float] = None
@@ -324,12 +312,12 @@ class Arm(_BaseArm):
 
   def __init__(
     self,
-    backend: ArmBackend,
+    backend: GripperArmBackend,
     reference_resource: Resource,
     grip_axis: Literal["x", "y"] = "x",
   ):
     super().__init__(backend=backend, reference_resource=reference_resource)
-    self.backend: ArmBackend = backend
+    self.backend: GripperArmBackend = backend
     self._grip_axis = grip_axis
 
   def _resource_width(self, resource: Resource) -> float:
