@@ -1,9 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
-from pylabrobot.arms.standard import JointCoords
 from pylabrobot.machines.backend import MachineBackend
 
 
@@ -78,20 +77,20 @@ class SCARABackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def approach(
     self,
-    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ) -> None:
     """Move the arm to an approach position (offset from target).
 
     Args:
-      position: Target position (CartesianCoords or JointCoords)
+      position: Target position (CartesianCoords or joint position dict)
       access: Access pattern defining how to approach the target.  Defaults to VerticalAccess() if not specified.
     """
 
   @abstractmethod
   async def pick_up_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     plate_width: float,
     access: Optional[AccessPattern] = None,
   ) -> None:
@@ -105,7 +104,7 @@ class SCARABackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def drop_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ) -> None:
     """Place a plate at the specified position.
@@ -116,13 +115,25 @@ class SCARABackend(MachineBackend, metaclass=ABCMeta):
     """
 
   @abstractmethod
-  async def move_to(self, position: Union[PreciseFlexCartesianCoords, JointCoords]) -> None:
+  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]) -> None:
     """Move the arm to a specified position in 3D space or in joint space."""
 
   @abstractmethod
-  async def get_joint_position(self) -> JointCoords:
+  async def get_joint_position(self) -> Dict[int, float]:
     """Get the current position of the arm in joint space."""
 
   @abstractmethod
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
+
+  @abstractmethod
+  async def freedrive_mode(self, free_axes: List[int]) -> None:
+    """Enter freedrive mode, allowing manual movement of the specified joints.
+
+    Args:
+      free_axes: List of joint indices to free.
+    """
+
+  @abstractmethod
+  async def end_freedrive_mode(self) -> None:
+    """Exit freedrive mode."""

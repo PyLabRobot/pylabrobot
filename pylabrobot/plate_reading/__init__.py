@@ -11,6 +11,10 @@ from .agilent import (
   SynergyH1Backend,
 )
 from .bmg_labtech import CLARIOstarBackend
+from .byonoy import (
+  ByonoyAbsorbance96AutomateBackend,
+  ByonoyLuminescence96AutomateBackend,
+)
 from .chatterbox import PlateReaderChatterboxBackend
 from .image_reader import ImageReader
 from .imager import Imager
@@ -44,4 +48,8 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+<<<<<<< tecan-microplate-reader
 from .tecan import TecanInfinite200ProBackend
+=======
+from .tecan.spark20m.spark_backend import ExperimentalSparkBackend
+>>>>>>> main

@@ -31,7 +31,12 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
 
   async def setup(self):
     # Setup serial communication for USB
-    self._serial = Serial(port=self.port, baudrate=115200, timeout=3)
+    self._serial = Serial(
+      human_readable_device_name="Opentrons Temperature Module",
+      port=self.port,
+      baudrate=115200,
+      timeout=3,
+    )
     await self._serial.setup()
 
   async def stop(self):

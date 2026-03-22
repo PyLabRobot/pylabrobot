@@ -24,6 +24,7 @@ class TestPetriDish(unittest.TestCase):
         "material_z_thickness": None,
         "compute_volume_from_height": None,
         "compute_height_from_volume": None,
+        "height_volume_data": None,
         "parent_name": None,
         "type": "PetriDish",
         "children": [],
@@ -32,6 +33,7 @@ class TestPetriDish(unittest.TestCase):
         "max_volume": 121500.0,
         "model": None,
         "barcode": None,
+        "preferred_pickup_location": None,
       },
     )
 
@@ -53,6 +55,7 @@ class TestPetriDish(unittest.TestCase):
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "model": None,
         "barcode": None,
+        "preferred_pickup_location": None,
       },
     )
 

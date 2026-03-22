@@ -55,27 +55,39 @@ class FTDI(IOBase):
 
   def __init__(
     self,
+    human_readable_device_name: str,
     device_id: Optional[str] = None,
     vid: Optional[int] = None,
     pid: Optional[int] = None,
+    interface_select: Optional[int] = None,
   ):
     if not HAS_PYLIBFTDI:
       global _FTDI_ERROR
-      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_ERROR}")
+      raise RuntimeError(
+        "pylibftdi is not installed. Install with: pip install pylabrobot[ftdi]. "
+        f"Import error: {_FTDI_ERROR}"
+      )
     if not HAS_PYUSB:
       global _PYUSB_ERROR
-      raise RuntimeError(f"pyusb not installed. Import error: {_PYUSB_ERROR}")
+      raise RuntimeError(
+        "pyusb is not installed. Install with: pip install pylabrobot[ftdi]. "
+        f"Import error: {_PYUSB_ERROR}"
+      )
 
+    self._human_readable_device_name = human_readable_device_name
     self._device_id = device_id
     self._vid = vid
     self._pid = pid
+    self._interface_select = interface_select
 
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
-      raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
+      raise RuntimeError(
+        f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active"
+      )
 
   @property
   def dev(self) -> "Device":
@@ -127,12 +139,16 @@ class FTDI(IOBase):
       # device matches all specified criteria
       candidates.append(device)
 
-    connected_devices_string = ", ".join(
-      [
-        f"{usb.util.get_string(d, d.iSerialNumber)} (VID:PID {d.idVendor:04x}:{d.idProduct:04x})"
-        for d in usb.core.find(find_all=True)
-      ]
-    )
+    connected_devices_list = []
+    for d in usb.core.find(find_all=True):
+      try:
+        sn = usb.util.get_string(d, d.iSerialNumber)
+      except ValueError:
+        sn = ""
+      connected_devices_list.append(f"{sn} (VID:PID {d.idVendor:04x}:{d.idProduct:04x})")
+
+    connected_devices_string = ", ".join(connected_devices_list)
+
     logger.debug(
       f"FTDI device resolution: found {len(candidates)} candidates for "
       f"VID:PID {self._vid}:{self._pid}, device_id {self._device_id}: " + connected_devices_string
@@ -171,12 +187,18 @@ class FTDI(IOBase):
       self._device_id = self._resolve_device_serial()
 
       # Create and open device
-      self._dev = Device(lazy_open=True, device_id=self.device_id, pid=self._pid, vid=self._vid)
+      self._dev = Device(
+        lazy_open=True,
+        device_id=self.device_id,
+        pid=self._pid,
+        vid=self._vid,
+        interface_select=self._interface_select,
+      )
       self._dev.open()
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
       raise RuntimeError(
-        f"Failed to open FTDI device: {e}. "
+        f"Failed to open FTDI device for '{self._human_readable_device_name}': {e}. "
         "Is the device connected? Is it in use by another process? "
         "Try restarting the kernel."
       ) from e
@@ -307,6 +329,7 @@ class FTDI(IOBase):
 
   def serialize(self):
     return {
+      "human_readable_device_name": self._human_readable_device_name,
       "device_id": self._device_id,
       "vid": self._vid,
       "pid": self._pid,
@@ -314,8 +337,8 @@ class FTDI(IOBase):
 
 
 class FTDIValidator(FTDI):
-  def __init__(self, cr: "CaptureReader", device_id: str):
-    super().__init__(device_id=device_id)
+  def __init__(self, cr: "CaptureReader", human_readable_device_name: str, device_id: str):
+    super().__init__(human_readable_device_name=human_readable_device_name, device_id=device_id)
     self.cr = cr
 
   async def setup(self):

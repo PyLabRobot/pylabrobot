@@ -71,6 +71,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     super().__init__()
     self.io = USB(
+      human_readable_device_name="Hamilton Liquid Handler",
       id_vendor=0x08AF,
       id_product=id_product,
       device_address=device_address,
@@ -83,6 +84,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self.id_ = 0
 
     self._reading_thread: Optional[threading.Thread] = None
+    self._reading_thread_stop = threading.Event()
     self._waiting_tasks: List[HamiltonTask] = []
     self._tth2tti: dict[int, int] = {}  # hash to tip type index
 
@@ -100,10 +102,19 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   async def setup(self):
     await super().setup()
     await self.io.setup()
+    self._reading_thread_stop.clear()
+    self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
+    self._reading_thread.start()
 
   async def stop(self):
+    self._reading_thread_stop.set()
+    if self._reading_thread is not None:
+      self._reading_thread.join(timeout=10)
+      self._reading_thread = None
     for task in self._waiting_tasks:
-      task.fut.set_exception(RuntimeError("Stopping HamiltonLiquidHandler."))
+      task.loop.call_soon_threadsafe(
+        task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
+      )
     self._waiting_tasks.clear()
     self._tth2tti.clear()
     await self.io.stop()
@@ -112,6 +123,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     usb_serialized = self.io.serialize()
     del usb_serialized["id_vendor"]
     del usb_serialized["id_product"]
+    del usb_serialized["human_readable_device_name"]
     liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
     return {**usb_serialized, **liquid_handler_serialized}
 
@@ -294,16 +306,16 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     cmd: str,
     timeout: int,
   ) -> None:
-    """Submit a task to the reading thread. Starts reading thread if it is not already running."""
+    """Submit a task to the reading thread."""
 
     timeout_time = time.time() + timeout
     self._waiting_tasks.append(
       HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
     )
 
-    # Start reading thread if it is not already running.
-    if len(self._waiting_tasks) == 1:  # self._reading_thread is None
-      self._reading_thread = threading.Thread(target=self._reading_thread_main)
+    if self._reading_thread is None or not self._reading_thread.is_alive():
+      self._reading_thread_stop.clear()
+      self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
       self._reading_thread.start()
 
   @abstractmethod
@@ -324,7 +336,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     loop.run_until_complete(self._continuously_read())
 
   async def _continuously_read(self) -> None:
-    """Continuously read from the USB port until all tasks are completed.
+    """Continuously read from the USB port until stop is requested.
 
     Tasks are stored in the `self._waiting_tasks` list, and contain a future that will be
     completed when the task is finished. Tasks are submitted to the list using the
@@ -335,7 +347,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     list. If a task has timed out, complete the future with a `TimeoutError`.
     """
 
-    while len(self._waiting_tasks) > 0:
+    while not self._reading_thread_stop.is_set():
       for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
         task = self._waiting_tasks[idx]
         if time.time() > task.timeout_time:
@@ -345,6 +357,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
             TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
           )
           del self._waiting_tasks[idx]
+
+      if len(self._waiting_tasks) == 0:
+        await asyncio.sleep(0.01)
+        continue
 
       try:
         resp = (await self.io.read()).decode("utf-8")
@@ -376,8 +392,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
             task.loop.call_soon_threadsafe(task.fut.set_result, resp)
           del self._waiting_tasks[idx]
           break
-
-    self._reading_thread = None
 
   def _ops_to_fw_positions(
     self, ops: Sequence[PipettingOp], use_channels: List[int]

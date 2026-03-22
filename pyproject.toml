@@ -1,7 +1,63 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyLabRobot"
+description = "A hardware agnostic platform for lab automation"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dynamic = ["version"]
+dependencies = ["typing_extensions", "websockets"]
+
+[project.optional-dependencies]
+serial = ["pyserial"]
+usb = ["pyusb", "libusb-package"]
+ftdi = ["pylibftdi", "pyusb"]
+hid = ["hid"]
+modbus = ["pymodbus>=3.0.0,<3.7.0"]
+opentrons = ["opentrons-http-api-client==0.2.0"]
+sila = ["zeroconf>=0.131.0", "grpcio"]
+microscopy = ["numpy>=1.26", "opencv-python"]
+pico = ["PyLabRobot[microscopy,sila]"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila]"]
+test = [
+  "pytest",
+  "pytest-timeout",
+]
+dev = [
+  "PyLabRobot[all,test]",
+
+  # lint/type
+  "mypy==1.18.2",
+  "ruff==0.15.4",
+
+  # docs
+  "sphinx-reredirects",
+  "nbconvert",
+  "sphinx-sitemap",
+  "pydata-sphinx-theme",
+  "myst_nb",
+  "sphinx_copybutton",
+]
+
+[project.urls]
+Homepage = "https://github.com/pylabrobot/pylabrobot"
+
+[tool.setuptools.dynamic]
+version = {file = "pylabrobot/version.txt"}
+
+[tool.setuptools.packages.find]
+namespaces = false
+exclude = ["tools*", "docs*"]
+
+[tool.setuptools.package-data]
+pylabrobot = ["visualizer/*", "version.txt"]
+
 [tool.ruff]
 line-length = 100
 indent-width = 2
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-

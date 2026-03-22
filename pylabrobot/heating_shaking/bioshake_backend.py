@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
@@ -31,6 +32,7 @@ class BioShake(HeaterShakerBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=10,
       timeout=self.timeout,
+      human_readable_device_name="BioShake",
     )
 
   async def _send_command(self, cmd: str, delay: float = 0.5, timeout: float = 2):
@@ -126,7 +128,7 @@ class BioShake(HeaterShakerBackend):
     # Initialize the BioShake into home position
     await self._send_command(cmd="shakeGoHome", delay=5)
 
-  async def shake(self, speed: float, acceleration: int = 0):
+  async def start_shaking(self, speed: float, acceleration: int = 0):
     # Check if speed is an integer
     if isinstance(speed, float):
       if not speed.is_integer():
@@ -141,9 +143,9 @@ class BioShake(HeaterShakerBackend):
     min_speed = int(float(await self._send_command(cmd="getShakeMinRpm", delay=0.2)))
     max_speed = int(float(await self._send_command(cmd="getShakeMaxRpm", delay=0.2)))
 
-    assert (
-      min_speed <= speed <= max_speed
-    ), f"Speed {speed} RPM is out of range. Allowed range is {min_speed}{max_speed} RPM"
+    assert min_speed <= speed <= max_speed, (
+      f"Speed {speed} RPM is out of range. Allowed range is {min_speed}{max_speed} RPM"
+    )
 
     # Set the speed of the shaker
     set_speed_cmd = f"setShakeTargetSpeed{speed}"
@@ -163,9 +165,9 @@ class BioShake(HeaterShakerBackend):
     min_accel = int(float(await self._send_command(cmd="getShakeAccelerationMin", delay=0.2)))
     max_accel = int(float(await self._send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
-    assert (
-      min_accel <= acceleration <= max_accel
-    ), f"Acceleration {acceleration} seconds is out of range. Allowed range is {min_accel}-{max_accel} seconds"
+    assert min_accel <= acceleration <= max_accel, (
+      f"Acceleration {acceleration} seconds is out of range. Allowed range is {min_accel}-{max_accel} seconds"
+    )
 
     # Set the acceleration of the shaker
     set_accel_cmd = f"setShakeAcceleration{acceleration}"
@@ -174,6 +176,15 @@ class BioShake(HeaterShakerBackend):
     # Send the command to start shaking, either with or without duration
 
     await self._send_command(cmd="shakeOn", delay=0.2)
+
+  async def shake(self, speed: float, acceleration: int = 0):
+    warnings.warn(
+      "BioShake.shake() is deprecated and will be removed in a future release. "
+      "Use start_shaking() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    await self.start_shaking(speed=speed, acceleration=acceleration)
 
   async def stop_shaking(self, deceleration: int = 0):
     # Check if decel is an integer
@@ -190,9 +201,9 @@ class BioShake(HeaterShakerBackend):
     min_decel = int(float(await self._send_command(cmd="getShakeAccelerationMin", delay=0.2)))
     max_decel = int(float(await self._send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
-    assert (
-      min_decel <= deceleration <= max_decel
-    ), f"Deceleration {deceleration} seconds is out of range. Allowed range is {min_decel}-{max_decel} seconds"
+    assert min_decel <= deceleration <= max_decel, (
+      f"Deceleration {deceleration} seconds is out of range. Allowed range is {min_decel}-{max_decel} seconds"
+    )
 
     # Set the deceleration of the shaker
     set_decel_cmd = f"setShakeAcceleration{deceleration}"
@@ -200,6 +211,12 @@ class BioShake(HeaterShakerBackend):
 
     # stop shaking
     await self._send_command(cmd="shakeOff", delay=0.2)
+
+    # The BioShake 3000 ELM firmware needs the motor to fully decelerate
+    # before the edge-locking mechanism (ELM) can operate. Without this
+    # delay, subsequent setElmUnlockPos commands return 'e' (error).
+    sleep_time_after_stop = 3
+    await asyncio.sleep(sleep_time_after_stop)
 
   @property
   def supports_locking(self) -> bool:
@@ -220,9 +237,9 @@ class BioShake(HeaterShakerBackend):
     min_temp = int(float(await self._send_command(cmd="getTempMin", delay=0.2)))
     max_temp = int(float(await self._send_command(cmd="getTempMax", delay=0.2)))
 
-    assert (
-      min_temp <= temperature <= max_temp
-    ), f"Temperature {temperature} C is out of range. Allowed range is {min_temp}–{max_temp} C."
+    assert min_temp <= temperature <= max_temp, (
+      f"Temperature {temperature} C is out of range. Allowed range is {min_temp}–{max_temp} C."
+    )
 
     temperature = temperature * 10
 

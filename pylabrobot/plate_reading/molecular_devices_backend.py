@@ -1,6 +1,6 @@
 import warnings
 
-from .molecular_devices.backend import (  # noqa: F401s
+from .molecular_devices.backend import (  # noqa: F401
   MolecularDevicesBackend,
   MolecularDevicesSettings,
 )

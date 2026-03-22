@@ -1,4 +1,4 @@
-""" Corning-Costar plates. """
+"""Corning-Costar plates."""
 
 from typing import Optional
 

@@ -30,6 +30,7 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     serial_number: Optional[str] = None,
   ):
     self.io = USB(
+      human_readable_device_name="Hamilton Heater Shaker Box",
       id_vendor=id_vendor,
       id_product=id_product,
       device_address=device_address,
@@ -96,7 +97,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
       "interface": None,  # TODO: implement serialization
     }
 
-  async def shake(
+  async def start_shaking(
     self,
     speed: float = 800,
     direction: Literal[0, 1] = 0,
@@ -125,6 +126,26 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
         break
       if timeout is not None and time.time() - now > timeout:
         raise TimeoutError("Failed to start shaking within timeout")
+
+  async def shake(
+    self,
+    speed: float = 800,
+    direction: Literal[0, 1] = 0,
+    acceleration: int = 1_000,
+    timeout: Optional[float] = 30,
+  ):
+    warnings.warn(
+      "HamiltonHeaterShakerBackend.shake() is deprecated and will be removed in a future release. "
+      "Use start_shaking() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    await self.start_shaking(
+      speed=speed,
+      direction=direction,
+      acceleration=acceleration,
+      timeout=timeout,
+    )
 
   async def stop_shaking(self):
     await self._stop_shaking()
@@ -174,7 +195,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def set_temperature(self, temperature: float):
     """set temperature in Celsius"""
     assert 0 < temperature <= 105
-    temp_str = f"{round(10*temperature):04d}"
+    temp_str = f"{round(10 * temperature):04d}"
     return await self.interface.send_hhs_command(index=self.index, command="TA", ta=temp_str)
 
   async def _get_current_temperature(self) -> Dict[str, float]:

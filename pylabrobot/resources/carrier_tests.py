@@ -22,6 +22,10 @@ from .utils import create_ordered_items_2d
 from .well import Well
 
 
+def _make_test_deck() -> Deck:
+  return Deck(size_x=100, size_y=100, size_z=100)
+
+
 class CarrierTests(unittest.TestCase):
   def setUp(self):
     self.A = TipRack(name="A", size_x=5, size_y=5, size_z=5, ordered_items={})
@@ -86,7 +90,7 @@ class CarrierTests(unittest.TestCase):
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
 
-    deck = Deck()
+    deck = _make_test_deck()
     deck.assign_child_resource(carrier, location=Coordinate.zero())
 
     self.assertEqual(deck.get_resource("carrier"), carrier)
@@ -109,7 +113,7 @@ class CarrierTests(unittest.TestCase):
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
     carrier.unassign_child_resource(plate)
-    deck = Deck()
+    deck = _make_test_deck()
     deck.assign_child_resource(carrier, location=Coordinate.zero())
 
     self.assertIsNone(plate.parent)
@@ -222,6 +226,7 @@ class CarrierTests(unittest.TestCase):
         "category": "tip_carrier",
         "model": None,
         "barcode": None,
+        "preferred_pickup_location": None,
         "parent_name": None,
         "children": [
           {
@@ -243,6 +248,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-1",
@@ -263,6 +269,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-2",
@@ -283,6 +290,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-3",
@@ -303,6 +311,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-4",
@@ -323,6 +332,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
         ],
       },

@@ -30,11 +30,27 @@ function setRootResource(data) {
   resource.location = { x: 0, y: 0, z: 0 };
   resource.draw(resourceLayer);
 
-  // center the root resource on the stage.
-  let centerXOffset = (stage.width() - resource.size_x) / 2;
-  let centerYOffset = (stage.height() - resource.size_y) / 2;
-  stage.x(centerXOffset);
-  stage.y(-centerYOffset);
+  // Store globally so fitToViewport() can use it.
+  rootResource = resource;
+
+  fitToViewport();
+
+  buildResourceTree(resource);
+}
+
+// Save the full serialized resource data before it is destroyed.
+// Called from the resource_unassigned handler while the resource and all its
+// children are still intact. The serialized data is later used by buildSingleArm
+// to create a live Konva stage using the exact same draw() code as the main canvas.
+// Cost: one serialize() call per unassigned resource — negligible.
+function snapshotResource(resourceName) {
+  var res = resources[resourceName];
+  if (!res) return;
+  try {
+    resourceSnapshots[resourceName] = res.serialize();
+  } catch (e) {
+    console.warn("[snapshot] failed for " + resourceName, e);
+  }
 }
 
 function removeResource(resourceName) {
@@ -46,7 +62,15 @@ function setState(allStates) {
   for (let resourceName in allStates) {
     let state = allStates[resourceName];
     let resource = resources[resourceName];
-    resource.setState(state);
+    if (!resource) {
+      console.warn(`[setState] resource not found: ${resourceName}`);
+      continue;
+    }
+    try {
+      resource.setState(state);
+    } catch (e) {
+      console.error(`[setState] error for ${resourceName}:`, e);
+    }
   }
 }
 
@@ -60,16 +84,29 @@ async function processCentralEvent(event, data) {
       resource = loadResource(data.resource);
       resource.draw(resourceLayer);
       setState(data.state);
+      addResourceToTree(resource);
       break;
 
     case "resource_unassigned":
+      // Snapshot the resource before destruction so the arm panel can show a
+      // pixel-perfect replica. Done here (not in destroy()) because the Konva
+      // group and all children are guaranteed intact at this point.
+      snapshotResource(data.resource_name);
+      removeResourceFromTree(data.resource_name);
       removeResource(data.resource_name);
       break;
 
     case "set_state":
       let allStates = data;
       setState(allStates);
+      // Update only the affected sidepanel nodes instead of rebuilding the entire tree
+      for (let resourceName in allStates) {
+        updateSidepanelState(resourceName);
+      }
+      break;
 
+    case "show_machine_tools":
+      openAllMachineToolPanels();
       break;
 
     default:

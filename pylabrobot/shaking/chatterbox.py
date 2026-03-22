@@ -12,7 +12,7 @@ class ShakerChatterboxBackend(ShakerBackend):
   async def stop(self):
     print("Stopping shaker")
 
-  async def shake(self, speed: float):
+  async def start_shaking(self, speed: float):
     print("Shaking at speed", speed)
 
   async def stop_shaking(self):
