@@ -3,13 +3,15 @@
 import warnings
 
 from pylabrobot.resources.trough import Trough, TroughBottomType
-from pylabrobot.utils.interpolation import interpolate_1d
 
 # --------------------------------------------------------------------------- #
 # Hamilton 1-trough 60 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_60ml_Vb_height_to_volume_measurements = {
+# Calibration data: height (mm) → volume (µL).
+# Obtained via ztouch probing of cavity_bottom, manual addition of known volumes,
+# and LLD measurement of liquid height relative to cavity_bottom.
+_hamilton_1_trough_60mL_Vb_height_volume_data = {
   0.0: 0.0,
   2.2: 500.0,
   3.5: 1_000.0,
@@ -34,49 +36,16 @@ _hamilton_1_trough_60ml_Vb_height_to_volume_measurements = {
   52.13: 70_000.0,
   58.5: 80_000.0,
 }
-_hamilton_1_trough_60ml_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_60ml_Vb_height_to_volume_measurements.items()
-}
 
 
-def _compute_volume_from_height_hamilton_1_trough_60ml_Vb(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Hamilton 1-trough 60 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 65.5 * 1.05:
-    raise ValueError(f"Height {h} is too large for Hamilton_1_trough_60ml_Vb.")
-
-  vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_60ml_Vb_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_hamilton_1_trough_60ml_Vb(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Hamilton 1-trough 60 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_60ml_Vb_volume_to_height_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, h_mm), 3)
-
-
-def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
+def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 56694-01 (white/translucent), 56694-02 (black/conductive)
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
   Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
   """
   warnings.warn(
-    "hamilton_1_trough_60ml_Vb has a center support that can interfere with pipetting.\
+    "hamilton_1_trough_60mL_Vb has a center support that can interfere with pipetting.\
      If using an odd number of channels, use spread='custom' and define offsets for each channel to avoid collision."
   )
 
@@ -88,10 +57,9 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
     material_z_thickness=1.58,
     through_base_to_container_base=1.0,
     max_volume=60_000,  # units: µL
-    model=hamilton_1_trough_60ml_Vb.__name__,
+    model=hamilton_1_trough_60mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_60ml_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_60ml_Vb,
+    height_volume_data=_hamilton_1_trough_60mL_Vb_height_volume_data,
   )
 
 
@@ -99,7 +67,7 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
 # Hamilton 1-trough 120 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_120mL_Vb_height_to_volume_measurements = {
+_hamilton_1_trough_120mL_Vb_height_volume_data = {
   0.0: 0.0,
   5.85: 4_000.0,
   6.3: 6_000.0,
@@ -117,39 +85,6 @@ _hamilton_1_trough_120mL_Vb_height_to_volume_measurements = {
   70.62: 140_000.0,
   80.0: 160_000.0,
 }
-_hamilton_1_trough_120mL_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_120mL_Vb_height_to_volume_measurements.items()
-}
-
-
-def _compute_volume_from_height_hamilton_1_trough_120mL_Vb(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Hamilton 1-trough 120 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 80.0 * 1.05:
-    raise ValueError(f"Height {h} is too large for hamilton_1_trough_120ml_Vb.")
-
-  vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_120mL_Vb_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_hamilton_1_trough_120mL_Vb(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Hamilton 1-trough 120 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_120mL_Vb_volume_to_height_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, h_mm), 3)
 
 
 def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
@@ -159,7 +94,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
   Compatible with Trough_CAR_?? (194058 <- not yet integrated into PLR!).
   """
   warnings.warn(
-    "hamilton_1_trough_120ml_Vb has 3 (!) in-container support beams that can interfere with "
+    "hamilton_1_trough_120mL_Vb has 3 (!) in-container support beams that can interfere with "
     "pipetting. If using an odd number of channels, use spread='custom' and define offsets "
     "for each channel to avoid collision."
   )
@@ -174,8 +109,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
     max_volume=120_000,  # units: µL
     model=hamilton_1_trough_120mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_120mL_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_120mL_Vb,
+    height_volume_data=_hamilton_1_trough_120mL_Vb_height_volume_data,
   )
 
 
@@ -183,7 +117,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
 # Hamilton 1-trough 200 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_200ml_Vb_height_to_volume_measurements = {
+_hamilton_1_trough_200mL_Vb_height_volume_data = {
   0.0: 0.0,
   5.8: 6_000.0,
   7.4: 10_000.0,
@@ -195,42 +129,9 @@ _hamilton_1_trough_200ml_Vb_height_to_volume_measurements = {
   72.6: 240_000.0,
   88.4: 300_000.0,
 }
-_hamilton_1_trough_200ml_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_200ml_Vb_height_to_volume_measurements.items()
-}
 
 
-def _compute_volume_from_height_hamilton_1_trough_200ml_Vb(h: float) -> float:
-  """Estimate liquid volume (µL) from observed liquid height (mm)
-  in the Hamilton 1-trough 200 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 95 * 1.05:
-    raise ValueError(f"Height {h} is too large for Hamilton_1_trough_200ml_Vb.")
-
-  vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_200ml_Vb_height_to_volume_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, vol_ul), 3)
-
-
-def _compute_height_from_volume_hamilton_1_trough_200ml_Vb(volume_ul: float) -> float:
-  """Estimate liquid height (mm) from known liquid volume (µL)
-  in the Hamilton 1-trough 200 mL (V-bottom, conductive),
-  using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_200ml_Vb_volume_to_height_measurements, bounds_handling="error"
-  )
-  return round(max(0.0, h_mm), 3)
-
-
-def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
+def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 56695-01 (white/translucent), 56695-02 (black/conductive)
   Trough 200 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~300 mL.
@@ -244,10 +145,9 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
     material_z_thickness=1.5,
     through_base_to_container_base=1.2,
     max_volume=200_000,  # units: µL
-    model=hamilton_1_trough_200ml_Vb.__name__,
+    model=hamilton_1_trough_200mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_200ml_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_200ml_Vb,
+    height_volume_data=_hamilton_1_trough_200mL_Vb_height_volume_data,
   )
 
 
@@ -256,16 +156,46 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
 # --------------------------------------------------------------------------- #
 
 
-def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-01
-  """Deprecated alias for hamilton_1_trough_200ml_Vb().
+def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_200mL_Vb().
 
-  This alias will be removed after 2026-01. Use the lowercase
-  `hamilton_1_trough_200ml_Vb()` instead.
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_200mL_Vb()` instead.
   """
   warnings.warn(
-    "Hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-01. "
-    "Use hamilton_1_trough_200ml_Vb() instead.",
+    "Hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_200mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_1_trough_200ml_Vb(name)
+  return hamilton_1_trough_200mL_Vb(name)
+
+
+def hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_200mL_Vb().
+
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_200mL_Vb()` instead (note capital L in 'mL').
+  """
+  warnings.warn(
+    "hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_200mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_1_trough_200mL_Vb(name)
+
+
+def hamilton_1_trough_60ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_60mL_Vb().
+
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_60mL_Vb()` instead (note capital L in 'mL').
+  """
+  warnings.warn(
+    "hamilton_1_trough_60ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_60mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_1_trough_60mL_Vb(name)

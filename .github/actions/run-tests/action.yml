@@ -1,0 +1,30 @@
+name: "Run Tests"
+description: "Sets up Python, installs dependencies, and runs tests"
+inputs:
+  version:
+    description: "Python version"
+    required: true
+  extra:
+    description: "Optional dependency to install"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Update packages
+      run: sudo apt-get update
+      shell: bash
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.version }}
+    - name: Install Dependencies
+      run: |
+        if [ "${{ inputs.extra }}" = "<none>" ]; then
+          pip install -e '.[test]'
+        else
+          pip install -e '.[test,${{ inputs.extra }}]'
+        fi
+      shell: bash
+    - name: Run Pytest
+      run: make test
+      shell: bash

@@ -1,0 +1,4 @@
+[
+  {"name": "0.2.0 (stable)", "version": "0.2.0", "url": "https://docs.pylabrobot.org/0.2.0/", "preferred": true},
+  {"name": "dev", "version": "dev", "url": "https://docs.pylabrobot.org/dev/"}
+]

@@ -39,6 +39,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=write_timeout,
       timeout=timeout,
+      human_readable_device_name="Hamilton Tilt Module",
     )
 
   async def setup(self, initial_offset: int = 0):

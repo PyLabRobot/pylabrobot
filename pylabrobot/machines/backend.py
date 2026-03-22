@@ -2,10 +2,11 @@ import inspect
 import weakref
 from abc import ABC, abstractmethod
 
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
 
 
-class MachineBackend(ABC):
+class MachineBackend(SerializableMixin, ABC):
   """Abstract class for machine backends."""
 
   _instances: weakref.WeakSet["MachineBackend"] = weakref.WeakSet()
@@ -29,9 +30,9 @@ class MachineBackend(ABC):
     class_name = data.pop("type")
     subclass = find_subclass(class_name, cls=cls)
     if subclass is None:
-      raise ValueError(f'Could not find subclass with name "{data["type"]}"')
+      raise ValueError(f'Could not find subclass with name "{class_name}"')
     if inspect.isabstract(subclass):
-      raise ValueError(f'Subclass with name "{data["type"]}" is abstract')
+      raise ValueError(f'Subclass with name "{class_name}" is abstract')
     assert issubclass(subclass, cls)
     return subclass(**data)
 

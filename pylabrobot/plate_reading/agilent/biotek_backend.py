@@ -22,7 +22,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     super().__init__()
     self.timeout = timeout
 
-    self.io = FTDI(device_id=device_id)
+    self.io = FTDI(device_id=device_id, human_readable_device_name="Biotek Cytation 5")
 
     self._version: Optional[str] = None
 
@@ -278,7 +278,8 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
         assert len(group) == 3
         row_index = int(group[0].decode()) - 1  # 1-based index in the response
         column_index = int(group[1].decode()) - 1  # 1-based index in the response
-        value = float(group[2].decode())
+        raw_value = group[2].decode()
+        value = float("nan") if "*" in raw_value else float(raw_value)
         parsed_data[(row_index, column_index)] = value
 
     result: List[List[Optional[float]]] = [
@@ -413,9 +414,9 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     integration_time_milliseconds = integration_time - int(integration_time)
     # TODO: I don't know if the multiple of 0.2 is a firmware requirement, but it's what gen5.exe requires.
     # round because of floating point precision issues
-    assert (
-      round(integration_time_milliseconds * 10) % 2 == 0
-    ), "Integration time milliseconds must be a multiple of 0.2"
+    assert round(integration_time_milliseconds * 10) % 2 == 0, (
+      "Integration time milliseconds must be a multiple of 0.2"
+    )
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 

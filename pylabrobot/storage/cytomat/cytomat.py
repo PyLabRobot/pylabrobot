@@ -4,7 +4,13 @@ import time
 import warnings
 from typing import List, Literal, Optional, Union, cast
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
@@ -49,6 +55,11 @@ class CytomatBackend(IncubatorBackend):
   serial_message_encoding = "utf-8"
 
   def __init__(self, model: Union[CytomatType, str], port: str):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
 
     supported_models = [
@@ -78,6 +89,7 @@ class CytomatBackend(IncubatorBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=1,
       timeout=1,
+      human_readable_device_name="Cytomat",
     )
 
   async def setup(self):
@@ -368,7 +380,7 @@ class CytomatBackend(IncubatorBackend):
   ) -> List[str]:
     shakers = shakers or [1, 2]
     assert all(shaker in [1, 2] for shaker in shakers), "Shaker index must be 1 or 2"
-    return [await self.send_command("se", f"pb 2{idx-1}", f"{frequency:04}") for idx in shakers]
+    return [await self.send_command("se", f"pb 2{idx - 1}", f"{frequency:04}") for idx in shakers]
 
   async def get_incubation_query(
     self, query: Literal["ic", "ih", "io", "it"]
@@ -391,12 +403,12 @@ class CytomatBackend(IncubatorBackend):
   async def get_temperature(self) -> float:
     return (await self.get_incubation_query("it")).actual_value
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **backend_kwargs):
     site = plate.parent
     assert isinstance(site, PlateHolder)
     await self.action_storage_to_transfer(site)
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **backend_kwargs):
     await self.action_transfer_to_storage(site)
 
   async def set_temperature(self, *args, **kwargs):

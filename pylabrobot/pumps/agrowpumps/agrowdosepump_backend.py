@@ -34,6 +34,11 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
   """
 
   def __init__(self, port: str, address: Union[int, str]):
+    if _MODBUS_IMPORT_ERROR is not None:
+      raise RuntimeError(
+        "pymodbus is not installed. Install with: pip install pylabrobot[modbus]. "
+        f"Import error: {_MODBUS_IMPORT_ERROR}"
+      )
     if not isinstance(port, str):
       raise ValueError("Port must be a string")
     self.port = port
@@ -121,7 +126,7 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
   async def _setup_modbus(self):
     if AsyncModbusSerialClient is None:
       raise RuntimeError(
-        "pymodbus is not installed. Please install it with 'pip install pymodbus'."
+        "pymodbus is not installed. Install with: pip install pylabrobot[modbus]."
         f" Import error: {_MODBUS_IMPORT_ERROR}"
       )
     self._modbus = AsyncModbusSerialClient(

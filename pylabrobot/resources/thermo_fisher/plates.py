@@ -249,8 +249,9 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       bottom_type=WellBottomType.U,
       material_z_thickness=31.6 - 29.1 - 1.4,  # from definition, F - L - N
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_height_from_volume=lambda liquid_volume: liquid_volume
-      / (math.pi * ((well_diameter / 2) ** 2)),
+      compute_height_from_volume=lambda liquid_volume: (
+        liquid_volume / (math.pi * ((well_diameter / 2) ** 2))
+      ),
     ),
   )
 
@@ -261,7 +262,7 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
 def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_mm: float) -> float:
   if height_mm > (23.24 - 0.74) * 1.05:
     raise ValueError(
-      f"Height {height_mm} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+      f"Height {height_mm} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
   # Reverse fit: height → volume, 5th-degree polynomial via numeric inversion
   return max(
@@ -278,7 +279,7 @@ def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_
 def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_ul: float) -> float:
   if volume_ul > 305:  # 5% tolerance above 290 µL
     raise ValueError(
-      f"Volume {volume_ul} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+      f"Volume {volume_ul} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
   # Polynomial coefficients: degree 5 fit from volume → height
   return max(
@@ -467,4 +468,40 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
     size_z=9.1,  # from spec
     nesting_z_height=16.7 - 14.86,  # from spec: lid+plate_z - plate_z
     model="Thermo_TS_Nunc_96_assay_300uL_Fb_Lid",
+  )
+
+
+# # # # # # # # # # Thermo_TS_Nalgene_1_troughplate_300000uL_Fb # # # # # # # # # #
+
+
+def Thermo_TS_Nalgene_1_troughplate_300000uL_Fb(name: str) -> Plate:
+  """Thermo Fisher Scientific Nalgene 300mL Flat Bottom Reservoir
+  - Product Number: 12001300 (non-sterile), 12001301 (sterile)
+  - 1-well reservoir with SBS footprint
+  - Max Volume: 300 mL
+  - manufacturer_link: https://www.fishersci.com/shop/products/nalgene-disposable-polypropylene-robotic-reservoirs/12565572
+  - Spec sheet info: https://assets.fishersci.com/TFS-Assets/LCD/Schematics-&-Diagrams/120013XX_0405.PDF
+  """
+  return Plate(
+    name=name,
+    size_x=127.8,  # from spec
+    size_y=85.5,  # from spec
+    size_z=39.9,  # from spec
+    model=Thermo_TS_Nalgene_1_troughplate_300000uL_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=1,  # from spec
+      num_items_y=1,  # from spec
+      dx=(127.8 - 123.8) / 2,  # from spec
+      dy=(85.5 - 82.1) / 2,  # from spec
+      dz=3.3,  # from spec
+      item_dx=0,  # from spec
+      item_dy=0,  # from spec
+      size_x=123.8,  # from spec
+      size_y=82.1,  # from spec
+      size_z=39.9 - 3.3 - 1.15,  # from spec/calculated
+      bottom_type=WellBottomType.FLAT,  # from spec
+      cross_section_type=CrossSectionType.RECTANGLE,  # rectangle wells
+      material_z_thickness=1.15,  # measured.
+    ),
   )

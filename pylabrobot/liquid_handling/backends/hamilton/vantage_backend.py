@@ -1640,17 +1640,17 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if not 0 <= tip_type_table_index <= 99:
       raise ValueError(
-        "tip_type_table_index must be between 0 and 99, but is " f"{tip_type_table_index}"
+        f"tip_type_table_index must be between 0 and 99, but is {tip_type_table_index}"
       )
     if not 0 <= tip_type_table_index <= 99:
       raise ValueError(
-        "tip_type_table_index must be between 0 and 99, but is " f"{tip_type_table_index}"
+        f"tip_type_table_index must be between 0 and 99, but is {tip_type_table_index}"
       )
     if not 1 <= tip_length <= 1999:
-      raise ValueError("tip_length must be between 1 and 1999, but is " f"{tip_length}")
+      raise ValueError(f"tip_length must be between 1 and 1999, but is {tip_length}")
     if not 1 <= maximum_tip_volume <= 56000:
       raise ValueError(
-        "maximum_tip_volume must be between 1 and 56000, but is " f"{maximum_tip_volume}"
+        f"maximum_tip_volume must be between 1 and 56000, but is {maximum_tip_volume}"
       )
 
     return await self.send_command(
@@ -1802,8 +1802,7 @@ class VantageBackend(HamiltonLiquidHandler):
       0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
     ):
       raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
-        "in range 0 to 3600"
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3600"
       )
 
     if tube_2nd_section_height_measured_from_zm is None:
@@ -2117,8 +2116,7 @@ class VantageBackend(HamiltonLiquidHandler):
       0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
     ):
       raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
-        "in range 0 to 3600"
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3600"
       )
 
     if immersion_depth is None:
@@ -2458,8 +2456,7 @@ class VantageBackend(HamiltonLiquidHandler):
       0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
     ):
       raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
-        "in range 0 to 3600"
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3600"
       )
 
     if minimum_height is None:
@@ -3888,6 +3885,16 @@ class VantageBackend(HamiltonLiquidHandler):
     presences_int = cast(List[int], resp["rt"])
     return [bool(p) for p in presences_int]
 
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request tip presence on each channel.
+
+    Returns:
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
+    """
+    result: List[Optional[bool]] = list(await self.query_tip_presence())
+    return result
+
   async def request_height_of_last_lld(self):
     """Request height of last LLD"""
 
@@ -4071,8 +4078,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
       raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
-        "range 0 to 3900"
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3900"
       )
 
     if not 0 <= minimum_height <= 3900:
@@ -4139,7 +4145,7 @@ class VantageBackend(HamiltonLiquidHandler):
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
       raise ValueError(
-        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
       )
     tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
 
@@ -4292,8 +4298,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
       raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
-        "range 0 to 3900"
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3900"
       )
 
     if not -990 <= immersion_depth <= 990:
@@ -4363,7 +4368,7 @@ class VantageBackend(HamiltonLiquidHandler):
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
       raise ValueError(
-        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
       )
     tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
 
@@ -4705,7 +4710,7 @@ class VantageBackend(HamiltonLiquidHandler):
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
       raise ValueError(
-        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
       )
     tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
 

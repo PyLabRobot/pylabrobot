@@ -1,4 +1,4 @@
-""" Corning plates. """
+"""Corning plates."""
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_vbottom,
@@ -13,6 +13,20 @@ from pylabrobot.resources.well import (
 )
 
 # # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
+
+# Well tapers from 6.35 mm (bottom) to 6.86 mm (top) over 10.67 mm depth.
+_cor_96_wellplate_360ul_Fb_height_volume_data = {
+  0.0: 0.0,
+  0.45: 20.0,  # "dead volume" to cover the full flat bottom and ensure LLD detectability
+  1.69: 50.0,
+  3.22: 100.0,
+  4.72: 150.0,
+  6.19: 200.0,
+  7.72: 250.0,
+  8.99: 300.0,
+  10.62: 350.0,
+  10.95: 360.0,
+}
 
 
 def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
@@ -58,6 +72,7 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
+      height_volume_data=_cor_96_wellplate_360ul_Fb_height_volume_data,
     ),
   )
 

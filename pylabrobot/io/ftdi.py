@@ -55,6 +55,7 @@ class FTDI(IOBase):
 
   def __init__(
     self,
+    human_readable_device_name: str,
     device_id: Optional[str] = None,
     vid: Optional[int] = None,
     pid: Optional[int] = None,
@@ -62,11 +63,18 @@ class FTDI(IOBase):
   ):
     if not HAS_PYLIBFTDI:
       global _FTDI_ERROR
-      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_ERROR}")
+      raise RuntimeError(
+        "pylibftdi is not installed. Install with: pip install pylabrobot[ftdi]. "
+        f"Import error: {_FTDI_ERROR}"
+      )
     if not HAS_PYUSB:
       global _PYUSB_ERROR
-      raise RuntimeError(f"pyusb not installed. Import error: {_PYUSB_ERROR}")
+      raise RuntimeError(
+        "pyusb is not installed. Install with: pip install pylabrobot[ftdi]. "
+        f"Import error: {_PYUSB_ERROR}"
+      )
 
+    self._human_readable_device_name = human_readable_device_name
     self._device_id = device_id
     self._vid = vid
     self._pid = pid
@@ -77,7 +85,9 @@ class FTDI(IOBase):
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
-      raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
+      raise RuntimeError(
+        f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active"
+      )
 
   @property
   def dev(self) -> "Device":
@@ -188,7 +198,7 @@ class FTDI(IOBase):
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
       raise RuntimeError(
-        f"Failed to open FTDI device: {e}. "
+        f"Failed to open FTDI device for '{self._human_readable_device_name}': {e}. "
         "Is the device connected? Is it in use by another process? "
         "Try restarting the kernel."
       ) from e
@@ -319,6 +329,7 @@ class FTDI(IOBase):
 
   def serialize(self):
     return {
+      "human_readable_device_name": self._human_readable_device_name,
       "device_id": self._device_id,
       "vid": self._vid,
       "pid": self._pid,
@@ -326,8 +337,8 @@ class FTDI(IOBase):
 
 
 class FTDIValidator(FTDI):
-  def __init__(self, cr: "CaptureReader", device_id: str):
-    super().__init__(device_id=device_id)
+  def __init__(self, cr: "CaptureReader", human_readable_device_name: str, device_id: str):
+    super().__init__(human_readable_device_name=human_readable_device_name, device_id=device_id)
     self.cr = cr
 
   async def setup(self):
