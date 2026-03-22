@@ -121,6 +121,12 @@ class Visualizer:
         indicate liquid volume. Default is ``"F39C12"`` (amber).
     """
 
+    if not HAS_WEBSOCKETS:
+      raise RuntimeError(
+        "The visualizer requires websockets to be installed. "
+        f"Import error: {_WEBSOCKETS_IMPORT_ERROR}"
+      )
+
     self.setup_finished = False
     self._show_machine_tools_at_start = show_machine_tools_at_start
     color = liquid_color.strip().lstrip("#")
@@ -450,11 +456,6 @@ class Visualizer:
 
     Sets up the websocket server. This will run in a separate thread.
     """
-
-    if not HAS_WEBSOCKETS:
-      raise RuntimeError(
-        f"The visualizer requires websockets to be installed. Import error: {_WEBSOCKETS_IMPORT_ERROR}"
-      )
 
     async def run_server():
       self._stop_ = self.loop.create_future()

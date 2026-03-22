@@ -207,9 +207,7 @@ class XPeelBackend(PeelerBackend):
   async def enable_plate_check(self, enabled=True):
     """Enable or disable plate presence check."""
     flag = "y" if enabled else "n"
-    return await self._send_command(
-      f"*platecheck:{flag}", expect_ack=True, wait_for_ready=True
-    )
+    return await self._send_command(f"*platecheck:{flag}", expect_ack=True, wait_for_ready=True)
 
   async def get_seal_sensor_status(self):
     """Get seal sensor threshold value (0-999)."""
@@ -227,9 +225,7 @@ class XPeelBackend(PeelerBackend):
     """Set the lower seal detected threshold (0-999)."""
     if not 0 <= value <= 999:
       raise ValueError("value must be between 0 and 999")
-    return await self._send_command(
-      f"*seallower:{value:03d}", expect_ack=True, wait_for_ready=True
-    )
+    return await self._send_command(f"*seallower:{value:03d}", expect_ack=True, wait_for_ready=True)
 
   async def move_conveyor_out(self):
     """Move conveyor out."""

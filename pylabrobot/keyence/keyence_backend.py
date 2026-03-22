@@ -2,7 +2,13 @@ import asyncio
 import logging
 import time
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.barcode_scanning.backend import (
   BarcodeScannerBackend,
@@ -24,6 +30,11 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     self,
     port: str,
   ):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
 
     # BL-1300 Barcode reader factory default serial communication settings

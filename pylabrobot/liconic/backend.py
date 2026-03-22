@@ -5,7 +5,13 @@ import time
 import warnings
 from typing import List, Optional, Tuple, Union
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
@@ -40,7 +46,6 @@ LICONIC_SITE_HEIGHT_TO_STEPS = {
 }
 
 
-
 class LiconicBackend(
   AutomatedRetrievalBackend,
   TemperatureControllerBackend,
@@ -60,6 +65,11 @@ class LiconicBackend(
     model: Union[LiconicType, str],
     port: str,
   ):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
 
     if isinstance(model, str):
@@ -359,7 +369,9 @@ class LiconicBackend(
     barcode = await barcode_scanner.scan_barcode()
     logger.info(
       "Read barcode from plate at cassette %d, position %d: %s",
-      cassette, plt_position, barcode.data,
+      cassette,
+      plt_position,
+      barcode.data,
     )
     reset = await self._send_command("RS 1910")
     if reset != "OK":
@@ -367,7 +379,9 @@ class LiconicBackend(
     await self._wait_ready()
     return barcode
 
-  async def scan_barcode(self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend) -> Barcode:
+  async def scan_barcode(
+    self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend
+  ) -> Barcode:
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
     await self._send_command(f"WR DM0 {m}")

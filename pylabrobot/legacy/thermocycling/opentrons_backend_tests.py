@@ -1,6 +1,10 @@
 import unittest
 from unittest.mock import patch
 
+import pytest
+
+pytest.importorskip("ot_api")
+
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.legacy.thermocycling.opentrons import OpentronsThermocyclerModuleV1
 from pylabrobot.legacy.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
