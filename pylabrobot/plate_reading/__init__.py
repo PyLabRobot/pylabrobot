@@ -49,7 +49,4 @@ from .standard import (
   Objective,
 )
 
-try:
-  from .tecan.spark20m.spark_backend import SparkBackend
-except ImportError:
-  pass
+from .tecan.spark20m.spark_backend import SparkBackend
