@@ -465,7 +465,7 @@ class USB(IOBase):
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""
 
-    return {
+    d = {
       **super().serialize(),
       "human_readable_device_name": self._human_readable_device_name,
       "id_vendor": self._id_vendor,
@@ -475,9 +475,12 @@ class USB(IOBase):
       "packet_read_timeout": self.packet_read_timeout,
       "read_timeout": self.read_timeout,
       "write_timeout": self.write_timeout,
-      "read_endpoint_address": self.read_endpoint_address,
-      "write_endpoint_address": self.write_endpoint_address,
     }
+    if self.read_endpoint_address is not None:
+      d["read_endpoint_address"] = self.read_endpoint_address
+    if self.write_endpoint_address is not None:
+      d["write_endpoint_address"] = self.write_endpoint_address
+    return d
 
 
 class USBValidator(USB):
