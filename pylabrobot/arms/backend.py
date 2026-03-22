@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pylabrobot.arms.standard import ArmPosition
 from pylabrobot.device import DeviceBackend
@@ -8,7 +8,63 @@ from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import SerializableMixin
 
 
-class _SharedArmBackend(DeviceBackend, metaclass=ABCMeta):
+# ArmBackend:
+# - pick_up_at_location
+# - drop_at_location
+# - move_to_location
+# - get_cartesian_position
+# - is_holding_resource
+
+# CanGrip
+# - open_gripper
+# - close_gripper
+# - is_gripper_closed
+
+# CanSuction
+# - start_suction
+# - stop_suction
+
+# CanFreedrive
+# - start_freedrive_mode
+# - stop_freedrive_mode
+
+# Joints
+# - pick_up_at_joint_position
+# - drop_at_joint_position
+# - get_joint_position
+
+
+class CanFreedrive(metaclass=ABCMeta):
+  """Mixin for arms that support freedrive (manual guidance) mode."""
+
+  @abstractmethod
+  async def start_freedrive_mode(
+    self, free_axes: List[int], backend_params: Optional[SerializableMixin] = None
+  ) -> None:
+    """Enter freedrive mode, allowing manual movement of the specified joints.
+
+    Args:
+      free_axes: List of joint indices to free. Use [0] for all axes.
+    """
+
+  @abstractmethod
+  async def stop_freedrive_mode(self, backend_params: Optional[SerializableMixin] = None) -> None:
+    """Exit freedrive mode."""
+
+
+class _BaseArmBackend(DeviceBackend, metaclass=ABCMeta):
+  @abstractmethod
+  async def halt(self, backend_params: Optional[SerializableMixin] = None) -> None:
+    """Stop any ongoing movement of the arm."""
+
+  @abstractmethod
+  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+    """Park the arm to its default position."""
+
+
+class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+  """Backend for a simple arm (no rotation capability). E.g. Hamilton core grippers."""
+
   @abstractmethod
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
@@ -24,19 +80,6 @@ class _SharedArmBackend(DeviceBackend, metaclass=ABCMeta):
   @abstractmethod
   async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
     """Check if the gripper is currently closed."""
-
-  @abstractmethod
-  async def halt(self, backend_params: Optional[SerializableMixin] = None) -> None:
-    """Stop any ongoing movement of the arm."""
-
-  @abstractmethod
-  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
-    """Park the arm to its default position."""
-
-
-
-class ArmBackend(_SharedArmBackend, metaclass=ABCMeta):
-  """Backend for a simple arm (no rotation capability). E.g. Hamilton core grippers."""
 
   @abstractmethod
   async def pick_up_at_location(
@@ -63,7 +106,7 @@ class ArmBackend(_SharedArmBackend, metaclass=ABCMeta):
     """Move the held object to the specified location."""
 
 
-class OrientableArmBackend(_SharedArmBackend, metaclass=ABCMeta):
+class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
   """Backend for an arm with rotation capability. E.g. Hamilton iSwap."""
 
   @abstractmethod
@@ -96,7 +139,7 @@ class OrientableArmBackend(_SharedArmBackend, metaclass=ABCMeta):
     """Move the held object to the specified location with rotation."""
 
 
-class JointArmBackend(OrientableArmBackend, metaclass=ABCMeta):
+class JointGripperArmBackend(OrientableGripperArmBackend, metaclass=ABCMeta):
   """Backend for a joint-space arm with rotation capability. E.g. PreciseFlex, KX2."""
 
   @abstractmethod
@@ -136,7 +179,7 @@ class JointArmBackend(OrientableArmBackend, metaclass=ABCMeta):
     """Get the current position of the arm in Cartesian space."""
 
 
-class ArticulatedArmBackend(_SharedArmBackend, metaclass=ABCMeta):
+class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
   @abstractmethod
   async def pick_up_at_location(
     self,

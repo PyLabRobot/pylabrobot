@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.backend import GripperArmBackend
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
 from pylabrobot.serializer import SerializableMixin
 
 
-class CoreGripper(ArmBackend):
+class CoreGripper(GripperArmBackend):
   """Backend for Hamilton CoRe gripper tools.
 
   The CoRe gripper uses two pipetting channels to grip plates along the Y axis.
@@ -183,8 +183,9 @@ class CoreGripper(ArmBackend):
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
   ) -> None:
-    raise NotImplementedError("CoreGripper does not support close_gripper directly. "
-                              "Use pick_up_at_location instead.")
+    raise NotImplementedError(
+      "CoreGripper does not support close_gripper directly. Use pick_up_at_location instead."
+    )
 
   async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
     raise NotImplementedError()
@@ -193,5 +194,6 @@ class CoreGripper(ArmBackend):
     raise NotImplementedError()
 
   async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
-    raise NotImplementedError("CoreGripper does not support park. "
-                              "Tool management is handled by the STAR backend.")
+    raise NotImplementedError(
+      "CoreGripper does not support park. Tool management is handled by the STAR backend."
+    )

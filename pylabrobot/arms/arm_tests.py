@@ -4,9 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 from pylabrobot.arms.arm import Arm
 from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.joint_arm import JointArm
-from pylabrobot.arms.backend import ArmBackend, OrientableArmBackend, JointArmBackend
+from pylabrobot.arms.backend import (
+  GripperArmBackend,
+  OrientableGripperArmBackend,
+  JointGripperArmBackend,
+)
 from pylabrobot.arms.standard import GripDirection
-from pylabrobot.resources import Coordinate, Lid, Resource, ResourceHolder, ResourceStack
+from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
 
 def _assert_location(test, call, x, y, z, places=1):
@@ -42,7 +46,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
   """Test Arm (ArmBackend, no rotation). E.g. Hamilton core grippers."""
 
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=ArmBackend)
+    self.mock_backend = MagicMock(spec=GripperArmBackend)
     for method_name in [
       "pick_up_at_location",
       "drop_at_location",
@@ -100,9 +104,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_open_gripper(self):
     await self.arm.open_gripper(gripper_width=50.0)
-    self.mock_backend.open_gripper.assert_called_once_with(
-      gripper_width=50.0, backend_params=None
-    )
+    self.mock_backend.open_gripper.assert_called_once_with(gripper_width=50.0, backend_params=None)
 
   async def test_halt(self):
     await self.arm.halt()
@@ -125,7 +127,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
   """Test OrientableArm coordinate computation with fictional resources."""
 
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=OrientableArmBackend)
+    self.mock_backend = MagicMock(spec=OrientableGripperArmBackend)
     for method_name in [
       "pick_up_at_location",
       "drop_at_location",
@@ -183,7 +185,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
 class TestJointArm(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=JointArmBackend)
+    self.mock_backend = MagicMock(spec=JointGripperArmBackend)
     for method_name in [
       "get_joint_position",
       "get_cartesian_position",
@@ -210,15 +212,11 @@ class TestJointArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_open_gripper(self):
     await self.arm.open_gripper(gripper_width=50.0)
-    self.mock_backend.open_gripper.assert_called_once_with(
-      gripper_width=50.0, backend_params=None
-    )
+    self.mock_backend.open_gripper.assert_called_once_with(gripper_width=50.0, backend_params=None)
 
   async def test_close_gripper(self):
     await self.arm.close_gripper(gripper_width=50.0)
-    self.mock_backend.close_gripper.assert_called_once_with(
-      gripper_width=50.0, backend_params=None
-    )
+    self.mock_backend.close_gripper.assert_called_once_with(gripper_width=50.0, backend_params=None)
 
   async def test_is_gripper_closed(self):
     await self.arm.is_gripper_closed()
