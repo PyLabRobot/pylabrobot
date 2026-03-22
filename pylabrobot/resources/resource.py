@@ -125,21 +125,30 @@ class Resource(SerializableMixin):
     return self._local_size_z
 
   def serialize(self) -> dict:
-    return {
+    data: dict = {
       "name": self.name,
       "type": self.__class__.__name__,
       "size_x": self._size_x,
       "size_y": self._size_y,
       "size_z": self._size_z,
-      "location": serialize(self.location),
-      "rotation": serialize(self.rotation),
-      "category": self.category,
-      "model": self.model,
-      "barcode": self.barcode.serialize() if self.barcode is not None else None,
-      "preferred_pickup_location": serialize(self.preferred_pickup_location),
-      "children": [child.serialize() for child in self.children],
-      "parent_name": self.parent.name if self.parent is not None else None,
     }
+    if self.location is not None:
+      data["location"] = serialize(self.location)
+    if not (self.rotation.x == 0 and self.rotation.y == 0 and self.rotation.z == 0):
+      data["rotation"] = serialize(self.rotation)
+    if self.category is not None:
+      data["category"] = self.category
+    if self.model is not None:
+      data["model"] = self.model
+    if self.barcode is not None:
+      data["barcode"] = self.barcode.serialize()
+    if self.preferred_pickup_location is not None:
+      data["preferred_pickup_location"] = serialize(self.preferred_pickup_location)
+    if self.children:
+      data["children"] = [child.serialize() for child in self.children]
+    if self.parent is not None:
+      data["parent_name"] = self.parent.name
+    return data
 
   @property
   def name(self) -> str:
@@ -750,15 +759,16 @@ class Resource(SerializableMixin):
       "parent_name",
       "location",
     ]:  # delete meta keys
-      del data_copy[key]
-    children_data = data_copy.pop("children")
-    rotation = data_copy.pop("rotation")
+      data_copy.pop(key, None)
+    children_data = data_copy.pop("children", [])
+    rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
-    resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+    if rotation is not None:
+      resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
-      resource.barcode = Barcode.deserialize(barcode)
+      resource.barcode = Barcode(**barcode)
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
 
