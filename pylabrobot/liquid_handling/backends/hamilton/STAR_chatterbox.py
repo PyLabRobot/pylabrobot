@@ -12,7 +12,17 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   MachineConfiguration,
   STARBackend,
 )
+from pylabrobot.liquid_handling.pipette_batch_scheduling import (
+  plan_batches,
+  print_batches,
+  validate_channel_selections,
+)
+from pylabrobot.resources.container import Container
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.well import Well
+
+# Type alias for nested enum (for cleaner signatures)
+LLDMode = STARBackend.LLDMode
 
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
   pip_type_1000ul=True,
@@ -213,6 +223,10 @@ class STARChatterboxBackend(STARBackend):
       )
     return self._channels_minimum_y_spacing[channel_idx]
 
+  async def channels_request_y_minimum_spacing(self) -> List[float]:
+    """Return mock per-channel minimum Y spacings for all channels."""
+    return list(self._channels_minimum_y_spacing)
+
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
 
@@ -316,3 +330,73 @@ class STARChatterboxBackend(STARBackend):
 
   async def request_pip_height_last_lld(self):
     return list(range(12))
+
+  async def probe_liquid_heights(
+    self,
+    containers: List[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    lld_mode: LLDMode = LLDMode.GAMMA,
+    search_speed: float = 10.0,
+    n_replicates: int = 1,
+    move_to_z_safety_after: bool = True,
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+    min_traverse_height_during_command: Optional[float] = None,
+    z_position_at_end_of_command: Optional[float] = None,
+    x_grouping_tolerance: Optional[float] = None,
+  ) -> List[float]:
+    """Probe liquid heights by computing from tracked container volumes.
+
+    Instead of simulating hardware LLD, this mock computes liquid heights directly from
+    each container's volume tracker using ``container.compute_height_from_volume()``.
+
+    Args:
+      containers: List of Container objects to probe, one per channel.
+      use_channels: Channel indices to use (0-indexed). Defaults to ``[0, ..., len(containers)-1]``.
+      resource_offsets: Passed to ``plan_batches`` for auto-spreading. See ``plan_batches``.
+      All other parameters: Accepted for API compatibility but unused in mock.
+
+    Returns:
+      Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
+
+    Raises:
+      ValueError: If ``use_channels`` is empty, contains out-of-range indices, or if
+        ``containers`` and ``use_channels`` have different lengths.
+      NoTipError: If any specified channel lacks a tip.
+    """
+    if x_grouping_tolerance is None:
+      x_grouping_tolerance = self._x_grouping_tolerance_mm
+
+    use_channels = validate_channel_selections(
+      containers=containers,
+      use_channels=use_channels,
+      num_channels=self.num_channels,
+    )
+
+    # Validate tip presence using tip tracker
+    for ch in use_channels:
+      self.head[ch].get_tip()  # Raises NoTipError if no tip
+
+    batches = plan_batches(
+      use_channels=use_channels,
+      targets=containers,
+      channel_spacings=self._channels_minimum_y_spacing,
+      x_tolerance=x_grouping_tolerance,
+      wrt_resource=self.deck,
+      resource_offsets=resource_offsets,
+    )
+
+    print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
+
+    # Compute heights from volume trackers
+    heights: List[float] = []
+    for container in containers:
+      volume = container.tracker.get_used_volume()
+      if volume == 0:
+        heights.append(0.0)
+      else:
+        height = container.compute_height_from_volume(volume)
+        heights.append(height)
+
+    print(f"  heights: {[f'{h:.2f}' for h in heights]} mm")
+    return heights
