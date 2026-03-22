@@ -237,7 +237,11 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
   )
   def test_odd_span_center_offset_when_wide_enough(self, mock_offsets):
-    mock_offsets.return_value = [Coordinate(0, 9.0, 0), Coordinate(0, 0.0, 0), Coordinate(0, -9.0, 0)]
+    mock_offsets.return_value = [
+      Coordinate(0, 9.0, 0),
+      Coordinate(0, 0.0, 0),
+      Coordinate(0, -9.0, 0),
+    ]
     # 50mm: max_offset=9.0, 9.0 + 5.5 + 4.5 = 19.0 <= 25.0 -> shift applied
     result = compute_single_container_offsets(self._mock_container(50.0), [0, 1, 2], self.S)
     assert result is not None
@@ -250,7 +254,11 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
   )
   def test_non_consecutive_uses_full_physical_span(self, mock_offsets):
-    mock_offsets.return_value = [Coordinate(0, 10.0, 0), Coordinate(0, 0.0, 0), Coordinate(0, -10.0, 0)]
+    mock_offsets.return_value = [
+      Coordinate(0, 10.0, 0),
+      Coordinate(0, 0.0, 0),
+      Coordinate(0, -10.0, 0),
+    ]
     result = compute_single_container_offsets(self._mock_container(50.0), [0, 2], self.S)
     assert result is not None
     self.assertEqual(len(result), 2)
@@ -262,7 +270,11 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
   )
   def test_mixed_spacing_uses_effective(self, mock_offsets):
-    mock_offsets.return_value = [Coordinate(0, 18.0, 0), Coordinate(0, 0.0, 0), Coordinate(0, -18.0, 0)]
+    mock_offsets.return_value = [
+      Coordinate(0, 18.0, 0),
+      Coordinate(0, 0.0, 0),
+      Coordinate(0, -18.0, 0),
+    ]
     result = compute_single_container_offsets(self._mock_container(100.0), [0, 2], [9.0, 9.0, 18.0])
     self.assertIsNotNone(result)
     mock_offsets.assert_called_once_with(
