@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import usb.core
+import usb.util
 
 from pylabrobot.io.usb import USB
 
@@ -19,6 +20,8 @@ class SparkReaderAsync:
   def __init__(self, vid: int = VENDOR_ID) -> None:
     self.vid: int = vid
     self.devices: Dict[SparkDevice, USB] = {}
+    # Per-device discovered endpoints, overriding DEVICE_ENDPOINTS from enums.py
+    self.device_endpoints: Dict[SparkDevice, Dict[str, SparkEndpoint]] = {}
     self.seq_num: int = 0
     self.lock: asyncio.Lock = asyncio.Lock()
     self.msgs: List[Any] = []
@@ -43,8 +46,16 @@ class SparkReaderAsync:
           # Note: calling set_configuration(0) twice before switching to configuration 1
           # is intentional. Some Tecan Spark devices require a double reset to config 0
           # to reliably accept configuration 1 after startup.
-          dev.set_configuration(0)
-          dev.set_configuration(0)
+          # However, some devices don't support config 0 and will raise USBError,
+          # so we catch and continue — set_configuration(1) is the critical call.
+          try:
+            dev.set_configuration(0)
+          except usb.core.USBError:
+            pass
+          try:
+            dev.set_configuration(0)
+          except usb.core.USBError:
+            pass
           dev.set_configuration(1)
 
         endpoints: Optional[Dict[str, SparkEndpoint]] = DEVICE_ENDPOINTS.get(device_type)
@@ -63,6 +74,11 @@ class SparkReaderAsync:
 
         await reader.setup(empty_buffer=False)  # type: ignore[no-untyped-call]
         self.devices[device_type] = reader
+
+        # Discover actual endpoints from the USB descriptor, overriding the
+        # hardcoded DEVICE_ENDPOINTS values for this specific hardware.
+        discovered = self._discover_endpoints(reader, device_type)
+        self.device_endpoints[device_type] = discovered
         logging.info(f"Successfully configured {device_type.name}")
 
       except Exception as e:
@@ -72,6 +88,71 @@ class SparkReaderAsync:
       raise ValueError(f"Failed to connect to any known Spark devices for VID={hex(self.vid)}")
 
     logging.info(f"Successfully connected to {len(self.devices)} devices.")
+
+  def _discover_endpoints(self, reader: USB, device_type: SparkDevice) -> Dict[str, SparkEndpoint]:
+    """Discover endpoints from the USB device descriptor.
+
+    Finds the first bulk-in, bulk-out, and interrupt-in endpoints and builds
+    a mapping compatible with DEVICE_ENDPOINTS. Falls back to the hardcoded
+    DEVICE_ENDPOINTS if discovery fails.
+    """
+    assert reader.dev is not None, "Device not connected."
+
+    try:
+      cfg = reader.dev.get_active_configuration()
+      intf = cfg[(0, 0)]
+
+      bulk_in = None
+      bulk_out = None
+      interrupt_in = None
+
+      for ep in intf:
+        direction = usb.util.endpoint_direction(ep.bEndpointAddress)
+        transfer_type = usb.util.endpoint_type(ep.bmAttributes)
+
+        if transfer_type == usb.util.ENDPOINT_TYPE_BULK:
+          if direction == usb.util.ENDPOINT_IN and bulk_in is None:
+            bulk_in = ep.bEndpointAddress
+          elif direction == usb.util.ENDPOINT_OUT and bulk_out is None:
+            bulk_out = ep.bEndpointAddress
+        elif transfer_type == usb.util.ENDPOINT_TYPE_INTR:
+          if direction == usb.util.ENDPOINT_IN and interrupt_in is None:
+            interrupt_in = ep.bEndpointAddress
+
+      if bulk_in is None or bulk_out is None or interrupt_in is None:
+        logging.warning(
+          f"Incomplete endpoint discovery for {device_type.name}: "
+          f"bulk_in={bulk_in}, bulk_out={bulk_out}, interrupt_in={interrupt_in}. "
+          f"Falling back to hardcoded endpoints."
+        )
+        fallback = DEVICE_ENDPOINTS.get(device_type, {})
+        return dict(fallback)
+
+      logging.info(
+        f"{device_type.name} endpoints: bulk_in=0x{bulk_in:02x}, "
+        f"bulk_out=0x{bulk_out:02x}, interrupt_in=0x{interrupt_in:02x}"
+      )
+
+      # Build endpoint mapping using SparkEndpoint values or raw ints.
+      # We create new SparkEndpoint-like values for the discovered addresses.
+      return {
+        "write": SparkEndpoint(bulk_out),
+        "read_status": SparkEndpoint(interrupt_in),
+        "read_data": SparkEndpoint(bulk_in),
+      }
+    except Exception as e:
+      logging.warning(f"Endpoint discovery failed for {device_type.name}: {e}. Using hardcoded.")
+      fallback = DEVICE_ENDPOINTS.get(device_type, {})
+      return dict(fallback)
+
+  def get_endpoints(self, device_type: SparkDevice) -> Dict[str, SparkEndpoint]:
+    """Get endpoints for a device, preferring discovered over hardcoded."""
+    if device_type in self.device_endpoints:
+      return self.device_endpoints[device_type]
+    fallback = DEVICE_ENDPOINTS.get(device_type)
+    if fallback is None:
+      raise ValueError(f"No endpoints for {device_type.name}")
+    return dict(fallback)
 
   def _calculate_checksum(self, data: bytes) -> int:
     checksum = 0
@@ -141,9 +222,6 @@ class SparkReaderAsync:
       raise RuntimeError(f"Device type {device_type} not connected.")
 
     reader = self.devices[device_type]
-    endpoints = DEVICE_ENDPOINTS.get(device_type)
-    if not endpoints:
-      raise ValueError(f"No endpoints defined for {device_type}")
 
     async with self.lock:
       # Set up read task before sending command
@@ -282,10 +360,7 @@ class SparkReaderAsync:
     reader = self.devices[device_type]
     stop_event = asyncio.Event()
     results: List[bytes] = []
-    endpoints = DEVICE_ENDPOINTS.get(device_type)
-    if endpoints is None:
-      logging.error(f"No endpoints for {device_type.name}")
-      return None, None, None
+    endpoints = self.get_endpoints(device_type)
     endpoint = endpoints["read_data"]
 
     async def background_reader() -> None:

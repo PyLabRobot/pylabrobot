@@ -19,7 +19,9 @@ class SparkEndpoint(Enum):
   BULK_IN = 0x82
   BULK_IN1 = 0x81
   BULK_OUT = 0x01
+  BULK_OUT2 = 0x02
   INTERRUPT_IN = 0x83
+  INTERRUPT_IN2 = 0x86
 
 
 DEVICE_ENDPOINTS = {

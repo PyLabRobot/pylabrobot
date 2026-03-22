@@ -124,6 +124,11 @@ class SparkBackend(PlateReaderBackend):
   ) -> List[Dict[str, object]]:
     """Read absorbance."""
 
+    if SparkDevice.ABSORPTION not in self.reader.devices:
+      raise RuntimeError(
+        "ABSORPTION device is not connected. Cannot perform absorbance measurement."
+      )
+
     # Initialize
     self.reader.clear_messages()
     await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
@@ -184,6 +189,11 @@ class SparkBackend(PlateReaderBackend):
     gain: int = 117,
   ) -> List[Dict[str, object]]:
     """Read fluorescence."""
+
+    if SparkDevice.FLUORESCENCE not in self.reader.devices:
+      raise RuntimeError(
+        "FLUORESCENCE device is not connected. Cannot perform fluorescence measurement."
+      )
 
     ex_wavelength = excitation_wavelength * 10
     em_wavelength = emission_wavelength * 10
