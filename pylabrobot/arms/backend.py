@@ -1,139 +1,210 @@
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
-from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
-from pylabrobot.machines.backend import MachineBackend
-
-
-@dataclass
-class VerticalAccess:
-  """Access location from above (most common pattern for stacks and tube racks).
-
-  This access pattern is used when approaching a location from above, such as
-  picking from a plate stack or tube rack on the deck.
-
-  Args:
-    approach_height_mm: Height above the target position to move to before descending to grip (default: 100mm)
-    clearance_mm: Vertical distance to retract after gripping before lateral movement (default: 100mm)
-    gripper_offset_mm: Additional vertical offset added when holding a plate, accounts for gripper thickness (default: 10mm)
-  """
-
-  approach_height_mm: float = 100
-  clearance_mm: float = 100
-  gripper_offset_mm: float = 10
+from pylabrobot.arms.standard import ArmPosition
+from pylabrobot.device import DeviceBackend
+from pylabrobot.resources import Coordinate
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.serializer import SerializableMixin
 
 
-@dataclass
-class HorizontalAccess:
-  """Access location from the side (for hotel-style plate carriers).
+# ArmBackend:
+# - pick_up_at_location
+# - drop_at_location
+# - move_to_location
+# - get_cartesian_position
+# - is_holding_resource
 
-  This access pattern is used when approaching a location horizontally, such as
-  accessing plates in a hotel-style storage system.
+# CanGrip
+# - open_gripper
+# - close_gripper
+# - is_gripper_closed
 
-  Args:
-    approach_distance_mm: Horizontal distance in front of the target to stop before moving in to grip (default: 50mm)
-    clearance_mm: Horizontal distance to retract after gripping before lifting (default: 50mm)
-    lift_height_mm: Vertical distance to lift the plate after horizontal retract, before lateral movement (default: 100mm)
-    gripper_offset_mm: Additional vertical offset added when holding a plate, accounts for gripper thickness (default: 10mm)
-  """
+# CanSuction
+# - start_suction
+# - stop_suction
 
-  approach_distance_mm: float = 50
-  clearance_mm: float = 50
-  lift_height_mm: float = 100
-  gripper_offset_mm: float = 10
+# CanFreedrive
+# - start_freedrive_mode
+# - stop_freedrive_mode
 
-
-AccessPattern = Union[VerticalAccess, HorizontalAccess]
+# Joints
+# - pick_up_at_joint_position
+# - drop_at_joint_position
+# - get_joint_position
 
 
-class SCARABackend(MachineBackend, metaclass=ABCMeta):
-  """Backend for a robotic arm"""
+class CanFreedrive(metaclass=ABCMeta):
+  """Mixin for arms that support freedrive (manual guidance) mode."""
 
   @abstractmethod
-  async def open_gripper(self, gripper_width: float) -> None:
-    """Open the arm's gripper."""
-
-  @abstractmethod
-  async def close_gripper(self, gripper_width: float) -> None:
-    """Close the arm's gripper."""
-
-  @abstractmethod
-  async def is_gripper_closed(self) -> bool:
-    """Check if the gripper is currently closed."""
-
-  @abstractmethod
-  async def halt(self) -> None:
-    """Stop any ongoing movement of the arm."""
-
-  @abstractmethod
-  async def home(self) -> None:
-    """Home the arm to its default position."""
-
-  @abstractmethod
-  async def move_to_safe(self) -> None:
-    """Move the arm to a predefined safe position."""
-
-  @abstractmethod
-  async def approach(
-    self,
-    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
-    access: Optional[AccessPattern] = None,
+  async def start_freedrive_mode(
+    self, free_axes: List[int], backend_params: Optional[SerializableMixin] = None
   ) -> None:
-    """Move the arm to an approach position (offset from target).
-
-    Args:
-      position: Target position (CartesianCoords or joint position dict)
-      access: Access pattern defining how to approach the target.  Defaults to VerticalAccess() if not specified.
-    """
-
-  @abstractmethod
-  async def pick_up_resource(
-    self,
-    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
-    plate_width: float,
-    access: Optional[AccessPattern] = None,
-  ) -> None:
-    """Pick a plate from the specified position.
-
-    Args:
-      position: Target position for pickup
-      access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
-    """
-
-  @abstractmethod
-  async def drop_resource(
-    self,
-    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
-    access: Optional[AccessPattern] = None,
-  ) -> None:
-    """Place a plate at the specified position.
-
-    Args:
-      position: Target position for placement
-      access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
-    """
-
-  @abstractmethod
-  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]) -> None:
-    """Move the arm to a specified position in 3D space or in joint space."""
-
-  @abstractmethod
-  async def get_joint_position(self) -> Dict[int, float]:
-    """Get the current position of the arm in joint space."""
-
-  @abstractmethod
-  async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
-    """Get the current position of the arm in 3D space."""
-
-  @abstractmethod
-  async def freedrive_mode(self, free_axes: List[int]) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
     Args:
-      free_axes: List of joint indices to free.
+      free_axes: List of joint indices to free. Use [0] for all axes.
     """
 
   @abstractmethod
-  async def end_freedrive_mode(self) -> None:
+  async def stop_freedrive_mode(self, backend_params: Optional[SerializableMixin] = None) -> None:
     """Exit freedrive mode."""
+
+
+class _BaseArmBackend(DeviceBackend, metaclass=ABCMeta):
+  @abstractmethod
+  async def halt(self, backend_params: Optional[SerializableMixin] = None) -> None:
+    """Stop any ongoing movement of the arm."""
+
+  @abstractmethod
+  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+    """Park the arm to its default position."""
+
+
+class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+  """Backend for a simple arm (no rotation capability). E.g. Hamilton core grippers."""
+
+  @abstractmethod
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+  ) -> None:
+    """Open the arm's gripper."""
+
+  @abstractmethod
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+  ) -> None:
+    """Close the arm's gripper."""
+
+  @abstractmethod
+  async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
+    """Check if the gripper is currently closed."""
+
+  @abstractmethod
+  async def pick_up_at_location(
+    self,
+    location: Coordinate,
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Pick up at the specified location."""
+
+  @abstractmethod
+  async def drop_at_location(
+    self,
+    location: Coordinate,
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Drop at the specified location."""
+
+  @abstractmethod
+  async def move_to_location(
+    self, location: Coordinate, backend_params: Optional[SerializableMixin] = None
+  ) -> None:
+    """Move the held object to the specified location."""
+
+
+class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+  """Backend for an arm with rotation capability. E.g. Hamilton iSwap."""
+
+  @abstractmethod
+  async def pick_up_at_location(
+    self,
+    location: Coordinate,
+    direction: float,
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Pick up at the specified location with rotation."""
+
+  @abstractmethod
+  async def drop_at_location(
+    self,
+    location: Coordinate,
+    direction: float,
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Drop at the specified location with rotation."""
+
+  @abstractmethod
+  async def move_to_location(
+    self,
+    location: Coordinate,
+    direction: Rotation,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Move the held object to the specified location with rotation."""
+
+
+class JointGripperArmBackend(OrientableGripperArmBackend, metaclass=ABCMeta):
+  """Backend for a joint-space arm with rotation capability. E.g. PreciseFlex, KX2."""
+
+  @abstractmethod
+  async def pick_up_at_joint_position(
+    self,
+    position: Dict[int, float],
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Pick up at the specified joint position."""
+
+  @abstractmethod
+  async def drop_at_joint_position(
+    self,
+    position: Dict[int, float],
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Drop at the specified joint position."""
+
+  @abstractmethod
+  async def move_to_joint_position(
+    self, position: Dict[int, float], backend_params: Optional[SerializableMixin] = None
+  ) -> None:
+    """Move the arm to the specified joint position."""
+
+  @abstractmethod
+  async def get_joint_position(
+    self, backend_params: Optional[SerializableMixin] = None
+  ) -> Dict[int, float]:
+    """Get the current position of the arm in joint space."""
+
+  @abstractmethod
+  async def get_cartesian_position(
+    self, backend_params: Optional[SerializableMixin] = None
+  ) -> ArmPosition:
+    """Get the current position of the arm in Cartesian space."""
+
+
+class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+  @abstractmethod
+  async def pick_up_at_location(
+    self,
+    location: Coordinate,
+    rotation: Rotation,
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Pick up at the specified location with rotation."""
+
+  @abstractmethod
+  async def drop_at_location(
+    self,
+    location: Coordinate,
+    rotation: Rotation,
+    resource_width: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Drop at the specified location with rotation."""
+
+  @abstractmethod
+  async def move_to_location(
+    self,
+    location: Coordinate,
+    rotation: Rotation,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
+    """Move the held object to the specified location with rotation."""
