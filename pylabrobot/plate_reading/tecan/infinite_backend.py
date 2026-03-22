@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 BIN_RE = re.compile(r"^(\d+),BIN:$")
 
 
-
-
 def _integration_microseconds_to_seconds(value: int) -> float:
   # DLL/UI indicates integration time is stored in microseconds; UI displays ms by dividing by 1000.
   return value / 1_000_000.0
@@ -674,7 +672,11 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("MIRROR CLEAR", allow_timeout=True)
 
   async def _configure_absorbance(
-    self, wavelength_nm: int, *, flashes: int, bandwidth: Optional[float] = None,
+    self,
+    wavelength_nm: int,
+    *,
+    flashes: int,
+    bandwidth: Optional[float] = None,
   ) -> None:
     wl_decitenth = int(round(wavelength_nm * 10))
     bw = bandwidth if bandwidth is not None else self._auto_bandwidth(wavelength_nm)
@@ -742,9 +744,14 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     await self._begin_run()
     try:
       await self._configure_fluorescence(
-        excitation_wavelength, emission_wavelength, focal_height,
-        flashes=flashes, integration_us=integration_us, gain=gain,
-        excitation_bandwidth=excitation_bandwidth, emission_bandwidth=emission_bandwidth,
+        excitation_wavelength,
+        emission_wavelength,
+        focal_height,
+        flashes=flashes,
+        integration_us=integration_us,
+        gain=gain,
+        excitation_bandwidth=excitation_bandwidth,
+        emission_bandwidth=emission_bandwidth,
         lag_us=lag_us,
       )
       decoder = _FluorescenceRunDecoder(len(scan_wells))
@@ -779,9 +786,17 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       await self._end_run()
 
   async def _configure_fluorescence(
-    self, excitation_nm: int, emission_nm: int, focal_height: float,
-    *, flashes: int, integration_us: int, gain: int,
-    excitation_bandwidth: int, emission_bandwidth: int, lag_us: int,
+    self,
+    excitation_nm: int,
+    emission_nm: int,
+    focal_height: float,
+    *,
+    flashes: int,
+    integration_us: int,
+    gain: int,
+    excitation_bandwidth: int,
+    emission_bandwidth: int,
+    lag_us: int,
   ) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
     em_decitenth = int(round(emission_nm * 10))
@@ -794,9 +809,11 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       await self._send_command("MODE FI.TOP", allow_timeout=True)
       await self._clear_mode_settings(excitation=True, emission=True)
       await self._send_command(
-        f"EXCITATION 0,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True)
+        f"EXCITATION 0,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True
+      )
       await self._send_command(
-        f"EMISSION 0,FI,{em_decitenth},{emission_bandwidth},0", allow_timeout=True)
+        f"EMISSION 0,FI,{em_decitenth},{emission_bandwidth},0", allow_timeout=True
+      )
       await self._send_command(f"TIME 0,INTEGRATION={integration_us}", allow_timeout=True)
       await self._send_command(f"TIME 0,LAG={lag_us}", allow_timeout=True)
       await self._send_command("TIME 0,READDELAY=0", allow_timeout=True)
@@ -807,9 +824,11 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       await self._send_command("RATIO LABELS=1", allow_timeout=True)
       await self._send_command(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
       await self._send_command(
-        f"EXCITATION 1,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True)
+        f"EXCITATION 1,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True
+      )
       await self._send_command(
-        f"EMISSION 1,FI,{em_decitenth},{emission_bandwidth},0", allow_timeout=True)
+        f"EMISSION 1,FI,{em_decitenth},{emission_bandwidth},0", allow_timeout=True
+      )
       await self._send_command(f"TIME 1,INTEGRATION={integration_us}", allow_timeout=True)
       await self._send_command(f"TIME 1,LAG={lag_us}", allow_timeout=True)
       await self._send_command("TIME 1,READDELAY=0", allow_timeout=True)
@@ -840,7 +859,9 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._begin_run()
     try:
-      await self._configure_luminescence(dark_integration, meas_integration, focal_height, flashes=flashes)
+      await self._configure_luminescence(
+        dark_integration, meas_integration, focal_height, flashes=flashes
+      )
 
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
@@ -905,7 +926,12 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     await self._read_command_response()
 
   async def _configure_luminescence(
-    self, dark_integration: int, meas_integration: int, focal_height: float, *, flashes: int,
+    self,
+    dark_integration: int,
+    meas_integration: int,
+    focal_height: float,
+    *,
+    flashes: int,
   ) -> None:
     await self._send_command("MODE LUM")
     # Pre-flight safety checks observed in captures (queries omitted).

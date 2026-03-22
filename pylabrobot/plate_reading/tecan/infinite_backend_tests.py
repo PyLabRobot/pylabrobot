@@ -592,9 +592,7 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
 
 class TestTecanInfiniteScanGeometry(unittest.TestCase):
   def setUp(self):
-    self.backend = ExperimentalTecanInfinite200ProBackend(
-      counts_per_mm_x=1, counts_per_mm_y=1
-    )
+    self.backend = ExperimentalTecanInfinite200ProBackend(counts_per_mm_x=1, counts_per_mm_y=1)
     self.plate = _make_test_plate()
 
   def test_scan_visit_order_serpentine(self):
