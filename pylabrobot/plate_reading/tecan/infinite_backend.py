@@ -518,7 +518,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self.counts_per_mm_x = counts_per_mm_x
     self.counts_per_mm_y = counts_per_mm_y
     self.counts_per_mm_z = counts_per_mm_z
-    self._setup_lock: Optional[asyncio.Lock] = None
+    self._setup_lock = asyncio.Lock()
     self._ready = False
     self._read_chunk_size = 512
     self._max_row_wait_s = 300.0
@@ -529,8 +529,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._active_step_loss_commands: List[str] = []
 
   async def setup(self) -> None:
-    if self._setup_lock is None:
-      self._setup_lock = asyncio.Lock()
     async with self._setup_lock:
       if self._ready:
         return
@@ -542,8 +540,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       self._ready = True
 
   async def stop(self) -> None:
-    if self._setup_lock is None:
-      self._setup_lock = asyncio.Lock()
     async with self._setup_lock:
       if not self._ready:
         return
