@@ -6,7 +6,6 @@ and liquid handling operations.
 
 import unittest
 import unittest.mock
-from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   Aspirate,
@@ -31,9 +30,25 @@ from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   UnlockDoor,
   _get_tip_type_from_tip,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams, HoiParamsParser
-from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
+  CommandResponse,
+  HoiParams,
+  HoiParamsParser,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
+  Address,
+  HarpPacket,
+  HoiPacket,
+  IpPacket,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol, Hoi2Action
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  U16,
+  Bool,
+  I16Array,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 from pylabrobot.liquid_handling.standard import (
   Drop,
   Pickup,
@@ -188,15 +203,15 @@ class TestNimbusCommands(unittest.TestCase):
     # STATUS_REQUEST must have action_code=0
     self.assertEqual(cmd.action_code, 0)
 
-  def test_is_door_locked_parse_response(self):
-    # Simulate response: bool fragment with True
-    response_data = HoiParams().bool_value(True).build()
-    result = IsDoorLocked.parse_response_parameters(response_data)
-    self.assertEqual(result, {"locked": True})
-
-    response_data = HoiParams().bool_value(False).build()
-    result = IsDoorLocked.parse_response_parameters(response_data)
-    self.assertEqual(result, {"locked": False})
+  def test_is_door_locked_interpret_response(self):
+    """Round-trip: HOI params -> interpret_response -> Response."""
+    cmd = IsDoorLocked(Address(1, 1, 268))
+    for wire_true in (True, False):
+      params = HoiParams().add(wire_true, Bool).build()
+      response = _build_command_response(params)
+      result = cmd.interpret_response(response)
+      self.assertIsInstance(result, IsDoorLocked.Response)
+      self.assertEqual(result.locked, wire_true)
 
   def test_park_command(self):
     cmd = Park(Address(1, 1, 48896))
@@ -209,10 +224,14 @@ class TestNimbusCommands(unittest.TestCase):
     self.assertEqual(cmd.command_id, 14)
     self.assertEqual(cmd.action_code, 0)
 
-  def test_is_initialized_parse_response(self):
-    response_data = HoiParams().bool_value(True).build()
-    result = IsInitialized.parse_response_parameters(response_data)
-    self.assertEqual(result, {"initialized": True})
+  def test_is_initialized_interpret_response(self):
+    """Round-trip: HOI params -> interpret_response -> Response."""
+    cmd = IsInitialized(Address(1, 1, 48896))
+    params = HoiParams().add(True, Bool).build()
+    response = _build_command_response(params)
+    result = cmd.interpret_response(response)
+    self.assertIsInstance(result, IsInitialized.Response)
+    self.assertTrue(result.value)
 
   def test_is_tip_present_command(self):
     cmd = IsTipPresent(Address(1, 1, 257))
@@ -220,11 +239,14 @@ class TestNimbusCommands(unittest.TestCase):
     self.assertEqual(cmd.command_id, 16)
     self.assertEqual(cmd.action_code, 0)
 
-  def test_is_tip_present_parse_response(self):
-    # Simulate response with i16 array
-    response_data = HoiParams().i16_array([1, 0, 1, 0, 0, 0, 0, 0]).build()
-    result = IsTipPresent.parse_response_parameters(response_data)
-    self.assertEqual(result["tip_present"], [1, 0, 1, 0, 0, 0, 0, 0])
+  def test_is_tip_present_interpret_response(self):
+    """Round-trip: HOI params -> interpret_response -> Response."""
+    cmd = IsTipPresent(Address(1, 1, 257))
+    params = HoiParams().add([1, 0, 1, 0, 0, 0, 0, 0], I16Array).build()
+    response = _build_command_response(params)
+    result = cmd.interpret_response(response)
+    self.assertIsInstance(result, IsTipPresent.Response)
+    self.assertEqual(result.tip_present, [1, 0, 1, 0, 0, 0, 0, 0])
 
   def test_get_channel_configuration_1_command(self):
     cmd = GetChannelConfiguration_1(Address(1, 1, 48896))
@@ -232,11 +254,15 @@ class TestNimbusCommands(unittest.TestCase):
     self.assertEqual(cmd.command_id, 15)
     self.assertEqual(cmd.action_code, 0)
 
-  def test_get_channel_configuration_1_parse_response(self):
-    response_data = HoiParams().u16(8).i16_array([0, 0, 0, 0, 0, 0, 0, 0]).build()
-    result = GetChannelConfiguration_1.parse_response_parameters(response_data)
-    self.assertEqual(result["channels"], 8)
-    self.assertEqual(result["channel_types"], [0, 0, 0, 0, 0, 0, 0, 0])
+  def test_get_channel_configuration_1_interpret_response(self):
+    """Round-trip: HOI params -> interpret_response -> Response."""
+    cmd = GetChannelConfiguration_1(Address(1, 1, 48896))
+    params = HoiParams().add(8, U16).add([0, 0, 0, 0, 0, 0, 0, 0], I16Array).build()
+    response = _build_command_response(params)
+    result = cmd.interpret_response(response)
+    self.assertIsInstance(result, GetChannelConfiguration_1.Response)
+    self.assertEqual(result.channels, 8)
+    self.assertEqual(result.channel_types, [0, 0, 0, 0, 0, 0, 0, 0])
 
   def test_pre_initialize_smart_command(self):
     cmd = PreInitializeSmart(Address(1, 1, 257))
@@ -535,17 +561,22 @@ class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
 
   async def test_backend_init(self):
     backend = NimbusBackend(host="192.168.1.100", port=2000)
-    self.assertEqual(backend.io._host, "192.168.1.100")
-    self.assertEqual(backend.io._port, 2000)
+    self.assertEqual(backend.client.io._host, "192.168.1.100")
+    self.assertEqual(backend.client.io._port, 2000)
     self.assertIsNone(backend._num_channels)
-    self.assertIsNone(backend._pipette_address)
-    self.assertIsNone(backend._door_lock_address)
-    self.assertIsNone(backend._nimbus_core_address)
+    self.assertEqual(backend.client._registry._objects, {})
     self.assertEqual(backend._channel_traversal_height, 146.0)
 
   async def test_backend_init_default_port(self):
     backend = NimbusBackend(host="192.168.1.100")
-    self.assertEqual(backend.io._port, 2000)
+    self.assertEqual(backend.client.io._port, 2000)
+
+  async def test_backend_init_with_client(self):
+    """Injected client is stored and used by the backend."""
+    client = HamiltonTCPClient(host="192.168.1.1", port=2000)
+    backend = NimbusBackend(client=client)
+    self.assertIs(backend.client, client)
+    self.assertEqual(backend.client.io._host, "192.168.1.1")
 
   async def test_num_channels_before_setup_raises(self):
     backend = NimbusBackend(host="192.168.1.100")
@@ -587,28 +618,66 @@ class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
       backend._fill_by_channels([1, 2], [0, 1, 2], default=0)
 
 
-def _mock_send_command_response(command) -> Optional[dict]:
-  """Return appropriate mock responses based on command type."""
+def _build_command_response(params: bytes) -> CommandResponse:
+  """Build a minimal CommandResponse with the given HOI params (for interpret_response tests)."""
+  hoi = HoiPacket(
+    interface_id=1,
+    action_code=Hoi2Action.COMMAND_RESPONSE,
+    action_id=0,
+    params=params,
+  )
+  harp = HarpPacket(
+    src=Address(0, 0, 0),
+    dst=Address(0, 0, 0),
+    seq=0,
+    protocol=2,
+    action_code=4,
+    payload=hoi.pack(),
+  )
+  ip = IpPacket(protocol=6, payload=harp.pack())
+  return CommandResponse.from_bytes(ip.pack())
+
+
+def _mock_send_command_response(command):
+  """Return appropriate mock responses based on command type (Response instances or None)."""
   if isinstance(command, IsTipPresent):
-    return {"tip_present": [0] * 8}
+    return IsTipPresent.Response(tip_present=[0] * 8)
   if isinstance(command, IsDoorLocked):
-    return {"locked": True}
+    return IsDoorLocked.Response(locked=True)
   if isinstance(command, IsInitialized):
-    return {"initialized": True}
+    return IsInitialized.Response(value=True)
   if isinstance(command, GetChannelConfiguration_1):
-    return {"channels": 8, "channel_types": [0] * 8}
+    return GetChannelConfiguration_1.Response(channels=8, channel_types=[0] * 8)
   if isinstance(command, GetChannelConfiguration):
-    return {"enabled": [False]}
+    return GetChannelConfiguration.Response(enabled=[False])
   return None
 
 
 def _setup_backend() -> NimbusBackend:
-  """Create a NimbusBackend with pre-configured state for testing."""
+  """Create a NimbusBackend with pre-configured state for testing (registry populated).
+
+  Tests seed the registry with Address(...) and ObjectInfo directly (rather than
+  going through the proxy) so that wire-format and address values are under test.
+  """
   backend = NimbusBackend(host="192.168.1.100", port=2000)
   backend._num_channels = 8
-  backend._pipette_address = Address(1, 1, 257)
-  backend._door_lock_address = Address(1, 1, 268)
-  backend._nimbus_core_address = Address(1, 1, 48896)
+  backend.client._registry.set_root_addresses([Address(1, 1, 48896)])
+  backend.client._registry.register(
+    "NimbusCORE",
+    ObjectInfo("NimbusCORE", "1.0", 10, 2, Address(1, 1, 48896)),
+  )
+  backend.client._registry.register(
+    "NimbusCORE.Pipette",
+    ObjectInfo("Pipette", "1.0", 20, 0, Address(1, 1, 257)),
+  )
+  backend.client._registry.register(
+    "NimbusCORE.DoorLock",
+    ObjectInfo("DoorLock", "1.0", 3, 0, Address(1, 1, 268)),
+  )
+  # Pre-populate resolver cache so _has_interface and _require use cached addresses
+  backend._resolver._resolved["nimbus_core"] = Address(1, 1, 48896)
+  backend._resolver._resolved["pipette"] = Address(1, 1, 257)
+  backend._resolver._resolved["door_lock"] = Address(1, 1, 268)
   backend._is_initialized = True
   return backend
 
@@ -626,7 +695,7 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = _setup_backend()
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
 
   def _get_command(self, cmd_type):
     for call in self.mock_send.call_args_list:
@@ -656,22 +725,28 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(self._get_command(Park), Park)
 
   async def test_door_methods_without_address_raise(self):
-    self.backend._door_lock_address = None
+    # When door lock is not available (_has_interface("door_lock")=False), methods return early without sending.
+    self.backend._resolver._resolved["door_lock"] = None
+    self.mock_send.reset_mock()
 
-    with self.assertRaises(RuntimeError):
-      await self.backend.lock_door()
+    await self.backend.lock_door()
+    await self.backend.unlock_door()
+    self.assertEqual(self.mock_send.call_count, 0)
 
-    with self.assertRaises(RuntimeError):
-      await self.backend.unlock_door()
-
-    with self.assertRaises(RuntimeError):
-      await self.backend.is_door_locked()
+    result = await self.backend.is_door_locked()
+    self.assertFalse(result)
+    self.assertEqual(self.mock_send.call_count, 0)
 
   async def test_park_without_address_raises(self):
-    self.backend._nimbus_core_address = None
+    # Backend with no resolved interfaces (e.g. setup() not run); _require raises RuntimeError
+    backend = NimbusBackend(host="192.168.1.100", port=2000)
+    backend._num_channels = 8
+    backend._is_initialized = True
 
-    with self.assertRaises(RuntimeError):
-      await self.backend.park()
+    with self.assertRaises(RuntimeError) as ctx:
+      await backend.park()
+    self.assertIn("Could not find interface", str(ctx.exception))
+    self.assertIn("nimbus_core", str(ctx.exception))
 
 
 class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):
@@ -679,11 +754,12 @@ class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):
 
   async def test_serialize(self):
     backend = NimbusBackend(host="192.168.1.100", port=2000)
-    backend._client_id = 5
+    backend.client._client_id = 5
 
     serialized = backend.serialize()
     self.assertEqual(serialized["client_id"], 5)
-    self.assertIn("instrument_addresses", serialized)
+    self.assertIn("registry_paths", serialized)
+    self.assertEqual(serialized["registry_paths"], [])
 
 
 class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
@@ -693,7 +769,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
 
     self.tip_rack = hamilton_96_tiprack_300uL("tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=1)
@@ -1069,7 +1145,7 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
 
   def _get_commands(self, cmd_type):
     return [
