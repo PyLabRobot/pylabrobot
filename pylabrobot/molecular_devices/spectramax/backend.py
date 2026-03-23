@@ -12,6 +12,7 @@ from pylabrobot.capabilities.temperature_controlling.backend import TemperatureC
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger("pylabrobot")
 
@@ -710,46 +711,53 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
         break
       await asyncio.sleep(1)
 
+  @dataclass
+  class AbsorbanceParams(SerializableMixin):
+    wavelengths: Optional[List[Union[int, Tuple[int, bool]]]] = None
+    read_type: ReadType = ReadType.ENDPOINT
+    read_order: ReadOrder = ReadOrder.COLUMN
+    calibrate: Calibrate = Calibrate.ONCE
+    shake_settings: Optional[ShakeSettings] = None
+    carriage_speed: CarriageSpeed = CarriageSpeed.NORMAL
+    speed_read: bool = False
+    path_check: bool = False
+    kinetic_settings: Optional[KineticSettings] = None
+    spectrum_settings: Optional[SpectrumSettings] = None
+    cuvette: bool = False
+    settling_time: int = 0
+    timeout: int = 600
+
   async def read_absorbance(
     self,
     plate: Plate,
     wells: List[Well],
     wavelength: int,
-    *,
-    wavelengths: Optional[List[Union[int, Tuple[int, bool]]]] = None,
-    read_type: ReadType = ReadType.ENDPOINT,
-    read_order: ReadOrder = ReadOrder.COLUMN,
-    calibrate: Calibrate = Calibrate.ONCE,
-    shake_settings: Optional[ShakeSettings] = None,
-    carriage_speed: CarriageSpeed = CarriageSpeed.NORMAL,
-    speed_read: bool = False,
-    path_check: bool = False,
-    kinetic_settings: Optional[KineticSettings] = None,
-    spectrum_settings: Optional[SpectrumSettings] = None,
-    cuvette: bool = False,
-    settling_time: int = 0,
-    timeout: int = 600,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
-    if wavelengths is None:
-      wavelengths = [wavelength]
+    if not isinstance(backend_params, self.AbsorbanceParams):
+      backend_params = MolecularDevicesBackend.AbsorbanceParams()
+
+    wavelengths = (
+      backend_params.wavelengths if backend_params.wavelengths is not None else [wavelength]
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,
-      read_type=read_type,
-      read_order=read_order,
-      calibrate=calibrate,
-      shake_settings=shake_settings,
-      carriage_speed=carriage_speed,
-      speed_read=speed_read,
-      path_check=path_check,
-      kinetic_settings=kinetic_settings,
-      spectrum_settings=spectrum_settings,
+      read_type=backend_params.read_type,
+      read_order=backend_params.read_order,
+      calibrate=backend_params.calibrate,
+      shake_settings=backend_params.shake_settings,
+      carriage_speed=backend_params.carriage_speed,
+      speed_read=backend_params.speed_read,
+      path_check=backend_params.path_check,
+      kinetic_settings=backend_params.kinetic_settings,
+      spectrum_settings=backend_params.spectrum_settings,
       wavelengths=wavelengths,
-      cuvette=cuvette,
-      settling_time=settling_time,
+      cuvette=backend_params.cuvette,
+      settling_time=backend_params.settling_time,
     )
     await self._set_clear()
-    if not cuvette:
+    if not backend_params.cuvette:
       await self._set_plate_position(settings)
       await self._set_strip(settings)
       await self._set_carriage_speed(settings)
@@ -765,7 +773,7 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._wait_for_idle(timeout=timeout)
+    await self._wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       AbsorbanceResult(

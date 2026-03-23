@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
 from pylabrobot.device import DeviceBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 
 class LuminescenceBackend(DeviceBackend, metaclass=ABCMeta):
@@ -14,7 +15,11 @@ class LuminescenceBackend(DeviceBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def read_luminescence(
-    self, plate: Plate, wells: List[Well], focal_height: float
+    self,
+    plate: Plate,
+    wells: List[Well],
+    focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
     """Read luminescence for the given wells.
 

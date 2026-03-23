@@ -94,8 +94,11 @@ class ByonoyLuminescence96AutomateBackend(PlateReaderBackend):
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 2
   ) -> List[Dict]:
+    from pylabrobot.byonoy.luminescence_96 import ByonoyLuminescence96Backend
+
+    params = ByonoyLuminescence96Backend.LuminescenceParams(integration_time=integration_time)
     results = await self._new.read_luminescence(
-      plate=plate, wells=wells, focal_height=focal_height, integration_time=integration_time
+      plate=plate, wells=wells, focal_height=focal_height, backend_params=params
     )
     return [
       {

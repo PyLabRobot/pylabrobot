@@ -1,7 +1,7 @@
 import logging
 import math
 import time
-from typing import Dict, Tuple, Union, cast
+from typing import Dict, Optional, Tuple, Union, cast
 
 from pylabrobot.capabilities.capability import Capability, need_capability_ready
 from pylabrobot.capabilities.microscopy.standard import (
@@ -16,6 +16,7 @@ from pylabrobot.capabilities.microscopy.standard import (
 )
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 from .backend import MicroscopyBackend
 
@@ -87,7 +88,7 @@ class MicroscopyCapability(Capability):
     focal_height: float,
     gain: float,
     plate: Plate,
-    **backend_kwargs,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     """Capture with iterative auto-exposure using weighted binary search."""
 
@@ -112,7 +113,7 @@ class MicroscopyCapability(Capability):
         focal_height=focal_height,
         gain=gain,
         plate=plate,
-        **backend_kwargs,
+        backend_params=backend_params,
       )
       assert len(res.images) == 1, "Expected exactly one image for auto-exposure"
       evaluation = await auto_exposure.evaluate_exposure(res.images[0])
@@ -137,7 +138,7 @@ class MicroscopyCapability(Capability):
     auto_focus: AutoFocus,
     gain: float,
     plate: Plate,
-    **backend_kwargs,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     """Capture with golden-ratio auto-focus search."""
 
@@ -150,7 +151,7 @@ class MicroscopyCapability(Capability):
         focal_height=focal_height,
         gain=gain,
         plate=plate,
-        **backend_kwargs,
+        backend_params=backend_params,
       )
 
     async def capture_and_evaluate(focal_height: float) -> float:
@@ -176,7 +177,7 @@ class MicroscopyCapability(Capability):
     exposure_time: Union[Exposure, AutoExposure] = "machine-auto",
     focal_height: Union[FocalPosition, AutoFocus] = "machine-auto",
     gain: Gain = "machine-auto",
-    **backend_kwargs,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     """Capture an image of a well.
 
@@ -188,7 +189,7 @@ class MicroscopyCapability(Capability):
       exposure_time: Exposure time in ms, :class:`AutoExposure`, or ``"machine-auto"``.
       focal_height: Focal height in mm, :class:`AutoFocus`, or ``"machine-auto"``.
       gain: Gain value or ``"machine-auto"``.
-      **backend_kwargs: Additional keyword arguments passed to the backend.
+      backend_params: Backend-specific parameters.
 
     Returns:
       An :class:`ImagingResult` with captured image(s) and metadata.
@@ -206,7 +207,7 @@ class MicroscopyCapability(Capability):
         focal_height=focal_height,
         gain=gain,
         plate=plate,
-        **backend_kwargs,
+        backend_params=backend_params,
       )
 
     if isinstance(focal_height, AutoFocus):
@@ -222,7 +223,7 @@ class MicroscopyCapability(Capability):
         auto_focus=focal_height,
         gain=gain,
         plate=plate,
-        **backend_kwargs,
+        backend_params=backend_params,
       )
 
     row, column = self._resolve_well(well)
@@ -235,7 +236,7 @@ class MicroscopyCapability(Capability):
       focal_height=focal_height,
       gain=gain,
       plate=plate,
-      **backend_kwargs,
+      backend_params=backend_params,
     )
 
   async def _on_stop(self):

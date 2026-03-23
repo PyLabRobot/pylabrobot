@@ -6,6 +6,7 @@ from pylabrobot.capabilities.plate_reading.absorbance.standard import Absorbance
 from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 
 class AbsorbanceChatterboxBackend(AbsorbanceBackend):
@@ -21,7 +22,11 @@ class AbsorbanceChatterboxBackend(AbsorbanceBackend):
     pass
 
   async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     data = mask_wells(self.dummy_absorbance, wells, plate)
     return [

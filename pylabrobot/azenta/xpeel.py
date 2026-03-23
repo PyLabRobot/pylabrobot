@@ -14,6 +14,7 @@ except ImportError as e:
 from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
 from pylabrobot.device import Device
 from pylabrobot.io.serial import Serial
+from pylabrobot.serializer import SerializableMixin
 
 
 class XPeelBackend(PeelerBackend):
@@ -152,23 +153,28 @@ class XPeelBackend(PeelerBackend):
     """Request reset."""
     return await self._send_command("*reset", expect_ack=True, wait_for_ready=True)
 
-  async def restart(self):
+  async def restart(self, backend_params: Optional[SerializableMixin] = None):
     """Request restart with full homing sequence."""
     return await self._send_command("*restart", expect_ack=True, wait_for_ready=True)
 
+  @dataclass
+  class PeelParams(SerializableMixin):
+    begin_location: Literal[-2, 0, 2, 4] = 0
+    fast: bool = False
+    adhere_time: float = 2.5
+
   async def peel(
     self,
-    begin_location: Literal[-2, 0, 2, 4] = 0,
-    fast: bool = False,
-    adhere_time: float = 2.5,
+    backend_params: Optional[SerializableMixin] = None,
   ):
-    """Run an automated de-seal cycle.
+    """Run an automated de-seal cycle."""
+    if not isinstance(backend_params, self.PeelParams):
+      backend_params = XPeelBackend.PeelParams()
 
-    Args:
-      begin_location: Begin peel location in mm relative to default. Must be -2, 0, 2, or 4.
-      fast: Use fast speed if True.
-      adhere_time: Adhere time in seconds. Must be 2.5, 5.0, 7.5, or 10.0.
-    """
+    adhere_time = backend_params.adhere_time
+    begin_location = backend_params.begin_location
+    fast = backend_params.fast
+
     if adhere_time not in {2.5, 5.0, 7.5, 10.0}:
       raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
     if begin_location not in {-2, 0, 2, 4}:

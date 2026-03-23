@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
 from pylabrobot.device import DeviceBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 
 class FluorescenceBackend(DeviceBackend, metaclass=ABCMeta):
@@ -20,6 +21,7 @@ class FluorescenceBackend(DeviceBackend, metaclass=ABCMeta):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
     """Read fluorescence for the given wells.
 

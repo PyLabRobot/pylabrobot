@@ -4,6 +4,7 @@ import math
 import struct
 import sys
 import time
+from dataclasses import dataclass
 from typing import List, Optional, Union
 
 from pylabrobot.capabilities.plate_reading.absorbance import (
@@ -26,6 +27,7 @@ from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
 if sys.version_info >= (3, 8):
@@ -270,7 +272,11 @@ class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBack
   # -- Capability methods ---------------------------------------------------
 
   async def read_luminescence(
-    self, plate: Plate, wells: List[Well], focal_height: float = 13
+    self,
+    plate: Plate,
+    wells: List[Well],
+    focal_height: float = 13,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
@@ -298,13 +304,20 @@ class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBack
       )
     ]
 
+  @dataclass
+  class AbsorbanceParams(SerializableMixin):
+    report: Literal["OD", "transmittance"] = "OD"
+
   async def read_absorbance(
     self,
     plate: Plate,
     wells: List[Well],
     wavelength: int,
-    report: Literal["OD", "transmittance"] = "OD",
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
+    if not isinstance(backend_params, self.AbsorbanceParams):
+      backend_params = CLARIOstarBackend.AbsorbanceParams()
+
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
 
@@ -335,15 +348,15 @@ class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBack
     ]
 
     data: List[List[Optional[float]]]
-    if report == "OD":
+    if backend_params.report == "OD":
       od: List[Optional[float]] = [
         math.log10(100 / t) if t is not None and t > 0 else None for t in transmittance
       ]
       data = reshape_2d(od, (plate.num_items_y, plate.num_items_x))
-    elif report == "transmittance":
+    elif backend_params.report == "transmittance":
       data = reshape_2d(transmittance, (plate.num_items_y, plate.num_items_x))
     else:
-      raise ValueError(f"Invalid report type: {report}")
+      raise ValueError(f"Invalid report type: {backend_params.report}")
 
     return [
       AbsorbanceResult(
@@ -361,6 +374,7 @@ class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBack
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
     raise NotImplementedError("CLARIOstar fluorescence reading is not implemented yet.")
 

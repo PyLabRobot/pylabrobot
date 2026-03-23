@@ -1,7 +1,7 @@
 """Tests for MicroscopyCapability."""
 
 import unittest
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pytest
 
@@ -24,6 +24,7 @@ from pylabrobot.device import Device
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
+from pylabrobot.serializer import SerializableMixin
 
 
 def _test_plate() -> Plate:
@@ -73,6 +74,7 @@ class RecordingMicroscopyBackend(MicroscopyBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     self.calls.append((row, column, mode, objective, exposure_time, focal_height, gain))
     return ImagingResult(

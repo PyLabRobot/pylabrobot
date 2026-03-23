@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from typing import Optional
 
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
@@ -10,6 +11,7 @@ from pylabrobot.capabilities.microscopy.standard import (
 )
 from pylabrobot.device import DeviceBackend
 from pylabrobot.resources.plate import Plate
+from pylabrobot.serializer import SerializableMixin
 
 
 class MicroscopyBackend(DeviceBackend, metaclass=ABCMeta):
@@ -26,6 +28,7 @@ class MicroscopyBackend(DeviceBackend, metaclass=ABCMeta):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     """Capture an image at the specified well position.
 

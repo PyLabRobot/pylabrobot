@@ -3,6 +3,7 @@ import enum
 import logging
 import time
 from abc import ABCMeta
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceBackend, AbsorbanceResult
@@ -16,6 +17,7 @@ from pylabrobot.capabilities.plate_reading.luminescence import (
 )
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Well
+from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +318,11 @@ class BioTekBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend,
     return self._non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
   async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     min_abs, max_abs = self.abs_wavelength_range
     if not (min_abs <= wavelength <= max_abs):
@@ -360,9 +366,21 @@ class BioTekBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend,
       )
     ]
 
+  @dataclass
+  class LuminescenceParams(SerializableMixin):
+    integration_time: float = 1
+
   async def read_luminescence(
-    self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
+    self,
+    plate: Plate,
+    wells: List[Well],
+    focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
+    if not isinstance(backend_params, self.LuminescenceParams):
+      backend_params = BioTekBackend.LuminescenceParams()
+
+    integration_time = backend_params.integration_time
     min_fh, max_fh = self.focal_height_range
     if not (min_fh <= focal_height <= max_fh):
       raise ValueError(f"{self.__class__.__name__}: focal height must be within {min_fh}-{max_fh}")
@@ -422,6 +440,7 @@ class BioTekBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend,
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
     min_fh, max_fh = self.focal_height_range
     if not (min_fh <= focal_height <= max_fh):

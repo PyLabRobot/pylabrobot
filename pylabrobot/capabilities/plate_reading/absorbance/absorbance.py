@@ -7,6 +7,7 @@ from pylabrobot.capabilities.capability import Capability, need_capability_ready
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 from .backend import AbsorbanceBackend
 
@@ -26,7 +27,7 @@ class AbsorbanceCapability(Capability):
     plate: Plate,
     wavelength: int,
     wells: Optional[List[Well]] = None,
-    **backend_kwargs,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     """Read absorbance from a plate.
 
@@ -34,7 +35,7 @@ class AbsorbanceCapability(Capability):
       plate: The plate to read.
       wavelength: Wavelength in nm.
       wells: Wells to measure. Defaults to all wells in the plate.
-      **backend_kwargs: Additional keyword arguments passed to the backend.
+      backend_params: Backend-specific parameters.
 
     Returns:
       A list of :class:`AbsorbanceResult` (typically length 1).
@@ -42,5 +43,5 @@ class AbsorbanceCapability(Capability):
     if wells is None:
       wells = plate.get_all_items()
     return await self.backend.read_absorbance(
-      plate=plate, wells=wells, wavelength=wavelength, **backend_kwargs
+      plate=plate, wells=wells, wavelength=wavelength, backend_params=backend_params
     )

@@ -1,4 +1,5 @@
 import time
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
@@ -14,6 +15,7 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
 # ---------------------------------------------------------------------------
@@ -27,8 +29,16 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
   def __init__(self) -> None:
     super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96)
 
+  @dataclass
+  class LuminescenceParams(SerializableMixin):
+    integration_time: float = 2
+
   async def read_luminescence(
-    self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 2
+    self,
+    plate: Plate,
+    wells: List[Well],
+    focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
     """Read luminescence.
 
@@ -36,8 +46,12 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
       plate: The plate being read.
       wells: Wells to measure.
       focal_height: Focal height in mm.
-      integration_time: Integration time in seconds, default 2 s.
+      backend_params: Backend-specific parameters.
     """
+    if not isinstance(backend_params, self.LuminescenceParams):
+      backend_params = ByonoyLuminescence96Backend.LuminescenceParams()
+
+    integration_time = backend_params.integration_time
 
     await self.send_command(
       report_id=0x0010,

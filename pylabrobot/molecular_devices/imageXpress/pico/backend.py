@@ -36,6 +36,7 @@ from pylabrobot.io.sila.grpc import (
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import row_index_to_label
 from pylabrobot.resources.well import WellBottomType
+from pylabrobot.serializer import SerializableMixin
 
 try:
   import grpc  # type: ignore[import-untyped]
@@ -650,6 +651,7 @@ class PicoBackend(MicroscopyBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     if mode not in _IMAGING_MODE_MAP:
       raise ValueError(
