@@ -1,11 +1,11 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 from .standard import Protocol
 
 
-class ThermocyclingBackend(DeviceBackend, metaclass=ABCMeta):
+class ThermocyclingBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for thermocyclers.
 
   Only thermocycling-specific operations live here: lid control, protocol
