@@ -3,9 +3,8 @@ import unittest
 
 from pylabrobot.serializer import serialize
 
-from .coordinate import Coordinate
-
 from .container import Container
+from .coordinate import Coordinate
 
 
 class TestContainer(unittest.TestCase):

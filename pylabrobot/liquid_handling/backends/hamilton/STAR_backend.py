@@ -4523,8 +4523,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
     sorted_channels = sorted(use_channels)
     return [
-      self._min_spacing_between(lo, hi)
-      for lo, hi in zip(sorted_channels[:-1], sorted_channels[1:])
+      self._min_spacing_between(lo, hi) for lo, hi in zip(sorted_channels[:-1], sorted_channels[1:])
     ]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
