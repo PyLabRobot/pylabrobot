@@ -3,8 +3,8 @@ import statistics
 import time
 from typing import Dict, List, Optional
 
-from pylabrobot.plate_reading.backend import PlateReaderBackend
-from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
+from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
+from pylabrobot.legacy.plate_reading.utils import _get_min_max_row_col_tuples
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 

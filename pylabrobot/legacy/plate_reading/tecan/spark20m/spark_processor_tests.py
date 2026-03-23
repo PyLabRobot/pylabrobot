@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 # Configure logging to avoid pollution during tests
-from pylabrobot.plate_reading.tecan.spark20m.spark_processor import (
+from pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor import (
   process_absorbance,
   process_fluorescence,
 )
@@ -65,7 +65,7 @@ class TestProcessAbsorbance(unittest.TestCase):
     }
 
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
       return_value=parsed_data,
     ):
       results = process_absorbance([])
@@ -83,7 +83,7 @@ class TestProcessAbsorbance(unittest.TestCase):
     # Only standalone sequences, no grouped reference
     parsed_data = {"SEQ_MEAS": [{"type": "standalone", "block": {"measurements": []}}]}
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
       return_value=parsed_data,
     ):
       results = process_absorbance([])
@@ -92,7 +92,7 @@ class TestProcessAbsorbance(unittest.TestCase):
 
   def test_process_empty_data(self) -> None:
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data", return_value={}
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data", return_value={}
     ):
       results = process_absorbance([])
     self.assertEqual(results, [])
@@ -117,7 +117,7 @@ class TestProcessAbsorbance(unittest.TestCase):
     }
 
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
       return_value=parsed_data,
     ):
       results = process_absorbance([])
@@ -258,7 +258,7 @@ class TestProcessFluorescence(unittest.TestCase):
     }
 
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
       return_value=parsed_data,
     ):
       results = process_fluorescence([])
@@ -277,7 +277,7 @@ class TestProcessFluorescence(unittest.TestCase):
       ]
     }
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
       return_value=parsed_data,
     ):
       results = process_fluorescence([])
@@ -296,7 +296,7 @@ class TestProcessFluorescence(unittest.TestCase):
     }
 
     with patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
       return_value=parsed_data,
     ):
       results = process_fluorescence([])

@@ -1,7 +1,7 @@
 """Tests for FluorescenceCapability."""
 
 import unittest
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
 from pylabrobot.capabilities.plate_reading.fluorescence.chatterbox import (
@@ -63,7 +63,7 @@ class RecordingFluorescenceBackend(FluorescenceBackend):
     self.calls.append(
       ("read_fluorescence", len(wells), excitation_wavelength, emission_wavelength, focal_height)
     )
-    data = [[0.0] * plate.num_items_x for _ in range(plate.num_items_y)]
+    data: List[List[Optional[float]]] = [[0.0] * plate.num_items_x for _ in range(plate.num_items_y)]
     return [
       FluorescenceResult(
         data=data,

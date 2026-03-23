@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Union
 
 from pylabrobot.capabilities.shaking import ShakingCapability, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import (
@@ -37,6 +37,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
     self.timeout = timeout
     self._supports_active_cooling = supports_active_cooling
     self.io = Serial(
+      human_readable_device_name="QInstruments BioShake",
       port=self.port,
       baudrate=9600,
       bytesize=serial.EIGHTBITS,
@@ -122,7 +123,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
 
   # -- shaking
 
-  async def start_shaking(self, speed: float, acceleration: int = 0):
+  async def start_shaking(self, speed: float, acceleration: Union[int, float] = 0):
     if isinstance(speed, float):
       if not speed.is_integer():
         raise ValueError(f"Speed must be a whole number, not {speed}")
@@ -161,7 +162,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
     await self._send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
     await self._send_command(cmd="shakeOn", delay=0.2)
 
-  async def stop_shaking(self, deceleration: int = 0):
+  async def stop_shaking(self, deceleration: Union[int, float] = 0):
     if isinstance(deceleration, float):
       if not deceleration.is_integer():
         raise ValueError(f"Deceleration must be a whole number, not {deceleration}")

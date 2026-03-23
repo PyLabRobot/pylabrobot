@@ -38,6 +38,7 @@ class A4SBackend(SealerBackend, TemperatureControllerBackend):
     self.port = port
     self.timeout = timeout
     self.io = Serial(
+      human_readable_device_name="Azenta a4S Thermal Sealer",
       port=self.port,
       baudrate=19200,
       bytesize=serial.EIGHTBITS,

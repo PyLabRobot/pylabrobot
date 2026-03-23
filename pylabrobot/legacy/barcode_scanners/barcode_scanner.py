@@ -1,6 +1,6 @@
 """Legacy. Use pylabrobot.capabilities.barcode_scanning instead."""
 
-from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
+from pylabrobot.legacy.barcode_scanners.backend import BarcodeScannerBackend
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources.barcode import Barcode
 

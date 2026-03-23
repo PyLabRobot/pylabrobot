@@ -33,7 +33,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
   """
 
   def __init__(self, port: str) -> None:
-    self._new = self._make_new_backend(port)
+    self._new: SpectraMaxM5Backend = self._make_new_backend(port)
 
     # Bridge internal methods so test mocks on self.* intercept calls from _new.
     self._real_send_command = self._new.send_command
@@ -76,7 +76,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     return await self._real_send_command(*args, **kwargs)
 
   def serialize(self) -> dict:
-    return self._new.serialize()
+    return dict(self._new.serialize())
 
   # -- Bridged internals (must be explicit for class-level @patch) ---------
 
@@ -108,8 +108,10 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
+    wl0 = wavelengths[0]
+    wavelength = wl0[0] if isinstance(wl0, tuple) else wl0
     results = await self._new.read_absorbance(
-      plate=plate, wells=[], wavelength=wavelengths[0],
+      plate=plate, wells=[], wavelength=wavelength,
       wavelengths=wavelengths, read_type=read_type, read_order=read_order,
       calibrate=calibrate, shake_settings=shake_settings,
       carriage_speed=carriage_speed, speed_read=speed_read, path_check=path_check,

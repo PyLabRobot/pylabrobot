@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.io.usb import USB
-from pylabrobot.plate_reading.tecan.infinite_backend import (
+from pylabrobot.legacy.plate_reading.tecan.infinite_backend import (
   ExperimentalTecanInfinite200ProBackend,
   _absorbance_od_calibrated,
   _AbsorbanceRunDecoder,
@@ -653,7 +653,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.mock_usb.read = AsyncMock(return_value=self._frame("ST"))
 
     patcher = patch(
-      "pylabrobot.plate_reading.tecan.infinite_backend.USB",
+      "pylabrobot.legacy.plate_reading.tecan.infinite_backend.USB",
       return_value=self.mock_usb,
     )
     self.mock_usb_class = patcher.start()

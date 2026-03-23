@@ -9,8 +9,8 @@ from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import (
   OpentronsOT2Backend,
 )
-from pylabrobot.liquid_handling.errors import NoChannelError
-from pylabrobot.liquid_handling.standard import (
+from pylabrobot.legacy.liquid_handling.errors import NoChannelError
+from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
   Pickup,
   SingleChannelAspiration,

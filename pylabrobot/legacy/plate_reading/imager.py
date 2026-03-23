@@ -9,6 +9,7 @@ from pylabrobot.capabilities.microscopy import (
   fraction_overexposed,
   max_pixel_at_fraction,
 )
+from pylabrobot.capabilities.microscopy import AutoExposure as NewAutoExposure
 from pylabrobot.capabilities.microscopy import ImagingMode as NewImagingMode
 from pylabrobot.capabilities.microscopy import ImagingResult as NewImagingResult
 from pylabrobot.capabilities.microscopy import Objective as NewObjective
@@ -136,12 +137,22 @@ class Imager(Resource, Machine):
     gain: Gain = "machine-auto",
     **backend_kwargs,
   ) -> ImagingResult:
+    new_exposure: Union[float, str, NewAutoExposure]
+    if isinstance(exposure_time, AutoExposure):
+      new_exposure = NewAutoExposure(
+        evaluate_exposure=exposure_time.evaluate_exposure,
+        max_rounds=exposure_time.max_rounds,
+        low=exposure_time.low,
+        high=exposure_time.high,
+      )
+    else:
+      new_exposure = exposure_time
     new_result = await self._microscopy.capture(
       well=well,
       mode=_to_new_imaging_mode(mode),
       objective=_to_new_objective(objective),
       plate=self.get_plate(),
-      exposure_time=exposure_time,
+      exposure_time=new_exposure,
       focal_height=focal_height,
       gain=gain,
       **backend_kwargs,

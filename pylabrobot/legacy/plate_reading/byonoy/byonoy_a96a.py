@@ -1,17 +1,14 @@
 """Legacy. Use pylabrobot.byonoy instead."""
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 from pylabrobot.byonoy.absorbance_96 import (
   ByonoyAbsorbanceBaseUnit,
-  _ByonoyAbsorbanceReaderPlateHolder,
   byonoy_a96a_illumination_unit,
-  byonoy_a96a_parking_unit,
-  byonoy_sbs_adapter,
 )
 from pylabrobot.legacy.plate_reading.byonoy.byonoy_backend import ByonoyAbsorbance96AutomateBackend
 from pylabrobot.legacy.plate_reading.plate_reader import PlateReader
-from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.resources import Resource
 
 
 class ByonoyAbsorbance96Automate(PlateReader, ByonoyAbsorbanceBaseUnit):

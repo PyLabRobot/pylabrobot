@@ -21,6 +21,8 @@ from pylabrobot.legacy.plate_reading.standard import (
 class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
   """Legacy. Use pylabrobot.agilent.CytationBackend instead."""
 
+  _new: cytation.CytationBackend
+
   def __init__(
     self,
     timeout: float = 20,

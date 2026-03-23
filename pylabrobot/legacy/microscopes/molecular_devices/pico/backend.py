@@ -16,7 +16,7 @@ from pylabrobot.legacy.plate_reading.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.molecular_devices.pico.backend import PicoBackend
+from pylabrobot.molecular_devices.imageXpress.pico.backend import PicoBackend
 from pylabrobot.resources.plate import Plate
 
 

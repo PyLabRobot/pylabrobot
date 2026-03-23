@@ -1,6 +1,6 @@
 """Legacy. Use pylabrobot.thermo_fisher.cytomat.CytomatBackend instead."""
 
-from typing import List, Literal, Optional, Union
+from typing import List, Optional, Union
 
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.legacy.storage.backend import IncubatorBackend
@@ -39,10 +39,10 @@ class CytomatBackend(IncubatorBackend):
   async def close_door(self):
     return await self._new.close_door()
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **backend_kwargs):
     await self._new.fetch_plate_to_loading_tray(plate)
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **backend_kwargs):
     await self._new.store_plate(plate, site)
 
   async def set_temperature(self, *args, **kwargs):

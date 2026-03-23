@@ -7,7 +7,6 @@ from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 
 from .backend import HamiltonHeaterShakerBackend
-from .box import HamiltonHeaterShakerInterface
 
 
 class HamiltonHeaterShaker(PlateHolder, Device):

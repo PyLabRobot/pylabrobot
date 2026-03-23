@@ -28,6 +28,7 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     self.io = USB(
       id_vendor=id_vendor,
       id_product=id_product,
+      human_readable_device_name="Hamilton Heater Shaker Box",
       device_address=device_address,
       serial_number=serial_number,
     )

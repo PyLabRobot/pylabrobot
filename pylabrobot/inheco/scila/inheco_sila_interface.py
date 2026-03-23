@@ -57,6 +57,14 @@ def _get_local_ip(machine_ip: str) -> str:
   return local_ip
 
 
+class SiLAError(RuntimeError):
+  def __init__(self, code: int, message: str, command: str, details: Optional[dict] = None):
+    self.code = code
+    self.message = message
+    self.command = command
+    self.details = details or {}
+
+
 class InhecoSiLAInterface:
   @dataclass(frozen=True)
   class _HTTPRequest:

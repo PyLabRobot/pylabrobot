@@ -25,6 +25,14 @@ class NoFreeSiteError(Exception):
 
 
 class Cytomat(Resource, Device):
+  _racks: List[PlateCarrier]
+  _backend: CytomatBackend
+  loading_tray: PlateHolder
+  retrieval: AutomatedRetrievalCapability
+  tc: TemperatureControlCapability
+  humidity: HumidityControlCapability
+  shaker: ShakingCapability
+
   def __init__(
     self,
     name: str,
@@ -82,7 +90,7 @@ class Cytomat(Resource, Device):
     await self._backend.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:
-    return sum(len(rack.get_free_sites()) for rack in self._racks)
+    return sum([len(rack.get_free_sites()) for rack in self._racks])
 
   def get_site_by_plate_name(self, plate_name: str) -> PlateHolder:
     for rack in self._racks:

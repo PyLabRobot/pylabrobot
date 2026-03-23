@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
-from pylabrobot.plate_reading.backend import PlateReaderBackend
+from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate
 from pylabrobot.resources.well import Well
 

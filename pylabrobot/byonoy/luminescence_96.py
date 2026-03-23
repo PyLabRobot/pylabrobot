@@ -74,7 +74,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     )
 
     t0 = time.time()
-    all_rows: List[float] = []
+    all_rows: List[Optional[float]] = []
 
     while True:
       if time.time() - t0 > 120:
@@ -101,7 +101,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
         if seq == seq_len - 1:
           break
 
-    hybrid_result = all_rows[96 * 0 : 96 * 1]
+    hybrid_result: List[Optional[float]] = all_rows[96 * 0 : 96 * 1]
 
     return [
       LuminescenceResult(

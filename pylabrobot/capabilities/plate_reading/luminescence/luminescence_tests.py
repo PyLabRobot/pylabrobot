@@ -1,7 +1,7 @@
 """Tests for LuminescenceCapability."""
 
 import unittest
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.luminescence.backend import LuminescenceBackend
 from pylabrobot.capabilities.plate_reading.luminescence.chatterbox import (
@@ -59,7 +59,7 @@ class RecordingLuminescenceBackend(LuminescenceBackend):
     focal_height: float,
   ) -> List[LuminescenceResult]:
     self.calls.append(("read_luminescence", len(wells), focal_height))
-    data = [[0.0] * plate.num_items_x for _ in range(plate.num_items_y)]
+    data: List[List[Optional[float]]] = [[0.0] * plate.num_items_x for _ in range(plate.num_items_y)]
     return [
       LuminescenceResult(data=data, temperature=25.0, timestamp=0.0)
     ]

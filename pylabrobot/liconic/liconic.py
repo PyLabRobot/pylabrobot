@@ -189,7 +189,7 @@ class Liconic(Resource, Device):
   def serialize(self):
     from pylabrobot.serializer import serialize
     return {
-      **Machine.serialize(self),
+      **Device.serialize(self),
       **Resource.serialize(self),
       "racks": [rack.serialize() for rack in self._racks],
       "loading_tray_location": serialize(self.loading_tray.location),

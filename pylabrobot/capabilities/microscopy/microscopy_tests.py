@@ -3,6 +3,8 @@
 import unittest
 from typing import List, Tuple
 
+import numpy
+
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
 from pylabrobot.capabilities.microscopy.chatterbox import MicroscopyChatterboxBackend
 from pylabrobot.capabilities.microscopy.microscopy import MicroscopyCapability
@@ -70,7 +72,7 @@ class RecordingMicroscopyBackend(MicroscopyBackend):
   ) -> ImagingResult:
     self.calls.append((row, column, mode, objective, exposure_time, focal_height, gain))
     return ImagingResult(
-      images=[[[0] * 4 for _ in range(4)]],
+      images=[numpy.zeros((4, 4), dtype=int)],
       exposure_time=exposure_time if isinstance(exposure_time, (int, float)) else 10.0,
       focal_height=focal_height if isinstance(focal_height, (int, float)) else 0.0,
     )
@@ -130,12 +132,13 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
     row, col, *_ = self.backend.calls[0]
     # index_of_item for C7 = 50, divmod(50, 12) = (4, 2)
     expected_idx = self.plate.index_of_item(well)
+    assert expected_idx is not None
     expected_row, expected_col = divmod(expected_idx, self.plate.num_items_x)
     self.assertEqual(row, expected_row)
     self.assertEqual(col, expected_col)
 
   async def test_capture_machine_auto(self):
-    result = await self.device.microscopy.capture(
+    await self.device.microscopy.capture(
       well=(0, 0),
       mode=ImagingMode.GFP,
       objective=Objective.O_4X_PL_FL,

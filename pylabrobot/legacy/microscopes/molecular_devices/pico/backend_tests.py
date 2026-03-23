@@ -29,7 +29,7 @@ from pylabrobot.io.sila.grpc import (
   varint_field,
 )
 from pylabrobot.capabilities.microscopy import ImagingMode, Objective
-from pylabrobot.molecular_devices.pico.backend import (
+from pylabrobot.molecular_devices.imageXpress.pico.backend import (
   PicoBackend,
   _FC_SVC,
   _HW_SVC,

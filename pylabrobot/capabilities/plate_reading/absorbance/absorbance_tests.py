@@ -1,7 +1,7 @@
 """Tests for AbsorbanceCapability."""
 
 import unittest
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from pylabrobot.capabilities.plate_reading.absorbance.absorbance import AbsorbanceCapability
 from pylabrobot.capabilities.plate_reading.absorbance.backend import AbsorbanceBackend
@@ -56,7 +56,9 @@ class RecordingAbsorbanceBackend(AbsorbanceBackend):
     self, plate: Plate, wells: List[Well], wavelength: int
   ) -> List[AbsorbanceResult]:
     self.calls.append((plate, wells, wavelength))
-    data = [[None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)]
+    data: List[List[Optional[float]]] = [
+      [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
+    ]
     for well in wells:
       r, c = well.get_row(), well.get_column()
       data[r][c] = 0.5

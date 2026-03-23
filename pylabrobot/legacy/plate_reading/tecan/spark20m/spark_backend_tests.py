@@ -3,8 +3,8 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice
-from pylabrobot.plate_reading.tecan.spark20m.spark_backend import ExperimentalSparkBackend
+from pylabrobot.legacy.plate_reading.tecan.spark20m.enums import SparkDevice
+from pylabrobot.legacy.plate_reading.tecan.spark20m.spark_backend import ExperimentalSparkBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 
@@ -16,7 +16,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self) -> None:
     # Patch SparkReaderAsync
     self.reader_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.SparkReaderAsync"
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_backend.SparkReaderAsync"
     )
     self.MockReaderClass = self.reader_patcher.start()
     self.mock_reader = self.MockReaderClass.return_value
@@ -27,12 +27,12 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
 
     # Patch processor functions
     self.abs_proc_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.process_absorbance"
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_backend.process_absorbance"
     )
     self.mock_process_absorbance = self.abs_proc_patcher.start()
 
     self.fluo_proc_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.process_fluorescence"
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_backend.process_fluorescence"
     )
     self.mock_process_fluorescence = self.fluo_proc_patcher.start()
 
