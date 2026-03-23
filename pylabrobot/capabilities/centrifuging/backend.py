@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
+from typing import Optional
 
 from pylabrobot.device import DeviceBackend
+from pylabrobot.serializer import SerializableMixin
 
 
 class CentrifugeBackend(DeviceBackend, metaclass=ABCMeta):
@@ -39,10 +41,16 @@ class CentrifugeBackend(DeviceBackend, metaclass=ABCMeta):
     """Unlock the bucket."""
 
   @abstractmethod
-  async def spin(self, g: float, duration: float, **kwargs) -> None:
+  async def spin(
+    self,
+    g: float,
+    duration: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
     """Start a spin cycle.
 
     Args:
       g: The g-force to spin at.
       duration: The duration of the spin in seconds (time at speed).
+      backend_params: Vendor-specific parameters.
     """

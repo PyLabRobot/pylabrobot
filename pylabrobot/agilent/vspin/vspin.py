@@ -6,6 +6,7 @@ import math
 import os
 import time
 import warnings
+from dataclasses import dataclass
 from typing import Optional
 
 from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
@@ -20,6 +21,7 @@ from pylabrobot.capabilities.centrifuging.errors import (
 from pylabrobot.device import Device, DeviceBackend
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
+from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)
 
@@ -351,21 +353,29 @@ class VSpinBackend(_NewCentrifugeBackend):
     rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
     return rpm
 
+  @dataclass
+  class SpinParams(SerializableMixin):
+    acceleration: float = 0.8
+    deceleration: float = 0.8
+
   async def spin(
     self,
     g: float = 500,
     duration: float = 60,
-    acceleration: float = 0.8,
-    deceleration: float = 0.8,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> None:
     """Start a spin cycle.
 
     Args:
       g: relative centrifugal force, also known as g-force
       duration: time in seconds spent at speed (g)
-      acceleration: 0-1 of total acceleration
-      deceleration: 0-1 of total deceleration
+      backend_params: VSpinBackend.SpinParams with acceleration and deceleration (0-1).
     """
+    if not isinstance(backend_params, self.SpinParams):
+      backend_params = VSpinBackend.SpinParams()
+
+    acceleration = backend_params.acceleration
+    deceleration = backend_params.deceleration
 
     if acceleration <= 0 or acceleration > 1:
       raise ValueError("Acceleration must be within 0-1.")

@@ -168,7 +168,11 @@ class VSpinBackend(CentrifugeBackend):
     deceleration: float = 0.8,
   ) -> None:
     await self._new.spin(
-      g=g, duration=duration, acceleration=acceleration, deceleration=deceleration
+      g=g,
+      duration=duration,
+      backend_params=_new.VSpinBackend.SpinParams(
+        acceleration=acceleration, deceleration=deceleration
+      ),
     )
 
   async def configure_and_initialize(self):

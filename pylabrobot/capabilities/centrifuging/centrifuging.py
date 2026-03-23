@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 from pylabrobot.capabilities.capability import Capability
 from pylabrobot.resources import ResourceHolder
+from pylabrobot.serializer import SerializableMixin
 
 from .backend import CentrifugeBackend
 
@@ -44,22 +45,28 @@ class CentrifugingCapability(Capability):
   async def unlock_bucket(self) -> None:
     await self.backend.unlock_bucket()
 
-  async def go_to_bucket1(self, **backend_kwargs) -> None:
-    await self.backend.go_to_bucket1(**backend_kwargs)
+  async def go_to_bucket1(self) -> None:
+    await self.backend.go_to_bucket1()
     self._at_bucket = self.bucket1
 
-  async def go_to_bucket2(self, **backend_kwargs) -> None:
-    await self.backend.go_to_bucket2(**backend_kwargs)
+  async def go_to_bucket2(self) -> None:
+    await self.backend.go_to_bucket2()
     self._at_bucket = self.bucket2
 
-  async def spin(self, g: float, duration: float, **backend_kwargs) -> None:
+  async def spin(
+    self,
+    g: float,
+    duration: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> None:
     """Start a spin cycle.
 
     Args:
       g: The g-force to spin at.
       duration: The duration of the spin in seconds (time at speed).
+      backend_params: Vendor-specific parameters.
     """
-    await self.backend.spin(g=g, duration=duration, **backend_kwargs)
+    await self.backend.spin(g=g, duration=duration, backend_params=backend_params)
     self._at_bucket = None
 
   @property
