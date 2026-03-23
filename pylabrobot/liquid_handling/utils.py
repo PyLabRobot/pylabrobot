@@ -222,3 +222,53 @@ def center_channels_in_compartments(
 
   offsets.sort(key=lambda o: o.y, reverse=True)
   return offsets
+
+
+def compute_channel_offsets(
+  resource: Resource,
+  num_channels: int,
+  spread: str = "wide",
+  channel_spacings: Optional[List[float]] = None,
+) -> List[Coordinate]:
+  """Compute Y offsets for positioning pipette channels in a resource.
+
+  Single entry point for all channel positioning logic. Handles containers with no-go zones
+  (distributing channels across compartments) and plain resources (wide/tight spread).
+
+  Args:
+    resource: The target resource (Container, Trough, Well, etc.).
+    num_channels: Number of channels to position.
+    spread: Positioning strategy:
+      - "wide": spread channels as far apart as possible (respects no-go zones if present)
+      - "tight": pack channels at minimum spacing (respects no-go zones if present)
+      - "custom": return zero offsets (caller controls positioning)
+    channel_spacings: Per-adjacent-pair minimum spacings in mm (length = num_channels - 1).
+      Only used when the resource has no-go zones. If None, defaults to 9mm for all pairs.
+
+  Returns:
+    List of Y offsets relative to the resource center, sorted back-to-front (descending Y).
+
+  Raises:
+    ValueError: If channels cannot fit into the compartments of a container with no-go zones,
+      or if spread is not one of "wide", "tight", or "custom".
+  """
+  if spread == "custom":
+    return [Coordinate.zero()] * num_channels
+
+  if num_channels > 1 and isinstance(resource, Container) and resource.no_go_zones:
+    compartment_offsets = center_channels_in_compartments(
+      resource, num_channels, channel_spacings=channel_spacings, spread=spread
+    )
+    if compartment_offsets is not None:
+      return compartment_offsets
+    raise ValueError(
+      f"Cannot fit {num_channels} channels into the compartments of "
+      f"'{resource.name}' while respecting its no-go zones. "
+      f"Use fewer channels or spread='custom' with manual offsets."
+    )
+
+  if spread == "tight":
+    return get_tight_single_resource_liquid_op_offsets(resource=resource, num_channels=num_channels)
+  if spread == "wide":
+    return get_wide_single_resource_liquid_op_offsets(resource=resource, num_channels=num_channels)
+  raise ValueError(f"Invalid value for 'spread': {spread!r}. Must be 'tight', 'wide', or 'custom'.")

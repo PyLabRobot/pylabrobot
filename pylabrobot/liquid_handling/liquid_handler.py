@@ -30,9 +30,7 @@ from pylabrobot.liquid_handling.strictness import (
   get_strictness,
 )
 from pylabrobot.liquid_handling.utils import (
-  center_channels_in_compartments,
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
+  compute_channel_offsets,
 )
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading import PlateReader
@@ -356,38 +354,12 @@ class LiquidHandler(Resource, Machine):
     spread: str,
   ) -> List[Coordinate]:
     """Compute channel spread offsets for a single-resource multi-channel operation."""
-    if (
-      len(use_channels) > 1
-      and isinstance(resource, Container)
-      and resource.no_go_zones
-      and spread != "custom"
-    ):
-      compartment_offsets = center_channels_in_compartments(
-        resource,
-        len(use_channels),
-        channel_spacings=self.backend.get_channel_spacings(use_channels),
-        spread=spread,
-      )
-      if compartment_offsets is not None:
-        return compartment_offsets
-      raise ValueError(
-        f"Cannot fit {len(use_channels)} channels into the compartments of "
-        f"'{resource.name}' while respecting its no-go zones. "
-        f"Use fewer channels or spread='custom' with manual offsets."
-      )
-    # TODO: pass backend.get_channel_spacings() to get_tight/get_wide so they respect
-    # per-pair spacing. Currently they default to 9mm regardless of backend configuration.
-    if spread == "tight":
-      return get_tight_single_resource_liquid_op_offsets(
-        resource=resource, num_channels=len(use_channels)
-      )
-    if spread == "wide":
-      return get_wide_single_resource_liquid_op_offsets(
-        resource=resource, num_channels=len(use_channels)
-      )
-    if spread == "custom":
-      return [Coordinate.zero()] * len(use_channels)
-    raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
+    return compute_channel_offsets(
+      resource=resource,
+      num_channels=len(use_channels),
+      spread=spread,
+      channel_spacings=self.backend.get_channel_spacings(use_channels),
+    )
 
   def _make_sure_channels_exist(self, channels: List[int]):
     """Checks that the channels exist."""
@@ -809,10 +781,7 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    trash_offsets = get_tight_single_resource_liquid_op_offsets(
-      trash,
-      num_channels=n,
-    )
+    trash_offsets = compute_channel_offsets(trash, num_channels=n, spread="tight")
     # add trash_offsets to offsets if defined, otherwise use trash_offsets
     # too advanced for mypy
     offsets = [
