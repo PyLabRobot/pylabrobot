@@ -40,8 +40,9 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
     # Mock time.time() to control the timestamp in the results
-    self.mock_time = unittest.mock.patch("time.time", return_value=12345.6789).start()
-    self.addCleanup(self.mock_time.stop)
+    self._time_patcher = unittest.mock.patch("time.time", return_value=12345.6789)
+    self.mock_time = self._time_patcher.start()
+    self.addCleanup(self._time_patcher.stop)
 
   async def test_setup(self):
     self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
