@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.dispensing\_drive\_vol\_per\_increment
+=======================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. autoattribute:: STAR.dispensing_drive_vol_per_increment

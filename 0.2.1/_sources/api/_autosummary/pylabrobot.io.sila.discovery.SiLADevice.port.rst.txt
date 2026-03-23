@@ -1,0 +1,6 @@
+pylabrobot.io.sila.discovery.SiLADevice.port
+============================================
+
+.. currentmodule:: pylabrobot.io.sila.discovery
+
+.. autoattribute:: SiLADevice.port

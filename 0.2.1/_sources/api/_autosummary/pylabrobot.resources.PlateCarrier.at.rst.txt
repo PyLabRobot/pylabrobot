@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateCarrier.at
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateCarrier.at

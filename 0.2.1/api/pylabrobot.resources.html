@@ -1,0 +1,1037 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pylabrobot.resources package &#8212; PyLabRobot 0.2.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=bbd25712" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=37f418d5"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/pylabrobot.resources';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.1';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script src="../_static/plr_cards.js?v=0d03ad13"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/pylabrobot.resources.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pylabrobot.resources.Carrier" href="_autosummary/pylabrobot.resources.Carrier.html" />
+    <link rel="prev" title="pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on" href="_autosummary/pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.1" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="pylabrobot.html">
+    API
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="pylabrobot.html" class="nav-link">API</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources package</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pylabrobot-resources-package">
+<h1>pylabrobot.resources package<a class="headerlink" href="#pylabrobot-resources-package" title="Link to this heading">#</a></h1>
+<p>Resources represent on-deck liquid handling equipment, including tip racks, plates and carriers. Many resources defined in the VENUS and Opentrons labware libraries are also defined in this package. In addition, by (optionally subclassing and) instantiating the appropriate classes, you can define your own resources.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.Carrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Carrier</span></code></a></p></td>
+<td><p>Base class for all carriers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Container.html#pylabrobot.resources.Container" title="pylabrobot.resources.Container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Container</span></code></a></p></td>
+<td><p>A container is an abstract base class for a resource that can hold liquid.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.Coordinate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Coordinate</span></code></a></p></td>
+<td><p>Represents coordinates.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Deck.html#pylabrobot.resources.Deck" title="pylabrobot.resources.Deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Deck</span></code></a></p></td>
+<td><p>Base class for liquid handler decks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ItemizedResource.html#pylabrobot.resources.ItemizedResource" title="pylabrobot.resources.ItemizedResource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ItemizedResource</span></code></a></p></td>
+<td><p>Base class for Itemized resources.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.utils.create_equally_spaced_2d.html#pylabrobot.resources.utils.create_equally_spaced_2d" title="pylabrobot.resources.utils.create_equally_spaced_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.create_equally_spaced_2d</span></code></a></p></td>
+<td><p>Make equally spaced resources in a 2D grid.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Lid.html#pylabrobot.resources.Lid" title="pylabrobot.resources.Lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Lid</span></code></a></p></td>
+<td><p>Lid for plates.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Liquid.html#pylabrobot.resources.Liquid" title="pylabrobot.resources.Liquid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Liquid</span></code></a></p></td>
+<td><p>A type of liquid (eg water, ethanol, etc.).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PetriDish.html#pylabrobot.resources.PetriDish" title="pylabrobot.resources.PetriDish"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PetriDish</span></code></a></p></td>
+<td><p>A petri dish</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.Plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Plate</span></code></a></p></td>
+<td><p>Base class for Plate resources.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PlateCarrier.html#pylabrobot.resources.PlateCarrier" title="pylabrobot.resources.PlateCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlateCarrier</span></code></a></p></td>
+<td><p>Base class for plate carriers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PlateHolder.html#pylabrobot.resources.PlateHolder" title="pylabrobot.resources.PlateHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlateHolder</span></code></a></p></td>
+<td><p>A single site within a plate carrier.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.Resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Resource</span></code></a></p></td>
+<td><p>Base class for deck resources.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ResourceHolder.html#pylabrobot.resources.ResourceHolder" title="pylabrobot.resources.ResourceHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResourceHolder</span></code></a></p></td>
+<td><p>A mixin class for resources that can hold other resources, like a plate or a lid.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ResourceStack.html#pylabrobot.resources.ResourceStack" title="pylabrobot.resources.ResourceStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResourceStack</span></code></a></p></td>
+<td><p>ResourceStack represent a group of resources that are stacked together and act as a single unit.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Rotation.html#pylabrobot.resources.Rotation" title="pylabrobot.resources.Rotation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Rotation</span></code></a></p></td>
+<td><p>Represents a 3D rotation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tip.Tip.html#pylabrobot.resources.tip.Tip" title="pylabrobot.resources.tip.Tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip.Tip</span></code></a></p></td>
+<td><p>A single tip.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TipCarrier.html#pylabrobot.resources.TipCarrier" title="pylabrobot.resources.TipCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TipCarrier</span></code></a></p></td>
+<td><p>Base class for tip carriers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TipRack.html#pylabrobot.resources.TipRack" title="pylabrobot.resources.TipRack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TipRack</span></code></a></p></td>
+<td><p>Tip rack for disposable tips.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Trough.html#pylabrobot.resources.Trough" title="pylabrobot.resources.Trough"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Trough</span></code></a></p></td>
+<td><p>A trough is a container, particularly useful for multichannel liquid handling operations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Tube.html#pylabrobot.resources.Tube" title="pylabrobot.resources.Tube"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tube</span></code></a></p></td>
+<td><p>Tube container, like Eppendorf tubes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TubeCarrier.html#pylabrobot.resources.TubeCarrier" title="pylabrobot.resources.TubeCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TubeCarrier</span></code></a></p></td>
+<td><p>Base class for tube/sample carriers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TubeRack.html#pylabrobot.resources.TubeRack" title="pylabrobot.resources.TubeRack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TubeRack</span></code></a></p></td>
+<td><p>Tube rack resource.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Well.html#pylabrobot.resources.Well" title="pylabrobot.resources.Well"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Well</span></code></a></p></td>
+<td><p>Base class for Well resources.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="azenta">
+<h2>Azenta<a class="headerlink" href="#azenta" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.azenta.plates.html#module-pylabrobot.resources.azenta.plates" title="pylabrobot.resources.azenta.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">azenta.plates</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="biorad">
+<h2>Biorad<a class="headerlink" href="#biorad" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.biorad.plates.html#module-pylabrobot.resources.biorad.plates" title="pylabrobot.resources.biorad.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">biorad.plates</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="boekel">
+<h2>Boekel<a class="headerlink" href="#boekel" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.boekel.tube_carriers.html#module-pylabrobot.resources.boekel.tube_carriers" title="pylabrobot.resources.boekel.tube_carriers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boekel.tube_carriers</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="corning-axygen">
+<h2>Corning Axygen<a class="headerlink" href="#corning-axygen" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.corning.axygen.plates.html#module-pylabrobot.resources.corning.axygen.plates" title="pylabrobot.resources.corning.axygen.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">corning.axygen.plates</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="corning-costar">
+<h2>Corning Costar<a class="headerlink" href="#corning-costar" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.corning.costar.plates.html#module-pylabrobot.resources.corning.costar.plates" title="pylabrobot.resources.corning.costar.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">corning.costar.plates</span></code></a></p></td>
+<td><p>Corning-Costar plates.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="corning-falcon">
+<h2>Corning Falcon<a class="headerlink" href="#corning-falcon" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.corning.falcon.tubes.html#module-pylabrobot.resources.corning.falcon.tubes" title="pylabrobot.resources.corning.falcon.tubes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">corning.falcon.tubes</span></code></a></p></td>
+<td><p>Corning-Falcon Tubes</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="hamilton">
+<h2>Hamilton<a class="headerlink" href="#hamilton" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.html#module-pylabrobot.resources.hamilton" title="pylabrobot.resources.hamilton"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.html#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck" title="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.hamilton_decks.HamiltonDeck</span></code></a></p></td>
+<td><p>Hamilton decks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.STARDeck.html#pylabrobot.resources.hamilton.STARDeck" title="pylabrobot.resources.hamilton.STARDeck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.STARDeck</span></code></a></p></td>
+<td><p>Create a new STAR deck.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.STARLetDeck.html#pylabrobot.resources.hamilton.STARLetDeck" title="pylabrobot.resources.hamilton.STARLetDeck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.STARLetDeck</span></code></a></p></td>
+<td><p>Create a new STARLet deck.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="ml-star-resources">
+<h2>ML Star resources<a class="headerlink" href="#ml-star-resources" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.html#module-pylabrobot.resources.hamilton" title="pylabrobot.resources.hamilton"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.tip_creators.html#module-pylabrobot.resources.hamilton.tip_creators" title="pylabrobot.resources.hamilton.tip_creators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.tip_creators</span></code></a></p></td>
+<td><p>ML Star tip types</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.tip_racks.html#module-pylabrobot.resources.hamilton.tip_racks" title="pylabrobot.resources.hamilton.tip_racks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.tip_racks</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.tip_carriers.html#module-pylabrobot.resources.hamilton.tip_carriers" title="pylabrobot.resources.hamilton.tip_carriers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.tip_carriers</span></code></a></p></td>
+<td><p>ML Star tip carriers</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.hamilton.plate_carriers.html#module-pylabrobot.resources.hamilton.plate_carriers" title="pylabrobot.resources.hamilton.plate_carriers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hamilton.plate_carriers</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="opentrons">
+<h2>Opentrons<a class="headerlink" href="#opentrons" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.opentrons.html#module-pylabrobot.resources.opentrons" title="pylabrobot.resources.opentrons"><code class="xref py py-obj docutils literal notranslate"><span class="pre">opentrons</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.opentrons.deck.html#module-pylabrobot.resources.opentrons.deck" title="pylabrobot.resources.opentrons.deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">opentrons.deck</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.opentrons.load.html#module-pylabrobot.resources.opentrons.load" title="pylabrobot.resources.opentrons.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">opentrons.load</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.opentrons.tip_racks.html#module-pylabrobot.resources.opentrons.tip_racks" title="pylabrobot.resources.opentrons.tip_racks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">opentrons.tip_racks</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="porvair">
+<h2>Porvair<a class="headerlink" href="#porvair" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.porvair.plates.html#module-pylabrobot.resources.porvair.plates" title="pylabrobot.resources.porvair.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">porvair.plates</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="revvity">
+<h2>Revvity<a class="headerlink" href="#revvity" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.revvity.plates.html#module-pylabrobot.resources.revvity.plates" title="pylabrobot.resources.revvity.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">revvity.plates</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="tecan">
+<h2>Tecan<a class="headerlink" href="#tecan" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.html#module-pylabrobot.resources.tecan" title="pylabrobot.resources.tecan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.plates.html#module-pylabrobot.resources.tecan.plates" title="pylabrobot.resources.tecan.plates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.plates</span></code></a></p></td>
+<td><p>Tecan plates</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.plate_carriers.html#module-pylabrobot.resources.tecan.plate_carriers" title="pylabrobot.resources.tecan.plate_carriers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.plate_carriers</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.tecan_decks.html#module-pylabrobot.resources.tecan.tecan_decks" title="pylabrobot.resources.tecan.tecan_decks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.tecan_decks</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.tecan_resource.html#module-pylabrobot.resources.tecan.tecan_resource" title="pylabrobot.resources.tecan.tecan_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.tecan_resource</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.tip_carriers.html#module-pylabrobot.resources.tecan.tip_carriers" title="pylabrobot.resources.tecan.tip_carriers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.tip_carriers</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.tip_creators.html#module-pylabrobot.resources.tecan.tip_creators" title="pylabrobot.resources.tecan.tip_creators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.tip_creators</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.tip_racks.html#module-pylabrobot.resources.tecan.tip_racks" title="pylabrobot.resources.tecan.tip_racks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.tip_racks</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tecan.wash.html#module-pylabrobot.resources.tecan.wash" title="pylabrobot.resources.tecan.wash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tecan.wash</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="thermo-fisher">
+<h2>Thermo Fisher<a class="headerlink" href="#thermo-fisher" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.thermo_fisher.troughs.html#module-pylabrobot.resources.thermo_fisher.troughs" title="pylabrobot.resources.thermo_fisher.troughs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">thermo_fisher.troughs</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="vwr">
+<h2>VWR<a class="headerlink" href="#vwr" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.vwr.troughs.html#module-pylabrobot.resources.vwr.troughs" title="pylabrobot.resources.vwr.troughs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vwr.troughs</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="tip-trackers">
+<h2>Tip trackers<a class="headerlink" href="#tip-trackers" title="Link to this heading">#</a></h2>
+<p>See <a class="reference internal" href="../user_guide/machine-agnostic-features/using-trackers.html"><span class="doc">Using trackers</span></a> for a tutorial.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.no_tip_tracking.html#pylabrobot.resources.no_tip_tracking" title="pylabrobot.resources.no_tip_tracking"><code class="xref py py-obj docutils literal notranslate"><span class="pre">no_tip_tracking</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.set_tip_tracking.html#pylabrobot.resources.set_tip_tracking" title="pylabrobot.resources.set_tip_tracking"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_tip_tracking</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tip_tracker.TipTracker.html#pylabrobot.resources.tip_tracker.TipTracker" title="pylabrobot.resources.tip_tracker.TipTracker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip_tracker.TipTracker</span></code></a></p></td>
+<td><p>A tip tracker tracks tip operations and raises errors if the tip operations are invalid.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="volume-trackers">
+<h2>Volume trackers<a class="headerlink" href="#volume-trackers" title="Link to this heading">#</a></h2>
+<p>See <a class="reference internal" href="../user_guide/machine-agnostic-features/using-trackers.html"><span class="doc">Using trackers</span></a> for a tutorial.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.no_volume_tracking.html#pylabrobot.resources.no_volume_tracking" title="pylabrobot.resources.no_volume_tracking"><code class="xref py py-obj docutils literal notranslate"><span class="pre">no_volume_tracking</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.set_volume_tracking.html#pylabrobot.resources.set_volume_tracking" title="pylabrobot.resources.set_volume_tracking"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_volume_tracking</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.volume_tracker.VolumeTracker.html#pylabrobot.resources.volume_tracker.VolumeTracker" title="pylabrobot.resources.volume_tracker.VolumeTracker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">volume_tracker.VolumeTracker</span></code></a></p></td>
+<td><p>A volume tracker tracks operations that change the volume in a container and raises errors if the volume operations are invalid.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="utils">
+<h2>Utils<a class="headerlink" href="#utils" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.utils.html#module-pylabrobot.resources.utils" title="pylabrobot.resources.utils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="_autosummary/pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="_autosummary/pylabrobot.resources.Carrier.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pylabrobot.resources.Carrier</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#azenta">Azenta</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#biorad">Biorad</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#boekel">Boekel</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#corning-axygen">Corning Axygen</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#corning-costar">Corning Costar</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#corning-falcon">Corning Falcon</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hamilton">Hamilton</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ml-star-resources">ML Star resources</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opentrons">Opentrons</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#porvair">Porvair</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#revvity">Revvity</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tecan">Tecan</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#thermo-fisher">Thermo Fisher</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vwr">VWR</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-trackers">Tip trackers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#volume-trackers">Volume trackers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#utils">Utils</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/pylabrobot.resources.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/api/pylabrobot.resources.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

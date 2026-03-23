@@ -1,0 +1,1630 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR &#8212; PyLabRobot 0.2.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=bbd25712" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../_static/documentation_options.js?v=37f418d5"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.1';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script src="../../_static/plr_cards.js?v=0d03ad13"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.html" />
+    <link rel="icon" href="../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.base.HamiltonLiquidHandler.stop" href="pylabrobot.liquid_handling.backends.hamilton.base.HamiltonLiquidHandler.stop.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.1" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../pylabrobot.html">
+    API
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.html" class="nav-link">API</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.liquid_handling.html" class="nav-link">pylabrobot.liquid_handling package</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.liquid_handling.backends.html" class="nav-link">pylabrobot.liquid_handling.backends package</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star">
+<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.</span></span><span class="sig-name descname"><span class="pre">STAR</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">STARBackend</span></code></p>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_TIP_FITTING_DEPTH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DISPENSING_DRIVE_VOL_LIMIT_BOTTOM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DISPENSING_DRIVE_VOL_LIMIT_TOP.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DISPENSING_DRIVE_VOL_LIMIT_TOP" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DISPENSING_DRIVE_VOL_LIMIT_TOP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DISPENSING_DRIVE_VOL_LIMIT_TOP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.MAXIMUM_CHANNEL_Z_POSITION.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.MAXIMUM_CHANNEL_Z_POSITION" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.MAXIMUM_CHANNEL_Z_POSITION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAXIMUM_CHANNEL_Z_POSITION</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.MINIMUM_CHANNEL_Z_POSITION.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.MINIMUM_CHANNEL_Z_POSITION" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.MINIMUM_CHANNEL_Z_POSITION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MINIMUM_CHANNEL_Z_POSITION</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.autoload_installed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.autoload_installed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.autoload_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">autoload_installed</span></code></a></p></td>
+<td><p>Deprecated.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.barcode_1d_symbology_dict.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.barcode_1d_symbology_dict" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.barcode_1d_symbology_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">barcode_1d_symbology_dict</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core96_head_installed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core96_head_installed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core96_head_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core96_head_installed</span></code></a></p></td>
+<td><p>Deprecated.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_parked.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_parked" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_parked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_parked</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.deck.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.deck" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deck</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_per_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_per_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_per_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_mm_per_increment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_per_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_per_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_per_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_vol_per_increment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.extended_conf.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.extended_conf" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.extended_conf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">extended_conf</span></code></a></p></td>
+<td><p>Extended configuration.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_installed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_installed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_installed</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_installed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_installed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_installed</span></code></a></p></td>
+<td><p>Deprecated.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_parked.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_parked" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_parked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_parked</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_traversal_height.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_traversal_height" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_traversal_height"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_traversal_height</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">machine_conf</span></code></a></p></td>
+<td><p>Machine configuration.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.module_id_length.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.module_id_length" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.module_id_length"><code class="xref py py-obj docutils literal notranslate"><span class="pre">module_id_length</span></code></a></p></td>
+<td><p>The length of the module identifier in firmware commands.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.num_arms.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.num_arms" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.num_arms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_arms</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.num_channels.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.num_channels" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.num_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_channels</span></code></a></p></td>
+<td><p>The number of pipette channels present on the robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.setup_done.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.setup_done" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.setup_done"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup_done</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unsafe.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unsafe" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unsafe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unsafe</span></code></a></p></td>
+<td><p>Actions that have a higher risk of damaging the robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.y_drive_mm_per_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.y_drive_mm_per_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.y_drive_mm_per_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">y_drive_mm_per_increment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.z_drive_mm_per_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.z_drive_mm_per_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.z_drive_mm_per_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">z_drive_mm_per_increment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.__init__.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.__init__" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Create a new STAR interface.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.additional_time_stamp.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.additional_time_stamp" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.additional_time_stamp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">additional_time_stamp</span></code></a>()</p></td>
+<td><p>Additional time stamp</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aspirate</span></code></a>(ops, use_channels[, jet, blow_out, ...])</p></td>
+<td><p>Aspirate liquid from the specified channels.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aspirate96</span></code></a>(aspiration[, jet, blow_out, ...])</p></td>
+<td><p>Aspirate using the Core96 head.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate_core_96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate_core_96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate_core_96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aspirate_core_96</span></code></a>([aspiration_type, ...])</p></td>
+<td><p>aspirate CoRe 96</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate_pip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate_pip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.aspirate_pip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aspirate_pip</span></code></a>([aspiration_type, tip_pattern, ...])</p></td>
+<td><p>aspirate pip</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.can_pick_up_tip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.can_pick_up_tip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.can_pick_up_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">can_pick_up_tip</span></code></a>(channel_idx, tip)</p></td>
+<td><p>Check if the tip can be picked up by the specified channel.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.can_reach_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.can_reach_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.can_reach_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">can_reach_position</span></code></a>(channel_idx, position)</p></td>
+<td><p>Check if a position is reachable by a channel (center-based).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_dispensing_drive_move_to_volume_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_dispensing_drive_move_to_volume_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_dispensing_drive_move_to_volume_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_dispensing_drive_move_to_volume_position</span></code></a>(...)</p></td>
+<td><p>Move channel's dispensing drive to specified volume position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_dispensing_drive_request_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_dispensing_drive_request_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_dispensing_drive_request_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_dispensing_drive_request_position</span></code></a>(...)</p></td>
+<td><p>Request the current position of the channel's dispensing drive</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_id.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_id" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_id</span></code></a>(channel_idx)</p></td>
+<td><p>channel_idx: plr style, 0-indexed from the back</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_request_cycle_counts.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_request_cycle_counts" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_request_cycle_counts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_request_cycle_counts</span></code></a>(channel_idx)</p></td>
+<td><p>Request cycle counters for a single channel.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_request_y_minimum_spacing.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_request_y_minimum_spacing" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channel_request_y_minimum_spacing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_request_y_minimum_spacing</span></code></a>(channel_idx)</p></td>
+<td><p>Request the minimum Y spacing for a given channel.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_request_cycle_counts.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_request_cycle_counts" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_request_cycle_counts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channels_request_cycle_counts</span></code></a>()</p></td>
+<td><p>Request cycle counters for all channels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_request_y_minimum_spacing.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_request_y_minimum_spacing" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_request_y_minimum_spacing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channels_request_y_minimum_spacing</span></code></a>()</p></td>
+<td><p>Query the minimum Y spacing for all channels in parallel.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_sense_tip_presence.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_sense_tip_presence" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.channels_sense_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channels_sense_tip_presence</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">request_tip_presence</span></code> instead.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.check_fw_string_error.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.check_fw_string_error" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.check_fw_string_error"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_fw_string_error</span></code></a>(resp)</p></td>
+<td><p>Raise an error if the firmware response is an error response.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.check_type_is_hhc.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.check_type_is_hhc" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.check_type_is_hhc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_type_is_hhc</span></code></a>(device_number)</p></td>
+<td><p>Convenience method to check that connected device is an HHC.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_x_position_using_channel.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_x_position_using_channel" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_x_position_using_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clld_probe_x_position_using_channel</span></code></a>(...[, ...])</p></td>
+<td><p>Probe the x-position of a conductive material using a channel's capacitive liquid level detection (cLLD) via a lateral X scan.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_y_position_using_channel.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_y_position_using_channel" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_y_position_using_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clld_probe_y_position_using_channel</span></code></a>(...[, ...])</p></td>
+<td><p>Probe the y-position of a conductive material using the channel's capacitive Liquid Level Detection (cLLD).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_z_height_using_channel.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_z_height_using_channel" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.clld_probe_z_height_using_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clld_probe_z_height_using_channel</span></code></a>(channel_idx)</p></td>
+<td><p>Probe the liquid surface Z-height using a channel's capacitive LLD (cLLD).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.collapse_gripper_arm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.collapse_gripper_arm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.collapse_gripper_arm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">collapse_gripper_arm</span></code></a>([...])</p></td>
+<td><p>Collapse gripper arm</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.configure_node_names.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.configure_node_names" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.configure_node_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">configure_node_names</span></code></a>()</p></td>
+<td><p>Configure node names</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_check_resource_exists_at_location_center.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_check_resource_exists_at_location_center" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_check_resource_exists_at_location_center"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_check_resource_exists_at_location_center</span></code></a>(...)</p></td>
+<td><p>Check existence of resource with CoRe gripper tool a &quot;Get plate using CO-RE gripper&quot; + error handling Which channels are used for resource check is dependent on which channels have been used for <code class="code docutils literal notranslate"><span class="pre">STARBackend.get_core(p1:</span> <span class="pre">int,</span> <span class="pre">p2:</span> <span class="pre">int)</span></code> (channel indices are 0-based) which is a prerequisite for this check function.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_get_plate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_get_plate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_get_plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_get_plate</span></code></a>([x_position, x_direction, ...])</p></td>
+<td><p>Get plate with CoRe gripper tool from wasteblock mount.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_move_picked_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_move_picked_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_move_picked_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_move_picked_up_resource</span></code></a>(center[, ...])</p></td>
+<td><p>After a resource is picked up, move it to a new location but don't release it yet.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_move_plate_to_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_move_plate_to_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_move_plate_to_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_move_plate_to_position</span></code></a>([x_position, ...])</p></td>
+<td><p>Move a plate with CoRe gripper tool.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_open_gripper.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_open_gripper" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_open_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_open_gripper</span></code></a>()</p></td>
+<td><p>Open CoRe gripper tool.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_pick_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_pick_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_pick_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_pick_up_resource</span></code></a>(resource, ...[, ...])</p></td>
+<td><p>Pick up resource with CoRe gripper tool Low level component of <code class="xref py py-meth docutils literal notranslate"><span class="pre">move_resource()</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_put_plate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_put_plate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_put_plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_put_plate</span></code></a>([x_position, x_direction, ...])</p></td>
+<td><p>Put plate with CoRe gripper tool and return to wasteblock mount.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_read_barcode_of_picked_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_read_barcode_of_picked_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_read_barcode_of_picked_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_read_barcode_of_picked_up_resource</span></code></a>(rails)</p></td>
+<td><p>Read a 1D barcode using the CoRe gripper scanner.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_release_picked_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_release_picked_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.core_release_picked_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">core_release_picked_up_resource</span></code></a>(location, ...)</p></td>
+<td><p>Place resource with CoRe gripper tool Low level component of <code class="xref py py-meth docutils literal notranslate"><span class="pre">move_resource()</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.define_tip_needle.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.define_tip_needle" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.define_tip_needle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">define_tip_needle</span></code></a>(tip_type_table_index, ...)</p></td>
+<td><p>Tip/needle definition.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.deserialize.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.deserialize" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.deserialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deserialize</span></code></a>(data)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.disable_cover_control.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.disable_cover_control" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.disable_cover_control"><code class="xref py py-obj docutils literal notranslate"><span class="pre">disable_cover_control</span></code></a>()</p></td>
+<td><p>Disable cover control</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.discard_tip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.discard_tip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.discard_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">discard_tip</span></code></a>(x_positions, y_positions, ...[, ...])</p></td>
+<td><p>discard tip</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.discard_tips_core96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.discard_tips_core96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.discard_tips_core96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">discard_tips_core96</span></code></a>(x_position, x_direction, ...)</p></td>
+<td><p>Drop tips with CoRe 96 head</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispense</span></code></a>(ops, use_channels[, ...])</p></td>
+<td><p>Dispense liquid from the specified channels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispense96</span></code></a>(dispense[, jet, empty, blow_out, ...])</p></td>
+<td><p>Dispense using the Core96 head.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense_core_96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense_core_96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense_core_96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispense_core_96</span></code></a>([dispensing_mode, ...])</p></td>
+<td><p>Dispensing of liquid using CoRe 96</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense_pip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense_pip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispense_pip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispense_pip</span></code></a>(tip_pattern[, dispensing_mode, ...])</p></td>
+<td><p>dispense pip</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_increment_to_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_increment_to_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_increment_to_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_increment_to_mm</span></code></a>(...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_increment_to_volume.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_increment_to_volume" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_increment_to_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_increment_to_volume</span></code></a>(...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_to_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_to_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_to_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_mm_to_increment</span></code></a>(position_mm)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_to_vol.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_to_vol" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_mm_to_vol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_mm_to_vol</span></code></a>(position_mm)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_to_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_to_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_to_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_vol_to_increment</span></code></a>(volume)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_to_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_to_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.dispensing_drive_vol_to_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispensing_drive_vol_to_mm</span></code></a>(vol)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drain_dual_chamber_system.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drain_dual_chamber_system" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drain_dual_chamber_system"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drain_dual_chamber_system</span></code></a>([pump_station])</p></td>
+<td><p>Drain system (dual chamber only)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_resource</span></code></a>(drop[, use_arm, ...])</p></td>
+<td><p>Drop a resource like a plate or a lid using the integrated robotic arm.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_tips.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_tips" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_tips</span></code></a>(ops, use_channels[, drop_method, ...])</p></td>
+<td><p>Drop tips to a resource.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_tips96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_tips96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.drop_tips96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_tips96</span></code></a>(drop[, ...])</p></td>
+<td><p>Drop tips from the 96 head.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.empty_tip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.empty_tip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.empty_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">empty_tip</span></code></a>(channel_idx[, vol, flow_rate, ...])</p></td>
+<td><p>Empty tip by moving to <code class="code docutils literal notranslate"><span class="pre">vol</span></code> (default bottom limit), optionally returning plunger position to 0.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.empty_tips.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.empty_tips" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.empty_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">empty_tips</span></code></a>([channels, vol, flow_rate, ...])</p></td>
+<td><p>Empty multiple tips by moving to <code class="code docutils literal notranslate"><span class="pre">vol</span></code> (default bottom limit), optionally returning plunger position to 0.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.enable_cover_control.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.enable_cover_control" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.enable_cover_control"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enable_cover_control</span></code></a>()</p></td>
+<td><p>Enable cover control</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.ensure_can_reach_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.ensure_can_reach_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.ensure_can_reach_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensure_can_reach_position</span></code></a>(use_channels, ops, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.execute_batched.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.execute_batched" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.execute_batched"><code class="xref py py-obj docutils literal notranslate"><span class="pre">execute_batched</span></code></a>(func, resources[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.fill_selected_dual_chamber.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.fill_selected_dual_chamber" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.fill_selected_dual_chamber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fill_selected_dual_chamber</span></code></a>([pump_station, ...])</p></td>
+<td><p>Initialize pump station valves (dual chamber only)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_all_instances.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_all_instances" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_all_instances"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_all_instances</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_channels_y_positions.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_channels_y_positions" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_channels_y_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_channels_y_positions</span></code></a>()</p></td>
+<td><p>Get the Y position of all channels in mm</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_channels_z_positions.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_channels_z_positions" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_channels_z_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_channels_z_positions</span></code></a>()</p></td>
+<td><p>Get the Y position of all channels in mm</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_core.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_core" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_core"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_core</span></code></a>(p1, p2)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_id_from_fw_response.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_id_from_fw_response" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_id_from_fw_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_id_from_fw_response</span></code></a>(resp)</p></td>
+<td><p>Get the id from a firmware response.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_iswap_version.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_iswap_version" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_iswap_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_iswap_version</span></code></a>()</p></td>
+<td><p>Lazily load the iSWAP version.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_logic_iswap_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_logic_iswap_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_logic_iswap_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_logic_iswap_position</span></code></a>([x_position, ...])</p></td>
+<td><p>Get logic iSWAP position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_or_assign_tip_type_index.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_or_assign_tip_type_index" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_or_assign_tip_type_index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_or_assign_tip_type_index</span></code></a>(tip)</p></td>
+<td><p>Get a tip type table index for the tip.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_temperature_at_hhc.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_temperature_at_hhc" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.get_temperature_at_hhc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_temperature_at_hhc</span></code></a>(device_number)</p></td>
+<td><p>Query current temperatures of both sensors of specified HHC</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.halt.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.halt" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.halt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">halt</span></code></a>()</p></td>
+<td><p>Halt</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_and_squeezer_driver_initialize.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_and_squeezer_driver_initialize" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_and_squeezer_driver_initialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_dispensing_drive_and_squeezer_driver_initialize</span></code></a>([...])</p></td>
+<td><p>Initialize 96-head's dispensing drive AND squeezer drive</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_move_to_home_volume.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_move_to_home_volume" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_move_to_home_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_dispensing_drive_move_to_home_volume</span></code></a>()</p></td>
+<td><p>Move the 96-head dispensing drive into its home position (vol=0.0 uL).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_move_to_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_move_to_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_move_to_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_dispensing_drive_move_to_position</span></code></a>(...)</p></td>
+<td><p>Move dispensing drive to absolute position in uL</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_request_position_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_request_position_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_request_position_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_dispensing_drive_request_position_mm</span></code></a>()</p></td>
+<td><p>Request 96 Head dispensing drive position in mm</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_request_position_uL.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_request_position_uL" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_dispensing_drive_request_position_uL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_dispensing_drive_request_position_uL</span></code></a>()</p></td>
+<td><p>Request 96 Head dispensing drive position in uL</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_to_coordinate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_to_coordinate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_to_coordinate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_move_to_coordinate</span></code></a>(coordinate[, ...])</p></td>
+<td><p>Move STAR(let) 96-Head to defined Coordinate</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_to_z_safety.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_to_z_safety" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_to_z_safety"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_move_to_z_safety</span></code></a>()</p></td>
+<td><p>Move 96-Head to Z safety coordinate, i.e. z=342.5 mm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_move_x</span></code></a>(x)</p></td>
+<td><p>Move the 96-head to a specified X-axis coordinate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_y.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_y" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_move_y</span></code></a>(y[, speed, acceleration, ...])</p></td>
+<td><p>Move the 96-head to a specified Y-axis coordinate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_move_z</span></code></a>(z[, speed, acceleration, ...])</p></td>
+<td><p>Move the 96-head to a specified Z-axis coordinate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_park.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_park" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_park"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_park</span></code></a>()</p></td>
+<td><p>Park the 96-head.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_firmware_version.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_firmware_version" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_firmware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_firmware_version</span></code></a>()</p></td>
+<td><p>Request 96 Head firmware version (MEM-READ command).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_position</span></code></a>()</p></td>
+<td><p>Request position of CoRe 96 Head (A1 considered to tip length)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_presence.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_presence" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_tip_presence</span></code></a>()</p></td>
+<td><p>Request Tip presence on the 96-Head</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_type</span></code></a>()</p></td>
+<td><p>Send QG and return the 96-head type as a human-readable string.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_auto_load.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_auto_load" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_auto_load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_auto_load</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">initialize_autoload</span></code> instead.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_autoload.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_autoload" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_autoload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_autoload</span></code></a>()</p></td>
+<td><p>Initialize Auto load module</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_core_96_head.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_core_96_head" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_core_96_head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_core_96_head</span></code></a>(trash96[, ...])</p></td>
+<td><p>Initialize CoRe 96 Head</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_dual_pump_station_valves.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_dual_pump_station_valves" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_dual_pump_station_valves"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_dual_pump_station_valves</span></code></a>([...])</p></td>
+<td><p>Initialize pump station valves (dual chamber only)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_hhc.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_hhc" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_hhc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_hhc</span></code></a>(device_number)</p></td>
+<td><p>Initialize Hamilton Heater Cooler (HHC) at specified TCC port</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_iswap.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_iswap" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_iswap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_iswap</span></code></a>()</p></td>
+<td><p>Initialize iSWAP (for standalone configuration only)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_pip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_pip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_pip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_pip</span></code></a>()</p></td>
+<td><p>Wrapper around initialize_pipetting_channels firmware command.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_pipetting_channels.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_pipetting_channels" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_pipetting_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_pipetting_channels</span></code></a>([x_positions, ...])</p></td>
+<td><p>Initialize pipetting channels</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_close_gripper.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_close_gripper" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_close_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_close_gripper</span></code></a>([grip_strength, ...])</p></td>
+<td><p>Close gripper</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_dangerous_release_break.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_dangerous_release_break" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_dangerous_release_break"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_dangerous_release_break</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_get_plate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_get_plate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_get_plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_get_plate</span></code></a>([x_position, x_direction, ...])</p></td>
+<td><p>Get plate using iswap.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_initialize_z_axis.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_initialize_z_axis" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_initialize_z_axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_initialize_z_axis</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_minimum_traversal_height.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_minimum_traversal_height" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_minimum_traversal_height"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_minimum_traversal_height</span></code></a>(traversal_height)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_move_picked_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_move_picked_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_move_picked_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_move_picked_up_resource</span></code></a>(center, ...[, ...])</p></td>
+<td><p>After a resource is picked up, move it to a new location but don't release it yet.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_open_gripper.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_open_gripper" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_open_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_open_gripper</span></code></a>([open_position])</p></td>
+<td><p>Open gripper</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_put_plate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_put_plate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_put_plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_put_plate</span></code></a>([x_position, x_direction, ...])</p></td>
+<td><p>put plate</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_reengage_break</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotate</span></code></a>(rotation_drive, grip_direction)</p></td>
+<td><p>Rotate the iswap to a predefined position.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_y.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_y" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_y</span></code></a>()</p></td>
+<td><p>Request iSWAP rotation drive Y position (center) in mm.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_carrier</span></code></a>(carrier[, ...])</p></td>
+<td><p>Use autoload to load carrier.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier_from_autoload_belt.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier_from_autoload_belt" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier_from_autoload_belt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_carrier_from_autoload_belt</span></code></a>([...])</p></td>
+<td><p>Finishes loading the carrier that is currently engaged with the autoload sled, i.e. is currently in the identification position.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier_from_tray_and_scan_carrier_barcode.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier_from_tray_and_scan_carrier_barcode" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier_from_tray_and_scan_carrier_barcode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_carrier_from_tray_and_scan_carrier_barcode</span></code></a>(carrier)</p></td>
+<td><p>Load carrier from loading tray and - optionally - scan 1D carrier barcode</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.lock_cover.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.lock_cover" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.lock_cover"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lock_cover</span></code></a>()</p></td>
+<td><p>Lock cover</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.mm_to_y_drive_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.mm_to_y_drive_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.mm_to_y_drive_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mm_to_y_drive_increment</span></code></a>(value_mm)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.mm_to_z_drive_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.mm_to_z_drive_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.mm_to_z_drive_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mm_to_z_drive_increment</span></code></a>(value_mm)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_96head_to_coordinate.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_96head_to_coordinate" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_96head_to_coordinate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_96head_to_coordinate</span></code></a>(coordinate[, ...])</p></td>
+<td><p>Move STAR(let) 96-Head to defined Coordinate</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_all_channels_in_z_safety.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_all_channels_in_z_safety" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_all_channels_in_z_safety"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_all_channels_in_z_safety</span></code></a>()</p></td>
+<td><p>Move all pipetting channels in Z-safety position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_all_pipetting_channels_to_defined_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_all_pipetting_channels_to_defined_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_all_pipetting_channels_to_defined_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_all_pipetting_channels_to_defined_position</span></code></a>([...])</p></td>
+<td><p>Move all pipetting channels to defined position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_auto_load_to_z_save_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_auto_load_to_z_save_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_auto_load_to_z_save_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_auto_load_to_z_save_position</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">move_autoload_to_safe_z_position</span></code> instead.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_safe_z_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_safe_z_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_safe_z_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_autoload_to_safe_z_position</span></code></a>()</p></td>
+<td><p>Move autoload carrier handling wheel to safe Z position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_save_z_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_save_z_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_save_z_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_autoload_to_save_z_position</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">move_autoload_to_safe_z_position</span></code> instead.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_slot.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_slot" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_slot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_autoload_to_slot</span></code></a>(slot_number)</p></td>
+<td><p>deprecated - use <code class="code docutils literal notranslate"><span class="pre">move_autoload_to_track</span></code> instead.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_track.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_track" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_autoload_to_track"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_autoload_to_track</span></code></a>(track)</p></td>
+<td><p>Move autoload to specific slot/track position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_x.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_x" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_channel_x</span></code></a>(channel, x)</p></td>
+<td><p>Move a channel in the x direction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_x_relative.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_x_relative" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_x_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_channel_x_relative</span></code></a>(channel, distance)</p></td>
+<td><p>Move a channel in the x direction by a relative amount.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_y.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_y" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_channel_y</span></code></a>(channel, y)</p></td>
+<td><p>Move a channel safely in the y direction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_y_relative.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_y_relative" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_y_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_channel_y_relative</span></code></a>(channel, distance)</p></td>
+<td><p>Move a channel in the y direction by a relative amount.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_channel_z</span></code></a>(channel, z)</p></td>
+<td><p>Move a channel in the z direction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z_relative.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z_relative" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_channel_z_relative</span></code></a>(channel, distance)</p></td>
+<td><p>Move a channel in the z direction by a relative amount.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_to_defined_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_to_defined_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_to_defined_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_core_96_head_to_defined_position</span></code></a>(x, y)</p></td>
+<td><p>Move CoRe 96 Head to defined position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_x.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_x" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_core_96_head_x</span></code></a>(x_position)</p></td>
+<td><p>Move CoRe 96 Head X to absolute position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_y.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_y" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_core_96_head_y</span></code></a>(y_position)</p></td>
+<td><p>Move CoRe 96 Head Y to absolute position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_head_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_core_96_head_z</span></code></a>(z_position)</p></td>
+<td><p>Move CoRe 96 Head Z to absolute position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_to_safe_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_to_safe_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_core_96_to_safe_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_core_96_to_safe_position</span></code></a>()</p></td>
+<td><p>Move CoRe 96 Head to Z safe position.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_iswap_x</span></code></a>(x_position)</p></td>
+<td><p>Move iSWAP X to absolute position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x_relative.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x_relative" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_iswap_x_relative</span></code></a>(step_size[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_iswap_y</span></code></a>(y_position)</p></td>
+<td><p>Move iSWAP Y to absolute position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y_relative.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y_relative" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_iswap_y_relative</span></code></a>(step_size[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_iswap_z</span></code></a>(z_position)</p></td>
+<td><p>Move iSWAP Z to absolute position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_z_relative.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_z_relative" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_z_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_iswap_z_relative</span></code></a>(step_size[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position</span></code></a>([...])</p></td>
+<td><p>Move left X-arm to position with all attached components in Z-safety position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_picked_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_picked_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_picked_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_picked_up_resource</span></code></a>(move[, use_arm])</p></td>
+<td><p>Move a picked up resource like a plate or a lid using the integrated robotic arm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_plate_to_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_plate_to_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_plate_to_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_plate_to_position</span></code></a>([x_position, ...])</p></td>
+<td><p>Move plate to position.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position</span></code></a>([...])</p></td>
+<td><p>Move right X-arm to position with all attached components in Z-safety position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.occupy_and_provide_area_for_external_access.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.occupy_and_provide_area_for_external_access" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.occupy_and_provide_area_for_external_access"><code class="xref py py-obj docutils literal notranslate"><span class="pre">occupy_and_provide_area_for_external_access</span></code></a>([...])</p></td>
+<td><p>Occupy and provide area for external access</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.open_not_initialized_gripper.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.open_not_initialized_gripper" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.open_not_initialized_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_not_initialized_gripper</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.park_autoload.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.park_autoload" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.park_autoload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">park_autoload</span></code></a>()</p></td>
+<td><p>Park autoload</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.park_iswap.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.park_iswap" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.park_iswap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">park_iswap</span></code></a>([...])</p></td>
+<td><p>Close gripper</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_core_gripper_tools.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_core_gripper_tools" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_core_gripper_tools"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_core_gripper_tools</span></code></a>(front_channel[, ...])</p></td>
+<td><p>Get CoRe gripper tool from wasteblock mount.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_resource.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_resource" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_resource</span></code></a>(pickup[, use_arm, ...])</p></td>
+<td><p>Pick up a resource like a plate or a lid using the integrated robotic arm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tip</span></code></a>(x_positions, y_positions, ...[, ...])</p></td>
+<td><p>Tip Pick-up</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips</span></code></a>(ops, use_channels[, ...])</p></td>
+<td><p>Pick up tips from a resource.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips96</span></code></a>(pickup[, tip_pickup_method, ...])</p></td>
+<td><p>Pick up tips using the 96 head.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips_core96.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips_core96" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pick_up_tips_core96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips_core96</span></code></a>(x_position, x_direction, ...)</p></td>
+<td><p>Pick up tips with CoRe 96 head</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pierce_foil.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pierce_foil" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pierce_foil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pierce_foil</span></code></a>(wells, piercing_channels, ...[, ...])</p></td>
+<td><p>Pierce the foil of the media source plate at the specified column.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.plld_probe_z_height_using_channel.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.plld_probe_z_height_using_channel" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.plld_probe_z_height_using_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plld_probe_z_height_using_channel</span></code></a>(channel_idx)</p></td>
+<td><p>Detect liquid level using pressured-based liquid level detection (pLLD) (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or (b) without foam detection sub-mode.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_channels_in_y_direction.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_channels_in_y_direction" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_channels_in_y_direction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_channels_in_y_direction</span></code></a>(ys[, ...])</p></td>
+<td><p>position all channels simultaneously in the Y direction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_channels_in_z_direction.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_channels_in_z_direction" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_channels_in_z_direction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_channels_in_z_direction</span></code></a>(zs)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_components_for_free_iswap_y_range.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_components_for_free_iswap_y_range" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_components_for_free_iswap_y_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_components_for_free_iswap_y_range</span></code></a>()</p></td>
+<td><p>Position all components so that there is maximum free Y range for iSWAP</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_left_x_arm_.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_left_x_arm_" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_left_x_arm_"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_left_x_arm_</span></code></a>([x_position])</p></td>
+<td><p>Position left X-Arm</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_max_free_y_for_n.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_max_free_y_for_n" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_max_free_y_for_n"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_max_free_y_for_n</span></code></a>(...)</p></td>
+<td><p>Position all pipetting channels so that there is maximum free Y range for channel n</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_right_x_arm_.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_right_x_arm_" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_right_x_arm_"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_right_x_arm_</span></code></a>([x_position])</p></td>
+<td><p>Position right X-Arm</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_single_pipetting_channel_in_y_direction.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_single_pipetting_channel_in_y_direction" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_single_pipetting_channel_in_y_direction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_single_pipetting_channel_in_y_direction</span></code></a>(...)</p></td>
+<td><p>Position single pipetting channel in Y-direction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_single_pipetting_channel_in_z_direction.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_single_pipetting_channel_in_z_direction" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.position_single_pipetting_channel_in_z_direction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position_single_pipetting_channel_in_z_direction</span></code></a>(...)</p></td>
+<td><p>Position single pipetting channel in Z-direction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pre_initialize_instrument.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pre_initialize_instrument" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.pre_initialize_instrument"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pre_initialize_instrument</span></code></a>()</p></td>
+<td><p>Pre-initialize instrument</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.prepare_for_manual_channel_operation.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.prepare_for_manual_channel_operation" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.prepare_for_manual_channel_operation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepare_for_manual_channel_operation</span></code></a>(channel)</p></td>
+<td><p>Prepare for manual operation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.prepare_iswap_teaching.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.prepare_iswap_teaching" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.prepare_iswap_teaching"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepare_iswap_teaching</span></code></a>([x_position, ...])</p></td>
+<td><p>Prepare iSWAP teaching</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.probe_liquid_heights.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.probe_liquid_heights" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.probe_liquid_heights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probe_liquid_heights</span></code></a>(containers[, ...])</p></td>
+<td><p>Probe liquid surface heights in containers using liquid level detection.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.probe_liquid_volumes.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.probe_liquid_volumes" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.probe_liquid_volumes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probe_liquid_volumes</span></code></a>(containers, use_channels)</p></td>
+<td><p>Probe liquid volumes in containers by measuring heights and converting to volumes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.put_core.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.put_core" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.put_core"><code class="xref py py-obj docutils literal notranslate"><span class="pre">put_core</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.query_whether_temperature_reached_at_hhc.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.query_whether_temperature_reached_at_hhc" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.query_whether_temperature_reached_at_hhc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">query_whether_temperature_reached_at_hhc</span></code></a>(...)</p></td>
+<td><p>Stop temperature regulation of specified HHC</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.release_all_occupied_areas.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.release_all_occupied_areas" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.release_all_occupied_areas"><code class="xref py py-obj docutils literal notranslate"><span class="pre">release_all_occupied_areas</span></code></a>()</p></td>
+<td><p>Release all occupied areas</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.release_occupied_area.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.release_occupied_area" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.release_occupied_area"><code class="xref py py-obj docutils literal notranslate"><span class="pre">release_occupied_area</span></code></a>([...])</p></td>
+<td><p>Release occupied area</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_additional_timestamp_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_additional_timestamp_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_additional_timestamp_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_additional_timestamp_data</span></code></a>()</p></td>
+<td><p>Request additional timestamp data</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_auto_load_slot_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_auto_load_slot_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_auto_load_slot_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_auto_load_slot_position</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">request_autoload_track</span></code> instead.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_initialization_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_initialization_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_initialization_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_autoload_initialization_status</span></code></a>()</p></td>
+<td><p>Request autoload initialization status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_track.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_track" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_track"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_autoload_track</span></code></a>()</p></td>
+<td><p>Request current track of the autoload 'carrier handler'.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_autoload_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_autoload_type</span></code></a>()</p></td>
+<td><p>Query the autoload module type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_channel_tadm_error_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_channel_tadm_error_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_channel_tadm_error_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_core_96_head_channel_tadm_error_status</span></code></a>()</p></td>
+<td><p>Request CoRe 96 Head channel TADM error status</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_channel_tadm_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_channel_tadm_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_channel_tadm_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_core_96_head_channel_tadm_status</span></code></a>()</p></td>
+<td><p>Request CoRe 96 Head channel TADM Status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_initialization_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_initialization_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_core_96_head_initialization_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_core_96_head_initialization_status</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_cover_open.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_cover_open" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_cover_open"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_cover_open</span></code></a>()</p></td>
+<td><p>Request cover open</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_deck_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_deck_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_deck_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_deck_data</span></code></a>()</p></td>
+<td><p>Request deck data</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_device_serial_number.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_device_serial_number" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_device_serial_number"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_device_serial_number</span></code></a>()</p></td>
+<td><p>Request device serial number</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_download_date.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_download_date" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_download_date"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_download_date</span></code></a>()</p></td>
+<td><p>Request download date</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_eeprom_data_correctness.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_eeprom_data_correctness" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_eeprom_data_correctness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_eeprom_data_correctness</span></code></a>()</p></td>
+<td><p>Request EEPROM data correctness</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_electronic_board_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_electronic_board_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_electronic_board_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_electronic_board_type</span></code></a>()</p></td>
+<td><p>Request electronic board type</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_error_code.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_error_code" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_error_code"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_error_code</span></code></a>()</p></td>
+<td><p>Request error code</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_extended_configuration.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_extended_configuration" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_extended_configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_extended_configuration</span></code></a>()</p></td>
+<td><p>Request extended configuration (QM command).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_firmware_version.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_firmware_version" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_firmware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_firmware_version</span></code></a>()</p></td>
+<td><p>Request firmware version</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_installation_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_installation_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_installation_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_installation_data</span></code></a>()</p></td>
+<td><p>Request installation data</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_instrument_initialization_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_instrument_initialization_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_instrument_initialization_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_instrument_initialization_status</span></code></a>()</p></td>
+<td><p>Request instrument initialization status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_in_parking_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_in_parking_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_in_parking_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_in_parking_position</span></code></a>()</p></td>
+<td><p>Request iSWAP in parking position</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_initialization_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_initialization_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_initialization_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_initialization_status</span></code></a>()</p></td>
+<td><p>Request iSWAP initialization status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_position</span></code></a>()</p></td>
+<td><p>Request iSWAP position ( grip center )</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_rotation_drive_orientation</span></code></a>()</p></td>
+<td><p>Request the iSWAP rotation drive orientation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_rotation_drive_position_increments</span></code></a>()</p></td>
+<td><p>Query the iSWAP rotation drive position (units: increments) from the firmware.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_version.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_version" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_version</span></code></a>()</p></td>
+<td><p>Firmware command for getting iswap version</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_orientation.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_orientation" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_orientation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_wrist_drive_orientation</span></code></a>()</p></td>
+<td><p>Request the iSWAP wrist drive orientation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_iswap_wrist_drive_position_increments</span></code></a>()</p></td>
+<td><p>Query the iSWAP wrist drive position (units: increments) from the firmware.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_left_x_arm_last_collision_type</span></code></a>()</p></td>
+<td><p>Request left X-Arm last collision type (after error 27)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_left_x_arm_position</span></code></a>()</p></td>
+<td><p>Request left X-Arm position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_machine_configuration.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_machine_configuration" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_machine_configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_machine_configuration</span></code></a>()</p></td>
+<td><p>Request machine configuration (RM command) [SFCO.0035].</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_master_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_master_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_master_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_master_status</span></code></a>()</p></td>
+<td><p>Request master status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_maximal_ranges_of_x_drives.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_maximal_ranges_of_x_drives" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_maximal_ranges_of_x_drives"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_maximal_ranges_of_x_drives</span></code></a>()</p></td>
+<td><p>Request maximal ranges of X drives</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_name_of_last_faulty_parameter.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_name_of_last_faulty_parameter" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_name_of_last_faulty_parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_name_of_last_faulty_parameter</span></code></a>()</p></td>
+<td><p>Request name of last faulty parameter</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_node_names.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_node_names" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_node_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_node_names</span></code></a>()</p></td>
+<td><p>Request node names</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_number_of_presence_sensors_installed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_number_of_presence_sensors_installed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_number_of_presence_sensors_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_number_of_presence_sensors_installed</span></code></a>()</p></td>
+<td><p>Request number of presence sensors installed</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_parameter_value.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_parameter_value" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_parameter_value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_parameter_value</span></code></a>()</p></td>
+<td><p>Request parameter value</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_channel_validation_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_channel_validation_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_channel_validation_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_pip_channel_validation_status</span></code></a>()</p></td>
+<td><p>Request PIP channel validation status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_channel_version.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_channel_version" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_channel_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_pip_channel_version</span></code></a>(channel)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_height_last_lld.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_height_last_lld" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pip_height_last_lld"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_pip_height_last_lld</span></code></a>()</p></td>
+<td><p>Return the absolute liquid heights measured during the most recent liquid-level detection (LLD) event for all channels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_plate_in_iswap.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_plate_in_iswap" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_plate_in_iswap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_plate_in_iswap</span></code></a>()</p></td>
+<td><p>Request plate in iSWAP</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_position_of_core_96_head.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_position_of_core_96_head" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_position_of_core_96_head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_position_of_core_96_head</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">head96_request_position</span></code> instead.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_carriers_on_deck.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_carriers_on_deck" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_carriers_on_deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_presence_of_carriers_on_deck</span></code></a>()</p></td>
+<td><p>Read the deck carrier presence sensors and return the positions where carriers are currently detected.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_carriers_on_loading_tray.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_carriers_on_loading_tray" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_carriers_on_loading_tray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_presence_of_carriers_on_loading_tray</span></code></a>()</p></td>
+<td><p>Moves autoload sled across loading tray and reads its front-facing proximity sensors to determine which tray positions contain carriers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_single_carrier_on_loading_tray.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_single_carrier_on_loading_tray" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_presence_of_single_carrier_on_loading_tray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_presence_of_single_carrier_on_loading_tray</span></code></a>(track)</p></td>
+<td><p>Check whether a specific loading-tray track contains a carrier.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_present_wrap_size_of_installed_arms.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_present_wrap_size_of_installed_arms" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_present_wrap_size_of_installed_arms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_present_wrap_size_of_installed_arms</span></code></a>()</p></td>
+<td><p>Request present wrap size of installed arms</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_probe_z_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_probe_z_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_probe_z_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_probe_z_position</span></code></a>(channel_idx)</p></td>
+<td><p>Request the z-position of the channel probe (EXCLUDING the tip)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pump_settings.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pump_settings" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_pump_settings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_pump_settings</span></code></a>([pump_station])</p></td>
+<td><p>Set carrier monitoring</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_right_x_arm_last_collision_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_right_x_arm_last_collision_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_right_x_arm_last_collision_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_right_x_arm_last_collision_type</span></code></a>()</p></td>
+<td><p>Request right X-Arm last collision type (after error 27)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_right_x_arm_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_right_x_arm_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_right_x_arm_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_right_x_arm_position</span></code></a>()</p></td>
+<td><p>Request right X-Arm position</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_single_carrier_presence.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_single_carrier_presence" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_single_carrier_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_single_carrier_presence</span></code></a>(carrier_position)</p></td>
+<td><p>Request single carrier presence on the loading tray (not on deck)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_supply_voltage.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_supply_voltage" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_supply_voltage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_supply_voltage</span></code></a>()</p></td>
+<td><p>Request supply voltage</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tadm_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tadm_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tadm_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tadm_status</span></code></a>()</p></td>
+<td><p>Request PIP height of last LLD</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_technical_status_of_assemblies.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_technical_status_of_assemblies" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_technical_status_of_assemblies"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_technical_status_of_assemblies</span></code></a>()</p></td>
+<td><p>Request Technical status of assemblies</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_bottom_z_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_bottom_z_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_bottom_z_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tip_bottom_z_position</span></code></a>(channel_idx)</p></td>
+<td><p>Request Z-Position of the tip bottom of the tip mounted at on channel <code class="code docutils literal notranslate"><span class="pre">channel_idx</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_len_on_channel.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_len_on_channel" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_len_on_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tip_len_on_channel</span></code></a>(channel_idx)</p></td>
+<td><p>Measures the length of the tip attached to the specified pipetting channel.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_presence.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_presence" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tip_presence</span></code></a>()</p></td>
+<td><p>Measure tip presence on all single channels using their sleeve sensors.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_presence_in_core_96_head.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_presence_in_core_96_head" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_tip_presence_in_core_96_head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tip_presence_in_core_96_head</span></code></a>()</p></td>
+<td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">head96_request_tip_presence</span></code> instead.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_verification_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_verification_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_verification_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_verification_data</span></code></a>([verification_subject])</p></td>
+<td><p>Request download date</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_volume_in_tip.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_volume_in_tip" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_volume_in_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_volume_in_tip</span></code></a>(channel)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_x_pos_channel_n.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_x_pos_channel_n" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_x_pos_channel_n"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_x_pos_channel_n</span></code></a>([...])</p></td>
+<td><p>Request X-Position of Pipetting channel n (in mm)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_xl_channel_validation_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_xl_channel_validation_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_xl_channel_validation_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_xl_channel_validation_status</span></code></a>()</p></td>
+<td><p>Request XL channel validation status</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_y_pos_channel_n.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_y_pos_channel_n" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_y_pos_channel_n"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_y_pos_channel_n</span></code></a>(pipetting_channel_index)</p></td>
+<td><p>Request Y-Position of Pipetting channel n</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_z_pos_channel_n.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_z_pos_channel_n" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_z_pos_channel_n"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_z_pos_channel_n</span></code></a>(pipetting_channel_index)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.reset_output.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.reset_output" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.reset_output"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset_output</span></code></a>([output])</p></td>
+<td><p>Reset output</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.return_core_gripper_tools.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.return_core_gripper_tools" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.return_core_gripper_tools"><code class="xref py py-obj docutils literal notranslate"><span class="pre">return_core_gripper_tools</span></code></a>([front_offset, ...])</p></td>
+<td><p>Put CoRe gripper tool at wasteblock mount.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_rotation_drive.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_rotation_drive" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_rotation_drive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate_iswap_rotation_drive</span></code></a>(orientation)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_wrist.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_wrist" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_wrist"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate_iswap_wrist</span></code></a>(orientation)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_all_cycle_counters.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_all_cycle_counters" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_all_cycle_counters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_all_cycle_counters</span></code></a>()</p></td>
+<td><p>Save all cycle counters</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_download_date.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_download_date" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_download_date"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_download_date</span></code></a>([date])</p></td>
+<td><p>Save Download date</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_pip_channel_validation_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_pip_channel_validation_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_pip_channel_validation_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_pip_channel_validation_status</span></code></a>([...])</p></td>
+<td><p>Save PIP channel validation status</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_technical_status_of_assemblies.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_technical_status_of_assemblies" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_technical_status_of_assemblies"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_technical_status_of_assemblies</span></code></a>(...)</p></td>
+<td><p>Save technical status of assemblies</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_xl_channel_validation_status.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_xl_channel_validation_status" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.save_xl_channel_validation_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_xl_channel_validation_status</span></code></a>([...])</p></td>
+<td><p>Save XL channel validation status</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.search_for_teach_in_signal_using_pipetting_channel_n_in_x_direction.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.search_for_teach_in_signal_using_pipetting_channel_n_in_x_direction" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.search_for_teach_in_signal_using_pipetting_channel_n_in_x_direction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">search_for_teach_in_signal_using_pipetting_channel_n_in_x_direction</span></code></a>(...)</p></td>
+<td><p>Search for Teach in signal using pipetting channel n in X-direction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_command.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_command" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(module, command[, auto_id, ...])</p></td>
+<td><p>Send a firmware command to the Hamilton machine.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_hhs_command.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_hhs_command" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_hhs_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_hhs_command</span></code></a>(index, command, **kwargs)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_raw_command.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_raw_command" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.send_raw_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_raw_command</span></code></a>(command[, write_timeout, ...])</p></td>
+<td><p>Send a raw command to the machine.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.serialize.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.serialize" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_1d_barcode_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_1d_barcode_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_1d_barcode_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_1d_barcode_type</span></code></a>(barcode_symbology)</p></td>
+<td><p>Set 1D barcode type for autoload barcode reading.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_barcode_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_barcode_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_barcode_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_barcode_type</span></code></a>([ISBT_Standard, code128, ...])</p></td>
+<td><p>deprecated - use set_1d_barcode_type instead</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_carrier_monitoring.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_carrier_monitoring" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_carrier_monitoring"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_carrier_monitoring</span></code></a>([should_monitor])</p></td>
+<td><p>Set carrier monitoring</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_cover_output.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_cover_output" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_cover_output"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_cover_output</span></code></a>([output])</p></td>
+<td><p>Set cover output</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_deck.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_deck" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_deck</span></code></a>(deck)</p></td>
+<td><p>Set the deck for the robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_deck_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_deck_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_deck_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_deck_data</span></code></a>([data_index, data_stream])</p></td>
+<td><p>set deck data</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_heads.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_heads" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_heads"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_heads</span></code></a>(head[, head96])</p></td>
+<td><p>Set the tip tracker for the robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_instrument_configuration.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_instrument_configuration" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_instrument_configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_instrument_configuration</span></code></a>([...])</p></td>
+<td><p>Set instrument configuration</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_loading_indicators.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_loading_indicators" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_loading_indicators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_loading_indicators</span></code></a>(bit_pattern, ...)</p></td>
+<td><p>Set loading indicators (LEDs)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_channel_traversal_height.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_channel_traversal_height" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_channel_traversal_height"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_minimum_channel_traversal_height</span></code></a>(...)</p></td>
+<td><p>Set the minimum traversal height for the pip channels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_iswap_traversal_height.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_iswap_traversal_height" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_iswap_traversal_height"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_minimum_iswap_traversal_height</span></code></a>(...)</p></td>
+<td><p>Set the minimum traversal height for the iswap.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_traversal_height.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_traversal_height" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_minimum_traversal_height"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_minimum_traversal_height</span></code></a>(traversal_height)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_not_stop.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_not_stop" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_not_stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_not_stop</span></code></a>(non_stop)</p></td>
+<td><p>Set not stop mode</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_single_step_mode.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_single_step_mode" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_single_step_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_single_step_mode</span></code></a>([single_step_mode])</p></td>
+<td><p>Set Single step mode</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_core_96_head.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_core_96_head" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_core_96_head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_x_offset_x_axis_core_96_head</span></code></a>(x_offset)</p></td>
+<td><p>Set X-offset X-axis &lt;-&gt; CoRe 96 head</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_core_nano_pipettor_head.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_core_nano_pipettor_head" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_core_nano_pipettor_head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_x_offset_x_axis_core_nano_pipettor_head</span></code></a>(...)</p></td>
+<td><p>Set X-offset X-axis &lt;-&gt; CoRe 96 head</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_iswap.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_iswap" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.set_x_offset_x_axis_iswap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_x_offset_x_axis_iswap</span></code></a>(x_offset)</p></td>
+<td><p>Set X-offset X-axis &lt;-&gt; iSWAP</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.setup.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.setup" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>([skip_instrument_initialization, ...])</p></td>
+<td><p>Creates a USB connection and finds read/write interfaces.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.slow_iswap.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.slow_iswap" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.slow_iswap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slow_iswap</span></code></a>([wrist_velocity, gripper_velocity])</p></td>
+<td><p>A context manager that sets the iSWAP to slow speed during the context</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.spread_pip_channels.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.spread_pip_channels" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.spread_pip_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spread_pip_channels</span></code></a>()</p></td>
+<td><p>Spread PIP channels</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.start_temperature_control_at_hhc.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.start_temperature_control_at_hhc" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.start_temperature_control_at_hhc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_temperature_control_at_hhc</span></code></a>(...)</p></td>
+<td><p>Start temperature regulation of specified HHC</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.step_off_foil.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.step_off_foil" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.step_off_foil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">step_off_foil</span></code></a>(wells, front_channel, back_channel)</p></td>
+<td><p>Hold down a plate by placing two channels on the edges of a plate that is sealed with foil while moving up the channels that are still within the foil.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_temperature_control_at_hhc</span></code></a>(device_number)</p></td>
+<td><p>Stop temperature regulation of specified HHC</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">store_installation_data</span></code></a>([date, serial_number])</p></td>
+<td><p>Store installation data</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">store_verification_data</span></code></a>([...])</p></td>
+<td><p>Store verification data</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.take_carrier_out_to_autoload_belt.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.take_carrier_out_to_autoload_belt" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.take_carrier_out_to_autoload_belt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">take_carrier_out_to_autoload_belt</span></code></a>(carrier)</p></td>
+<td><p>Take carrier out to identification position for barcode reading.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.trigger_next_step.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.trigger_next_step" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.trigger_next_step"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trigger_next_step</span></code></a>()</p></td>
+<td><p>Trigger next step (Single step mode)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unload_carrier.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unload_carrier" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unload_carrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unload_carrier</span></code></a>(carrier[, park_autoload_after])</p></td>
+<td><p>Use autoload to unload carrier.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unload_carrier_after_carrier_barcode_scanning.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unload_carrier_after_carrier_barcode_scanning" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unload_carrier_after_carrier_barcode_scanning"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unload_carrier_after_carrier_barcode_scanning</span></code></a>()</p></td>
+<td><p>After scanning the barcode of the carrier currently engaged with the autoload sled, unload the carrier back to the loading tray.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unlock_cover.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unlock_cover" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.unlock_cover"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unlock_cover</span></code></a>()</p></td>
+<td><p>Unlock cover</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.verify_and_wait_for_carriers.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.verify_and_wait_for_carriers" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.verify_and_wait_for_carriers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">verify_and_wait_for_carriers</span></code></a>([check_interval])</p></td>
+<td><p>Verify that carriers have been loaded at expected rail positions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.y_drive_increment_to_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.y_drive_increment_to_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.y_drive_increment_to_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">y_drive_increment_to_mm</span></code></a>(value_mm)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.z_drive_increment_to_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.z_drive_increment_to_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.z_drive_increment_to_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">z_drive_increment_to_mm</span></code></a>(value_increments)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.ztouch_probe_z_height_using_channel.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.ztouch_probe_z_height_using_channel" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.ztouch_probe_z_height_using_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ztouch_probe_z_height_using_channel</span></code></a>(channel_idx)</p></td>
+<td><p>Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine using the channels 'z-touchoff' capabilities, i.e. a controlled triggering of the z-drive, aka a controlled 'crash'.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="pylabrobot.liquid_handling.backends.hamilton.base.HamiltonLiquidHandler.stop.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.base.HamiltonLiquidHandler.stop</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.DEFAULT_TIP_FITTING_DEPTH</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR"><code class="docutils literal notranslate"><span class="pre">STAR</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

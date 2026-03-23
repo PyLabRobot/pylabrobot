@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1.run\_pcr\_profile
+==================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. automethod:: OpentronsThermocyclerModuleV1.run_pcr_profile

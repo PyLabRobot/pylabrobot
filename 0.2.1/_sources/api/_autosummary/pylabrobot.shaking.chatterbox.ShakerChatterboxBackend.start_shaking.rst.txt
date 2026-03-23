@@ -1,0 +1,6 @@
+pylabrobot.shaking.chatterbox.ShakerChatterboxBackend.start\_shaking
+====================================================================
+
+.. currentmodule:: pylabrobot.shaking.chatterbox
+
+.. automethod:: ShakerChatterboxBackend.start_shaking

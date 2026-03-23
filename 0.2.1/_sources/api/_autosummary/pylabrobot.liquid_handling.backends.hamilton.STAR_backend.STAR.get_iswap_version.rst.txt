@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.get\_iswap\_version
+====================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.get_iswap_version

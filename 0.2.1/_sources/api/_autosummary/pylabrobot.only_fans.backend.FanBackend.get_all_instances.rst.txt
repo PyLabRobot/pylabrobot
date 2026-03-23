@@ -1,0 +1,6 @@
+pylabrobot.only\_fans.backend.FanBackend.get\_all\_instances
+============================================================
+
+.. currentmodule:: pylabrobot.only_fans.backend
+
+.. automethod:: FanBackend.get_all_instances

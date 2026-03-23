@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.save\_state\_to\_file
+=============================================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. automethod:: Imager.save_state_to_file
