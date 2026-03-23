@@ -230,6 +230,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     )
     result = self.center(c, num_channels=1)
     self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(len(result), 1)
     self.assertAlmostEqual(result[0].y, 23.0)
 
@@ -240,6 +241,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     )
     result = self.center(c, num_channels=2)
     self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(len(result), 2)
     # Sorted descending by Y (back-to-front)
     self.assertGreater(result[0].y, result[1].y)
@@ -251,6 +253,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     )
     result = self.center(c, num_channels=4)
     self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(len(result), 4)
 
   def test_center_returns_none_when_impossible(self):
@@ -273,4 +276,5 @@ class TestNoGoZoneCollision(unittest.TestCase):
     )
     result = self.center(c, num_channels=6)
     self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(len(result), 6)
