@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>BMG Labtech CLARIOstar (Plus) &#8212; PyLabRobot dev documentation</title>
+    <title>Tecan Infinite 200 PRO &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/02_analytical/plate-reading/bmg-clariostar';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/02_analytical/plate-reading/tecan-infinite';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -55,12 +55,12 @@
             true;
         </script>
     <script src="../../../_static/plr_cards.js?v=0d03ad13"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/bmg-clariostar.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/tecan-infinite.html" />
     <link rel="icon" href="../../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="Byonoy Absorbance 96 Automate" href="byonoy/absorbance.html" />
-    <link rel="prev" title="Plate reading" href="plate-reading.html" />
+    <link rel="next" title="Scales" href="../scales/scales.html" />
+    <link rel="prev" title="Tecan Spark 20M" href="tecan-spark.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.0" />
@@ -588,7 +588,7 @@
 </ul>
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="plate-reading.html">Plate reading</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l3 current active"><a class="current reference internal" href="#">BMG Labtech CLARIOstar (Plus)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
 <li class="toctree-l3"><a class="reference internal" href="byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
 <li class="toctree-l3"><a class="reference internal" href="byonoy.html">Byonoy Absorbance 96 Automate</a></li>
@@ -596,7 +596,7 @@
 <li class="toctree-l3"><a class="reference internal" href="pico.html">ImageXpress Pico</a></li>
 <li class="toctree-l3"><a class="reference internal" href="synergyh1.html">Synergy H1</a></li>
 <li class="toctree-l3"><a class="reference internal" href="tecan-spark.html">Tecan Spark 20M</a></li>
-<li class="toctree-l3"><a class="reference internal" href="tecan-infinite.html">Tecan Infinite 200 PRO</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">Tecan Infinite 200 PRO</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -672,7 +672,7 @@
     
     <li class="breadcrumb-item"><a href="plate-reading.html" class="nav-link">Plate reading</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">BMG Labtech CLARIOstar (Plus)</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Tecan Infinite 200 PRO</span></li>
   </ul>
 </nav>
 </div>
@@ -689,190 +689,118 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="bmg-labtech-clariostar-plus">
-<h1>BMG Labtech CLARIOstar (Plus)<a class="headerlink" href="#bmg-labtech-clariostar-plus" title="Link to this heading">#</a></h1>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Summary</p></th>
-<th class="head"><p>Photo</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>- <a class="reference external" href="https://www.bmglabtech.com/en/clariostar-plus/">OEM Link</a><br>- <strong>Communication Protocol / Hardware</strong>: Serial (FTDI)/ USB-A<br>- <strong>Communication Level</strong>: Firmware<br>- <strong>Measurement Modes</strong>: Absorbance, Luminescence, Fluorescence <br>- <strong>Plate Delivery</strong>: Loading tray<br>- <strong>Additional Standard Features</strong>: Temperature sontrol, Shaking<br><br>- <strong>Additional Upgrades</strong>: Injector system, increased max temperature, plate stacking system, …</p></td>
-<td><p><img alt="quadrants" src="../../../_images/bmg-labtech-clariostar-plus.png" /></p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<hr class="docutils" />
-<section id="setup-instructions-physical">
-<h2>Setup Instructions (Physical)<a class="headerlink" href="#setup-instructions-physical" title="Link to this heading">#</a></h2>
-<p>The CLARIOstar and CLARIOstar Plus require a minimum of two cable connections to be operational:</p>
-<ol class="arabic simple">
-<li><p>Power cord (standard IEC C13)</p></li>
-<li><p>USB cable (USB-B with security screws at CLARIOstar end; USB-A at control PC end)</p></li>
-</ol>
-<p>Optional:
-If you have a plate stacking unit to use with the CLARIOstar (Plus), an additional RS-232 port is available on the CLARIOstar (Plus).</p>
-</section>
-<hr class="docutils" />
-<section id="setup-instructions-programmatic">
-<h2>Setup Instructions (Programmatic)<a class="headerlink" href="#setup-instructions-programmatic" title="Link to this heading">#</a></h2>
+  <section class="tex2jax_ignore mathjax_ignore" id="tecan-infinite-200-pro">
+<h1>Tecan Infinite 200 PRO<a class="headerlink" href="#tecan-infinite-200-pro" title="Link to this heading">#</a></h1>
+<p>The Tecan Infinite 200 PRO is a multimode microplate reader that supports absorbance, fluorescence, and luminescence measurements. This backend targets the Infinite “M” series (e.g., Infinite 200 PRO M Plex).</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
-<span class="o">%</span><span class="k">autoreload</span> 2
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlateReader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading.tecan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExperimentalTecanInfinite200ProBackend</span>
 </pre></div>
 </div>
 </div>
 </div>
-<p>To control the BMG Labtech CLARIOstar (Plus), generate a <code class="docutils literal notranslate"><span class="pre">PlateReader</span></code> frontend instance that uses a <code class="docutils literal notranslate"><span class="pre">CLARIOstarBackend</span></code> instance as its backend.</p>
-<p>To access the CLARIOstar-specific machine features you can still use the backend directly.
-For convenience, it is useful to therefore store the backend instance as a separate <code class="docutils literal notranslate"><span class="pre">clariostar_backend</span></code> variable.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlateReader</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pr</span> <span class="o">=</span> <span class="n">PlateReader</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;PR&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">ExperimentalTecanInfinite200ProBackend</span><span class="p">())</span>
+<span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Before closing, assign a plate to the plate reader. This determines the well positions for measurements.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<span class="n">pr</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="absorbance">
+<h2>Absorbance<a class="headerlink" href="#absorbance" title="Link to this heading">#</a></h2>
+<p>Read absorbance at a specified wavelength (230-1000 nm).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading.clario_star_backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">CLARIOstarBackend</span>
-<span class="n">clariostar_backend</span> <span class="o">=</span> <span class="n">CLARIOstarBackend</span><span class="p">()</span>
-
-<span class="n">pr</span> <span class="o">=</span> <span class="n">PlateReader</span><span class="p">(</span>
-    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;CLARIOstar&quot;</span><span class="p">,</span>
-    <span class="n">backend</span><span class="o">=</span><span class="n">clariostar_backend</span><span class="p">,</span>
-    <span class="n">size_x</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="c1"># TODO: generate new handling for resources with loading tray </span>
-    <span class="n">size_y</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">size_z</span><span class="o">=</span><span class="mf">0.0</span>
+<span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">read_absorbance</span><span class="p">(</span><span class="n">wavelength</span><span class="o">=</span><span class="mi">450</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;OD&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Absorbance at 450 nm&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="fluorescence">
+<h2>Fluorescence<a class="headerlink" href="#fluorescence" title="Link to this heading">#</a></h2>
+<p>Read fluorescence with specified excitation and emission wavelengths (230-850 nm). The focal height is in millimeters.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">read_fluorescence</span><span class="p">(</span>
+    <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">485</span><span class="p">,</span>
+    <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">528</span><span class="p">,</span>
+    <span class="n">focal_height</span><span class="o">=</span><span class="mf">20.0</span>
 <span class="p">)</span>
-</pre></div>
-</div>
-</div>
-</div>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Expected behaviour: the machine should perform its initialization routine.</p>
-</div>
-</section>
-<hr class="docutils" />
-<section id="usage-machine-features">
-<h2>Usage / Machine Features<a class="headerlink" href="#usage-machine-features" title="Link to this heading">#</a></h2>
-<section id="loading-tray">
-<h3>Loading Tray<a class="headerlink" href="#loading-tray" title="Link to this heading">#</a></h3>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-</div>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># perform arm movement to move your plate of interest onto the CLARIOstar&#39;s loading tray</span>
-<span class="c1"># this movement can be performed by a human</span>
-<span class="c1"># or it can be performed by a robotic arm</span>
-</pre></div>
-</div>
-</div>
-</div>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;RFU&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Fluorescence (Ex: 485 nm, Em: 528 nm)&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 </section>
-<section id="set-temperature">
-<h3>Set Temperature<a class="headerlink" href="#set-temperature" title="Link to this heading">#</a></h3>
-<p>The CLARIOstar offers a temperature control feature.
-Reaching a set temperature is relatively slow compared to standalone temperature controllers.
-We therefore recommend setting the temperature early on in your automated Protocol (aP).</p>
+<section id="luminescence">
+<h2>Luminescence<a class="headerlink" href="#luminescence" title="Link to this heading">#</a></h2>
+<p>Read luminescence. The focal height is in millimeters.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature exposure in active development</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">read_luminescence</span><span class="p">(</span><span class="n">focal_height</span><span class="o">=</span><span class="mf">20.0</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;RLU&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Luminescence&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 </section>
-<section id="set-shaking">
-<h3>Set Shaking<a class="headerlink" href="#set-shaking" title="Link to this heading">#</a></h3>
-<p>The CLARIOstar offers a shaking feature.</p>
+<section id="reading-specific-wells">
+<h2>Reading specific wells<a class="headerlink" href="#reading-specific-wells" title="Link to this heading">#</a></h2>
+<p>You can specify a subset of wells to read instead of the entire plate.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature in active development</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">wells</span> <span class="o">=</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_items</span><span class="p">([</span><span class="s2">&quot;A1&quot;</span><span class="p">,</span> <span class="s2">&quot;A2&quot;</span><span class="p">,</span> <span class="s2">&quot;B1&quot;</span><span class="p">,</span> <span class="s2">&quot;B2&quot;</span><span class="p">])</span>
+<span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">read_absorbance</span><span class="p">(</span><span class="n">wavelength</span><span class="o">=</span><span class="mi">450</span><span class="p">,</span> <span class="n">wells</span><span class="o">=</span><span class="n">wells</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 </section>
-<hr class="docutils" />
-<section id="measuring-absorbance">
-<h3>Measuring Absorbance<a class="headerlink" href="#measuring-absorbance" title="Link to this heading">#</a></h3>
+<section id="cleanup">
+<h2>Cleanup<a class="headerlink" href="#cleanup" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature in active development including</span>
-<span class="c1"># reading subsets of wells</span>
-<span class="c1"># specifying orbital diameter</span>
-<span class="c1"># specifying number of technical replicate measurements per well</span>
-<span class="c1"># specifying start position for reading: topleft, topright, bottomleft, bottomright</span>
-<span class="c1"># ...</span>
-
-<span class="n">results_absorbance</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">read_absorbance</span><span class="p">()</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">results</span></code> will be a width x height array of absorbance values.</p>
-<section id="performing-a-spectral-scan">
-<h4>Performing a Spectral Scan<a class="headerlink" href="#performing-a-spectral-scan" title="Link to this heading">#</a></h4>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature in active development</span>
-</pre></div>
-</div>
-</div>
-</div>
-</section>
-</section>
-<section id="measuring-luminescence">
-<h3>Measuring Luminescence<a class="headerlink" href="#measuring-luminescence" title="Link to this heading">#</a></h3>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature in active development</span>
-
-<span class="n">results_luminescence</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">read_luminescence</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-</div>
-</section>
-<section id="measuring-fluorescence">
-<h3>Measuring Fluorescence<a class="headerlink" href="#measuring-fluorescence" title="Link to this heading">#</a></h3>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature in active development</span>
-</pre></div>
-</div>
-</div>
-</div>
-</section>
-<section id="using-the-injector-needles">
-<h3>Using the Injector Needles<a class="headerlink" href="#using-the-injector-needles" title="Link to this heading">#</a></h3>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># WIP: feature in active development</span>
-</pre></div>
-</div>
-</div>
-</div>
-</section>
 </section>
 </section>
 
@@ -887,20 +815,20 @@ We therefore recommend setting the temperature early on in your automated Protoc
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="plate-reading.html"
+       href="tecan-spark.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Plate reading</p>
+        <p class="prev-next-title">Tecan Spark 20M</p>
       </div>
     </a>
     <a class="right-next"
-       href="byonoy/absorbance.html"
+       href="../scales/scales.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Byonoy Absorbance 96 Automate</p>
+        <p class="prev-next-title">Scales</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -923,21 +851,11 @@ We therefore recommend setting the temperature early on in your automated Protoc
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-instructions-physical">Setup Instructions (Physical)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-instructions-programmatic">Setup Instructions (Programmatic)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage-machine-features">Usage / Machine Features</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-tray">Loading Tray</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#set-temperature">Set Temperature</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#set-shaking">Set Shaking</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#measuring-absorbance">Measuring Absorbance</a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#performing-a-spectral-scan">Performing a Spectral Scan</a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#measuring-luminescence">Measuring Luminescence</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#measuring-fluorescence">Measuring Fluorescence</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#using-the-injector-needles">Using the Injector Needles</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#absorbance">Absorbance</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fluorescence">Fluorescence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#luminescence">Luminescence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-specific-wells">Reading specific wells</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cleanup">Cleanup</a></li>
 </ul>
   </nav></div>
 
@@ -945,7 +863,7 @@ We therefore recommend setting the temperature early on in your automated Protoc
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/02_analytical/plate-reading/bmg-clariostar.ipynb">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/02_analytical/plate-reading/tecan-infinite.ipynb">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -961,7 +879,7 @@ We therefore recommend setting the temperature early on in your automated Protoc
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="../../../_sources/user_guide/02_analytical/plate-reading/bmg-clariostar.ipynb.txt"
+      <li><a href="../../../_sources/user_guide/02_analytical/plate-reading/tecan-infinite.ipynb.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div></div>
