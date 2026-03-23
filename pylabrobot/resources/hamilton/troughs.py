@@ -2,6 +2,7 @@
 
 import warnings
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.trough import Trough, TroughBottomType
 
 # --------------------------------------------------------------------------- #
@@ -43,11 +44,8 @@ def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
   Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
+  Has a center support wall (~2mm wide at Y=44-46mm).
   """
-  warnings.warn(
-    "hamilton_1_trough_60mL_Vb has a center support that can interfere with pipetting.\
-     If using an odd number of channels, use spread='custom' and define offsets for each channel to avoid collision."
-  )
 
   return Trough(
     name=name,
@@ -60,6 +58,9 @@ def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
     model=hamilton_1_trough_60mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_60mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 44.0, 0), Coordinate(19.0, 46.0, 65.5)),  # center divider
+    ],
   )
 
 
@@ -92,12 +93,8 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
   Trough 120 mL, without lid, self standing (V-bottom).
   True maximal volume capacity ~120 mL.
   Compatible with Trough_CAR_?? (194058 <- not yet integrated into PLR!).
+  Has 3 in-container support beams (~2mm wide each, evenly spaced).
   """
-  warnings.warn(
-    "hamilton_1_trough_120mL_Vb has 3 (!) in-container support beams that can interfere with "
-    "pipetting. If using an odd number of channels, use spread='custom' and define offsets "
-    "for each channel to avoid collision."
-  )
 
   return Trough(
     name=name,
@@ -110,6 +107,11 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
     model=hamilton_1_trough_120mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_120mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 34.625, 0), Coordinate(19.0, 36.625, 80.0)),  # beam 1
+      (Coordinate(0, 70.25, 0), Coordinate(19.0, 72.25, 80.0)),  # beam 2 (center)
+      (Coordinate(0, 105.875, 0), Coordinate(19.0, 107.875, 80.0)),  # beam 3
+    ],
   )
 
 
