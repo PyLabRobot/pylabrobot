@@ -32,8 +32,8 @@ from pylabrobot.resources.resource import Resource
 class ChannelBatch:
   """A group of channels that can operate simultaneously.
 
-  After transition optimization, ``y_positions`` contains entries for all instrument
-  channels (not just active and phantom ones).
+  ``y_positions`` contains entries for active channels and any phantom channels
+  between non-consecutive active members.
   """
 
   x_position: float
@@ -403,8 +403,8 @@ def plan_batches(
 
   Args:
     use_channels: Channel indices being used (e.g. [0, 1, 2, 5, 6, 7]).
-    targets: Either Container objects (requires *deck*) or Coordinate objects with
-      absolute X/Y positions. One per entry in *use_channels*.
+    targets: Either Container objects (requires *wrt_resource*) or Coordinate objects
+      with absolute X/Y positions. One per entry in *use_channels*.
     channel_spacings: Minimum Y spacing per channel (mm). Scalar for uniform,
       or a list with one entry per channel on the instrument.
     x_tolerance: Positions within this tolerance share an X group.
