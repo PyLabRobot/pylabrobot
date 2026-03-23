@@ -370,7 +370,11 @@ class LiquidHandler(Resource, Machine):
       )
       if compartment_offsets is not None:
         return compartment_offsets
-      return [Coordinate.zero()] * len(use_channels)
+      raise ValueError(
+        f"Cannot fit {len(use_channels)} channels into the compartments of "
+        f"'{resource.name}' while respecting its no-go zones. "
+        f"Use fewer channels or spread='custom' with manual offsets."
+      )
     # TODO: pass backend.get_channel_spacings() to get_tight/get_wide so they respect
     # per-pair spacing. Currently they default to 9mm regardless of backend configuration.
     if spread == "tight":

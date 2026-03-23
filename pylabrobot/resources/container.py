@@ -109,18 +109,19 @@ class Container(Resource):
       # Ensure all coordinates lie within the container bounds.
       for coord_label, coord in (("flb", flb), ("brt", brt)):
         if coord.x < 0 or coord.y < 0 or coord.z < 0:
-          raise ValueError(
-            f"no_go_zones[{idx}].{coord_label} has negative coordinates: {coord}."
-          )
-        if coord.x > self.size_x or coord.y > self.size_y or coord.z > self.size_z:
+          raise ValueError(f"no_go_zones[{idx}].{coord_label} has negative coordinates: {coord}.")
+        if (
+          coord.x > self.get_size_x() or coord.y > self.get_size_y() or coord.z > self.get_size_z()
+        ):
           raise ValueError(
             f"no_go_zones[{idx}].{coord_label}={coord} is outside the container bounds "
-            f"(size_x={self.size_x}, size_y={self.size_y}, size_z={self.size_z})."
+            f"(size_x={self.get_size_x()}, size_y={self.get_size_y()}, size_z={self.get_size_z()})."
           )
 
       validated.append((flb, brt))
 
     return validated
+
   @property
   def material_z_thickness(self) -> float:
     if self._material_z_thickness is None:

@@ -153,6 +153,9 @@ def center_channels_in_compartments(
     List of Y offsets (relative to container center) for each channel, sorted back-to-front
     (descending Y), or None if the channels cannot fit.
   """
+  if spread not in ("wide", "tight"):
+    raise ValueError(f"Invalid value for 'spread': {spread!r}. Must be 'wide' or 'tight'.")
+
   if not container.no_go_zones:
     return None
 
@@ -179,7 +182,7 @@ def center_channels_in_compartments(
   for i in priority[:remainder]:
     distribution[i] += 1
 
-  container_center_y = container.get_absolute_size_y() / 2
+  container_center_y = container.get_size_y() / 2
   offsets = []
   spacing_idx = 0  # tracks which pair spacings to consume
 
@@ -189,8 +192,7 @@ def center_channels_in_compartments(
     comp_width = comp_hi - comp_lo
     # get the spacings for channels assigned to this compartment
     group_spacings = channel_spacings[spacing_idx : spacing_idx + n_ch - 1]
-    spacing_idx += n_ch
-    min_spacing = min(group_spacings) if group_spacings else GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
+    spacing_idx += max(n_ch - 1, 0)
     needed = sum(group_spacings)
     if comp_width < needed:
       return None
@@ -198,11 +200,16 @@ def center_channels_in_compartments(
     if n_ch == 1:
       centers = [(comp_lo + comp_hi) / 2]
     elif spread == "wide":
-      # spread channels as far apart as possible within the compartment
-      local_centers = _get_centers_with_margin(
-        dim_size=comp_width, n=n_ch, margin=0, min_spacing=min_spacing
-      )
-      centers = [comp_lo + c for c in local_centers]
+      # spread channels as far apart as possible within the compartment,
+      # distributing surplus space evenly across all gaps
+      surplus = comp_width - needed
+      gap_surplus = surplus / max(n_ch - 1, 1)
+      wide_spacings = [s + gap_surplus for s in group_spacings]
+      total = sum(wide_spacings)
+      start = (comp_lo + comp_hi) / 2 - total / 2
+      centers = [start]
+      for s in wide_spacings:
+        centers.append(centers[-1] + s)
     else:
       # tight: pack channels at minimum spacing, centered in the compartment
       start = (comp_lo + comp_hi) / 2 - needed / 2
