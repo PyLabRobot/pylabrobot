@@ -1,7 +1,7 @@
 """Legacy. Use pylabrobot.hamilton.only_fans.HamiltonHepaFan instead."""
 
-from pylabrobot.capabilities.fan_control import FanControlCapability
 from pylabrobot.capabilities.fan_control import FanBackend as _NewFanBackend
+from pylabrobot.capabilities.fan_control import FanControlCapability
 from pylabrobot.legacy.machines.machine import Machine
 
 from .backend import FanBackend
@@ -10,10 +10,16 @@ from .backend import FanBackend
 class _FanAdapter(_NewFanBackend):
   def __init__(self, legacy: FanBackend):
     self._legacy = legacy
-  async def setup(self): pass
-  async def stop(self): pass
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
   async def turn_on(self, intensity: int) -> None:
     await self._legacy.turn_on(intensity)
+
   async def turn_off(self) -> None:
     await self._legacy.turn_off()
 

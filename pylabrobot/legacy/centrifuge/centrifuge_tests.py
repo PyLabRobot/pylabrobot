@@ -10,7 +10,10 @@ from pylabrobot.legacy.centrifuge import (
   NotAtBucketError,
 )
 from pylabrobot.legacy.centrifuge.backend import CentrifugeBackend, LoaderBackend
-from pylabrobot.legacy.centrifuge.chatterbox import CentrifugeChatterboxBackend, LoaderChatterboxBackend
+from pylabrobot.legacy.centrifuge.chatterbox import (
+  CentrifugeChatterboxBackend,
+  LoaderChatterboxBackend,
+)
 from pylabrobot.resources import Coordinate, Cor_96_wellplate_360ul_Fb
 
 

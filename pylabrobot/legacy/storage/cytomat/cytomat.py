@@ -2,9 +2,9 @@
 
 from typing import List, Optional, Union
 
-from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.legacy.storage.cytomat.constants import CytomatType
+from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.thermo_fisher.cytomat import backend as new_cytomat
 
 
@@ -166,6 +166,7 @@ class CytomatChatterbox(CytomatBackend):
     # Skip CytomatBackend.__init__ and use the new chatterbox directly
     IncubatorBackend.__init__(self)
     from pylabrobot.thermo_fisher.cytomat.chatterbox import CytomatChatterbox as NewChatterbox
+
     self._new = NewChatterbox(model=model, port=port)
 
 

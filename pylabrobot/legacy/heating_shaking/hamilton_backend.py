@@ -3,9 +3,9 @@
 import warnings
 from typing import Dict, Literal, Optional
 
-from pylabrobot.hamilton.heater_shaker import box, backend as hhs_backend
+from pylabrobot.hamilton.heater_shaker import backend as hhs_backend
+from pylabrobot.hamilton.heater_shaker import box
 from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
-
 
 HamiltonHeaterShakerInterface = box.HamiltonHeaterShakerInterface
 HamiltonHeaterShakerBox = box.HamiltonHeaterShakerBox

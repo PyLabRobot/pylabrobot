@@ -38,9 +38,7 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float = 13
   ) -> List[Dict]:
-    results = await self._new.read_luminescence(
-      plate=plate, wells=wells, focal_height=focal_height
-    )
+    results = await self._new.read_luminescence(plate=plate, wells=wells, focal_height=focal_height)
     return [
       {
         "data": r.data,

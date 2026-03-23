@@ -4,7 +4,10 @@ import time
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
-from pylabrobot.legacy.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAError
+from pylabrobot.legacy.storage.inheco.scila.inheco_sila_interface import (
+  InhecoSiLAInterface,
+  SiLAError,
+)
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import BlockStatus, LidStatus, Protocol
 

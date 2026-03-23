@@ -5,7 +5,9 @@ from typing import List, Tuple
 
 import pytest
 
-numpy = pytest.importorskip("numpy")
+pytest.importorskip("numpy")
+
+import numpy  # noqa: E402
 
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
 from pylabrobot.capabilities.microscopy.chatterbox import MicroscopyChatterboxBackend

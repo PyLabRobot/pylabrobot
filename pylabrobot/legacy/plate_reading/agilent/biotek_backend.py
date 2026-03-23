@@ -179,7 +179,8 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     focal_height: float,
   ) -> List[Dict]:
     results = await self._new.read_fluorescence(
-      plate=plate, wells=wells,
+      plate=plate,
+      wells=wells,
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,

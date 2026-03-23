@@ -1,7 +1,7 @@
 import warnings
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import ShakingCapability, ShakerBackend
+from pylabrobot.capabilities.shaking import ShakerBackend, ShakingCapability
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder

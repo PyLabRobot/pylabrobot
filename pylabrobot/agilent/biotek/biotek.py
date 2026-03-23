@@ -315,7 +315,9 @@ class BioTekBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend,
       raise ValueError("All wells must be in the specified plate")
     return self._non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
-  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[AbsorbanceResult]:
+  async def read_absorbance(
+    self, plate: Plate, wells: List[Well], wavelength: int
+  ) -> List[AbsorbanceResult]:
     min_abs, max_abs = self.abs_wavelength_range
     if not (min_abs <= wavelength <= max_abs):
       raise ValueError(f"{self.__class__.__name__}: wavelength must be within {min_abs}-{max_abs}")

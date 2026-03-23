@@ -1,8 +1,8 @@
 import unittest
 import unittest.mock
 
-from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.machine import Machine
 
 
 class TestMachine(unittest.TestCase):

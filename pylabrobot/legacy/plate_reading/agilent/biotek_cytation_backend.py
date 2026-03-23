@@ -6,8 +6,6 @@ from pylabrobot.agilent.biotek import cytation
 from pylabrobot.agilent.biotek.cytation import CytationImagingConfig
 from pylabrobot.legacy.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend
-from pylabrobot.resources import Plate
-
 from pylabrobot.legacy.plate_reading.standard import (
   Exposure,
   FocalPosition,
@@ -16,6 +14,7 @@ from pylabrobot.legacy.plate_reading.standard import (
   ImagingResult,
   Objective,
 )
+from pylabrobot.resources import Plate
 
 
 class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):

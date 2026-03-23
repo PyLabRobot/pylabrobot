@@ -3,7 +3,9 @@
 from typing import Optional, Tuple
 
 from pylabrobot.byonoy.luminescence_96 import ByonoyLuminescenceBaseUnit
-from pylabrobot.legacy.plate_reading.byonoy.byonoy_backend import ByonoyLuminescence96AutomateBackend
+from pylabrobot.legacy.plate_reading.byonoy.byonoy_backend import (
+  ByonoyLuminescence96AutomateBackend,
+)
 from pylabrobot.legacy.plate_reading.plate_reader import PlateReader
 from pylabrobot.resources import Coordinate
 

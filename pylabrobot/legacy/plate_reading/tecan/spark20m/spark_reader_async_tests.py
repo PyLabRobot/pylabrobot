@@ -9,13 +9,18 @@ pytest.importorskip("usb")
 
 # Import the module under test
 from pylabrobot.legacy.plate_reading.tecan.spark20m.enums import SparkDevice, SparkEndpoint
-from pylabrobot.legacy.plate_reading.tecan.spark20m.spark_reader_async import SparkError, SparkReaderAsync
+from pylabrobot.legacy.plate_reading.tecan.spark20m.spark_reader_async import (
+  SparkError,
+  SparkReaderAsync,
+)
 
 
 class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self) -> None:
     # Patch USB class
-    self.usb_patcher = patch("pylabrobot.legacy.plate_reading.tecan.spark20m.spark_reader_async.USB")
+    self.usb_patcher = patch(
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_reader_async.USB"
+    )
     self.mock_usb_class = self.usb_patcher.start()
 
     self.reader = SparkReaderAsync()

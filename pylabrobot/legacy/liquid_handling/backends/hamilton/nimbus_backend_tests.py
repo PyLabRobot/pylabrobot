@@ -31,7 +31,10 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.nimbus_backend import (
   UnlockDoor,
   _get_tip_type_from_tip,
 )
-from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.messages import HoiParams, HoiParamsParser
+from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.messages import (
+  HoiParams,
+  HoiParamsParser,
+)
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.legacy.liquid_handling.standard import (

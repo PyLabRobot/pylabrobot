@@ -13,7 +13,9 @@ class InhecoTECControlBox:
   ):
     self.io = HID(
       human_readable_device_name="Inheco TEC Control Box",
-      vid=vid, pid=pid, serial_number=serial_number,
+      vid=vid,
+      pid=pid,
+      serial_number=serial_number,
     )
 
   async def setup(self):

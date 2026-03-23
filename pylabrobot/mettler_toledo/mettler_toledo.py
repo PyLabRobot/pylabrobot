@@ -5,9 +5,9 @@ import logging
 import time
 from typing import List, Literal, Optional, Union
 
-from pylabrobot.io.serial import Serial
 from pylabrobot.capabilities.weighing import ScaleBackend
 from pylabrobot.device import DeviceBackend
+from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger("pylabrobot")
 
@@ -165,7 +165,11 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     self.io = Serial(
       human_readable_device_name="Mettler Toledo WXS205SDU",
-      port=port, vid=vid, pid=pid, baudrate=9600, timeout=1,
+      port=port,
+      vid=vid,
+      pid=pid,
+      baudrate=9600,
+      timeout=1,
     )
 
   async def setup(self) -> None:
@@ -461,4 +465,3 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def set_weight_display(self) -> MettlerToledoResponse:
     """Return the display to the normal weight display."""
     return await self.send_command("DW")
-

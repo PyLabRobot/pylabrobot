@@ -1,8 +1,8 @@
 from typing import Optional
 
 from pylabrobot.legacy.machines.machine import Machine
-from pylabrobot.resources import Resource, Rotation
 from pylabrobot.legacy.scales.scale_backend import ScaleBackend
+from pylabrobot.resources import Resource, Rotation
 
 
 class Scale(Resource, Machine):

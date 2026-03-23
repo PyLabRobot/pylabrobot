@@ -383,11 +383,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       kinetic_settings=None,
       spectrum_settings=None,
     )
-    await self.backend._new._set_integration_time(settings,10, 100)
+    await self.backend._new._set_integration_time(settings, 10, 100)
     self.send_command_mock.assert_has_calls([call("!COUNTTIMEDELAY 10"), call("!COUNTTIME 0.1")])
     self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
-    await self.backend._new._set_integration_time(settings,10, 100)
+    await self.backend._new._set_integration_time(settings, 10, 100)
     self.send_command_mock.assert_not_called()
 
   async def test_set_nvram_polar(self):

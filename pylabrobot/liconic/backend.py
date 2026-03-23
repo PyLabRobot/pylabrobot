@@ -14,12 +14,12 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
+from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.io.serial import Serial
 from pylabrobot.device import DeviceBackend
-from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.carrier import PlateCarrier
@@ -44,7 +44,6 @@ LICONIC_SITE_HEIGHT_TO_STEPS = {
   66: 2467,  # pitch=72, site_height=66
   104: 3563,  # pitch=110, site_height=104
 }
-
 
 
 class LiconicBackend(
@@ -370,7 +369,9 @@ class LiconicBackend(
     barcode = await barcode_scanner.scan_barcode()
     logger.info(
       "Read barcode from plate at cassette %d, position %d: %s",
-      cassette, plt_position, barcode.data,
+      cassette,
+      plt_position,
+      barcode.data,
     )
     reset = await self._send_command("RS 1910")
     if reset != "OK":
@@ -378,7 +379,9 @@ class LiconicBackend(
     await self._wait_ready()
     return barcode
 
-  async def scan_barcode(self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend) -> Barcode:
+  async def scan_barcode(
+    self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend
+  ) -> Barcode:
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
     await self._send_command(f"WR DM0 {m}")

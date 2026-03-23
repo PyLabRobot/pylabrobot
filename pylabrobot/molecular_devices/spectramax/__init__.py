@@ -1,8 +1,8 @@
 from .backend import (
-  Calibrate,
-  CarriageSpeed,
   COMMAND_TERMINATORS,
   ERROR_CODES,
+  Calibrate,
+  CarriageSpeed,
   KineticSettings,
   MolecularDevicesBackend,
   MolecularDevicesError,

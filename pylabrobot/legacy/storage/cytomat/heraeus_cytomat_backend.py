@@ -2,9 +2,9 @@
 
 from typing import List
 
+from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
-from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.thermo_fisher.cytomat import heraeus_backend as new_heraeus
 
 

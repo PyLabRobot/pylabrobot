@@ -32,9 +32,7 @@ class ByonoyAbsorbance96AutomateBackend(PlateReaderBackend):
       "byonoy cannot close by itself. you need to move the top module using a robot arm."
     )
 
-  async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict]:
+  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     results = await self._new.read_absorbance(plate=plate, wells=wells, wavelength=wavelength)
     return [
       {

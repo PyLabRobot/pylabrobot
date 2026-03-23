@@ -45,7 +45,11 @@ class SpectraMax384Plus(Resource, Device):
   ):
     backend = SpectraMax384PlusBackend(port=port)
     Resource.__init__(
-      self, name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
       model="Molecular Devices SpectraMax 384 Plus",
     )
     Device.__init__(self, backend=backend)
@@ -56,7 +60,9 @@ class SpectraMax384Plus(Resource, Device):
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
-      size_x=127.76, size_y=85.48, size_z=0,  # TODO: measure
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
       pedestal_size_z=0,  # TODO: measure
       child_location=Coordinate.zero(),  # TODO: measure
     )

@@ -2,12 +2,12 @@ from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
 from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
 from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
 from pylabrobot.capabilities.plate_reading.luminescence.backend import LuminescenceBackend
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
+from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
@@ -350,7 +350,11 @@ class SpectraMaxM5(Resource, Device):
   ):
     backend = SpectraMaxM5Backend(port=port)
     Resource.__init__(
-      self, name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
       model="Molecular Devices SpectraMax M5",
     )
     Device.__init__(self, backend=backend)
@@ -363,7 +367,9 @@ class SpectraMaxM5(Resource, Device):
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
-      size_x=127.76, size_y=85.48, size_z=0,  # TODO: measure
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
       pedestal_size_z=0,  # TODO: measure
       child_location=Coordinate.zero(),  # TODO: measure
     )

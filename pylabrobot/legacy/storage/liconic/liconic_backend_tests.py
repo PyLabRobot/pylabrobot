@@ -7,8 +7,6 @@ import pytest
 
 pytest.importorskip("serial")
 
-from pylabrobot.resources import PlateHolder
-from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.legacy.storage.liconic.constants import LiconicType
 from pylabrobot.legacy.storage.liconic.liconic_backend import (
   LICONIC_SITE_HEIGHT_TO_STEPS,
@@ -19,6 +17,8 @@ from pylabrobot.legacy.storage.liconic.racks import (
   liconic_rack_17mm_22,
   liconic_rack_44mm_10,
 )
+from pylabrobot.resources import PlateHolder
+from pylabrobot.resources.carrier import PlateCarrier
 
 
 class TestStepSizeFormula(unittest.TestCase):

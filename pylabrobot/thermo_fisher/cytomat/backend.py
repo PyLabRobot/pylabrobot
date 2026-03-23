@@ -16,8 +16,8 @@ from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetriev
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.io.serial import Serial
 from pylabrobot.device import DeviceBackend
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.thermo_fisher.cytomat.constants import (
   ActionRegister,

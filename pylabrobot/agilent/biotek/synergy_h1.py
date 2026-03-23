@@ -25,8 +25,9 @@ class SynergyH1Backend(BioTekBackend):
   """Backend for Agilent BioTek Synergy H1 plate readers."""
 
   def __init__(self, timeout: float = 20, device_id: Optional[str] = None) -> None:
-    super().__init__(timeout=timeout, device_id=device_id,
-                     human_readable_device_name="Agilent BioTek Synergy H1")
+    super().__init__(
+      timeout=timeout, device_id=device_id, human_readable_device_name="Agilent BioTek Synergy H1"
+    )
 
   @property
   def supports_heating(self):
@@ -114,8 +115,14 @@ class SynergyH1(Resource, Device):
     size_z: float = 0.0,  # TODO: measure
   ):
     backend = SynergyH1Backend(device_id=device_id)
-    Resource.__init__(self, name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-                      model="Agilent BioTek Synergy H1")
+    Resource.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      model="Agilent BioTek Synergy H1",
+    )
     Device.__init__(self, backend=backend)
     self._backend: SynergyH1Backend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
@@ -125,7 +132,9 @@ class SynergyH1(Resource, Device):
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
-      size_x=127.76, size_y=85.48, size_z=0,  # TODO: measure
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
       pedestal_size_z=0,
       child_location=Coordinate.zero(),  # TODO: measure
     )

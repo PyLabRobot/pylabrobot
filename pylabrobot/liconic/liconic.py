@@ -68,13 +68,26 @@ class Liconic(Resource, Device):
       self.assign_child_resource(rack, location=None)
 
     self.retrieval = AutomatedRetrievalCapability(backend=backend)
-    self.tc = TemperatureControlCapability(backend=backend) if liconic_model.has_temperature_control else None
-    self.humidity_controller = HumidityControlCapability(backend=backend) if liconic_model.has_humidity_control else None
+    self.tc = (
+      TemperatureControlCapability(backend=backend)
+      if liconic_model.has_temperature_control
+      else None
+    )
+    self.humidity_controller = (
+      HumidityControlCapability(backend=backend) if liconic_model.has_humidity_control else None
+    )
     self.shaker = ShakingCapability(backend=backend) if has_shaker else None
     self.barcode_scanner = barcode_scanner
 
     self._capabilities = [
-      c for c in [self.retrieval, self.tc, self.humidity_controller, self.shaker, self.barcode_scanner]
+      c
+      for c in [
+        self.retrieval,
+        self.tc,
+        self.humidity_controller,
+        self.shaker,
+        self.barcode_scanner,
+      ]
       if c is not None
     ]
 
@@ -125,9 +138,7 @@ class Liconic(Resource, Device):
       if site.get_size_z() >= _plate_height(plate)
     ]
     if len(available) == 0:
-      raise NoFreeSiteError(
-        f"No free site found in '{self.name}' for plate '{plate.name}'"
-      )
+      raise NoFreeSiteError(f"No free site found in '{self.name}' for plate '{plate.name}'")
     return sorted(available, key=lambda site: site.get_size_z())
 
   def find_smallest_site_for_plate(self, plate: Plate) -> PlateHolder:
@@ -188,6 +199,7 @@ class Liconic(Resource, Device):
 
   def serialize(self):
     from pylabrobot.serializer import serialize
+
     return {
       **Device.serialize(self),
       **Resource.serialize(self),

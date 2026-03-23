@@ -1,7 +1,7 @@
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import ShakingCapability
 from pylabrobot.capabilities.shaking import ShakerBackend as _NewShakerBackend
+from pylabrobot.capabilities.shaking import ShakingCapability
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -11,17 +11,26 @@ from .backend import ShakerBackend
 class _ShakingAdapter(_NewShakerBackend):
   def __init__(self, legacy: ShakerBackend):
     self._legacy = legacy
-  async def setup(self): pass
-  async def stop(self): pass
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
   async def start_shaking(self, speed: float):
     await self._legacy.start_shaking(speed)
+
   async def stop_shaking(self):
     await self._legacy.stop_shaking()
+
   @property
   def supports_locking(self) -> bool:
     return self._legacy.supports_locking
+
   async def lock_plate(self):
     await self._legacy.lock_plate()
+
   async def unlock_plate(self):
     await self._legacy.unlock_plate()
 

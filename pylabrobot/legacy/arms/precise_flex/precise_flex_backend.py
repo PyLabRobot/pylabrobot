@@ -3,6 +3,7 @@ import warnings
 from abc import ABC
 from typing import Dict, List, Literal, Optional, Union
 
+from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.arms.backend import (
   AccessPattern,
   HorizontalAccess,
@@ -12,7 +13,6 @@ from pylabrobot.legacy.arms.backend import (
 from pylabrobot.legacy.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.legacy.arms.precise_flex.error_codes import ERROR_CODES
 from pylabrobot.legacy.arms.precise_flex.joints import PFAxis
-from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 
 

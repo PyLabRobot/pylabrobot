@@ -21,6 +21,7 @@ pytest.importorskip("grpc")
 
 import numpy as np  # type: ignore[import-not-found]
 
+from pylabrobot.capabilities.microscopy import ImagingMode, Objective
 from pylabrobot.io.sila.grpc import (
   decode_fields,
   get_field_bytes,
@@ -28,9 +29,7 @@ from pylabrobot.io.sila.grpc import (
   sila_string,
   varint_field,
 )
-from pylabrobot.capabilities.microscopy import ImagingMode, Objective
 from pylabrobot.molecular_devices.imageXpress.pico.backend import (
-  PicoBackend,
   _FC_SVC,
   _HW_SVC,
   _INST_SVC,
@@ -38,6 +37,7 @@ from pylabrobot.molecular_devices.imageXpress.pico.backend import (
   _LOCK_SVC,
   _OBJ_SVC,
   _SNAP_SVC,
+  PicoBackend,
   _decode_intermediate_response,
   _extract_image_buffer,
   _get_image_info,

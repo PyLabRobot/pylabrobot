@@ -85,9 +85,7 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_with_wells(self):
     wells = [self.plate.get_well("A1"), self.plate.get_well("B2")]
-    results = await self.device.absorbance.read(
-      plate=self.plate, wavelength=450, wells=wells
-    )
+    results = await self.device.absorbance.read(plate=self.plate, wavelength=450, wells=wells)
     self.assertEqual(len(self.backend.calls), 1)
     _, recorded_wells, recorded_wl = self.backend.calls[0]
     self.assertEqual(recorded_wells, wells)

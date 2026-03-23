@@ -34,7 +34,9 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     pass
 
   async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
-    results = await self._absorbance.read_absorbance(plate=plate, wells=wells, wavelength=wavelength)
+    results = await self._absorbance.read_absorbance(
+      plate=plate, wells=wells, wavelength=wavelength
+    )
     return [
       {
         "wavelength": r.wavelength,

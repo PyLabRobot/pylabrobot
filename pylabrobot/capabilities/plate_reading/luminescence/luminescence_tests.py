@@ -59,10 +59,10 @@ class RecordingLuminescenceBackend(LuminescenceBackend):
     focal_height: float,
   ) -> List[LuminescenceResult]:
     self.calls.append(("read_luminescence", len(wells), focal_height))
-    data: List[List[Optional[float]]] = [[0.0] * plate.num_items_x for _ in range(plate.num_items_y)]
-    return [
-      LuminescenceResult(data=data, temperature=25.0, timestamp=0.0)
+    data: List[List[Optional[float]]] = [
+      [0.0] * plate.num_items_x for _ in range(plate.num_items_y)
     ]
+    return [LuminescenceResult(data=data, temperature=25.0, timestamp=0.0)]
 
 
 class _TestDevice(Device):
@@ -84,9 +84,7 @@ class TestLuminescenceCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_with_wells(self):
     wells = [self.plate.get_well("A1"), self.plate.get_well("B2")]
-    results = await self.device.luminescence.read(
-      plate=self.plate, focal_height=13.0, wells=wells
-    )
+    results = await self.device.luminescence.read(plate=self.plate, focal_height=13.0, wells=wells)
     self.assertEqual(len(results), 1)
     self.assertEqual(len(self.backend.calls), 1)
     _, n_wells, fh = self.backend.calls[0]

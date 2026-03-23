@@ -122,9 +122,7 @@ class Cytomat(Resource, Device):
       if site.get_size_z() >= _plate_height(plate)
     ]
     if len(available) == 0:
-      raise NoFreeSiteError(
-        f"No free site found in '{self.name}' for plate '{plate.name}'"
-      )
+      raise NoFreeSiteError(f"No free site found in '{self.name}' for plate '{plate.name}'")
     return sorted(available, key=lambda site: site.get_size_z())
 
   def find_smallest_site_for_plate(self, plate: Plate) -> PlateHolder:
@@ -186,6 +184,7 @@ class Cytomat(Resource, Device):
 
   def serialize(self):
     from pylabrobot.serializer import serialize
+
     return {
       **Device.serialize(self),
       **Resource.serialize(self),

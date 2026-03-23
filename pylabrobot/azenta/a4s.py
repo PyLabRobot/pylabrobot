@@ -17,8 +17,8 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.io.serial import Serial
 from pylabrobot.device import Device, DeviceBackend
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 

@@ -126,9 +126,7 @@ class InhecoCPAC(ResourceHolder, Device):
     }
 
 
-def inheco_cpac_ultraflat(
-  name: str, control_box: InhecoTECControlBox, index: int
-) -> InhecoCPAC:
+def inheco_cpac_ultraflat(name: str, control_box: InhecoTECControlBox, index: int) -> InhecoCPAC:
   """Inheco CPAC Ultraflat
   7000166, 7000190, 7000165
 

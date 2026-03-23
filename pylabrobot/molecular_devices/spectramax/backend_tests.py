@@ -530,8 +530,13 @@ class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
     "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
     return_value=[
-      {"data": [[100.0]], "ex_wavelength": 485, "em_wavelength": 520,
-       "temperature": 25.0, "time": 12345.6}
+      {
+        "data": [[100.0]],
+        "ex_wavelength": 485,
+        "em_wavelength": 520,
+        "temperature": 25.0,
+        "time": 12345.6,
+      }
     ],
   )
   @patch(
@@ -585,9 +590,7 @@ class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
   @patch(
     "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
-    return_value=[
-      {"data": [[1000.0]], "em_wavelength": 590, "temperature": 25.0, "time": 12345.6}
-    ],
+    return_value=[{"data": [[1000.0]], "em_wavelength": 590, "temperature": 25.0, "time": 12345.6}],
   )
   @patch(
     "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._read_now",
@@ -647,7 +650,10 @@ class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
     new_callable=AsyncMock,
   )
   async def test_read_fluorescence_polarization(
-    self, mock_read_now, mock_transfer_data, mock_wait_for_idle,
+    self,
+    mock_read_now,
+    mock_transfer_data,
+    mock_wait_for_idle,
   ):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_fluorescence_polarization(plate, [485], [520], [515])
@@ -693,7 +699,10 @@ class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
     new_callable=AsyncMock,
   )
   async def test_read_time_resolved_fluorescence(
-    self, mock_read_now, mock_transfer_data, mock_wait_for_idle,
+    self,
+    mock_read_now,
+    mock_transfer_data,
+    mock_wait_for_idle,
   ):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_time_resolved_fluorescence(

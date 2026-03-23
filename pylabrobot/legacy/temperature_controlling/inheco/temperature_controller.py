@@ -1,5 +1,5 @@
-from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.inheco import cpac
+from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
 
 
 class InhecoTemperatureControllerBackend(TemperatureControllerBackend):

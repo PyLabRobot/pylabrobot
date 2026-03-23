@@ -1,9 +1,9 @@
 import time
 from typing import List, Optional
 
-from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
+from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 

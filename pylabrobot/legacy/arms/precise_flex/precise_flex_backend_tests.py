@@ -2,11 +2,14 @@ import unittest
 from typing import Dict
 from unittest.mock import AsyncMock, patch
 
+from pylabrobot.io.socket import Socket  # Import Socket for mocking
 from pylabrobot.legacy.arms.backend import HorizontalAccess, VerticalAccess
 from pylabrobot.legacy.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.legacy.arms.precise_flex.joints import PFAxis
-from pylabrobot.legacy.arms.precise_flex.precise_flex_backend import PreciseFlexBackend, PreciseFlexError
-from pylabrobot.io.socket import Socket  # Import Socket for mocking
+from pylabrobot.legacy.arms.precise_flex.precise_flex_backend import (
+  PreciseFlexBackend,
+  PreciseFlexError,
+)
 from pylabrobot.resources import Coordinate, Rotation
 
 

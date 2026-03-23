@@ -1,13 +1,13 @@
 import asyncio
 from typing import Optional, Union
 
-from pylabrobot.capabilities.shaking import ShakingCapability, ShakerBackend
+from pylabrobot.capabilities.shaking import ShakerBackend, ShakingCapability
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.io.serial import Serial
 from pylabrobot.device import Device, DeviceBackend
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 
@@ -29,9 +29,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
 
   def __init__(self, port: str, timeout: int = 60, supports_active_cooling: bool = False):
     if not HAS_SERIAL:
-      raise RuntimeError(
-        f"pyserial is required for BioShake. Import error: {_SERIAL_IMPORT_ERROR}"
-      )
+      raise RuntimeError(f"pyserial is required for BioShake. Import error: {_SERIAL_IMPORT_ERROR}")
 
     self.port = port
     self.timeout = timeout
@@ -77,9 +75,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
       return decoded
 
     except Exception as e:
-      raise RuntimeError(
-        f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}"
-      ) from e
+      raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
   async def setup(self, skip_home: bool = False):
     await DeviceBackend.setup(self)
@@ -272,14 +268,18 @@ class BioShake(PlateHolder, Device):
 # -- Per-model classes --
 # Shaking only
 
+
 class BioShake3000(BioShake):
   """BioShake 3000 - shaking 200-3000 rpm, no ELM, no heating."""
 
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShake3000 is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -293,8 +293,11 @@ class BioShake3000Elm(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShake3000Elm is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -308,8 +311,11 @@ class BioShake3000ElmDWP(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShake3000ElmDWP is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -323,8 +329,11 @@ class BioShakeD30Elm(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShakeD30Elm is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -338,8 +347,11 @@ class BioShake5000Elm(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShake5000Elm is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -349,14 +361,18 @@ class BioShake5000Elm(BioShake):
 
 # Shaking + heating (no active cooling)
 
+
 class BioShake3000T(BioShake):
   """BioShake 3000-T - shaking 200-3000 rpm, no ELM, heating."""
 
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShake3000T is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -371,8 +387,11 @@ class BioShake3000TElm(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShake3000TElm is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -387,8 +406,11 @@ class BioShakeD30TElm(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShakeD30TElm is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -399,14 +421,18 @@ class BioShakeD30TElm(BioShake):
 
 # Shaking + heating + active cooling
 
+
 class BioShakeQ1(BioShake):
   """BioShake Q1 - shaking 200-3000 rpm, ELM, heating, active cooling."""
 
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShakeQ1 is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port, supports_active_cooling=True),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port, supports_active_cooling=True),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -421,8 +447,11 @@ class BioShakeQ2(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("BioShakeQ2 is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port, supports_active_cooling=True),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port, supports_active_cooling=True),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -433,14 +462,18 @@ class BioShakeQ2(BioShake):
 
 # Temperature only
 
+
 class Heatplate(BioShake):
   """Heatplate - no shaking, heating only."""
 
   def __init__(self, name: str, port: str):
     raise NotImplementedError("Heatplate is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
@@ -454,8 +487,11 @@ class ColdPlate(BioShake):
   def __init__(self, name: str, port: str):
     raise NotImplementedError("ColdPlate is missing resource definition.")
     super().__init__(
-      name=name, backend=BioShakeBackend(port=port, supports_active_cooling=True),
-      size_x=0, size_y=0, size_z=0,  # TODO
+      name=name,
+      backend=BioShakeBackend(port=port, supports_active_cooling=True),
+      size_x=0,
+      size_y=0,
+      size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )

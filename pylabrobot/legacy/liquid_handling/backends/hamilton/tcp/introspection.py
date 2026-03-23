@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.messages import HoiParams, HoiParamsParser
+from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.messages import (
+  HoiParams,
+  HoiParamsParser,
+)
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.protocol import (
   HamiltonDataType,

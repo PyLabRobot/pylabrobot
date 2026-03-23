@@ -63,7 +63,9 @@ class RecordingFluorescenceBackend(FluorescenceBackend):
     self.calls.append(
       ("read_fluorescence", len(wells), excitation_wavelength, emission_wavelength, focal_height)
     )
-    data: List[List[Optional[float]]] = [[0.0] * plate.num_items_x for _ in range(plate.num_items_y)]
+    data: List[List[Optional[float]]] = [
+      [0.0] * plate.num_items_x for _ in range(plate.num_items_y)
+    ]
     return [
       FluorescenceResult(
         data=data,

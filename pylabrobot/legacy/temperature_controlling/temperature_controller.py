@@ -13,15 +13,23 @@ from .backend import TemperatureControllerBackend
 class _TemperatureControlAdapter(_NewTCBackend):
   def __init__(self, legacy: TemperatureControllerBackend):
     self._legacy = legacy
-  async def setup(self): pass
-  async def stop(self): pass
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
   @property
   def supports_active_cooling(self) -> bool:
     return self._legacy.supports_active_cooling
+
   async def set_temperature(self, temperature: float):
     await self._legacy.set_temperature(temperature)
+
   async def get_current_temperature(self) -> float:
     return await self._legacy.get_current_temperature()
+
   async def deactivate(self):
     await self._legacy.deactivate()
 

@@ -4,7 +4,11 @@ from typing import Dict, List, Optional
 
 from pylabrobot.capabilities.microscopy import (
   ImagingMode as NewImagingMode,
+)
+from pylabrobot.capabilities.microscopy import (
   ImagingResult as NewImagingResult,
+)
+from pylabrobot.capabilities.microscopy import (
   Objective as NewObjective,
 )
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend
@@ -48,9 +52,7 @@ class ExperimentalPicoBackend(ImagerBackend):
     filter_cubes: Optional[Dict[int, ImagingMode]] = None,
   ):
     super().__init__()
-    new_objectives = {
-      pos: _legacy_to_new_objective(obj) for pos, obj in (objectives or {}).items()
-    }
+    new_objectives = {pos: _legacy_to_new_objective(obj) for pos, obj in (objectives or {}).items()}
     new_filter_cubes = {
       pos: _legacy_to_new_imaging_mode(mode) for pos, mode in (filter_cubes or {}).items()
     }

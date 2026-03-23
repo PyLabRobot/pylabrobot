@@ -5,11 +5,11 @@ from typing import List, Union
 from pylabrobot.capabilities.barcode_scanning.backend import (
   BarcodeScannerBackend as _NewBarcodeScannerBackend,
 )
+from pylabrobot.legacy.storage.backend import IncubatorBackend
+from pylabrobot.liconic import backend as new_liconic
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.carrier import PlateCarrier
-from pylabrobot.legacy.storage.backend import IncubatorBackend
-from pylabrobot.liconic import backend as new_liconic
 
 # Re-export for legacy imports
 LICONIC_SITE_HEIGHT_TO_STEPS = new_liconic.LICONIC_SITE_HEIGHT_TO_STEPS
@@ -37,8 +37,13 @@ class ExperimentalLiconicBackend(IncubatorBackend):
 
   # Internal attributes that should be forwarded to self._new for test compatibility
   _FORWARDED_ATTRS = {
-    "_send_command", "_wait_ready", "_wait_plate_ready", "_carrier_to_steps_pos",
-    "_site_to_m_n", "_racks", "io",
+    "_send_command",
+    "_wait_ready",
+    "_wait_plate_ready",
+    "_carrier_to_steps_pos",
+    "_site_to_m_n",
+    "_racks",
+    "io",
   }
 
   def __init__(

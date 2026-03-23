@@ -25,7 +25,7 @@ from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapabilit
 from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
 from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
 from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, PlateHolder, Plate, Resource
+from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
 
 try:
   import PySpin  # type: ignore
@@ -81,8 +81,9 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     device_id: Optional[str] = None,
     imaging_config: Optional[CytationImagingConfig] = None,
   ) -> None:
-    super().__init__(timeout=timeout, device_id=device_id,
-                     human_readable_device_name="Agilent BioTek Cytation")
+    super().__init__(
+      timeout=timeout, device_id=device_id, human_readable_device_name="Agilent BioTek Cytation"
+    )
 
     self._spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self._cam: Optional["PySpin.CameraPtr"] = None
@@ -168,7 +169,10 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     version = self._spinnaker_system.GetLibraryVersion()
     logger.debug(
       f"{self.__class__.__name__} Library version: %d.%d.%d.%d",
-      version.major, version.minor, version.type, version.build,
+      version.major,
+      version.minor,
+      version.type,
+      version.build,
     )
 
     cam_list = self._spinnaker_system.GetCameras()
@@ -308,13 +312,45 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
       for spot in [1, 2]:
         configuration = await self.send_command("i", f"o{spot}")
         weird_encoding = {
-          0x00: " ", 0x14: ".", 0x15: "/", 0x16: "0", 0x17: "1", 0x18: "2",
-          0x19: "3", 0x20: "4", 0x21: "5", 0x22: "6", 0x23: "7", 0x24: "8",
-          0x25: "9", 0x33: "A", 0x34: "B", 0x35: "C", 0x36: "D", 0x37: "E",
-          0x38: "F", 0x39: "G", 0x40: "H", 0x41: "I", 0x42: "J", 0x43: "K",
-          0x44: "L", 0x45: "M", 0x46: "N", 0x47: "O", 0x48: "P", 0x49: "Q",
-          0x50: "R", 0x51: "S", 0x52: "T", 0x53: "U", 0x54: "V", 0x55: "W",
-          0x56: "X", 0x57: "Y", 0x58: "Z",
+          0x00: " ",
+          0x14: ".",
+          0x15: "/",
+          0x16: "0",
+          0x17: "1",
+          0x18: "2",
+          0x19: "3",
+          0x20: "4",
+          0x21: "5",
+          0x22: "6",
+          0x23: "7",
+          0x24: "8",
+          0x25: "9",
+          0x33: "A",
+          0x34: "B",
+          0x35: "C",
+          0x36: "D",
+          0x37: "E",
+          0x38: "F",
+          0x39: "G",
+          0x40: "H",
+          0x41: "I",
+          0x42: "J",
+          0x43: "K",
+          0x44: "L",
+          0x45: "M",
+          0x46: "N",
+          0x47: "O",
+          0x48: "P",
+          0x49: "Q",
+          0x50: "R",
+          0x51: "S",
+          0x52: "T",
+          0x53: "U",
+          0x54: "V",
+          0x55: "W",
+          0x56: "X",
+          0x57: "Y",
+          0x58: "Z",
         }
         if configuration is None:
           raise RuntimeError("Failed to load objective configuration")
@@ -817,8 +853,14 @@ class Cytation5(Resource, Device):
     size_z: float = 0.0,  # TODO: measure
   ):
     backend = CytationBackend(device_id=device_id, imaging_config=imaging_config)
-    Resource.__init__(self, name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-                      model="Agilent BioTek Cytation 5")
+    Resource.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      model="Agilent BioTek Cytation 5",
+    )
     Device.__init__(self, backend=backend)
     self._backend: CytationBackend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
@@ -829,7 +871,9 @@ class Cytation5(Resource, Device):
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
-      size_x=127.76, size_y=85.48, size_z=0,  # TODO: measure
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
       pedestal_size_z=0,
       child_location=Coordinate.zero(),  # TODO: measure
     )
@@ -857,8 +901,14 @@ class Cytation1(Resource, Device):
     size_z: float = 0.0,  # TODO: measure
   ):
     backend = BioTekBackend(device_id=device_id)
-    Resource.__init__(self, name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-                      model="Agilent BioTek Cytation 1")
+    Resource.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      model="Agilent BioTek Cytation 1",
+    )
     Device.__init__(self, backend=backend)
     self._backend: BioTekBackend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
@@ -868,7 +918,9 @@ class Cytation1(Resource, Device):
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
-      size_x=127.76, size_y=85.48, size_z=0,  # TODO: measure
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
       pedestal_size_z=0,
       child_location=Coordinate.zero(),  # TODO: measure
     )

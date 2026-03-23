@@ -2,6 +2,9 @@
 
 from typing import Optional, Tuple, Union, cast
 
+from pylabrobot.capabilities.microscopy import AutoExposure as NewAutoExposure
+from pylabrobot.capabilities.microscopy import ImagingMode as NewImagingMode
+from pylabrobot.capabilities.microscopy import ImagingResult as NewImagingResult
 from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
   MicroscopyCapability,
@@ -9,9 +12,6 @@ from pylabrobot.capabilities.microscopy import (
   fraction_overexposed,
   max_pixel_at_fraction,
 )
-from pylabrobot.capabilities.microscopy import AutoExposure as NewAutoExposure
-from pylabrobot.capabilities.microscopy import ImagingMode as NewImagingMode
-from pylabrobot.capabilities.microscopy import ImagingResult as NewImagingResult
 from pylabrobot.capabilities.microscopy import Objective as NewObjective
 from pylabrobot.legacy.machines import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend

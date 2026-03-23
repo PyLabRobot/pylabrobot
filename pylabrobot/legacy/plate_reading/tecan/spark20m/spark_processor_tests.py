@@ -92,7 +92,8 @@ class TestProcessAbsorbance(unittest.TestCase):
 
   def test_process_empty_data(self) -> None:
     with patch(
-      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data", return_value={}
+      "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value={},
     ):
       results = process_absorbance([])
     self.assertEqual(results, [])

@@ -3,10 +3,10 @@
 import math
 from typing import List, Optional
 
-from pylabrobot.capabilities.tilting import TiltingCapability
 from pylabrobot.capabilities.tilting import TilterBackend as _NewTilterBackend
-from pylabrobot.legacy.tilting.tilter_backend import TilterBackend
+from pylabrobot.capabilities.tilting import TiltingCapability
 from pylabrobot.legacy.machines import Machine
+from pylabrobot.legacy.tilting.tilter_backend import TilterBackend
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.well import CrossSectionType, Well
@@ -15,8 +15,13 @@ from pylabrobot.resources.well import CrossSectionType, Well
 class _TiltingAdapter(_NewTilterBackend):
   def __init__(self, legacy: TilterBackend):
     self._legacy = legacy
-  async def setup(self): pass
-  async def stop(self): pass
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
   async def set_angle(self, angle: float):
     await self._legacy.set_angle(angle)
 

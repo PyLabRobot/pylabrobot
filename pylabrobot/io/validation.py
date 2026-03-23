@@ -1,11 +1,11 @@
 from typing import Optional
 
+from pylabrobot.device import DeviceBackend
 from pylabrobot.io.capture import CaptureReader, capturer
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.usb import USB, USBValidator
-from pylabrobot.device import DeviceBackend
 
 cr: Optional[CaptureReader] = None
 

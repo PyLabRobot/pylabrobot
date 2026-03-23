@@ -43,10 +43,13 @@ class MolecularDevicesBackend(PlateReaderBackend):
 
     async def _sc(*a, **kw):
       return await self.send_command(*a, **kw)
+
     async def _rn():
       return await self._read_now()
+
     async def _wfi(**kw):
       return await self._wait_for_idle(**kw)
+
     async def _td(*a, **kw):
       return await self._transfer_data(*a, **kw)
 
@@ -111,16 +114,30 @@ class MolecularDevicesBackend(PlateReaderBackend):
     wl0 = wavelengths[0]
     wavelength = wl0[0] if isinstance(wl0, tuple) else wl0
     results = await self._new.read_absorbance(
-      plate=plate, wells=[], wavelength=wavelength,
-      wavelengths=wavelengths, read_type=read_type, read_order=read_order,
-      calibrate=calibrate, shake_settings=shake_settings,
-      carriage_speed=carriage_speed, speed_read=speed_read, path_check=path_check,
-      kinetic_settings=kinetic_settings, spectrum_settings=spectrum_settings,
-      cuvette=cuvette, settling_time=settling_time, timeout=timeout,
+      plate=plate,
+      wells=[],
+      wavelength=wavelength,
+      wavelengths=wavelengths,
+      read_type=read_type,
+      read_order=read_order,
+      calibrate=calibrate,
+      shake_settings=shake_settings,
+      carriage_speed=carriage_speed,
+      speed_read=speed_read,
+      path_check=path_check,
+      kinetic_settings=kinetic_settings,
+      spectrum_settings=spectrum_settings,
+      cuvette=cuvette,
+      settling_time=settling_time,
+      timeout=timeout,
     )
     return [
-      {"wavelength": r.wavelength, "data": r.data,
-       "temperature": r.temperature, "time": r.timestamp}
+      {
+        "wavelength": r.wavelength,
+        "data": r.data,
+        "temperature": r.temperature,
+        "time": r.timestamp,
+      }
       for r in results
     ]
 
@@ -145,20 +162,36 @@ class MolecularDevicesBackend(PlateReaderBackend):
     timeout: int = 600,
   ) -> List[Dict]:
     results = await self._new.read_fluorescence(
-      plate=plate, wells=[], excitation_wavelength=excitation_wavelengths[0],
-      emission_wavelength=emission_wavelengths[0], focal_height=0,
+      plate=plate,
+      wells=[],
+      excitation_wavelength=excitation_wavelengths[0],
+      emission_wavelength=emission_wavelengths[0],
+      focal_height=0,
       excitation_wavelengths=excitation_wavelengths,
-      emission_wavelengths=emission_wavelengths, cutoff_filters=cutoff_filters,
-      read_type=read_type, read_order=read_order, calibrate=calibrate,
-      shake_settings=shake_settings, carriage_speed=carriage_speed,
-      read_from_bottom=read_from_bottom, pmt_gain=pmt_gain,
-      flashes_per_well=flashes_per_well, kinetic_settings=kinetic_settings,
-      spectrum_settings=spectrum_settings, cuvette=cuvette,
-      settling_time=settling_time, timeout=timeout,
+      emission_wavelengths=emission_wavelengths,
+      cutoff_filters=cutoff_filters,
+      read_type=read_type,
+      read_order=read_order,
+      calibrate=calibrate,
+      shake_settings=shake_settings,
+      carriage_speed=carriage_speed,
+      read_from_bottom=read_from_bottom,
+      pmt_gain=pmt_gain,
+      flashes_per_well=flashes_per_well,
+      kinetic_settings=kinetic_settings,
+      spectrum_settings=spectrum_settings,
+      cuvette=cuvette,
+      settling_time=settling_time,
+      timeout=timeout,
     )
     return [
-      {"ex_wavelength": r.excitation_wavelength, "em_wavelength": r.emission_wavelength,
-       "data": r.data, "temperature": r.temperature, "time": r.timestamp}
+      {
+        "ex_wavelength": r.excitation_wavelength,
+        "em_wavelength": r.emission_wavelength,
+        "data": r.data,
+        "temperature": r.temperature,
+        "time": r.timestamp,
+      }
       for r in results
     ]
 
@@ -181,18 +214,25 @@ class MolecularDevicesBackend(PlateReaderBackend):
     timeout: int = 600,
   ) -> List[Dict]:
     results = await self._new.read_luminescence(
-      plate=plate, wells=[], focal_height=0,
-      emission_wavelengths=emission_wavelengths, read_type=read_type,
-      read_order=read_order, calibrate=calibrate, shake_settings=shake_settings,
-      carriage_speed=carriage_speed, read_from_bottom=read_from_bottom,
-      pmt_gain=pmt_gain, flashes_per_well=flashes_per_well,
-      kinetic_settings=kinetic_settings, spectrum_settings=spectrum_settings,
-      cuvette=cuvette, settling_time=settling_time, timeout=timeout,
+      plate=plate,
+      wells=[],
+      focal_height=0,
+      emission_wavelengths=emission_wavelengths,
+      read_type=read_type,
+      read_order=read_order,
+      calibrate=calibrate,
+      shake_settings=shake_settings,
+      carriage_speed=carriage_speed,
+      read_from_bottom=read_from_bottom,
+      pmt_gain=pmt_gain,
+      flashes_per_well=flashes_per_well,
+      kinetic_settings=kinetic_settings,
+      spectrum_settings=spectrum_settings,
+      cuvette=cuvette,
+      settling_time=settling_time,
+      timeout=timeout,
     )
-    return [
-      {"data": r.data, "temperature": r.temperature, "time": r.timestamp}
-      for r in results
-    ]
+    return [{"data": r.data, "temperature": r.temperature, "time": r.timestamp} for r in results]
 
   async def read_fluorescence_polarization(
     self,
@@ -215,14 +255,23 @@ class MolecularDevicesBackend(PlateReaderBackend):
     timeout: int = 600,
   ) -> List[Dict]:
     return await self._new.read_fluorescence_polarization(
-      plate=plate, excitation_wavelengths=excitation_wavelengths,
-      emission_wavelengths=emission_wavelengths, cutoff_filters=cutoff_filters,
-      read_type=read_type, read_order=read_order, calibrate=calibrate,
-      shake_settings=shake_settings, carriage_speed=carriage_speed,
-      read_from_bottom=read_from_bottom, pmt_gain=pmt_gain,
-      flashes_per_well=flashes_per_well, kinetic_settings=kinetic_settings,
-      spectrum_settings=spectrum_settings, cuvette=cuvette,
-      settling_time=settling_time, timeout=timeout,
+      plate=plate,
+      excitation_wavelengths=excitation_wavelengths,
+      emission_wavelengths=emission_wavelengths,
+      cutoff_filters=cutoff_filters,
+      read_type=read_type,
+      read_order=read_order,
+      calibrate=calibrate,
+      shake_settings=shake_settings,
+      carriage_speed=carriage_speed,
+      read_from_bottom=read_from_bottom,
+      pmt_gain=pmt_gain,
+      flashes_per_well=flashes_per_well,
+      kinetic_settings=kinetic_settings,
+      spectrum_settings=spectrum_settings,
+      cuvette=cuvette,
+      settling_time=settling_time,
+      timeout=timeout,
     )
 
   async def read_time_resolved_fluorescence(
@@ -248,13 +297,23 @@ class MolecularDevicesBackend(PlateReaderBackend):
     timeout: int = 600,
   ) -> List[Dict]:
     return await self._new.read_time_resolved_fluorescence(
-      plate=plate, excitation_wavelengths=excitation_wavelengths,
-      emission_wavelengths=emission_wavelengths, cutoff_filters=cutoff_filters,
-      delay_time=delay_time, integration_time=integration_time,
-      read_type=read_type, read_order=read_order, calibrate=calibrate,
-      shake_settings=shake_settings, carriage_speed=carriage_speed,
-      read_from_bottom=read_from_bottom, pmt_gain=pmt_gain,
-      flashes_per_well=flashes_per_well, kinetic_settings=kinetic_settings,
-      spectrum_settings=spectrum_settings, cuvette=cuvette,
-      settling_time=settling_time, timeout=timeout,
+      plate=plate,
+      excitation_wavelengths=excitation_wavelengths,
+      emission_wavelengths=emission_wavelengths,
+      cutoff_filters=cutoff_filters,
+      delay_time=delay_time,
+      integration_time=integration_time,
+      read_type=read_type,
+      read_order=read_order,
+      calibrate=calibrate,
+      shake_settings=shake_settings,
+      carriage_speed=carriage_speed,
+      read_from_bottom=read_from_bottom,
+      pmt_gain=pmt_gain,
+      flashes_per_well=flashes_per_well,
+      kinetic_settings=kinetic_settings,
+      spectrum_settings=spectrum_settings,
+      cuvette=cuvette,
+      settling_time=settling_time,
+      timeout=timeout,
     )

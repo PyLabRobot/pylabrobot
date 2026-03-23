@@ -1,9 +1,9 @@
 import time
 from typing import List, Optional
 
-from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.capabilities.plate_reading.luminescence.backend import LuminescenceBackend
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
+from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 

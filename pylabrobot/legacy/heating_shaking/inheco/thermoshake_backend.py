@@ -1,7 +1,7 @@
 """Legacy. Use pylabrobot.inheco.thermoshake.InhecoThermoshakeBackend instead."""
 
-from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.inheco import thermoshake
+from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 
 
 class InhecoThermoshakeBackend(HeaterShakerBackend):

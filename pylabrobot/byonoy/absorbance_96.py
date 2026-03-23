@@ -16,7 +16,6 @@ from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
 from pylabrobot.utils.list import reshape_2d
 
-
 # ---------------------------------------------------------------------------
 # Backend
 # ---------------------------------------------------------------------------
@@ -53,27 +52,14 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
       wait_for_response=False,
     )
 
-    payload2 = (
-      Writer()
-      .u16(7)
-      .u8(0)
-      .raw_bytes(b"\x00" * 52)
-      .finish()
-    )
+    payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
     await self.send_command(
       report_id=0x0200,
       payload=payload2,
       wait_for_response=False,
     )
 
-    payload3 = (
-      Writer()
-      .i16(signal_wl)
-      .i16(reference_wl)
-      .u8(int(is_reference))
-      .u8(0)
-      .finish()
-    )
+    payload3 = Writer().i16(signal_wl).i16(reference_wl).u8(int(is_reference)).u8(0).finish()
     await self.send_command(
       report_id=0x0320,
       payload=payload3,
