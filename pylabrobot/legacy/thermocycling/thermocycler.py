@@ -1,13 +1,137 @@
-"""High-level Thermocycler resource wrapping a backend."""
+"""High-level Thermocycler resource wrapping a backend.
 
-import asyncio
-import time
+Internally delegates to ThermocyclingCapability and TemperatureControlCapability
+via adapters. The legacy public API is unchanged.
+"""
+
 from typing import List, Optional
 
+from pylabrobot.capabilities.temperature_controlling import (
+  TemperatureControlCapability,
+  TemperatureControllerBackend as _NewTempBackend,
+)
+from pylabrobot.capabilities.thermocycling import (
+  ThermocyclingBackend as _NewThermocyclingBackend,
+  ThermocyclingCapability,
+)
+from pylabrobot.capabilities.thermocycling import standard as _new_std
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.legacy.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
+from pylabrobot.legacy.thermocycling.standard import (
+  BlockStatus,
+  LidStatus,
+  Protocol,
+  Stage,
+  Step,
+  protocol_to_new,
+)
 from pylabrobot.resources import Coordinate, ResourceHolder
+
+
+# ---------------------------------------------------------------------------
+# Adapters: wrap a legacy ThermocyclerBackend for the new capability interfaces
+# ---------------------------------------------------------------------------
+
+
+class _BlockTempAdapter(_NewTempBackend):
+  """Adapts the block side of a legacy ThermocyclerBackend to TemperatureControllerBackend."""
+
+  def __init__(self, legacy: ThermocyclerBackend):
+    self._legacy = legacy
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return True
+
+  async def set_temperature(self, temperature: float):
+    await self._legacy.set_block_temperature([temperature])
+
+  async def get_current_temperature(self) -> float:
+    temps = await self._legacy.get_block_current_temperature()
+    return temps[0]
+
+  async def deactivate(self):
+    await self._legacy.deactivate_block()
+
+
+class _LidTempAdapter(_NewTempBackend):
+  """Adapts the lid side of a legacy ThermocyclerBackend to TemperatureControllerBackend."""
+
+  def __init__(self, legacy: ThermocyclerBackend):
+    self._legacy = legacy
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
+  async def set_temperature(self, temperature: float):
+    await self._legacy.set_lid_temperature([temperature])
+
+  async def get_current_temperature(self) -> float:
+    temps = await self._legacy.get_lid_current_temperature()
+    return temps[0]
+
+  async def deactivate(self):
+    await self._legacy.deactivate_lid()
+
+
+class _ThermocyclingAdapter(_NewThermocyclingBackend):
+  """Adapts a legacy ThermocyclerBackend to the new ThermocyclingBackend."""
+
+  def __init__(self, legacy: ThermocyclerBackend):
+    self._legacy = legacy
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
+  async def open_lid(self) -> None:
+    await self._legacy.open_lid()
+
+  async def close_lid(self) -> None:
+    await self._legacy.close_lid()
+
+  async def get_lid_open(self) -> bool:
+    return await self._legacy.get_lid_open()
+
+  async def run_protocol(self, protocol: _new_std.Protocol, block_max_volume: float) -> None:
+    from pylabrobot.legacy.thermocycling.standard import protocol_from_new
+
+    await self._legacy.run_protocol(protocol_from_new(protocol), block_max_volume)
+
+  async def get_hold_time(self) -> float:
+    return await self._legacy.get_hold_time()
+
+  async def get_current_cycle_index(self) -> int:
+    return await self._legacy.get_current_cycle_index()
+
+  async def get_total_cycle_count(self) -> int:
+    return await self._legacy.get_total_cycle_count()
+
+  async def get_current_step_index(self) -> int:
+    return await self._legacy.get_current_step_index()
+
+  async def get_total_step_count(self) -> int:
+    return await self._legacy.get_total_step_count()
+
+
+# ---------------------------------------------------------------------------
+# Legacy frontend
+# ---------------------------------------------------------------------------
 
 
 class Thermocycler(ResourceHolder, Machine):
@@ -24,18 +148,6 @@ class Thermocycler(ResourceHolder, Machine):
     category: str = "thermocycler",
     model: Optional[str] = None,
   ):
-    """Initialize a Thermocycler resource.
-
-    Args:
-      name: Human-readable name.
-      size_x: Footprint in the X dimension (mm).
-      size_y: Footprint in the Y dimension (mm).
-      size_z: Height in the Z dimension (mm).
-      backend: A ThermocyclerBackend instance.
-      child_location: Where a plate sits on the block.
-      category: Resource category (default: "thermocycler").
-      model: Module model string (e.g. "thermocyclerModuleV1").
-    """
     ResourceHolder.__init__(
       self,
       name=name,
@@ -49,54 +161,35 @@ class Thermocycler(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self.backend: ThermocyclerBackend = backend
 
+    # Wire up capabilities via adapters
+    block_cap = TemperatureControlCapability(backend=_BlockTempAdapter(backend))
+    lid_cap = TemperatureControlCapability(backend=_LidTempAdapter(backend))
+    self._thermocycling = ThermocyclingCapability(
+      backend=_ThermocyclingAdapter(backend), block=block_cap, lid=lid_cap
+    )
+
+  # --- delegate to capabilities ---
+
   async def open_lid(self, **backend_kwargs):
-    return await self.backend.open_lid(**backend_kwargs)
+    return await self._thermocycling.open_lid()
 
   async def close_lid(self, **backend_kwargs):
-    return await self.backend.close_lid(**backend_kwargs)
+    return await self._thermocycling.close_lid()
 
   async def set_block_temperature(self, temperature: List[float], **backend_kwargs):
-    """Set the block temperature.
-
-    Args:
-      temperature: List of target temperatures in °C for multiple zones.
-    """
     return await self.backend.set_block_temperature(temperature, **backend_kwargs)
 
   async def set_lid_temperature(self, temperature: List[float], **backend_kwargs):
-    """Set the lid temperature.
-
-    Args:
-      temperature: List of target temperatures in °C for multiple zones.
-    """
     return await self.backend.set_lid_temperature(temperature, **backend_kwargs)
 
   async def deactivate_block(self, **backend_kwargs):
-    """Turn off the block heater."""
     return await self.backend.deactivate_block(**backend_kwargs)
 
   async def deactivate_lid(self, **backend_kwargs):
-    """Turn off the lid heater."""
     return await self.backend.deactivate_lid(**backend_kwargs)
 
   async def run_protocol(self, protocol: Protocol, block_max_volume: float, **backend_kwargs):
-    """Enqueue a multi-stage temperature protocol (fire-and-forget).
-
-    Args:
-      protocol: Protocol object containing stages with steps and repeats.
-      block_max_volume: Maximum block volume (µL) for safety.
-    """
-
-    num_zones = len(protocol.stages[0].steps[0].temperature)
-    for stage in protocol.stages:
-      for i, step in enumerate(stage.steps):
-        if len(step.temperature) != num_zones:
-          raise ValueError(
-            f"All steps must have the same number of temperatures. "
-            f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
-          )
-
-    return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
+    await self._thermocycling.run_protocol(protocol_to_new(protocol), block_max_volume)
 
   async def run_pcr_profile(
     self,
@@ -117,57 +210,42 @@ class Thermocycler(ResourceHolder, Machine):
     storage_time: Optional[float] = None,
     **backend_kwargs,
   ):
-    """Run a PCR profile with specified parameters.
-
-    Args:
-      denaturation_temp: List of denaturation temperatures in °C.
-      denaturation_time: Denaturation time in seconds.
-      annealing_temp: List of annealing temperatures in °C.
-      annealing_time: Annealing time in seconds.
-      extension_temp: List of extension temperatures in °C.
-      extension_time: Extension time in seconds.
-      num_cycles: Number of PCR cycles.
-      block_max_volume: Maximum block volume (µL) for safety.
-      lid_temperature: List of lid temperatures to set during the profile.
-      pre_denaturation_temp: Optional list of pre-denaturation temperatures in °C.
-      pre_denaturation_time: Optional pre-denaturation time in seconds.
-      final_extension_temp: Optional list of final extension temperatures in °C.
-      final_extension_time: Optional final extension time in seconds.
-      storage_temp: Optional list of storage temperatures in °C.
-      storage_time: Optional storage time in seconds.
-    """
-
     await self.set_lid_temperature(lid_temperature)
     await self.wait_for_lid()
 
     stages: List[Stage] = []
 
-    # Pre-denaturation stage (if specified)
     if pre_denaturation_temp is not None and pre_denaturation_time is not None:
-      pre_denaturation_step = Step(
-        temperature=pre_denaturation_temp, hold_seconds=pre_denaturation_time
+      stages.append(
+        Stage(
+          steps=[Step(temperature=pre_denaturation_temp, hold_seconds=pre_denaturation_time)],
+          repeats=1,
+        )
       )
-      stages.append(Stage(steps=[pre_denaturation_step], repeats=1))
 
-    # Main PCR cycles stage
-    pcr_steps = [
-      Step(temperature=denaturation_temp, hold_seconds=denaturation_time),
-      Step(temperature=annealing_temp, hold_seconds=annealing_time),
-      Step(temperature=extension_temp, hold_seconds=extension_time),
-    ]
-    stages.append(Stage(steps=pcr_steps, repeats=num_cycles))
+    stages.append(
+      Stage(
+        steps=[
+          Step(temperature=denaturation_temp, hold_seconds=denaturation_time),
+          Step(temperature=annealing_temp, hold_seconds=annealing_time),
+          Step(temperature=extension_temp, hold_seconds=extension_time),
+        ],
+        repeats=num_cycles,
+      )
+    )
 
-    # Final extension stage (if specified)
     if final_extension_temp is not None and final_extension_time is not None:
-      final_extension_step = Step(
-        temperature=final_extension_temp, hold_seconds=final_extension_time
+      stages.append(
+        Stage(
+          steps=[Step(temperature=final_extension_temp, hold_seconds=final_extension_time)],
+          repeats=1,
+        )
       )
-      stages.append(Stage(steps=[final_extension_step], repeats=1))
 
-    # Storage stage (if specified)
     if storage_temp is not None and storage_time is not None:
-      storage_step = Step(temperature=storage_temp, hold_seconds=storage_time)
-      stages.append(Stage(steps=[storage_step], repeats=1))
+      stages.append(
+        Stage(steps=[Step(temperature=storage_temp, hold_seconds=storage_time)], repeats=1)
+      )
 
     protocol = Protocol(stages=stages)
     return await self.run_protocol(
@@ -175,108 +253,58 @@ class Thermocycler(ResourceHolder, Machine):
     )
 
   async def get_block_current_temperature(self, **backend_kwargs) -> List[float]:
-    """Get the current block temperature(s) (°C)."""
     return await self.backend.get_block_current_temperature(**backend_kwargs)
 
   async def get_block_target_temperature(self, **backend_kwargs) -> List[float]:
-    """Get the block's target temperature(s) (°C)."""
     return await self.backend.get_block_target_temperature(**backend_kwargs)
 
   async def get_lid_current_temperature(self, **backend_kwargs) -> List[float]:
-    """Get the current lid temperature(s) (°C)."""
     return await self.backend.get_lid_current_temperature(**backend_kwargs)
 
   async def get_lid_target_temperature(self, **backend_kwargs) -> List[float]:
-    """Get the lid's target temperature(s) (°C), if supported."""
     return await self.backend.get_lid_target_temperature(**backend_kwargs)
 
   async def get_lid_open(self, **backend_kwargs) -> bool:
-    """Return ``True`` if the lid is open."""
-    return await self.backend.get_lid_open(**backend_kwargs)
+    return await self._thermocycling.get_lid_open()
 
   async def get_lid_status(self, **backend_kwargs) -> LidStatus:
-    """Get the lid temperature status."""
     return await self.backend.get_lid_status(**backend_kwargs)
 
   async def get_block_status(self, **backend_kwargs) -> BlockStatus:
-    """Get the block status."""
     return await self.backend.get_block_status(**backend_kwargs)
 
   async def get_hold_time(self, **backend_kwargs) -> float:
-    """Get remaining hold time (s) for the current step."""
-    return await self.backend.get_hold_time(**backend_kwargs)
+    return await self._thermocycling.get_hold_time()
 
   async def get_current_cycle_index(self, **backend_kwargs) -> int:
-    """Get the one-based index of the current cycle."""
-    return await self.backend.get_current_cycle_index(**backend_kwargs)
+    return await self._thermocycling.get_current_cycle_index()
 
   async def get_total_cycle_count(self, **backend_kwargs) -> int:
-    """Get the total number of cycles."""
-    return await self.backend.get_total_cycle_count(**backend_kwargs)
+    return await self._thermocycling.get_total_cycle_count()
 
   async def get_current_step_index(self, **backend_kwargs) -> int:
-    """Get the one-based index of the current step."""
-    return await self.backend.get_current_step_index(**backend_kwargs)
+    return await self._thermocycling.get_current_step_index()
 
   async def get_total_step_count(self, **backend_kwargs) -> int:
-    """Get the total number of steps in the current cycle."""
-    return await self.backend.get_total_step_count(**backend_kwargs)
+    return await self._thermocycling.get_total_step_count()
 
   async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5, **backend_kwargs):
-    """Wait until block temp reaches target ± tolerance for all zones."""
-    targets = await self.get_block_target_temperature(**backend_kwargs)
-    start = time.time()
-    while time.time() - start < timeout:
-      currents = await self.get_block_current_temperature(**backend_kwargs)
-      if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
-        return
-      await asyncio.sleep(1)
-    raise TimeoutError("Block temperature timeout.")
+    self._thermocycling.block.target_temperature = (
+      await self.backend.get_block_target_temperature()
+    )[0]
+    await self._thermocycling.block.wait_for_temperature(timeout=timeout, tolerance=tolerance)
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
-    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""
-    try:
-      targets = await self.get_lid_target_temperature(**backend_kwargs)
-    except RuntimeError:
-      targets = None
-    start = time.time()
-    while time.time() - start < timeout:
-      if targets is not None:
-        currents = await self.get_lid_current_temperature(**backend_kwargs)
-        if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
-          return
-      else:
-        # If no target temperature, check status
-        status = await self.get_lid_status(**backend_kwargs)
-        if status in ["idle", "holding at target"]:
-          return
-      await asyncio.sleep(1)
-    raise TimeoutError("Lid temperature timeout.")
+    self._thermocycling.lid.target_temperature = (await self.backend.get_lid_target_temperature())[
+      0
+    ]
+    await self._thermocycling.lid.wait_for_temperature(timeout=timeout, tolerance=tolerance)
 
   async def is_profile_running(self, **backend_kwargs) -> bool:
-    """Return True if a profile is still in progress."""
-    hold = await self.get_hold_time(**backend_kwargs)
-    cycle = await self.get_current_cycle_index(**backend_kwargs)
-    total_cycles = await self.get_total_cycle_count(**backend_kwargs)
-    step = await self.get_current_step_index(**backend_kwargs)
-    total_steps = await self.get_total_step_count(**backend_kwargs)
-
-    # if still holding in a step, it's running
-    if hold and hold > 0:
-      return True
-    # if haven't reached last cycle (zero-based indexing)
-    if cycle < total_cycles - 1:
-      return True
-    # last cycle but not last step (zero-based indexing)
-    if cycle == total_cycles - 1 and step < total_steps - 1:
-      return True
-    return False
+    return await self._thermocycling.is_profile_running()
 
   async def wait_for_profile_completion(self, poll_interval: float = 60.0, **backend_kwargs):
-    """Block until the profile finishes, polling at `poll_interval` seconds."""
-    while await self.is_profile_running(**backend_kwargs):
-      await asyncio.sleep(poll_interval)
+    await self._thermocycling.wait_for_profile_completion(poll_interval=poll_interval)
 
   def serialize(self) -> dict:
-    """JSON-serializable representation."""
     return {**Machine.serialize(self), **ResourceHolder.serialize(self)}

@@ -67,3 +67,50 @@ class BlockStatus(enum.Enum):
 
   IDLE = "idle"
   HOLDING_AT_TARGET = "holding at target"
+
+
+# ---------------------------------------------------------------------------
+# Translation between legacy and new types
+# ---------------------------------------------------------------------------
+
+
+def protocol_to_new(protocol: Protocol):
+  """Convert a legacy Protocol to a new-architecture Protocol."""
+  from pylabrobot.capabilities.thermocycling import standard as new
+
+  return new.Protocol(
+    stages=[
+      new.Stage(
+        steps=[
+          new.Step(
+            temperature=list(step.temperature),
+            hold_seconds=step.hold_seconds,
+            rate=step.rate,
+          )
+          for step in stage.steps
+        ],
+        repeats=stage.repeats,
+      )
+      for stage in protocol.stages
+    ]
+  )
+
+
+def protocol_from_new(new_protocol) -> Protocol:
+  """Convert a new-architecture Protocol to a legacy Protocol."""
+  return Protocol(
+    stages=[
+      Stage(
+        steps=[
+          Step(
+            temperature=list(step.temperature),
+            hold_seconds=step.hold_seconds,
+            rate=step.rate,
+          )
+          for step in stage.steps
+        ],
+        repeats=stage.repeats,
+      )
+      for stage in new_protocol.stages
+    ]
+  )
