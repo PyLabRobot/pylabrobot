@@ -30,6 +30,7 @@ from pylabrobot.liquid_handling.strictness import (
   get_strictness,
 )
 from pylabrobot.liquid_handling.utils import (
+  center_channels_in_compartments,
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
@@ -947,7 +948,23 @@ class LiquidHandler(Resource, Machine):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      if spread == "tight":
+
+      if (
+        len(use_channels) > 1
+        and isinstance(resource, Container)
+        and resource.no_go_zones
+        and spread != "custom"
+      ):
+        compartment_offsets = center_channels_in_compartments(
+          resource,
+          len(use_channels),
+          channel_spacings=self.backend.get_channel_spacings(use_channels),
+        )
+        if compartment_offsets is not None:
+          center_offsets = compartment_offsets
+        else:
+          center_offsets = [Coordinate.zero()] * len(use_channels)
+      elif spread == "tight":
         center_offsets = get_tight_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
@@ -1130,7 +1147,23 @@ class LiquidHandler(Resource, Machine):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      if spread == "tight":
+
+      if (
+        len(use_channels) > 1
+        and isinstance(resource, Container)
+        and resource.no_go_zones
+        and spread != "custom"
+      ):
+        compartment_offsets = center_channels_in_compartments(
+          resource,
+          len(use_channels),
+          channel_spacings=self.backend.get_channel_spacings(use_channels),
+        )
+        if compartment_offsets is not None:
+          center_offsets = compartment_offsets
+        else:
+          center_offsets = [Coordinate.zero()] * len(use_channels)
+      elif spread == "tight":
         center_offsets = get_tight_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )

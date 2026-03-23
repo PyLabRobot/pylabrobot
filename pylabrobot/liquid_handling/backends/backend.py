@@ -18,6 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
+from pylabrobot.liquid_handling.utils import GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Tip
 from pylabrobot.resources.tip_tracker import TipTracker
@@ -157,6 +158,19 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     where each element is `True` if a tip is mounted, `False` if not, or `None` if unknown."""
 
     raise NotImplementedError()
+
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    """Get the minimum spacing between each adjacent pair of channels.
+
+    Args:
+      use_channels: The channels being used, in order.
+
+    Returns:
+      List of minimum spacings (mm) between each adjacent pair. Length is
+      ``len(use_channels) - 1``. Defaults to ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm)
+      for all pairs. Backends with variable channel spacing should override this.
+    """
+    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * max(len(use_channels) - 1, 0)
 
   @abstractmethod
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:

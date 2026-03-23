@@ -2193,10 +2193,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
           min_ch = min(use_channels)
           offsets = [all_offsets[ch - min_ch] for ch in use_channels]
-
-          if num_channels_in_span % 2 != 0:
-            y_offset = 5.5
-            offsets = [offset + Coordinate(0, y_offset, 0) for offset in offsets]
         # else: container too small to fit all channels — fall back to center offsets.
         # Y sub-batching will serialize channels that can't coexist.
 
@@ -2307,8 +2303,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Notes:
       - All specified channels must have tips attached
       - Containers at different X positions are probed in sequential groups (single X carriage)
-      - For single containers with odd channel counts, Y-offsets are applied to avoid
-        center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
+      - For single containers with no-go zones, Y-offsets are computed to avoid
+        obstructed regions (e.g. center dividers in troughs)
     """
 
     if move_to_z_safety_after is not None:
@@ -4523,6 +4519,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move a channel in the z direction by a relative amount."""
     current_z = await self.request_z_pos_channel_n(channel)
     await self.move_channel_z(channel, current_z + distance)
+
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    sorted_channels = sorted(use_channels)
+    return [
+      self._min_spacing_between(lo, hi)
+      for lo, hi in zip(sorted_channels[:-1], sorted_channels[1:])
+    ]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, HamiltonTip):
