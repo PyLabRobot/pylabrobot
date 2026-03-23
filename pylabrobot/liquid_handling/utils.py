@@ -154,6 +154,11 @@ def center_channels_in_compartments(
 
   if channel_spacings is None:
     channel_spacings = [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * max(num_channels - 1, 0)
+  elif len(channel_spacings) != max(num_channels - 1, 0):
+    raise ValueError(
+      f"channel_spacings has {len(channel_spacings)} entries, "
+      f"expected {max(num_channels - 1, 0)} (num_channels - 1)."
+    )
 
   compartments = _get_compartments(container, edge_clearance)
   if not compartments:

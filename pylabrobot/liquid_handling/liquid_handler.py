@@ -370,6 +370,8 @@ class LiquidHandler(Resource, Machine):
       if compartment_offsets is not None:
         return compartment_offsets
       return [Coordinate.zero()] * len(use_channels)
+    # TODO: pass backend.get_channel_spacings() to get_tight/get_wide so they respect
+    # per-pair spacing. Currently they default to 9mm regardless of backend configuration.
     if spread == "tight":
       return get_tight_single_resource_liquid_op_offsets(
         resource=resource, num_channels=len(use_channels)
