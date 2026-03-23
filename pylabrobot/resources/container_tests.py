@@ -41,6 +41,7 @@ class TestContainer(unittest.TestCase):
         "compute_volume_from_height": serialize(compute_volume_from_height),
         "compute_height_from_volume": serialize(compute_height_from_volume),
         "height_volume_data": None,
+        "no_go_zones": [],
         "parent_name": None,
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "type": "Container",
