@@ -1,5 +1,5 @@
-from .pico.backend import PicoBackend
-from .pico.pico import Pico
+from .imageXpress.pico.backend import PicoBackend
+from .imageXpress.pico.pico import Pico
 from .spectramax import (
   MolecularDevicesBackend,
   SpectraMax384Plus,
