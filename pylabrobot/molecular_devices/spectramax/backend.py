@@ -737,7 +737,9 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     if not isinstance(backend_params, self.AbsorbanceParams):
       backend_params = MolecularDevicesBackend.AbsorbanceParams()
 
-    wavelengths = backend_params.wavelengths if backend_params.wavelengths is not None else [wavelength]
+    wavelengths = (
+      backend_params.wavelengths if backend_params.wavelengths is not None else [wavelength]
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,

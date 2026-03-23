@@ -18,7 +18,6 @@ from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
   Objective,
 )
-from pylabrobot.serializer import SerializableMixin
 from pylabrobot.io.sila.grpc import (
   command_execution_uuid,
   decode_command_confirmation,
@@ -37,6 +36,7 @@ from pylabrobot.io.sila.grpc import (
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import row_index_to_label
 from pylabrobot.resources.well import WellBottomType
+from pylabrobot.serializer import SerializableMixin
 
 try:
   import grpc  # type: ignore[import-untyped]
