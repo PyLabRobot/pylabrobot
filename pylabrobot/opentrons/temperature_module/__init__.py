@@ -1,0 +1,2 @@
+from .backend import OpentronsTemperatureModuleBackend, OpentronsTemperatureModuleUSBBackend
+from .temperature_module import OpentronsTemperatureModuleV2
