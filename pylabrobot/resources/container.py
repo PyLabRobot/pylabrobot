@@ -81,10 +81,46 @@ class Container(Resource):
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
-    self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = [
-      (zone[0], zone[1]) for zone in (no_go_zones or [])
-    ]
+    self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = self._validate_no_go_zones(
+      no_go_zones or []
+    )
 
+  def _validate_no_go_zones(
+    self, zones: List[Tuple[Coordinate, Coordinate]]
+  ) -> List[Tuple[Coordinate, Coordinate]]:
+    """Validate no-go zones to ensure they are inside the container and well-formed.
+
+    Each zone is defined as (front_left_bottom, back_right_top).
+    """
+    validated: List[Tuple[Coordinate, Coordinate]] = []
+    for idx, (flb, brt) in enumerate(zones):
+      if not isinstance(flb, Coordinate) or not isinstance(brt, Coordinate):
+        raise TypeError(
+          f"no_go_zones[{idx}] must be a tuple of Coordinate instances, got {type(flb)!r}, {type(brt)!r}."
+        )
+
+      # Ensure front-left-bottom is not beyond back-right-top on any axis.
+      if flb.x > brt.x or flb.y > brt.y or flb.z > brt.z:
+        raise ValueError(
+          f"no_go_zones[{idx}] has invalid ordering: front_left_bottom must not exceed "
+          f"back_right_top on any axis (flb={flb}, brt={brt})."
+        )
+
+      # Ensure all coordinates lie within the container bounds.
+      for coord_label, coord in (("flb", flb), ("brt", brt)):
+        if coord.x < 0 or coord.y < 0 or coord.z < 0:
+          raise ValueError(
+            f"no_go_zones[{idx}].{coord_label} has negative coordinates: {coord}."
+          )
+        if coord.x > self.size_x or coord.y > self.size_y or coord.z > self.size_z:
+          raise ValueError(
+            f"no_go_zones[{idx}].{coord_label}={coord} is outside the container bounds "
+            f"(size_x={self.size_x}, size_y={self.size_y}, size_z={self.size_z})."
+          )
+
+      validated.append((flb, brt))
+
+    return validated
   @property
   def material_z_thickness(self) -> float:
     if self._material_z_thickness is None:
