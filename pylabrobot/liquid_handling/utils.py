@@ -1,16 +1,20 @@
-from typing import List
+import warnings
+from typing import List, Optional, Tuple
 
+from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
 GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS = 9
 MIN_SPACING_BETWEEN_CHANNELS = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
-# minimum spacing between the edge of the container and the center of channel
-MIN_SPACING_EDGE = 1.0
+# minimum spacing between the edge of the container and the border of a pipette
+MIN_SPACING_EDGE = 2.0
 
 
 def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
   """Get the centers of the channels with a minimum margin on the edges."""
+  if n == 1:
+    return [dim_size / 2]
   if dim_size < margin * 2 + (n - 1) * min_spacing:
     raise ValueError("Resource is too small to space channels.")
   if dim_size - (n - 1) * min_spacing <= min_spacing * 2:
@@ -73,3 +77,123 @@ def get_tight_single_resource_liquid_op_offsets(
     )
     for c in centers
   ]
+
+
+def _get_compartments(
+  container: Container,
+  edge_clearance: float = MIN_SPACING_EDGE,
+) -> List[Tuple[float, float]]:
+  """Compute the usable Y compartments within a container created by no-go zones.
+
+  Each compartment is the free-space region between no-go zones and/or container walls,
+  shrunk by ``edge_clearance`` on each side.
+
+  Args:
+    container: The container whose no-go zones define the compartments.
+    edge_clearance: Minimum clearance between the pipette border and a compartment
+      boundary (container wall or no-go zone) in mm.
+
+  Returns:
+    List of (y_min, y_max) tuples representing usable Y ranges for channel centers.
+  """
+  container_y = container.get_absolute_size_y()
+  zones = sorted(container.no_go_zones, key=lambda z: z[0].y)
+
+  raw_compartments = []
+  prev_end = 0.0
+  for flb, brt in zones:
+    if flb.y > prev_end:
+      raw_compartments.append((prev_end, flb.y))
+    prev_end = max(prev_end, brt.y)
+  if prev_end < container_y:
+    raw_compartments.append((prev_end, container_y))
+
+  usable = []
+  for lo, hi in raw_compartments:
+    raw_width = hi - lo
+    usable_lo = lo + edge_clearance
+    usable_hi = hi - edge_clearance
+    if usable_hi > usable_lo:
+      usable.append((usable_lo, usable_hi))
+    elif raw_width > 0:
+      warnings.warn(
+        f"Compartment Y=[{lo:.1f}, {hi:.1f}] (width={raw_width:.1f}mm) is smaller than "
+        f"2 * edge_clearance ({2 * edge_clearance:.1f}mm). Automatic channel positioning will "
+        f"skip this compartment. Ensure the attached tip physically fits in the container.",
+        stacklevel=3,
+      )
+  return usable
+
+
+def center_channels_in_compartments(
+  container: Container,
+  num_channels: int,
+  channel_spacings: Optional[List[float]] = None,
+  edge_clearance: float = MIN_SPACING_EDGE,
+) -> Optional[List[Coordinate]]:
+  """Distribute channels evenly across compartments created by no-go zones and center each group.
+
+  Divides the channels by the number of compartments, then computes centered offsets for each
+  group within its compartment. Channels are distributed center-out, then back-first.
+
+  Args:
+    container: The container with no-go zones that define compartments.
+    num_channels: Number of channels to distribute.
+    channel_spacings: Per-adjacent-pair minimum spacings in mm. Length must be
+      ``num_channels - 1``. If None, uses ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm)
+      for all pairs.
+    edge_clearance: Minimum clearance between the edge of a pipette and a compartment
+      boundary (container wall or no-go zone) in mm.
+
+  Returns:
+    List of Y offsets (relative to container center) for each channel, sorted back-to-front
+    (descending Y), or None if the channels cannot fit.
+  """
+  if not container.no_go_zones:
+    return None
+
+  if channel_spacings is None:
+    channel_spacings = [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * max(num_channels - 1, 0)
+
+  compartments = _get_compartments(container, edge_clearance)
+  if not compartments:
+    return None
+
+  n_comp = len(compartments)
+  base = num_channels // n_comp
+  remainder = num_channels % n_comp
+  # distribute remainder center-out, then back-first:
+  # rank compartments by distance from center (ascending), break ties back-first (descending index)
+  center_idx = (n_comp - 1) / 2
+  priority = sorted(range(n_comp), key=lambda i: (abs(i - center_idx), -i))
+  distribution = [base] * n_comp
+  for i in priority[:remainder]:
+    distribution[i] += 1
+
+  container_center_y = container.get_absolute_size_y() / 2
+  offsets = []
+  spacing_idx = 0  # tracks which pair spacings to consume
+
+  for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
+    if n_ch == 0:
+      continue
+    comp_width = comp_hi - comp_lo
+    # get the spacings for channels assigned to this compartment
+    group_spacings = channel_spacings[spacing_idx : spacing_idx + n_ch - 1]
+    spacing_idx += n_ch
+    needed = sum(group_spacings)
+    if comp_width < needed:
+      return None
+    # center channels within this compartment using per-pair spacings
+    if n_ch == 1:
+      centers = [(comp_lo + comp_hi) / 2]
+    else:
+      start = (comp_lo + comp_hi) / 2 - needed / 2
+      centers = [start]
+      for s in group_spacings:
+        centers.append(centers[-1] + s)
+    for c in centers:
+      offsets.append(Coordinate(0, c - container_center_y, 0))
+
+  offsets.sort(key=lambda o: o.y, reverse=True)
+  return offsets
