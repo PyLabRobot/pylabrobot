@@ -55,8 +55,11 @@ class CLARIOstarBackend(PlateReaderBackend):
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
   ) -> List[Dict]:
+    from pylabrobot.bmg_labtech.clariostar import CLARIOstarBackend
+
+    params = CLARIOstarBackend.AbsorbanceParams(report=report)
     results = await self._new.read_absorbance(
-      plate=plate, wells=wells, wavelength=wavelength, report=report
+      plate=plate, wells=wells, wavelength=wavelength, backend_params=params
     )
     return [
       {

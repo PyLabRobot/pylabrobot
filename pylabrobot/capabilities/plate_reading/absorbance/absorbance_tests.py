@@ -13,6 +13,7 @@ from pylabrobot.device import Device
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
+from pylabrobot.serializer import SerializableMixin
 
 
 def _test_plate() -> Plate:
@@ -53,7 +54,11 @@ class RecordingAbsorbanceBackend(AbsorbanceBackend):
     pass
 
   async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     self.calls.append((plate, wells, wavelength))
     data: List[List[Optional[float]]] = [

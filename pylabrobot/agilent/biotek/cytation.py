@@ -26,6 +26,7 @@ from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapab
 from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
+from pylabrobot.serializer import SerializableMixin
 
 try:
   import PySpin  # type: ignore
@@ -745,6 +746,16 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
       await asyncio.sleep(0.3)
     raise TimeoutError("max_image_read_attempts reached")
 
+  @dataclass
+  class CaptureParams(SerializableMixin):
+    led_intensity: int = 10
+    coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1)
+    center_position: Optional[Tuple[float, float]] = None
+    overlap: Optional[float] = None
+    color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR
+    pixel_format: int = PixelFormat_Mono8
+    auto_stop_acquisition: bool = True
+
   async def capture(
     self,
     row: int,
@@ -755,14 +766,19 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
-    led_intensity: int = 10,
-    coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
-    center_position: Optional[Tuple[float, float]] = None,
-    overlap: Optional[float] = None,
-    color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
-    pixel_format: int = PixelFormat_Mono8,
-    auto_stop_acquisition=True,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
+    if not isinstance(backend_params, self.CaptureParams):
+      backend_params = CytationBackend.CaptureParams()
+
+    led_intensity = backend_params.led_intensity
+    coverage = backend_params.coverage
+    center_position = backend_params.center_position
+    overlap = backend_params.overlap
+    color_processing_algorithm = backend_params.color_processing_algorithm
+    pixel_format = backend_params.pixel_format
+    auto_stop_acquisition = backend_params.auto_stop_acquisition
+
     assert overlap is None, "not implemented yet"
 
     if self._cam is None:

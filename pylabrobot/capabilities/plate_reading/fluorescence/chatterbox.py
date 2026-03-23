@@ -6,6 +6,7 @@ from pylabrobot.capabilities.plate_reading.fluorescence.standard import Fluoresc
 from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 
 class FluorescenceChatterboxBackend(FluorescenceBackend):
@@ -27,6 +28,7 @@ class FluorescenceChatterboxBackend(FluorescenceBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
     data = mask_wells(self.dummy_fluorescence, wells, plate)
     return [

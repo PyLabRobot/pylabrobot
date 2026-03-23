@@ -48,7 +48,10 @@ class _ImagerBackendAdapter(MicroscopyBackend):
   async def stop(self) -> None:
     await self._legacy.stop()
 
-  async def capture(self, row, column, mode, objective, exposure_time, focal_height, gain, plate):
+  async def capture(
+    self, row, column, mode, objective, exposure_time, focal_height, gain, plate,
+    backend_params=None,
+  ):
     legacy_mode = ImagingMode[mode.name]
     legacy_obj = Objective[objective.name]
     result = await self._legacy.capture(
@@ -155,6 +158,5 @@ class Imager(Resource, Machine):
       exposure_time=new_exposure,
       focal_height=focal_height,
       gain=gain,
-      **backend_kwargs,
     )
     return _to_legacy_result(new_result)

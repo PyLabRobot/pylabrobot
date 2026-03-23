@@ -6,6 +6,7 @@ from pylabrobot.capabilities.plate_reading.luminescence.standard import Luminesc
 from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 
 class LuminescenceChatterboxBackend(LuminescenceBackend):
@@ -21,7 +22,11 @@ class LuminescenceChatterboxBackend(LuminescenceBackend):
     pass
 
   async def read_luminescence(
-    self, plate: Plate, wells: List[Well], focal_height: float
+    self,
+    plate: Plate,
+    wells: List[Well],
+    focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
     data = mask_wells(self.dummy_luminescence, wells, plate)
     return [

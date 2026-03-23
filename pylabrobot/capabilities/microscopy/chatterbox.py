@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
@@ -8,6 +10,7 @@ from pylabrobot.capabilities.microscopy.standard import (
   Objective,
 )
 from pylabrobot.resources.plate import Plate
+from pylabrobot.serializer import SerializableMixin
 
 try:
   import numpy as np  # type: ignore
@@ -37,6 +40,7 @@ class MicroscopyChatterboxBackend(MicroscopyBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     if HAS_NUMPY:
       image = np.zeros((512, 512), dtype=np.uint16)

@@ -18,6 +18,7 @@ from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
   Objective,
 )
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.io.sila.grpc import (
   command_execution_uuid,
   decode_command_confirmation,
@@ -650,6 +651,7 @@ class PicoBackend(MicroscopyBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     if mode not in _IMAGING_MODE_MAP:
       raise ValueError(

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
@@ -12,6 +13,7 @@ from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 from .backend import (
   Calibrate,
@@ -38,6 +40,25 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
   def __init__(self, port: str) -> None:
     super().__init__(port, human_readable_device_name="Molecular Devices SpectraMax M5")
 
+  @dataclass
+  class FluorescenceParams(SerializableMixin):
+    excitation_wavelengths: Optional[List[int]] = None
+    emission_wavelengths: Optional[List[int]] = None
+    cutoff_filters: Optional[List[int]] = None
+    read_type: ReadType = ReadType.ENDPOINT
+    read_order: ReadOrder = ReadOrder.COLUMN
+    calibrate: Calibrate = Calibrate.ONCE
+    shake_settings: Optional[ShakeSettings] = None
+    carriage_speed: CarriageSpeed = CarriageSpeed.NORMAL
+    read_from_bottom: bool = False
+    pmt_gain: Union[PmtGain, int] = PmtGain.AUTO
+    flashes_per_well: int = 10
+    kinetic_settings: Optional[KineticSettings] = None
+    spectrum_settings: Optional[SpectrumSettings] = None
+    cuvette: bool = False
+    settling_time: int = 0
+    timeout: int = 600
+
   async def read_fluorescence(
     self,
     plate: Plate,
@@ -45,53 +66,39 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-    *,
-    excitation_wavelengths: Optional[List[int]] = None,
-    emission_wavelengths: Optional[List[int]] = None,
-    cutoff_filters: Optional[List[int]] = None,
-    read_type: ReadType = ReadType.ENDPOINT,
-    read_order: ReadOrder = ReadOrder.COLUMN,
-    calibrate: Calibrate = Calibrate.ONCE,
-    shake_settings: Optional[ShakeSettings] = None,
-    carriage_speed: CarriageSpeed = CarriageSpeed.NORMAL,
-    read_from_bottom: bool = False,
-    pmt_gain: Union[PmtGain, int] = PmtGain.AUTO,
-    flashes_per_well: int = 10,
-    kinetic_settings: Optional[KineticSettings] = None,
-    spectrum_settings: Optional[SpectrumSettings] = None,
-    cuvette: bool = False,
-    settling_time: int = 0,
-    timeout: int = 600,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
-    if excitation_wavelengths is None:
-      excitation_wavelengths = [excitation_wavelength]
-    if emission_wavelengths is None:
-      emission_wavelengths = [emission_wavelength]
+    if not isinstance(backend_params, self.FluorescenceParams):
+      backend_params = SpectraMaxM5Backend.FluorescenceParams()
+
+    excitation_wavelengths = backend_params.excitation_wavelengths or [excitation_wavelength]
+    emission_wavelengths = backend_params.emission_wavelengths or [emission_wavelength]
+    cutoff_filters = backend_params.cutoff_filters
     if cutoff_filters is None:
       cutoff_filters = [self._get_cutoff_filter_index_from_wavelength(emission_wavelength)]
 
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.FLU,
-      read_type=read_type,
-      read_order=read_order,
-      calibrate=calibrate,
-      shake_settings=shake_settings,
-      carriage_speed=carriage_speed,
-      read_from_bottom=read_from_bottom,
-      pmt_gain=pmt_gain,
-      flashes_per_well=flashes_per_well,
-      kinetic_settings=kinetic_settings,
-      spectrum_settings=spectrum_settings,
+      read_type=backend_params.read_type,
+      read_order=backend_params.read_order,
+      calibrate=backend_params.calibrate,
+      shake_settings=backend_params.shake_settings,
+      carriage_speed=backend_params.carriage_speed,
+      read_from_bottom=backend_params.read_from_bottom,
+      pmt_gain=backend_params.pmt_gain,
+      flashes_per_well=backend_params.flashes_per_well,
+      kinetic_settings=backend_params.kinetic_settings,
+      spectrum_settings=backend_params.spectrum_settings,
       excitation_wavelengths=excitation_wavelengths,
       emission_wavelengths=emission_wavelengths,
       cutoff_filters=cutoff_filters,
-      cuvette=cuvette,
+      cuvette=backend_params.cuvette,
       speed_read=False,
-      settling_time=settling_time,
+      settling_time=backend_params.settling_time,
     )
     await self._set_clear()
-    if not cuvette:
+    if not backend_params.cuvette:
       await self._set_plate_position(settings)
       await self._set_strip(settings)
       await self._set_carriage_speed(settings)
@@ -110,7 +117,7 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._wait_for_idle(timeout=timeout)
+    await self._wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       FluorescenceResult(
@@ -123,52 +130,58 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
       for d in dicts
     ]
 
+  @dataclass
+  class LuminescenceParams(SerializableMixin):
+    emission_wavelengths: Optional[List[int]] = None
+    read_type: ReadType = ReadType.ENDPOINT
+    read_order: ReadOrder = ReadOrder.COLUMN
+    calibrate: Calibrate = Calibrate.ONCE
+    shake_settings: Optional[ShakeSettings] = None
+    carriage_speed: CarriageSpeed = CarriageSpeed.NORMAL
+    read_from_bottom: bool = False
+    pmt_gain: Union[PmtGain, int] = PmtGain.AUTO
+    flashes_per_well: int = 0
+    kinetic_settings: Optional[KineticSettings] = None
+    spectrum_settings: Optional[SpectrumSettings] = None
+    cuvette: bool = False
+    settling_time: int = 0
+    timeout: int = 600
+
   async def read_luminescence(
     self,
     plate: Plate,
     wells: List[Well],
     focal_height: float,
-    *,
-    emission_wavelengths: Optional[List[int]] = None,
-    read_type: ReadType = ReadType.ENDPOINT,
-    read_order: ReadOrder = ReadOrder.COLUMN,
-    calibrate: Calibrate = Calibrate.ONCE,
-    shake_settings: Optional[ShakeSettings] = None,
-    carriage_speed: CarriageSpeed = CarriageSpeed.NORMAL,
-    read_from_bottom: bool = False,
-    pmt_gain: Union[PmtGain, int] = PmtGain.AUTO,
-    flashes_per_well: int = 0,
-    kinetic_settings: Optional[KineticSettings] = None,
-    spectrum_settings: Optional[SpectrumSettings] = None,
-    cuvette: bool = False,
-    settling_time: int = 0,
-    timeout: int = 600,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
-    if emission_wavelengths is None:
+    if not isinstance(backend_params, self.LuminescenceParams):
+      backend_params = SpectraMaxM5Backend.LuminescenceParams()
+
+    if backend_params.emission_wavelengths is None:
       raise ValueError("emission_wavelengths is required for SpectraMax M5 luminescence reads")
 
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.LUM,
-      read_type=read_type,
-      read_order=read_order,
-      calibrate=calibrate,
-      shake_settings=shake_settings,
-      carriage_speed=carriage_speed,
-      read_from_bottom=read_from_bottom,
-      pmt_gain=pmt_gain,
-      flashes_per_well=flashes_per_well,
-      kinetic_settings=kinetic_settings,
-      spectrum_settings=spectrum_settings,
-      emission_wavelengths=emission_wavelengths,
-      cuvette=cuvette,
+      read_type=backend_params.read_type,
+      read_order=backend_params.read_order,
+      calibrate=backend_params.calibrate,
+      shake_settings=backend_params.shake_settings,
+      carriage_speed=backend_params.carriage_speed,
+      read_from_bottom=backend_params.read_from_bottom,
+      pmt_gain=backend_params.pmt_gain,
+      flashes_per_well=backend_params.flashes_per_well,
+      kinetic_settings=backend_params.kinetic_settings,
+      spectrum_settings=backend_params.spectrum_settings,
+      emission_wavelengths=backend_params.emission_wavelengths,
+      cuvette=backend_params.cuvette,
       speed_read=False,
-      settling_time=settling_time,
+      settling_time=backend_params.settling_time,
     )
     await self._set_clear()
     await self._set_read_stage(settings)
 
-    if not cuvette:
+    if not backend_params.cuvette:
       await self._set_plate_position(settings)
       await self._set_strip(settings)
       await self._set_carriage_speed(settings)
@@ -185,7 +198,7 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._wait_for_idle(timeout=timeout)
+    await self._wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       LuminescenceResult(

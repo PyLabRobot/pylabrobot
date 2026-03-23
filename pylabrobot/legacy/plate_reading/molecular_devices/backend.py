@@ -111,12 +111,13 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
+    from pylabrobot.molecular_devices.spectramax.backend import (
+      MolecularDevicesBackend as NewMDBackend,
+    )
+
     wl0 = wavelengths[0]
     wavelength = wl0[0] if isinstance(wl0, tuple) else wl0
-    results = await self._new.read_absorbance(
-      plate=plate,
-      wells=[],
-      wavelength=wavelength,
+    params = NewMDBackend.AbsorbanceParams(
       wavelengths=wavelengths,
       read_type=read_type,
       read_order=read_order,
@@ -130,6 +131,12 @@ class MolecularDevicesBackend(PlateReaderBackend):
       cuvette=cuvette,
       settling_time=settling_time,
       timeout=timeout,
+    )
+    results = await self._new.read_absorbance(
+      plate=plate,
+      wells=[],
+      wavelength=wavelength,
+      backend_params=params,
     )
     return [
       {
@@ -161,12 +168,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    results = await self._new.read_fluorescence(
-      plate=plate,
-      wells=[],
-      excitation_wavelength=excitation_wavelengths[0],
-      emission_wavelength=emission_wavelengths[0],
-      focal_height=0,
+    params = SpectraMaxM5Backend.FluorescenceParams(
       excitation_wavelengths=excitation_wavelengths,
       emission_wavelengths=emission_wavelengths,
       cutoff_filters=cutoff_filters,
@@ -183,6 +185,14 @@ class MolecularDevicesBackend(PlateReaderBackend):
       cuvette=cuvette,
       settling_time=settling_time,
       timeout=timeout,
+    )
+    results = await self._new.read_fluorescence(
+      plate=plate,
+      wells=[],
+      excitation_wavelength=excitation_wavelengths[0],
+      emission_wavelength=emission_wavelengths[0],
+      focal_height=0,
+      backend_params=params,
     )
     return [
       {
@@ -213,10 +223,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    results = await self._new.read_luminescence(
-      plate=plate,
-      wells=[],
-      focal_height=0,
+    params = SpectraMaxM5Backend.LuminescenceParams(
       emission_wavelengths=emission_wavelengths,
       read_type=read_type,
       read_order=read_order,
@@ -231,6 +238,12 @@ class MolecularDevicesBackend(PlateReaderBackend):
       cuvette=cuvette,
       settling_time=settling_time,
       timeout=timeout,
+    )
+    results = await self._new.read_luminescence(
+      plate=plate,
+      wells=[],
+      focal_height=0,
+      backend_params=params,
     )
     return [{"data": r.data, "temperature": r.temperature, "time": r.timestamp} for r in results]
 

@@ -13,6 +13,7 @@ from pylabrobot.device import Device
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
+from pylabrobot.serializer import SerializableMixin
 
 
 def _test_plate() -> Plate:
@@ -59,6 +60,7 @@ class RecordingFluorescenceBackend(FluorescenceBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
     self.calls.append(
       ("read_fluorescence", len(wells), excitation_wavelength, emission_wavelength, focal_height)

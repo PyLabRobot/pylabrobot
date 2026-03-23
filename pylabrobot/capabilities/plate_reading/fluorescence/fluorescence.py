@@ -7,6 +7,7 @@ from pylabrobot.capabilities.capability import Capability, need_capability_ready
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 
 from .backend import FluorescenceBackend
 
@@ -28,7 +29,7 @@ class FluorescenceCapability(Capability):
     emission_wavelength: int,
     focal_height: float,
     wells: Optional[List[Well]] = None,
-    **backend_kwargs,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[FluorescenceResult]:
     """Read fluorescence from a plate.
 
@@ -38,7 +39,7 @@ class FluorescenceCapability(Capability):
       emission_wavelength: Emission wavelength in nm.
       focal_height: Focal height in mm.
       wells: Wells to measure. Defaults to all wells in the plate.
-      **backend_kwargs: Additional keyword arguments passed to the backend.
+      backend_params: Backend-specific parameters.
 
     Returns:
       A list of :class:`FluorescenceResult` (typically length 1).
@@ -51,5 +52,5 @@ class FluorescenceCapability(Capability):
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,
-      **backend_kwargs,
+      backend_params=backend_params,
     )

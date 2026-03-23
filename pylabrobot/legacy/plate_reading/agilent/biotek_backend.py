@@ -158,8 +158,11 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
   ) -> List[Dict]:
+    from pylabrobot.agilent.biotek.biotek import BioTekBackend
+
+    params = BioTekBackend.LuminescenceParams(integration_time=integration_time)
     results = await self._new.read_luminescence(
-      plate=plate, wells=wells, focal_height=focal_height, integration_time=integration_time
+      plate=plate, wells=wells, focal_height=focal_height, backend_params=params
     )
     return [
       {

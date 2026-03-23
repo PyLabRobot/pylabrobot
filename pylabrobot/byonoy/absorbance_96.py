@@ -14,6 +14,7 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,11 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
     )
 
   async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     assert wavelength in self.available_wavelengths, (
       f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."

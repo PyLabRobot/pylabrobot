@@ -13,6 +13,7 @@ from pylabrobot.device import Device
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
+from pylabrobot.serializer import SerializableMixin
 
 
 def _test_plate() -> Plate:
@@ -57,6 +58,7 @@ class RecordingLuminescenceBackend(LuminescenceBackend):
     plate: Plate,
     wells: List[Well],
     focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
   ) -> List[LuminescenceResult]:
     self.calls.append(("read_luminescence", len(wells), focal_height))
     data: List[List[Optional[float]]] = [

@@ -20,7 +20,8 @@ class XPeelBackend(PeelerBackend):
     return self._new.serialize()
 
   async def peel(self, **kwargs):
-    return await self._new.peel(**kwargs)
+    params = xpeel.XPeelBackend.PeelParams(**kwargs) if kwargs else None
+    return await self._new.peel(backend_params=params)
 
   async def restart(self):
     return await self._new.restart()
