@@ -3,7 +3,9 @@
 import unittest
 from typing import List, Tuple
 
-import numpy
+import pytest
+
+numpy = pytest.importorskip("numpy")
 
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
 from pylabrobot.capabilities.microscopy.chatterbox import MicroscopyChatterboxBackend
