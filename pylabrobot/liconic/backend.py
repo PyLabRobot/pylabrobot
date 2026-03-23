@@ -5,7 +5,13 @@ import time
 import warnings
 from typing import List, Optional, Tuple, Union
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
@@ -60,6 +66,11 @@ class LiconicBackend(
     model: Union[LiconicType, str],
     port: str,
   ):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
 
     if isinstance(model, str):

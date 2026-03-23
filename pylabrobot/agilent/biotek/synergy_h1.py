@@ -3,7 +3,13 @@ import logging
 import time
 from typing import Optional
 
-from pylibftdi import FtdiError
+try:
+  from pylibftdi import FtdiError
+
+  HAS_PYLIBFTDI = True
+except ImportError:
+  HAS_PYLIBFTDI = False
+  FtdiError = Exception  # type: ignore[misc,assignment]
 
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
 from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability

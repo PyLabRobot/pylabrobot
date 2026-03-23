@@ -3,7 +3,52 @@ from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def imcs_tip() -> HamiltonTip:
+def imcs_tip_1000uL() -> HamiltonTip:
+  """IMCS tip. Same as "Hamilton High volume (1000 µL) tip without a filter", but tips are 14mm shorter."""
+  return HamiltonTip(
+    has_filter=True,
+    total_tip_length=95.1 - 14,  # - 14
+    maximal_volume=1065,
+    tip_size=TipSize.HIGH_VOLUME,
+    # requires "full_blowout" pickup method from STARBackend.pick_up_tips96. Not available on pip channels.
+    pickup_method=TipPickupMethod.OUT_OF_RACK,
+  )
+
+
+def imcs_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipRack:
+  """Tip racks for IMCS tips. Same as Hamilton 1000 µL filter tip racks, but tips are 14mm shorter.
+
+  requires `"full_blowout"` pickup method from STARBackend.pick_up_tips96.
+  Not available on pip channels...
+
+  Part numbers:
+  ...
+  """
+
+  return TipRack(
+    name=name,
+    size_x=122.4,
+    size_y=82.6,
+    size_z=20.0,
+    model=imcs_96_tiprack_1000uL_filter.__name__,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      dx=7.2,
+      dy=5.3,
+      dz=-83.5 + 14,  # 14mm shorter
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=imcs_tip_1000uL,
+    ),
+    with_tips=with_tips,
+  )
+
+
+def imcs_tip_300uL() -> HamiltonTip:
   """IMCS tip. Same as "Hamilton Standard volume (300 µL) tip without a filter", but tips are 6mm shorter."""
   return HamiltonTip(
     has_filter=True,
@@ -66,12 +111,12 @@ def imcs_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
       num_items_y=8,
       dx=7.2,
       dy=5.3,
-      dz=-50.5 + 6,
+      dz=-50.5 + 6,  # 6mm shorter
       item_dx=9.0,
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=imcs_tip,
+      make_tip=imcs_tip_300uL,
     ),
     with_tips=with_tips,
   )

@@ -1,4 +1,4 @@
-from typing import Callable, Optional, cast
+from typing import Callable, Dict, Optional, cast
 
 from .container import Container
 from .coordinate import Coordinate
@@ -19,6 +19,7 @@ class PetriDish(Container):
     max_volume: Optional[float] = None,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
+    height_volume_data: Optional[Dict[float, float]] = None,
   ):
     super().__init__(
       name=name,
@@ -31,6 +32,7 @@ class PetriDish(Container):
       max_volume=max_volume,
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
+      height_volume_data=height_volume_data,
     )
     self.diameter = diameter
     self.height = height

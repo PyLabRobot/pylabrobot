@@ -1,4 +1,10 @@
-import serial  # type: ignore
+try:
+  import serial  # type: ignore
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.pumps.backend import PumpBackend
@@ -24,6 +30,11 @@ class MasterflexBackend(PumpBackend):
   """
 
   def __init__(self, com_port: str):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     self.com_port = com_port
     self.io = Serial(
       port=self.com_port,

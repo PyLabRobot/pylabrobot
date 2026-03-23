@@ -75,7 +75,7 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
     "size_z": 14.0,  # from spec
     "bottom_type": WellBottomType.U,
     "material_z_thickness": 0.88,  # measured using z-probing
-    "max_volume": 150,
+    "max_volume": 190,  # measured
     "compute_volume_from_height": _compute_volume_from_height_agilent_96_wellplate_150uL_Vb,
     "compute_height_from_volume": _compute_height_from_volume_agilent_96_wellplate_150uL_Vb,
   }
