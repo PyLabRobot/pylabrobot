@@ -498,7 +498,7 @@ def _egg_grid():
   ]
 
 
-class TestTecanInfiniteDecoders(unittest.TestCase):
+class TestTecanInfiniteDecoders(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.backend = ExperimentalTecanInfinite200ProBackend()
     self.plate = Plate_384_Well(name="plate")
@@ -590,7 +590,7 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     self._run_decoder_case(decoder, build_packet, extract_actual)
 
 
-class TestTecanInfiniteScanGeometry(unittest.TestCase):
+class TestTecanInfiniteScanGeometry(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.backend = ExperimentalTecanInfinite200ProBackend(counts_per_mm_x=1, counts_per_mm_y=1)
     self.plate = _make_test_plate()
@@ -621,7 +621,7 @@ class TestTecanInfiniteScanGeometry(unittest.TestCase):
     self.assertEqual((stage_x, stage_y), (3, 16))
 
 
-class TestTecanInfiniteAscii(unittest.TestCase):
+class TestTecanInfiniteAscii(unittest.IsolatedAsyncioTestCase):
   def test_frame_command(self):
     framed = ExperimentalTecanInfinite200ProBackend._frame_command("A")
     self.assertEqual(framed, b"\x02A\x03\x00\x00\x01\x40\x0d")
