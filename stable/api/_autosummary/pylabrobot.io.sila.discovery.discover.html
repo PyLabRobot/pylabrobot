@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.io.sila.discovery.discover &#8212; PyLabRobot 0.2.0 documentation</title>
+    <title>pylabrobot.io.sila.discovery.discover &#8212; PyLabRobot 0.2.1 documentation</title>
   
   
   
@@ -31,7 +31,7 @@
 <link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=bbd25712" />
   
@@ -41,7 +41,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
-    <script src="../../_static/documentation_options.js?v=938c9ccc"></script>
+    <script src="../../_static/documentation_options.js?v=37f418d5"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -50,7 +50,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -63,7 +63,7 @@
     <link rel="prev" title="pylabrobot.io.sila.discovery.SiLADevice.__init__" href="pylabrobot.io.sila.discovery.SiLADevice.__init__.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.2.0" />
+  <meta name="docsearch:version" content="0.2.1" />
   </head>
   
   
@@ -557,9 +557,7 @@
 <dt class="sig sig-object py" id="pylabrobot.io.sila.discovery.discover">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.io.sila.discovery.</span></span><span class="sig-name descname"><span class="pre">discover</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interface</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="pylabrobot.io.sila.discovery.SiLADevice.html#pylabrobot.io.sila.discovery.SiLADevice" title="pylabrobot.io.sila.discovery.SiLADevice"><span class="pre">SiLADevice</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.io.sila.discovery.discover" title="Link to this definition">#</a></dt>
 <dd><p>Discover SiLA devices on the local network.</p>
-<p>Runs SiLA 1 (NetBIOS + GetDeviceIdentification) and SiLA 2 (mDNS) probes in parallel.</p>
-<p>For SiLA 1, the <code class="docutils literal notranslate"><span class="pre">interface</span></code> parameter specifies which local IP to send NetBIOS broadcasts
-from. If not provided, all link-local (169.254.x.x) interfaces are scanned automatically.</p>
+<p>Convenience wrapper around <code class="xref py py-func docutils literal notranslate"><span class="pre">discover_iter()</span></code> that collects all results into a list.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
