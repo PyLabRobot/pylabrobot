@@ -1,4 +1,4 @@
-"""Applied Biosystems plate adapters"""
+"""Thermo Fisher plate adapters"""
 
 from pylabrobot.resources.plate_adapter import PlateAdapter
 
