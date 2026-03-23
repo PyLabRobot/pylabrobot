@@ -19,10 +19,10 @@ class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
 
   Example:
     >>> from pylabrobot.opentrons.temperature_module import OpentronsTemperatureModuleV2
-    >>> tc = OpentronsTemperatureModuleV2("tc", serial_port="/dev/ttyACM0")
-    >>> await tc.setup()
-    >>> await tc.tc.set_temperature(37.0)
-    >>> await tc.tc.get_temperature()
+    >>> mod = OpentronsTemperatureModuleV2("temp_mod", serial_port="/dev/ttyACM0")
+    >>> await mod.setup()
+    >>> await mod.tc.set_temperature(37.0)
+    >>> await mod.tc.get_temperature()
     37.0
   """
 
