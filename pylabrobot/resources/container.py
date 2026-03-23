@@ -81,7 +81,9 @@ class Container(Resource):
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
-    self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = no_go_zones or []
+    self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = [
+      (zone[0], zone[1]) for zone in (no_go_zones or [])
+    ]
 
   @property
   def material_z_thickness(self) -> float:

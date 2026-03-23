@@ -349,6 +349,39 @@ class LiquidHandler(Resource, Machine):
 
     return extra
 
+  def _compute_spread_offsets(
+    self,
+    resource: Resource,
+    use_channels: List[int],
+    spread: str,
+  ) -> List[Coordinate]:
+    """Compute channel spread offsets for a single-resource multi-channel operation."""
+    if (
+      len(use_channels) > 1
+      and isinstance(resource, Container)
+      and resource.no_go_zones
+      and spread != "custom"
+    ):
+      compartment_offsets = center_channels_in_compartments(
+        resource,
+        len(use_channels),
+        channel_spacings=self.backend.get_channel_spacings(use_channels),
+      )
+      if compartment_offsets is not None:
+        return compartment_offsets
+      return [Coordinate.zero()] * len(use_channels)
+    if spread == "tight":
+      return get_tight_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+    if spread == "wide":
+      return get_wide_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+    if spread == "custom":
+      return [Coordinate.zero()] * len(use_channels)
+    raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
+
   def _make_sure_channels_exist(self, channels: List[int]):
     """Checks that the channels exist."""
     invalid_channels = [c for c in channels if c not in self.head]
@@ -949,33 +982,7 @@ class LiquidHandler(Resource, Machine):
       resource = resources[0]
       resources = [resource] * len(use_channels)
 
-      if (
-        len(use_channels) > 1
-        and isinstance(resource, Container)
-        and resource.no_go_zones
-        and spread != "custom"
-      ):
-        compartment_offsets = center_channels_in_compartments(
-          resource,
-          len(use_channels),
-          channel_spacings=self.backend.get_channel_spacings(use_channels),
-        )
-        if compartment_offsets is not None:
-          center_offsets = compartment_offsets
-        else:
-          center_offsets = [Coordinate.zero()] * len(use_channels)
-      elif spread == "tight":
-        center_offsets = get_tight_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "wide":
-        center_offsets = get_wide_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "custom":
-        center_offsets = [Coordinate.zero()] * len(use_channels)
-      else:
-        raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
+      center_offsets = self._compute_spread_offsets(resource, use_channels, spread)
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -1148,33 +1155,7 @@ class LiquidHandler(Resource, Machine):
       resource = resources[0]
       resources = [resource] * len(use_channels)
 
-      if (
-        len(use_channels) > 1
-        and isinstance(resource, Container)
-        and resource.no_go_zones
-        and spread != "custom"
-      ):
-        compartment_offsets = center_channels_in_compartments(
-          resource,
-          len(use_channels),
-          channel_spacings=self.backend.get_channel_spacings(use_channels),
-        )
-        if compartment_offsets is not None:
-          center_offsets = compartment_offsets
-        else:
-          center_offsets = [Coordinate.zero()] * len(use_channels)
-      elif spread == "tight":
-        center_offsets = get_tight_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "wide":
-        center_offsets = get_wide_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "custom":
-        center_offsets = [Coordinate.zero()] * len(use_channels)
-      else:
-        raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
+      center_offsets = self._compute_spread_offsets(resource, use_channels, spread)
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
