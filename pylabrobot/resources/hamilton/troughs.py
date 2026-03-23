@@ -154,7 +154,7 @@ def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_200mL_Vb_height_volume_data,
     no_go_zones=[
-      (Coordinate(0, 60, 8.0), Coordinate(19.0, 61.7, 60.0))  # center divider
+      (Coordinate(0, 60, 8.0), Coordinate(37.0, 61.7, 60.0))  # center divider
     ],
   )
 
