@@ -10,6 +10,7 @@ import pytest
 
 pytest.importorskip("pylibftdi")
 
+from pylabrobot.agilent.biotek.biotek import BioTekBackend
 from pylabrobot.agilent.biotek.cytation import CytationBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
@@ -228,7 +229,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     plate = CellVis_96_wellplate_350uL_Fb(name="plate")
     wells = plate["A1"] + plate["B1:G3"] + plate["D4:F4"]
     resp = await self.backend.read_luminescence(
-      focal_height=4.5, integration_time=0.4, plate=plate, wells=wells
+      focal_height=4.5,
+      plate=plate,
+      wells=wells,
+      backend_params=BioTekBackend.LuminescenceParams(integration_time=0.4),
     )
 
     self.backend.io.write.assert_any_call(b"D")

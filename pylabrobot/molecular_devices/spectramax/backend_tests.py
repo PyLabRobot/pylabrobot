@@ -599,7 +599,10 @@ class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_read_luminescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     results = await self.backend.read_luminescence(
-      plate, plate.get_wells(), focal_height=0, emission_wavelengths=[590]
+      plate,
+      plate.get_wells(),
+      focal_height=0,
+      backend_params=SpectraMaxM5Backend.LuminescenceParams(emission_wavelengths=[590]),
     )
 
     # Verify typed results
