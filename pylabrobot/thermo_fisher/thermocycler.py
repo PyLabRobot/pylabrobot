@@ -22,7 +22,7 @@ from pylabrobot.capabilities.thermocycling import (
   ThermocyclingBackend,
   ThermocyclingCapability,
 )
-from pylabrobot.device import Device
+from pylabrobot.device import Device, DeviceBackend
 from pylabrobot.io import Socket
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -234,12 +234,12 @@ class RunProgress:
   running: bool
 
 
-class ThermoFisherThermocyclerDriver:
-  """Low-level SCPI driver for ThermoFisher thermocyclers (ProFlex / ATC).
+class ThermoFisherThermocyclerDriver(DeviceBackend):
+  """SCPI driver for ThermoFisher thermocyclers (ProFlex / ATC).
 
-  This is a plain class, NOT a DeviceBackend. It owns the socket, handles
-  SSL/auth, block discovery, power management, temperature control, protocol
-  execution, run management, file I/O, buzzer, etc.
+  Owns the socket connection and handles SSL/auth, block discovery,
+  power management, temperature control, protocol execution, run management,
+  file I/O, buzzer, etc.
   """
 
   def __init__(
@@ -248,6 +248,7 @@ class ThermoFisherThermocyclerDriver:
     use_ssl: bool = False,
     serial_number: Optional[str] = None,
   ):
+    super().__init__()
     self.ip = ip
     self.use_ssl = use_ssl
 
@@ -1233,19 +1234,10 @@ class ThermoFisherThermocycler(ResourceHolder, Device):
     size_y: float = 300.0,
     size_z: float = 200.0,
   ):
-    # Build the shared driver (not a DeviceBackend — lifecycle managed manually).
     self._driver = ThermoFisherThermocyclerDriver(
       ip=ip,
       use_ssl=use_ssl,
       serial_number=serial_number,
-    )
-
-    # We need a DeviceBackend for the Device.__init__ call. The thermocycling
-    # backend for block 0 serves double duty here.
-    first_tc_backend = ThermoFisherThermocyclingBackend(
-      driver=self._driver,
-      block_id=0,
-      supports_lid_control=supports_lid_control,
     )
 
     ResourceHolder.__init__(
@@ -1256,34 +1248,23 @@ class ThermoFisherThermocycler(ResourceHolder, Device):
       size_z=size_z,
       child_location=child_location,
     )
-    Device.__init__(self, backend=first_tc_backend)
+    Device.__init__(self, backend=self._driver)
 
-    self._ip = ip
-    self._num_blocks = num_blocks
-    self._num_temp_zones = num_temp_zones
-    self._supports_lid_control = supports_lid_control
     self._block_idle_temp = block_idle_temp
     self._cover_idle_temp = cover_idle_temp
 
-    # Build per-block capability backends and frontends.
     self.blocks: List[TemperatureControlCapability] = []
     self.lids: List[TemperatureControlCapability] = []
     self.thermocycling: List[ThermocyclingCapability] = []
 
-    all_capabilities = []
-
     for block_id in range(num_blocks):
       block_be = ThermoFisherBlockBackend(driver=self._driver, block_id=block_id)
       lid_be = ThermoFisherLidBackend(driver=self._driver, block_id=block_id)
-
-      if block_id == 0:
-        tc_be = first_tc_backend
-      else:
-        tc_be = ThermoFisherThermocyclingBackend(
-          driver=self._driver,
-          block_id=block_id,
-          supports_lid_control=supports_lid_control,
-        )
+      tc_be = ThermoFisherThermocyclingBackend(
+        driver=self._driver,
+        block_id=block_id,
+        supports_lid_control=supports_lid_control,
+      )
 
       block_cap = TemperatureControlCapability(backend=block_be)
       lid_cap = TemperatureControlCapability(backend=lid_be)
@@ -1293,9 +1274,9 @@ class ThermoFisherThermocycler(ResourceHolder, Device):
       self.lids.append(lid_cap)
       self.thermocycling.append(tc_cap)
 
-      all_capabilities.extend([block_cap, lid_cap, tc_cap])
-
-    self._capabilities = all_capabilities
+    self._capabilities = [
+      cap for triple in zip(self.blocks, self.lids, self.thermocycling) for cap in triple
+    ]
 
   async def setup(self, **backend_kwargs):
     """Set up the thermocycler: authenticate, power on, discover blocks, set idle temps."""
@@ -1306,29 +1287,3 @@ class ThermoFisherThermocycler(ResourceHolder, Device):
     for cap in self._capabilities:
       await cap._on_setup()
     self._setup_finished = True
-
-  async def stop(self):
-    """Stop all blocks and tear down the driver connection."""
-    for cap in reversed(self._capabilities):
-      await cap._on_stop()
-    await self._driver.stop()
-    self._setup_finished = False
-
-  # ----- Factory class methods -----
-
-  @classmethod
-  def proflex_single_block(cls, name: str, ip: str, **kwargs) -> "ThermoFisherThermocycler":
-    """Create a ProFlex with a single 6-zone block (BID 12)."""
-    return cls(name=name, ip=ip, num_blocks=1, num_temp_zones=6, **kwargs)
-
-  @classmethod
-  def proflex_three_block(cls, name: str, ip: str, **kwargs) -> "ThermoFisherThermocycler":
-    """Create a ProFlex with three 2-zone blocks (BID 13)."""
-    return cls(name=name, ip=ip, num_blocks=3, num_temp_zones=2, **kwargs)
-
-  @classmethod
-  def atc(cls, name: str, ip: str, **kwargs) -> "ThermoFisherThermocycler":
-    """Create an ATC thermocycler with a single 3-zone block and lid control (BID 31)."""
-    return cls(
-      name=name, ip=ip, num_blocks=1, num_temp_zones=3, supports_lid_control=True, **kwargs
-    )
