@@ -130,11 +130,12 @@ def center_channels_in_compartments(
   num_channels: int,
   channel_spacings: Optional[List[float]] = None,
   edge_clearance: float = MIN_SPACING_EDGE,
+  spread: str = "tight",
 ) -> Optional[List[Coordinate]]:
-  """Distribute channels evenly across compartments created by no-go zones and center each group.
+  """Distribute channels across compartments created by no-go zones.
 
-  Divides the channels by the number of compartments, then computes centered offsets for each
-  group within its compartment. Channels are distributed center-out, then back-first.
+  Divides the channels by the number of compartments, then positions each group within its
+  compartment according to the spread mode. Channels are distributed center-out, then back-first.
 
   Args:
     container: The container with no-go zones that define compartments.
@@ -144,6 +145,9 @@ def center_channels_in_compartments(
       for all pairs.
     edge_clearance: Minimum clearance between the edge of a pipette and a compartment
       boundary (container wall or no-go zone) in mm.
+    spread: How to position channels within each compartment:
+      - "wide": spread channels as far apart as possible within the compartment
+      - "tight": pack channels at minimum spacing, centered in the compartment
 
   Returns:
     List of Y offsets (relative to container center) for each channel, sorted back-to-front
@@ -186,17 +190,26 @@ def center_channels_in_compartments(
     # get the spacings for channels assigned to this compartment
     group_spacings = channel_spacings[spacing_idx : spacing_idx + n_ch - 1]
     spacing_idx += n_ch
+    min_spacing = min(group_spacings) if group_spacings else GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
     needed = sum(group_spacings)
     if comp_width < needed:
       return None
-    # center channels within this compartment using per-pair spacings
+
     if n_ch == 1:
       centers = [(comp_lo + comp_hi) / 2]
+    elif spread == "wide":
+      # spread channels as far apart as possible within the compartment
+      local_centers = _get_centers_with_margin(
+        dim_size=comp_width, n=n_ch, margin=0, min_spacing=min_spacing
+      )
+      centers = [comp_lo + c for c in local_centers]
     else:
+      # tight: pack channels at minimum spacing, centered in the compartment
       start = (comp_lo + comp_hi) / 2 - needed / 2
       centers = [start]
       for s in group_spacings:
         centers.append(centers[-1] + s)
+
     for c in centers:
       offsets.append(Coordinate(0, c - container_center_y, 0))
 

@@ -1293,3 +1293,32 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     # Custom spread: offsets should be zero (user controls positioning)
     for op in ops:
       self.assertAlmostEqual(op.offset.y, 0.0)
+
+  async def test_no_go_zones_tight_vs_wide(self):
+    """spread='tight' should pack channels closer than spread='wide' within compartments."""
+    tips = [self.tip_rack.get_item(f"{chr(65 + i)}1").get_tip() for i in range(4)]
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+    self.trough.tracker.set_volume(50_000)
+    self.backend.get_channel_spacings.return_value = [9.0, 9.0, 9.0]
+
+    # wide (default): channels spread far apart within each compartment
+    await self.lh.aspirate(
+      [self.trough] * 4, vols=[100] * 4, use_channels=[0, 1, 2, 3], spread="wide"
+    )
+    wide_ops = self.backend.aspirate.call_args.kwargs["ops"]
+    wide_offsets = sorted([op.offset.y for op in wide_ops])
+
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+    self.trough.tracker.set_volume(50_000)
+
+    # tight: channels packed at minimum spacing within each compartment
+    await self.lh.aspirate(
+      [self.trough] * 4, vols=[100] * 4, use_channels=[0, 1, 2, 3], spread="tight"
+    )
+    tight_ops = self.backend.aspirate.call_args.kwargs["ops"]
+    tight_offsets = sorted([op.offset.y for op in tight_ops])
+
+    # within each compartment, wide channels should be further apart than tight
+    wide_gap_lower = abs(wide_offsets[1] - wide_offsets[0])
+    tight_gap_lower = abs(tight_offsets[1] - tight_offsets[0])
+    self.assertGreater(wide_gap_lower, tight_gap_lower)

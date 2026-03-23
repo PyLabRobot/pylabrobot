@@ -366,6 +366,7 @@ class LiquidHandler(Resource, Machine):
         resource,
         len(use_channels),
         channel_spacings=self.backend.get_channel_spacings(use_channels),
+        spread=spread,
       )
       if compartment_offsets is not None:
         return compartment_offsets
