@@ -1254,8 +1254,8 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     for y in y_offsets:
       self.assertGreater(abs(y), 5, f"offset {y} too close to divider")
 
-  async def test_single_channel_ignores_no_go_zone(self):
-    """Single channel should go to container center, ignoring no-go zones."""
+  async def test_single_channel_respects_no_go_zone(self):
+    """Single channel on a container with no-go zones should be placed in a safe compartment."""
     t = self.tip_rack.get_item("A1").get_tip()
     self.lh.update_head_state({0: t})
     self.trough.tracker.set_volume(50_000)
@@ -1263,8 +1263,11 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate([self.trough], vols=[100], use_channels=[0])
 
     ops = self.backend.aspirate.call_args.kwargs["ops"]
-    # Single channel: offset should be zero (centered)
-    self.assertAlmostEqual(ops[0].offset.y, 0.0)
+    # Single channel should be placed in a compartment, not at container center
+    # (container center Y=45 is inside the no-go zone at Y=44-46)
+    self.assertNotAlmostEqual(ops[0].offset.y, 0.0)
+    # Should be in the back compartment center: (48+88)/2 = 68, offset = 68-45 = 23
+    self.assertAlmostEqual(ops[0].offset.y, 23.0)
 
   async def test_dispense_uses_no_go_zones(self):
     """Dispense should also use no-go zone logic."""

@@ -11,74 +11,6 @@ MIN_SPACING_BETWEEN_CHANNELS = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 MIN_SPACING_EDGE = 2.0
 
 
-def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
-  """Get the centers of the channels with a minimum margin on the edges."""
-  if n == 1:
-    return [dim_size / 2]
-  if dim_size < margin * 2 + (n - 1) * min_spacing:
-    raise ValueError("Resource is too small to space channels.")
-  if dim_size - (n - 1) * min_spacing <= min_spacing * 2:
-    remaining_space = dim_size - (n - 1) * min_spacing - margin * 2
-    return [margin + remaining_space / 2 + i * min_spacing for i in range(n)]
-  return [(i + 1) * dim_size / (n + 1) for i in range(n)]
-
-
-def get_wide_single_resource_liquid_op_offsets(
-  resource: Resource,
-  num_channels: int,
-  min_spacing: float = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
-) -> List[Coordinate]:
-  resource_size = resource.get_absolute_size_y()
-  centers = list(
-    reversed(
-      _get_centers_with_margin(
-        dim_size=resource_size,
-        n=num_channels,
-        margin=MIN_SPACING_EDGE,
-        min_spacing=min_spacing,
-      )
-    )
-  )  # reverse because channels are from back to front
-
-  # offsets are relative to the center of the resource, but above we computed them wrt lfb
-  # so we need to subtract the center of the resource
-  # also, offsets are in absolute space, so we need to rotate the center
-  return [
-    Coordinate(
-      x=0,
-      y=c - resource.center().rotated(resource.get_absolute_rotation()).y,
-      z=0,
-    )
-    for c in centers
-  ]
-
-
-def get_tight_single_resource_liquid_op_offsets(
-  resource: Resource,
-  num_channels: int,
-  min_spacing: float = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
-) -> List[Coordinate]:
-  channel_space = (num_channels - 1) * min_spacing
-
-  min_y = (resource.get_absolute_size_y() - channel_space) / 2
-  if min_y < MIN_SPACING_EDGE:
-    raise ValueError("Resource is too small to space channels.")
-
-  centers = [min_y + i * min_spacing for i in range(num_channels)][::-1]
-
-  # offsets are relative to the center of the resource, but above we computed them wrt lfb
-  # so we need to subtract the center of the resource
-  # also, offsets are in absolute space, so we need to rotate the center
-  return [
-    Coordinate(
-      x=0,
-      y=c - resource.center().rotated(resource.get_absolute_rotation()).y,
-      z=0,
-    )
-    for c in centers
-  ]
-
-
 def _get_compartments(
   container: Container,
   edge_clearance: float = MIN_SPACING_EDGE,
@@ -125,101 +57,76 @@ def _get_compartments(
   return usable
 
 
-def center_channels_in_compartments(
-  container: Container,
+def _resolve_channel_spacings(
   num_channels: int,
   channel_spacings: Optional[List[float]] = None,
-  edge_clearance: float = MIN_SPACING_EDGE,
-  spread: str = "tight",
-) -> Optional[List[Coordinate]]:
-  """Distribute channels across compartments created by no-go zones.
-
-  Divides the channels by the number of compartments, then positions each group within its
-  compartment according to the spread mode. Channels are distributed center-out, then back-first.
-
-  Args:
-    container: The container with no-go zones that define compartments.
-    num_channels: Number of channels to distribute.
-    channel_spacings: Per-adjacent-pair minimum spacings in mm. Length must be
-      ``num_channels - 1``. If None, uses ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm)
-      for all pairs.
-    edge_clearance: Minimum clearance between the edge of a pipette and a compartment
-      boundary (container wall or no-go zone) in mm.
-    spread: How to position channels within each compartment:
-      - "wide": spread channels as far apart as possible within the compartment
-      - "tight": pack channels at minimum spacing, centered in the compartment
-
-  Returns:
-    List of Y offsets (relative to container center) for each channel, sorted back-to-front
-    (descending Y), or None if the channels cannot fit.
-  """
-  if spread not in ("wide", "tight"):
-    raise ValueError(f"Invalid value for 'spread': {spread!r}. Must be 'wide' or 'tight'.")
-
-  if not container.no_go_zones:
-    return None
-
+) -> List[float]:
+  """Resolve channel_spacings to a validated list of per-pair spacings."""
+  expected = max(num_channels - 1, 0)
   if channel_spacings is None:
-    channel_spacings = [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * max(num_channels - 1, 0)
-  elif len(channel_spacings) != max(num_channels - 1, 0):
+    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * expected
+  if expected == 0:
+    return []
+  if len(channel_spacings) != expected:
     raise ValueError(
       f"channel_spacings has {len(channel_spacings)} entries, "
-      f"expected {max(num_channels - 1, 0)} (num_channels - 1)."
+      f"expected {expected} (num_channels - 1)."
     )
+  return channel_spacings
 
-  compartments = _get_compartments(container, edge_clearance)
-  if not compartments:
-    return None
 
-  n_comp = len(compartments)
-  base = num_channels // n_comp
-  remainder = num_channels % n_comp
-  # distribute remainder center-out, then back-first:
-  # rank compartments by distance from center (ascending), break ties back-first (descending index)
-  center_idx = (n_comp - 1) / 2
-  priority = sorted(range(n_comp), key=lambda i: (abs(i - center_idx), -i))
-  distribution = [base] * n_comp
-  for i in priority[:remainder]:
-    distribution[i] += 1
+def _position_channels_wide(
+  resource_size: float,
+  num_channels: int,
+  spacings: List[float],
+) -> List[float]:
+  """Compute channel Y centers spread wide across a single region.
 
-  container_center_y = container.get_size_y() / 2
-  offsets = []
-  spacing_idx = 0  # tracks which pair spacings to consume
+  Distributes channels as far apart as possible while respecting minimum spacings.
+  Surplus space is shared equally across all gaps (n+1 slots: edges + between channels).
+  Returns centers in front-to-back order (ascending Y).
+  """
+  if num_channels == 1:
+    return [resource_size / 2]
+  min_spacing = min(spacings)
+  needed = sum(spacings)
+  if resource_size < MIN_SPACING_EDGE * 2 + needed:
+    raise ValueError("Resource is too small to space channels.")
+  # If there's enough room for equal distribution (margins + gaps), use it
+  if resource_size - needed > min_spacing * 2:
+    # Evenly distribute across n+1 slots (same as old _get_centers_with_margin)
+    return [(i + 1) * resource_size / (num_channels + 1) for i in range(num_channels)]
+  # Otherwise, tight distribution with edge margins
+  remaining_space = resource_size - needed - MIN_SPACING_EDGE * 2
+  return [MIN_SPACING_EDGE + remaining_space / 2 + sum(spacings[:i]) for i in range(num_channels)]
 
-  for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
-    if n_ch == 0:
-      continue
-    comp_width = comp_hi - comp_lo
-    # get the spacings for channels assigned to this compartment
-    group_spacings = channel_spacings[spacing_idx : spacing_idx + n_ch - 1]
-    spacing_idx += max(n_ch - 1, 0)
-    needed = sum(group_spacings)
-    if comp_width < needed:
-      return None
 
-    if n_ch == 1:
-      centers = [(comp_lo + comp_hi) / 2]
-    elif spread == "wide":
-      # spread channels as far apart as possible within the compartment,
-      # distributing surplus space evenly across all gaps
-      surplus = comp_width - needed
-      gap_surplus = surplus / max(n_ch - 1, 1)
-      wide_spacings = [s + gap_surplus for s in group_spacings]
-      total = sum(wide_spacings)
-      start = (comp_lo + comp_hi) / 2 - total / 2
-      centers = [start]
-      for s in wide_spacings:
-        centers.append(centers[-1] + s)
-    else:
-      # tight: pack channels at minimum spacing, centered in the compartment
-      start = (comp_lo + comp_hi) / 2 - needed / 2
-      centers = [start]
-      for s in group_spacings:
-        centers.append(centers[-1] + s)
+def _position_channels_tight(
+  resource_size: float,
+  num_channels: int,
+  spacings: List[float],
+) -> List[float]:
+  """Compute channel Y centers packed tight in the center of a single region.
 
-    for c in centers:
-      offsets.append(Coordinate(0, c - container_center_y, 0))
+  Channels are placed at minimum spacings, centered in the region.
+  Returns centers in front-to-back order (ascending Y).
+  """
+  if num_channels == 1:
+    return [resource_size / 2]
+  needed = sum(spacings)
+  start = (resource_size - needed) / 2
+  if start < MIN_SPACING_EDGE:
+    raise ValueError("Resource is too small to space channels.")
+  centers = [start]
+  for s in spacings:
+    centers.append(centers[-1] + s)
+  return centers
 
+
+def _centers_to_offsets(centers: List[float], resource: Resource) -> List[Coordinate]:
+  """Convert absolute Y centers to offsets relative to the resource center, sorted back-to-front."""
+  center_y = resource.center().rotated(resource.get_absolute_rotation()).y
+  offsets = [Coordinate(x=0, y=c - center_y, z=0) for c in centers]
   offsets.sort(key=lambda o: o.y, reverse=True)
   return offsets
 
@@ -243,32 +150,127 @@ def compute_channel_offsets(
       - "tight": pack channels at minimum spacing (respects no-go zones if present)
       - "custom": return zero offsets (caller controls positioning)
     channel_spacings: Per-adjacent-pair minimum spacings in mm (length = num_channels - 1).
-      Only used when the resource has no-go zones. If None, defaults to 9mm for all pairs.
+      If None, defaults to 9mm for all pairs.
 
   Returns:
     List of Y offsets relative to the resource center, sorted back-to-front (descending Y).
 
   Raises:
-    ValueError: If channels cannot fit into the compartments of a container with no-go zones,
-      or if spread is not one of "wide", "tight", or "custom".
+    ValueError: If channels cannot fit, or if spread is not "wide", "tight", or "custom".
   """
   if spread == "custom":
     return [Coordinate.zero()] * num_channels
-
-  if num_channels > 1 and isinstance(resource, Container) and resource.no_go_zones:
-    compartment_offsets = center_channels_in_compartments(
-      resource, num_channels, channel_spacings=channel_spacings, spread=spread
-    )
-    if compartment_offsets is not None:
-      return compartment_offsets
+  if spread not in ("wide", "tight"):
     raise ValueError(
-      f"Cannot fit {num_channels} channels into the compartments of "
-      f"'{resource.name}' while respecting its no-go zones. "
-      f"Use fewer channels or spread='custom' with manual offsets."
+      f"Invalid value for 'spread': {spread!r}. Must be 'wide', 'tight', or 'custom'."
     )
 
-  if spread == "tight":
-    return get_tight_single_resource_liquid_op_offsets(resource=resource, num_channels=num_channels)
+  spacings = _resolve_channel_spacings(num_channels, channel_spacings)
+
+  # Container with no-go zones: distribute across compartments
+  if isinstance(resource, Container) and resource.no_go_zones:
+    compartments = _get_compartments(resource)
+    if not compartments:
+      raise ValueError(
+        f"Cannot fit {num_channels} channels into the compartments of "
+        f"'{resource.name}' while respecting its no-go zones. "
+        f"Use fewer channels or spread='custom' with manual offsets."
+      )
+
+    n_comp = len(compartments)
+    base = num_channels // n_comp
+    remainder = num_channels % n_comp
+    center_idx = (n_comp - 1) / 2
+    priority = sorted(range(n_comp), key=lambda i: (abs(i - center_idx), -i))
+    distribution = [base] * n_comp
+    for i in priority[:remainder]:
+      distribution[i] += 1
+
+    container_center_y = resource.get_size_y() / 2
+    offsets = []
+    spacing_idx = 0
+
+    for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
+      if n_ch == 0:
+        continue
+      comp_width = comp_hi - comp_lo
+      group_spacings = spacings[spacing_idx : spacing_idx + n_ch - 1]
+      spacing_idx += max(n_ch - 1, 0)
+      needed = sum(group_spacings)
+      if comp_width < needed:
+        raise ValueError(
+          f"Cannot fit {num_channels} channels into the compartments of "
+          f"'{resource.name}' while respecting its no-go zones. "
+          f"Use fewer channels or spread='custom' with manual offsets."
+        )
+
+      if n_ch == 1:
+        centers = [(comp_lo + comp_hi) / 2]
+      elif spread == "wide":
+        min_gap = min(group_spacings) if group_spacings else GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
+        even_gap = comp_width / (n_ch + 1)
+        if even_gap >= min_gap:
+          # Even distribution with equal edge margins
+          centers = [comp_lo + (i + 1) * comp_width / (n_ch + 1) for i in range(n_ch)]
+        else:
+          # Compartment too small for even distribution; use tight (centered) instead
+          start = (comp_lo + comp_hi) / 2 - needed / 2
+          centers = [start]
+          for s in group_spacings:
+            centers.append(centers[-1] + s)
+      else:
+        start = (comp_lo + comp_hi) / 2 - needed / 2
+        centers = [start]
+        for s in group_spacings:
+          centers.append(centers[-1] + s)
+
+      for c in centers:
+        offsets.append(Coordinate(0, c - container_center_y, 0))
+
+    offsets.sort(key=lambda o: o.y, reverse=True)
+    return offsets
+
+  # Plain resource (no no-go zones): wide or tight across full Y
+  resource_size = resource.get_absolute_size_y()
   if spread == "wide":
-    return get_wide_single_resource_liquid_op_offsets(resource=resource, num_channels=num_channels)
-  raise ValueError(f"Invalid value for 'spread': {spread!r}. Must be 'tight', 'wide', or 'custom'.")
+    centers = _position_channels_wide(resource_size, num_channels, spacings)
+  else:
+    centers = _position_channels_tight(resource_size, num_channels, spacings)
+  return _centers_to_offsets(centers, resource)
+
+
+# ---------------------------------------------------------------------------
+# Deprecated wrappers (remove after 2026-09)
+# ---------------------------------------------------------------------------
+
+
+def get_wide_single_resource_liquid_op_offsets(
+  resource: Resource,
+  num_channels: int,
+  min_spacing: float = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
+) -> List[Coordinate]:
+  """Deprecated. Use ``compute_channel_offsets(resource, num_channels, spread='wide')`` instead."""
+  warnings.warn(
+    "get_wide_single_resource_liquid_op_offsets() is deprecated and will be removed after 2026-09. "
+    "Use compute_channel_offsets(resource, num_channels, spread='wide') instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  spacings = [min_spacing] * max(num_channels - 1, 0)
+  return compute_channel_offsets(resource, num_channels, spread="wide", channel_spacings=spacings)
+
+
+def get_tight_single_resource_liquid_op_offsets(
+  resource: Resource,
+  num_channels: int,
+  min_spacing: float = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
+) -> List[Coordinate]:
+  """Deprecated. Use ``compute_channel_offsets(resource, num_channels, spread='tight')`` instead."""
+  warnings.warn(
+    "get_tight_single_resource_liquid_op_offsets() is deprecated and will be removed after 2026-09. "
+    "Use compute_channel_offsets(resource, num_channels, spread='tight') instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  spacings = [min_spacing] * max(num_channels - 1, 0)
+  return compute_channel_offsets(resource, num_channels, spread="tight", channel_spacings=spacings)
