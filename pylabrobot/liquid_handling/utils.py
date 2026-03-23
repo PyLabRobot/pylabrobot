@@ -96,7 +96,7 @@ def _get_compartments(
   Returns:
     List of (y_min, y_max) tuples representing usable Y ranges for channel centers.
   """
-  container_y = container.get_absolute_size_y()
+  container_y = container.get_size_y()
   zones = sorted(container.no_go_zones, key=lambda z: z[0].y)
 
   raw_compartments = []
