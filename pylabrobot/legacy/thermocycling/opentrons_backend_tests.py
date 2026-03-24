@@ -29,7 +29,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     deserialized = OpentronsThermocyclerModuleV1.deserialize(serialized)
     assert tc_model == deserialized
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.list_connected_modules")
+  @patch("pylabrobot.opentrons.thermocycler.list_connected_modules")
   async def test_find_module_raises_error_if_not_found(self, mock_list_connected_modules):
     """Test that an error is raised if the module is not found."""
     mock_list_connected_modules.return_value = [{"id": "some_other_id", "data": {}}]
@@ -37,37 +37,37 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
       await self.thermocycler_backend.get_lid_open()
     self.assertEqual(str(e.exception), "Module 'test_id' not found")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_open_lid")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_open_lid")
   async def test_open_lid(self, mock_open_lid):
     await self.thermocycler_backend.open_lid()
     mock_open_lid.assert_called_once_with(module_id="test_id")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_close_lid")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_close_lid")
   async def test_close_lid(self, mock_close_lid):
     await self.thermocycler_backend.close_lid()
     mock_close_lid.assert_called_once_with(module_id="test_id")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_set_block_temperature")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_set_block_temperature")
   async def test_set_block_temperature(self, mock_set_block_temp):
     await self.thermocycler_backend.set_block_temperature([95.0])
     mock_set_block_temp.assert_called_once_with(celsius=95.0, module_id="test_id")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_set_lid_temperature")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_set_lid_temperature")
   async def test_set_lid_temperature(self, mock_set_lid_temp):
     await self.thermocycler_backend.set_lid_temperature([105.0])
     mock_set_lid_temp.assert_called_once_with(celsius=105.0, module_id="test_id")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_deactivate_block")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_deactivate_block")
   async def test_deactivate_block(self, mock_deactivate_block):
     await self.thermocycler_backend.deactivate_block()
     mock_deactivate_block.assert_called_once_with(module_id="test_id")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_deactivate_lid")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_deactivate_lid")
   async def test_deactivate_lid(self, mock_deactivate_lid):
     await self.thermocycler_backend.deactivate_lid()
     mock_deactivate_lid.assert_called_once_with(module_id="test_id")
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.thermocycler_run_profile_no_wait")
+  @patch("pylabrobot.opentrons.thermocycler.thermocycler_run_profile_no_wait")
   async def test_run_protocol(self, mock_run_profile):
     protocol = Protocol(stages=[Stage(steps=[Step(temperature=[95], hold_seconds=10)], repeats=1)])
     await self.thermocycler_backend.run_protocol(protocol, 50.0)
@@ -76,7 +76,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
       profile=[{"celsius": 95, "holdSeconds": 10}], block_max_volume=50.0, module_id="test_id"
     )
 
-  @patch("pylabrobot.legacy.thermocycling.opentrons_backend.list_connected_modules")
+  @patch("pylabrobot.opentrons.thermocycler.list_connected_modules")
   async def test_getters_return_correct_data(self, mock_list_connected_modules):
     mock_data = {
       "id": "test_id",

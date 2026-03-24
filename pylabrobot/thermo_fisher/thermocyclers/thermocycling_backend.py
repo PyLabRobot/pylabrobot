@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import re
-from base64 import b64decode
 from typing import List, Optional, cast
 
 from pylabrobot.capabilities.thermocycling import (
@@ -61,14 +59,21 @@ class ThermoFisherThermocyclingBackend(ThermocyclingBackend):
   # ----- Protocol execution -----
 
   async def run_protocol(self, protocol: Protocol, block_max_volume: float) -> None:
+    await self._run_protocol_with_options(protocol=protocol, block_max_volume=block_max_volume)
+
+  async def _run_protocol_with_options(
+    self,
+    protocol: Protocol,
+    block_max_volume: float,
+    run_name: str = "testrun",
+    user: str = "Admin",
+    run_mode: str = "Fast",
+    cover_temp: float = 105,
+    cover_enabled: bool = True,
+    protocol_name: str = "PCR_Protocol",
+    stage_name_prefixes: Optional[List[str]] = None,
+  ) -> None:
     block_id = self._block_id
-    run_name = "testrun"
-    user = "Admin"
-    run_mode = "Fast"
-    cover_temp = 105
-    cover_enabled = True
-    protocol_name = "PCR_Protocol"
-    stage_name_prefixes: Optional[List[str]] = None
 
     if await self.check_run_exists(run_name):
       logger.warning(f"Run {run_name} already exists")
@@ -398,45 +403,13 @@ class ThermoFisherThermocyclingBackend(ThermocyclingBackend):
   # ----- Log / run file management -----
 
   async def get_log_by_runname(self, run_name: str) -> str:
-    res = await self._driver.send_command(
-      {"cmd": "FILe:READ?", "args": [f"RUNS:{run_name}/{run_name}.log"]},
-      response_timeout=5,
-      read_once=False,
-    )
-    if self._driver._parse_scpi_response(res)["status"] != "OK":
-      raise ValueError("Failed to get log")
-    res.replace("\n", "")
-    encoded_log_match = re.search(r"<quote>(.*?)</quote>", res, re.DOTALL)
-    if not encoded_log_match:
-      raise ValueError("Failed to parse log content")
-    encoded_log = encoded_log_match.group(1).strip()
-    log = b64decode(encoded_log).decode("utf-8")
-    return log
+    return await self._driver.get_log_by_runname(run_name)
 
   async def get_elapsed_run_time_from_log(self, run_name: str) -> int:
-    """Parse a log to find the elapsed run time in hh:mm:ss format and convert to total seconds."""
-    log = await self.get_log_by_runname(run_name)
-    elapsed_time_match = re.search(r"Run Time:\s*(\d+):(\d+):(\d+)", log)
-    if not elapsed_time_match:
-      raise ValueError("Failed to parse elapsed time from log. Expected hh:mm:ss format.")
-    hours = int(elapsed_time_match.group(1))
-    minutes = int(elapsed_time_match.group(2))
-    seconds = int(elapsed_time_match.group(3))
-    total_seconds = (hours * 3600) + (minutes * 60) + seconds
-    return total_seconds
+    return await self._driver.get_elapsed_run_time_from_log(run_name)
 
   async def check_run_exists(self, run_name: str) -> bool:
-    res = await self._driver.send_command(
-      {"cmd": "RUNS:EXISTS?", "args": [run_name], "params": {"type": "folders"}}
-    )
-    if self._driver._parse_scpi_response(res)["status"] != "OK":
-      raise ValueError("Failed to check if run exists")
-    return cast(str, self._driver._parse_scpi_response(res)["args"][1]) == "True"
+    return await self._driver.check_run_exists(run_name)
 
   async def create_run(self, run_name: str):
-    res = await self._driver.send_command(
-      {"cmd": "RUNS:NEW", "args": [run_name]}, response_timeout=10
-    )
-    if self._driver._parse_scpi_response(res)["status"] != "OK":
-      raise ValueError("Failed to create run")
-    return self._driver._parse_scpi_response(res)["args"][0]
+    return await self._driver.create_run(run_name)

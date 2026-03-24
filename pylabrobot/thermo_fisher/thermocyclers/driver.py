@@ -5,6 +5,7 @@ import logging
 import re
 import ssl
 import warnings
+from base64 import b64decode
 from typing import Any, Dict, List, Optional, cast
 
 from pylabrobot.device import DeviceBackend
@@ -442,8 +443,49 @@ class ThermoFisherThermocyclerDriver(DeviceBackend):
       await self.deactivate_block(block_id=block_id)
     await self.io.stop()
 
-  # ----- Methods used by stop() that delegate to backend-level logic -----
-  # These are thin wrappers so that the driver's stop() can abort runs and deactivate.
+  # ----- Run management (device-level, not per-block) -----
+
+  async def check_run_exists(self, run_name: str) -> bool:
+    res = await self.send_command(
+      {"cmd": "RUNS:EXISTS?", "args": [run_name], "params": {"type": "folders"}}
+    )
+    if self._parse_scpi_response(res)["status"] != "OK":
+      raise ValueError("Failed to check if run exists")
+    return cast(str, self._parse_scpi_response(res)["args"][1]) == "True"
+
+  async def create_run(self, run_name: str):
+    res = await self.send_command({"cmd": "RUNS:NEW", "args": [run_name]}, response_timeout=10)
+    if self._parse_scpi_response(res)["status"] != "OK":
+      raise ValueError("Failed to create run")
+    return self._parse_scpi_response(res)["args"][0]
+
+  async def get_log_by_runname(self, run_name: str) -> str:
+    res = await self.send_command(
+      {"cmd": "FILe:READ?", "args": [f"RUNS:{run_name}/{run_name}.log"]},
+      response_timeout=5,
+      read_once=False,
+    )
+    if self._parse_scpi_response(res)["status"] != "OK":
+      raise ValueError("Failed to get log")
+    res.replace("\n", "")
+    encoded_log_match = re.search(r"<quote>(.*?)</quote>", res, re.DOTALL)
+    if not encoded_log_match:
+      raise ValueError("Failed to parse log content")
+    encoded_log = encoded_log_match.group(1).strip()
+    return b64decode(encoded_log).decode("utf-8")
+
+  async def get_elapsed_run_time_from_log(self, run_name: str) -> int:
+    """Parse a log to find the elapsed run time in hh:mm:ss format and convert to total seconds."""
+    log = await self.get_log_by_runname(run_name)
+    elapsed_time_match = re.search(r"Run Time:\s*(\d+):(\d+):(\d+)", log)
+    if not elapsed_time_match:
+      raise ValueError("Failed to parse elapsed time from log. Expected hh:mm:ss format.")
+    hours = int(elapsed_time_match.group(1))
+    minutes = int(elapsed_time_match.group(2))
+    seconds = int(elapsed_time_match.group(3))
+    return (hours * 3600) + (minutes * 60) + seconds
+
+  # ----- Methods used by stop() -----
 
   async def abort_run(self, block_id: int):
     if not await self.is_block_running(block_id=block_id):

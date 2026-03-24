@@ -88,13 +88,13 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     return await self._new.get_lid_open()
 
   async def get_lid_status(self) -> LidStatus:
-    status = self._driver._find_module().get("lidTemperatureStatus", "idle")
+    status = self._driver.get_lid_temperature_status_str()
     if status == "holding at target":
       return LidStatus.HOLDING_AT_TARGET
     return LidStatus.IDLE
 
   async def get_block_status(self) -> BlockStatus:
-    status = self._driver._find_module().get("status", "idle")
+    status = self._driver.get_block_status_str()
     if status == "holding at target":
       return BlockStatus.HOLDING_AT_TARGET
     return BlockStatus.IDLE
