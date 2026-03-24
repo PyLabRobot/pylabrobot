@@ -367,16 +367,16 @@ def compute_channel_offsets(
           max_gap = max(group_gaps)
           even_gap = comp_width / (n_ch + 1)
           if even_gap >= max_gap:
-            # Even distribution: all per-pair gaps satisfied
+            # Even distribution: equal edge margins and gaps
             centers = [comp_lo + (i + 1) * comp_width / (n_ch + 1) for i in range(n_ch)]
           else:
-            # Distribute surplus evenly across edges and gaps (n+1 slots)
+            # Can't fit equal spacing; center block with minimum gaps, max edge margins
             surplus = usable - needed
-            slot_extra = surplus / (n_ch + 1)
-            start = comp_lo + slot_extra
+            edge_margin = surplus / 2
+            start = comp_lo + edge_margin
             centers = [start]
             for g in group_gaps:
-              centers.append(centers[-1] + g + slot_extra)
+              centers.append(centers[-1] + g)
         else:
           surplus = usable - needed
           start = comp_lo + surplus / 2
@@ -387,6 +387,75 @@ def compute_channel_offsets(
       for c in centers:
         offsets.append(Coordinate(0, c - container_center_y, 0))
 
+    # Enforce all adjacent gaps (including cross-compartment).
+    all_centers = sorted([container_center_y + o.y for o in offsets])
+    all_gaps = [required_spacing_between(spacings, i, i + 1) for i in range(num_channels - 1)]
+
+    # Forward pass: push channels forward if too close to predecessor.
+    for i in range(len(all_centers) - 1):
+      required = all_gaps[i]
+      if all_centers[i + 1] - all_centers[i] < required - 0.01:
+        all_centers[i + 1] = all_centers[i] + required
+
+    # Backward pass: push channels backward if too close to successor.
+    for i in range(len(all_centers) - 2, -1, -1):
+      required = all_gaps[i]
+      if all_centers[i + 1] - all_centers[i] < required - 0.01:
+        all_centers[i] = all_centers[i + 1] - required
+
+    # Re-center each compartment's group within its boundaries.
+    # Channel-to-channel spacing has priority; edge margins use remaining space.
+    ch_idx = 0
+    adjusted_centers = []
+    for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
+      if n_ch == 0:
+        continue
+      group = all_centers[ch_idx : ch_idx + n_ch]
+      group_span = group[-1] - group[0] if n_ch > 1 else 0
+      comp_width = comp_hi - comp_lo
+
+      # Clamp the group within the compartment
+      if n_ch == 1:
+        # Single channel: center in compartment
+        adjusted_centers.append((comp_lo + comp_hi) / 2)
+      else:
+        # Preserve internal gaps, shift group to center in compartment
+        ideal_start = comp_lo + (comp_width - group_span) / 2
+        # Clamp so group doesn't extend past compartment edges
+        min_start = comp_lo
+        max_start = comp_hi - group_span
+        start = max(min_start, min(ideal_start, max_start))
+        shift = start - group[0]
+        for c in group:
+          adjusted_centers.append(c + shift)
+
+      ch_idx += n_ch
+
+    # Final gap enforcement after re-centering
+    for i in range(len(adjusted_centers) - 1):
+      required = all_gaps[i]
+      if adjusted_centers[i + 1] - adjusted_centers[i] < required - 0.01:
+        adjusted_centers[i + 1] = adjusted_centers[i] + required
+    for i in range(len(adjusted_centers) - 2, -1, -1):
+      required = all_gaps[i]
+      if adjusted_centers[i + 1] - adjusted_centers[i] < required - 0.01:
+        adjusted_centers[i] = adjusted_centers[i + 1] - required
+
+    # Verify all channels within compartment boundaries
+    ch_idx = 0
+    for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
+      if n_ch == 0:
+        continue
+      for c in adjusted_centers[ch_idx : ch_idx + n_ch]:
+        if c < comp_lo - 0.05 or c > comp_hi + 0.05:
+          raise ValueError(
+            f"Cannot fit {num_channels} channels into the compartments of "
+            f"'{resource.name}' while respecting spacing constraints. "
+            f"Use fewer channels or spread='custom' with manual offsets."
+          )
+      ch_idx += n_ch
+
+    offsets = [Coordinate(0, c - container_center_y, 0) for c in adjusted_centers]
     offsets.sort(key=lambda o: o.y, reverse=True)
     return offsets
 
