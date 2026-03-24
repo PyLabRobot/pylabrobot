@@ -1,6 +1,7 @@
-from .atc import ATC
-from .proflex import ProFlexSingleBlock, ProFlexThreeBlock
-from .thermocycler import (
+from .thermocyclers import (
+  ATC,
+  ProFlexSingleBlock,
+  ProFlexThreeBlock,
   ThermoFisherBlockBackend,
   ThermoFisherLidBackend,
   ThermoFisherThermocycler,
