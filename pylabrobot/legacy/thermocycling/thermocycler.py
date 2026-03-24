@@ -23,6 +23,7 @@ from pylabrobot.legacy.thermocycling.standard import (
   Protocol,
   Stage,
   Step,
+  protocol_from_new,
   protocol_to_new,
 )
 from pylabrobot.resources import Coordinate, ResourceHolder
@@ -109,8 +110,6 @@ class _ThermocyclingAdapter(_NewThermocyclingBackend):
     return await self._legacy.get_lid_open()
 
   async def run_protocol(self, protocol: _new_std.Protocol, block_max_volume: float) -> None:
-    from pylabrobot.legacy.thermocycling.standard import protocol_from_new
-
     await self._legacy.run_protocol(protocol_from_new(protocol), block_max_volume)
 
   async def get_hold_time(self) -> float:

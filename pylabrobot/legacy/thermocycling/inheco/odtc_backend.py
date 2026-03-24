@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional
 
-from pylabrobot.inheco.odtc.odtc import ODTCDriver, ODTCThermocyclingBackend
+from pylabrobot.inheco.odtc.odtc import ODTCBlockBackend, ODTCDriver, ODTCThermocyclingBackend
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import (
   BlockStatus,
@@ -52,9 +52,6 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
       return
     self._block_target_temp = temperature[0]
     lid = self._lid_target_temp if self._lid_target_temp is not None else 105.0
-    # Use the block backend's _run_pre_method logic directly via driver
-    from pylabrobot.inheco.odtc.odtc import ODTCBlockBackend
-
     block_be = ODTCBlockBackend(self._driver)
     block_be._lid_target = lid
     await block_be._run_pre_method(self._block_target_temp, lid)
@@ -77,8 +74,6 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
       return
     self._lid_target_temp = temperature[0]
     block = self._block_target_temp if self._block_target_temp is not None else 25.0
-    from pylabrobot.inheco.odtc.odtc import ODTCBlockBackend
-
     block_be = ODTCBlockBackend(self._driver)
     block_be._lid_target = self._lid_target_temp
     await block_be._run_pre_method(block, self._lid_target_temp)
