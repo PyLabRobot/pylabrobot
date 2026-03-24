@@ -115,6 +115,7 @@ def _position_channels_wide(
   """Compute channel Y centers spread wide across a single region.
 
   Distributes channels as far apart as possible while respecting per-channel spacing constraints.
+  Edge clearance = each edge channel's radius (half its occupancy diameter).
   Returns centers in front-to-back order (ascending Y).
   """
   num_channels = len(channel_spacings)
@@ -125,22 +126,24 @@ def _position_channels_wide(
     required_spacing_between(channel_spacings, i, i + 1) for i in range(len(channel_spacings) - 1)
   ]
   needed = sum(gaps)
+  first_radius = channel_spacings[0] / 2
+  last_radius = channel_spacings[-1] / 2
+  usable = resource_size - first_radius - last_radius
 
-  if resource_size < MIN_SPACING_EDGE * 2 + needed:
+  if usable < needed:
     raise ValueError("Resource is too small to space channels.")
 
-  # Even distribution if all per-pair gaps are satisfied
   max_gap = max(gaps)
-  even_gap = resource_size / (num_channels + 1)
-  if even_gap >= max_gap:
+  classic_gap = resource_size / (num_channels + 1)
+  if classic_gap >= max_gap:
     return [(i + 1) * resource_size / (num_channels + 1) for i in range(num_channels)]
 
-  # Otherwise: distribute surplus evenly across edges and gaps (n+1 slots)
-  surplus = resource_size - needed
-  slot_extra = surplus / (num_channels + 1)
-  centers = [slot_extra]
+  # Can't achieve equal spacing; center block like tight
+  surplus = usable - needed
+  start = first_radius + surplus / 2
+  centers = [start]
   for g in gaps:
-    centers.append(centers[-1] + g + slot_extra)
+    centers.append(centers[-1] + g)
   return centers
 
 
@@ -151,6 +154,7 @@ def _position_channels_tight(
   """Compute channel Y centers packed tight in the center of a single region.
 
   Channels are placed at minimum gap distances, centered in the region.
+  Edge clearance = each edge channel's radius (half its occupancy diameter).
   Returns centers in front-to-back order (ascending Y).
   """
   num_channels = len(channel_spacings)
@@ -161,11 +165,15 @@ def _position_channels_tight(
     required_spacing_between(channel_spacings, i, i + 1) for i in range(len(channel_spacings) - 1)
   ]
   needed = sum(gaps)
+  first_radius = channel_spacings[0] / 2
+  last_radius = channel_spacings[-1] / 2
+  usable = resource_size - first_radius - last_radius
 
-  start = (resource_size - needed) / 2
-  if start < MIN_SPACING_EDGE:
+  if usable < needed:
     raise ValueError("Resource is too small to space channels.")
 
+  surplus = usable - needed
+  start = first_radius + surplus / 2
   centers = [start]
   for g in gaps:
     centers.append(centers[-1] + g)
@@ -354,7 +362,10 @@ def compute_channel_offsets(
           required_spacing_between(group_spacings, i, i + 1) for i in range(len(group_spacings) - 1)
         ]
         needed = sum(group_gaps)
-        usable = comp_width
+        # Edge clearance: first and last channel's radius must not extend past compartment
+        first_radius = group_spacings[0] / 2
+        last_radius = group_spacings[-1] / 2
+        usable = comp_width - first_radius - last_radius
 
         if usable < needed:
           raise ValueError(
@@ -365,20 +376,20 @@ def compute_channel_offsets(
 
         if spread == "wide":
           max_gap = max(group_gaps)
-          even_gap = comp_width / (n_ch + 1)
-          if even_gap >= max_gap:
-            # Even distribution: equal edge margins and gaps
+          classic_gap = comp_width / (n_ch + 1)
+          if classic_gap >= max_gap:
             centers = [comp_lo + (i + 1) * comp_width / (n_ch + 1) for i in range(n_ch)]
           else:
-            # Can't make all slots equal; center the block with max edge margins
+            # Can't achieve equal spacing; center block like tight
             surplus = usable - needed
-            start = comp_lo + surplus / 2
+            start = comp_lo + first_radius + surplus / 2
             centers = [start]
             for g in group_gaps:
               centers.append(centers[-1] + g)
         else:
+          # Tight: minimum gaps, centered within usable space
           surplus = usable - needed
-          start = comp_lo + surplus / 2
+          start = comp_lo + first_radius + surplus / 2
           centers = [start]
           for g in group_gaps:
             centers.append(centers[-1] + g)
@@ -386,75 +397,33 @@ def compute_channel_offsets(
       for c in centers:
         offsets.append(Coordinate(0, c - container_center_y, 0))
 
-    # Enforce all adjacent gaps (including cross-compartment).
+    # Validate cross-compartment gaps: channels at adjacent compartment boundaries
+    # must respect their required spacing across the no-go zone.
     all_centers = sorted([container_center_y + o.y for o in offsets])
-    all_gaps = [required_spacing_between(spacings, i, i + 1) for i in range(num_channels - 1)]
-
-    # Forward pass: push channels forward if too close to predecessor.
-    for i in range(len(all_centers) - 1):
-      required = all_gaps[i]
-      if all_centers[i + 1] - all_centers[i] < required - 0.01:
-        all_centers[i + 1] = all_centers[i] + required
-
-    # Backward pass: push channels backward if too close to successor.
-    for i in range(len(all_centers) - 2, -1, -1):
-      required = all_gaps[i]
-      if all_centers[i + 1] - all_centers[i] < required - 0.01:
-        all_centers[i] = all_centers[i + 1] - required
-
-    # Re-center each compartment's group within its boundaries.
-    # Channel-to-channel spacing has priority; edge margins use remaining space.
     ch_idx = 0
-    adjusted_centers = []
-    for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
-      if n_ch == 0:
+    for comp_i in range(len(distribution) - 1):
+      n_a = distribution[comp_i]
+      n_b = distribution[comp_i + 1]
+      if n_a == 0 or n_b == 0:
+        ch_idx += n_a
         continue
-      group = all_centers[ch_idx : ch_idx + n_ch]
-      group_span = group[-1] - group[0] if n_ch > 1 else 0
-      comp_width = comp_hi - comp_lo
+      last_in_a = all_centers[ch_idx + n_a - 1]
+      first_in_b = all_centers[ch_idx + n_a]
+      # Spacing indices: last channel of group A and first channel of group B
+      spacing_idx_a = sum(distribution[: comp_i + 1]) - 1
+      spacing_idx_b = spacing_idx_a + 1
+      required = required_spacing_between(spacings, spacing_idx_a, spacing_idx_b)
+      actual = first_in_b - last_in_a
+      if actual < required - 0.05:
+        raise ValueError(
+          f"Cannot fit {num_channels} channels into the compartments of "
+          f"'{resource.name}' while respecting spacing constraints across no-go zones "
+          f"(gap {actual:.1f}mm < required {required:.1f}mm between compartments "
+          f"{comp_i} and {comp_i + 1}). "
+          f"Use fewer channels or spread='custom' with manual offsets."
+        )
+      ch_idx += n_a
 
-      # Clamp the group within the compartment
-      if n_ch == 1:
-        # Single channel: center in compartment
-        adjusted_centers.append((comp_lo + comp_hi) / 2)
-      else:
-        # Preserve internal gaps, shift group to center in compartment
-        ideal_start = comp_lo + (comp_width - group_span) / 2
-        # Clamp so group doesn't extend past compartment edges
-        min_start = comp_lo
-        max_start = comp_hi - group_span
-        start = max(min_start, min(ideal_start, max_start))
-        shift = start - group[0]
-        for c in group:
-          adjusted_centers.append(c + shift)
-
-      ch_idx += n_ch
-
-    # Final gap enforcement after re-centering
-    for i in range(len(adjusted_centers) - 1):
-      required = all_gaps[i]
-      if adjusted_centers[i + 1] - adjusted_centers[i] < required - 0.01:
-        adjusted_centers[i + 1] = adjusted_centers[i] + required
-    for i in range(len(adjusted_centers) - 2, -1, -1):
-      required = all_gaps[i]
-      if adjusted_centers[i + 1] - adjusted_centers[i] < required - 0.01:
-        adjusted_centers[i] = adjusted_centers[i + 1] - required
-
-    # Verify all channels within compartment boundaries
-    ch_idx = 0
-    for (comp_lo, comp_hi), n_ch in zip(compartments, distribution):
-      if n_ch == 0:
-        continue
-      for c in adjusted_centers[ch_idx : ch_idx + n_ch]:
-        if c < comp_lo - 0.05 or c > comp_hi + 0.05:
-          raise ValueError(
-            f"Cannot fit {num_channels} channels into the compartments of "
-            f"'{resource.name}' while respecting spacing constraints. "
-            f"Use fewer channels or spread='custom' with manual offsets."
-          )
-      ch_idx += n_ch
-
-    offsets = [Coordinate(0, c - container_center_y, 0) for c in adjusted_centers]
     offsets.sort(key=lambda o: o.y, reverse=True)
     return offsets
 
