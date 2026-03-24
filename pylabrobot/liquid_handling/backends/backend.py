@@ -174,10 +174,9 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
       Defaults to ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm) for all channels.
       Backends with variable channel spacing should override this.
 
-    .. todo::
-      This assumes channels spread along Y. Backends where channels are fixed in Y
-      (e.g. OT2 with 2 channels at fixed X spacing) should either override this or
-      signal that Y-spread is not supported via a ``supports_y_spread`` property.
+    Note: This assumes channels spread along Y. Backends where channels are fixed in Y
+    (e.g. OT2 with 2 channels at fixed X spacing) should either override this or
+    signal that Y-spread is not supported via a ``supports_y_spread`` property.
     """
     return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * len(use_channels)
 

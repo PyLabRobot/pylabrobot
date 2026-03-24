@@ -324,6 +324,11 @@ def compute_channel_offsets(
 
   spacings = _resolve_channel_spacings(num_channels, channel_spacings)
 
+  # channel_spacings are back-to-front (ch0=backmost first).
+  # Compartments are processed front-to-back (ascending Y).
+  # Reverse for compartment assignment so spacings[0] = frontmost channel.
+  spacings_front_to_back = list(reversed(spacings))
+
   # Container with no-go zones: distribute across compartments
   if isinstance(resource, Container) and resource.no_go_zones:
     compartments = _get_compartments(resource)
@@ -334,7 +339,7 @@ def compute_channel_offsets(
         f"Use fewer channels or spread='custom' with manual offsets."
       )
 
-    distribution = _distribute_channels(compartments, num_channels, spacings)
+    distribution = _distribute_channels(compartments, num_channels, spacings_front_to_back)
 
     container_center_y = resource.get_size_y() / 2
     offsets = []
@@ -345,8 +350,8 @@ def compute_channel_offsets(
         continue
       comp_width = comp_hi - comp_lo
 
-      # Slice per-channel spacings for this group
-      group_spacings = spacings[spacing_idx : spacing_idx + n_ch]
+      # Slice per-channel spacings for this group (front-to-back order)
+      group_spacings = spacings_front_to_back[spacing_idx : spacing_idx + n_ch]
       spacing_idx += n_ch
 
       if n_ch == 1:
@@ -412,7 +417,7 @@ def compute_channel_offsets(
       # Spacing indices: last channel of group A and first channel of group B
       spacing_idx_a = sum(distribution[: comp_i + 1]) - 1
       spacing_idx_b = spacing_idx_a + 1
-      required = required_spacing_between(spacings, spacing_idx_a, spacing_idx_b)
+      required = required_spacing_between(spacings_front_to_back, spacing_idx_a, spacing_idx_b)
       actual = first_in_b - last_in_a
       if actual < required - 0.05:
         raise ValueError(
@@ -430,9 +435,9 @@ def compute_channel_offsets(
   # Plain resource (no no-go zones): wide or tight across full Y
   resource_size = resource.get_absolute_size_y()
   if spread == "wide":
-    centers = _position_channels_wide(resource_size, spacings)
+    centers = _position_channels_wide(resource_size, spacings_front_to_back)
   else:
-    centers = _position_channels_tight(resource_size, spacings)
+    centers = _position_channels_tight(resource_size, spacings_front_to_back)
   return _centers_to_offsets(centers, resource)
 
 
