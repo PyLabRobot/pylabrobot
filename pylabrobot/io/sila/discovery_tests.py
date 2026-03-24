@@ -2,11 +2,14 @@ import asyncio
 import socket
 import struct
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.io.sila.discovery import (
   HAS_ZEROCONF,
   SiLADevice,
+  _arp_scan_bsd,
+  _arp_scan_linux,
+  _arp_scan_windows,
   _decode_nbns_name,
   _discover_sila2,
   _parse_device_identification,
@@ -130,6 +133,111 @@ class TestParseDeviceIdentification(unittest.TestCase):
 
   def test_invalid_xml(self):
     self.assertIsNone(_parse_device_identification("10.0.0.1", 8080, b"not xml"))
+
+
+class TestArpScanBsd(unittest.TestCase):
+  ARP_OUTPUT = (
+    "? (169.254.245.237) at 0:5:51:e:e5:7e on en13 [ethernet]\n"
+    "? (192.168.0.1) at aa:bb:cc:dd:ee:ff on en0 ifscope [ethernet]\n"
+    "? (169.254.10.20) at (incomplete) on en13 [ethernet]\n"
+    "? (169.254.99.1) at 11:22:33:44:55:66 on en13 [ethernet]\n"
+    "? (169.254.50.50) at 22:33:44:55:66:77 on en7 [ethernet]\n"
+  )
+
+  @patch("pylabrobot.io.sila.discovery._interface_name_for_ip_sync", return_value="en13")
+  @patch("asyncio.create_subprocess_exec", new_callable=AsyncMock)
+  def test_parses_link_local_entries(self, mock_exec, _mock_iface):
+    mock_proc = AsyncMock()
+    mock_proc.communicate.return_value = (self.ARP_OUTPUT.encode(), b"")
+    mock_exec.return_value = mock_proc
+
+    results = asyncio.run(_arp_scan_bsd("169.254.229.18"))
+    self.assertIn("169.254.245.237", results)
+    self.assertIn("169.254.99.1", results)
+    # Non-link-local should be excluded
+    self.assertNotIn("192.168.0.1", results)
+    # Incomplete entries should be excluded
+    self.assertNotIn("169.254.10.20", results)
+    # Our own interface IP should be excluded
+    self.assertNotIn("169.254.229.18", results)
+    # Entry on a different interface should be excluded
+    self.assertNotIn("169.254.50.50", results)
+
+  @patch("pylabrobot.io.sila.discovery._interface_name_for_ip_sync", return_value="en13")
+  @patch("asyncio.create_subprocess_exec", new_callable=AsyncMock)
+  def test_empty_output(self, mock_exec, _mock_iface):
+    mock_proc = AsyncMock()
+    mock_proc.communicate.return_value = (b"", b"")
+    mock_exec.return_value = mock_proc
+
+    results = asyncio.run(_arp_scan_bsd("169.254.229.18"))
+    self.assertEqual(results, {})
+
+  @patch("pylabrobot.io.sila.discovery._interface_name_for_ip_sync", return_value=None)
+  def test_returns_empty_when_interface_unknown(self, _mock_iface):
+    """If we can't resolve the interface name, return empty rather than all entries."""
+    results = asyncio.run(_arp_scan_bsd("169.254.229.18"))
+    self.assertEqual(results, {})
+
+
+class TestArpScanLinux(unittest.TestCase):
+  PROC_NET_ARP = (
+    "IP address       HW type     Flags       HW address            Mask     Device\n"
+    "169.254.245.237  0x1         0x2         00:05:51:0e:e5:7e     *        eth0\n"
+    "192.168.1.1      0x1         0x2         aa:bb:cc:dd:ee:ff     *        eth1\n"
+    "169.254.10.20    0x1         0x0         00:00:00:00:00:00     *        eth0\n"
+  )
+
+  @patch("pylabrobot.io.sila.discovery._interface_name_for_ip_sync", return_value="eth0")
+  @patch("os.path.exists", return_value=True)
+  def test_parses_proc_net_arp(self, _mock_exists, _mock_iface):
+    with patch(
+      "builtins.open",
+      MagicMock(
+        return_value=MagicMock(
+          __enter__=lambda s: s,
+          __exit__=MagicMock(return_value=False),
+          read=MagicMock(return_value=self.PROC_NET_ARP),
+        )
+      ),
+    ):
+      results = asyncio.run(_arp_scan_linux("169.254.229.18"))
+
+    self.assertIn("169.254.245.237", results)
+    # Non-link-local excluded
+    self.assertNotIn("192.168.1.1", results)
+    # Incomplete (flags=0x0) excluded
+    self.assertNotIn("169.254.10.20", results)
+
+
+class TestArpScanWindows(unittest.TestCase):
+  ARP_OUTPUT = (
+    "\r\n"
+    "Interface: 169.254.229.18 --- 0x5\r\n"
+    "  Internet Address      Physical Address      Type\r\n"
+    "  169.254.245.237       00-05-51-0e-e5-7e     dynamic\r\n"
+    "  169.254.10.20         00-aa-bb-cc-dd-ee     dynamic\r\n"
+    "\r\n"
+    "Interface: 192.168.0.100 --- 0x3\r\n"
+    "  Internet Address      Physical Address      Type\r\n"
+    "  192.168.0.1           aa-bb-cc-dd-ee-ff     dynamic\r\n"
+    "  169.254.99.1          11-22-33-44-55-66     dynamic\r\n"
+  )
+
+  @patch("asyncio.create_subprocess_exec", new_callable=AsyncMock)
+  def test_parses_correct_interface_section(self, mock_exec):
+    mock_proc = AsyncMock()
+    mock_proc.communicate.return_value = (self.ARP_OUTPUT.encode(), b"")
+    mock_exec.return_value = mock_proc
+
+    results = asyncio.run(_arp_scan_windows("169.254.229.18"))
+    self.assertIn("169.254.245.237", results)
+    self.assertIn("169.254.10.20", results)
+    # This is under a different interface section
+    self.assertNotIn("169.254.99.1", results)
+    self.assertNotIn("192.168.0.1", results)
+    # Our own IP should be excluded
+    self.assertNotIn("169.254.229.18", results)
 
 
 class TestDiscoverSila2(unittest.TestCase):
