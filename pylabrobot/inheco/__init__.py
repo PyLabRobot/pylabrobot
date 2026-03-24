@@ -1,5 +1,6 @@
 from .control_box import InhecoTECControlBox
 from .cpac import InhecoCPAC, InhecoCPACBackend, inheco_cpac_ultraflat
+from .odtc import ODTC, ODTCBlockBackend, ODTCDriver, ODTCLidBackend, ODTCThermocyclingBackend
 from .thermoshake import (
   InhecoThermoShake,
   InhecoThermoshakeBackend,
