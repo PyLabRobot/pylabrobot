@@ -70,6 +70,7 @@ def _create_mock_backend(num_channels: int = 8):
   type(mock).num_arms = PropertyMock(return_value=1)
   type(mock).head96_installed = PropertyMock(return_value=True)
   mock.can_pick_up_tip.return_value = True
+  mock.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
   return mock
 
 
@@ -1214,7 +1215,7 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.backend = _create_mock_backend(num_channels=8)
-    self.backend.get_channel_spacings.return_value = [9.0]
+    self.backend.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
@@ -1302,7 +1303,7 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     tips = [self.tip_rack.get_item(f"{chr(65 + i)}1").get_tip() for i in range(4)]
     self.lh.update_head_state({i: t for i, t in enumerate(tips)})
     self.trough.tracker.set_volume(50_000)
-    self.backend.get_channel_spacings.return_value = [9.0, 9.0, 9.0]
+    self.backend.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
 
     # wide (default): channels spread far apart within each compartment
     await self.lh.aspirate(

@@ -1,3 +1,4 @@
+import math
 import warnings
 from typing import List, Optional, Tuple
 
@@ -61,65 +62,113 @@ def _resolve_channel_spacings(
   num_channels: int,
   channel_spacings: Optional[List[float]] = None,
 ) -> List[float]:
-  """Resolve channel_spacings to a validated list of per-pair spacings."""
-  expected = max(num_channels - 1, 0)
+  """Resolve channel_spacings to a validated per-channel list.
+
+  Args:
+    num_channels: Number of channels.
+    channel_spacings: Per-channel spacing values (length = num_channels).
+      Each value is the symmetric minimum distance this channel's center must maintain
+      from any neighbor. If None, defaults to GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS for all.
+
+  Returns:
+    List of per-channel spacings, length = num_channels.
+  """
   if channel_spacings is None:
-    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * expected
-  if expected == 0:
-    return []
-  if len(channel_spacings) != expected:
+    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * num_channels
+  if num_channels <= 1:
+    return channel_spacings[:num_channels]
+  if len(channel_spacings) != num_channels:
     raise ValueError(
       f"channel_spacings has {len(channel_spacings)} entries, "
-      f"expected {expected} (num_channels - 1)."
+      f"expected {num_channels} (one per channel)."
     )
   return channel_spacings
 
 
+def required_spacing_between(channel_spacings: List[float], i: int, j: int) -> float:
+  """Compute the required center-to-center distance between channels i and j.
+
+  Each channel has a symmetric spacing constraint. For adjacent channels, the required distance
+  is the ``max()`` of both channels' spacings (the larger constraint wins), ceiling-rounded to
+  0.1mm for safety. For non-adjacent channels, the distance is the sum of all intermediate
+  adjacent-pair required spacings.
+
+  Args:
+    channel_spacings: Per-channel spacing values (one per channel). Each value is the symmetric
+      minimum distance that channel's center must maintain from any neighbor.
+    i: Index of the first channel.
+    j: Index of the second channel.
+
+  Returns:
+    Required center-to-center distance in mm, ceiling-rounded to 0.1mm.
+  """
+  lo, hi = min(i, j), max(i, j)
+  if hi - lo == 1:
+    return math.ceil(max(channel_spacings[lo], channel_spacings[hi]) * 10) / 10
+  return sum(required_spacing_between(channel_spacings, k, k + 1) for k in range(lo, hi))
+
+
 def _position_channels_wide(
   resource_size: float,
-  num_channels: int,
-  spacings: List[float],
+  channel_spacings: List[float],
 ) -> List[float]:
   """Compute channel Y centers spread wide across a single region.
 
-  Distributes channels as far apart as possible while respecting minimum spacings.
-  Surplus space is shared equally across all gaps (n+1 slots: edges + between channels).
+  Distributes channels as far apart as possible while respecting per-channel spacing constraints.
   Returns centers in front-to-back order (ascending Y).
   """
+  num_channels = len(channel_spacings)
   if num_channels == 1:
     return [resource_size / 2]
-  min_spacing = min(spacings)
-  needed = sum(spacings)
+
+  gaps = [
+    required_spacing_between(channel_spacings, i, i + 1) for i in range(len(channel_spacings) - 1)
+  ]
+  needed = sum(gaps)
+
   if resource_size < MIN_SPACING_EDGE * 2 + needed:
     raise ValueError("Resource is too small to space channels.")
-  # If there's enough room for equal distribution (margins + gaps), use it
-  if resource_size - needed > min_spacing * 2:
-    # Evenly distribute across n+1 slots (same as old _get_centers_with_margin)
+
+  # Even distribution if all per-pair gaps are satisfied
+  max_gap = max(gaps)
+  even_gap = resource_size / (num_channels + 1)
+  if even_gap >= max_gap:
     return [(i + 1) * resource_size / (num_channels + 1) for i in range(num_channels)]
-  # Otherwise, tight distribution with edge margins
-  remaining_space = resource_size - needed - MIN_SPACING_EDGE * 2
-  return [MIN_SPACING_EDGE + remaining_space / 2 + sum(spacings[:i]) for i in range(num_channels)]
+
+  # Otherwise: distribute surplus evenly across edges and gaps (n+1 slots)
+  surplus = resource_size - needed
+  slot_extra = surplus / (num_channels + 1)
+  centers = [slot_extra]
+  for g in gaps:
+    centers.append(centers[-1] + g + slot_extra)
+  return centers
 
 
 def _position_channels_tight(
   resource_size: float,
-  num_channels: int,
-  spacings: List[float],
+  channel_spacings: List[float],
 ) -> List[float]:
   """Compute channel Y centers packed tight in the center of a single region.
 
-  Channels are placed at minimum spacings, centered in the region.
+  Channels are placed at minimum gap distances, centered in the region.
   Returns centers in front-to-back order (ascending Y).
   """
+  num_channels = len(channel_spacings)
   if num_channels == 1:
     return [resource_size / 2]
-  needed = sum(spacings)
+
+  gaps = [
+    required_spacing_between(channel_spacings, i, i + 1) for i in range(len(channel_spacings) - 1)
+  ]
+  needed = sum(gaps)
+
   start = (resource_size - needed) / 2
   if start < MIN_SPACING_EDGE:
     raise ValueError("Resource is too small to space channels.")
+
   centers = [start]
-  for s in spacings:
-    centers.append(centers[-1] + s)
+  for g in gaps:
+    centers.append(centers[-1] + g)
   return centers
 
 
@@ -129,6 +178,104 @@ def _centers_to_offsets(centers: List[float], resource: Resource) -> List[Coordi
   offsets = [Coordinate(x=0, y=c - center_y, z=0) for c in centers]
   offsets.sort(key=lambda o: o.y, reverse=True)
   return offsets
+
+
+def _space_needed(spacings: List[float]) -> float:
+  """Compute the minimum space needed for a contiguous group of channels."""
+  if len(spacings) <= 1:
+    return 0.0
+  return sum(required_spacing_between(spacings, i, i + 1) for i in range(len(spacings) - 1))
+
+
+def _distribute_channels(
+  compartments: List[Tuple[float, float]],
+  num_channels: int,
+  spacings: List[float],
+) -> List[int]:
+  """Distribute channels across compartments proportionally to compartment width.
+
+  Channels are ordered and assigned contiguously. Wider compartments get more channels.
+  Falls back to shifting channels between neighbors if proportional assignment doesn't fit.
+
+  Args:
+    compartments: List of (y_min, y_max) usable compartment ranges.
+    num_channels: Total number of channels to distribute.
+    spacings: Per-channel spacing values (length = num_channels).
+
+  Returns:
+    List of channel counts per compartment.
+
+  Raises:
+    ValueError: If no valid distribution exists.
+  """
+  n_comp = len(compartments)
+  widths = [hi - lo for lo, hi in compartments]
+  total_width = sum(widths)
+
+  # Proportional targets (largest-remainder rounding)
+  targets = [w / total_width * num_channels for w in widths]
+  distribution = [int(t) for t in targets]
+  remainders = [t - int(t) for t in targets]
+  deficit = num_channels - sum(distribution)
+  # Give extra channels to compartments with largest remainders.
+  # Break ties by preferring back compartments (higher index = further back).
+  for _ in range(deficit):
+    idx = max(range(n_comp), key=lambda i: (remainders[i], i))
+    distribution[idx] += 1
+    remainders[idx] = -1  # don't pick again
+
+  # Validate: check each group fits
+  def _fits(dist: List[int]) -> bool:
+    idx = 0
+    for comp_idx, n_ch in enumerate(dist):
+      if n_ch == 0:
+        idx += 0
+        continue
+      group = spacings[idx : idx + n_ch]
+      needed = _space_needed(group)
+      if needed > widths[comp_idx]:
+        return False
+      idx += n_ch
+    return True
+
+  if _fits(distribution):
+    return distribution
+
+  # Try shifting channels from overloaded compartments to neighbors
+  for _ in range(num_channels):
+    improved = False
+    idx = 0
+    for comp_idx in range(n_comp):
+      n_ch = distribution[comp_idx]
+      if n_ch == 0:
+        continue
+      group = spacings[idx : idx + n_ch]
+      needed = _space_needed(group)
+      if needed > widths[comp_idx] and n_ch > 1:
+        # Try shifting last channel to next compartment
+        if comp_idx + 1 < n_comp:
+          distribution[comp_idx] -= 1
+          distribution[comp_idx + 1] += 1
+          improved = True
+          break
+        # Try shifting first channel to previous compartment
+        if comp_idx - 1 >= 0:
+          distribution[comp_idx] -= 1
+          distribution[comp_idx - 1] += 1
+          improved = True
+          break
+      idx += n_ch
+    if not improved:
+      break
+    if _fits(distribution):
+      return distribution
+
+  if _fits(distribution):
+    return distribution
+
+  raise ValueError(
+    "Cannot distribute channels across compartments while respecting spacing constraints."
+  )
 
 
 def compute_channel_offsets(
@@ -149,8 +296,10 @@ def compute_channel_offsets(
       - "wide": spread channels as far apart as possible (respects no-go zones if present)
       - "tight": pack channels at minimum spacing (respects no-go zones if present)
       - "custom": return zero offsets (caller controls positioning)
-    channel_spacings: Per-adjacent-pair minimum spacings in mm (length = num_channels - 1).
-      If None, defaults to 9mm for all pairs.
+    channel_spacings: Per-channel minimum spacings in mm (length = num_channels).
+      Each value is the symmetric minimum distance this channel's center must maintain
+      from any neighbor. The gap between channels i and i+1 = max(spacing[i], spacing[i+1]).
+      If None, defaults to 9mm for all channels.
 
   Returns:
     List of Y offsets relative to the resource center, sorted back-to-front (descending Y).
@@ -177,14 +326,7 @@ def compute_channel_offsets(
         f"Use fewer channels or spread='custom' with manual offsets."
       )
 
-    n_comp = len(compartments)
-    base = num_channels // n_comp
-    remainder = num_channels % n_comp
-    center_idx = (n_comp - 1) / 2
-    priority = sorted(range(n_comp), key=lambda i: (abs(i - center_idx), -i))
-    distribution = [base] * n_comp
-    for i in priority[:remainder]:
-      distribution[i] += 1
+    distribution = _distribute_channels(compartments, num_channels, spacings)
 
     container_center_y = resource.get_size_y() / 2
     offsets = []
@@ -194,35 +336,53 @@ def compute_channel_offsets(
       if n_ch == 0:
         continue
       comp_width = comp_hi - comp_lo
-      group_spacings = spacings[spacing_idx : spacing_idx + n_ch - 1]
-      spacing_idx += max(n_ch - 1, 0)
-      needed = sum(group_spacings)
-      if comp_width < needed:
-        raise ValueError(
-          f"Cannot fit {num_channels} channels into the compartments of "
-          f"'{resource.name}' while respecting its no-go zones. "
-          f"Use fewer channels or spread='custom' with manual offsets."
-        )
+
+      # Slice per-channel spacings for this group
+      group_spacings = spacings[spacing_idx : spacing_idx + n_ch]
+      spacing_idx += n_ch
 
       if n_ch == 1:
+        if comp_width <= 0:
+          raise ValueError(
+            f"Cannot fit {num_channels} channels into the compartments of "
+            f"'{resource.name}' while respecting its no-go zones. "
+            f"Use fewer channels or spread='custom' with manual offsets."
+          )
         centers = [(comp_lo + comp_hi) / 2]
-      elif spread == "wide":
-        min_gap = min(group_spacings) if group_spacings else GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
-        even_gap = comp_width / (n_ch + 1)
-        if even_gap >= min_gap:
-          # Even distribution with equal edge margins
-          centers = [comp_lo + (i + 1) * comp_width / (n_ch + 1) for i in range(n_ch)]
-        else:
-          # Compartment too small for even distribution; use tight (centered) instead
-          start = (comp_lo + comp_hi) / 2 - needed / 2
-          centers = [start]
-          for s in group_spacings:
-            centers.append(centers[-1] + s)
       else:
-        start = (comp_lo + comp_hi) / 2 - needed / 2
-        centers = [start]
-        for s in group_spacings:
-          centers.append(centers[-1] + s)
+        group_gaps = [
+          required_spacing_between(group_spacings, i, i + 1) for i in range(len(group_spacings) - 1)
+        ]
+        needed = sum(group_gaps)
+        usable = comp_width
+
+        if usable < needed:
+          raise ValueError(
+            f"Cannot fit {num_channels} channels into the compartments of "
+            f"'{resource.name}' while respecting its no-go zones. "
+            f"Use fewer channels or spread='custom' with manual offsets."
+          )
+
+        if spread == "wide":
+          max_gap = max(group_gaps)
+          even_gap = comp_width / (n_ch + 1)
+          if even_gap >= max_gap:
+            # Even distribution: all per-pair gaps satisfied
+            centers = [comp_lo + (i + 1) * comp_width / (n_ch + 1) for i in range(n_ch)]
+          else:
+            # Distribute surplus evenly across edges and gaps (n+1 slots)
+            surplus = usable - needed
+            slot_extra = surplus / (n_ch + 1)
+            start = comp_lo + slot_extra
+            centers = [start]
+            for g in group_gaps:
+              centers.append(centers[-1] + g + slot_extra)
+        else:
+          surplus = usable - needed
+          start = comp_lo + surplus / 2
+          centers = [start]
+          for g in group_gaps:
+            centers.append(centers[-1] + g)
 
       for c in centers:
         offsets.append(Coordinate(0, c - container_center_y, 0))
@@ -233,9 +393,9 @@ def compute_channel_offsets(
   # Plain resource (no no-go zones): wide or tight across full Y
   resource_size = resource.get_absolute_size_y()
   if spread == "wide":
-    centers = _position_channels_wide(resource_size, num_channels, spacings)
+    centers = _position_channels_wide(resource_size, spacings)
   else:
-    centers = _position_channels_tight(resource_size, num_channels, spacings)
+    centers = _position_channels_tight(resource_size, spacings)
   return _centers_to_offsets(centers, resource)
 
 
@@ -256,8 +416,10 @@ def get_wide_single_resource_liquid_op_offsets(
     DeprecationWarning,
     stacklevel=2,
   )
-  spacings = [min_spacing] * max(num_channels - 1, 0)
-  return compute_channel_offsets(resource, num_channels, spread="wide", channel_spacings=spacings)
+  per_channel = [min_spacing] * num_channels
+  return compute_channel_offsets(
+    resource, num_channels, spread="wide", channel_spacings=per_channel
+  )
 
 
 def get_tight_single_resource_liquid_op_offsets(
@@ -272,5 +434,7 @@ def get_tight_single_resource_liquid_op_offsets(
     DeprecationWarning,
     stacklevel=2,
   )
-  spacings = [min_spacing] * max(num_channels - 1, 0)
-  return compute_channel_offsets(resource, num_channels, spread="tight", channel_spacings=spacings)
+  per_channel = [min_spacing] * num_channels
+  return compute_channel_offsets(
+    resource, num_channels, spread="tight", channel_spacings=per_channel
+  )

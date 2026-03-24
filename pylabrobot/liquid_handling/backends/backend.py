@@ -160,17 +160,21 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     raise NotImplementedError()
 
   def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
-    """Get the minimum spacing between each adjacent pair of channels.
+    """Get the per-channel minimum spacing for each channel being used.
+
+    Each value is the symmetric minimum distance that channel's center must maintain
+    from any neighbor's center. The safe distance between two adjacent channels is
+    ``max(spacing[i], spacing[j])``.
 
     Args:
       use_channels: The channels being used, in order.
 
     Returns:
-      List of minimum spacings (mm) between each adjacent pair. Length is
-      ``len(use_channels) - 1``. Defaults to ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm)
-      for all pairs. Backends with variable channel spacing should override this.
+      List of per-channel spacings (mm), length = ``len(use_channels)``.
+      Defaults to ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm) for all channels.
+      Backends with variable channel spacing should override this.
     """
-    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * max(len(use_channels) - 1, 0)
+    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * len(use_channels)
 
   @abstractmethod
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
