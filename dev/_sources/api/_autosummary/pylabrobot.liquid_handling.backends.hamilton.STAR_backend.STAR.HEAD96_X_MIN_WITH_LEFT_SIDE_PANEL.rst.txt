@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.HEAD96\_X\_MIN\_WITH\_LEFT\_SIDE\_PANEL
+========================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. autoattribute:: STAR.HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL
