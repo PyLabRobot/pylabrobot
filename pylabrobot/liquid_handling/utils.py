@@ -66,9 +66,9 @@ def _resolve_channel_spacings(
 
   Args:
     num_channels: Number of channels.
-    channel_spacings: Per-channel spacing values (length = num_channels).
-      Each value is the symmetric minimum distance this channel's center must maintain
-      from any neighbor. If None, defaults to GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS for all.
+    channel_spacings: Per-channel occupancy diameters (length = num_channels).
+      Each value is the physical space the channel occupies.
+      If None, defaults to GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS for all.
 
   Returns:
     List of per-channel spacings, length = num_channels.
@@ -88,14 +88,14 @@ def _resolve_channel_spacings(
 def required_spacing_between(channel_spacings: List[float], i: int, j: int) -> float:
   """Compute the required center-to-center distance between channels i and j.
 
-  Each channel has a symmetric spacing constraint. For adjacent channels, the required distance
-  is the ``max()`` of both channels' spacings (the larger constraint wins), ceiling-rounded to
-  0.1mm for safety. For non-adjacent channels, the distance is the sum of all intermediate
-  adjacent-pair required spacings.
+  Each channel's spacing value is its diameter - the minimum distance its center must maintain
+  from any neighbor. For adjacent channels, the required distance is the sum of both channels'
+  radii (half-spacings), ceiling-rounded to 0.1mm for safety. For non-adjacent channels, the
+  distance is the sum of all intermediate adjacent-pair required spacings.
 
   Args:
-    channel_spacings: Per-channel spacing values (one per channel). Each value is the symmetric
-      minimum distance that channel's center must maintain from any neighbor.
+    channel_spacings: Per-channel spacing values (one per channel). Each value is the channel's
+      spacing diameter.
     i: Index of the first channel.
     j: Index of the second channel.
 
@@ -104,7 +104,7 @@ def required_spacing_between(channel_spacings: List[float], i: int, j: int) -> f
   """
   lo, hi = min(i, j), max(i, j)
   if hi - lo == 1:
-    return math.ceil(max(channel_spacings[lo], channel_spacings[hi]) * 10) / 10
+    return math.ceil((channel_spacings[lo] / 2 + channel_spacings[hi] / 2) * 10) / 10
   return sum(required_spacing_between(channel_spacings, k, k + 1) for k in range(lo, hi))
 
 
@@ -296,9 +296,9 @@ def compute_channel_offsets(
       - "wide": spread channels as far apart as possible (respects no-go zones if present)
       - "tight": pack channels at minimum spacing (respects no-go zones if present)
       - "custom": return zero offsets (caller controls positioning)
-    channel_spacings: Per-channel minimum spacings in mm (length = num_channels).
-      Each value is the symmetric minimum distance this channel's center must maintain
-      from any neighbor. The gap between channels i and i+1 = max(spacing[i], spacing[i+1]).
+    channel_spacings: Per-channel occupancy diameters in mm (length = num_channels).
+      Each value is the physical space the channel occupies. The required gap between
+      channels i and i+1 = spacing[i]/2 + spacing[i+1]/2 (sum of radii).
       If None, defaults to 9mm for all channels.
 
   Returns:
@@ -370,10 +370,9 @@ def compute_channel_offsets(
             # Even distribution: equal edge margins and gaps
             centers = [comp_lo + (i + 1) * comp_width / (n_ch + 1) for i in range(n_ch)]
           else:
-            # Can't fit equal spacing; center block with minimum gaps, max edge margins
+            # Can't make all slots equal; center the block with max edge margins
             surplus = usable - needed
-            edge_margin = surplus / 2
-            start = comp_lo + edge_margin
+            start = comp_lo + surplus / 2
             centers = [start]
             for g in group_gaps:
               centers.append(centers[-1] + g)

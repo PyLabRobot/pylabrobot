@@ -160,17 +160,17 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     raise NotImplementedError()
 
   def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
-    """Get the per-channel minimum spacing for each channel being used.
+    """Get the per-channel occupancy diameter for each channel being used.
 
-    Each value is the symmetric minimum distance that channel's center must maintain
-    from any neighbor's center. The safe distance between two adjacent channels is
-    ``max(spacing[i], spacing[j])``.
+    Each value is the channel's occupancy diameter - the physical space it takes up.
+    The required center-to-center distance between two adjacent channels is the sum of
+    their radii: ``spacing[i]/2 + spacing[j]/2``.
 
     Args:
       use_channels: The channels being used, in order.
 
     Returns:
-      List of per-channel spacings (mm), length = ``len(use_channels)``.
+      List of per-channel occupancy diameters (mm), length = ``len(use_channels)``.
       Defaults to ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm) for all channels.
       Backends with variable channel spacing should override this.
     """

@@ -65,7 +65,6 @@ from pylabrobot.liquid_handling.utils import (
   MIN_SPACING_EDGE,
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
-  required_spacing_between,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -1351,11 +1350,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._setup_done = False
 
   def _min_spacing_between(self, i: int, j: int) -> float:
-    """Return the required Y spacing between channels *i* and *j*.
+    """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
 
-    Delegates to :func:`required_spacing_between` using this machine's per-channel spacings.
+    Uses max() of both channels' spacings for firmware safety (conservative).
+    For adjacent channels, ceiling-rounded to 0.1mm.
+    For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
     """
-    return required_spacing_between(self._channels_minimum_y_spacing, i, j)
+    lo, hi = min(i, j), max(i, j)
+    if hi - lo == 1:
+      import math
+
+      spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
+      return math.ceil(spacing * 10) / 10
+    return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
 
   @property
   def machine_conf(self) -> MachineConfiguration:
