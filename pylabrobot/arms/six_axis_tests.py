@@ -44,12 +44,12 @@ class TestSixAxisArm(unittest.IsolatedAsyncioTestCase):
     self.mock_backend.get_cartesian_position.assert_called_once()
 
   async def test_open_gripper(self):
-    await self.arm.open_gripper(speed=5)
-    self.mock_backend.open_gripper.assert_called_once_with(speed=5)
+    await self.arm.open_gripper(position=850, speed=5)
+    self.mock_backend.open_gripper.assert_called_once_with(position=850, speed=5)
 
   async def test_close_gripper(self):
-    await self.arm.close_gripper(speed=5)
-    self.mock_backend.close_gripper.assert_called_once_with(speed=5)
+    await self.arm.close_gripper(position=100, speed=5)
+    self.mock_backend.close_gripper.assert_called_once_with(position=100, speed=5)
 
   async def test_halt(self):
     await self.arm.halt()

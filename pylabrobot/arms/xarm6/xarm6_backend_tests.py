@@ -22,8 +22,9 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
     self.mock_arm.move_gohome.return_value = 0
     self.mock_arm.get_position.return_value = [0, [100, 200, 300, 180, 0, 90]]
     self.mock_arm.get_servo_angle.return_value = [0, [10, 20, 30, 40, 50, 60]]
-    self.mock_arm.open_bio_gripper.return_value = 0
-    self.mock_arm.close_bio_gripper.return_value = 0
+    self.mock_arm.set_gripper_position.return_value = 0
+    self.mock_arm.set_gripper_mode.return_value = 0
+    self.mock_arm.set_gripper_enable.return_value = 0
     self.mock_arm.emergency_stop.return_value = None
     self.mock_arm.disconnect.return_value = None
 
@@ -115,16 +116,16 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result.rotation.z, 90)
 
   async def test_open_gripper(self):
-    await self.backend.open_gripper()
-    self.mock_arm.open_bio_gripper.assert_called_once_with(speed=0, wait=True)
+    await self.backend.open_gripper(position=850)
+    self.mock_arm.set_gripper_position.assert_called_once_with(850, wait=True, speed=0)
 
   async def test_open_gripper_with_speed(self):
-    await self.backend.open_gripper(speed=5)
-    self.mock_arm.open_bio_gripper.assert_called_once_with(speed=5, wait=True)
+    await self.backend.open_gripper(position=850, speed=5)
+    self.mock_arm.set_gripper_position.assert_called_once_with(850, wait=True, speed=5)
 
   async def test_close_gripper(self):
-    await self.backend.close_gripper()
-    self.mock_arm.close_bio_gripper.assert_called_once_with(speed=0, wait=True)
+    await self.backend.close_gripper(position=100)
+    self.mock_arm.set_gripper_position.assert_called_once_with(100, wait=True, speed=0)
 
   async def test_freedrive_mode(self):
     await self.backend.freedrive_mode()
@@ -158,8 +159,9 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
 
     calls = self.mock_arm.set_position.call_args_list
     # open_gripper, move above (z=130), descend (z=50), close_gripper, retract (z=130)
-    self.mock_arm.open_bio_gripper.assert_called_once()
-    self.mock_arm.close_bio_gripper.assert_called_once()
+    gripper_calls = self.mock_arm.set_gripper_position.call_args_list
+    self.assertEqual(gripper_calls[0], call(850, wait=True, speed=0))
+    self.assertEqual(gripper_calls[1], call(0, wait=True, speed=0))
     self.assertEqual(len(calls), 3)
     # approach: z = 50 + 80 = 130
     self.assertEqual(calls[0].kwargs["z"], 130)
@@ -182,7 +184,7 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(calls[0].kwargs["z"], 140)
     self.assertEqual(calls[1].kwargs["z"], 60)
     self.assertEqual(calls[2].kwargs["z"], 140)
-    self.mock_arm.open_bio_gripper.assert_called_once()
+    self.mock_arm.set_gripper_position.assert_called_once_with(850, wait=True, speed=0)
 
   async def test_pick_up_resource_horizontal(self):
     pos = CartesianCoords(
@@ -196,8 +198,9 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
 
     calls = self.mock_arm.set_position.call_args_list
     # open, approach (y=50), target (y=100), close, retract (y=50), lift (y=50, z=150)
-    self.mock_arm.open_bio_gripper.assert_called_once()
-    self.mock_arm.close_bio_gripper.assert_called_once()
+    gripper_calls = self.mock_arm.set_gripper_position.call_args_list
+    self.assertEqual(gripper_calls[0], call(850, wait=True, speed=0))
+    self.assertEqual(gripper_calls[1], call(0, wait=True, speed=0))
     self.assertEqual(len(calls), 4)
     # approach: y = 100 - 50 = 50
     self.assertEqual(calls[0].kwargs["y"], 50)

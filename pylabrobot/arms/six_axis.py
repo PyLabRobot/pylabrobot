@@ -35,15 +35,25 @@ class SixAxisArm(Machine):
     """Get the current position of the arm in Cartesian space."""
     return await self.backend.get_cartesian_position(**backend_kwargs)
 
-  async def open_gripper(self, speed: int = 0, **backend_kwargs) -> None:
-    """Open the arm's gripper."""
-    await self._ensure_not_freedrive()
-    return await self.backend.open_gripper(speed=speed, **backend_kwargs)
+  async def open_gripper(self, position: int, speed: int = 0, **backend_kwargs) -> None:
+    """Open the arm's gripper.
 
-  async def close_gripper(self, speed: int = 0, **backend_kwargs) -> None:
-    """Close the arm's gripper."""
+    Args:
+      position: Target open position (gripper-specific units).
+      speed: Gripper speed (0 = default/max).
+    """
     await self._ensure_not_freedrive()
-    return await self.backend.close_gripper(speed=speed, **backend_kwargs)
+    return await self.backend.open_gripper(position=position, speed=speed, **backend_kwargs)
+
+  async def close_gripper(self, position: int, speed: int = 0, **backend_kwargs) -> None:
+    """Close the arm's gripper.
+
+    Args:
+      position: Target close position (gripper-specific units).
+      speed: Gripper speed (0 = default/max).
+    """
+    await self._ensure_not_freedrive()
+    return await self.backend.close_gripper(position=position, speed=speed, **backend_kwargs)
 
   async def halt(self, **backend_kwargs) -> None:
     """Emergency stop any ongoing movement of the arm."""

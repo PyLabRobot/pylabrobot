@@ -29,6 +29,8 @@ class XArm6Backend(SixAxisBackend):
     safe_position: Optional predefined safe position for move_to_safe().
     tcp_offset: Optional TCP offset (x, y, z, roll, pitch, yaw) for the end effector.
     tcp_load: Optional payload config as (mass_kg, [cx, cy, cz]).
+    gripper_open_pos: Default gripper open position for pick/place sequences.
+    gripper_close_pos: Default gripper close position for pick/place sequences.
   """
 
   def __init__(
@@ -41,6 +43,8 @@ class XArm6Backend(SixAxisBackend):
     safe_position: Optional[CartesianCoords] = None,
     tcp_offset: Optional[Tuple[float, float, float, float, float, float]] = None,
     tcp_load: Optional[Tuple[float, list]] = None,
+    gripper_open_pos: int = 850,
+    gripper_close_pos: int = 0,
   ):
     super().__init__()
     self._ip = ip
@@ -52,6 +56,46 @@ class XArm6Backend(SixAxisBackend):
     self._safe_position = safe_position
     self._tcp_offset = tcp_offset
     self._tcp_load = tcp_load
+    self._gripper_open_pos = gripper_open_pos
+    self._gripper_close_pos = gripper_close_pos
+
+  # -- Speed/acceleration get/set --
+
+  @property
+  def speed(self) -> float:
+    """Current default Cartesian move speed in mm/s."""
+    return self._default_speed
+
+  @speed.setter
+  def speed(self, value: float) -> None:
+    self._default_speed = value
+
+  @property
+  def mvacc(self) -> float:
+    """Current default Cartesian move acceleration in mm/s^2."""
+    return self._default_mvacc
+
+  @mvacc.setter
+  def mvacc(self, value: float) -> None:
+    self._default_mvacc = value
+
+  @property
+  def joint_speed(self) -> float:
+    """Current default joint move speed in deg/s."""
+    return self._default_joint_speed
+
+  @joint_speed.setter
+  def joint_speed(self, value: float) -> None:
+    self._default_joint_speed = value
+
+  @property
+  def joint_mvacc(self) -> float:
+    """Current default joint move acceleration in deg/s^2."""
+    return self._default_joint_mvacc
+
+  @joint_mvacc.setter
+  def joint_mvacc(self, value: float) -> None:
+    self._default_joint_mvacc = value
 
   async def _call_sdk(self, func, *args, **kwargs):
     """Run a synchronous xArm SDK call in a thread executor to avoid blocking."""
@@ -86,6 +130,9 @@ class XArm6Backend(SixAxisBackend):
       await self._call_sdk(self._arm.set_tcp_offset, list(self._tcp_offset))
     if self._tcp_load is not None:
       await self._call_sdk(self._arm.set_tcp_load, self._tcp_load[0], self._tcp_load[1])
+
+    await self._call_sdk(self._arm.set_gripper_mode, 0)
+    await self._call_sdk(self._arm.set_gripper_enable, True)
 
   async def stop(self):
     """Disconnect from the xArm."""
@@ -169,15 +216,29 @@ class XArm6Backend(SixAxisBackend):
       rotation=Rotation(x=pose[3], y=pose[4], z=pose[5]),
     )
 
-  async def open_gripper(self, speed: int = 0) -> None:
-    """Open the bio-gripper."""
-    code = await self._call_sdk(self._arm.open_bio_gripper, speed=speed, wait=True)
-    self._check_result(code, "open_bio_gripper")
+  async def open_gripper(self, position: int, speed: int = 0) -> None:
+    """Open the gripper to a target position.
 
-  async def close_gripper(self, speed: int = 0) -> None:
-    """Close the bio-gripper."""
-    code = await self._call_sdk(self._arm.close_bio_gripper, speed=speed, wait=True)
-    self._check_result(code, "close_bio_gripper")
+    Args:
+      position: Target open position (gripper-specific units, e.g. 0-850 for xArm gripper).
+      speed: Gripper speed (0 = default/max).
+    """
+    code = await self._call_sdk(
+      self._arm.set_gripper_position, position, wait=True, speed=speed
+    )
+    self._check_result(code, "set_gripper_position (open)")
+
+  async def close_gripper(self, position: int, speed: int = 0) -> None:
+    """Close the gripper to a target position.
+
+    Args:
+      position: Target close position (gripper-specific units, e.g. 0-850 for xArm gripper).
+      speed: Gripper speed (0 = default/max).
+    """
+    code = await self._call_sdk(
+      self._arm.set_gripper_position, position, wait=True, speed=speed
+    )
+    self._check_result(code, "set_gripper_position (close)")
 
   async def freedrive_mode(self) -> None:
     """Enter freedrive (manual teaching) mode."""
@@ -235,10 +296,10 @@ class XArm6Backend(SixAxisBackend):
   # -- Pick (vertical) --
 
   async def _pick_vertical(self, position: CartesianCoords, access: VerticalAccess) -> None:
-    await self.open_gripper()
+    await self.open_gripper(self._gripper_open_pos)
     await self.move_to(self._offset_position(position, dz=access.approach_height_mm))
     await self.move_to(position)
-    await self.close_gripper()
+    await self.close_gripper(self._gripper_close_pos)
     await self.move_to(self._offset_position(position, dz=access.clearance_mm))
 
   # -- Place (vertical) --
@@ -247,16 +308,16 @@ class XArm6Backend(SixAxisBackend):
     place_z_offset = access.gripper_offset_mm
     await self.move_to(self._offset_position(position, dz=place_z_offset + access.approach_height_mm))
     await self.move_to(self._offset_position(position, dz=place_z_offset))
-    await self.open_gripper()
+    await self.open_gripper(self._gripper_open_pos)
     await self.move_to(self._offset_position(position, dz=place_z_offset + access.clearance_mm))
 
   # -- Pick (horizontal) --
 
   async def _pick_horizontal(self, position: CartesianCoords, access: HorizontalAccess) -> None:
-    await self.open_gripper()
+    await self.open_gripper(self._gripper_open_pos)
     await self.move_to(self._offset_position(position, dy=-access.approach_distance_mm))
     await self.move_to(position)
-    await self.close_gripper()
+    await self.close_gripper(self._gripper_close_pos)
     retract = self._offset_position(position, dy=-access.clearance_mm)
     await self.move_to(retract)
     await self.move_to(self._offset_position(retract, dz=access.lift_height_mm))
@@ -270,7 +331,7 @@ class XArm6Backend(SixAxisBackend):
     approach = self._offset_position(position, dy=-access.clearance_mm, dz=place_z_offset)
     await self.move_to(approach)
     await self.move_to(self._offset_position(position, dz=place_z_offset))
-    await self.open_gripper()
+    await self.open_gripper(self._gripper_open_pos)
     await self.move_to(self._offset_position(position, dy=-access.clearance_mm, dz=place_z_offset))
     await self.move_to(
       self._offset_position(position, dy=-access.clearance_mm, dz=access.lift_height_mm + place_z_offset)

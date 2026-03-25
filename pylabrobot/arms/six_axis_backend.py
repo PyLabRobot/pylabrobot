@@ -10,18 +10,20 @@ class SixAxisBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a 6-axis robotic arm."""
 
   @abstractmethod
-  async def open_gripper(self, speed: int = 0) -> None:
+  async def open_gripper(self, position: int, speed: int = 0) -> None:
     """Open the arm's gripper.
 
     Args:
+      position: Target open position (gripper-specific units).
       speed: Gripper speed (0 = default/max).
     """
 
   @abstractmethod
-  async def close_gripper(self, speed: int = 0) -> None:
+  async def close_gripper(self, position: int, speed: int = 0) -> None:
     """Close the arm's gripper.
 
     Args:
+      position: Target close position (gripper-specific units).
       speed: Gripper speed (0 = default/max).
     """
 
