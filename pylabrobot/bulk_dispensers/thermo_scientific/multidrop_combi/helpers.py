@@ -101,7 +101,7 @@ def plate_to_pla_params(plate: Plate) -> dict:
   height_hundredths = round(plate.get_size_z() * 100)
 
   # Get max_volume from first well
-  first_well = next(iter(plate.get_all_children()))
+  first_well = plate.get_well("A1")
   well_max_volume_tenths = round(first_well.max_volume * 10)
 
   # Validate against hardware limits

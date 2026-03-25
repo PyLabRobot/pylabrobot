@@ -27,7 +27,8 @@ class MultidropCombiQueriesMixin:
     Returns:
       List of parameter lines from the instrument.
     """
-    return await self._send_command("REP", timeout=10.0)  # type: ignore[attr-defined]
+    result: list[str] = await self._send_command("REP", timeout=10.0)  # type: ignore[attr-defined]
+    return result
 
   async def read_error_log(self) -> list[str]:
     """Read the instrument error log (LOG command).
@@ -35,7 +36,8 @@ class MultidropCombiQueriesMixin:
     Returns:
       List of error log lines.
     """
-    return await self._send_command("LOG", timeout=10.0)  # type: ignore[attr-defined]
+    result: list[str] = await self._send_command("LOG", timeout=10.0)  # type: ignore[attr-defined]
+    return result
 
   async def read_cassette_info(self) -> list[str]:
     """Read RFID cassette info (RIR command).
@@ -43,4 +45,5 @@ class MultidropCombiQueriesMixin:
     Returns:
       List of cassette info lines.
     """
-    return await self._send_command("RIR", timeout=5.0)  # type: ignore[attr-defined]
+    result: list[str] = await self._send_command("RIR", timeout=5.0)  # type: ignore[attr-defined]
+    return result

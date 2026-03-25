@@ -58,22 +58,29 @@ class MultidropCombiBackend(
 
     # When port is specified, skip VID/PID discovery (the Multidrop is often
     # connected via an RS232-to-USB adapter with a different VID/PID).
-    serial_kwargs = dict(
-      human_readable_device_name="Multidrop Combi",
-      baudrate=9600,
-      bytesize=8,
-      parity="N",
-      stopbits=1,
-      timeout=self.timeout,
-      write_timeout=5,
-    )
     if self._port:
-      serial_kwargs["port"] = self._port
+      self.io = Serial(
+        human_readable_device_name="Multidrop Combi",
+        port=self._port,
+        baudrate=9600,
+        bytesize=8,
+        parity="N",
+        stopbits=1,
+        timeout=self.timeout,
+        write_timeout=5,
+      )
     else:
-      serial_kwargs["vid"] = 0x0AB6
-      serial_kwargs["pid"] = 0x0344
-
-    self.io = Serial(**serial_kwargs)
+      self.io = Serial(
+        human_readable_device_name="Multidrop Combi",
+        vid=0x0AB6,
+        pid=0x0344,
+        baudrate=9600,
+        bytesize=8,
+        parity="N",
+        stopbits=1,
+        timeout=self.timeout,
+        write_timeout=5,
+      )
     await self.io.setup()
 
     # Enable XON/XOFF flow control on the underlying serial port

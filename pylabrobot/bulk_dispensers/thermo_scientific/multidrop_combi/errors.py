@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class MultidropCombiError(Exception):
   """Base exception for Multidrop Combi errors."""
 
