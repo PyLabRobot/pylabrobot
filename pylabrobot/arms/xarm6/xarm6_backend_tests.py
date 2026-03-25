@@ -1,9 +1,9 @@
 import sys
 import types
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call
 
-from pylabrobot.arms.backend import VerticalAccess, HorizontalAccess
+from pylabrobot.arms.backend import HorizontalAccess, VerticalAccess
 from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.arms.xarm6.xarm6_backend import XArm6Backend, XArm6Error
 from pylabrobot.resources import Coordinate, Rotation
@@ -31,8 +31,8 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
     # Create fake xarm.wrapper module with a mock XArmAPI class
     mock_xarm = types.ModuleType("xarm")
     mock_wrapper = types.ModuleType("xarm.wrapper")
-    mock_wrapper.XArmAPI = MagicMock(return_value=self.mock_arm)
-    mock_xarm.wrapper = mock_wrapper
+    mock_wrapper.XArmAPI = MagicMock(return_value=self.mock_arm)  # type: ignore[attr-defined]
+    mock_xarm.wrapper = mock_wrapper  # type: ignore[attr-defined]
     sys.modules["xarm"] = mock_xarm
     sys.modules["xarm.wrapper"] = mock_wrapper
     self.MockXArmAPI = mock_wrapper.XArmAPI
@@ -64,9 +64,15 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
     )
     await self.backend.move_to(pos)
     self.mock_arm.set_position.assert_called_once_with(
-      x=300, y=100, z=200,
-      roll=180, pitch=0, yaw=0,
-      speed=100.0, mvacc=2000.0, wait=True,
+      x=300,
+      y=100,
+      z=200,
+      roll=180,
+      pitch=0,
+      yaw=0,
+      speed=100.0,
+      mvacc=2000.0,
+      wait=True,
     )
 
   async def test_move_to_joints(self):
@@ -74,12 +80,14 @@ class TestXArm6Backend(unittest.IsolatedAsyncioTestCase):
     self.mock_arm.get_servo_angle.assert_called()
     self.mock_arm.set_servo_angle.assert_called_once_with(
       angle=[45, 20, -90, 40, 50, 60],
-      speed=50.0, mvacc=500.0, wait=True,
+      speed=50.0,
+      mvacc=500.0,
+      wait=True,
     )
 
   async def test_move_to_invalid_type(self):
     with self.assertRaises(TypeError):
-      await self.backend.move_to("invalid")
+      await self.backend.move_to("invalid")  # type: ignore[arg-type]
 
   async def test_home(self):
     await self.backend.home()

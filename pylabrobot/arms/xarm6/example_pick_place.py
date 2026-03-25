@@ -31,8 +31,8 @@ from pylabrobot.arms.xarm6.xarm6_backend import XArm6Backend
 from pylabrobot.resources import Coordinate, Rotation
 
 # ── Configuration ──────────────────────────────────────────────
-ROBOT_IP = "192.168.1.220"           # Change to your xArm's IP
-TCP_OFFSET = (0, 0, 0, 0, 0, 0)     # Adjust for bio-gripper mount (x, y, z, roll, pitch, yaw)
+ROBOT_IP = "192.168.1.220"  # Change to your xArm's IP
+TCP_OFFSET = (0, 0, 0, 0, 0, 0)  # Adjust for bio-gripper mount (x, y, z, roll, pitch, yaw)
 POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "taught_positions.json")
 
 
@@ -178,9 +178,11 @@ async def main():
     # ── Pick & Place cycle ────────────────────────────────────
     print("\n=== Pick & Place (Vertical Access) ===")
     access = VerticalAccess(approach_height_mm=80, clearance_mm=80, gripper_offset_mm=10)
-    print(f"  Access: approach={access.approach_height_mm}mm, "
-          f"clearance={access.clearance_mm}mm, "
-          f"offset={access.gripper_offset_mm}mm")
+    print(
+      f"  Access: approach={access.approach_height_mm}mm, "
+      f"clearance={access.clearance_mm}mm, "
+      f"offset={access.gripper_offset_mm}mm"
+    )
 
     pick_pos = positions["pick"]
     place_pos = positions["place"]
@@ -222,9 +224,11 @@ async def main():
     for j, angle in joints.items():
       print(f"    J{j}: {angle:.2f}")
     print(f"  Cartesian: {cartesian.location}")
-    print(f"  Rotation:  roll={cartesian.rotation.x:.1f}, "
-          f"pitch={cartesian.rotation.y:.1f}, "
-          f"yaw={cartesian.rotation.z:.1f}")
+    print(
+      f"  Rotation:  roll={cartesian.rotation.x:.1f}, "
+      f"pitch={cartesian.rotation.y:.1f}, "
+      f"yaw={cartesian.rotation.z:.1f}"
+    )
 
     # ── Cleanup ───────────────────────────────────────────────
     print("\n=== Cleanup ===")

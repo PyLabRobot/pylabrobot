@@ -75,9 +75,7 @@ class TestSixAxisArm(unittest.IsolatedAsyncioTestCase):
       location=Coordinate(x=100, y=200, z=300), rotation=Rotation(x=0, y=0, z=0)
     )
     await self.arm.pick_up_resource(position)
-    self.mock_backend.pick_up_resource.assert_called_once_with(
-      position=position, access=None
-    )
+    self.mock_backend.pick_up_resource.assert_called_once_with(position=position, access=None)
 
   async def test_drop_resource(self):
     position = CartesianCoords(

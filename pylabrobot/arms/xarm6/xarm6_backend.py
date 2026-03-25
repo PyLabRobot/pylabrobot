@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from pylabrobot.arms.backend import AccessPattern, HorizontalAccess, VerticalAccess
 from pylabrobot.arms.six_axis_backend import SixAxisBackend
@@ -9,6 +9,7 @@ from pylabrobot.resources import Coordinate, Rotation
 
 class XArm6Error(Exception):
   """Error raised when the xArm SDK returns a non-zero code."""
+
   def __init__(self, code: int, message: str):
     self.code = code
     super().__init__(f"XArm6Error {code}: {message}")
@@ -48,7 +49,7 @@ class XArm6Backend(SixAxisBackend):
   ):
     super().__init__()
     self._ip = ip
-    self._arm = None
+    self._arm: Any = None
     self._default_speed = default_speed
     self._default_mvacc = default_mvacc
     self._default_joint_speed = default_joint_speed
@@ -121,7 +122,7 @@ class XArm6Backend(SixAxisBackend):
 
   async def setup(self):
     """Connect to the xArm and initialize for position control."""
-    from xarm.wrapper import XArmAPI  # lazy import
+    from xarm.wrapper import XArmAPI  # type: ignore[import-untyped]
 
     self._arm = XArmAPI(self._ip)
     await self.clear_errors()
@@ -223,9 +224,7 @@ class XArm6Backend(SixAxisBackend):
       position: Target open position (gripper-specific units, e.g. 0-850 for xArm gripper).
       speed: Gripper speed (0 = default/max).
     """
-    code = await self._call_sdk(
-      self._arm.set_gripper_position, position, wait=True, speed=speed
-    )
+    code = await self._call_sdk(self._arm.set_gripper_position, position, wait=True, speed=speed)
     self._check_result(code, "set_gripper_position (open)")
 
   async def close_gripper(self, position: int, speed: int = 0) -> None:
@@ -235,9 +234,7 @@ class XArm6Backend(SixAxisBackend):
       position: Target close position (gripper-specific units, e.g. 0-850 for xArm gripper).
       speed: Gripper speed (0 = default/max).
     """
-    code = await self._call_sdk(
-      self._arm.set_gripper_position, position, wait=True, speed=speed
-    )
+    code = await self._call_sdk(self._arm.set_gripper_position, position, wait=True, speed=speed)
     self._check_result(code, "set_gripper_position (close)")
 
   async def freedrive_mode(self) -> None:
@@ -306,7 +303,9 @@ class XArm6Backend(SixAxisBackend):
 
   async def _place_vertical(self, position: CartesianCoords, access: VerticalAccess) -> None:
     place_z_offset = access.gripper_offset_mm
-    await self.move_to(self._offset_position(position, dz=place_z_offset + access.approach_height_mm))
+    await self.move_to(
+      self._offset_position(position, dz=place_z_offset + access.approach_height_mm)
+    )
     await self.move_to(self._offset_position(position, dz=place_z_offset))
     await self.open_gripper(self._gripper_open_pos)
     await self.move_to(self._offset_position(position, dz=place_z_offset + access.clearance_mm))
@@ -326,7 +325,9 @@ class XArm6Backend(SixAxisBackend):
 
   async def _place_horizontal(self, position: CartesianCoords, access: HorizontalAccess) -> None:
     place_z_offset = access.gripper_offset_mm
-    above = self._offset_position(position, dy=-access.clearance_mm, dz=access.lift_height_mm + place_z_offset)
+    above = self._offset_position(
+      position, dy=-access.clearance_mm, dz=access.lift_height_mm + place_z_offset
+    )
     await self.move_to(above)
     approach = self._offset_position(position, dy=-access.clearance_mm, dz=place_z_offset)
     await self.move_to(approach)
@@ -334,7 +335,9 @@ class XArm6Backend(SixAxisBackend):
     await self.open_gripper(self._gripper_open_pos)
     await self.move_to(self._offset_position(position, dy=-access.clearance_mm, dz=place_z_offset))
     await self.move_to(
-      self._offset_position(position, dy=-access.clearance_mm, dz=access.lift_height_mm + place_z_offset)
+      self._offset_position(
+        position, dy=-access.clearance_mm, dz=access.lift_height_mm + place_z_offset
+      )
     )
 
   # -- Public pick/place --

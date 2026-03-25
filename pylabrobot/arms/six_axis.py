@@ -100,9 +100,7 @@ class SixAxisArm(Machine):
               Defaults to VerticalAccess() if not specified.
     """
     await self._ensure_not_freedrive()
-    return await self.backend.pick_up_resource(
-      position=position, access=access, **backend_kwargs
-    )
+    return await self.backend.pick_up_resource(position=position, access=access, **backend_kwargs)
 
   async def drop_resource(
     self,
