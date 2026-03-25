@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from pylabrobot.bulk_dispensers.thermo_scientific.multidrop_combi.communication import (
   MultidropCombiCommunicationMixin,
