@@ -4571,7 +4571,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed_increment = STARBackend.mm_to_z_drive_increment(speed)
     acceleration_increment = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
 
-    assert 0 <= channel <= 15, f"channel must be between 0 and 15, got {channel}"
+    if not isinstance(channel, int):
+      raise ValueError(f"channel must be an int, got {type(channel).__name__}")
+    if not (0 <= channel < self.num_channels):
+      raise ValueError(
+        f"channel index {channel} out of range for instrument with "
+        f"{self.num_channels} channels"
+      )
     assert 9320 <= z_increment <= 31200, (
       f"z must be between {STARBackend.z_drive_increment_to_mm(9320)} and "
       f"{STARBackend.z_drive_increment_to_mm(31200)} mm, got {z} mm"
