@@ -4531,11 +4531,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_z(self, channel: int, z: float):
     """Move a channel in the Z direction.
-    The meaning of this command can change -> it refers to..
-      1.) the bottom of the stop disc when no tip is present (making
-        it identical to `move_channel_probe_z`), or
-      2.) the tip end when a tip is mounted (making
-        it different to `move_channel_probe_z`).
+
+    The Hamilton firmware interprets this Z position based on its internal
+    "tip mounted" state for the specified channel. When the firmware state
+    indicates that no tip is mounted, the absolute Z position refers to the
+    bottom of the stop disc. In that case, this command is effectively
+    equivalent to :meth:`move_channel_probe_z` for the same numeric Z value.
+
+    When the firmware state indicates that a tip is mounted on the channel,
+    the same Z position instead refers to the physical end of the tip. In
+    this case, the numeric Z value used with this method may differ from the
+    probe Z position used with :meth:`move_channel_probe_z` for the same
+    physical height above the deck.
     """
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
