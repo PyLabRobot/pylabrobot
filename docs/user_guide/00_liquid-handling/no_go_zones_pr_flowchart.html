@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>No-Go Zones PR Flow - PyLabRobot #953</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #fafafa; color: #1a1a1a; padding: 24px; max-width: 1300px; margin: 0 auto; }
+  h1 { font-size: 1.3em; text-align: center; margin-bottom: 2px; }
+  .subtitle { text-align: center; color: #666; font-size: 0.8em; margin-bottom: 16px; }
+
+  .legend { display: flex; gap: 18px; justify-content: center; margin-bottom: 20px; font-size: 0.75em; color: #555; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .leg-new { width: 10px; height: 10px; border: 2px solid #2e7d32; border-radius: 2px; background: #e8f5e9; }
+  .leg-changed { width: 10px; height: 10px; border: 2px solid #e65100; border-radius: 2px; background: #fff3e0; }
+  .leg-deprecated { width: 10px; height: 10px; border: 2px dashed #999; border-radius: 2px; background: #f5f5f5; }
+  .leg-data { width: 10px; height: 10px; border: 2px solid #1565c0; border-radius: 2px; background: #e3f2fd; }
+
+  .tag { display: inline-block; font-size: 0.6em; font-weight: 700; padding: 1px 5px; border-radius: 2px; vertical-align: middle; margin-left: 4px; }
+  .tag-new { background: #2e7d32; color: white; }
+  .tag-changed { background: #e65100; color: white; }
+  .tag-deprecated { background: #999; color: white; }
+  .tag-data { background: #1565c0; color: white; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .full-width { grid-column: 1 / -1; }
+
+  .card { border: 2px solid #ddd; border-radius: 8px; padding: 12px 14px; background: white; font-size: 0.82em; }
+  .card-new { border-color: #2e7d32; background: #fafff9; }
+  .card-changed { border-color: #e65100; background: #fffaf5; }
+  .card-data { border-color: #1565c0; background: #f8fbff; }
+
+  .card-title { font-size: 0.95em; font-weight: 700; margin-bottom: 2px; }
+  .card-file { font-size: 0.7em; color: #888; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; }
+  .card-desc { font-size: 0.8em; line-height: 1.4; margin-bottom: 6px; }
+
+  code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: #f0f0f0; padding: 1px 4px; border-radius: 2px; }
+  pre { font-family: 'JetBrains Mono', monospace; font-size: 0.72em; background: #f5f5f5; padding: 6px 10px; border-radius: 4px; border: 1px solid #e0e0e0; line-height: 1.4; overflow-x: auto; white-space: pre; margin: 4px 0; }
+
+  .flow-list { list-style: none; padding: 0; font-size: 0.8em; }
+  .flow-list li { padding: 2px 0 2px 14px; position: relative; }
+  .flow-list li::before { content: ''; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: #e0e0e0; }
+  .flow-list li.hl::before { background: #e65100; }
+
+  .inner { border: 1px solid #c8e6c9; border-radius: 6px; padding: 8px 10px; background: #f1f8e9; margin-top: 8px; }
+  .inner-title { font-size: 0.8em; font-weight: 700; color: #33691e; margin-bottom: 4px; }
+  .inner-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .dep-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .dep-box { border: 1.5px dashed #bbb; border-radius: 6px; padding: 6px 10px; font-size: 0.75em; background: #fafafa; flex: 1; min-width: 200px; }
+
+  .arrow { text-align: center; color: #bbb; font-size: 1.2em; grid-column: 1 / -1; margin: -4px 0; }
+  .section-label { grid-column: 1 / -1; font-size: 0.7em; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Container No-Go Zones - Channel Positioning Flow</h1>
+<p class="subtitle">PR #953 - Add container no-go zones with spread-aware channel distribution</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="leg-new"></div> New</div>
+  <div class="legend-item"><div class="leg-changed"></div> Changed</div>
+  <div class="legend-item"><div class="leg-data"></div> Measured</div>
+  <div class="legend-item"><div class="leg-deprecated"></div> Deprecated</div>
+</div>
+
+<div class="grid">
+
+<!-- ROW 1: Entry + Backend -->
+<div class="card card-changed">
+  <div class="card-title">lh.aspirate() / lh.dispense() <span class="tag tag-changed">CHANGED</span></div>
+  <div class="card-file">liquid_handler.py</div>
+  <div class="card-desc">Single-resource multi-channel -> <code>_compute_spread_offsets()</code> -> queries backend -> delegates to unified positioning.</div>
+  <pre>spread: Literal["wide", "tight", "custom"] = "wide"
+center_offsets = self._compute_spread_offsets(resource, use_channels, spread)</pre>
+</div>
+
+<div class="card card-changed">
+  <div class="card-title">backend.get_channel_spacings() <span class="tag tag-changed">CHANGED</span></div>
+  <div class="card-file">backends/backend.py, STAR_backend.py</div>
+  <div class="card-desc">Returns per-channel <strong>occupancy diameters</strong> (n values). Gap = sum of radii: <code>s[i]/2 + s[j]/2</code></div>
+  <pre># Uniform:  [9.0, 9.0, 9.0, 9.0]
+# Mixed:    [9.0, 9.0, 18.0, 18.0]
+# STAR firmware uses separate max() model</pre>
+</div>
+
+<div class="arrow">v</div>
+
+<!-- ROW 2: compute_channel_offsets (full width) -->
+<div class="card card-new full-width">
+  <div class="card-title">compute_channel_offsets() <span class="tag tag-new">NEW</span></div>
+  <div class="card-file">liquid_handling/utils.py</div>
+  <div class="card-desc">Single entry point for all channel positioning. <code>"custom"</code> -> zero offsets. Container + no_go_zones -> compartment path. Plain resource -> wide/tight.</div>
+
+  <div class="inner">
+    <div class="inner-title">Compartment Path (when container has no_go_zones)</div>
+    <div class="inner-cols">
+      <div>
+        <pre>1. _get_compartments(container)
+   Split Y at no-go zones, apply 2mm edge clearance
+
+2. _distribute_channels(comps, n, spacings)
+   Proportional to width, largest-remainder</pre>
+      </div>
+      <div>
+        <pre>3. Position within each compartment
+   Edge clearance = channel radius
+   Wide: even (i+1)*w/(n+1) or centered block
+   Tight: min gaps, centered
+
+4. Validate cross-compartment gaps</pre>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px">
+    <div style="border:1px solid #ddd; border-radius:6px; padding:6px 8px; background:white">
+      <div style="font-size:0.7em; font-weight:700; color:#555; margin-bottom:2px">WIDE (PLAIN RESOURCE)</div>
+      <div style="font-size:0.75em">Classic <code>(i+1)*size/(n+1)</code> or centered block. Edge = channel radius.</div>
+    </div>
+    <div style="border:1px solid #ddd; border-radius:6px; padding:6px 8px; background:white">
+      <div style="font-size:0.7em; font-weight:700; color:#555; margin-bottom:2px">TIGHT (PLAIN RESOURCE)</div>
+      <div style="font-size:0.75em">Min gaps, centered. Edge = channel radius.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION: Supporting -->
+<div class="section-label">Supporting Components</div>
+
+<!-- ROW 3: Utility + Container -->
+<div class="card card-new">
+  <div class="card-title">required_spacing_between() <span class="tag tag-new">NEW</span></div>
+  <div class="card-file">liquid_handling/utils.py</div>
+  <div class="card-desc">Single source of truth for inter-channel distance.</div>
+  <pre>Adjacent:     ceil((s[i]/2 + s[j]/2) * 10) / 10
+Non-adjacent: sum of intermediate pairs</pre>
+</div>
+
+<div class="card card-new">
+  <div class="card-title">Container.no_go_zones <span class="tag tag-new">NEW</span></div>
+  <div class="card-file">resources/container.py + all subclasses</div>
+  <div class="card-desc"><code>List[Tuple[Coordinate, Coordinate]]</code> cuboid regions. Validated at construction: bounds, ordering, type safety.</div>
+</div>
+
+<!-- ROW 4: Measured data (full width) -->
+<div class="card card-data full-width">
+  <div class="card-title">Hamilton Trough No-Go Zones <span class="tag tag-data">MEASURED</span></div>
+  <div class="card-file">resources/hamilton/troughs.py</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; font-size:0.78em">
+    <div>
+      <strong>60mL</strong> - 1 center divider<br>
+      <code>(0, 44.4, 5) -> (19, 45.6, 60.25)</code><br>
+      ~1.2mm wide, open at bottom
+    </div>
+    <div>
+      <strong>120mL</strong> - 3 tapered beams<br>
+      <code>y: 39.7-42.2, 73.5-76.0, 107.3-109.8</code><br>
+      ~2.5mm base, ~0.8mm top
+    </div>
+    <div>
+      <strong>200mL</strong> - 1 center divider<br>
+      <code>(0, 60, 8) -> (37, 61.7, 60)</code><br>
+      ~1.7mm wide, open at bottom
+    </div>
+  </div>
+</div>
+
+<!-- ROW 5: Deprecated + Docs -->
+<div class="full-width dep-row">
+  <div class="dep-box"><code>get_wide_single_resource_liquid_op_offsets()</code> <span class="tag tag-deprecated">DEPRECATED</span> -> <code>compute_channel_offsets(..., spread="wide")</code></div>
+  <div class="dep-box"><code>get_tight_single_resource_liquid_op_offsets()</code> <span class="tag tag-deprecated">DEPRECATED</span> -> <code>compute_channel_offsets(..., spread="tight")</code></div>
+</div>
+
+<div class="card card-new full-width" style="padding:8px 14px">
+  <div class="card-title" style="font-size:0.85em">Tutorial Notebook <span class="tag tag-new">NEW</span></div>
+  <div class="card-file">docs/user_guide/00_liquid-handling/container_no_go_zones.ipynb</div>
+  <div class="card-desc" style="margin:0">Real-world Hamilton trough examples, dimensional breakdowns, cross-section visualizations with distance annotations, wide vs tight comparisons, mixed occupancy diameter demo, end-to-end simulation.</div>
+</div>
+
+</div><!-- grid -->
+
+</body>
+</html>

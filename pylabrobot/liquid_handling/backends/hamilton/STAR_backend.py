@@ -4532,8 +4532,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def move_channel_z(self, channel: int, z: float):
     """Move a channel in the Z direction.
     The meaning of this command can change -> it refers to..
-      1.) the bottom of the stop disc when no tip is present, or 
-      2.) the tip end when a tip is mounted.
+      1.) the bottom of the stop disc when no tip is present (making
+        it identical to `move_channel_probe_z`), or
+      2.) the tip end when a tip is mounted (making
+        it different to `move_channel_probe_z`).
     """
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
