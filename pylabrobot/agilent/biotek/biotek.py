@@ -17,6 +17,7 @@ from pylabrobot.capabilities.plate_reading.luminescence import (
 )
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)
@@ -367,7 +368,7 @@ class BioTekBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend,
     ]
 
   @dataclass
-  class LuminescenceParams(SerializableMixin):
+  class LuminescenceParams(BackendParams):
     integration_time: float = 1
 
   async def read_luminescence(

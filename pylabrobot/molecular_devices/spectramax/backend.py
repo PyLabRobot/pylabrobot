@@ -12,6 +12,7 @@ from pylabrobot.capabilities.temperature_controlling.backend import TemperatureC
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger("pylabrobot")
@@ -712,7 +713,7 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
       await asyncio.sleep(1)
 
   @dataclass
-  class AbsorbanceParams(SerializableMixin):
+  class AbsorbanceParams(BackendParams):
     wavelengths: Optional[List[Union[int, Tuple[int, bool]]]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN

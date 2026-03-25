@@ -26,6 +26,7 @@ from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapab
 from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 try:
@@ -747,7 +748,7 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     raise TimeoutError("max_image_read_attempts reached")
 
   @dataclass
-  class CaptureParams(SerializableMixin):
+  class CaptureParams(BackendParams):
     led_intensity: int = 10
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1)
     center_position: Optional[Tuple[float, float]] = None

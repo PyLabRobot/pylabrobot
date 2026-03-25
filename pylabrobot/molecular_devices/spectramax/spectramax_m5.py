@@ -13,6 +13,7 @@ from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 from .backend import (
@@ -41,7 +42,7 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
     super().__init__(port, human_readable_device_name="Molecular Devices SpectraMax M5")
 
   @dataclass
-  class FluorescenceParams(SerializableMixin):
+  class FluorescenceParams(BackendParams):
     excitation_wavelengths: Optional[List[int]] = None
     emission_wavelengths: Optional[List[int]] = None
     cutoff_filters: Optional[List[int]] = None
@@ -131,7 +132,7 @@ class SpectraMaxM5Backend(MolecularDevicesBackend, FluorescenceBackend, Luminesc
     ]
 
   @dataclass
-  class LuminescenceParams(SerializableMixin):
+  class LuminescenceParams(BackendParams):
     emission_wavelengths: Optional[List[int]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN

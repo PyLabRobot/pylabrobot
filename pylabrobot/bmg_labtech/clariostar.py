@@ -27,6 +27,7 @@ from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
@@ -305,7 +306,7 @@ class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBack
     ]
 
   @dataclass
-  class AbsorbanceParams(SerializableMixin):
+  class AbsorbanceParams(BackendParams):
     report: Literal["OD", "transmittance"] = "OD"
 
   async def read_absorbance(

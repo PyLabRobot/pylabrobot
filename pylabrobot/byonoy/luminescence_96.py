@@ -15,6 +15,7 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
@@ -30,7 +31,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96)
 
   @dataclass
-  class LuminescenceParams(SerializableMixin):
+  class LuminescenceParams(BackendParams):
     integration_time: float = 2
 
   async def read_luminescence(

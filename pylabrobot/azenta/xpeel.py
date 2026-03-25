@@ -14,6 +14,7 @@ except ImportError as e:
 from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
 from pylabrobot.device import Device
 from pylabrobot.io.serial import Serial
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 
@@ -158,7 +159,7 @@ class XPeelBackend(PeelerBackend):
     return await self._send_command("*restart", expect_ack=True, wait_for_ready=True)
 
   @dataclass
-  class PeelParams(SerializableMixin):
+  class PeelParams(BackendParams):
     begin_location: Literal[-2, 0, 2, 4] = 0
     fast: bool = False
     adhere_time: float = 2.5

@@ -21,6 +21,7 @@ from pylabrobot.capabilities.centrifuging.errors import (
 from pylabrobot.device import Device, DeviceBackend
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)
@@ -354,7 +355,7 @@ class VSpinBackend(_NewCentrifugeBackend):
     return rpm
 
   @dataclass
-  class SpinParams(SerializableMixin):
+  class SpinParams(BackendParams):
     acceleration: float = 0.8
     deceleration: float = 0.8
 
