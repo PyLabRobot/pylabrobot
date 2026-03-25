@@ -4530,9 +4530,66 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def move_channel_z(self, channel: int, z: float):
-    """Move a channel in the z direction."""
+    """Move a channel in the Z direction.
+    The meaning of this command can change -> it refers to..
+      1.) the bottom of the stop disc when no tip is present, or 
+      2.) the tip end when a tip is mounted.
+    """
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
+    )
+
+  async def move_channel_probe_z(
+    self,
+    channel: int,
+    z: float,
+    speed: float = 125.0,
+    acceleration: float = 800.0,
+    current_limit: int = 3,
+  ):
+    """Move a channel's probe Z-drive to an absolute position, communicating directly
+    with the individual channel rather than through the master module.
+
+    "Probe" refers to the lowest point of the stop disc / entire channel assembly
+    without a tip attached.
+
+    Use this instead of `move_channel_z` when the firmware's internal "tip picked up"
+    flag has been incorrectly set (e.g. after sleeve-sensing displacement during
+    tip-presence probing), which causes master-routed Z moves to misbehave.
+
+    Args:
+      channel: Channel index (0-based, backmost = 0).
+      z: Target Z position in mm.
+      speed: Max Z-drive speed in mm/sec. Default 125.0 mm/s.
+      acceleration: Acceleration in mm/sec². Default 800.0. Valid range: ~53.6 to 1609.
+      current_limit: Current limit (0-7). Default 3.
+    """
+
+    z_increment = STARBackend.mm_to_z_drive_increment(z)
+    speed_increment = STARBackend.mm_to_z_drive_increment(speed)
+    acceleration_increment = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
+
+    assert 0 <= channel <= 15, f"channel must be between 0 and 15, got {channel}"
+    assert 9320 <= z_increment <= 31200, (
+      f"z must be between {STARBackend.z_drive_increment_to_mm(9320)} and "
+      f"{STARBackend.z_drive_increment_to_mm(31200)} mm, got {z} mm"
+    )
+    assert 20 <= speed_increment <= 15000, (
+      f"speed must be between {STARBackend.z_drive_increment_to_mm(20)} and "
+      f"{STARBackend.z_drive_increment_to_mm(15000)} mm/s, got {speed} mm/s"
+    )
+    assert 5 <= acceleration_increment <= 150, (
+      f"acceleration must be between ~53.6 and ~1609 mm/s², got {acceleration} mm/s²"
+    )
+    assert 0 <= current_limit <= 7, f"current_limit must be between 0 and 7, got {current_limit}"
+
+    return await self.send_command(
+      module=STARBackend.channel_id(channel),
+      command="ZA",
+      za=f"{z_increment:05}",
+      zv=f"{speed_increment:05}",
+      zr=f"{acceleration_increment:03}",
+      zw=f"{current_limit:01}",
     )
 
   async def move_channel_x_relative(self, channel: int, distance: float):
