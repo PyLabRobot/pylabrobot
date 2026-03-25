@@ -85,18 +85,18 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
   # # # # # # # # # # Greiner_96_half_skirt_wellplate_200uL_vb # # # # # # # # # #
 
 
-def Greiner_96_half_skirt_wellplate_200uL_vb(name: str, with_lid: bool = False) -> Plate:
+def greiner_96_wellplate_200uL_Vb(name: str, with_lid: bool = False) -> Plate:
   """Greiner cat. no.: 652260.
   SAPPHIRE MICROPLATE, 96 WELL, PP, FOR PCR, NATURAL, HALF SKIRT
   Spec: https://shop.gbo.com/en/usa/files/30114476/652260.pdf
   """
   return Plate(
     name=name,
-    size_x=125.24,  # from spec
+    size_x=125.64,  # from spec (from bottom of skirt)
     size_y=85.98,  # from spec
-    size_z=21.08,  # from spec, total height to bottom of well
+    size_z=21.08 + (10.11-7.57) - 0.22,  # measured (well height + wall height - well_protruding_height); see PR#950
     lid=None,
-    model=Greiner_96_half_skirt_wellplate_200uL_vb.__name__,
+    model=greiner_96_wellplate_200uL_Vb.__name__,
     plate_type="semi-skirted",
     ordered_items=create_ordered_items_2d(
       Well,
