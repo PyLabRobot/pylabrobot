@@ -4582,8 +4582,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"channel must be an int, got {type(channel).__name__}")
     if not (0 <= channel < self.num_channels):
       raise ValueError(
-        f"channel index {channel} out of range for instrument with "
-        f"{self.num_channels} channels"
+        f"channel index {channel} out of range for instrument with {self.num_channels} channels"
       )
     assert 9320 <= z_increment <= 31200, (
       f"z must be between {STARBackend.z_drive_increment_to_mm(9320)} and "
