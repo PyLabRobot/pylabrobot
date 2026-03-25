@@ -94,7 +94,9 @@ def greiner_96_wellplate_200uL_Vb(name: str, with_lid: bool = False) -> Plate:
     name=name,
     size_x=125.64,  # from spec (from bottom of skirt)
     size_y=85.98,  # from spec
-    size_z=21.08 + (10.11-7.57) - 0.22,  # measured (well height + wall height - well_protruding_height); see PR#950
+    size_z=21.08
+    + (10.11 - 7.57)
+    - 0.22,  # measured (well height + wall height - well_protruding_height); see PR#950
     lid=None,
     model=greiner_96_wellplate_200uL_Vb.__name__,
     plate_type="semi-skirted",
