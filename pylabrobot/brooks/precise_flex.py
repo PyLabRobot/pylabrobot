@@ -79,55 +79,7 @@ class HorizontalAccess:
 AccessPattern = Union[VerticalAccess, HorizontalAccess]
 
 
-ERROR_CODES: Dict[int, Dict[str, str]] = {
-  0: {"text": "Success", "description": "Command completed successfully."},
-  1: {
-    "text": "Unrecognized command",
-    "description": "An unrecognized command was entered on the command line.",
-  },
-  2: {"text": "Missing or extra parameter(s)", "description": "Wrong number of arguments."},
-  3: {
-    "text": "Invalid parameter value",
-    "description": "A value is out of range or its type is invalid.",
-  },
-  5: {"text": "Need to home", "description": "Robot requires homing before this operation."},
-  6: {"text": "Aborted by user", "description": "An operation was stopped by a user command."},
-  7: {
-    "text": "Robot not attached",
-    "description": "Must attach robot before performing this command.",
-  },
-  8: {
-    "text": "High power not enabled",
-    "description": "Motor power must be enabled before this command.",
-  },
-  9: {
-    "text": "Robot in motion",
-    "description": "Cannot perform this command while robot is moving.",
-  },
-  10: {"text": "Location not set", "description": "The specified location has not been set."},
-  11: {
-    "text": "Following error",
-    "description": "Robot motion caused a following error (motor stall or collision).",
-  },
-  12: {"text": "Timeout waiting for EOM", "description": "Timed out waiting for end of motion."},
-  13: {
-    "text": "Robot already attached",
-    "description": "Robot is already attached by another thread.",
-  },
-  14: {
-    "text": "Out of range",
-    "description": "Target position is outside the robot's reachable workspace.",
-  },
-  15: {"text": "Profile error", "description": "Invalid profile index or profile parameter."},
-  16: {"text": "Station not found", "description": "The specified station does not exist."},
-  17: {"text": "Pallet error", "description": "Invalid pallet configuration or index."},
-  18: {
-    "text": "Singularity",
-    "description": "Requested position would cause a kinematic singularity.",
-  },
-  19: {"text": "Limit exceeded", "description": "A joint limit would be exceeded for this move."},
-  20: {"text": "Communication error", "description": "Internal communication failure."},
-}
+from pylabrobot.brooks.error_codes import ERROR_CODES
 
 
 # ---------------------------------------------------------------------------
