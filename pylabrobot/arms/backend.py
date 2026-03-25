@@ -133,7 +133,7 @@ class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
   async def move_to_location(
     self,
     location: Coordinate,
-    direction: Rotation,
+    direction: float,
     backend_params: Optional[SerializableMixin] = None,
   ) -> None:
     """Move the held object to the specified location with rotation."""

@@ -5,6 +5,7 @@ import logging
 
 from pylabrobot.arms.backend import _BaseArmBackend, GripperArmBackend
 from pylabrobot.arms.standard import GripDirection
+from pylabrobot.capabilities.capability import Capability
 from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
@@ -35,7 +36,7 @@ class _PickedUpState:
   rotation: Rotation = Rotation()
 
 
-class _BaseArm(Device):
+class _BaseArm(Capability):
   """Base class for all arm types. Not instantiated directly."""
 
   def __init__(self, backend, reference_resource: Resource):
@@ -45,13 +46,13 @@ class _BaseArm(Device):
     self._picked_up: Optional[_PickedUpState] = None
     self._holding_resource_width: Optional[float] = None
 
-  async def setup(self, **backend_kwargs):
-    await super().setup(**backend_kwargs)
+  async def _on_setup(self, **backend_kwargs):
+    await super()._on_setup(**backend_kwargs)
     self._picked_up = None
     self._holding_resource_width = None
 
-  async def stop(self):
-    await super().stop()
+  async def _on_stop(self):
+    await super()._on_stop()
     self._picked_up = None
     self._holding_resource_width = None
 

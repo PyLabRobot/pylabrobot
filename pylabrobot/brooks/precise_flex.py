@@ -6,8 +6,11 @@ from enum import Enum, IntEnum
 from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import CanFreedrive, JointGripperArmBackend
+from pylabrobot.arms.joint_arm import JointArm
+from pylabrobot.device import Device
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
+from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import SerializableMixin
 
 
@@ -220,10 +223,10 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
       return ElbowOrientation.LEFT
     return None
 
-  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
-    if orientation == ElbowOrientation.LEFT:
+  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation) -> int:
+    if orientation.value == ElbowOrientation.LEFT.value:
       return 2
-    if orientation == ElbowOrientation.RIGHT:
+    if orientation.value == ElbowOrientation.RIGHT.value:
       return 1
     return 0
 
@@ -504,20 +507,21 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
   class MoveToLocationParams(SerializableMixin):
     speed: Optional[float] = None
     orientation: Optional[ElbowOrientation] = None
+    rail: Optional[float] = None
 
   async def move_to_location(
     self,
     location: Coordinate,
-    direction: Rotation,
+    direction: float,
     backend_params: Optional[SerializableMixin] = None,
   ) -> None:
     """Move the arm to the specified Cartesian location."""
-    if not isinstance(backend_params, self.MoveToLocationParams):
+    if backend_params is None:
       backend_params = PreciseFlexBackend.MoveToLocationParams()
     if backend_params.speed is not None:
       await self._set_speed(backend_params.speed)
     coords = PreciseFlexCartesianCoords(
-      location=location, rotation=direction, orientation=backend_params.orientation
+      location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
     )
     await self._move_c(profile_index=self.profile_index, cartesian_coords=coords)
 
@@ -542,7 +546,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     gripper_2_closed = (ret_int & 2) != 0
     return (gripper_1_closed, gripper_2_closed)
 
-  async def start_freedrive_mode(self, free_axes: List[int], backend_params=None) -> None:
+  async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None, backend_params=None) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
     The robot must be attached to enter free mode.
@@ -550,7 +554,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     Args:
       free_axes: List of joint indices to free. Use [0] for all axes.
     """
-    for axis in free_axes:
+    for axis in (free_axes or [PFAxis.BASE, PFAxis.SHOULDER, PFAxis.ELBOW, PFAxis.WRIST, PFAxis.RAIL]):
       await self.send_command(f"freemode {axis}")
 
   async def stop_freedrive_mode(self, backend_params=None) -> None:
@@ -1728,13 +1732,17 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
 # ---------------------------------------------------------------------------
 
 
-class PreciseFlex400Backend(PreciseFlexBackend):
+class PreciseFlex400(Device):
   """Backend for the PreciseFlex 400 robotic arm."""
 
   def __init__(
     self, host: str, port: int = 10100, has_rail: bool = False, timeout: int = 20
   ) -> None:
-    super().__init__(host=host, port=port, has_rail=has_rail, timeout=timeout)
+    # super().__init__(host=host, port=port, has_rail=has_rail, timeout=timeout)
+    self._backend = PreciseFlexBackend(host=host, port=port, has_rail=has_rail, timeout=timeout)
+    self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
+    self.arm = JointArm(backend=self._backend, reference_resource=self.reference)
+    self._capabilities = [self.arm]
 
 
 class PreciseFlex3400Backend(PreciseFlexBackend):

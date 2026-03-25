@@ -1,6 +1,6 @@
 """Legacy. Use pylabrobot.brooks.PreciseFlex400Backend instead."""
 
-from pylabrobot.brooks.precise_flex import PreciseFlex400Backend as _NewBackend
+from pylabrobot.brooks.precise_flex import PreciseFlexBackend as _NewBackend
 from pylabrobot.legacy.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
 
 
