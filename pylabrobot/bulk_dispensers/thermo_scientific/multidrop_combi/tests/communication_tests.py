@@ -35,8 +35,8 @@ class SendCommandTests(unittest.IsolatedAsyncioTestCase):
   async def test_simple_command(self) -> None:
     """Test a simple command with echo + END response."""
     self.backend.io.readline.side_effect = [
-      b"SPL\r\n",           # echo
-      b"SPL END 0\r\n",     # end with status 0
+      b"SPL\r\n",  # echo
+      b"SPL END 0\r\n",  # end with status 0
     ]
     result = await self.backend._send_command("SPL 1")
     self.assertEqual(result, [])

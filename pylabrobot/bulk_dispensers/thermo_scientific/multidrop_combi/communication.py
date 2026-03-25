@@ -3,6 +3,7 @@
 Ported from the SiLA implementation's serial_transport.py to use
 pylabrobot's async Serial wrapper.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -123,8 +124,7 @@ class MultidropCombiCommunicationMixin:
 
         if status_code != STATUS_OK:
           desc = ERROR_DESCRIPTIONS.get(status_code, "Unknown error")
-          logger.error("Command %s failed (status %d). RX lines: %s",
-                       cmd_code, status_code, lines)
+          logger.error("Command %s failed (status %d). RX lines: %s", cmd_code, status_code, lines)
           raise MultidropCombiInstrumentError(status_code, desc)
 
         # Return data lines: skip echo (first) and END line (last)

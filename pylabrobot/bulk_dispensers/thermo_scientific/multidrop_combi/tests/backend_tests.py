@@ -37,12 +37,12 @@ class BackendLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     # Setup readline responses: drain (empty), VER, EAK
     mock_serial.readline.side_effect = [
-      b"",                                       # drain - empty
-      b"VER\r\n",                                 # VER echo
-      b"MultidropCombi 2.00.29 836-4191\r\n",    # VER data
-      b"VER END 0\r\n",                           # VER end
-      b"EAK\r\n",                                 # EAK echo
-      b"EAK END 0\r\n",                           # EAK end
+      b"",  # drain - empty
+      b"VER\r\n",  # VER echo
+      b"MultidropCombi 2.00.29 836-4191\r\n",  # VER data
+      b"VER END 0\r\n",  # VER end
+      b"EAK\r\n",  # EAK echo
+      b"EAK END 0\r\n",  # EAK end
     ]
 
     backend = MultidropCombiBackend(port="COM3")

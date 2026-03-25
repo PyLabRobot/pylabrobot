@@ -102,11 +102,13 @@ class PlateToTypeIndexRealPlatesTests(unittest.TestCase):
 
   def test_corning_96_well(self):
     from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+
     plate = Cor_96_wellplate_360ul_Fb("test")
     self.assertEqual(plate_to_type_index(plate), 0)  # 14.2mm → type 0
 
   def test_biorad_384_well(self):
     from pylabrobot.resources.biorad.plates import BioRad_384_wellplate_50uL_Vb
+
     plate = BioRad_384_wellplate_50uL_Vb("test")
     self.assertEqual(plate_to_type_index(plate), 4)  # 10.4mm → type 4
 
@@ -115,21 +117,17 @@ class PlateToPlaParamsTests(unittest.TestCase):
   """Test PLA command parameter generation."""
 
   def test_96_well_params(self):
-    plate = _make_plate(
-      num_items_x=12, num_items_y=8, size_z=14.2, well_max_volume=360.0
-    )
+    plate = _make_plate(num_items_x=12, num_items_y=8, size_z=14.2, well_max_volume=360.0)
     params = plate_to_pla_params(plate)
     self.assertEqual(params["columns"], 12)
     self.assertEqual(params["rows"], 8)
     self.assertEqual(params["column_positions"], 12)
     self.assertEqual(params["row_positions"], 8)
-    self.assertEqual(params["height"], 1420)       # 14.2mm * 100
-    self.assertEqual(params["max_volume"], 3600)   # 360uL * 10
+    self.assertEqual(params["height"], 1420)  # 14.2mm * 100
+    self.assertEqual(params["max_volume"], 3600)  # 360uL * 10
 
   def test_384_well_params(self):
-    plate = _make_plate(
-      num_items_x=24, num_items_y=16, size_z=10.4, well_max_volume=50.0
-    )
+    plate = _make_plate(num_items_x=24, num_items_y=16, size_z=10.4, well_max_volume=50.0)
     params = plate_to_pla_params(plate)
     self.assertEqual(params["columns"], 24)
     self.assertEqual(params["rows"], 16)
@@ -138,6 +136,7 @@ class PlateToPlaParamsTests(unittest.TestCase):
 
   def test_real_corning_96_well(self):
     from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+
     plate = Cor_96_wellplate_360ul_Fb("test")
     params = plate_to_pla_params(plate)
     self.assertEqual(params["columns"], 12)

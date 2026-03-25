@@ -1,4 +1,5 @@
 """Query operations mixin for the Multidrop Combi."""
+
 from __future__ import annotations
 
 

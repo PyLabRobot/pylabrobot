@@ -3,6 +3,7 @@
 All volume parameters at the public interface are in microliters (float).
 Internally, volumes are converted to the instrument's native 1/10 uL units.
 """
+
 from __future__ import annotations
 
 from pylabrobot.bulk_dispensers.thermo_scientific.multidrop_combi.enums import (
@@ -233,8 +234,9 @@ class MultidropCombiCommandsMixin:
       timeout=COMMAND_TIMEOUTS["PLA"],
     )
 
-  async def start_protocol(self, plate_type: int | None = None,
-                           protocol_name: str | None = None) -> None:
+  async def start_protocol(
+    self, plate_type: int | None = None, protocol_name: str | None = None
+  ) -> None:
     """Start a protocol from instrument memory (BGN command).
 
     Args:

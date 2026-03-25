@@ -24,6 +24,7 @@ def list_serial_ports():
   """List available serial ports to help the user find the right one."""
   try:
     import serial.tools.list_ports
+
     ports = list(serial.tools.list_ports.comports())
     if not ports:
       print("  No serial ports found.")
@@ -71,8 +72,10 @@ async def main():
   try:
     # Connection info
     info = backend.get_version()
-    print(f"Connected: {info['instrument_name']} "
-          f"FW {info['firmware_version']} SN {info['serial_number']}")
+    print(
+      f"Connected: {info['instrument_name']} "
+      f"FW {info['firmware_version']} SN {info['serial_number']}"
+    )
 
     # --- Query instrument parameters ---
     print("\n--- Instrument Parameters ---")
@@ -102,20 +105,26 @@ async def main():
       print(f"  No factory match, using remote plate definition: {pla_params}")
       await run_step("Define plate (PLA)", backend.define_plate(**pla_params))
 
-    await run_step("Set cassette type (SCT)", dispenser.set_cassette_type(
-      cassette_type=CassetteType.STANDARD))
-    await run_step("Set column volume 10 uL (SCV)", dispenser.set_column_volume(
-      column=0, volume=10.0))
+    await run_step(
+      "Set cassette type (SCT)", dispenser.set_cassette_type(cassette_type=CassetteType.STANDARD)
+    )
+    await run_step(
+      "Set column volume 10 uL (SCV)", dispenser.set_column_volume(column=0, volume=10.0)
+    )
 
     # Dispensing height must be above the plate. Add 3mm clearance.
     dispense_height = round(plate.get_size_z() * 100) + 300
     dispense_height = max(500, min(5500, dispense_height))  # clamp to valid range
     print(f"  Dispensing height: {dispense_height} (plate {plate.get_size_z()}mm + 3mm clearance)")
-    await run_step(f"Set dispensing height {dispense_height} (SDH)",
-      dispenser.set_dispensing_height(height=dispense_height))
+    await run_step(
+      f"Set dispensing height {dispense_height} (SDH)",
+      dispenser.set_dispensing_height(height=dispense_height),
+    )
     await run_step("Set pump speed 50% (SPS)", dispenser.set_pump_speed(speed=50))
-    await run_step("Set dispensing order row-wise (SDO)", dispenser.set_dispensing_order(
-      order=DispensingOrder.ROW_WISE))
+    await run_step(
+      "Set dispensing order row-wise (SDO)",
+      dispenser.set_dispensing_order(order=DispensingOrder.ROW_WISE),
+    )
 
     # --- Prime ---
     print("\n--- Prime ---")

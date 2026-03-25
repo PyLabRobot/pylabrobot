@@ -3,6 +3,7 @@
 Maps PyLabRobot Plate resources to Multidrop Combi plate type indices and
 PLA (remote plate definition) command parameters.
 """
+
 from __future__ import annotations
 
 from pylabrobot.resources import Plate
@@ -12,30 +13,30 @@ from pylabrobot.resources import Plate
 # Heights are upper bounds for selecting the best-fit factory type.
 _FACTORY_96_WELL_TYPES = [
   # (type_index, max_height_mm)
-  (0, 18.0),    # Type 0: 96-well, 15mm
-  (1, 30.0),    # Type 1: 96-well, 22mm
-  (2, 55.0),    # Type 2: 96-well, 44mm
+  (0, 18.0),  # Type 0: 96-well, 15mm
+  (1, 30.0),  # Type 1: 96-well, 22mm
+  (2, 55.0),  # Type 2: 96-well, 44mm
 ]
 
 _FACTORY_384_WELL_TYPES = [
-  (3, 8.5),     # Type 3: 384-well, 7.5mm
-  (4, 12.0),    # Type 4: 384-well, 10mm
-  (5, 18.0),    # Type 5: 384-well, 15mm
-  (6, 30.0),    # Type 6: 384-well, 22mm
-  (7, 55.0),    # Type 7: 384-well, 44mm
+  (3, 8.5),  # Type 3: 384-well, 7.5mm
+  (4, 12.0),  # Type 4: 384-well, 10mm
+  (5, 18.0),  # Type 5: 384-well, 15mm
+  (6, 30.0),  # Type 6: 384-well, 22mm
+  (7, 55.0),  # Type 7: 384-well, 44mm
 ]
 
 _FACTORY_1536_WELL_TYPES = [
-  (8, 7.0),     # Type 8: 1536-well, 5mm
-  (9, 55.0),    # Type 9: 1536-well, 10.5mm
+  (8, 7.0),  # Type 8: 1536-well, 5mm
+  (9, 55.0),  # Type 9: 1536-well, 10.5mm
 ]
 
 # Hardware limits
 MAX_COLUMNS = 48
 MAX_ROWS = 32
-MIN_HEIGHT_HUNDREDTHS_MM = 500    # 5mm
-MAX_HEIGHT_HUNDREDTHS_MM = 5500   # 55mm
-MAX_VOLUME_TENTHS_UL = 25000     # 2500 uL
+MIN_HEIGHT_HUNDREDTHS_MM = 500  # 5mm
+MAX_HEIGHT_HUNDREDTHS_MM = 5500  # 55mm
+MAX_VOLUME_TENTHS_UL = 25000  # 2500 uL
 
 
 def plate_to_type_index(plate: Plate) -> int:
@@ -106,22 +107,16 @@ def plate_to_pla_params(plate: Plate) -> dict:
 
   # Validate against hardware limits
   if columns > MAX_COLUMNS:
-    raise ValueError(
-      f"Plate has {columns} columns, but Multidrop supports at most {MAX_COLUMNS}."
-    )
+    raise ValueError(f"Plate has {columns} columns, but Multidrop supports at most {MAX_COLUMNS}.")
   if rows > MAX_ROWS:
-    raise ValueError(
-      f"Plate has {rows} rows, but Multidrop supports at most {MAX_ROWS}."
-    )
+    raise ValueError(f"Plate has {rows} rows, but Multidrop supports at most {MAX_ROWS}.")
   if height_hundredths < MIN_HEIGHT_HUNDREDTHS_MM:
     raise ValueError(
-      f"Plate height {plate.get_size_z()}mm is below minimum "
-      f"{MIN_HEIGHT_HUNDREDTHS_MM / 100}mm."
+      f"Plate height {plate.get_size_z()}mm is below minimum {MIN_HEIGHT_HUNDREDTHS_MM / 100}mm."
     )
   if height_hundredths > MAX_HEIGHT_HUNDREDTHS_MM:
     raise ValueError(
-      f"Plate height {plate.get_size_z()}mm exceeds maximum "
-      f"{MAX_HEIGHT_HUNDREDTHS_MM / 100}mm."
+      f"Plate height {plate.get_size_z()}mm exceeds maximum {MAX_HEIGHT_HUNDREDTHS_MM / 100}mm."
     )
   if well_max_volume_tenths > MAX_VOLUME_TENTHS_UL:
     raise ValueError(

@@ -8,8 +8,9 @@ class MultidropCombiError(Exception):
 class MultidropCombiCommunicationError(MultidropCombiError):
   """Serial communication failure (port not found, timeout, connection lost)."""
 
-  def __init__(self, message: str, operation: str = "",
-               original_error: Exception | None = None) -> None:
+  def __init__(
+    self, message: str, operation: str = "", original_error: Exception | None = None
+  ) -> None:
     self.operation = operation
     self.original_error = original_error
     super().__init__(message)
