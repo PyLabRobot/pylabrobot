@@ -10,3 +10,4 @@ Company page: [Greiner Bio-One](https://www.gbo.com/en-gb/company)
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'Greiner_384_wellplate_28ul_Fb'<br>Part no.: 784075 (white), 784076 (black), 784101 (transparent)<br>[manufacturer website](https://shop.gbo.com/en/england/products/bioscience/microplates/384-well-microplates/384-well-small-volume-hibase-microplates/784075.html) | ![](img/greiner/Greiner_384_wellplate_28ul_Fb.png) | `Greiner_384_wellplate_28ul_Fb`
+| 'greiner_96_wellplate_200uL_Vb'<br>Part no.: 652260<br>[manufacturer website](https://shop.gbo.com/en/usa/products/bioscience/molecular-biology/pcr-microplates/652260.html) <br> NOTE: This is a half-skirt plate and reqiures a plate adapter to use| ![](img/greiner/greiner_96_wellplate_200uL_Vb.jpg) | `greiner_96_wellplate_200uL_Vb`
