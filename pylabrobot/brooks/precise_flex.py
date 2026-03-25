@@ -11,7 +11,8 @@ from pylabrobot.device import Device
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 from pylabrobot.resources.resource import Resource
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.capabilities.capability import BackendParams
+
 
 
 # ---------------------------------------------------------------------------
@@ -211,20 +212,20 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     return await self.get_profile_speed(self.profile_index)
 
   async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ):
     """Open the gripper to the specified width."""
     await self._set_grip_open_pos(gripper_width)
     await self.send_command("gripper 1")
 
   async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ):
     """Close the gripper to the specified width."""
     await self._set_grip_close_pos(gripper_width)
     await self.send_command("gripper 2")
 
-  async def halt(self, backend_params: Optional[SerializableMixin] = None):
+  async def halt(self, backend_params: Optional[BackendParams] = None):
     """Stops the current robot immediately but leaves power on."""
     await self.send_command("halt")
 
@@ -318,14 +319,14 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     else:
       raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
-  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default safe position."""
     await self.move_to_safe()
 
   # -- JointArmBackend interface (joint-space) --------------------------------
 
   @dataclass
-  class PickUpParams(SerializableMixin):
+  class PickUpParams(BackendParams):
     access: Optional[AccessPattern] = None
     finger_speed_percent: float = 50.0
     grasp_force: float = 10.0
@@ -335,7 +336,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     self,
     position: Dict[int, float],
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified joint position."""
     if not isinstance(backend_params, self.PickUpParams):
@@ -349,7 +350,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     await self._pick_plate_j(position, access)
 
   @dataclass
-  class DropParams(SerializableMixin):
+  class DropParams(BackendParams):
     access: Optional[AccessPattern] = None
     orientation: Optional[ElbowOrientation] = None
 
@@ -357,7 +358,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     self,
     position: Dict[int, float],
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified joint position."""
     if not isinstance(backend_params, self.DropParams):
@@ -366,13 +367,13 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     await self._place_plate_j(position, access)
 
   @dataclass
-  class MoveToJointPositionParams(SerializableMixin):
+  class MoveToJointPositionParams(BackendParams):
     speed: Optional[float] = None
 
   async def move_to_joint_position(
     self,
     position: Dict[int, float],
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the arm to the specified joint position."""
     if not isinstance(backend_params, self.MoveToJointPositionParams):
@@ -384,7 +385,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     await self._move_j(profile_index=self.profile_index, joint_coords=joint_coords)
 
   async def get_joint_position(
-    self, backend_params: Optional[SerializableMixin] = None
+    self, backend_params: Optional[BackendParams] = None
   ) -> Dict[int, float]:
     """Get the current joint position of the arm."""
     await self._wait_for_eom()
@@ -399,7 +400,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     return self._parse_angles_response(parts)
 
   async def get_cartesian_position(
-    self, backend_params: Optional[SerializableMixin] = None
+    self, backend_params: Optional[BackendParams] = None
   ) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in Cartesian space."""
     await self._wait_for_eom()
@@ -423,7 +424,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     location: Coordinate,
     direction: float,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified Cartesian location."""
     if not isinstance(backend_params, self.PickUpParams):
@@ -444,7 +445,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     location: Coordinate,
     direction: float,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified Cartesian location."""
     if not isinstance(backend_params, self.DropParams):
@@ -456,7 +457,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     await self._place_plate_c(cartesian_position=coords, access=access)
 
   @dataclass
-  class MoveToLocationParams(SerializableMixin):
+  class MoveToLocationParams(BackendParams):
     speed: Optional[float] = None
     orientation: Optional[ElbowOrientation] = None
     rail: Optional[float] = None
@@ -465,7 +466,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     self,
     location: Coordinate,
     direction: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the arm to the specified Cartesian location."""
     if backend_params is None:
@@ -477,7 +478,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     )
     await self._move_c(profile_index=self.profile_index, cartesian_coords=coords)
 
-  async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
 
     Returns:

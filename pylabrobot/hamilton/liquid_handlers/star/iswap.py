@@ -4,7 +4,7 @@ from typing import Optional, cast
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.capabilities.capability import BackendParams
 
 
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
@@ -45,10 +45,10 @@ class iSWAP(OrientableGripperArmBackend):
     return cast(str, (await self.interface.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
   @dataclass
-  class ParkParams(SerializableMixin):
+  class ParkParams(BackendParams):
     minimum_traverse_height: float = 284.0
 
-  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the iSWAP.
 
     Args:
@@ -68,7 +68,7 @@ class iSWAP(OrientableGripperArmBackend):
     self._parked = True
 
   async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Open the iSWAP gripper.
 
@@ -84,12 +84,12 @@ class iSWAP(OrientableGripperArmBackend):
     )
 
   @dataclass
-  class CloseGripperParams(SerializableMixin):
+  class CloseGripperParams(BackendParams):
     grip_strength: int = 5
     plate_width_tolerance: float = 0
 
   async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Close the iSWAP gripper.
 
@@ -116,7 +116,7 @@ class iSWAP(OrientableGripperArmBackend):
     )
 
   @dataclass
-  class PickUpParams(SerializableMixin):
+  class PickUpParams(BackendParams):
     minimum_traverse_height: float = 280.0
     z_position_at_end: float = 280.0
     grip_strength: int = 4
@@ -131,7 +131,7 @@ class iSWAP(OrientableGripperArmBackend):
     location: Coordinate,
     direction: float,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up a plate at the specified location.
 
@@ -196,7 +196,7 @@ class iSWAP(OrientableGripperArmBackend):
     self._parked = False
 
   @dataclass
-  class DropParams(SerializableMixin):
+  class DropParams(BackendParams):
     minimum_traverse_height: float = 280.0
     z_position_at_end: float = 280.0
     collision_control_level: int = 0
@@ -209,7 +209,7 @@ class iSWAP(OrientableGripperArmBackend):
     location: Coordinate,
     direction: float,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop a plate at the specified location.
 
@@ -276,7 +276,7 @@ class iSWAP(OrientableGripperArmBackend):
     raise NotImplementedError()
 
   @dataclass
-  class MoveToLocationParams(SerializableMixin):
+  class MoveToLocationParams(BackendParams):
     minimum_traverse_height: float = 360.0
     collision_control_level: int = 1
     acceleration_index_high_acc: int = 4
@@ -286,7 +286,7 @@ class iSWAP(OrientableGripperArmBackend):
     self,
     location: Coordinate,
     direction: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move a held plate to a new position without releasing it.
 

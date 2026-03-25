@@ -19,7 +19,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.legacy.tilting.tilter import Tilter
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.capabilities.capability import BackendParams
 
 
 logger = logging.getLogger(__name__)
@@ -71,27 +71,27 @@ class _BaseArm(Capability):
   # -- gripper / motion control -----------------------------------------------
 
   async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     return await self.backend.open_gripper(
       gripper_width=gripper_width, backend_params=backend_params
     )
 
   async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     return await self.backend.close_gripper(
       gripper_width=gripper_width, backend_params=backend_params
     )
 
-  async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     return await self.backend.is_gripper_closed(backend_params=backend_params)
 
-  async def halt(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     """Stop any ongoing movement of the arm."""
     return await self.backend.halt(backend_params=backend_params)
 
-  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default position."""
     return await self.backend.park(backend_params=backend_params)
 
@@ -330,7 +330,7 @@ class Arm(_BaseArm):
     self,
     location: Coordinate,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     self._begin_holding(resource_width)
     await self.backend.pick_up_at_location(
@@ -342,7 +342,7 @@ class Arm(_BaseArm):
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: Optional[float] = None,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     location, pickup_distance_from_top = self._prepare_pickup(
       resource, offset, pickup_distance_from_top
@@ -360,7 +360,7 @@ class Arm(_BaseArm):
   async def drop_at_location(
     self,
     location: Coordinate,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     if not self.holding:
       raise RuntimeError("Not holding anything")
@@ -373,7 +373,7 @@ class Arm(_BaseArm):
     self,
     destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     offset: Coordinate = Coordinate.zero(),
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     resource = self._prepare_drop(destination)
     location, rotation = self._compute_drop(
@@ -386,7 +386,7 @@ class Arm(_BaseArm):
     self._finalize_drop(resource, destination, rotation)
 
   async def move_to_location(
-    self, location: Coordinate, backend_params: Optional[SerializableMixin] = None
+    self, location: Coordinate, backend_params: Optional[BackendParams] = None
   ):
     await self.backend.move_to_location(location=location, backend_params=backend_params)
 
@@ -394,7 +394,7 @@ class Arm(_BaseArm):
     self,
     to: Coordinate,
     offset: Coordinate = Coordinate.zero(),
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     if self._picked_up is None:
       raise RuntimeError("No resource picked up")
@@ -411,8 +411,8 @@ class Arm(_BaseArm):
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
-    pickup_backend_params: Optional[SerializableMixin] = None,
-    drop_backend_params: Optional[SerializableMixin] = None,
+    pickup_backend_params: Optional[BackendParams] = None,
+    drop_backend_params: Optional[BackendParams] = None,
   ):
     await self.pick_up_resource(
       resource=resource,

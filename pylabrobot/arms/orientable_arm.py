@@ -5,7 +5,7 @@ from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder, ResourceStack
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.capabilities.capability import BackendParams
 
 
 _GRIP_DIRECTION_TO_DEGREES = {
@@ -42,7 +42,7 @@ class OrientableArm(_BaseArm):
     location: Coordinate,
     resource_width: float,
     direction: GripOrientation = 0.0,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     dir_degrees = _resolve_direction(direction)
     self._begin_holding(resource_width)
@@ -59,7 +59,7 @@ class OrientableArm(_BaseArm):
     offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: Optional[float] = None,
     direction: GripOrientation = GripDirection.FRONT,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     location, pickup_distance_from_top = self._prepare_pickup(
       resource, offset, pickup_distance_from_top
@@ -83,7 +83,7 @@ class OrientableArm(_BaseArm):
     self,
     location: Coordinate,
     direction: GripOrientation,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     if not self.holding:
       raise RuntimeError("Not holding anything")
@@ -100,7 +100,7 @@ class OrientableArm(_BaseArm):
     destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     offset: Coordinate = Coordinate.zero(),
     direction: GripOrientation = GripDirection.FRONT,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     resource = self._prepare_drop(destination)
     drop_dir = _resolve_direction(direction)
@@ -119,7 +119,7 @@ class OrientableArm(_BaseArm):
     self,
     location: Coordinate,
     direction: GripOrientation = 0.0,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     await self.backend.move_to_location(
       location=location,
@@ -132,7 +132,7 @@ class OrientableArm(_BaseArm):
     to: Coordinate,
     direction: GripOrientation,
     offset: Coordinate = Coordinate.zero(),
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ):
     if self._picked_up is None:
       raise RuntimeError("No resource picked up")

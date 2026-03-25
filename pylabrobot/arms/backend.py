@@ -5,7 +5,7 @@ from pylabrobot.arms.standard import ArmPosition
 from pylabrobot.device import DeviceBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.capabilities.capability import BackendParams
 
 
 # ArmBackend:
@@ -39,7 +39,7 @@ class CanFreedrive(metaclass=ABCMeta):
 
   @abstractmethod
   async def start_freedrive_mode(
-    self, free_axes: List[int], backend_params: Optional[SerializableMixin] = None
+    self, free_axes: List[int], backend_params: Optional[BackendParams] = None
   ) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
@@ -48,17 +48,17 @@ class CanFreedrive(metaclass=ABCMeta):
     """
 
   @abstractmethod
-  async def stop_freedrive_mode(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def stop_freedrive_mode(self, backend_params: Optional[BackendParams] = None) -> None:
     """Exit freedrive mode."""
 
 
 class _BaseArmBackend(DeviceBackend, metaclass=ABCMeta):
   @abstractmethod
-  async def halt(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     """Stop any ongoing movement of the arm."""
 
   @abstractmethod
-  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default position."""
 
 
@@ -67,18 +67,18 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Open the arm's gripper."""
 
   @abstractmethod
   async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Close the arm's gripper."""
 
   @abstractmethod
-  async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Check if the gripper is currently closed."""
 
   @abstractmethod
@@ -86,7 +86,7 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     self,
     location: Coordinate,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified location."""
 
@@ -95,13 +95,13 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     self,
     location: Coordinate,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified location."""
 
   @abstractmethod
   async def move_to_location(
-    self, location: Coordinate, backend_params: Optional[SerializableMixin] = None
+    self, location: Coordinate, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Move the held object to the specified location."""
 
@@ -115,7 +115,7 @@ class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     location: Coordinate,
     direction: float,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified location with rotation."""
 
@@ -125,7 +125,7 @@ class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     location: Coordinate,
     direction: float,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified location with rotation."""
 
@@ -134,7 +134,7 @@ class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     self,
     location: Coordinate,
     direction: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the held object to the specified location with rotation."""
 
@@ -147,7 +147,7 @@ class JointGripperArmBackend(OrientableGripperArmBackend, metaclass=ABCMeta):
     self,
     position: Dict[int, float],
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified joint position."""
 
@@ -156,25 +156,25 @@ class JointGripperArmBackend(OrientableGripperArmBackend, metaclass=ABCMeta):
     self,
     position: Dict[int, float],
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified joint position."""
 
   @abstractmethod
   async def move_to_joint_position(
-    self, position: Dict[int, float], backend_params: Optional[SerializableMixin] = None
+    self, position: Dict[int, float], backend_params: Optional[BackendParams] = None
   ) -> None:
     """Move the arm to the specified joint position."""
 
   @abstractmethod
   async def get_joint_position(
-    self, backend_params: Optional[SerializableMixin] = None
+    self, backend_params: Optional[BackendParams] = None
   ) -> Dict[int, float]:
     """Get the current position of the arm in joint space."""
 
   @abstractmethod
   async def get_cartesian_position(
-    self, backend_params: Optional[SerializableMixin] = None
+    self, backend_params: Optional[BackendParams] = None
   ) -> ArmPosition:
     """Get the current position of the arm in Cartesian space."""
 
@@ -186,7 +186,7 @@ class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     location: Coordinate,
     rotation: Rotation,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified location with rotation."""
 
@@ -196,7 +196,7 @@ class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     location: Coordinate,
     rotation: Rotation,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified location with rotation."""
 
@@ -205,6 +205,6 @@ class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     self,
     location: Coordinate,
     rotation: Rotation,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the held object to the specified location with rotation."""

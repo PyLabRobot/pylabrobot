@@ -4,7 +4,7 @@ from typing import Optional
 from pylabrobot.arms.backend import GripperArmBackend
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.capabilities.capability import BackendParams
 
 
 class CoreGripper(GripperArmBackend):
@@ -28,7 +28,7 @@ class CoreGripper(GripperArmBackend):
   # -- ArmBackend interface ---------------------------------------------------
 
   @dataclass
-  class PickUpParams(SerializableMixin):
+  class PickUpParams(BackendParams):
     grip_strength: int = 15
     y_gripping_speed: float = 5.0
     z_speed: float = 50.0
@@ -39,7 +39,7 @@ class CoreGripper(GripperArmBackend):
     self,
     location: Coordinate,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up a plate at the specified location.
 
@@ -84,7 +84,7 @@ class CoreGripper(GripperArmBackend):
     )
 
   @dataclass
-  class DropParams(SerializableMixin):
+  class DropParams(BackendParams):
     z_press_on_distance: float = 0.0
     z_speed: float = 50.0
     minimum_traverse_height: float = 280.0
@@ -94,7 +94,7 @@ class CoreGripper(GripperArmBackend):
     self,
     location: Coordinate,
     resource_width: float,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop a plate at the specified location.
 
@@ -134,7 +134,7 @@ class CoreGripper(GripperArmBackend):
     )
 
   @dataclass
-  class MoveToLocationParams(SerializableMixin):
+  class MoveToLocationParams(BackendParams):
     acceleration_index: int = 4
     z_speed: float = 50.0
     minimum_traverse_height: float = 280.0
@@ -142,7 +142,7 @@ class CoreGripper(GripperArmBackend):
   async def move_to_location(
     self,
     location: Coordinate,
-    backend_params: Optional[SerializableMixin] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move a held plate to a new position without releasing it.
 
@@ -175,25 +175,25 @@ class CoreGripper(GripperArmBackend):
     )
 
   async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Open the CoRe gripper."""
     await self.interface.send_command(module="C0", command="ZO")
 
   async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[SerializableMixin] = None
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     raise NotImplementedError(
       "CoreGripper does not support close_gripper directly. Use pick_up_at_location instead."
     )
 
-  async def is_gripper_closed(self, backend_params: Optional[SerializableMixin] = None) -> bool:
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     raise NotImplementedError()
 
-  async def halt(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     raise NotImplementedError()
 
-  async def park(self, backend_params: Optional[SerializableMixin] = None) -> None:
+  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     raise NotImplementedError(
       "CoreGripper does not support park. Tool management is handled by the STAR backend."
     )
