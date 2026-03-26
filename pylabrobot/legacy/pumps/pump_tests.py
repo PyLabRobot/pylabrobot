@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 
 from pylabrobot.legacy.pumps import PumpArray
-from pylabrobot.legacy.pumps.backend import PumpArrayBackend, PumpBackend
+from pylabrobot.legacy.pumps.backend import PumpArrayBackend
 from pylabrobot.legacy.pumps.calibration import PumpCalibration
 from pylabrobot.legacy.pumps.errors import NotCalibratedError
 from pylabrobot.legacy.pumps.pump import Pump
