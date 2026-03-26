@@ -24,13 +24,10 @@ def _to_new_coords(
 ) -> Union[_new_module.PreciseFlexGripperLocation, Dict[int, float]]:
   """Convert legacy CartesianCoords to new module's CartesianCoords."""
   if isinstance(position, PreciseFlexCartesianCoords):
-    orientation = None
-    if position.orientation is not None:
-      orientation = _new_module.ElbowOrientation(position.orientation.value)
     return _new_module.PreciseFlexGripperLocation(
       location=position.location,
       rotation=position.rotation,
-      orientation=orientation,
+      orientation=position.orientation.value if position.orientation is not None else None,
     )
   return position
 
@@ -58,10 +55,10 @@ def _to_new_access(access: Optional[AccessPattern]) -> Optional[_new_module.Acce
 def _from_new_coords(
   position: _new_module.PreciseFlexGripperLocation,
 ) -> PreciseFlexCartesianCoords:
-  """Convert new module's CartesianCoords to legacy CartesianCoords."""
+  """Convert new module's GripperLocation to legacy CartesianCoords."""
   orientation = None
   if position.orientation is not None:
-    orientation = ElbowOrientation(position.orientation.value)
+    orientation = ElbowOrientation(position.orientation)
   return PreciseFlexCartesianCoords(
     location=position.location,
     rotation=position.rotation,

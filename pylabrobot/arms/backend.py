@@ -95,6 +95,12 @@ class _BaseArmBackend(DeviceBackend, metaclass=ABCMeta):
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default position."""
 
+  @abstractmethod
+  async def get_gripper_location(
+    self, backend_params: Optional[BackendParams] = None
+  ) -> GripperLocation:
+    """Get the current location and rotation of the gripper."""
+
 
 class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
   """Backend for a simple arm (no rotation capability). E.g. Hamilton core grippers."""
@@ -114,12 +120,6 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
   @abstractmethod
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Check if the gripper is currently closed."""
-
-  @abstractmethod
-  async def get_gripper_location(
-    self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
-    """Get the current position of the arm in Cartesian space."""
 
   @abstractmethod
   async def pick_up_at_location(

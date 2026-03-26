@@ -3,7 +3,7 @@ import logging
 import warnings
 from abc import ABC
 from dataclasses import dataclass
-from enum import Enum, IntEnum
+from enum import IntEnum
 from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class ElbowOrientation(Enum):
-  RIGHT = "right"
-  LEFT = "left"
+ElbowOrientation = Literal["right", "left"]
 
 
 class PFAxis(IntEnum):
@@ -144,7 +142,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     self, position: PreciseFlexGripperLocation
   ) -> tuple[float, float, float, float, float, float, int]:
     """Convert a PreciseFlexGripperLocation object to a list of cartesian coordinates."""
-    orientation_int = self._convert_orientation_enum_to_int(position.orientation)
+    orientation_int = self._convert_orientation_str_to_int(position.orientation) if position.orientation is not None else 0
     return (
       position.location.x,
       position.location.y,
@@ -155,17 +153,17 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       orientation_int,
     )
 
-  def _convert_orientation_int_to_enum(self, orientation_int: int) -> Optional[ElbowOrientation]:
+  def _convert_orientation_int_to_str(self, orientation_int: int) -> Optional[ElbowOrientation]:
     if orientation_int == 1:
-      return ElbowOrientation.RIGHT
+      return "right"
     if orientation_int == 2:
-      return ElbowOrientation.LEFT
+      return "left"
     return None
 
-  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation) -> int:
-    if orientation.value == ElbowOrientation.LEFT.value:
+  def _convert_orientation_str_to_int(self, orientation: ElbowOrientation) -> int:
+    if orientation == "left":
       return 2
-    if orientation.value == ElbowOrientation.RIGHT.value:
+    if orientation == "right":
       return 1
     return 0
 
@@ -428,7 +426,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
     config = int(parts[6])
-    elbow_orientation = self._convert_orientation_int_to_enum(config)
+    elbow_orientation = self._convert_orientation_int_to_str(config)
     rail_position = (await self.get_joint_position())[PFAxis.RAIL] if self._has_rail else None
 
     return PreciseFlexGripperLocation(
@@ -622,8 +620,9 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     """
     await self._set_location_xyz(self.location_index, cartesian_position)
     await self._set_grip_detail(access)
-    orientation_int = self._convert_orientation_enum_to_int(cartesian_position.orientation)
-    await self._set_location_config(self.location_index, orientation_int)
+    if cartesian_position.orientation is not None:
+      orientation_int = self._convert_orientation_str_to_int(cartesian_position.orientation)
+      await self._set_location_config(self.location_index, orientation_int)
     await self._move_to_stored_location_appro(self.location_index, self.profile_index)
 
   async def _pick_plate_c(
@@ -634,9 +633,10 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     """Pick a plate from the specified position using Cartesian coordinates."""
     await self._set_location_xyz(self.location_index, cartesian_position)
     await self._set_grip_detail(access)
-    orientation_int = self._convert_orientation_enum_to_int(cartesian_position.orientation)
-    orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
-    await self._set_location_config(self.location_index, orientation_int)
+    if cartesian_position.orientation is not None:
+      orientation_int = self._convert_orientation_str_to_int(cartesian_position.orientation)
+      orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
+      await self._set_location_config(self.location_index, orientation_int)
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     ret_code = await self.send_command(
       f"pickplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
@@ -652,9 +652,10 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     """Place a plate at the specified position using Cartesian coordinates."""
     await self._set_location_xyz(self.location_index, cartesian_position)
     await self._set_grip_detail(access)
-    orientation_int = self._convert_orientation_enum_to_int(cartesian_position.orientation)
-    orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
-    await self._set_location_config(self.location_index, orientation_int)
+    if cartesian_position.orientation is not None:
+      orientation_int = self._convert_orientation_str_to_int(cartesian_position.orientation)
+      orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
+      await self._set_location_config(self.location_index, orientation_int)
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     await self.send_command(
       f"placeplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
@@ -1515,7 +1516,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       f"{cartesian_coords.rotation.roll} "
     )
     if cartesian_coords.orientation is not None:
-      config_int = self._convert_orientation_enum_to_int(cartesian_coords.orientation)
+      config_int = self._convert_orientation_str_to_int(cartesian_coords.orientation)
       config_int |= 0x1000
       cmd += f"{config_int}"
     await self.send_command(cmd)

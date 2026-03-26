@@ -4,7 +4,7 @@ from typing import List, Literal, Optional, Tuple, Union
 import logging
 
 from pylabrobot.arms.backend import _BaseArmBackend, GripperArmBackend
-from pylabrobot.arms.standard import GripDirection
+from pylabrobot.arms.standard import GripDirection, GripperLocation
 from pylabrobot.capabilities.capability import Capability
 from pylabrobot.device import Device
 from pylabrobot.resources import (
@@ -94,6 +94,12 @@ class _BaseArm(Capability):
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default position."""
     return await self.backend.park(backend_params=backend_params)
+
+  async def get_gripper_location(
+    self, backend_params: Optional[BackendParams] = None
+  ) -> GripperLocation:
+    """Get the current location and rotation of the gripper."""
+    return await self.backend.get_gripper_location(backend_params=backend_params)
 
   # -- holding state -----------------------------------------------------------
 
