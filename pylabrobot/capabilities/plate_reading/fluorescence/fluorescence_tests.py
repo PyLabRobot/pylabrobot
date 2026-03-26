@@ -9,7 +9,6 @@ from pylabrobot.capabilities.plate_reading.fluorescence.chatterbox import (
 )
 from pylabrobot.capabilities.plate_reading.fluorescence.fluorescence import FluorescenceCapability
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
-from pylabrobot.device import Device, Driver
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -39,14 +38,6 @@ def _test_plate() -> Plate:
       max_volume=350.0,
     ),
   )
-
-
-class _NullDriver(Driver):
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
 
 
 class RecordingFluorescenceBackend(FluorescenceBackend):
@@ -81,26 +72,16 @@ class RecordingFluorescenceBackend(FluorescenceBackend):
     ]
 
 
-class _TestDevice(Device):
-  def __init__(self, backend):
-    super().__init__(driver=_NullDriver())
-    self.fluorescence = FluorescenceCapability(backend=backend)
-    self._capabilities = [self.fluorescence]
-
-
 class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingFluorescenceBackend()
-    self.device = _TestDevice(backend=self.backend)
-    await self.device.setup()
+    self.cap = FluorescenceCapability(backend=self.backend)
+    await self.cap._on_setup()
     self.plate = _test_plate()
-
-  async def asyncTearDown(self):
-    await self.device.stop()
 
   async def test_read_with_wells(self):
     wells = [self.plate.get_well("A1"), self.plate.get_well("B2")]
-    results = await self.device.fluorescence.read(
+    results = await self.cap.read(
       plate=self.plate,
       excitation_wavelength=485,
       emission_wavelength=528,
@@ -118,7 +99,7 @@ class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(fh, 8.5)
 
   async def test_read_all_wells(self):
-    results = await self.device.fluorescence.read(
+    results = await self.cap.read(
       plate=self.plate,
       excitation_wavelength=485,
       emission_wavelength=528,
@@ -143,12 +124,12 @@ class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
 class TestFluorescenceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = FluorescenceChatterboxBackend()
-    device = _TestDevice(backend=backend)
-    await device.setup()
+    cap = FluorescenceCapability(backend=backend)
+    await cap._on_setup()
     plate = _test_plate()
 
     wells = [plate.get_well("A1"), plate.get_well("C3")]
-    results = await device.fluorescence.read(
+    results = await cap.read(
       plate=plate,
       excitation_wavelength=485,
       emission_wavelength=528,
@@ -160,8 +141,6 @@ class TestFluorescenceChatterbox(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[0].emission_wavelength, 528)
     self.assertEqual(results[0].data[0][0], 0.0)
     self.assertIsNone(results[0].data[1][0])
-
-    await device.stop()
 
 
 if __name__ == "__main__":

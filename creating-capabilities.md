@@ -322,8 +322,8 @@ await pico._driver.open_door()
 
 ### Chatterbox backends (testing)
 
-Chatterbox backends are pure `CapabilityBackend` subclasses with no driver. They return
-dummy data for device-free testing:
+Chatterbox backends are pure `CapabilityBackend` subclasses — they do **not** extend `Driver`.
+They have no I/O and return dummy data for device-free testing:
 
 ```python
 class MyFanChatterboxBackend(FanBackend):
@@ -334,6 +334,16 @@ class MyFanChatterboxBackend(FanBackend):
 
   async def turn_off(self) -> None:
     pass
+```
+
+To test a capability without a real device, create it directly and call `_on_setup()`:
+
+```python
+async def test_something(self):
+    backend = MyFanChatterboxBackend()
+    cap = FanControlCapability(backend=backend)
+    await cap._on_setup()
+    await cap.turn_on(intensity=50)
 ```
 
 ## Naming conventions
