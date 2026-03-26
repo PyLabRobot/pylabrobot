@@ -41,17 +41,19 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingFluorescenceBackend(FluorescenceBackend, Driver):
-  """Backend that records all calls for assertion."""
-
-  def __init__(self):
-    self.calls: List[tuple] = []
-
+class _NullDriver(Driver):
   async def setup(self) -> None:
     pass
 
   async def stop(self) -> None:
     pass
+
+
+class RecordingFluorescenceBackend(FluorescenceBackend):
+  """Backend that records all calls for assertion."""
+
+  def __init__(self):
+    self.calls: List[tuple] = []
 
   async def read_fluorescence(
     self,
@@ -80,16 +82,16 @@ class RecordingFluorescenceBackend(FluorescenceBackend, Driver):
 
 
 class _TestDevice(Device):
-  def __init__(self, driver):
-    super().__init__(driver=driver)
-    self.fluorescence = FluorescenceCapability(backend=driver)
+  def __init__(self, backend):
+    super().__init__(driver=_NullDriver())
+    self.fluorescence = FluorescenceCapability(backend=backend)
     self._capabilities = [self.fluorescence]
 
 
 class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingFluorescenceBackend()
-    self.device = _TestDevice(driver=self.backend)
+    self.device = _TestDevice(backend=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -141,7 +143,7 @@ class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
 class TestFluorescenceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = FluorescenceChatterboxBackend()
-    device = _TestDevice(driver=backend)
+    device = _TestDevice(backend=backend)
     await device.setup()
     plate = _test_plate()
 

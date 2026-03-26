@@ -1,2 +1,2 @@
-from .backend import PicoBackend
+from .backend import PicoDriver, PicoMicroscopyBackend
 from .pico import Pico

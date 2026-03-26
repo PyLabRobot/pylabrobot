@@ -18,8 +18,12 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 
-class XPeelBackend(PeelerBackend, Driver):
-  """Backend for the Azenta XPeel automated plate seal remover (RS-232)."""
+class XPeelDriver(Driver):
+  """Serial driver for the Azenta XPeel automated plate seal remover (RS-232).
+
+  Owns the hardware connection and provides generic send/receive plus device-level operations
+  (status, reset, conveyor/elevator movement, tape, seal sensor).
+  """
 
   BAUDRATE = 9600
   RESPONSE_TIMEOUT = 20.0
@@ -53,6 +57,7 @@ class XPeelBackend(PeelerBackend, Driver):
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
         f"Import error: {_SERIAL_IMPORT_ERROR}"
       )
+    super().__init__()
     self.logger = logging.getLogger(__name__)
     self.port = port
     self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT
@@ -93,7 +98,7 @@ class XPeelBackend(PeelerBackend, Driver):
     except Exception:
       return None
 
-  async def _send_command(
+  async def send_command(
     self, cmd, expect_ack=False, wait_for_ready=False, clear_buffer=True
   ) -> List[str]:
     full_cmd = cmd if cmd.endswith("\r\n") else f"{cmd}\r\n"
@@ -143,20 +148,91 @@ class XPeelBackend(PeelerBackend, Driver):
 
   async def get_status(self) -> Tuple[int, int, int]:
     """Request instrument status; returns three error codes."""
-    resp = await self._send_command("*stat")
+    resp = await self.send_command("*stat")
     return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
 
   async def get_version(self):
     """Request firmware version."""
-    return await self._send_command("*version")
+    return await self.send_command("*version")
 
   async def reset(self):
     """Request reset."""
-    return await self._send_command("*reset", expect_ack=True, wait_for_ready=True)
+    return await self.send_command("*reset", expect_ack=True, wait_for_ready=True)
 
-  async def restart(self, backend_params: Optional[SerializableMixin] = None):
-    """Request restart with full homing sequence."""
-    return await self._send_command("*restart", expect_ack=True, wait_for_ready=True)
+  async def seal_check(self) -> Literal["seal_detected", "no_seal", "plate_not_detected"]:
+    """Check for seal presence."""
+    resp = await self.send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
+    ready_line = resp[-1]
+    parsed = self.parse_ready_line(ready_line)
+    if parsed is None:
+      raise RuntimeError(f"Could not parse ready line: {ready_line}")
+    code, _ = parsed
+    if code == 0:
+      return "no_seal"
+    if code == 4:
+      return "seal_detected"
+    if code == 6:
+      return "plate_not_detected"
+    raise RuntimeError(
+      f"Unexpected seal check code: {code}, interpreted as: {self.describe_error(code)}"
+    )
+
+  async def get_tape_remaining(self):
+    """Query remaining tape. Returns (supply_remaining, takeup_remaining) in number of deseals."""
+    resp = await self.send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
+    tape_line = resp[-1]
+    parts = tape_line.split(":")[1].split(",")
+    supply_remaining = int(parts[0]) * 10
+    takeup_remaining = int(parts[1]) * 10
+    return supply_remaining, takeup_remaining
+
+  async def enable_plate_check(self, enabled=True):
+    """Enable or disable plate presence check."""
+    flag = "y" if enabled else "n"
+    return await self.send_command(f"*platecheck:{flag}", expect_ack=True, wait_for_ready=True)
+
+  async def get_seal_sensor_status(self):
+    """Get seal sensor threshold value (0-999)."""
+    return await self.send_command("*sealstat", expect_ack=True, wait_for_ready=True)
+
+  async def set_seal_threshold_upper(self, value: int):
+    """Set the upper seal detected threshold (0-999)."""
+    if not 0 <= value <= 999:
+      raise ValueError("value must be between 0 and 999")
+    return await self.send_command(f"*sealhigher:{value:03d}", expect_ack=True, wait_for_ready=True)
+
+  async def set_seal_threshold_lower(self, value: int):
+    """Set the lower seal detected threshold (0-999)."""
+    if not 0 <= value <= 999:
+      raise ValueError("value must be between 0 and 999")
+    return await self.send_command(f"*seallower:{value:03d}", expect_ack=True, wait_for_ready=True)
+
+  async def move_conveyor_out(self):
+    """Move conveyor out."""
+    return await self.send_command("*moveout", expect_ack=True, wait_for_ready=True)
+
+  async def move_conveyor_in(self):
+    """Move conveyor in."""
+    return await self.send_command("*movein", expect_ack=True, wait_for_ready=True)
+
+  async def move_elevator_down(self):
+    """Move elevator down."""
+    return await self.send_command("*movedown", expect_ack=True, wait_for_ready=True)
+
+  async def move_elevator_up(self):
+    """Move elevator up."""
+    return await self.send_command("*moveup", expect_ack=True, wait_for_ready=True)
+
+  async def advance_tape(self):
+    """Advance tape / move spool."""
+    return await self.send_command("*movespool", expect_ack=True, wait_for_ready=True)
+
+
+class XPeelPeelerBackend(PeelerBackend):
+  """Translates PeelerBackend interface into XPeel driver commands.
+
+  Protocol encoding for peel and restart operations lives here.
+  """
 
   @dataclass
   class PeelParams(BackendParams):
@@ -164,13 +240,16 @@ class XPeelBackend(PeelerBackend, Driver):
     fast: bool = False
     adhere_time: float = 2.5
 
+  def __init__(self, driver: XPeelDriver):
+    self._driver = driver
+
   async def peel(
     self,
     backend_params: Optional[SerializableMixin] = None,
   ):
     """Run an automated de-seal cycle."""
     if not isinstance(backend_params, self.PeelParams):
-      backend_params = XPeelBackend.PeelParams()
+      backend_params = XPeelPeelerBackend.PeelParams()
 
     adhere_time = backend_params.adhere_time
     begin_location = backend_params.begin_location
@@ -193,85 +272,19 @@ class XPeelBackend(PeelerBackend, Driver):
     }.get((begin_location, fast), 9)
 
     cmd = f"*xpeel:{parameter_set}{adhere_time}"
-    return await self._send_command(cmd, expect_ack=True, wait_for_ready=True)
+    return await self._driver.send_command(cmd, expect_ack=True, wait_for_ready=True)
 
-  async def seal_check(self) -> Literal["seal_detected", "no_seal", "plate_not_detected"]:
-    """Check for seal presence."""
-    resp = await self._send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
-    ready_line = resp[-1]
-    parsed = self.parse_ready_line(ready_line)
-    if parsed is None:
-      raise RuntimeError(f"Could not parse ready line: {ready_line}")
-    code, _ = parsed
-    if code == 0:
-      return "no_seal"
-    if code == 4:
-      return "seal_detected"
-    if code == 6:
-      return "plate_not_detected"
-    raise RuntimeError(
-      f"Unexpected seal check code: {code}, interpreted as: {self.describe_error(code)}"
-    )
-
-  async def get_tape_remaining(self):
-    """Query remaining tape. Returns (supply_remaining, takeup_remaining) in number of deseals."""
-    resp = await self._send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
-    tape_line = resp[-1]
-    parts = tape_line.split(":")[1].split(",")
-    supply_remaining = int(parts[0]) * 10
-    takeup_remaining = int(parts[1]) * 10
-    return supply_remaining, takeup_remaining
-
-  async def enable_plate_check(self, enabled=True):
-    """Enable or disable plate presence check."""
-    flag = "y" if enabled else "n"
-    return await self._send_command(f"*platecheck:{flag}", expect_ack=True, wait_for_ready=True)
-
-  async def get_seal_sensor_status(self):
-    """Get seal sensor threshold value (0-999)."""
-    return await self._send_command("*sealstat", expect_ack=True, wait_for_ready=True)
-
-  async def set_seal_threshold_upper(self, value: int):
-    """Set the upper seal detected threshold (0-999)."""
-    if not 0 <= value <= 999:
-      raise ValueError("value must be between 0 and 999")
-    return await self._send_command(
-      f"*sealhigher:{value:03d}", expect_ack=True, wait_for_ready=True
-    )
-
-  async def set_seal_threshold_lower(self, value: int):
-    """Set the lower seal detected threshold (0-999)."""
-    if not 0 <= value <= 999:
-      raise ValueError("value must be between 0 and 999")
-    return await self._send_command(f"*seallower:{value:03d}", expect_ack=True, wait_for_ready=True)
-
-  async def move_conveyor_out(self):
-    """Move conveyor out."""
-    return await self._send_command("*moveout", expect_ack=True, wait_for_ready=True)
-
-  async def move_conveyor_in(self):
-    """Move conveyor in."""
-    return await self._send_command("*movein", expect_ack=True, wait_for_ready=True)
-
-  async def move_elevator_down(self):
-    """Move elevator down."""
-    return await self._send_command("*movedown", expect_ack=True, wait_for_ready=True)
-
-  async def move_elevator_up(self):
-    """Move elevator up."""
-    return await self._send_command("*moveup", expect_ack=True, wait_for_ready=True)
-
-  async def advance_tape(self):
-    """Advance tape / move spool."""
-    return await self._send_command("*movespool", expect_ack=True, wait_for_ready=True)
+  async def restart(self, backend_params: Optional[SerializableMixin] = None):
+    """Request restart with full homing sequence."""
+    return await self._driver.send_command("*restart", expect_ack=True, wait_for_ready=True)
 
 
 class XPeel(Device):
   """Azenta XPeel automated plate seal remover."""
 
   def __init__(self, name: str, port: str, timeout: Optional[float] = None):
-    backend = XPeelBackend(port=port, timeout=timeout)
-    super().__init__(driver=backend)
-    self._driver: XPeelBackend = backend
-    self.peeler = PeelingCapability(backend=backend)
+    driver = XPeelDriver(port=port, timeout=timeout)
+    super().__init__(driver=driver)
+    self._driver: XPeelDriver = driver
+    self.peeler = PeelingCapability(backend=XPeelPeelerBackend(driver))
     self._capabilities = [self.peeler]

@@ -1,7 +1,6 @@
 from typing import Optional
 
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
-from pylabrobot.device import Driver
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
   FocalPosition,
@@ -22,14 +21,8 @@ except ImportError:
   HAS_NUMPY = False
 
 
-class MicroscopyChatterboxBackend(MicroscopyBackend, Driver):
+class MicroscopyChatterboxBackend(MicroscopyBackend):
   """Mock microscopy backend for testing."""
-
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
 
   async def capture(
     self,

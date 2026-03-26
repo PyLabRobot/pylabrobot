@@ -57,9 +57,6 @@ class Driver(SerializableMixin, ABC):
     return cls._instances
 
 
-DeviceBackend = Driver  # backward compat alias
-
-
 def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   """Decorator for methods that require the device to be set up.
 

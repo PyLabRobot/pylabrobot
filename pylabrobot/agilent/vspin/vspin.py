@@ -9,6 +9,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
 from pylabrobot.capabilities.centrifuging import CentrifugingCapability
 from pylabrobot.capabilities.centrifuging.errors import (
@@ -21,7 +22,6 @@ from pylabrobot.capabilities.centrifuging.errors import (
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)
@@ -60,16 +60,23 @@ def _save_vspin_calibrations(device_id, remainder: int):
 
 FULL_ROTATION: int = 8000
 
-
 bucket_1_not_set_error = RuntimeError(
   "Bucket 1 position not set. "
-  "Please rotate the bucket to bucket 1 using VSpinBackend.go_to_position and "
-  "then calling VSpinBackend.set_bucket_1_position_to_current."
+  "Please rotate the bucket to bucket 1 using go_to_position and "
+  "then calling set_bucket_1_position_to_current."
 )
 
 
-class VSpinBackend(_NewCentrifugeBackend, Driver):
-  """Backend for the Agilent VSpin Centrifuge."""
+# ---------------------------------------------------------------------------
+# VSpin Driver — FTDI I/O and hardware queries
+# ---------------------------------------------------------------------------
+
+
+class VSpinDriver(Driver):
+  """FTDI driver for the Agilent VSpin Centrifuge.
+
+  Owns the USB connection, low-level command protocol, and hardware status queries.
+  """
 
   def __init__(self, device_id: Optional[str] = None):
     """
@@ -79,166 +86,29 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     """
     super().__init__()
     self.io = FTDI(human_readable_device_name="Agilent VSpin Centrifuge", device_id=device_id)
-    self._bucket_1_remainder: Optional[int] = None
-    if device_id is not None:
-      self._bucket_1_remainder = _load_vspin_calibrations(device_id)
+    self.device_id = device_id
 
   async def setup(self):
     await self.io.setup()
     for _ in range(3):
       await self.configure_and_initialize()
-      await self._send_command(bytes.fromhex("aa002101ff21"))
-    await self._send_command(bytes.fromhex("aa002101ff21"))
-    await self._send_command(bytes.fromhex("aa01132034"))
-    await self._send_command(bytes.fromhex("aa002102ff22"))
-    await self._send_command(bytes.fromhex("aa02132035"))
-    await self._send_command(bytes.fromhex("aa002103ff23"))
-    await self._send_command(bytes.fromhex("aaff1a142d"))
+      await self.send_command(bytes.fromhex("aa002101ff21"))
+    await self.send_command(bytes.fromhex("aa002101ff21"))
+    await self.send_command(bytes.fromhex("aa01132034"))
+    await self.send_command(bytes.fromhex("aa002102ff22"))
+    await self.send_command(bytes.fromhex("aa02132035"))
+    await self.send_command(bytes.fromhex("aa002103ff23"))
+    await self.send_command(bytes.fromhex("aaff1a142d"))
 
     await self.io.set_baudrate(57600)
     await self.io.set_rts(True)
     await self.io.set_dtr(True)
 
-    await self._send_command(bytes.fromhex("aa01121f32"))
-    for _ in range(8):
-      await self._send_command(bytes.fromhex("aa0220ff0f30"))
-    await self._send_command(bytes.fromhex("aa0220df0f10"))
-    await self._send_command(bytes.fromhex("aa0220df0e0f"))
-    await self._send_command(bytes.fromhex("aa0220df0c0d"))
-    await self._send_command(bytes.fromhex("aa0220df0809"))
-    for _ in range(4):
-      await self._send_command(bytes.fromhex("aa0226000028"))
-    await self._send_command(bytes.fromhex("aa02120317"))
-    for _ in range(5):
-      await self._send_command(bytes.fromhex("aa0226200048"))
-      await self._send_command(bytes.fromhex("aa0226000028"))
-    await self.lock_door()
-
-    await self._send_command(bytes.fromhex("aa0226000028"))
-
-    await self._send_command(bytes.fromhex("aa0117021a"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(bytes.fromhex("aa0117041c"))
-    await self._send_command(bytes.fromhex("aa01170119"))
-
-    await self._send_command(bytes.fromhex("aa010b0c"))
-    await self._send_command(bytes.fromhex("aa010001"))
-    await self._send_command(bytes.fromhex("aa01e605006400000000003200e80301006e"))
-    await self._send_command(bytes.fromhex("aa0194b61283000012010000f3"))
-    await self._send_command(bytes.fromhex("aa01192842"))
-
-    resp = 0x89
-    while resp == 0x89:
-      resp = (await self._get_positions_and_tachometer()).status
-
-    # --- almost the same as go to position ---
-    await self._send_command(bytes.fromhex("aa0117021a"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(bytes.fromhex("aa0117041c"))
-    await self._send_command(bytes.fromhex("aa01170119"))
-
-    await self._send_command(bytes.fromhex("aa010b0c"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    new_position = (0).to_bytes(4, byteorder="little")  # arbitrary
-    await self._send_command(
-      bytes.fromhex("aa01d497") + new_position + bytes.fromhex("c3f52800d71a000049")
-    )
-    # -----------------------------------------
-
-    resp = 0x08
-    while resp != 0x09:
-      resp = (await self._get_positions_and_tachometer()).status
-
-    await self._send_command(bytes.fromhex("aa0117021a"))
-
-    await self.lock_door()
-
-    # If we have not set the calibration yet, load it now.
-    if self._bucket_1_remainder is None:
-      device_id = await self.io.get_serial()
-      self._bucket_1_remainder = _load_vspin_calibrations(device_id)
-
-  @property
-  def bucket_1_remainder(self) -> int:
-    if self._bucket_1_remainder is None:
-      raise bucket_1_not_set_error
-    return self._bucket_1_remainder
-
-  async def set_bucket_1_position_to_current(self) -> None:
-    """Set the current position as bucket 1 position and save calibration."""
-    current_position = await self.get_position()
-    device_id = await self.io.get_serial()
-    remainder = await self.get_home_position() - current_position
-    self._bucket_1_remainder = current_position % FULL_ROTATION
-    _save_vspin_calibrations(device_id, remainder)
-
-  async def get_bucket_1_position(self) -> int:
-    """Get the bucket 1 position based on calibration."""
-    if self._bucket_1_remainder is None:
-      raise bucket_1_not_set_error
-    home_position = await self.get_home_position()
-    bucket_1_position_mod_full_rotation = home_position - self.bucket_1_remainder
-    current_position = await self.get_position()
-    bucket_1_position = (
-      FULL_ROTATION
-      * math.floor((current_position - bucket_1_position_mod_full_rotation) / FULL_ROTATION + 1)
-      + bucket_1_position_mod_full_rotation
-    )
-    return bucket_1_position
-
   async def stop(self):
     await self.configure_and_initialize()
     await self.io.stop()
 
-  class _StatusPositionTachometer(ctypes.LittleEndianStructure):
-    _pack_ = 1
-    _fields_ = [
-      ("status", ctypes.c_uint8),
-      ("current_position", ctypes.c_uint32),
-      ("unknown1", ctypes.c_uint8),
-      ("tachometer", ctypes.c_int16),
-      ("unknown2", ctypes.c_uint8),
-      ("home_position", ctypes.c_uint32),
-      ("checksum", ctypes.c_uint8),
-    ]
-
-  async def _get_positions_and_tachometer(self) -> _StatusPositionTachometer:
-    resp = await self._send_command(bytes.fromhex("aa010e0f"))
-    if len(resp) == 0:
-      raise IOError("Empty status from centrifuge")
-    return VSpinBackend._StatusPositionTachometer.from_buffer_copy(resp)
-
-  async def get_position(self) -> int:
-    return (await self._get_positions_and_tachometer()).current_position  # type: ignore
-
-  async def get_tachometer(self) -> int:
-    """Current speed in rpm."""
-    tack_to_rpm = -14.69320388
-    return (await self._get_positions_and_tachometer()).tachometer * tack_to_rpm  # type: ignore
-
-  async def get_home_position(self) -> int:
-    """Changes during a run, but the bucket 1 position relative to it does not."""
-    return (await self._get_positions_and_tachometer()).home_position  # type: ignore
-
-  async def _get_status(self):
-    resp = await self._send_command(bytes.fromhex("aa020e10"))
-    if len(resp) == 0:
-      raise IOError("Empty status from centrifuge. Is the machine on?")
-    return resp
-
-  async def get_bucket_locked(self) -> bool:
-    resp = await self._get_status()
-    return resp[2] & 0b0001 != 0  # type: ignore
-
-  async def get_door_open(self) -> bool:
-    resp = await self._get_status()
-    return resp[2] & 0b0010 != 0  # type: ignore
-
-  async def get_door_locked(self) -> bool:
-    resp = await self._get_status()
-    return resp[2] & 0b0100 == 0  # type: ignore
-
-  # Centrifuge communication: read_resp, send
+  # -- low-level protocol --
 
   async def _read_resp(self, timeout: float = 20) -> bytes:
     data = b""
@@ -260,9 +130,8 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     logger.debug("Read %s", data.hex())
     return data
 
-  async def _send_command(self, cmd: bytes, read_timeout=0.2) -> bytes:
+  async def send_command(self, cmd: bytes, read_timeout=0.2) -> bytes:
     written = await self.io.write(bytes(cmd))
-
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
     return await self._read_resp(timeout=read_timeout)
@@ -283,43 +152,199 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     for i in range(33):
       packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
       await self.io.write(packet)
-    await self._send_command(bytes.fromhex("aaff0f0e"))
+    await self.send_command(bytes.fromhex("aaff0f0e"))
 
-  # Centrifuge operations (CentrifugeBackend interface)
+  # -- hardware status queries --
+
+  class _StatusPositionTachometer(ctypes.LittleEndianStructure):
+    _pack_ = 1
+    _fields_ = [
+      ("status", ctypes.c_uint8),
+      ("current_position", ctypes.c_uint32),
+      ("unknown1", ctypes.c_uint8),
+      ("tachometer", ctypes.c_int16),
+      ("unknown2", ctypes.c_uint8),
+      ("home_position", ctypes.c_uint32),
+      ("checksum", ctypes.c_uint8),
+    ]
+
+  async def get_positions_and_tachometer(self) -> _StatusPositionTachometer:
+    resp = await self.send_command(bytes.fromhex("aa010e0f"))
+    if len(resp) == 0:
+      raise IOError("Empty status from centrifuge")
+    return VSpinDriver._StatusPositionTachometer.from_buffer_copy(resp)
+
+  async def get_position(self) -> int:
+    return (await self.get_positions_and_tachometer()).current_position  # type: ignore
+
+  async def get_tachometer(self) -> int:
+    """Current speed in rpm."""
+    tack_to_rpm = -14.69320388
+    return (await self.get_positions_and_tachometer()).tachometer * tack_to_rpm  # type: ignore
+
+  async def get_home_position(self) -> int:
+    """Changes during a run, but the bucket 1 position relative to it does not."""
+    return (await self.get_positions_and_tachometer()).home_position  # type: ignore
+
+  async def _get_status(self):
+    resp = await self.send_command(bytes.fromhex("aa020e10"))
+    if len(resp) == 0:
+      raise IOError("Empty status from centrifuge. Is the machine on?")
+    return resp
+
+  async def get_bucket_locked(self) -> bool:
+    resp = await self._get_status()
+    return resp[2] & 0b0001 != 0  # type: ignore
+
+  async def get_door_open(self) -> bool:
+    resp = await self._get_status()
+    return resp[2] & 0b0010 != 0  # type: ignore
+
+  async def get_door_locked(self) -> bool:
+    resp = await self._get_status()
+    return resp[2] & 0b0100 == 0  # type: ignore
+
+
+# ---------------------------------------------------------------------------
+# VSpin Centrifuge Backend — protocol translation
+# ---------------------------------------------------------------------------
+
+
+class VSpinCentrifugeBackend(_NewCentrifugeBackend):
+  """Translates CentrifugeBackend interface into VSpin driver commands."""
+
+  def __init__(self, driver: VSpinDriver):
+    self._driver = driver
+    self._bucket_1_remainder: Optional[int] = None
+    if driver.device_id is not None:
+      self._bucket_1_remainder = _load_vspin_calibrations(driver.device_id)
+
+  async def _on_setup(self):
+    driver = self._driver
+
+    await driver.send_command(bytes.fromhex("aa01121f32"))
+    for _ in range(8):
+      await driver.send_command(bytes.fromhex("aa0220ff0f30"))
+    await driver.send_command(bytes.fromhex("aa0220df0f10"))
+    await driver.send_command(bytes.fromhex("aa0220df0e0f"))
+    await driver.send_command(bytes.fromhex("aa0220df0c0d"))
+    await driver.send_command(bytes.fromhex("aa0220df0809"))
+    for _ in range(4):
+      await driver.send_command(bytes.fromhex("aa0226000028"))
+    await driver.send_command(bytes.fromhex("aa02120317"))
+    for _ in range(5):
+      await driver.send_command(bytes.fromhex("aa0226200048"))
+      await driver.send_command(bytes.fromhex("aa0226000028"))
+    await self.lock_door()
+
+    await driver.send_command(bytes.fromhex("aa0226000028"))
+
+    await driver.send_command(bytes.fromhex("aa0117021a"))
+    await driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await driver.send_command(bytes.fromhex("aa0117041c"))
+    await driver.send_command(bytes.fromhex("aa01170119"))
+
+    await driver.send_command(bytes.fromhex("aa010b0c"))
+    await driver.send_command(bytes.fromhex("aa010001"))
+    await driver.send_command(bytes.fromhex("aa01e605006400000000003200e80301006e"))
+    await driver.send_command(bytes.fromhex("aa0194b61283000012010000f3"))
+    await driver.send_command(bytes.fromhex("aa01192842"))
+
+    resp = 0x89
+    while resp == 0x89:
+      resp = (await driver.get_positions_and_tachometer()).status
+
+    # --- almost the same as go to position ---
+    await driver.send_command(bytes.fromhex("aa0117021a"))
+    await driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await driver.send_command(bytes.fromhex("aa0117041c"))
+    await driver.send_command(bytes.fromhex("aa01170119"))
+
+    await driver.send_command(bytes.fromhex("aa010b0c"))
+    await driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    new_position = (0).to_bytes(4, byteorder="little")
+    await driver.send_command(
+      bytes.fromhex("aa01d497") + new_position + bytes.fromhex("c3f52800d71a000049")
+    )
+    # -----------------------------------------
+
+    resp = 0x08
+    while resp != 0x09:
+      resp = (await driver.get_positions_and_tachometer()).status
+
+    await driver.send_command(bytes.fromhex("aa0117021a"))
+
+    await self.lock_door()
+
+    if self._bucket_1_remainder is None:
+      device_id = await driver.io.get_serial()
+      self._bucket_1_remainder = _load_vspin_calibrations(device_id)
+
+  # -- bucket calibration --
+
+  @property
+  def bucket_1_remainder(self) -> int:
+    if self._bucket_1_remainder is None:
+      raise bucket_1_not_set_error
+    return self._bucket_1_remainder
+
+  async def set_bucket_1_position_to_current(self) -> None:
+    """Set the current position as bucket 1 position and save calibration."""
+    current_position = await self._driver.get_position()
+    device_id = await self._driver.io.get_serial()
+    remainder = await self._driver.get_home_position() - current_position
+    self._bucket_1_remainder = current_position % FULL_ROTATION
+    _save_vspin_calibrations(device_id, remainder)
+
+  async def get_bucket_1_position(self) -> int:
+    """Get the bucket 1 position based on calibration."""
+    if self._bucket_1_remainder is None:
+      raise bucket_1_not_set_error
+    home_position = await self._driver.get_home_position()
+    bucket_1_position_mod_full_rotation = home_position - self.bucket_1_remainder
+    current_position = await self._driver.get_position()
+    bucket_1_position = (
+      FULL_ROTATION
+      * math.floor((current_position - bucket_1_position_mod_full_rotation) / FULL_ROTATION + 1)
+      + bucket_1_position_mod_full_rotation
+    )
+    return bucket_1_position
+
+  # -- CentrifugeBackend interface --
 
   async def open_door(self):
-    if await self.get_door_open():
+    if await self._driver.get_door_open():
       return
-    await self._send_command(bytes.fromhex("aa022600062e"))
+    await self._driver.send_command(bytes.fromhex("aa022600062e"))
     await asyncio.sleep(4)
 
   async def close_door(self):
-    if not (await self.get_door_open()):
+    if not (await self._driver.get_door_open()):
       return
-    await self._send_command(bytes.fromhex("aa022600042c"))
+    await self._driver.send_command(bytes.fromhex("aa022600042c"))
     await asyncio.sleep(2)
 
   async def lock_door(self):
-    if await self.get_door_open():
+    if await self._driver.get_door_open():
       raise RuntimeError("Cannot lock door while it is open.")
-    if await self.get_door_locked():
+    if await self._driver.get_door_locked():
       return
-    await self._send_command(bytes.fromhex("aa0226000028"))
+    await self._driver.send_command(bytes.fromhex("aa0226000028"))
 
   async def unlock_door(self):
-    if not await self.get_door_locked():
+    if not await self._driver.get_door_locked():
       return
-    await self._send_command(bytes.fromhex("aa022600042c"))
+    await self._driver.send_command(bytes.fromhex("aa022600042c"))
 
   async def lock_bucket(self):
-    if await self.get_bucket_locked():
+    if await self._driver.get_bucket_locked():
       return
-    await self._send_command(bytes.fromhex("aa022600072f"))
+    await self._driver.send_command(bytes.fromhex("aa022600072f"))
 
   async def unlock_bucket(self):
-    if not await self.get_bucket_locked():
+    if not await self._driver.get_bucket_locked():
       return
-    await self._send_command(bytes.fromhex("aa022600062e"))
+    await self._driver.send_command(bytes.fromhex("aa022600062e"))
 
   async def go_to_bucket1(self):
     await self.go_to_position(await self.get_bucket_1_position())
@@ -335,16 +360,16 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     byte_string = bytes.fromhex("aa01d497") + position_bytes + bytes.fromhex("c3f52800d71a0000")
     sum_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += sum_byte.to_bytes(1, byteorder="little")
-    await self._send_command(bytes.fromhex("aa0226000028"))
-    await self._send_command(bytes.fromhex("aa0117021a"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(bytes.fromhex("aa0117041c"))
-    await self._send_command(bytes.fromhex("aa01170119"))
-    await self._send_command(bytes.fromhex("aa010b0c"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(byte_string)
+    await self._driver.send_command(bytes.fromhex("aa0226000028"))
+    await self._driver.send_command(bytes.fromhex("aa0117021a"))
+    await self._driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self._driver.send_command(bytes.fromhex("aa0117041c"))
+    await self._driver.send_command(bytes.fromhex("aa01170119"))
+    await self._driver.send_command(bytes.fromhex("aa010b0c"))
+    await self._driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self._driver.send_command(byte_string)
 
-    while abs(await self.get_position() - position) > 10:
+    while abs(await self._driver.get_position() - position) > 10:
       await asyncio.sleep(0.1)
     await self.open_door()
 
@@ -370,10 +395,10 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     Args:
       g: relative centrifugal force, also known as g-force
       duration: time in seconds spent at speed (g)
-      backend_params: VSpinBackend.SpinParams with acceleration and deceleration (0-1).
+      backend_params: VSpinCentrifugeBackend.SpinParams with acceleration and deceleration (0-1).
     """
     if not isinstance(backend_params, self.SpinParams):
-      backend_params = VSpinBackend.SpinParams()
+      backend_params = VSpinCentrifugeBackend.SpinParams()
 
     acceleration = backend_params.acceleration
     deceleration = backend_params.deceleration
@@ -387,14 +412,14 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     if duration < 1:
       raise ValueError("Spin time must be at least 1 second")
 
-    if await self.get_door_open():
+    if await self._driver.get_door_open():
       await self.close_door()
-    if not await self.get_door_locked():
+    if not await self._driver.get_door_locked():
       await self.lock_door()
-    if await self.get_bucket_locked():
+    if await self._driver.get_bucket_locked():
       await self.unlock_bucket()
 
-    rpm = VSpinBackend.g_to_rpm(g)
+    rpm = VSpinCentrifugeBackend.g_to_rpm(g)
 
     acceleration_ticks_per_second2 = 12903.2 * acceleration
     rounds_per_second = rpm / 60
@@ -403,7 +428,7 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
 
     distance_at_speed = ticks_per_second * duration
 
-    current_position = await self.get_position()
+    current_position = await self._driver.get_position()
     final_position = int(current_position + distance_during_acceleration + distance_at_speed)
 
     if final_position > 2**32 - 1:
@@ -420,49 +445,52 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
     checksum = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += checksum.to_bytes(1, byteorder="little")
 
-    await self._send_command(bytes.fromhex("aa0226000028"))
-    await self._send_command(bytes.fromhex("aa0117021a"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(bytes.fromhex("aa0117041c"))
-    await self._send_command(bytes.fromhex("aa01170119"))
-    await self._send_command(bytes.fromhex("aa010b0c"))
-    await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+    await self._driver.send_command(bytes.fromhex("aa0226000028"))
+    await self._driver.send_command(bytes.fromhex("aa0117021a"))
+    await self._driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self._driver.send_command(bytes.fromhex("aa0117041c"))
+    await self._driver.send_command(bytes.fromhex("aa01170119"))
+    await self._driver.send_command(bytes.fromhex("aa010b0c"))
+    await self._driver.send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
 
-    await self._send_command(byte_string)
+    await self._driver.send_command(byte_string)
 
-    while await self.get_tachometer() < rpm * 0.95 and await self.get_position() < final_position:
+    while (
+      await self._driver.get_tachometer() < rpm * 0.95
+      and await self._driver.get_position() < final_position
+    ):
       await asyncio.sleep(0.1)
 
-    if await self.get_position() < final_position:
-      decel_start_position = await self.get_position() + distance_at_speed
+    if await self._driver.get_position() < final_position:
+      decel_start_position = await self._driver.get_position() + distance_at_speed
 
-      while await self.get_position() < decel_start_position:
+      while await self._driver.get_position() < decel_start_position:
         await asyncio.sleep(0.1)
 
-    await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+    await self._driver.send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
     decc = int(9.15 * 100 * deceleration).to_bytes(2, byteorder="little")
     decel_command = bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("0000")
     decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
-    await self._send_command(decel_command)
+    await self._driver.send_command(decel_command)
 
     await asyncio.sleep(2)
 
     async def _reset_to_zero():
-      await self._send_command(bytes.fromhex("aa0117021a"))
-      await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-      await self._send_command(bytes.fromhex("aa0117041c"))
-      await self._send_command(bytes.fromhex("aa01170119"))
-      await self._send_command(bytes.fromhex("aa010b0c"))
-      await self._send_command(bytes.fromhex("aa010001"))
-      await self._send_command(bytes.fromhex("aa01e605006400000000003200e80301006e"))
-      await self._send_command(bytes.fromhex("aa0194b61283000012010000f3"))
-      await self._send_command(bytes.fromhex("aa01192842"))
+      await self._driver.send_command(bytes.fromhex("aa0117021a"))
+      await self._driver.send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+      await self._driver.send_command(bytes.fromhex("aa0117041c"))
+      await self._driver.send_command(bytes.fromhex("aa01170119"))
+      await self._driver.send_command(bytes.fromhex("aa010b0c"))
+      await self._driver.send_command(bytes.fromhex("aa010001"))
+      await self._driver.send_command(bytes.fromhex("aa01e605006400000000003200e80301006e"))
+      await self._driver.send_command(bytes.fromhex("aa0194b61283000012010000f3"))
+      await self._driver.send_command(bytes.fromhex("aa01192842"))
 
     await _reset_to_zero()
 
-    start = await self.get_home_position()
+    start = await self._driver.get_home_position()
     num_tries = 0
-    while await self.get_home_position() == start:
+    while await self._driver.get_home_position() == start:
       await asyncio.sleep(0.1)
       num_tries += 1
       if num_tries % 25 == 0:
@@ -471,14 +499,15 @@ class VSpinBackend(_NewCentrifugeBackend, Driver):
         raise RuntimeError("Home position did not change after spin.")
 
 
-class Access2Backend(Driver):
-  """Backend for the Agilent Access2 centrifuge loader."""
+# ---------------------------------------------------------------------------
+# Access2 Driver — pure driver, no capabilities
+# ---------------------------------------------------------------------------
 
-  def __init__(
-    self,
-    device_id: str,
-    timeout: int = 60,
-  ):
+
+class Access2Driver(Driver):
+  """FTDI driver for the Agilent Access2 centrifuge loader."""
+
+  def __init__(self, device_id: str, timeout: int = 60):
     """
     Args:
       device_id: The libftdi id for the loader. Find using
@@ -581,7 +610,7 @@ class Access2Backend(Driver):
 
 
 # ---------------------------------------------------------------------------
-# Device
+# Devices
 # ---------------------------------------------------------------------------
 
 
@@ -596,7 +625,7 @@ class VSpin(Resource, Device):
     size_y: float = 0.0,
     size_z: float = 0.0,
   ):
-    backend = VSpinBackend(device_id=device_id)
+    driver = VSpinDriver(device_id=device_id)
     Resource.__init__(
       self,
       name=name,
@@ -606,8 +635,8 @@ class VSpin(Resource, Device):
       model="Agilent VSpin",
       category="centrifuge",
     )
-    Device.__init__(self, driver=backend)
-    self._driver: VSpinBackend = backend
+    Device.__init__(self, driver=driver)
+    self._driver: VSpinDriver = driver
 
     bucket1 = ResourceHolder(
       name=f"{name}_bucket1",
@@ -626,7 +655,9 @@ class VSpin(Resource, Device):
     self.assign_child_resource(bucket1, location=Coordinate.zero())
     self.assign_child_resource(bucket2, location=Coordinate.zero())
 
-    self.centrifuging = CentrifugingCapability(backend=backend, buckets=(bucket1, bucket2))
+    self.centrifuging = CentrifugingCapability(
+      backend=VSpinCentrifugeBackend(driver), buckets=(bucket1, bucket2)
+    )
     self._capabilities = [self.centrifuging]
 
   def serialize(self) -> dict:
@@ -645,7 +676,7 @@ class Access2(ResourceHolder, Device):
     size_y: float = 0.0,
     size_z: float = 0.0,
   ):
-    backend = Access2Backend(device_id=device_id)
+    driver = Access2Driver(device_id=device_id)
     ResourceHolder.__init__(
       self,
       name=name,
@@ -656,8 +687,8 @@ class Access2(ResourceHolder, Device):
       category="loader",
       child_location=Coordinate.zero(),
     )
-    Device.__init__(self, driver=backend)
-    self._driver: Access2Backend = backend
+    Device.__init__(self, driver=driver)
+    self._driver: Access2Driver = driver
     self._vspin = vspin
 
   def serialize(self) -> dict:

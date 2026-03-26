@@ -41,17 +41,19 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingAbsorbanceBackend(AbsorbanceBackend, Driver):
-  """Backend that records all read_absorbance calls for assertion."""
-
-  def __init__(self):
-    self.calls: List[Tuple] = []
-
+class _NullDriver(Driver):
   async def setup(self) -> None:
     pass
 
   async def stop(self) -> None:
     pass
+
+
+class RecordingAbsorbanceBackend(AbsorbanceBackend):
+  """Backend that records all read_absorbance calls for assertion."""
+
+  def __init__(self):
+    self.calls: List[Tuple] = []
 
   async def read_absorbance(
     self,
@@ -71,17 +73,16 @@ class RecordingAbsorbanceBackend(AbsorbanceBackend, Driver):
 
 
 class _TestDevice(Device):
-  def __init__(self, driver):
-    super().__init__(driver=driver)
-    self._driver = driver
-    self.absorbance = AbsorbanceCapability(backend=driver)
+  def __init__(self, backend):
+    super().__init__(driver=_NullDriver())
+    self.absorbance = AbsorbanceCapability(backend=backend)
     self._capabilities = [self.absorbance]
 
 
 class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingAbsorbanceBackend()
-    self.device = _TestDevice(driver=self.backend)
+    self.device = _TestDevice(backend=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -115,7 +116,7 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
 class TestAbsorbanceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = AbsorbanceChatterboxBackend()
-    device = _TestDevice(driver=backend)
+    device = _TestDevice(backend=backend)
     await device.setup()
 
     plate = _test_plate()

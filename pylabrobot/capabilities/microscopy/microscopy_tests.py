@@ -52,17 +52,19 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingMicroscopyBackend(MicroscopyBackend, Driver):
-  """Backend that records all capture calls for assertion."""
-
-  def __init__(self):
-    self.calls: List[Tuple] = []
-
+class _NullDriver(Driver):
   async def setup(self) -> None:
     pass
 
   async def stop(self) -> None:
     pass
+
+
+class RecordingMicroscopyBackend(MicroscopyBackend):
+  """Backend that records all capture calls for assertion."""
+
+  def __init__(self):
+    self.calls: List[Tuple] = []
 
   async def capture(
     self,
@@ -85,17 +87,16 @@ class RecordingMicroscopyBackend(MicroscopyBackend, Driver):
 
 
 class _TestMicroscope(Device):
-  def __init__(self, driver):
-    super().__init__(driver=driver)
-    self._driver = driver
-    self.microscopy = MicroscopyCapability(backend=driver)
+  def __init__(self, backend):
+    super().__init__(driver=_NullDriver())
+    self.microscopy = MicroscopyCapability(backend=backend)
     self._capabilities = [self.microscopy]
 
 
 class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingMicroscopyBackend()
-    self.device = _TestMicroscope(driver=self.backend)
+    self.device = _TestMicroscope(backend=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -171,7 +172,7 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
 class TestChatterboxBackend(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_capture(self):
     backend = MicroscopyChatterboxBackend()
-    device = _TestMicroscope(driver=backend)
+    device = _TestMicroscope(backend=backend)
     await device.setup()
 
     plate = _test_plate()

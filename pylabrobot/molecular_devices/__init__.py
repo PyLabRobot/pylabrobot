@@ -1,9 +1,12 @@
-from .imageXpress.pico.backend import PicoBackend
+from .imageXpress.pico.backend import PicoDriver, PicoMicroscopyBackend
 from .imageXpress.pico.pico import Pico
 from .spectramax import (
-  MolecularDevicesBackend,
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
+  MolecularDevicesTemperatureBackend,
   SpectraMax384Plus,
-  SpectraMax384PlusBackend,
+  SpectraMax384PlusAbsorbanceBackend,
   SpectraMaxM5,
-  SpectraMaxM5Backend,
+  SpectraMaxM5FluorescenceBackend,
+  SpectraMaxM5LuminescenceBackend,
 )

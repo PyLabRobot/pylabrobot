@@ -7,7 +7,7 @@ from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.well import CrossSectionType, Well
 
-from .backend import HamiltonTiltModuleBackend
+from .backend import HamiltonTiltModuleDriver, HamiltonTiltModuleTilterBackend
 
 
 class HamiltonTiltModule(ResourceHolder, Device):
@@ -22,7 +22,7 @@ class HamiltonTiltModule(ResourceHolder, Device):
     write_timeout: float = 3,
     timeout: float = 3,
   ):
-    backend = HamiltonTiltModuleBackend(
+    driver = HamiltonTiltModuleDriver(
       com_port=com_port,
       write_timeout=write_timeout,
       timeout=timeout,
@@ -37,12 +37,12 @@ class HamiltonTiltModule(ResourceHolder, Device):
       category="tilter",
       model="HamiltonTiltModule",
     )
-    Device.__init__(self, driver=backend)
-    self._driver: HamiltonTiltModuleBackend = backend
+    Device.__init__(self, driver=driver)
+    self._driver: HamiltonTiltModuleDriver = driver
     self.pedestal_size_z = pedestal_size_z
     self._hinge_coordinate = Coordinate(6.18, 0, 72.85)
 
-    self.tilter = TiltingCapability(backend=backend)
+    self.tilter = TiltingCapability(backend=HamiltonTiltModuleTilterBackend(driver=driver))
     self._capabilities = [self.tilter]
 
   @property

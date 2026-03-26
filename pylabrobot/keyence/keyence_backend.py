@@ -21,16 +21,16 @@ from pylabrobot.resources.barcode import Barcode
 logger = logging.getLogger(__name__)
 
 
-class KeyenceBarcodeScannerBackend(BarcodeScannerBackend, Driver):
+class KeyenceBarcodeScannerDriver(Driver):
+  """Serial driver for Keyence BL-series barcode scanners.
+
+  Owns the serial connection and provides a generic send_command() method.
+  """
+
   default_baudrate = 9600
   serial_messaging_encoding = "ascii"
-  init_timeout = 1.0  # seconds
-  poll_interval = 0.2  # seconds
 
-  def __init__(
-    self,
-    port: str,
-  ):
+  def __init__(self, port: str):
     if not HAS_SERIAL:
       raise RuntimeError(
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
@@ -54,14 +54,35 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend, Driver):
 
   async def setup(self):
     await self.io.setup()
-    await self.initialize()
 
-  async def initialize(self):
-    """Initialize the Keyence barcode scanner."""
+  async def stop(self):
+    await self.io.stop()
+
+  async def send_command(self, command: str) -> str:
+    """Send a command to the barcode scanner and return the response.
+    Keyence uses carriage return \\r as the line ending by default."""
+
+    await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
+    response = await self.io.read()
+    return response.decode(self.serial_messaging_encoding).strip()
+
+
+class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
+  """Translates BarcodeScannerBackend interface into Keyence driver commands."""
+
+  init_timeout = 1.0  # seconds
+  poll_interval = 0.2  # seconds
+
+  def __init__(self, driver: KeyenceBarcodeScannerDriver):
+    super().__init__()
+    self._driver = driver
+
+  async def _on_setup(self):
+    """Initialize the barcode scanner motor after the driver connects."""
 
     deadline = time.time() + self.init_timeout
     while time.time() < deadline:
-      response = await self.send_command("RMOTOR")
+      response = await self._driver.send_command("RMOTOR")
       if response.strip() == "MOTORON":
         logger.info("Barcode scanner motor is ON.")
         break
@@ -73,19 +94,8 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend, Driver):
         "Failed to initialize Keyence barcode scanner: Timeout waiting for motor to turn on."
       )
 
-  async def send_command(self, command: str) -> str:
-    """Send a command to the barcode scanner and return the response.
-    Keyence uses carriage return \\r as the line ending by default."""
-
-    await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
-    response = await self.io.read()
-    return response.decode(self.serial_messaging_encoding).strip()
-
-  async def stop(self):
-    await self.io.stop()
-
   async def scan_barcode(self) -> Barcode:
-    data = await self.send_command("LON")
+    data = await self._driver.send_command("LON")
     if data.startswith("NG"):
       raise BarcodeScannerError("Barcode reader is off: cannot read barcode")
     if data.startswith("ERR99"):

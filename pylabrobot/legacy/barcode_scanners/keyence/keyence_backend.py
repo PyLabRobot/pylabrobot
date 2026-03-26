@@ -1,3 +1,31 @@
-"""Legacy. Use pylabrobot.keyence.KeyenceBarcodeScannerBackend instead."""
+"""Legacy. Use pylabrobot.keyence instead."""
 
-from pylabrobot.keyence.keyence_backend import KeyenceBarcodeScannerBackend  # noqa: F401
+from pylabrobot.keyence.keyence_backend import (
+  KeyenceBarcodeScannerBarcodeScanningBackend,
+  KeyenceBarcodeScannerDriver,
+)
+from pylabrobot.legacy.barcode_scanners.backend import BarcodeScannerBackend
+from pylabrobot.resources.barcode import Barcode
+
+
+class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
+  """Legacy wrapper around the new Driver + CapabilityBackend.
+
+  In new code, use KeyenceBarcodeScanner (Device) instead.
+  """
+
+  def __init__(self, port: str):
+    super().__init__()
+    self._driver = KeyenceBarcodeScannerDriver(port=port)
+    self._barcode_scanning = KeyenceBarcodeScannerBarcodeScanningBackend(self._driver)
+
+  async def setup(self):
+    await self._driver.setup()
+    await self._barcode_scanning._on_setup()
+
+  async def stop(self):
+    await self._barcode_scanning._on_stop()
+    await self._driver.stop()
+
+  async def scan_barcode(self) -> Barcode:
+    return await self._barcode_scanning.scan_barcode()

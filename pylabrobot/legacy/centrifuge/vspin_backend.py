@@ -11,54 +11,54 @@ logger = logging.getLogger(__name__)
 
 
 class Access2Backend(LoaderBackend):
-  """Legacy. Use pylabrobot.agilent.vspin.Access2Backend instead."""
+  """Legacy. Use pylabrobot.agilent.vspin.Access2Driver instead."""
 
   def __init__(self, device_id: str, timeout: int = 60):
-    self._new = _new.Access2Backend(device_id=device_id, timeout=timeout)
+    self._driver = _new.Access2Driver(device_id=device_id, timeout=timeout)
 
   @property
   def io(self):
-    return self._new.io
+    return self._driver.io
 
   @io.setter
   def io(self, value):
-    self._new.io = value
+    self._driver.io = value
 
   @property
   def timeout(self):
-    return self._new.timeout
+    return self._driver.timeout
 
   @timeout.setter
   def timeout(self, value):
-    self._new.timeout = value
+    self._driver.timeout = value
 
   async def setup(self):
-    await self._new.setup()
+    await self._driver.setup()
 
   async def stop(self):
-    await self._new.stop()
+    await self._driver.stop()
 
   def serialize(self):
     return {"io": self.io.serialize(), "timeout": self.timeout}
 
   async def send_command(self, command: bytes) -> bytes:
-    return await self._new.send_command(command)
+    return await self._driver.send_command(command)
 
   async def get_status(self) -> bytes:
-    return await self._new.get_status()
+    return await self._driver.get_status()
 
   async def park(self):
-    await self._new.park()
+    await self._driver.park()
 
   async def close(self):
-    await self._new.close()
+    await self._driver.close()
 
   async def open(self):
-    await self._new.open()
+    await self._driver.open()
 
   async def load(self):
     try:
-      await self._new.load()
+      await self._driver.load()
     except RuntimeError as e:
       if "no plate found on stage" in str(e):
         raise LoaderNoPlateError("no plate found on stage") from e
@@ -66,7 +66,7 @@ class Access2Backend(LoaderBackend):
 
   async def unload(self):
     try:
-      await self._new.unload()
+      await self._driver.unload()
     except RuntimeError as e:
       if "no plate found in centrifuge" in str(e):
         raise LoaderNoPlateError("no plate found in centrifuge") from e
@@ -74,91 +74,94 @@ class Access2Backend(LoaderBackend):
 
 
 class VSpinBackend(CentrifugeBackend):
-  """Legacy. Use pylabrobot.agilent.vspin.VSpinBackend instead."""
+  """Legacy. Use pylabrobot.agilent.vspin.VSpinDriver instead."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self._new = _new.VSpinBackend(device_id=device_id)
+    self._driver = _new.VSpinDriver(device_id=device_id)
+    self._centrifuge = _new.VSpinCentrifugeBackend(self._driver)
 
   @property
   def io(self):
-    return self._new.io
+    return self._driver.io
 
   @io.setter
   def io(self, value):
-    self._new.io = value
+    self._driver.io = value
 
   @property
   def _bucket_1_remainder(self):
-    return self._new._bucket_1_remainder
+    return self._centrifuge._bucket_1_remainder
 
   @_bucket_1_remainder.setter
   def _bucket_1_remainder(self, value):
-    self._new._bucket_1_remainder = value
+    self._centrifuge._bucket_1_remainder = value
 
   @property
   def bucket_1_remainder(self) -> int:
-    return self._new.bucket_1_remainder
+    return self._centrifuge.bucket_1_remainder
 
   async def setup(self):
-    await self._new.setup()
+    await self._driver.setup()
+    await self._centrifuge._on_setup()
 
   async def stop(self):
-    await self._new.stop()
+    await self._centrifuge._on_stop()
+    await self._driver.stop()
 
   async def set_bucket_1_position_to_current(self) -> None:
-    await self._new.set_bucket_1_position_to_current()
+    await self._centrifuge.set_bucket_1_position_to_current()
 
   async def get_bucket_1_position(self) -> int:
-    return await self._new.get_bucket_1_position()
+    return await self._centrifuge.get_bucket_1_position()
 
   async def get_position(self) -> int:
-    return await self._new.get_position()
+    return await self._driver.get_position()
 
   async def get_tachometer(self) -> int:
-    return await self._new.get_tachometer()
+    return await self._driver.get_tachometer()
 
   async def get_home_position(self) -> int:
-    return await self._new.get_home_position()
+    return await self._driver.get_home_position()
 
   async def get_bucket_locked(self) -> bool:
-    return await self._new.get_bucket_locked()
+    return await self._driver.get_bucket_locked()
 
   async def get_door_open(self) -> bool:
-    return await self._new.get_door_open()
+    return await self._driver.get_door_open()
 
   async def get_door_locked(self) -> bool:
-    return await self._new.get_door_locked()
+    return await self._driver.get_door_locked()
 
   async def open_door(self):
-    await self._new.open_door()
+    await self._centrifuge.open_door()
 
   async def close_door(self):
-    await self._new.close_door()
+    await self._centrifuge.close_door()
 
   async def lock_door(self):
-    await self._new.lock_door()
+    await self._centrifuge.lock_door()
 
   async def unlock_door(self):
-    await self._new.unlock_door()
+    await self._centrifuge.unlock_door()
 
   async def lock_bucket(self):
-    await self._new.lock_bucket()
+    await self._centrifuge.lock_bucket()
 
   async def unlock_bucket(self):
-    await self._new.unlock_bucket()
+    await self._centrifuge.unlock_bucket()
 
   async def go_to_bucket1(self):
-    await self._new.go_to_bucket1()
+    await self._centrifuge.go_to_bucket1()
 
   async def go_to_bucket2(self):
-    await self._new.go_to_bucket2()
+    await self._centrifuge.go_to_bucket2()
 
   async def go_to_position(self, position: int):
-    await self._new.go_to_position(position)
+    await self._centrifuge.go_to_position(position)
 
   @staticmethod
   def g_to_rpm(g: float) -> int:
-    return _new.VSpinBackend.g_to_rpm(g)
+    return _new.VSpinCentrifugeBackend.g_to_rpm(g)
 
   async def spin(
     self,
@@ -167,16 +170,16 @@ class VSpinBackend(CentrifugeBackend):
     acceleration: float = 0.8,
     deceleration: float = 0.8,
   ) -> None:
-    await self._new.spin(
+    await self._centrifuge.spin(
       g=g,
       duration=duration,
-      backend_params=_new.VSpinBackend.SpinParams(
+      backend_params=_new.VSpinCentrifugeBackend.SpinParams(
         acceleration=acceleration, deceleration=deceleration
       ),
     )
 
   async def configure_and_initialize(self):
-    await self._new.configure_and_initialize()
+    await self._driver.configure_and_initialize()
 
 
 # Deprecated alias
