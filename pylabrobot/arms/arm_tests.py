@@ -188,7 +188,7 @@ class TestJointArm(unittest.IsolatedAsyncioTestCase):
     self.mock_backend = MagicMock(spec=HasJoints)
     for method_name in [
       "get_joint_position",
-      "get_cartesian_position",
+      "get_gripper_location",
       "open_gripper",
       "close_gripper",
       "is_gripper_closed",
@@ -206,9 +206,9 @@ class TestJointArm(unittest.IsolatedAsyncioTestCase):
     await self.arm.get_joint_position()
     self.mock_backend.get_joint_position.assert_called_once()
 
-  async def test_get_cartesian_position(self):
-    await self.arm.get_cartesian_position()
-    self.mock_backend.get_cartesian_position.assert_called_once()
+  async def test_get_gripper_location(self):
+    await self.arm.get_gripper_location()
+    self.mock_backend.get_gripper_location.assert_called_once()
 
   async def test_open_gripper(self):
     await self.arm.open_gripper(gripper_width=50.0)

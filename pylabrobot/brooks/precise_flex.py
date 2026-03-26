@@ -7,6 +7,7 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
 from pylabrobot.arms.joint_arm import JointArm
+from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.device import Device
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
@@ -35,13 +36,7 @@ class PFAxis(IntEnum):
 
 
 @dataclass
-class CartesianCoords:
-  location: Coordinate
-  rotation: Rotation
-
-
-@dataclass
-class PreciseFlexCartesianCoords(CartesianCoords):
+class PreciseFlexGripperLocation(GripperLocation):
   rail: Optional[float] = None
   orientation: Optional[ElbowOrientation] = None
 
@@ -142,9 +137,9 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
   # -- coordinate conversion helpers -----------------------------------------
 
   def _convert_to_cartesian_array(
-    self, position: PreciseFlexCartesianCoords
+    self, position: PreciseFlexGripperLocation
   ) -> tuple[float, float, float, float, float, float, int]:
-    """Convert a CartesianCoords object to a list of cartesian coordinates."""
+    """Convert a PreciseFlexGripperLocation object to a list of cartesian coordinates."""
     orientation_int = self._convert_orientation_enum_to_int(position.orientation)
     return (
       position.location.x,
@@ -274,13 +269,13 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
 
   async def approach(
     self,
-    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
+    position: Union[PreciseFlexGripperLocation, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ):
     """Move the arm to an approach position (offset from target).
 
     Args:
-      position: Target position (CartesianCoords or Dict[int, float])
+      position: Target position (PreciseFlexGripperLocation or Dict[int, float])
       access: Access pattern defining how to approach the target. Defaults to VerticalAccess() if not specified.
 
     Example:
@@ -301,10 +296,10 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       access = VerticalAccess()
     if isinstance(position, dict):
       await self._approach_j(position, access)
-    elif isinstance(position, PreciseFlexCartesianCoords):
+    elif isinstance(position, PreciseFlexGripperLocation):
       await self._approach_c(position, access)
     else:
-      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
 
   async def move_rail(self, position: float) -> None:
     """Move the rail to the specified position.
@@ -402,9 +397,9 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
     return self._parse_angles_response(parts)
 
-  async def get_cartesian_position(
+  async def get_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> PreciseFlexCartesianCoords:
+  ) -> PreciseFlexGripperLocation:
     """Get the current position of the arm in Cartesian space."""
     await self._wait_for_eom()
     num_tries = 2
@@ -420,7 +415,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     elbow_orientation = self._convert_orientation_int_to_enum(config)
     rail_position = (await self.get_joint_position())[PFAxis.RAIL] if self._has_rail else None
 
-    return PreciseFlexCartesianCoords(
+    return PreciseFlexGripperLocation(
       location=Coordinate(x, y, z),
       rotation=Rotation(x=roll, y=pitch, z=yaw),
       orientation=elbow_orientation,
@@ -444,7 +439,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     elif self._has_rail:
       raise ValueError("rail_position must be specified for pick_up_at_location when using a rail-equipped arm.")
     access = backend_params.access or VerticalAccess()
-    coords = PreciseFlexCartesianCoords(
+    coords = PreciseFlexGripperLocation(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
     )
     await self._set_grasp_data(
@@ -469,7 +464,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     elif self._has_rail:
       raise ValueError("rail_position must be specified for drop_at_location when using a rail-equipped arm.")
     access = backend_params.access or VerticalAccess()
-    coords = PreciseFlexCartesianCoords(
+    coords = PreciseFlexGripperLocation(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
     )
     await self._place_plate_c(cartesian_position=coords, access=access)
@@ -497,7 +492,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     elif self._has_rail:
       raise ValueError("Rail position must be specified for move_to_location when using a rail-equipped arm.")
 
-    coords = PreciseFlexCartesianCoords(
+    coords = PreciseFlexGripperLocation(
       location=location, rotation=Rotation(x=-180, y=90, z=direction), orientation=backend_params.orientation
     )
     await self._move_c(profile_index=self.profile_index, cartesian_coords=coords)
@@ -600,7 +595,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
 
   async def _approach_c(
     self,
-    cartesian_position: PreciseFlexCartesianCoords,
+    cartesian_position: PreciseFlexGripperLocation,
     access: AccessPattern,
   ):
     """Move the arm to a position above the specified coordinates.
@@ -617,7 +612,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
 
   async def _pick_plate_c(
     self,
-    cartesian_position: PreciseFlexCartesianCoords,
+    cartesian_position: PreciseFlexGripperLocation,
     access: AccessPattern,
   ):
     """Pick a plate from the specified position using Cartesian coordinates."""
@@ -635,7 +630,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
 
   async def _place_plate_c(
     self,
-    cartesian_position: PreciseFlexCartesianCoords,
+    cartesian_position: PreciseFlexGripperLocation,
     access: AccessPattern,
   ):
     """Place a plate at the specified position using Cartesian coordinates."""
@@ -1021,7 +1016,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
   async def _set_location_xyz(
     self,
     location_index: int,
-    cartesian_position: PreciseFlexCartesianCoords,
+    cartesian_position: PreciseFlexGripperLocation,
   ) -> None:
     """Set the Cartesian position values for the specified station index.
 
@@ -1483,7 +1478,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
   async def _move_c(
     self,
     profile_index: int,
-    cartesian_coords: PreciseFlexCartesianCoords,
+    cartesian_coords: PreciseFlexGripperLocation,
   ) -> None:
     """Move the robot to the Cartesian location specified by the arguments.
 

@@ -5,8 +5,8 @@ from pylabrobot.resources import Coordinate, Rotation
 
 
 @dataclass
-class ArmPosition:
-  """Position of the arm in Cartesian space. Subclass for robot-specific fields."""
+class GripperLocation:
+  """Location and rotation of the gripper. Subclass for robot-specific fields."""
 
   location: Coordinate
   rotation: Rotation

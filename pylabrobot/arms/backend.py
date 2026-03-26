@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional
 
-from pylabrobot.arms.standard import ArmPosition
+from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.device import DeviceBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -12,7 +12,7 @@ from pylabrobot.capabilities.capability import BackendParams
 # - pick_up_at_location
 # - drop_at_location
 # - move_to_location
-# - get_cartesian_position
+# - get_gripper_location
 # - is_holding_resource
 
 # CanGrip
@@ -116,9 +116,9 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     """Check if the gripper is currently closed."""
 
   @abstractmethod
-  async def get_cartesian_position(
+  async def get_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> ArmPosition:
+  ) -> GripperLocation:
     """Get the current position of the arm in Cartesian space."""
 
   @abstractmethod

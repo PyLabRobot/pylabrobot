@@ -21,13 +21,13 @@ PreciseFlexError = _new_module.PreciseFlexError
 
 def _to_new_coords(
   position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
-) -> Union[_new_module.PreciseFlexCartesianCoords, Dict[int, float]]:
+) -> Union[_new_module.PreciseFlexGripperLocation, Dict[int, float]]:
   """Convert legacy CartesianCoords to new module's CartesianCoords."""
   if isinstance(position, PreciseFlexCartesianCoords):
     orientation = None
     if position.orientation is not None:
       orientation = _new_module.ElbowOrientation(position.orientation.value)
-    return _new_module.PreciseFlexCartesianCoords(
+    return _new_module.PreciseFlexGripperLocation(
       location=position.location,
       rotation=position.rotation,
       orientation=orientation,
@@ -56,7 +56,7 @@ def _to_new_access(access: Optional[AccessPattern]) -> Optional[_new_module.Acce
 
 
 def _from_new_coords(
-  position: _new_module.PreciseFlexCartesianCoords,
+  position: _new_module.PreciseFlexGripperLocation,
 ) -> PreciseFlexCartesianCoords:
   """Convert new module's CartesianCoords to legacy CartesianCoords."""
   orientation = None
@@ -234,7 +234,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new.get_joint_position()
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
-    result = await self._new.get_cartesian_position()
+    result = await self._new.get_gripper_location()
     return _from_new_coords(result)
 
   async def send_command(self, command: str) -> str:

@@ -2,7 +2,7 @@ from typing import Dict, Optional
 
 from pylabrobot.arms.backend import HasJoints
 from pylabrobot.arms.orientable_arm import OrientableArm
-from pylabrobot.arms.standard import ArmPosition
+from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.resources import Resource
 from pylabrobot.capabilities.capability import BackendParams
 
@@ -44,7 +44,7 @@ class JointArm(OrientableArm):
   ) -> Dict[int, float]:
     return await self.backend.get_joint_position(backend_params=backend_params)
 
-  async def get_cartesian_position(
+  async def get_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> ArmPosition:
-    return await self.backend.get_cartesian_position(backend_params=backend_params)
+  ) -> GripperLocation:
+    return await self.backend.get_gripper_location(backend_params=backend_params)
