@@ -42,6 +42,7 @@ class CartesianCoords:
 
 @dataclass
 class PreciseFlexCartesianCoords(CartesianCoords):
+  rail: Optional[float] = None
   orientation: Optional[ElbowOrientation] = None
 
 
@@ -127,6 +128,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
     self.profile_index: int = 1
     self.location_index: int = 1
+    self._rail_position_index = 1
     self.horizontal_compliance: bool = False
     self.horizontal_compliance_torque: int = 0
     self.timeout = timeout
@@ -138,21 +140,6 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
       )
 
   # -- coordinate conversion helpers -----------------------------------------
-
-  def _convert_to_cartesian_space(
-    self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
-  ) -> PreciseFlexCartesianCoords:
-    """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
-    if len(position) != 7:
-      raise ValueError(
-        "Position must be a tuple of 7 values (x, y, z, yaw, pitch, roll, orientation)."
-      )
-    orientation = ElbowOrientation(position[6])
-    return PreciseFlexCartesianCoords(
-      location=Coordinate(position[0], position[1], position[2]),
-      rotation=Rotation(position[5], position[4], position[3]),
-      orientation=orientation,
-    )
 
   def _convert_to_cartesian_array(
     self, position: PreciseFlexCartesianCoords
@@ -330,8 +317,8 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     """
     if not self._has_rail:
       raise RuntimeError("This arm does not have a rail.")
-    await self._set_rail_position(self.location_index, position)
-    await self._move_rail(station_id=self.location_index)
+    await self._set_rail_position(self._rail_position_index, position)
+    await self._move_rail(station_id=self._rail_position_index)
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default safe position."""
@@ -430,8 +417,15 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
       raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
     config = int(parts[6])
-    enum_thing = self._convert_orientation_int_to_enum(config)
-    return self._convert_to_cartesian_space(position=(x, y, z, yaw, pitch, roll, enum_thing))
+    elbow_orientation = self._convert_orientation_int_to_enum(config)
+    rail_position = (await self.get_joint_position())[PFAxis.RAIL] if self._has_rail else None
+
+    return PreciseFlexCartesianCoords(
+      location=Coordinate(x, y, z),
+      rotation=Rotation(x=roll, y=pitch, z=yaw),
+      orientation=elbow_orientation,
+      rail=rail_position
+    )
 
   # -- OrientableArmBackend interface (Cartesian) -----------------------------
 
@@ -497,12 +491,14 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
       backend_params = PreciseFlexBackend.MoveToLocationParams()
     if backend_params.speed is not None:
       await self._set_speed(backend_params.speed)
+
     if backend_params.rail_position is not None:
       await self.move_rail(backend_params.rail_position)
     elif self._has_rail:
       raise ValueError("Rail position must be specified for move_to_location when using a rail-equipped arm.")
+
     coords = PreciseFlexCartesianCoords(
-      location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
+      location=location, rotation=Rotation(x=-180, y=90, z=direction), orientation=backend_params.orientation
     )
     await self._move_c(profile_index=self.profile_index, cartesian_coords=coords)
 
@@ -1435,18 +1431,6 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
 
   # -- RAIL COMMANDS ---------------------------------------------------------
 
-  async def _get_rail_position(self, station_id: int) -> float:
-    """Get the rail position for the specified station.
-
-    Args:
-      station_id: The station index.
-
-    Returns:
-      The rail position in mm.
-    """
-    data = await self.send_command(f"Rail {station_id}")
-    return float(data)
-
   async def _set_rail_position(self, station_id: int, rail_position: float) -> None:
     """Set the rail position for the specified station.
 
@@ -1456,7 +1440,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     """
     await self.send_command(f"Rail {station_id} {rail_position}")
 
-  async def _move_rail(self, station_id: Optional[int] = None, mode: int = 0) -> None:
+  async def _move_rail(self, station_id: Optional[int] = None, mode: int = 1) -> None:
     """Move the rail to the position stored at the specified station.
 
     Args:
