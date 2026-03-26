@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import warnings
 from abc import ABC
 from dataclasses import dataclass
@@ -13,6 +14,9 @@ from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 from pylabrobot.resources.resource import Resource
 from pylabrobot.capabilities.capability import BackendParams
+
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -261,7 +265,19 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
 
   async def power_on_robot(self):
     """Power on the robot."""
-    await self.set_power(True, self.timeout)
+    error: Optional[PreciseFlexError] = None
+    for _ in range(3):
+      try:
+        await self.set_power(True, self.timeout)
+      except PreciseFlexError as e:
+        logger.warning(f"Error powering on robot, retrying... Attempt {_+1}/3. Error: {e}")
+        error = e
+      else:
+        return
+
+    if error:
+      raise error
+    raise RuntimeError("Failed to power on robot after 3 attempts for unknown reasons.")
 
   async def power_off_robot(self):
     """Power off the robot."""
