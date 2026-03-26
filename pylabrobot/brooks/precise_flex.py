@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum
 from typing import Dict, List, Literal, Optional, Union
 
-from pylabrobot.arms.backend import CanFreedrive, JointGripperArmBackend
+from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
 from pylabrobot.arms.joint_arm import JointArm
 from pylabrobot.device import Device
 from pylabrobot.io.socket import Socket
@@ -106,7 +106,7 @@ class PreciseFlexError(Exception):
 # ---------------------------------------------------------------------------
 
 
-class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
+class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, ABC):
   """Backend for the PreciseFlex robotic arm.
 
   Default to using Cartesian coordinates; some methods in Brook's TCS

@@ -52,6 +52,40 @@ class CanFreedrive(metaclass=ABCMeta):
     """Exit freedrive mode."""
 
 
+class HasJoints(metaclass=ABCMeta):
+  """Mixin for arms that can be controlled in joint space."""
+
+  @abstractmethod
+  async def pick_up_at_joint_position(
+    self,
+    position: Dict[int, float],
+    resource_width: float,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Pick up at the specified joint position."""
+
+  @abstractmethod
+  async def drop_at_joint_position(
+    self,
+    position: Dict[int, float],
+    resource_width: float,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Drop at the specified joint position."""
+
+  @abstractmethod
+  async def move_to_joint_position(
+    self, position: Dict[int, float], backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Move the arm to the specified joint position."""
+
+  @abstractmethod
+  async def get_joint_position(
+    self, backend_params: Optional[BackendParams] = None
+  ) -> Dict[int, float]:
+    """Get the current position of the arm in joint space."""
+
+
 class _BaseArmBackend(DeviceBackend, metaclass=ABCMeta):
   @abstractmethod
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -80,6 +114,12 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
   @abstractmethod
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Check if the gripper is currently closed."""
+
+  @abstractmethod
+  async def get_cartesian_position(
+    self, backend_params: Optional[BackendParams] = None
+  ) -> ArmPosition:
+    """Get the current position of the arm in Cartesian space."""
 
   @abstractmethod
   async def pick_up_at_location(
@@ -137,46 +177,6 @@ class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the held object to the specified location with rotation."""
-
-
-class JointGripperArmBackend(OrientableGripperArmBackend, metaclass=ABCMeta):
-  """Backend for a joint-space arm with rotation capability. E.g. PreciseFlex, KX2."""
-
-  @abstractmethod
-  async def pick_up_at_joint_position(
-    self,
-    position: Dict[int, float],
-    resource_width: float,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    """Pick up at the specified joint position."""
-
-  @abstractmethod
-  async def drop_at_joint_position(
-    self,
-    position: Dict[int, float],
-    resource_width: float,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    """Drop at the specified joint position."""
-
-  @abstractmethod
-  async def move_to_joint_position(
-    self, position: Dict[int, float], backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Move the arm to the specified joint position."""
-
-  @abstractmethod
-  async def get_joint_position(
-    self, backend_params: Optional[BackendParams] = None
-  ) -> Dict[int, float]:
-    """Get the current position of the arm in joint space."""
-
-  @abstractmethod
-  async def get_cartesian_position(
-    self, backend_params: Optional[BackendParams] = None
-  ) -> ArmPosition:
-    """Get the current position of the arm in Cartesian space."""
 
 
 class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):

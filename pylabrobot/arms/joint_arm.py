@@ -1,6 +1,6 @@
 from typing import Dict, Optional
 
-from pylabrobot.arms.backend import JointGripperArmBackend
+from pylabrobot.arms.backend import HasJoints
 from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.standard import ArmPosition
 from pylabrobot.resources import Resource
@@ -10,9 +10,9 @@ from pylabrobot.capabilities.capability import BackendParams
 class JointArm(OrientableArm):
   """An arm with joint-space control and rotation capability. E.g. PreciseFlex, KX2."""
 
-  def __init__(self, backend: JointGripperArmBackend, reference_resource: Resource):
+  def __init__(self, backend: HasJoints, reference_resource: Resource):
     super().__init__(backend=backend, reference_resource=reference_resource)
-    self.backend: JointGripperArmBackend = backend  # type: ignore[assignment]
+    self.backend: HasJoints = backend  # type: ignore[assignment]
 
   async def pick_up_at_joint_position(
     self,

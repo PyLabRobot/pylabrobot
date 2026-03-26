@@ -7,7 +7,7 @@ from pylabrobot.arms.joint_arm import JointArm
 from pylabrobot.arms.backend import (
   GripperArmBackend,
   OrientableGripperArmBackend,
-  JointGripperArmBackend,
+  HasJoints,
 )
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
@@ -185,7 +185,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
 class TestJointArm(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=JointGripperArmBackend)
+    self.mock_backend = MagicMock(spec=HasJoints)
     for method_name in [
       "get_joint_position",
       "get_cartesian_position",
