@@ -9,12 +9,12 @@ from pylabrobot.capabilities.microscopy.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.serializer import SerializableMixin
 
 
-class MicroscopyBackend(DeviceBackend, metaclass=ABCMeta):
+class MicroscopyBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for microscopy devices."""
 
   @abstractmethod

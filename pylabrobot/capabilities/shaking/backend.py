@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 
-class ShakerBackend(DeviceBackend, metaclass=ABCMeta):
+class ShakerBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for shaking devices."""
 
   @abstractmethod

@@ -6,7 +6,7 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.device import Device, DeviceBackend
+from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
@@ -20,7 +20,7 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 
-class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
+class BioShakeBackend(TemperatureControllerBackend, ShakerBackend, Driver):
   """Backend for all QInstruments BioShake models.
 
   All models share the same firmware. Commands that are not supported by a given
@@ -78,7 +78,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
   async def setup(self, skip_home: bool = False):
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     await self.io.setup()
     if not skip_home:
       await self.reset()
@@ -86,7 +86,7 @@ class BioShakeBackend(TemperatureControllerBackend, ShakerBackend):
       await self.home()
 
   async def stop(self):
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
     await self.io.stop()
 
   async def reset(self):
@@ -238,7 +238,7 @@ class BioShake(PlateHolder, Device):
     size_x: float,
     size_y: float,
     size_z: float,
-    backend: BioShakeBackend,
+    driver: BioShakeBackend,
     child_location: Coordinate,
     pedestal_size_z: float,
     category: str = "bioshake",
@@ -255,8 +255,8 @@ class BioShake(PlateHolder, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: BioShakeBackend = backend
+    Device.__init__(self, driver=driver)
+    self._driver: BioShakeBackend = driver
 
   def serialize(self) -> dict:
     return {
@@ -276,14 +276,14 @@ class BioShake3000(BioShake):
     raise NotImplementedError("BioShake3000 is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.shaker]
 
 
@@ -294,14 +294,14 @@ class BioShake3000Elm(BioShake):
     raise NotImplementedError("BioShake3000Elm is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.shaker]
 
 
@@ -312,14 +312,14 @@ class BioShake3000ElmDWP(BioShake):
     raise NotImplementedError("BioShake3000ElmDWP is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.shaker]
 
 
@@ -330,14 +330,14 @@ class BioShakeD30Elm(BioShake):
     raise NotImplementedError("BioShakeD30Elm is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.shaker]
 
 
@@ -348,14 +348,14 @@ class BioShake5000Elm(BioShake):
     raise NotImplementedError("BioShake5000Elm is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.shaker]
 
 
@@ -369,15 +369,15 @@ class BioShake3000T(BioShake):
     raise NotImplementedError("BioShake3000T is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.tc, self.shaker]
 
 
@@ -388,15 +388,15 @@ class BioShake3000TElm(BioShake):
     raise NotImplementedError("BioShake3000TElm is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.tc, self.shaker]
 
 
@@ -407,15 +407,15 @@ class BioShakeD30TElm(BioShake):
     raise NotImplementedError("BioShakeD30TElm is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.tc, self.shaker]
 
 
@@ -429,15 +429,15 @@ class BioShakeQ1(BioShake):
     raise NotImplementedError("BioShakeQ1 is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port, supports_active_cooling=True),
+      driver=BioShakeBackend(port=port, supports_active_cooling=True),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.tc, self.shaker]
 
 
@@ -448,15 +448,15 @@ class BioShakeQ2(BioShake):
     raise NotImplementedError("BioShakeQ2 is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port, supports_active_cooling=True),
+      driver=BioShakeBackend(port=port, supports_active_cooling=True),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
-    self.shaker = ShakingCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
+    self.shaker = ShakingCapability(backend=self._driver)
     self._capabilities = [self.tc, self.shaker]
 
 
@@ -470,14 +470,14 @@ class Heatplate(BioShake):
     raise NotImplementedError("Heatplate is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port),
+      driver=BioShakeBackend(port=port),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
     self._capabilities = [self.tc]
 
 
@@ -488,12 +488,12 @@ class ColdPlate(BioShake):
     raise NotImplementedError("ColdPlate is missing resource definition.")
     super().__init__(
       name=name,
-      backend=BioShakeBackend(port=port, supports_active_cooling=True),
+      driver=BioShakeBackend(port=port, supports_active_cooling=True),
       size_x=0,
       size_y=0,
       size_z=0,  # TODO
       child_location=Coordinate(0, 0, 0),  # TODO
       pedestal_size_z=0,  # TODO
     )
-    self.tc = TemperatureControlCapability(backend=self._backend)
+    self.tc = TemperatureControlCapability(backend=self._driver)
     self._capabilities = [self.tc]

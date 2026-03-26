@@ -6,7 +6,7 @@ import time
 from typing import List, Literal, Optional, Union
 
 from pylabrobot.capabilities.weighing import ScaleBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger("pylabrobot")
@@ -143,7 +143,7 @@ class MettlerToledoError(Exception):
 MettlerToledoResponse = List[str]
 
 
-class MettlerToledoWXS205SDUBackend(ScaleBackend):
+class MettlerToledoWXS205SDUBackend(ScaleBackend, Driver):
   """Backend for the Mettler Toledo WXS205SDU scale.
 
   This scale is used by Hamilton in the liquid verification kit (LVK).
@@ -173,7 +173,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     )
 
   async def setup(self) -> None:
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     await self.io.setup()
 
     # set output unit to grams
@@ -183,7 +183,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.serial_number = await self.request_serial_number()
 
   async def stop(self) -> None:
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
     await self.io.stop()
 
   def serialize(self) -> dict:

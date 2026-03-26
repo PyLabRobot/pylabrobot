@@ -17,13 +17,13 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.device import Device, DeviceBackend
+from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 
 
-class A4SBackend(SealerBackend, TemperatureControllerBackend):
+class A4SBackend(SealerBackend, TemperatureControllerBackend, Driver):
   """Backend for the Azenta a4S thermal sealer.
 
   https://web.azenta.com/hubfs/azenta-files/resources/tech-drawings/TD-automated-roll-heat-sealer.pdf
@@ -47,13 +47,13 @@ class A4SBackend(SealerBackend, TemperatureControllerBackend):
     )
 
   async def setup(self):
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     await self.io.setup()
     await self.system_reset()
 
   async def stop(self):
     await self.set_heater(on=False)
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
     await self.io.stop()
 
   # -- serial protocol --
@@ -254,7 +254,7 @@ class A4S(PlateHolder, Device):
   def __init__(
     self,
     name: str,
-    backend: A4SBackend,
+    driver: A4SBackend,
     size_x: float = 222,
     size_y: float = 500,
     size_z: float = 276,
@@ -275,10 +275,10 @@ class A4S(PlateHolder, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: A4SBackend = backend
-    self.sealer = SealingCapability(backend=backend)
-    self.tc = TemperatureControlCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver: A4SBackend = driver
+    self.sealer = SealingCapability(backend=driver)
+    self.tc = TemperatureControlCapability(backend=driver)
     self._capabilities = [self.tc, self.sealer]
 
   def serialize(self) -> dict:

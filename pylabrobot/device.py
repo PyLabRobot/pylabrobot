@@ -22,10 +22,10 @@ _P = ParamSpec("_P")
 _R = TypeVar("_R", bound=Awaitable[Any])
 
 
-class DeviceBackend(SerializableMixin, ABC):
-  """Abstract class for device backends."""
+class Driver(SerializableMixin, ABC):
+  """Abstract class for hardware drivers."""
 
-  _instances: weakref.WeakSet["DeviceBackend"] = weakref.WeakSet()
+  _instances: weakref.WeakSet["Driver"] = weakref.WeakSet()
 
   def __init__(self):
     self._instances.add(self)
@@ -57,6 +57,9 @@ class DeviceBackend(SerializableMixin, ABC):
     return cls._instances
 
 
+DeviceBackend = Driver  # backward compat alias
+
+
 def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   """Decorator for methods that require the device to be set up.
 
@@ -81,8 +84,8 @@ def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
 class Device(SerializableMixin, ABC):
   """Abstract base class for device frontends."""
 
-  def __init__(self, backend: DeviceBackend):
-    self._backend = backend
+  def __init__(self, driver: Driver):
+    self._driver = driver
     self._setup_finished = False
     self._capabilities: List[Capability] = []
 
@@ -91,18 +94,18 @@ class Device(SerializableMixin, ABC):
     return self._setup_finished
 
   def serialize(self) -> dict:
-    return {"backend": self._backend.serialize()}
+    return {"driver": self._driver.serialize()}
 
   @classmethod
   def deserialize(cls, data: dict):
     data_copy = data.copy()
-    backend_data = data_copy.pop("backend")
-    backend = DeviceBackend.deserialize(backend_data)
-    data_copy["backend"] = backend
+    driver_data = data_copy.pop("driver", None) or data_copy.pop("backend", None)
+    driver = Driver.deserialize(driver_data)
+    data_copy["driver"] = driver
     return cls(**data_copy)
 
-  async def setup(self, **backend_kwargs):
-    await self._backend.setup(**backend_kwargs)
+  async def setup(self):
+    await self._driver.setup()
     for cap in self._capabilities:
       await cap._on_setup()
     self._setup_finished = True
@@ -111,7 +114,7 @@ class Device(SerializableMixin, ABC):
   async def stop(self):
     for cap in reversed(self._capabilities):
       await cap._on_stop()
-    await self._backend.stop()
+    await self._driver.stop()
     self._setup_finished = False
 
   async def __aenter__(self):

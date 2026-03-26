@@ -1,6 +1,7 @@
 from typing import Optional, cast
 
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 
 try:
@@ -12,7 +13,7 @@ except ImportError as e:
   _OT_IMPORT_ERROR = e
 
 
-class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
+class OpentronsTemperatureModuleBackend(TemperatureControllerBackend, Driver):
   """Backend for the Opentrons Temperature Module v2 via the Opentrons HTTP API."""
 
   @property
@@ -59,7 +60,7 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
     raise RuntimeError(f"Module with id '{self.opentrons_id}' not found")
 
 
-class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
+class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend, Driver):
   """Backend for the Opentrons Temperature Module v2 via direct USB serial."""
 
   @property

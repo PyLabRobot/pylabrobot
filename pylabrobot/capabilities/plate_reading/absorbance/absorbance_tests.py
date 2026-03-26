@@ -9,7 +9,7 @@ from pylabrobot.capabilities.plate_reading.absorbance.chatterbox import (
   AbsorbanceChatterboxBackend,
 )
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -41,7 +41,7 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingAbsorbanceBackend(AbsorbanceBackend):
+class RecordingAbsorbanceBackend(AbsorbanceBackend, Driver):
   """Backend that records all read_absorbance calls for assertion."""
 
   def __init__(self):
@@ -71,17 +71,17 @@ class RecordingAbsorbanceBackend(AbsorbanceBackend):
 
 
 class _TestDevice(Device):
-  def __init__(self, backend: AbsorbanceBackend):
-    super().__init__(backend=backend)
-    self._backend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
+  def __init__(self, driver):
+    super().__init__(driver=driver)
+    self._driver = driver
+    self.absorbance = AbsorbanceCapability(backend=driver)
     self._capabilities = [self.absorbance]
 
 
 class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingAbsorbanceBackend()
-    self.device = _TestDevice(backend=self.backend)
+    self.device = _TestDevice(driver=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -115,7 +115,7 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
 class TestAbsorbanceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = AbsorbanceChatterboxBackend()
-    device = _TestDevice(backend=backend)
+    device = _TestDevice(driver=backend)
     await device.setup()
 
     plate = _test_plate()

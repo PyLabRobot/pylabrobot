@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 
 from .inheco_sila_interface import InhecoSiLAInterface
 
@@ -36,7 +36,7 @@ def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
 DrawerStatus = Literal["Opened", "Closed"]
 
 
-class SCILABackend(TemperatureControllerBackend):
+class SCILABackend(TemperatureControllerBackend, Driver):
   """Backend for Inheco SciLa incubators.
 
   Communicates over HTTP/SOAP via the SiLA interface.
@@ -46,12 +46,12 @@ class SCILABackend(TemperatureControllerBackend):
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
   async def setup(self) -> None:
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     await self._sila_interface.setup()
     await self._reset_and_initialize()
 
   async def stop(self) -> None:
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
     await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:

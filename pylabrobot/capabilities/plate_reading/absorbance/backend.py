@@ -4,13 +4,13 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
 
-class AbsorbanceBackend(DeviceBackend, metaclass=ABCMeta):
+class AbsorbanceBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for absorbance plate reading."""
 
   @abstractmethod

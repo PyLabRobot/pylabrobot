@@ -2,6 +2,7 @@ import time
 from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.absorbance.backend import AbsorbanceBackend
+from pylabrobot.device import Driver
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
 from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
@@ -9,7 +10,7 @@ from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
 
-class AbsorbanceChatterboxBackend(AbsorbanceBackend):
+class AbsorbanceChatterboxBackend(AbsorbanceBackend, Driver):
   """Mock absorbance backend for testing."""
 
   def __init__(self):

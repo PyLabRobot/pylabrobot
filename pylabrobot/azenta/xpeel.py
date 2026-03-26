@@ -12,13 +12,13 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 
-class XPeelBackend(PeelerBackend):
+class XPeelBackend(PeelerBackend, Driver):
   """Backend for the Azenta XPeel automated plate seal remover (RS-232)."""
 
   BAUDRATE = 9600
@@ -271,7 +271,7 @@ class XPeel(Device):
 
   def __init__(self, name: str, port: str, timeout: Optional[float] = None):
     backend = XPeelBackend(port=port, timeout=timeout)
-    super().__init__(backend=backend)
-    self._backend: XPeelBackend = backend
+    super().__init__(driver=backend)
+    self._driver: XPeelBackend = backend
     self.peeler = PeelingCapability(backend=backend)
     self._capabilities = [self.peeler]

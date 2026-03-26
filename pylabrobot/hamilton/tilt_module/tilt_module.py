@@ -37,8 +37,8 @@ class HamiltonTiltModule(ResourceHolder, Device):
       category="tilter",
       model="HamiltonTiltModule",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: HamiltonTiltModuleBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: HamiltonTiltModuleBackend = backend
     self.pedestal_size_z = pedestal_size_z
     self._hinge_coordinate = Coordinate(6.18, 0, 72.85)
 

@@ -18,6 +18,7 @@ from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
   Objective,
 )
+from pylabrobot.device import Driver
 from pylabrobot.io.sila.grpc import (
   command_execution_uuid,
   decode_command_confirmation,
@@ -313,7 +314,7 @@ _OBJECTIVE_MAP: Dict[Objective, str] = {
 }
 
 
-class PicoBackend(MicroscopyBackend):
+class PicoBackend(MicroscopyBackend, Driver):
   """Backend for Molecular Devices ImageXpress Pico automated microscope.
 
   Communicates with the instrument via SiLA 2 over gRPC.

@@ -5,7 +5,7 @@ import time
 from abc import ABCMeta
 from typing import Optional
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
 
@@ -15,7 +15,7 @@ class ByonoyDevice(enum.Enum):
   LUMINESCENCE_96 = enum.auto()
 
 
-class ByonoyBase(DeviceBackend, metaclass=ABCMeta):
+class ByonoyBase(Driver, metaclass=ABCMeta):
   """Shared HID communication logic for Byonoy plate readers."""
 
   def __init__(self, pid: int, device_type: ByonoyDevice) -> None:

@@ -52,8 +52,8 @@ class SpectraMax384Plus(Resource, Device):
       size_z=size_z,
       model="Molecular Devices SpectraMax 384 Plus",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: SpectraMax384PlusBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: SpectraMax384PlusBackend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self.tc = TemperatureControlCapability(backend=backend)
     self._capabilities = [self.absorbance, self.tc]
@@ -72,7 +72,7 @@ class SpectraMax384Plus(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self) -> None:
-    await self._backend.open()
+    await self._driver.open()
 
   async def close(self) -> None:
-    await self._backend.close()
+    await self._driver.close()

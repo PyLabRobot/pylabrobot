@@ -15,7 +15,7 @@ class HamiltonHeaterShaker(PlateHolder, Device):
   def __init__(
     self,
     name: str,
-    backend: HamiltonHeaterShakerBackend,
+    driver: HamiltonHeaterShakerBackend,
     size_x: float = 146.2,
     size_y: float = 103.6,
     size_z: float = 74.11,
@@ -36,10 +36,10 @@ class HamiltonHeaterShaker(PlateHolder, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: HamiltonHeaterShakerBackend = backend
-    self.tc = TemperatureControlCapability(backend=backend)
-    self.shaker = ShakingCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver: HamiltonHeaterShakerBackend = driver
+    self.tc = TemperatureControlCapability(backend=driver)
+    self.shaker = ShakingCapability(backend=driver)
     self._capabilities = [self.tc, self.shaker]
 
   def serialize(self) -> dict:

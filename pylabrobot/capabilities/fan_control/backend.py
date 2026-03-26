@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 
-class FanBackend(DeviceBackend, metaclass=ABCMeta):
+class FanBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for fan devices."""
 
   @abstractmethod

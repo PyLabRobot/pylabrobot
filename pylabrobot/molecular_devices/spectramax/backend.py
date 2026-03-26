@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.capabilities.plate_reading.absorbance.backend import AbsorbanceBackend
+from pylabrobot.device import Driver
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.io.serial import Serial
@@ -250,7 +251,7 @@ class MolecularDevicesSettings:
   settling_time: int = 0
 
 
-class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
+class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend, Driver):
   """Backend for Molecular Devices plate readers. Supports absorbance reading.
 
   Contains all serial protocol code, enums, dataclasses, and exceptions shared

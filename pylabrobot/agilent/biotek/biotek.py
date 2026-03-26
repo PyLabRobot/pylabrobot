@@ -15,6 +15,7 @@ from pylabrobot.capabilities.plate_reading.luminescence import (
   LuminescenceBackend,
   LuminescenceResult,
 )
+from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Well
 from pylabrobot.capabilities.capability import BackendParams
@@ -23,7 +24,9 @@ from pylabrobot.serializer import SerializableMixin
 logger = logging.getLogger(__name__)
 
 
-class BioTekBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend, metaclass=ABCMeta):
+class BioTekBackend(
+  AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend, Driver, metaclass=ABCMeta
+):
   """Backend for Agilent BioTek plate readers."""
 
   def __init__(

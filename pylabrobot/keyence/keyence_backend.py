@@ -14,13 +14,14 @@ from pylabrobot.capabilities.barcode_scanning.backend import (
   BarcodeScannerBackend,
   BarcodeScannerError,
 )
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
 
 logger = logging.getLogger(__name__)
 
 
-class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
+class KeyenceBarcodeScannerBackend(BarcodeScannerBackend, Driver):
   default_baudrate = 9600
   serial_messaging_encoding = "ascii"
   init_timeout = 1.0  # seconds

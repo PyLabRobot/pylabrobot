@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.capture import CaptureReader, capturer
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
@@ -40,7 +40,7 @@ def validate(capture_file: str):
       return False
     return True
 
-  for machine_backend in DeviceBackend.get_all_instances():
+  for machine_backend in Driver.get_all_instances():
     if not (
       (hasattr(machine_backend, "io") and _replace_io(machine_backend))
       or (hasattr(machine_backend, "interface") and _replace_io(machine_backend.interface))

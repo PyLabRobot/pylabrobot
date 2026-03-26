@@ -9,7 +9,7 @@ from pylabrobot.capabilities.plate_reading.luminescence.chatterbox import (
 )
 from pylabrobot.capabilities.plate_reading.luminescence.luminescence import LuminescenceCapability
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -41,7 +41,7 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingLuminescenceBackend(LuminescenceBackend):
+class RecordingLuminescenceBackend(LuminescenceBackend, Driver):
   """Backend that records all calls for assertion."""
 
   def __init__(self):
@@ -68,16 +68,16 @@ class RecordingLuminescenceBackend(LuminescenceBackend):
 
 
 class _TestDevice(Device):
-  def __init__(self, backend: LuminescenceBackend):
-    super().__init__(backend=backend)
-    self.luminescence = LuminescenceCapability(backend=backend)
+  def __init__(self, driver):
+    super().__init__(driver=driver)
+    self.luminescence = LuminescenceCapability(backend=driver)
     self._capabilities = [self.luminescence]
 
 
 class TestLuminescenceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingLuminescenceBackend()
-    self.device = _TestDevice(backend=self.backend)
+    self.device = _TestDevice(driver=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -109,7 +109,7 @@ class TestLuminescenceCapability(unittest.IsolatedAsyncioTestCase):
 class TestLuminescenceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = LuminescenceChatterboxBackend()
-    device = _TestDevice(backend=backend)
+    device = _TestDevice(driver=backend)
     await device.setup()
     plate = _test_plate()
 

@@ -2,6 +2,7 @@ import time
 from typing import List, Optional
 
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
+from pylabrobot.device import Driver
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
 from pylabrobot.capabilities.plate_reading.utils import mask_wells
 from pylabrobot.resources.plate import Plate
@@ -9,7 +10,7 @@ from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
 
-class FluorescenceChatterboxBackend(FluorescenceBackend):
+class FluorescenceChatterboxBackend(FluorescenceBackend, Driver):
   """Mock fluorescence backend for testing."""
 
   def __init__(self):

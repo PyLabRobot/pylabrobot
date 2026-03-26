@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.resources.barcode import Barcode
 
 
@@ -8,7 +8,7 @@ class BarcodeScannerError(Exception):
   """Error raised by a barcode scanner backend."""
 
 
-class BarcodeScannerBackend(DeviceBackend, metaclass=ABCMeta):
+class BarcodeScannerBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for barcode scanning devices."""
 
   @abstractmethod

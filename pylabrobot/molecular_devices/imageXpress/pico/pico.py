@@ -54,8 +54,8 @@ class Pico(Resource, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: PicoBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: PicoBackend = backend
 
     self.microscopy = MicroscopyCapability(backend=backend)
     self._capabilities = [self.microscopy]

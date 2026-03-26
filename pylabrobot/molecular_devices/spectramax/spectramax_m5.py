@@ -371,8 +371,8 @@ class SpectraMaxM5(Resource, Device):
       size_z=size_z,
       model="Molecular Devices SpectraMax M5",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: SpectraMaxM5Backend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: SpectraMaxM5Backend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self.luminescence = LuminescenceCapability(backend=backend)
     self.fluorescence = FluorescenceCapability(backend=backend)
@@ -393,7 +393,7 @@ class SpectraMaxM5(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self) -> None:
-    await self._backend.open()
+    await self._driver.open()
 
   async def close(self) -> None:
-    await self._backend.close()
+    await self._driver.close()

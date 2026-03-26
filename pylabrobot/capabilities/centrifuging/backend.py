@@ -1,11 +1,11 @@
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.serializer import SerializableMixin
 
 
-class CentrifugeBackend(DeviceBackend, metaclass=ABCMeta):
+class CentrifugeBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for centrifuge devices."""
 
   @abstractmethod

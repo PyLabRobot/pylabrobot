@@ -20,7 +20,7 @@ from pylabrobot.capabilities.microscopy.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -52,7 +52,7 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingMicroscopyBackend(MicroscopyBackend):
+class RecordingMicroscopyBackend(MicroscopyBackend, Driver):
   """Backend that records all capture calls for assertion."""
 
   def __init__(self):
@@ -85,17 +85,17 @@ class RecordingMicroscopyBackend(MicroscopyBackend):
 
 
 class _TestMicroscope(Device):
-  def __init__(self, backend: MicroscopyBackend):
-    super().__init__(backend=backend)
-    self._backend = backend
-    self.microscopy = MicroscopyCapability(backend=backend)
+  def __init__(self, driver):
+    super().__init__(driver=driver)
+    self._driver = driver
+    self.microscopy = MicroscopyCapability(backend=driver)
     self._capabilities = [self.microscopy]
 
 
 class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingMicroscopyBackend()
-    self.device = _TestMicroscope(backend=self.backend)
+    self.device = _TestMicroscope(driver=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -171,7 +171,7 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
 class TestChatterboxBackend(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_capture(self):
     backend = MicroscopyChatterboxBackend()
-    device = _TestMicroscope(backend=backend)
+    device = _TestMicroscope(driver=backend)
     await device.setup()
 
     plate = _test_plate()

@@ -2,10 +2,11 @@ import asyncio
 from typing import Optional
 
 from pylabrobot.capabilities.fan_control import FanBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
 
 
-class HamiltonHepaFanBackend(FanBackend):
+class HamiltonHepaFanBackend(FanBackend, Driver):
   """Backend for the Hamilton HEPA fan attachment."""
 
   def __init__(self, device_id: Optional[str] = None):
@@ -153,7 +154,7 @@ class HamiltonHepaFanBackend(FanBackend):
     await self.io.read(64)
 
 
-class HamiltonHepaFanChatterboxBackend(FanBackend):
+class HamiltonHepaFanChatterboxBackend(FanBackend, Driver):
   """Chatterbox backend for device-free testing."""
 
   async def setup(self) -> None:

@@ -9,7 +9,7 @@ from pylabrobot.capabilities.plate_reading.fluorescence.chatterbox import (
 )
 from pylabrobot.capabilities.plate_reading.fluorescence.fluorescence import FluorescenceCapability
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -41,7 +41,7 @@ def _test_plate() -> Plate:
   )
 
 
-class RecordingFluorescenceBackend(FluorescenceBackend):
+class RecordingFluorescenceBackend(FluorescenceBackend, Driver):
   """Backend that records all calls for assertion."""
 
   def __init__(self):
@@ -80,16 +80,16 @@ class RecordingFluorescenceBackend(FluorescenceBackend):
 
 
 class _TestDevice(Device):
-  def __init__(self, backend: FluorescenceBackend):
-    super().__init__(backend=backend)
-    self.fluorescence = FluorescenceCapability(backend=backend)
+  def __init__(self, driver):
+    super().__init__(driver=driver)
+    self.fluorescence = FluorescenceCapability(backend=driver)
     self._capabilities = [self.fluorescence]
 
 
 class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingFluorescenceBackend()
-    self.device = _TestDevice(backend=self.backend)
+    self.device = _TestDevice(driver=self.backend)
     await self.device.setup()
     self.plate = _test_plate()
 
@@ -141,7 +141,7 @@ class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
 class TestFluorescenceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = FluorescenceChatterboxBackend()
-    device = _TestDevice(backend=backend)
+    device = _TestDevice(driver=backend)
     await device.setup()
     plate = _test_plate()
 

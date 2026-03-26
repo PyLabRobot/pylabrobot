@@ -18,7 +18,7 @@ from pylabrobot.capabilities.centrifuging.errors import (
   LoaderNoPlateError,
   NotAtBucketError,
 )
-from pylabrobot.device import Device, DeviceBackend
+from pylabrobot.device import Device, Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 from pylabrobot.capabilities.capability import BackendParams
@@ -68,7 +68,7 @@ bucket_1_not_set_error = RuntimeError(
 )
 
 
-class VSpinBackend(_NewCentrifugeBackend):
+class VSpinBackend(_NewCentrifugeBackend, Driver):
   """Backend for the Agilent VSpin Centrifuge."""
 
   def __init__(self, device_id: Optional[str] = None):
@@ -471,7 +471,7 @@ class VSpinBackend(_NewCentrifugeBackend):
         raise RuntimeError("Home position did not change after spin.")
 
 
-class Access2Backend(DeviceBackend):
+class Access2Backend(Driver):
   """Backend for the Agilent Access2 centrifuge loader."""
 
   def __init__(
@@ -606,8 +606,8 @@ class VSpin(Resource, Device):
       model="Agilent VSpin",
       category="centrifuge",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: VSpinBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: VSpinBackend = backend
 
     bucket1 = ResourceHolder(
       name=f"{name}_bucket1",
@@ -656,8 +656,8 @@ class Access2(ResourceHolder, Device):
       category="loader",
       child_location=Coordinate.zero(),
     )
-    Device.__init__(self, backend=backend)
-    self._backend: Access2Backend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: Access2Backend = backend
     self._vspin = vspin
 
   def serialize(self) -> dict:
@@ -678,7 +678,7 @@ class Access2(ResourceHolder, Device):
     if centrifuging.at_bucket.resource is not None:
       raise BucketHasPlateError("Bucket must be empty to load a plate.")
 
-    await self._backend.load()
+    await self._driver.load()
 
     centrifuging.at_bucket.assign_child_resource(self.resource, location=Coordinate.zero())
 
@@ -695,6 +695,6 @@ class Access2(ResourceHolder, Device):
     if centrifuging.at_bucket.resource is None:
       raise BucketNoPlateError("Bucket must have a plate to unload.")
 
-    await self._backend.unload()
+    await self._driver.unload()
 
     self.assign_child_resource(centrifuging.at_bucket.resource)

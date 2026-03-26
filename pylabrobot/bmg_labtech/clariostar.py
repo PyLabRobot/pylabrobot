@@ -22,7 +22,7 @@ from pylabrobot.capabilities.plate_reading.luminescence import (
   LuminescenceCapability,
   LuminescenceResult,
 )
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
@@ -44,7 +44,7 @@ logger = logging.getLogger("pylabrobot")
 # ---------------------------------------------------------------------------
 
 
-class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend):
+class CLARIOstarBackend(AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend, Driver):
   """Backend for the BMG Labtech CLARIOstar plate reader.
 
   Communicates over FTDI USB (VID 0x0403, PID 0xBB68) at 125000 baud.
@@ -405,8 +405,8 @@ class CLARIOstar(Resource, Device):
       size_z=size_z,
       model="BMG CLARIOstar",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: CLARIOstarBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: CLARIOstarBackend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self.luminescence = LuminescenceCapability(backend=backend)
     self.fluorescence = FluorescenceCapability(backend=backend)
@@ -427,8 +427,8 @@ class CLARIOstar(Resource, Device):
 
   async def open(self) -> None:
     """Open the plate tray."""
-    await self._backend.open()
+    await self._driver.open()
 
   async def close(self) -> None:
     """Close the plate tray."""
-    await self._backend.close()
+    await self._driver.close()

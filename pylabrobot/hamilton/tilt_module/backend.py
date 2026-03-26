@@ -10,10 +10,11 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.tilting.backend import TilterBackend, TiltModuleError
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 
 
-class HamiltonTiltModuleBackend(TilterBackend):
+class HamiltonTiltModuleBackend(TilterBackend, Driver):
   """Backend for the Hamilton tilt module."""
 
   def __init__(

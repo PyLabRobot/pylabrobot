@@ -67,8 +67,8 @@ class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
       category="temperature_controller",
       model="temperatureModuleV2",
     )
-    Device.__init__(self, backend=backend)
-    self._backend = backend
+    Device.__init__(self, driver=backend)
+    self._driver = backend
     self.tc = TemperatureControlCapability(backend=backend)
     self._capabilities = [self.tc]
 
