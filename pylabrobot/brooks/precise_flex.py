@@ -319,6 +319,20 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     else:
       raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
+  async def move_rail(self, position: float) -> None:
+    """Move the rail to the specified position.
+
+    Args:
+      position: Rail destination in mm.
+
+    Raises:
+      RuntimeError: If the arm does not have a rail.
+    """
+    if not self._has_rail:
+      raise RuntimeError("This arm does not have a rail.")
+    await self._set_rail_position(self.location_index, position)
+    await self._move_rail(station_id=self.location_index)
+
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the arm to its default safe position."""
     await self.move_to_safe()
@@ -331,6 +345,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     finger_speed_percent: float = 50.0
     grasp_force: float = 10.0
     orientation: Optional[ElbowOrientation] = None
+    rail_position: Optional[float] = None
 
   async def pick_up_at_joint_position(
     self,
@@ -353,6 +368,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
   class DropParams(BackendParams):
     access: Optional[AccessPattern] = None
     orientation: Optional[ElbowOrientation] = None
+    rail_position: Optional[float] = None
 
   async def drop_at_joint_position(
     self,
@@ -429,6 +445,10 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     """Pick up at the specified Cartesian location."""
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexBackend.PickUpParams()
+    if backend_params.rail_position is not None:
+      await self.move_rail(backend_params.rail_position)
+    elif self._has_rail:
+      raise ValueError("rail_position must be specified for pick_up_at_location when using a rail-equipped arm.")
     access = backend_params.access or VerticalAccess()
     coords = PreciseFlexCartesianCoords(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
@@ -450,6 +470,10 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     """Drop at the specified Cartesian location."""
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexBackend.DropParams()
+    if backend_params.rail_position is not None:
+      await self.move_rail(backend_params.rail_position)
+    elif self._has_rail:
+      raise ValueError("rail_position must be specified for drop_at_location when using a rail-equipped arm.")
     access = backend_params.access or VerticalAccess()
     coords = PreciseFlexCartesianCoords(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
@@ -460,7 +484,7 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
   class MoveToLocationParams(BackendParams):
     speed: Optional[float] = None
     orientation: Optional[ElbowOrientation] = None
-    rail: Optional[float] = None
+    rail_position: Optional[float] = None
 
   async def move_to_location(
     self,
@@ -469,10 +493,14 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the arm to the specified Cartesian location."""
-    if backend_params is None:
+    if not isinstance(backend_params, self.MoveToLocationParams):
       backend_params = PreciseFlexBackend.MoveToLocationParams()
     if backend_params.speed is not None:
       await self._set_speed(backend_params.speed)
+    if backend_params.rail_position is not None:
+      await self.move_rail(backend_params.rail_position)
+    elif self._has_rail:
+      raise ValueError("Rail position must be specified for move_to_location when using a rail-equipped arm.")
     coords = PreciseFlexCartesianCoords(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
     )
@@ -1404,6 +1432,41 @@ class PreciseFlexBackend(JointGripperArmBackend, CanFreedrive, ABC):
       float(parts[7]),
       int(parts[8]) != 0,
     )
+
+  # -- RAIL COMMANDS ---------------------------------------------------------
+
+  async def _get_rail_position(self, station_id: int) -> float:
+    """Get the rail position for the specified station.
+
+    Args:
+      station_id: The station index.
+
+    Returns:
+      The rail position in mm.
+    """
+    data = await self.send_command(f"Rail {station_id}")
+    return float(data)
+
+  async def _set_rail_position(self, station_id: int, rail_position: float) -> None:
+    """Set the rail position for the specified station.
+
+    Args:
+      station_id: The station index.
+      rail_position: The rail position in mm.
+    """
+    await self.send_command(f"Rail {station_id} {rail_position}")
+
+  async def _move_rail(self, station_id: Optional[int] = None, mode: int = 0) -> None:
+    """Move the rail to the position stored at the specified station.
+
+    Args:
+      station_id: The station index whose rail position to move to.
+      mode: Motion mode (0 = normal).
+    """
+    if station_id is not None:
+      await self.send_command(f"MoveRail {station_id} {mode}")
+    else:
+      await self.send_command(f"MoveRail {mode}")
 
   # -- MOTION COMMANDS -------------------------------------------------------
 
