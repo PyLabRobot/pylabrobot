@@ -20,6 +20,8 @@ Before running:
   - Ensure the workspace is clear and safe
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import os

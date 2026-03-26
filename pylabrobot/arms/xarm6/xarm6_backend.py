@@ -122,7 +122,7 @@ class XArm6Backend(SixAxisBackend):
 
   async def setup(self):
     """Connect to the xArm and initialize for position control."""
-    from xarm.wrapper import XArmAPI  # type: ignore[import-untyped]
+    from xarm.wrapper import XArmAPI  # type: ignore[import-not-found]
 
     self._arm = XArmAPI(self._ip)
     await self.clear_errors()
