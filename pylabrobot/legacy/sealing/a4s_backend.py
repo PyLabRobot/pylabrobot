@@ -1,50 +1,56 @@
-"""Legacy. Use pylabrobot.azenta.A4SBackend instead."""
+"""Legacy. Use pylabrobot.azenta.A4SDriver / A4SSealerBackend / A4STemperatureBackend instead."""
 
-from pylabrobot.azenta import a4s
+from pylabrobot.azenta.a4s import A4SDriver, A4SSealerBackend, A4STemperatureBackend
 from pylabrobot.legacy.sealing.backend import SealerBackend
 
 
 class A4SBackend(SealerBackend):
-  """Legacy. Use pylabrobot.azenta.A4SBackend instead."""
+  """Legacy. Use pylabrobot.azenta.A4SDriver / A4SSealerBackend / A4STemperatureBackend instead."""
 
   def __init__(self, port: str, timeout: int = 20):
-    self._new = a4s.A4SBackend(port=port, timeout=timeout)
+    self._driver = A4SDriver(port=port, timeout=timeout)
+    self._sealer = A4SSealerBackend(self._driver)
+    self._temperature = A4STemperatureBackend(self._driver)
 
   async def setup(self):
-    await self._new.setup()
+    await self._driver.setup()
+    await self._sealer._on_setup()
+    await self._temperature._on_setup()
 
   async def stop(self):
-    await self._new.stop()
+    await self._temperature._on_stop()
+    await self._sealer._on_stop()
+    await self._driver.stop()
 
   def serialize(self) -> dict:
-    return self._new.serialize()
+    return self._driver.serialize()
 
   async def seal(self, temperature: int, duration: float):
-    await self._new.seal(temperature=temperature, duration=duration)
+    await self._sealer.seal(temperature=temperature, duration=duration)
 
   async def open(self):
-    return await self._new.open()
+    return await self._sealer.open()
 
   async def close(self):
-    return await self._new.close()
+    return await self._sealer.close()
 
   async def set_temperature(self, temperature: float):
-    await self._new.set_temperature(temperature=temperature)
+    await self._temperature.set_temperature(temperature=temperature)
 
   async def get_temperature(self) -> float:
-    return await self._new.get_current_temperature()
+    return await self._temperature.get_current_temperature()
 
   async def set_heater(self, on: bool):
-    await self._new.set_heater(on=on)
+    await self._driver.set_heater(on=on)
 
   async def system_reset(self):
-    await self._new.system_reset()
+    await self._driver.system_reset()
 
   async def set_time(self, seconds: float):
-    await self._new.set_time(seconds=seconds)
+    await self._driver.set_time(seconds=seconds)
 
   async def get_remaining_time(self) -> int:
-    return await self._new.get_remaining_time()
+    return await self._driver.get_remaining_time()
 
   async def get_status(self):
-    return await self._new.get_status()
+    return await self._driver.get_status()

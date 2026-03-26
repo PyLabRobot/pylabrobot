@@ -23,4 +23,5 @@ Backends
 
     chatterbox.TilterChatterboxBackend
     tilter_backend.TilterBackend
-    hamilton_backend.HamiltonTiltModuleBackend
+    hamilton_backend.HamiltonTiltModuleDriver
+    hamilton_backend.HamiltonTiltModuleTilterBackend

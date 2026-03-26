@@ -23,7 +23,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     await self.backend.setup()
     self.mock_sila_interface.setup.assert_called_once()
     self.mock_sila_interface.send_command.assert_any_call(
-      command="Reset",
+      "Reset",
       deviceId="MyController",
       eventReceiverURI="http://127.0.0.1:80/",
       simulationMode=False,

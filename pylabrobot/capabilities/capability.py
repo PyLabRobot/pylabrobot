@@ -20,7 +20,11 @@ _R = TypeVar("_R", bound=Awaitable[Any])
 class CapabilityBackend(ABC):
   """Base class for capability-specific backends."""
 
-  pass
+  async def _on_setup(self):
+    """Called when the parent capability is set up."""
+
+  async def _on_stop(self):
+    """Called when the parent capability is stopped."""
 
 
 def need_capability_ready(func: Callable[_P, _R]) -> Callable[_P, _R]:
@@ -83,8 +87,10 @@ class Capability(ABC):
 
   async def _on_setup(self):
     """Called by the parent Device after driver.setup() completes."""
+    await self.backend._on_setup()
     self._setup_finished = True
 
   async def _on_stop(self):
     """Called by the parent Device before driver.stop()."""
+    await self.backend._on_stop()
     self._setup_finished = False

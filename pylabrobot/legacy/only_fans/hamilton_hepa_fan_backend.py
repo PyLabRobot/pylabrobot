@@ -1,26 +1,27 @@
-"""Legacy. Use pylabrobot.hamilton.hepa_fan.HamiltonHepaFanBackend instead."""
+"""Legacy. Use pylabrobot.hamilton.only_fans.HamiltonHepaFan instead."""
 
-from pylabrobot.hamilton.only_fans import backend as hepa_fan_backend
+from pylabrobot.hamilton.only_fans.backend import HamiltonHepaFanDriver, HamiltonHepaFanFanBackend
 from pylabrobot.legacy.only_fans.backend import FanBackend
 
 
 class HamiltonHepaFanBackend(FanBackend):
-  """Legacy. Use pylabrobot.hamilton.hepa_fan.HamiltonHepaFanBackend instead."""
+  """Legacy. Use pylabrobot.hamilton.only_fans.HamiltonHepaFan instead."""
 
   def __init__(self, device_id=None):
-    self._new = hepa_fan_backend.HamiltonHepaFanBackend(device_id=device_id)
+    self._driver = HamiltonHepaFanDriver(device_id=device_id)
+    self._fan = HamiltonHepaFanFanBackend(self._driver)
 
   async def setup(self) -> None:
-    await self._new.setup()
+    await self._driver.setup()
 
   async def turn_on(self, intensity: int) -> None:
-    await self._new.turn_on(intensity=intensity)
+    await self._fan.turn_on(intensity=intensity)
 
   async def turn_off(self) -> None:
-    await self._new.turn_off()
+    await self._fan.turn_off()
 
   async def stop(self) -> None:
-    await self._new.stop()
+    await self._driver.stop()
 
 
 class HamiltonHepaFan:

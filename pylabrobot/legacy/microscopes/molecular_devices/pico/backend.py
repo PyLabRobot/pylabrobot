@@ -1,4 +1,4 @@
-"""Legacy. Use pylabrobot.molecular_devices.PicoBackend instead."""
+"""Legacy. Use pylabrobot.molecular_devices.PicoDriver instead."""
 
 from typing import Dict, List, Optional
 
@@ -20,7 +20,7 @@ from pylabrobot.legacy.plate_reading.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.molecular_devices.imageXpress.pico.backend import PicoBackend
+from pylabrobot.molecular_devices.imageXpress.pico.backend import PicoDriver, PicoMicroscopyBackend
 from pylabrobot.resources.plate import Plate
 
 
@@ -41,7 +41,7 @@ def _new_to_legacy_imaging_result(result: NewImagingResult) -> ImagingResult:
 
 
 class ExperimentalPicoBackend(ImagerBackend):
-  """Legacy. Use pylabrobot.molecular_devices.PicoBackend instead."""
+  """Legacy. Use pylabrobot.molecular_devices.PicoDriver instead."""
 
   def __init__(
     self,
@@ -56,50 +56,55 @@ class ExperimentalPicoBackend(ImagerBackend):
     new_filter_cubes = {
       pos: _legacy_to_new_imaging_mode(mode) for pos, mode in (filter_cubes or {}).items()
     }
-    self._new = PicoBackend(
+    self._driver = PicoDriver(
       host=host,
       port=port,
       lock_timeout=lock_timeout,
+    )
+    self._microscopy = PicoMicroscopyBackend(
+      self._driver,
       objectives=new_objectives,
       filter_cubes=new_filter_cubes,
     )
 
   @property
   def door_open(self) -> bool:
-    return self._new.door_open
+    return self._driver.door_open
 
   async def setup(self) -> None:
-    await self._new.setup()
+    await self._driver.setup()
+    await self._microscopy._on_setup()
 
   async def stop(self) -> None:
-    await self._new.stop()
+    await self._microscopy._on_stop()
+    await self._driver.stop()
 
   async def get_configuration(self) -> dict:
-    return await self._new.get_configuration()
+    return await self._driver.get_configuration()
 
   async def open_door(self) -> None:
-    await self._new.open_door()
+    await self._driver.open_door()
 
   async def close_door(self) -> None:
-    await self._new.close_door()
+    await self._driver.close_door()
 
   async def enter_objective_maintenance(self, position: int) -> None:
-    await self._new.enter_objective_maintenance(position)
+    await self._microscopy.enter_objective_maintenance(position)
 
   async def exit_objective_maintenance(self) -> None:
-    await self._new.exit_objective_maintenance()
+    await self._microscopy.exit_objective_maintenance()
 
   async def get_available_objectives(self, position: int) -> List[dict]:
-    return await self._new.get_available_objectives(position)
+    return await self._microscopy.get_available_objectives(position)
 
   async def get_available_filter_cubes(self) -> List[dict]:
-    return await self._new.get_available_filter_cubes()
+    return await self._microscopy.get_available_filter_cubes()
 
   async def change_objective(self, position: int, objective_id: str) -> None:
-    await self._new.change_objective(position, objective_id)
+    await self._microscopy.change_objective(position, objective_id)
 
   async def change_filter_cube(self, position: int, filter_cube_id: str) -> None:
-    await self._new.change_filter_cube(position, filter_cube_id)
+    await self._microscopy.change_filter_cube(position, filter_cube_id)
 
   async def capture(
     self,
@@ -112,7 +117,7 @@ class ExperimentalPicoBackend(ImagerBackend):
     gain: Gain,
     plate: Plate,
   ) -> ImagingResult:
-    result = await self._new.capture(
+    result = await self._microscopy.capture(
       row=row,
       column=column,
       mode=_legacy_to_new_imaging_mode(mode),

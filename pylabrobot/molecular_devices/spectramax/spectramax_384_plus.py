@@ -3,22 +3,24 @@ from pylabrobot.capabilities.temperature_controlling import TemperatureControlCa
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
-from .backend import MolecularDevicesBackend, MolecularDevicesSettings
+from .backend import (
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
+  MolecularDevicesSettings,
+  MolecularDevicesTemperatureBackend,
+)
 
 
-class SpectraMax384PlusBackend(MolecularDevicesBackend):
-  """Backend for Molecular Devices SpectraMax 384 Plus plate readers.
+class SpectraMax384PlusAbsorbanceBackend(MolecularDevicesAbsorbanceBackend):
+  """Absorbance backend for Molecular Devices SpectraMax 384 Plus plate readers.
 
-  Absorbance only. Overrides ``_set_readtype`` (simpler CUV/PLA), and no-ops
+  Overrides ``_set_readtype`` (simpler CUV/PLA), and no-ops
   ``_set_nvram`` / ``_set_tag``.
   """
 
-  def __init__(self, port: str) -> None:
-    super().__init__(port, human_readable_device_name="Molecular Devices SpectraMax 384 Plus")
-
   async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
     cmd = f"!READTYPE {'CUV' if settings.cuvette else 'PLA'}"
-    await self.send_command(cmd, num_res_fields=1)
+    await self._driver.send_command(cmd, num_res_fields=1)
 
   async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
     pass
@@ -43,7 +45,9 @@ class SpectraMax384Plus(Resource, Device):
     size_y: float = 0.0,  # TODO: measure
     size_z: float = 0.0,  # TODO: measure
   ):
-    backend = SpectraMax384PlusBackend(port=port)
+    driver = MolecularDevicesDriver(
+      port=port, human_readable_device_name="Molecular Devices SpectraMax 384 Plus"
+    )
     Resource.__init__(
       self,
       name=name,
@@ -52,10 +56,10 @@ class SpectraMax384Plus(Resource, Device):
       size_z=size_z,
       model="Molecular Devices SpectraMax 384 Plus",
     )
-    Device.__init__(self, driver=backend)
-    self._driver: SpectraMax384PlusBackend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
-    self.tc = TemperatureControlCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver: MolecularDevicesDriver = driver
+    self.absorbance = AbsorbanceCapability(backend=SpectraMax384PlusAbsorbanceBackend(driver))
+    self.tc = TemperatureControlCapability(backend=MolecularDevicesTemperatureBackend(driver))
     self._capabilities = [self.absorbance, self.tc]
 
     self.plate_holder = PlateHolder(
@@ -70,9 +74,3 @@ class SpectraMax384Plus(Resource, Device):
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}
-
-  async def open(self) -> None:
-    await self._driver.open()
-
-  async def close(self) -> None:
-    await self._driver.close()

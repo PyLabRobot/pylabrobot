@@ -8,4 +8,4 @@ from .biotek import (
   SynergyH1,
   SynergyH1Backend,
 )
-from .vspin import Access2, Access2Backend, VSpin, VSpinBackend
+from .vspin import Access2, Access2Driver, VSpin, VSpinCentrifugeBackend, VSpinDriver

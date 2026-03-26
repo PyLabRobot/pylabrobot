@@ -1,3 +1,5 @@
 """Legacy. Use pylabrobot.keyence instead."""
 
-from pylabrobot.keyence import KeyenceBarcodeScannerBackend  # noqa: F401
+from pylabrobot.legacy.barcode_scanners.keyence.keyence_backend import (
+  KeyenceBarcodeScannerBackend,  # noqa: F401
+)
