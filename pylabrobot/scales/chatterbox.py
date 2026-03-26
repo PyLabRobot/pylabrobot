@@ -16,8 +16,8 @@ class ScaleChatterboxBackend(ScaleBackend):
   async def tare(self):
     print("Taring the scale")
 
-  async def get_weight(self) -> float:
-    print("Getting the weight")
+  async def read_weight(self) -> float:
+    print("Reading the weight")
     return self._dummy_weight
 
   async def zero(self):
