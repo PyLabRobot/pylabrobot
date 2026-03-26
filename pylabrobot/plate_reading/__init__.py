@@ -48,3 +48,5 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+from .tecan import ExperimentalTecanInfinite200ProBackend
+from .tecan.spark20m.spark_backend import ExperimentalSparkBackend
