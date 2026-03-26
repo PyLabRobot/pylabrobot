@@ -4533,23 +4533,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move a channel in the Z direction.
 
     .. deprecated::
-      Use :meth:`move_channel_probe_z` for bare-channel moves (stop disc reference)
-      or :meth:`move_channel_tool_z` when a tip or tool is attached (tip/tool end reference).
+      Use :meth:`move_channel_stop_disk_z` for moves without a tip attached (stop disk)
+      or :meth:`move_channel_tool_z` when a tip or tool is attached (tip/tool end).
 
     The Hamilton firmware interprets this Z position based on its internal
     "tip mounted" state for the specified channel. When the firmware state
     indicates that no tip is mounted, the absolute Z position refers to the
-    bottom of the stop disc. In that case, this command is effectively
-    equivalent to :meth:`move_channel_probe_z` for the same numeric Z value.
+    bottom of the stop disk. In that case, this command is effectively
+    equivalent to :meth:`move_channel_stop_disk_z` for the same numeric Z value.
 
     When the firmware state indicates that a tip is mounted on the channel,
     the same Z position instead refers to the physical end of the tip. In
     this case, the numeric Z value used with this method may differ from the
-    probe Z position used with :meth:`move_channel_probe_z` for the same
+    stop disk Z position used with :meth:`move_channel_stop_disk_z` for the same
     physical height above the deck.
     """
     warnings.warn(
-      "move_channel_z is deprecated. Use move_channel_probe_z() for bare-channel moves "
+      "move_channel_z is deprecated. Use move_channel_stop_disk_z() for moves without a tip attached "
       "or move_channel_tool_z() when a tip/tool is attached.",
       DeprecationWarning,
       stacklevel=2,
@@ -4558,7 +4558,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
 
-  async def move_channel_probe_z(
+  async def move_channel_stop_disk_z(
     self,
     channel_idx: int,
     z: float,
@@ -4566,19 +4566,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration: float = 800.0,
     current_limit: int = 3,
   ):
-    """Move a channel's probe Z-drive to an absolute position, communicating directly
-    with the individual channel rather than through the master module.
+    """Move a channel's Z-drive to an absolute stop disk position.
 
-    "Probe" refers to the lowest point of the stop disc / entire channel assembly
-    without a tip attached.
-
-    Use this instead of `move_channel_z` when the firmware's internal "tip picked up"
-    flag has been incorrectly set (e.g. after sleeve-sensing displacement during
-    tip-presence probing), which causes master-routed Z moves to misbehave.
+    Communicates directly with the individual channel rather than through the
+    master module.
 
     Args:
-      channel_idxchannel_idx: Channel index (0-based, backmost = 0).
-      z: Target Z position in mm.
+      channel_idx: Channel index (0-based, backmost = 0).
+      z: Target Z position in mm (stop disk).
       speed: Max Z-drive speed in mm/sec. Default 125.0 mm/s.
       acceleration: Acceleration in mm/sec². Default 800.0. Valid range: ~53.6 to 1609.
       current_limit: Current limit (0-7). Default 3.
@@ -4589,7 +4584,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_increment = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
 
     if not isinstance(channel_idx, int):
-      raise ValueError(f"channel must be an int, got {type(channel_idx).__name__}")
+      raise ValueError(f"channel_idx must be an int, got {type(channel_idx).__name__}")
     if not (0 <= channel_idx < self.num_channels):
       raise ValueError(
         f"channel index {channel_idx} out of range for instrument with {self.num_channels} channels"
@@ -4617,19 +4612,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def move_channel_tool_z(self, channel_idx: int, z: float):
-    """Move a channel in the Z direction when a tip or tool is attached.
+    """Move a channel in the Z direction (tip/tool end reference).
 
-    Unlike :meth:`move_channel_z`, this method first verifies that the firmware
-    reports a tip (or tool) as present on the channel. The Z position is
-    interpreted by the firmware as the physical end of the attached tip/tool,
-    not the stop disc.
-
-    Use :meth:`move_channel_z` or :meth:`move_channel_probe_z` when operating
-    without a tip attached.
+    Requires a tip or tool to be attached. Use :meth:`move_channel_stop_disk_z`
+    for moves without a tip.
 
     Args:
       channel_idx: Channel index (0-based, backmost = 0).
-      z: Target Z position in mm (tip/tool end reference).
+      z: Target Z position in mm (tip/tool end).
     """
 
     if not isinstance(channel_idx, int):
@@ -4644,7 +4634,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not tip_presence[channel_idx]:
       raise ValueError(
         f"Channel {channel_idx} does not have a tip or tool attached. "
-        "Use move_channel_z() or move_channel_probe_z() for bare-channel Z moves."
+        "Use move_channel_stop_disk_z() for Z moves without a tip attached."
       )
 
     tip_len = await self.request_tip_len_on_channel(channel_idx)
@@ -4681,6 +4671,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_z_relative(self, channel: int, distance: float):
     """Move a channel in the z direction by a relative amount."""
+    # TODO: determine whether this refers to stop disk or tip bottom
     current_z = await self.request_z_pos_channel_n(channel)
     await self.move_channel_z(channel, current_z + distance)
 
