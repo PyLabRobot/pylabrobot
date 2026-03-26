@@ -1,8 +1,7 @@
-"""Legacy. Use pylabrobot.agrowpumps or similar Device with PumpingCapability instead."""
-
 import asyncio
 from typing import List, Optional, Union
 
+from pylabrobot.capabilities.pumping.backend import PumpBackend as _NewPumpBackend
 from pylabrobot.capabilities.pumping.pumping import PumpingCapability
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.pumps.backend import PumpArrayBackend
@@ -10,8 +9,27 @@ from pylabrobot.legacy.pumps.calibration import PumpCalibration
 from pylabrobot.legacy.pumps.errors import NotCalibratedError
 
 
+class _ChannelAdapter(_NewPumpBackend):
+  """Adapts one channel of a legacy PumpArrayBackend to the new PumpBackend."""
+
+  def __init__(self, legacy: PumpArrayBackend, channel: int):
+    self._legacy = legacy
+    self._channel = channel
+
+  async def run_revolutions(self, num_revolutions: float):
+    await self._legacy.run_revolutions(
+      num_revolutions=[num_revolutions], use_channels=[self._channel]
+    )
+
+  async def run_continuously(self, speed: float):
+    await self._legacy.run_continuously(speed=[speed], use_channels=[self._channel])
+
+  async def halt(self):
+    await self._legacy.run_continuously(speed=[0.0], use_channels=[self._channel])
+
+
 class PumpArray(Machine):
-  """Legacy. Use AgrowDosePumpArray or similar Device with per-channel PumpingCapability instead."""
+  """Front-end for a pump array."""
 
   def __init__(
     self,
@@ -19,12 +37,27 @@ class PumpArray(Machine):
     calibration: Optional[PumpCalibration] = None,
   ):
     super().__init__(backend=backend)
-    self.backend: PumpArrayBackend = backend  # fix type
+    self.backend: PumpArrayBackend = backend
     self.calibration = calibration
+    self._pumps: List[PumpingCapability] = []
 
   @property
   def num_channels(self) -> int:
     return self.backend.num_channels
+
+  async def setup(self, **backend_kwargs):
+    await super().setup(**backend_kwargs)
+    self._pumps = [
+      PumpingCapability(backend=_ChannelAdapter(self.backend, ch))
+      for ch in range(self.num_channels)
+    ]
+    for p in self._pumps:
+      await p._on_setup()
+
+  async def stop(self):
+    for p in reversed(self._pumps):
+      await p._on_stop()
+    await super().stop()
 
   def serialize(self) -> dict:
     if self.calibration is None:
@@ -43,47 +76,56 @@ class PumpArray(Machine):
       data_copy["calibration"] = calibration
     return super().deserialize(data_copy)
 
+  # -- helpers ----------------------------------------------------------------
+
+  def _normalize_channels(self, use_channels: Union[int, List[int]]) -> List[int]:
+    if isinstance(use_channels, int):
+      use_channels = [use_channels]
+    if len(set(use_channels)) != len(use_channels):
+      raise ValueError("Channels in use channels must be unique.")
+    if any(ch not in range(0, self.num_channels) for ch in use_channels):
+      raise ValueError(
+        f"Pump address out of range for this pump array. "
+        f"Value should be between 0 and {self.num_channels}"
+      )
+    if any(ch < 0 for ch in use_channels):
+      raise ValueError("Channels in use channels must be positive.")
+    return use_channels
+
+  @staticmethod
+  def _normalize_speeds(
+    speed: Union[float, int, List[float], List[int]], n: int
+  ) -> List[float]:
+    if isinstance(speed, (float, int)):
+      speed = [float(speed)] * n
+    if any(s < 0 for s in speed):
+      raise ValueError("Speed must be positive.")
+    if len(speed) != n:
+      raise ValueError("Speed and use_channels must be the same length.")
+    return [float(s) for s in speed]
+
+  # -- public API -------------------------------------------------------------
+
   async def run_revolutions(
     self,
     num_revolutions: Union[float, List[float]],
     use_channels: Union[int, List[int]],
   ):
-    if isinstance(use_channels, int):
-      use_channels = [use_channels]
-    if isinstance(num_revolutions, float):
-      num_revolutions = [num_revolutions] * len(use_channels)
-    await self.backend.run_revolutions(num_revolutions=num_revolutions, use_channels=use_channels)
+    channels = self._normalize_channels(use_channels)
+    if isinstance(num_revolutions, (float, int)):
+      num_revolutions = [float(num_revolutions)] * len(channels)
+    for ch, rev in zip(channels, num_revolutions):
+      await self._pumps[ch].run_revolutions(num_revolutions=rev)
 
   async def run_continuously(
     self,
     speed: Union[float, int, List[float], List[int]],
     use_channels: Union[int, List[int]],
   ):
-    if isinstance(use_channels, list) and len(set(use_channels)) != len(use_channels):
-      raise ValueError("Channels in use channels must be unique.")
-    if isinstance(use_channels, int):
-      use_channels = [use_channels]
-    if isinstance(speed, (float, int)):
-      speed = [speed] * len(use_channels)
-
-    if any(channel not in range(0, self.num_channels) for channel in use_channels):
-      raise ValueError(
-        f"Pump address out of range for this pump array. "
-        f"Value should be between 0 and {self.num_channels}"
-      )
-    if any(s < 0 for s in speed):
-      raise ValueError("Speed must be positive.")
-    if isinstance(speed[0], int):
-      speed = [float(x) for x in speed]
-    if len(speed) != len(use_channels):
-      raise ValueError("Speed and use_channels must be the same length.")
-    if any(channel < 0 for channel in use_channels):
-      raise ValueError("Channels in use channels must be positive.")
-
-    await self.backend.run_continuously(
-      speed=speed,  # type: ignore[arg-type]
-      use_channels=use_channels,
-    )
+    channels = self._normalize_channels(use_channels)
+    speeds = self._normalize_speeds(speed, len(channels))
+    for ch, s in zip(channels, speeds):
+      await self._pumps[ch].run_continuously(speed=s)
 
   async def run_for_duration(
     self,
@@ -107,41 +149,35 @@ class PumpArray(Machine):
       raise NotCalibratedError(
         "Pump is not calibrated. Volume based pumping and related functions unavailable."
       )
-    if isinstance(use_channels, int):
-      use_channels = [use_channels]
-    if isinstance(speed, (float, int)):
-      speed = [speed] * len(use_channels)
+    channels = self._normalize_channels(use_channels)
+    speeds = self._normalize_speeds(speed, len(channels))
     if isinstance(volume, (float, int)):
-      volume = [volume] * len(use_channels)
+      volume = [float(volume)] * len(channels)
     if not all(vol >= 0 for vol in volume):
       raise ValueError("Volume must be positive.")
-    if not len(speed) == len(use_channels) == len(volume):
+    if len(volume) != len(channels):
       raise ValueError("Speed, use_channels, and volume must be the same length.")
     if self.calibration.calibration_mode == "duration":
       durations = [
         channel_volume / self.calibration[channel]
-        for channel, channel_volume in zip(use_channels, volume)
+        for channel, channel_volume in zip(channels, volume)
       ]
       tasks = [
         asyncio.create_task(
-          self.run_for_duration(
-            speed=channel_speed,
-            use_channels=channel,
-            duration=duration,
-          )
+          self.run_for_duration(speed=s, use_channels=ch, duration=d)
         )
-        for channel_speed, channel, duration in zip(speed, use_channels, durations)
+        for s, ch, d in zip(speeds, channels, durations)
       ]
     elif self.calibration.calibration_mode == "revolutions":
       num_rotations = [
         channel_volume / self.calibration[channel]
-        for channel, channel_volume in zip(use_channels, volume)
+        for channel, channel_volume in zip(channels, volume)
       ]
       tasks = [
         asyncio.create_task(
-          self.run_revolutions(num_revolutions=num_rotation, use_channels=channel)
+          self.run_revolutions(num_revolutions=r, use_channels=ch)
         )
-        for num_rotation, channel in zip(num_rotations, use_channels)
+        for r, ch in zip(num_rotations, channels)
       ]
     else:
       raise ValueError("Calibration mode must be 'duration' or 'revolutions'.")
