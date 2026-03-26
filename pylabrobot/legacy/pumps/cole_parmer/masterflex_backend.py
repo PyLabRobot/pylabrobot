@@ -1,6 +1,7 @@
 """Legacy. Use pylabrobot.cole_parmer instead."""
 
-from pylabrobot.cole_parmer import masterflex_backend as _new
+from pylabrobot.cole_parmer.masterflex_backend import MasterflexBackend as _NewBackend
+from pylabrobot.cole_parmer.masterflex_backend import MasterflexDriver
 from pylabrobot.legacy.pumps.backend import PumpBackend
 
 
@@ -8,36 +9,37 @@ class MasterflexBackend(PumpBackend):
   """Legacy. Use pylabrobot.cole_parmer.MasterflexBackend instead."""
 
   def __init__(self, com_port: str):
-    self._new = _new.MasterflexBackend(com_port=com_port)
+    self._driver = MasterflexDriver(com_port=com_port)
+    self._backend = _NewBackend(self._driver)
 
   @property
   def io(self):
-    return self._new.io
+    return self._driver.io
 
   @io.setter
   def io(self, value):
-    self._new.io = value
+    self._driver.io = value
 
   async def setup(self):
-    await self._new.setup()
+    await self._driver.setup()
 
   async def stop(self):
-    await self._new.stop()
+    await self._driver.stop()
 
   def serialize(self):
-    return self._new.serialize()
+    return self._driver.serialize()
 
   async def send_command(self, command: str):
-    return await self._new.send_command(command)
+    return await self._driver.send_command(command)
 
   async def run_revolutions(self, num_revolutions: float):
-    await self._new.run_revolutions(num_revolutions)
+    await self._backend.run_revolutions(num_revolutions)
 
   async def run_continuously(self, speed: float):
-    await self._new.run_continuously(speed)
+    await self._backend.run_continuously(speed)
 
   async def halt(self):
-    await self._new.halt()
+    await self._backend.halt()
 
 
 # Deprecated alias

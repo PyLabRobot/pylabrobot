@@ -1,1 +1,1 @@
-from .masterflex_backend import MasterflexBackend, MasterflexPump
+from .masterflex_backend import MasterflexBackend, MasterflexDriver, MasterflexPump

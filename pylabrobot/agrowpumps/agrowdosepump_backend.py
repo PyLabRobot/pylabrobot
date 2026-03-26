@@ -138,12 +138,6 @@ class AgrowChannelBackend(PumpBackend):
     self._driver = connection
     self._channel = channel
 
-  async def setup(self):
-    pass  # lifecycle managed by the device via AgrowDriver
-
-  async def stop(self):
-    pass  # lifecycle managed by the device via AgrowDriver
-
   async def run_revolutions(self, num_revolutions: float):
     raise NotImplementedError(
       "Revolution based pumping commands are not available for Agrow pumps."

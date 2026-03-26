@@ -15,8 +15,8 @@ from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 
 
-class MasterflexBackend(PumpBackend, Driver):
-  """Backend for the Cole Parmer Masterflex L/S pump
+class MasterflexDriver(Driver):
+  """Serial driver for Cole Parmer Masterflex L/S pumps.
 
   tested on:
   07551-20
@@ -35,6 +35,7 @@ class MasterflexBackend(PumpBackend, Driver):
   """
 
   def __init__(self, com_port: str):
+    super().__init__()
     if not HAS_SERIAL:
       raise RuntimeError(
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
@@ -56,9 +57,6 @@ class MasterflexBackend(PumpBackend, Driver):
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")
 
-  def serialize(self):
-    return {"type": self.__class__.__name__, "com_port": self.com_port}
-
   async def stop(self):
     await self.io.stop()
 
@@ -67,10 +65,20 @@ class MasterflexBackend(PumpBackend, Driver):
     await self.io.write(command.encode())
     return self.io.read()
 
+  def serialize(self):
+    return {"type": self.__class__.__name__, "com_port": self.com_port}
+
+
+class MasterflexBackend(PumpBackend):
+  """Pump capability backend for Masterflex L/S pumps."""
+
+  def __init__(self, driver: MasterflexDriver):
+    self._driver = driver
+
   async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
     cmd = f"V{num_revolutions}G"
-    await self.send_command(cmd)
+    await self._driver.send_command(cmd)
 
   async def run_continuously(self, speed: float):
     if speed == 0:
@@ -80,10 +88,15 @@ class MasterflexBackend(PumpBackend, Driver):
     direction = "+" if speed > 0 else "-"
     speed_int = int(abs(speed))
     cmd = f"S{direction}{speed_int}G0"
-    await self.send_command(cmd)
+    await self._driver.send_command(cmd)
 
   async def halt(self):
-    await self.send_command("H")
+    await self._driver.send_command("H")
+
+  def serialize(self):
+    return {
+      "com_port": self._driver.com_port,
+    }
 
 
 class MasterflexPump(Device):
@@ -94,7 +107,8 @@ class MasterflexPump(Device):
     com_port: str,
     calibration: Optional[PumpCalibration] = None,
   ):
-    backend = MasterflexBackend(com_port=com_port)
-    super().__init__(driver=backend)
-    self.pumping = PumpingCapability(backend=backend, calibration=calibration)
+    driver = MasterflexDriver(com_port=com_port)
+    super().__init__(driver=driver)
+    self._driver: MasterflexDriver
+    self.pumping = PumpingCapability(backend=MasterflexBackend(driver), calibration=calibration)
     self._capabilities = [self.pumping]
