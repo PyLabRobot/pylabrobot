@@ -4532,6 +4532,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def move_channel_z(self, channel: int, z: float):
     """Move a channel in the Z direction.
 
+    .. deprecated::
+      Use :meth:`move_channel_probe_z` for bare-channel moves (stop disc reference)
+      or :meth:`move_channel_tool_z` when a tip or tool is attached (tip/tool end reference).
+
     The Hamilton firmware interprets this Z position based on its internal
     "tip mounted" state for the specified channel. When the firmware state
     indicates that no tip is mounted, the absolute Z position refers to the
@@ -4544,13 +4548,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     probe Z position used with :meth:`move_channel_probe_z` for the same
     physical height above the deck.
     """
+    warnings.warn(
+      "move_channel_z is deprecated. Use move_channel_probe_z() for bare-channel moves "
+      "or move_channel_tool_z() when a tip/tool is attached.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
 
   async def move_channel_probe_z(
     self,
-    channel: int,
+    channel_idx: int,
     z: float,
     speed: float = 125.0,
     acceleration: float = 800.0,
@@ -4567,7 +4577,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip-presence probing), which causes master-routed Z moves to misbehave.
 
     Args:
-      channel: Channel index (0-based, backmost = 0).
+      channel_idxchannel_idx: Channel index (0-based, backmost = 0).
       z: Target Z position in mm.
       speed: Max Z-drive speed in mm/sec. Default 125.0 mm/s.
       acceleration: Acceleration in mm/sec². Default 800.0. Valid range: ~53.6 to 1609.
@@ -4578,11 +4588,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed_increment = STARBackend.mm_to_z_drive_increment(speed)
     acceleration_increment = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
 
-    if not isinstance(channel, int):
-      raise ValueError(f"channel must be an int, got {type(channel).__name__}")
-    if not (0 <= channel < self.num_channels):
+    if not isinstance(channel_idx, int):
+      raise ValueError(f"channel must be an int, got {type(channel_idx).__name__}")
+    if not (0 <= channel_idx < self.num_channels):
       raise ValueError(
-        f"channel index {channel} out of range for instrument with {self.num_channels} channels"
+        f"channel index {channel_idx} out of range for instrument with {self.num_channels} channels"
       )
     assert 9320 <= z_increment <= 31200, (
       f"z must be between {STARBackend.z_drive_increment_to_mm(9320)} and "
@@ -4598,12 +4608,65 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= current_limit <= 7, f"current_limit must be between 0 and 7, got {current_limit}"
 
     return await self.send_command(
-      module=STARBackend.channel_id(channel),
+      module=STARBackend.channel_id(channel_idx),
       command="ZA",
       za=f"{z_increment:05}",
       zv=f"{speed_increment:05}",
       zr=f"{acceleration_increment:03}",
       zw=f"{current_limit:01}",
+    )
+
+  async def move_channel_tool_z(self, channel_idx: int, z: float):
+    """Move a channel in the Z direction when a tip or tool is attached.
+
+    Unlike :meth:`move_channel_z`, this method first verifies that the firmware
+    reports a tip (or tool) as present on the channel. The Z position is
+    interpreted by the firmware as the physical end of the attached tip/tool,
+    not the stop disc.
+
+    Use :meth:`move_channel_z` or :meth:`move_channel_probe_z` when operating
+    without a tip attached.
+
+    Args:
+      channel_idx: Channel index (0-based, backmost = 0).
+      z: Target Z position in mm (tip/tool end reference).
+    """
+
+    if not isinstance(channel_idx, int):
+      raise ValueError(f"channel_idx must be an int, got {type(channel_idx).__name__}")
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(
+        f"channel index {channel_idx} out of range for instrument with {self.num_channels} channels"
+      )
+
+    tip_presence = await self.request_tip_presence()
+
+    if not tip_presence[channel_idx]:
+      raise ValueError(
+        f"Channel {channel_idx} does not have a tip or tool attached. "
+        "Use move_channel_z() or move_channel_probe_z() for bare-channel Z moves."
+      )
+
+    tip_len = await self.request_tip_len_on_channel(channel_idx)
+
+    # The firmware command operates in "tip space" (Z refers to the tip/tool end).
+    # Convert the head-space limits to tip-space limits:
+    #   tip_space = head_space - tip_len + fitting_depth
+    max_tip_z = (
+      STARBackend.MAXIMUM_CHANNEL_Z_POSITION - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    )
+    min_tip_z = (
+      STARBackend.MINIMUM_CHANNEL_Z_POSITION - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    )
+
+    if not (min_tip_z <= z <= max_tip_z):
+      raise ValueError(
+        f"z={z} mm out of safe range [{min_tip_z}, {max_tip_z}] mm "
+        f"for tip length {tip_len} mm on channel {channel_idx}"
+      )
+
+    await self.position_single_pipetting_channel_in_z_direction(
+      pipetting_channel_index=channel_idx + 1, z_position=round(z * 10)
     )
 
   async def move_channel_x_relative(self, channel: int, distance: float):
