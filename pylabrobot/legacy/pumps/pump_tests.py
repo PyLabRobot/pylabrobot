@@ -15,7 +15,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
   """
 
   def setUp(self):
-    self.mock_backend = Mock(spec=PumpBackend)
+    self.mock_backend = AsyncMock()
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=1)
 
   async def test_setup(self):
