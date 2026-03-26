@@ -1900,7 +1900,7 @@ class LiquidHandler(Resource, Machine):
 
       if does_volume_tracking():
         tip.tracker.remove_liquid(volume=volume)
-      elif tip.tracker.get_used_volume() < volume:
+      elif tip.tracker.get_used_volume() <= volume:
         tip.tracker.remove_liquid(volume=min(tip.tracker.get_used_volume(), volume))
 
     if len(containers) == 1:  # single container
