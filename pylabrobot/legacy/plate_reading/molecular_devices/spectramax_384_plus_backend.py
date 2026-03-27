@@ -6,13 +6,13 @@ from pylabrobot.molecular_devices.spectramax.backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
-  MolecularDevicesDriver,
   PmtGain,
   ReadOrder,
   ReadType,
   ShakeSettings,
   SpectrumSettings,
 )
+from pylabrobot.molecular_devices.spectramax.backend import MolecularDevicesDriver
 from pylabrobot.molecular_devices.spectramax.spectramax_384_plus import (
   SpectraMax384PlusAbsorbanceBackend,
 )

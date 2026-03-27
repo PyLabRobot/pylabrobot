@@ -5,8 +5,6 @@ from pylabrobot.legacy.temperature_controlling.backend import (
 )
 from pylabrobot.opentrons.temperature_module import (
   OpentronsTemperatureModuleUSBDriver,
-)
-from pylabrobot.opentrons.temperature_module import (
   OpentronsTemperatureModuleUSBTemperatureBackend as _NewBackend,
 )
 

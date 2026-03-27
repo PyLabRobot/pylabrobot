@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
   MicroscopyCapability,
@@ -27,6 +26,7 @@ from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapab
 from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 try:

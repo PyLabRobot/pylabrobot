@@ -1,7 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
   FocalPosition,
@@ -10,6 +9,7 @@ from pylabrobot.capabilities.microscopy.standard import (
   ImagingResult,
   Objective,
 )
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.serializer import SerializableMixin
 

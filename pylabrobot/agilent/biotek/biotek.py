@@ -6,7 +6,6 @@ from abc import ABCMeta
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceBackend, AbsorbanceResult
 from pylabrobot.capabilities.plate_reading.fluorescence import (
   FluorescenceBackend,
@@ -19,6 +18,7 @@ from pylabrobot.capabilities.plate_reading.luminescence import (
 from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)

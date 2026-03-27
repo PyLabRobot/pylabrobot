@@ -11,10 +11,10 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 
 

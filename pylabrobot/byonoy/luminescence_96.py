@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.luminescence import (
   LuminescenceBackend,
   LuminescenceCapability,
@@ -16,6 +15,7 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
