@@ -2,6 +2,8 @@ import asyncio
 import logging
 from typing import List, Optional, cast
 
+from pylabrobot.serializer import SerializableMixin
+
 from pylabrobot.capabilities.thermocycling import (
   Protocol,
   Stage,
@@ -24,16 +26,9 @@ class ThermoFisherThermocyclingBackend(ThermocyclingBackend):
     block_id: int,
     supports_lid_control: bool = False,
   ):
-    super().__init__()
     self._driver = driver
     self._block_id = block_id
     self._supports_lid_control = supports_lid_control
-
-  async def setup(self):
-    pass  # driver handles setup
-
-  async def stop(self):
-    pass  # driver handles stop
 
   # ----- Lid control -----
 
@@ -58,7 +53,7 @@ class ThermoFisherThermocyclingBackend(ThermocyclingBackend):
 
   # ----- Protocol execution -----
 
-  async def run_protocol(self, protocol: Protocol, block_max_volume: float) -> None:
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, backend_params: Optional[SerializableMixin] = None) -> None:
     await self._run_protocol_with_options(protocol=protocol, block_max_volume=block_max_volume)
 
   async def _run_protocol_with_options(

@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional
 
-from pylabrobot.inheco.odtc.odtc import ODTCBlockBackend, ODTCDriver, ODTCThermocyclingBackend
+from pylabrobot.inheco.odtc.odtc import ODTCBlockBackend, ODTCDriver, ODTCRunProtocolParams, ODTCThermocyclingBackend
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import (
   BlockStatus,
@@ -18,6 +18,7 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
   def __init__(self, ip: str, client_ip: Optional[str] = None) -> None:
     self._driver = ODTCDriver(ip=ip, client_ip=client_ip)
     self._tc = ODTCThermocyclingBackend(self._driver)
+    self._block_be = ODTCBlockBackend(self._driver)
     self._block_target_temp: Optional[float] = None
     self._lid_target_temp: Optional[float] = None
     self._sensor_cache: Dict = {}
@@ -52,9 +53,8 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
       return
     self._block_target_temp = temperature[0]
     lid = self._lid_target_temp if self._lid_target_temp is not None else 105.0
-    block_be = ODTCBlockBackend(self._driver)
-    block_be._lid_target = lid
-    await block_be._run_pre_method(self._block_target_temp, lid)
+    self._block_be._lid_target = lid
+    await self._block_be._run_pre_method(self._block_target_temp, lid, dynamic_time=dynamic_time)
 
   async def deactivate_block(self):
     await self._driver.send_command("StopMethod")
@@ -74,9 +74,8 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
       return
     self._lid_target_temp = temperature[0]
     block = self._block_target_temp if self._block_target_temp is not None else 25.0
-    block_be = ODTCBlockBackend(self._driver)
-    block_be._lid_target = self._lid_target_temp
-    await block_be._run_pre_method(block, self._lid_target_temp)
+    self._block_be._lid_target = self._lid_target_temp
+    await self._block_be._run_pre_method(block, self._lid_target_temp, dynamic_time=dynamic_time)
 
   async def deactivate_lid(self):
     raise NotImplementedError()
@@ -99,14 +98,16 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
     **kwargs,
   ):
     new_protocol = protocol_to_new(protocol)
-    await self._tc.run_protocol(
-      protocol=new_protocol,
-      block_max_volume=block_max_volume,
+    params = ODTCRunProtocolParams(
       start_block_temperature=start_block_temperature,
       start_lid_temperature=start_lid_temperature,
       post_heating=post_heating,
       method_name=method_name,
-      **kwargs,
+    )
+    await self._tc.run_protocol(
+      protocol=new_protocol,
+      block_max_volume=block_max_volume,
+      backend_params=params,
     )
 
   async def stop_method(self):

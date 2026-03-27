@@ -4,8 +4,10 @@ import asyncio
 import datetime
 import time
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
@@ -15,9 +17,14 @@ from pylabrobot.capabilities.thermocycling import (
   ThermocyclingBackend,
   ThermocyclingCapability,
 )
-from pylabrobot.device import Device, DeviceBackend
+from pylabrobot.device import Device, Driver
 from pylabrobot.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAError
 from pylabrobot.resources import Coordinate, ResourceHolder
+from pylabrobot.serializer import SerializableMixin
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +69,7 @@ def _recursive_find_key(data: Any, key: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-class ODTCDriver(DeviceBackend):
+class ODTCDriver(Driver):
   """Low-level SiLA driver for the Inheco ODTC."""
 
   def __init__(self, ip: str, client_ip: Optional[str] = None):
@@ -84,7 +91,7 @@ class ODTCDriver(DeviceBackend):
       )
       await self._sila.send_command("Initialize")
     except Exception as e:
-      print(f"Warning during ODTC initialization: {e}")
+      logger.warning("Warning during ODTC initialization: %s", e)
 
   async def wait_for_idle(self, timeout=30):
     start = time.time()
@@ -121,7 +128,7 @@ class ODTCDriver(DeviceBackend):
         cache["_time"] = time.time()
         return data
     except Exception as e:
-      print(f"Error reading sensor data: {e}")
+      logger.error("Error reading sensor data: %s", e)
     return cache.get("_data", {})
 
 
@@ -134,7 +141,6 @@ class ODTCBlockBackend(TemperatureControllerBackend):
   """Block temperature controller for the ODTC."""
 
   def __init__(self, driver: ODTCDriver):
-    super().__init__()
     self._driver = driver
     self._target: Optional[float] = None
     self._lid_target: Optional[float] = None
@@ -143,12 +149,6 @@ class ODTCBlockBackend(TemperatureControllerBackend):
   @property
   def supports_active_cooling(self) -> bool:
     return True
-
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    pass
 
   async def set_temperature(self, temperature: float):
     self._target = temperature
@@ -162,7 +162,7 @@ class ODTCBlockBackend(TemperatureControllerBackend):
   async def deactivate(self):
     await self._driver.send_command("StopMethod")
 
-  async def _run_pre_method(self, block_temp: float, lid_temp: float):
+  async def _run_pre_method(self, block_temp: float, lid_temp: float, dynamic_time: bool = True):
     now = datetime.datetime.now().astimezone()
     method_name = f"PLR_Hold_{now.strftime('%Y%m%d_%H%M%S')}"
 
@@ -173,7 +173,7 @@ class ODTCBlockBackend(TemperatureControllerBackend):
       f'<PreMethod methodName="{method_name}" creator="PLR" dateTime="{now.isoformat()}">'
       f"<TargetBlockTemperature>{_format_number(block_temp)}</TargetBlockTemperature>"
       f"<TargetLidTemp>{_format_number(lid_temp)}</TargetLidTemp>"
-      f"<DynamicPreMethodDuration>true</DynamicPreMethodDuration>"
+      f"<DynamicPreMethodDuration>{'true' if dynamic_time else 'false'}</DynamicPreMethodDuration>"
       f"</PreMethod>"
       f"</MethodSet>"
     )
@@ -193,7 +193,6 @@ class ODTCLidBackend(TemperatureControllerBackend):
   """Lid temperature controller for the ODTC."""
 
   def __init__(self, driver: ODTCDriver, block_backend: ODTCBlockBackend):
-    super().__init__()
     self._driver = driver
     self._block = block_backend
     self._sensor_cache: Dict[str, Any] = {}
@@ -201,12 +200,6 @@ class ODTCLidBackend(TemperatureControllerBackend):
   @property
   def supports_active_cooling(self) -> bool:
     return False
-
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    pass
 
   async def set_temperature(self, temperature: float):
     self._block._lid_target = temperature
@@ -221,18 +214,25 @@ class ODTCLidBackend(TemperatureControllerBackend):
     raise NotImplementedError("ODTC lid cannot be deactivated independently.")
 
 
+@dataclass
+class ODTCRunProtocolParams(BackendParams):
+  """ODTC-specific parameters for run_protocol."""
+
+  start_block_temperature: float = 25.0
+  start_lid_temperature: float = 30.0
+  post_heating: bool = True
+  method_name: Optional[str] = None
+
+
 class ODTCThermocyclingBackend(ThermocyclingBackend):
   """Thermocycling backend for the ODTC."""
 
   def __init__(self, driver: ODTCDriver):
-    super().__init__()
     self._driver = driver
 
-  async def setup(self):
-    pass
-
-  async def stop(self):
+  async def _on_stop(self):
     await self._driver.send_command("StopMethod")
+    await super()._on_stop()
 
   async def open_lid(self) -> None:
     await self._driver.send_command("OpenDoor")
@@ -243,24 +243,19 @@ class ODTCThermocyclingBackend(ThermocyclingBackend):
   async def get_lid_open(self) -> bool:
     raise NotImplementedError()
 
-  async def run_protocol(
-    self,
-    protocol: Protocol,
-    block_max_volume: float = 20.0,
-    start_block_temperature: float = 25.0,
-    start_lid_temperature: float = 30.0,
-    post_heating: bool = True,
-    method_name: Optional[str] = None,
-    **kwargs,
-  ) -> None:
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float,
+                         backend_params: Optional[SerializableMixin] = None) -> None:
+    if isinstance(backend_params, ODTCRunProtocolParams):
+      params = backend_params
+    else:
+      params = ODTCRunProtocolParams()
     method_xml, method_name = _generate_method_xml(
       protocol=protocol,
       block_max_volume=block_max_volume,
-      start_block_temperature=start_block_temperature,
-      start_lid_temperature=start_lid_temperature,
-      post_heating=post_heating,
-      method_name=method_name,
-      **kwargs,
+      start_block_temperature=params.start_block_temperature,
+      start_lid_temperature=params.start_lid_temperature,
+      post_heating=params.post_heating,
+      method_name=params.method_name,
     )
 
     ps = ET.Element("ParameterSet")
@@ -273,7 +268,7 @@ class ODTCThermocyclingBackend(ThermocyclingBackend):
       await self._driver.send_command("ExecuteMethod", methodName=method_name)
     except SiLAError as e:
       if e.code == 12:  # SuccessWithWarning
-        print(f"[ODTC Warning] {e.message}")
+        logger.warning("[ODTC Warning] %s", e.message)
       else:
         raise
 

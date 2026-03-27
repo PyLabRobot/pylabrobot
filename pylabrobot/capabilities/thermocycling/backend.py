@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
+from typing import Optional
 
 from pylabrobot.capabilities.capability import CapabilityBackend
+from pylabrobot.serializer import SerializableMixin
 
 from .standard import Protocol
 
@@ -26,12 +28,13 @@ class ThermocyclingBackend(CapabilityBackend, metaclass=ABCMeta):
     """Return True if the lid is open."""
 
   @abstractmethod
-  async def run_protocol(self, protocol: Protocol, block_max_volume: float) -> None:
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, backend_params: Optional[SerializableMixin] = None) -> None:
     """Execute a thermocycler protocol.
 
     Args:
       protocol: Protocol containing stages with steps and repeats.
       block_max_volume: Maximum block volume in uL.
+      backend_params: Backend-specific parameters.
     """
 
   @abstractmethod

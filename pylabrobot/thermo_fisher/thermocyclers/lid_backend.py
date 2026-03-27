@@ -7,19 +7,12 @@ class ThermoFisherLidBackend(TemperatureControllerBackend):
   """Temperature control backend for a single thermocycler lid (cover heater)."""
 
   def __init__(self, driver: ThermoFisherThermocyclerDriver, block_id: int):
-    super().__init__()
     self._driver = driver
     self._block_id = block_id
 
   @property
   def supports_active_cooling(self) -> bool:
     return False
-
-  async def setup(self):
-    pass  # driver handles setup
-
-  async def stop(self):
-    pass  # driver handles stop
 
   async def set_temperature(self, temperature: float):
     res = await self._driver.send_command(

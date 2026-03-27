@@ -8,13 +8,13 @@ import warnings
 from base64 import b64decode
 from typing import Any, Dict, List, Optional, cast
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io import Socket
 
 logger = logging.getLogger(__name__)
 
 
-class ThermoFisherThermocyclerDriver(DeviceBackend):
+class ThermoFisherThermocyclerDriver(Driver):
   """SCPI driver for ThermoFisher thermocyclers (ProFlex / ATC).
 
   Owns the socket connection and handles SSL/auth, block discovery,

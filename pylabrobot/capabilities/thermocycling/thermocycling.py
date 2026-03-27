@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from pylabrobot.capabilities.capability import Capability
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.serializer import SerializableMixin
 
 from .backend import ThermocyclingBackend
 from .standard import Protocol, Stage, Step
@@ -36,12 +37,13 @@ class ThermocyclingCapability(Capability):
   async def get_lid_open(self) -> bool:
     return await self.backend.get_lid_open()
 
-  async def run_protocol(self, protocol: Protocol, block_max_volume: float) -> None:
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, backend_params: Optional[SerializableMixin] = None) -> None:
     """Execute a thermocycler protocol.
 
     Args:
       protocol: Protocol containing stages with steps and repeats.
       block_max_volume: Maximum block volume in uL.
+      backend_params: Backend-specific parameters.
     """
     num_zones = len(protocol.stages[0].steps[0].temperature)
     for stage in protocol.stages:
@@ -52,7 +54,7 @@ class ThermocyclingCapability(Capability):
             f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
           )
 
-    await self.backend.run_protocol(protocol, block_max_volume)
+    await self.backend.run_protocol(protocol, block_max_volume, backend_params=backend_params)
 
   async def run_pcr_profile(
     self,
@@ -138,7 +140,7 @@ class ThermocyclingCapability(Capability):
     step = await self.backend.get_current_step_index()
     total_steps = await self.backend.get_total_step_count()
 
-    if hold and hold > 0:
+    if hold > 0:
       return True
     if cycle < total_cycles - 1:
       return True

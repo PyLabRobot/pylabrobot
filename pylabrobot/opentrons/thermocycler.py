@@ -13,6 +13,7 @@ from pylabrobot.capabilities.thermocycling import (
 )
 from pylabrobot.device import Device, Driver
 from pylabrobot.resources import Coordinate, ItemizedResource, ResourceHolder
+from pylabrobot.serializer import SerializableMixin
 
 try:
   from ot_api.modules import (
@@ -184,7 +185,7 @@ class OpentronsThermocyclingBackend(ThermocyclingBackend):
   async def get_lid_open(self) -> bool:
     return self._driver.get_lid_status_str() == "open"
 
-  async def run_protocol(self, protocol: Protocol, block_max_volume: float) -> None:
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, backend_params: Optional[SerializableMixin] = None) -> None:
     ot_profile = []
     for stage in protocol.stages:
       for _ in range(stage.repeats):

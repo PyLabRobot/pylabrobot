@@ -4,6 +4,8 @@ Internally delegates to ThermocyclingCapability and TemperatureControlCapability
 via adapters. The legacy public API is unchanged.
 """
 
+import asyncio
+import time
 from typing import List, Optional
 
 from pylabrobot.capabilities.temperature_controlling import (
@@ -109,7 +111,7 @@ class _ThermocyclingAdapter(_NewThermocyclingBackend):
   async def get_lid_open(self) -> bool:
     return await self._legacy.get_lid_open()
 
-  async def run_protocol(self, protocol: _new_std.Protocol, block_max_volume: float) -> None:
+  async def run_protocol(self, protocol: _new_std.Protocol, block_max_volume: float, backend_params=None) -> None:
     await self._legacy.run_protocol(protocol_from_new(protocol), block_max_volume)
 
   async def get_hold_time(self) -> float:
@@ -288,16 +290,32 @@ class Thermocycler(ResourceHolder, Machine):
     return await self._thermocycling.get_total_step_count()
 
   async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5, **backend_kwargs):
-    self._thermocycling.block.target_temperature = (
-      await self.backend.get_block_target_temperature()
-    )[0]
-    await self._thermocycling.block.wait_for_temperature(timeout=timeout, tolerance=tolerance)
+    targets = await self.get_block_target_temperature(**backend_kwargs)
+    start = time.time()
+    while time.time() - start < timeout:
+      currents = await self.get_block_current_temperature(**backend_kwargs)
+      if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
+        return
+      await asyncio.sleep(1)
+    raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
-    self._thermocycling.lid.target_temperature = (await self.backend.get_lid_target_temperature())[
-      0
-    ]
-    await self._thermocycling.lid.wait_for_temperature(timeout=timeout, tolerance=tolerance)
+    try:
+      targets = await self.get_lid_target_temperature(**backend_kwargs)
+    except (RuntimeError, NotImplementedError):
+      targets = None
+    start = time.time()
+    while time.time() - start < timeout:
+      if targets is not None:
+        currents = await self.get_lid_current_temperature(**backend_kwargs)
+        if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
+          return
+      else:
+        status = await self.get_lid_status(**backend_kwargs)
+        if status in (LidStatus.IDLE, LidStatus.HOLDING_AT_TARGET):
+          return
+      await asyncio.sleep(1)
+    raise TimeoutError("Lid temperature timeout.")
 
   async def is_profile_running(self, **backend_kwargs) -> bool:
     return await self._thermocycling.is_profile_running()
