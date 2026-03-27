@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional
 
 from pylabrobot.arms.standard import GripperLocation
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.capabilities.capability import BackendParams
@@ -86,7 +86,7 @@ class HasJoints(metaclass=ABCMeta):
     """Get the current position of the arm in joint space."""
 
 
-class _BaseArmBackend(DeviceBackend, metaclass=ABCMeta):
+class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
   @abstractmethod
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     """Stop any ongoing movement of the arm."""

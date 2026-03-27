@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from pylabrobot.arms.arm import Arm
 from pylabrobot.arms.orientable_arm import OrientableArm
-from pylabrobot.arms.joint_arm import JointArm
 from pylabrobot.arms.backend import (
   GripperArmBackend,
   OrientableGripperArmBackend,
@@ -200,10 +199,11 @@ class TestJointArm(unittest.IsolatedAsyncioTestCase):
     ]:
       setattr(self.mock_backend, method_name, AsyncMock())
     self.reference_resource = Resource("deck", size_x=1000, size_y=1000, size_z=0)
-    self.arm = JointArm(backend=self.mock_backend, reference_resource=self.reference_resource)
+    self.arm = OrientableArm(backend=self.mock_backend, reference_resource=self.reference_resource)
 
   async def test_get_joint_position(self):
-    await self.arm.get_joint_position()
+    """Joint methods are accessed via backend, not frontend."""
+    await self.arm.backend.get_joint_position()
     self.mock_backend.get_joint_position.assert_called_once()
 
   async def test_get_gripper_location(self):

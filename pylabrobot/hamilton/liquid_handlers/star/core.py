@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pylabrobot.arms.backend import GripperArmBackend
+from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
 from pylabrobot.capabilities.capability import BackendParams
@@ -19,11 +20,8 @@ class CoreGripper(GripperArmBackend):
 
   # -- lifecycle --------------------------------------------------------------
 
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
+  async def get_gripper_location(self, backend_params=None) -> GripperLocation:
+    raise NotImplementedError("CoreGripper does not support get_gripper_location")
 
   # -- ArmBackend interface ---------------------------------------------------
 
@@ -188,10 +186,10 @@ class CoreGripper(GripperArmBackend):
     )
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    raise NotImplementedError()
+    raise NotImplementedError("CoreGripper does not support is_gripper_closed")
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
-    raise NotImplementedError()
+    raise NotImplementedError("CoreGripper does not support halt")
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     raise NotImplementedError(

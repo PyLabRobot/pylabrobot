@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional, cast
 
 from pylabrobot.arms.backend import OrientableGripperArmBackend
+from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
 from pylabrobot.capabilities.capability import BackendParams
@@ -37,7 +38,10 @@ class iSWAP(OrientableGripperArmBackend):
   def parked(self) -> bool:
     return self._parked is True
 
-  async def setup(self) -> None:
+  async def get_gripper_location(self, backend_params=None) -> GripperLocation:
+    raise NotImplementedError("iSWAP does not support get_gripper_location")
+
+  async def _on_setup(self) -> None:
     self._version = await self._request_version()
 
   async def _request_version(self) -> str:
@@ -263,7 +267,7 @@ class iSWAP(OrientableGripperArmBackend):
     )
     self._parked = False
 
-  async def is_gripper_closed(self) -> bool:
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Check if the iSWAP is holding a plate.
 
     Returns:
@@ -271,9 +275,6 @@ class iSWAP(OrientableGripperArmBackend):
     """
     resp = await self.interface.send_command(module="C0", command="QP", fmt="ph#")
     return resp is not None and resp["ph"] == 1
-
-  async def stop(self) -> None:
-    raise NotImplementedError()
 
   @dataclass
   class MoveToLocationParams(BackendParams):
@@ -331,8 +332,5 @@ class iSWAP(OrientableGripperArmBackend):
     )
     self._parked = False
 
-  async def halt(self) -> None:
-    raise NotImplementedError()
-
-  async def move_to_safe(self) -> None:
-    raise NotImplementedError()
+  async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
+    raise NotImplementedError("iSWAP halt not yet implemented")

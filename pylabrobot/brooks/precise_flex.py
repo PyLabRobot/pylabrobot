@@ -7,7 +7,8 @@ from enum import IntEnum
 from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
-from pylabrobot.arms.joint_arm import JointArm
+from pylabrobot.brooks.error_codes import ERROR_CODES
+from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.device import Device
 from pylabrobot.io.socket import Socket
@@ -17,7 +18,6 @@ from pylabrobot.capabilities.capability import BackendParams
 
 
 logger = logging.getLogger(__name__)
-
 
 
 # ---------------------------------------------------------------------------
@@ -76,9 +76,6 @@ class HorizontalAccess:
 
 
 AccessPattern = Union[VerticalAccess, HorizontalAccess]
-
-
-from pylabrobot.brooks.error_codes import ERROR_CODES
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +139,11 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     self, position: PreciseFlexGripperLocation
   ) -> tuple[float, float, float, float, float, float, int]:
     """Convert a PreciseFlexGripperLocation object to a list of cartesian coordinates."""
-    orientation_int = self._convert_orientation_str_to_int(position.orientation) if position.orientation is not None else 0
+    orientation_int = (
+      self._convert_orientation_str_to_int(position.orientation)
+      if position.orientation is not None
+      else 0
+    )
     return (
       position.location.x,
       position.location.y,
@@ -268,7 +269,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       try:
         await self.set_power(True, self.timeout)
       except PreciseFlexError as e:
-        logger.warning(f"Error powering on robot, retrying... Attempt {_+1}/3. Error: {e}")
+        logger.warning(f"Error powering on robot, retrying... Attempt {_ + 1}/3. Error: {e}")
         error = e
       else:
         return
@@ -433,7 +434,7 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
       location=Coordinate(x, y, z),
       rotation=Rotation(x=roll, y=pitch, z=yaw),
       orientation=elbow_orientation,
-      rail=rail_position
+      rail=rail_position,
     )
 
   # -- OrientableArmBackend interface (Cartesian) -----------------------------
@@ -451,7 +452,9 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     if backend_params.rail_position is not None:
       await self.move_rail(backend_params.rail_position)
     elif self._has_rail:
-      raise ValueError("rail_position must be specified for pick_up_at_location when using a rail-equipped arm.")
+      raise ValueError(
+        "rail_position must be specified for pick_up_at_location when using a rail-equipped arm."
+      )
     access = backend_params.access or VerticalAccess()
     coords = PreciseFlexGripperLocation(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
@@ -476,7 +479,9 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     if backend_params.rail_position is not None:
       await self.move_rail(backend_params.rail_position)
     elif self._has_rail:
-      raise ValueError("rail_position must be specified for drop_at_location when using a rail-equipped arm.")
+      raise ValueError(
+        "rail_position must be specified for drop_at_location when using a rail-equipped arm."
+      )
     access = backend_params.access or VerticalAccess()
     coords = PreciseFlexGripperLocation(
       location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
@@ -504,10 +509,14 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     if backend_params.rail_position is not None:
       await self.move_rail(backend_params.rail_position)
     elif self._has_rail:
-      raise ValueError("Rail position must be specified for move_to_location when using a rail-equipped arm.")
+      raise ValueError(
+        "Rail position must be specified for move_to_location when using a rail-equipped arm."
+      )
 
     coords = PreciseFlexGripperLocation(
-      location=location, rotation=Rotation(x=-180, y=90, z=direction), orientation=backend_params.orientation
+      location=location,
+      rotation=Rotation(x=-180, y=90, z=direction),
+      orientation=backend_params.orientation,
     )
     await self._move_c(profile_index=self.profile_index, cartesian_coords=coords)
 
@@ -532,7 +541,9 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     gripper_2_closed = (ret_int & 2) != 0
     return (gripper_1_closed, gripper_2_closed)
 
-  async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None, backend_params=None) -> None:
+  async def start_freedrive_mode(
+    self, free_axes: Optional[List[int]] = None, backend_params=None
+  ) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
     The robot must be attached to enter free mode.
@@ -540,7 +551,13 @@ class PreciseFlexBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, A
     Args:
       free_axes: List of joint indices to free. Use [0] for all axes.
     """
-    for axis in (free_axes or [PFAxis.BASE, PFAxis.SHOULDER, PFAxis.ELBOW, PFAxis.WRIST, PFAxis.RAIL]):
+    for axis in free_axes or [
+      PFAxis.BASE,
+      PFAxis.SHOULDER,
+      PFAxis.ELBOW,
+      PFAxis.WRIST,
+      PFAxis.RAIL,
+    ]:
       await self.send_command(f"freemode {axis}")
 
   async def stop_freedrive_mode(self, backend_params=None) -> None:
@@ -1753,7 +1770,7 @@ class PreciseFlex400(Device):
     # super().__init__(host=host, port=port, has_rail=has_rail, timeout=timeout)
     self._backend = PreciseFlexBackend(host=host, port=port, has_rail=has_rail, timeout=timeout)
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
-    self.arm = JointArm(backend=self._backend, reference_resource=self.reference)
+    self.arm = OrientableArm(backend=self._backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
 
 

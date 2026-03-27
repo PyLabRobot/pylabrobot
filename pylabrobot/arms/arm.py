@@ -6,7 +6,6 @@ import logging
 from pylabrobot.arms.backend import _BaseArmBackend, GripperArmBackend
 from pylabrobot.arms.standard import GripDirection, GripperLocation
 from pylabrobot.capabilities.capability import Capability
-from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
   Lid,
