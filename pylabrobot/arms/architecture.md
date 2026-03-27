@@ -42,6 +42,14 @@ _BaseArmBackend(CapabilityBackend)
 - `HasJoints` — joint-space control: pick_up/drop/move at joint position, get_joint_position
 - `CanFreedrive` — freedrive (manual guidance) mode
 
+## Concrete implementations
+
+| Device | Driver | Arm Backend | Frontend |
+|--------|--------|-------------|----------|
+| Hamilton STAR (iSWAP) | STARDriver (shared) | `iSWAP(OrientableGripperArmBackend)` | `OrientableArm` |
+| Hamilton STAR (core) | STARDriver (shared) | `CoreGripper(GripperArmBackend)` | `Arm` |
+| PreciseFlex 400 | `PreciseFlexDriver` | `PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive)` | `OrientableArm` |
+
 ## Usage
 
 Arms are capabilities, not devices. They are owned by a Device:
@@ -51,8 +59,8 @@ class STAR(Device):
   def __init__(self, ...):
     driver = STARDriver(...)
     super().__init__(driver=driver)
-    self.iswap = OrientableArm(backend=iSWAPBackend(driver), reference_resource=deck)
-    self.core_gripper = Arm(backend=CoreGripperBackend(driver), reference_resource=deck)
+    self.iswap = OrientableArm(backend=iSWAP(driver), reference_resource=deck)
+    self.core_gripper = Arm(backend=CoreGripper(driver), reference_resource=deck)
     self._capabilities = [self.iswap, self.core_gripper]
 ```
 
@@ -60,12 +68,14 @@ A standalone arm (like PreciseFlex) is a Device with a single arm capability:
 
 ```python
 class PreciseFlex400(Device):
-  def __init__(self, ...):
-    driver = PreciseFlexDriver(...)
+  def __init__(self, host, port=10100, has_rail=False, timeout=20):
+    driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
-    self.arm = OrientableArm(backend=PF400Backend(driver), reference_resource=deck)
+    backend = PreciseFlexArmBackend(driver=driver, has_rail=has_rail)
+    self.arm = OrientableArm(backend=backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
 
-# Joint methods accessed via backend:
-await pf.arm.backend.move_to_joint_position({0: 0, 1: 90, 2: 45})
+# Joint methods accessed via backend (robot-specific):
+await pf.arm.backend.move_to_joint_position({1: 0, 2: 90, 3: 45})
+await pf.arm.backend.start_freedrive_mode(free_axes=[0])
 ```
