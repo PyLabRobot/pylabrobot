@@ -10,138 +10,10 @@ import warnings
 from typing import Any, Callable, List, Literal, Optional, Set, TypeVar, Union
 
 from pylabrobot.io.serial import Serial
+from pylabrobot.scales.mettler_toledo_sics_errors import MettlerToledoError
 from pylabrobot.scales.scale_backend import ScaleBackend
 
 logger = logging.getLogger("pylabrobot")
-
-
-class MettlerToledoError(Exception):
-  """Exceptions raised by a Mettler Toledo scale."""
-
-  def __init__(self, title: str, message: Optional[str] = None) -> None:
-    self.title = title
-    self.message = message
-
-  def __str__(self) -> str:
-    return f"{self.title}: {self.message}"
-
-  @staticmethod
-  def unknown_error() -> "MettlerToledoError":
-    return MettlerToledoError(title="Unknown error", message="An unknown error occurred")
-
-  @staticmethod
-  def executing_another_command() -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Command not understood, not executable at present",
-      message=(
-        "Command understood but currently not executable (balance is "
-        "currently executing another command)."
-      ),
-    )
-
-  @staticmethod
-  def incorrect_parameter() -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Command understood but not executable",
-      message="(incorrect parameter).",
-    )
-
-  @staticmethod
-  def overload() -> "MettlerToledoError":
-    return MettlerToledoError(title="Balance in overload range.", message=None)
-
-  @staticmethod
-  def underload() -> "MettlerToledoError":
-    return MettlerToledoError(title="Balance in underload range.", message=None)
-
-  @staticmethod
-  def syntax_error() -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Syntax error",
-      message="The weigh module/balance has not recognized the received command or the command is "
-      "not allowed",
-    )
-
-  @staticmethod
-  def transmission_error() -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Transmission error",
-      message="The weigh module/balance has received a 'faulty' command, e.g. owing to a parity "
-      "error or interface break",
-    )
-
-  @staticmethod
-  def logical_error() -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Logical error",
-      message="The weigh module/balance can not execute the received command",
-    )
-
-  @staticmethod
-  def boot_error(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Boot error",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def brand_error(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Brand error",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def checksum_error(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Checksum error",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def option_fail(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Option fail",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def eeprom_error(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="EEPROM error",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def device_mismatch(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Device mismatch",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def hot_plug_out(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Hot plug out",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def weight_module_electronic_mismatch(
-    from_terminal: bool,
-  ) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Weight module / electronic mismatch",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
-  @staticmethod
-  def adjustment_needed(from_terminal: bool) -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Adjustment needed",
-      message="from terminal" if from_terminal else "from electronics",
-    )
-
 
 MettlerToledoResponse = List[str]
 
@@ -398,6 +270,25 @@ class MTSICSBackend(ScaleBackend):
     # mypy doesn't understand this
     return response  # type: ignore
 
+  async def _drain_followup_responses(self, command: str, timeout: float = 10) -> None:
+    """Read and discard follow-up responses from multi-response commands.
+
+    Multi-response commands (B status) send additional lines after the first response.
+    This method reads lines until it sees status A (final) or times out.
+    """
+    timeout_time = time.time() + timeout
+    while True:
+      raw_followup = await self.io.readline()
+      if raw_followup != b"":
+        followup = raw_followup.decode("utf-8").strip().split()
+        logger.debug("[scale] %s followup: %s", command, raw_followup)
+        if len(followup) >= 2 and followup[1] == "A":
+          break
+      if time.time() > timeout_time:
+        logger.warning("[scale] Timeout waiting for %s followup", command)
+        break
+      await asyncio.sleep(0.001)
+
   # === Public high-level API ===
 
   # # Cancel commands # #
@@ -436,18 +327,8 @@ class MTSICSBackend(ScaleBackend):
         message=f"C command returned error: {response}",
       )
 
-    # Second response: C A (cancel complete) - must read to clear buffer
-    raw_followup = b""
-    timeout_time = time.time() + 10
-    while True:
-      raw_followup = await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        logger.warning("[scale] Timeout waiting for C A followup")
-        break
-      if raw_followup != b"":
-        break
-    logger.debug("[scale] Cancel followup: %s", raw_followup)
+    # Second response: C A (cancel complete)
+    await self._drain_followup_responses("C")
 
   # # Identification commands # #
 
@@ -492,23 +373,7 @@ class MTSICSBackend(ScaleBackend):
     remaining = float(response[3])
 
     # Drain follow-up responses (RangeNo 1 and 2) to keep the serial buffer clean
-    timeout_time = time.time() + 10
-    while True:
-      raw_followup = b""
-      while True:
-        raw_followup = await self.io.readline()
-        await asyncio.sleep(0.001)
-        if time.time() > timeout_time:
-          break
-        if raw_followup != b"":
-          break
-      if raw_followup == b"" or time.time() > timeout_time:
-        break
-      followup = raw_followup.decode("utf-8").strip().split()
-      logger.debug("[scale] I50 followup: %s", raw_followup)
-      # Stop after the final response (status A)
-      if len(followup) >= 2 and followup[1] == "A":
-        break
+    await self._drain_followup_responses("I50")
 
     return remaining
 

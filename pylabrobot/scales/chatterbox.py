@@ -57,8 +57,8 @@ class ScaleChatterboxBackend(ScaleBackend):
 
   async def request_tare_weight(self, **kwargs) -> float:
     print("Requesting tare weight")
-    return self.tare_weight
+    return round(self.tare_weight, 5)
 
   async def read_weight(self, **kwargs) -> float:
     print("Reading the weight")
-    return self._sensor_reading - self.zero_offset - self.tare_weight
+    return round(self._sensor_reading - self.zero_offset - self.tare_weight, 5)
