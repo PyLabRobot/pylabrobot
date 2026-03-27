@@ -93,9 +93,7 @@ class PumpArray(Machine):
     return use_channels
 
   @staticmethod
-  def _normalize_speeds(
-    speed: Union[float, int, List[float], List[int]], n: int
-  ) -> List[float]:
+  def _normalize_speeds(speed: Union[float, int, List[float], List[int]], n: int) -> List[float]:
     if isinstance(speed, (float, int)):
       speed = [float(speed)] * n
     if any(s < 0 for s in speed):
@@ -163,9 +161,7 @@ class PumpArray(Machine):
         for channel, channel_volume in zip(channels, volume)
       ]
       tasks = [
-        asyncio.create_task(
-          self.run_for_duration(speed=s, use_channels=ch, duration=d)
-        )
+        asyncio.create_task(self.run_for_duration(speed=s, use_channels=ch, duration=d))
         for s, ch, d in zip(speeds, channels, durations)
       ]
     elif self.calibration.calibration_mode == "revolutions":
@@ -174,9 +170,7 @@ class PumpArray(Machine):
         for channel, channel_volume in zip(channels, volume)
       ]
       tasks = [
-        asyncio.create_task(
-          self.run_revolutions(num_revolutions=r, use_channels=ch)
-        )
+        asyncio.create_task(self.run_revolutions(num_revolutions=r, use_channels=ch))
         for r, ch in zip(num_rotations, channels)
       ]
     else:
