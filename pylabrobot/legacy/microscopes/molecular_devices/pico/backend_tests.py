@@ -38,6 +38,7 @@ from pylabrobot.molecular_devices.imageXpress.pico.backend import (
   _OBJ_SVC,
   _SNAP_SVC,
   PicoDriver,
+  PicoMicroscopyBackend,
   _decode_intermediate_response,
   _extract_image_buffer,
   _get_image_info,
@@ -180,20 +181,23 @@ def _make_backend(
   objectives=None,
   filter_cubes=None,
   lock_timeout=3600,
-) -> Tuple[PicoDriver, _MockChannel]:
-  """Create a PicoDriver with a mock channel, bypassing setup()."""
-  backend = PicoDriver(
+) -> Tuple[PicoDriver, PicoMicroscopyBackend, _MockChannel]:
+  """Create a PicoDriver + PicoMicroscopyBackend with a mock channel, bypassing setup()."""
+  driver = PicoDriver(
     host="127.0.0.1",
     port=8091,
     lock_timeout=lock_timeout,
+  )
+  microscopy = PicoMicroscopyBackend(
+    driver=driver,
     objectives=objectives or {},
     filter_cubes=filter_cubes or {},
   )
   channel = _MockChannel()
-  backend._channel = channel
-  backend._lock_id = "pylabrobot"
-  backend._locked = True
-  return backend, channel
+  driver._channel = channel
+  driver._lock_id = "pylabrobot"
+  driver._locked = True
+  return driver, microscopy, channel
 
 
 def _decode_sila_string_from_request(data: bytes) -> str:
@@ -223,7 +227,8 @@ def _unwrap_sila_string(data: bytes) -> str:
 class TestSetup(unittest.IsolatedAsyncioTestCase):
   async def test_setup_sends_correct_sequence(self):
     """setup() with no objectives/filter_cubes: unlock stale, lock, query hardware."""
-    backend = PicoDriver(host="127.0.0.1", lock_timeout=120)
+    driver = PicoDriver(host="127.0.0.1", lock_timeout=120)
+    microscopy = PicoMicroscopyBackend(driver=driver)
     channel = _MockChannel()
 
     channel.set_response(f"/{_LOCK_SVC}/UnlockServer", b"")
@@ -238,7 +243,8 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     )
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await backend.setup()
+      await driver.setup()
+      await microscopy._on_setup()
 
     self.assertEqual(len(channel.calls), 4)
     self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
@@ -254,8 +260,9 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_configures_objectives_and_filter_cubes(self):
     """When objectives/filter_cubes are specified, setup() calls ChangeHardware."""
-    backend = PicoDriver(
-      host="127.0.0.1",
+    driver = PicoDriver(host="127.0.0.1")
+    microscopy = PicoMicroscopyBackend(
+      driver=driver,
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -284,7 +291,8 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await backend.setup()
+      await driver.setup()
+      await microscopy._on_setup()
 
     # Verify ChangeHardware was called with correct JSON params
     obj_change_calls = channel.get_calls(f"/{_OBJ_SVC}/ChangeHardware")
@@ -307,7 +315,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
 class TestStop(unittest.IsolatedAsyncioTestCase):
   async def test_stop_sends_unlock(self):
-    backend, channel = _make_backend()
+    backend, _, channel = _make_backend()
 
     await backend.stop()
 
@@ -324,7 +332,7 @@ class TestStop(unittest.IsolatedAsyncioTestCase):
 
 class TestDoorCommands(unittest.IsolatedAsyncioTestCase):
   async def test_open_door(self):
-    backend, channel = _make_backend()
+    backend, _, channel = _make_backend()
     channel.set_response(f"/{_INST_SVC}/Initialize", b"")
     channel.set_response(f"/{_HW_SVC}/OpenPlateDrawer", b"")
 
@@ -338,7 +346,7 @@ class TestDoorCommands(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(backend.door_open)
 
   async def test_close_door(self):
-    backend, channel = _make_backend()
+    backend, _, channel = _make_backend()
     backend._door_open = True
     channel.set_response(f"/{_INST_SVC}/Initialize", b"")
     channel.set_response(f"/{_HW_SVC}/ClosePlateDrawer", b"")
@@ -360,11 +368,11 @@ class TestDoorCommands(unittest.IsolatedAsyncioTestCase):
 
 class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
   async def test_enter_maintenance(self):
-    backend, channel = _make_backend()
+    _, microscopy, channel = _make_backend()
     channel.set_response(f"/{_INST_SVC}/Initialize", b"")
     channel.set_response(f"/{_OBJ_SVC}/EnterObjectiveMaintenance", b"")
 
-    await backend.enter_objective_maintenance(2)
+    await microscopy.enter_objective_maintenance(2)
 
     self.assertEqual(len(channel.calls), 2)
     self.assertEqual(channel.calls[0].path, f"/{_INST_SVC}/Initialize")
@@ -374,10 +382,10 @@ class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(params, {"Index": 2})
 
   async def test_exit_maintenance(self):
-    backend, channel = _make_backend()
+    _, microscopy, channel = _make_backend()
     channel.set_response(f"/{_OBJ_SVC}/ExitObjectiveMaintenance", b"")
 
-    await backend.exit_objective_maintenance()
+    await microscopy.exit_objective_maintenance()
 
     self.assertEqual(len(channel.calls), 1)
     self.assertEqual(channel.calls[0].path, f"/{_OBJ_SVC}/ExitObjectiveMaintenance")
@@ -392,7 +400,7 @@ class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
 
 class TestGetConfiguration(unittest.IsolatedAsyncioTestCase):
   async def test_decodes_instrument_configuration(self):
-    backend, channel = _make_backend()
+    backend, _, channel = _make_backend()
     config = {
       "InstrumentConfiguration": {
         "objectivesComponent": {"objectives": [{"Id": "4x", "Magnification": 4}]},
@@ -420,7 +428,7 @@ class TestGetConfiguration(unittest.IsolatedAsyncioTestCase):
 
 class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
   async def test_change_objective(self):
-    backend, channel = _make_backend()
+    _, microscopy, channel = _make_backend()
     available = [{"Id": "PL FLUOTAR 4x/0.13"}, {"Id": "PL FLUOTAR 10x/0.30"}]
     channel.set_response(
       f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition",
@@ -428,7 +436,7 @@ class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
     )
     channel.set_response(f"/{_OBJ_SVC}/ChangeHardware", b"")
 
-    await backend.change_objective(1, "PL FLUOTAR 10x/0.30")
+    await microscopy.change_objective(1, "PL FLUOTAR 10x/0.30")
 
     # Query available, then change
     self.assertEqual(len(channel.calls), 2)
@@ -443,14 +451,14 @@ class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(channel.calls[1].has_lock_metadata)
 
   async def test_change_objective_rejects_invalid_id(self):
-    backend, channel = _make_backend()
+    _, microscopy, channel = _make_backend()
     channel.set_response(
       f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition",
       _sila_string_response(json.dumps({"objectives": [{"Id": "4x"}]})),
     )
 
     with self.assertRaises(ValueError) as ctx:
-      await backend.change_objective(0, "INVALID")
+      await microscopy.change_objective(0, "INVALID")
     self.assertIn("not compatible", str(ctx.exception))
 
     # Only the query was sent, ChangeHardware was NOT called
@@ -458,14 +466,14 @@ class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(channel.calls[0].path, f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition")
 
   async def test_change_filter_cube(self):
-    backend, channel = _make_backend()
+    _, microscopy, channel = _make_backend()
     channel.set_response(
       f"/{_FC_SVC}/Get_CompatibleFilterCubes",
       _sila_string_response(json.dumps({"filterCubes": [{"Id": "DAPI"}, {"Id": "FITC"}]})),
     )
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
-    await backend.change_filter_cube(1, "FITC")
+    await microscopy.change_filter_cube(1, "FITC")
 
     self.assertEqual(len(channel.calls), 2)
     self.assertEqual(channel.calls[0].path, f"/{_FC_SVC}/Get_CompatibleFilterCubes")
@@ -504,7 +512,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_sends_correct_snap_params(self):
     """Verify SnapImages request contains the right labware + snap JSON."""
 
-    backend, channel = _make_backend(
+    _, microscopy, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -519,7 +527,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "uuid-1", snap_event)
 
-    await backend.capture(
+    await microscopy.capture(
       row=3,
       column=7,
       mode=ImagingMode.DAPI,
@@ -576,7 +584,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_auto_exposure_and_autofocus(self):
     """When exposure_time='auto' and focal_height='auto', verify params."""
 
-    backend, channel = _make_backend(
+    _, microscopy, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -591,7 +599,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "uuid-2", snap_event)
 
-    await backend.capture(
+    await microscopy.capture(
       row=0,
       column=0,
       mode=ImagingMode.DAPI,
@@ -615,7 +623,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_observable_command_flow(self):
     """Verify the 3-step observable command protocol: start, stream, result."""
 
-    backend, channel = _make_backend(
+    _, microscopy, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -630,7 +638,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "exec-uuid-abc", snap_event)
 
-    result = await backend.capture(
+    result = await microscopy.capture(
       row=0,
       column=0,
       mode=ImagingMode.DAPI,
@@ -666,7 +674,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_multi_chunk_reassembly(self):
     """Verify image data is correctly reassembled from multiple chunks."""
 
-    backend, channel = _make_backend(
+    _, microscopy, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -703,7 +711,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
-    result = await backend.capture(
+    result = await microscopy.capture(
       row=0,
       column=0,
       mode=ImagingMode.DAPI,
@@ -720,7 +728,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_brightfield_uses_correct_illumination(self):
     """Brightfield mode uses different light_channel/excitation_source."""
 
-    backend, channel = _make_backend(
+    _, microscopy, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.BRIGHTFIELD},
     )
@@ -735,7 +743,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "uuid-bf", snap_event)
 
-    await backend.capture(
+    await microscopy.capture(
       row=0,
       column=0,
       mode=ImagingMode.BRIGHTFIELD,

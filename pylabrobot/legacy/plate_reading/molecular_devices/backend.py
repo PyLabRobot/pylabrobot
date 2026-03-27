@@ -7,12 +7,15 @@ from pylabrobot.molecular_devices.spectramax.backend import (  # noqa: F401
   Calibrate,
   CarriageSpeed,
   KineticSettings,
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
   MolecularDevicesError,
   MolecularDevicesFirmwareError,
   MolecularDevicesHardwareError,
   MolecularDevicesMotionError,
   MolecularDevicesNVRAMError,
   MolecularDevicesSettings,
+  MolecularDevicesTemperatureBackend,
   MolecularDevicesUnrecognizedCommandError,
   PmtGain,
   ReadMode,
@@ -20,11 +23,6 @@ from pylabrobot.molecular_devices.spectramax.backend import (  # noqa: F401
   ReadType,
   ShakeSettings,
   SpectrumSettings,
-)
-from pylabrobot.molecular_devices.spectramax.backend import (
-  MolecularDevicesAbsorbanceBackend,
-  MolecularDevicesDriver,
-  MolecularDevicesTemperatureBackend,
 )
 from pylabrobot.molecular_devices.spectramax.spectramax_m5 import (
   SpectraMaxM5FluorescenceBackend,
@@ -34,7 +32,7 @@ from pylabrobot.resources.plate import Plate
 
 
 class MolecularDevicesBackend(PlateReaderBackend):
-  """Legacy. Use pylabrobot.molecular_devices.spectramax.MolecularDevicesBackend instead.
+  """Legacy. Use pylabrobot.molecular_devices.spectramax instead.
 
   Delegates to the new capability-based backend, adapting read method signatures
   and return types (List[Dict]) for backward compatibility.
@@ -100,13 +98,9 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    from pylabrobot.molecular_devices.spectramax.backend import (
-      MolecularDevicesBackend as NewMDBackend,
-    )
-
     wl0 = wavelengths[0]
     wavelength = wl0[0] if isinstance(wl0, tuple) else wl0
-    params = NewMDBackend.AbsorbanceParams(
+    params = MolecularDevicesAbsorbanceBackend.AbsorbanceParams(
       wavelengths=wavelengths,
       read_type=read_type,
       read_order=read_order,
