@@ -1006,6 +1006,10 @@ class Resource {
       size_z: this.size_z,
       children: serializedChildren,
       parent_name: this.parent === undefined ? null : this.parent.name,
+      model: this.model,
+      rotation: this.rotation,
+      barcode: this.barcode,
+      preferred_pickup_location: this.preferred_pickup_location,
     };
   }
 
@@ -1415,6 +1419,7 @@ class Well extends Container {
     return {
       ...super.serialize(),
       cross_section_type: this.cross_section_type,
+      bottom_type: this.bottom_type,
     };
   }
 
