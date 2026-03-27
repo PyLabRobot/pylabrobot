@@ -127,15 +127,25 @@ class AirEVOBackend(EVOBackend):
     """
 
     # Connect USB (TecanLiquidHandler.setup)
+    logger.info("Connecting USB...")
     await self.io.setup()
 
     # Configure ZaapMotion controllers before PIA
+    logger.info("Configuring ZaapMotion controllers...")
     await self._configure_zaapmotion()
 
     # Safety module: enable motor power
+    logger.info("Enabling safety module / motor power...")
     await self._setup_safety_module()
 
+    # ZaapMotion SDO config (from EVOware: sent right before PIA)
+    try:
+      await self.send_command("C5", command="T23SDO11,1")
+    except TecanError:
+      pass  # may fail if already in app mode, non-critical
+
     # Standard arm init (PIA, BMX, etc.)
+    logger.info("Initializing arms (PIA)...")
     self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
     self._mca_connected = await self.setup_arm(EVOBackend.MCA)
     self._roma_connected = await self.setup_arm(EVOBackend.ROMA)

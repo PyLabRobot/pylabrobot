@@ -14,10 +14,14 @@ Usage:
 """
 
 import asyncio
+import logging
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.tecan import AirEVOBackend
 from pylabrobot.resources.tecan.tecan_decks import EVO150Deck
+
+# Enable logging so we can see what AirEVOBackend is doing
+logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
 
 async def main():
@@ -34,9 +38,42 @@ async def main():
 
   try:
     await lh.setup()
-    print("Setup complete!")
+    print("\nSetup complete!")
   except Exception as e:
-    print(f"Setup FAILED: {type(e).__name__}: {e}")
+    print(f"\nSetup FAILED: {type(e).__name__}: {e}")
+    import traceback
+
+    traceback.print_exc()
+
+    # Try to get diagnostics even after failure
+    print("\n--- Post-failure diagnostics ---")
+    try:
+      resp = await backend.send_command("C5", command="REE0")
+      err = resp["data"][0] if resp and resp.get("data") else ""
+      resp = await backend.send_command("C5", command="REE1")
+      cfg = resp["data"][0] if resp and resp.get("data") else ""
+      if err and cfg:
+        error_names = {0: "OK", 1: "Init failed", 7: "Not initialized"}
+        for i, (axis, code_char) in enumerate(zip(cfg, err)):
+          code = ord(code_char) - 0x40
+          label = f"{axis}{i-2}" if axis == "Z" else axis
+          status = "OK" if code == 0 else f"ERR {code}: {error_names.get(code, '?')}"
+          print(f"  {label} = {status}")
+    except Exception:
+      pass
+
+    try:
+      for tip in range(8):
+        resp = await backend.send_command("C5", command=f"T2{tip}RFV0")
+        fw = resp["data"][0] if resp and resp.get("data") else "?"
+        print(f"  Tip {tip+1}: {fw}")
+    except Exception:
+      pass
+
+    try:
+      await backend.io.stop()
+    except Exception:
+      pass
     return
 
   try:
