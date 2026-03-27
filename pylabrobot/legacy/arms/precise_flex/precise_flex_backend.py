@@ -730,3 +730,24 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   def _parse_angles_response(self, parts):
     return self._new_backend._parse_angles_response(parts)
+
+  async def _approach_j(self, *args, **kwargs):
+    return await self._new_backend._approach_j(*args, **kwargs)
+
+  async def _pick_plate_j(self, *args, **kwargs):
+    return await self._new_backend._pick_plate_j(*args, **kwargs)
+
+  async def _place_plate_j(self, *args, **kwargs):
+    return await self._new_backend._place_plate_j(*args, **kwargs)
+
+  async def _approach_c(self, *args, **kwargs):
+    return await self._new_backend._approach_c(*args, **kwargs)
+
+  async def _pick_plate_c(self, *args, **kwargs):
+    return await self._new_backend._pick_plate_c(*args, **kwargs)
+
+  async def _place_plate_c(self, *args, **kwargs):
+    return await self._new_backend._place_plate_c(*args, **kwargs)
+
+  async def _set_grip_detail(self, *args, **kwargs):
+    return await self._new_backend._set_grip_detail(*args, **kwargs)
