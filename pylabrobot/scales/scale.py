@@ -33,24 +33,24 @@ class Scale(Resource, Machine):
     )
     self.backend: ScaleBackend = backend  # fix type
 
-  async def tare(self, **backend_kwargs):
-    """Reset the displayed weight to zero, storing the current
-      weight as the tare value.
-
-    Use this to measure only the weight of material added after
-      taring (e.g. ignoring a container).
-    Note: taring does not restore scale capacity.
-    """
-    await self.backend.tare(**backend_kwargs)
-
-  async def zero(self, **backend_kwargs):
+  async def zero(self, **backend_kwargs) -> None:
     """Calibrate the scale's zero point to the current load.
 
     Establishes the baseline "empty" reading. Unlike tare, this
-    does not account for container weight — it simply resets what
+    does not account for container weight - it simply resets what
     the scale considers zero. Does not restore scale capacity.
     """
     await self.backend.zero(**backend_kwargs)
+
+  async def tare(self, **backend_kwargs) -> None:
+    """Reset the displayed weight to zero, storing the current
+    weight as the tare value.
+
+    Use this to measure only the weight of material added after
+    taring (e.g. ignoring a container).
+    Note: taring does not restore scale capacity.
+    """
+    await self.backend.tare(**backend_kwargs)
 
   async def get_weight(self, **backend_kwargs) -> float:
     """Deprecated: use :meth:`read_weight` instead."""
