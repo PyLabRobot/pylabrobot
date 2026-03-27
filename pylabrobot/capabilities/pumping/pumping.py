@@ -2,6 +2,7 @@ import asyncio
 from typing import Optional, Union
 
 from pylabrobot.capabilities.capability import Capability, need_capability_ready
+from pylabrobot.capabilities.pumping.errors import NotCalibratedError
 
 from .backend import PumpBackend
 from .calibration import PumpCalibration
@@ -62,7 +63,7 @@ class PumpingCapability(Capability):
       volume: volume to pump.
     """
     if self.calibration is None:
-      raise TypeError(
+      raise NotCalibratedError(
         "Pump is not calibrated. Volume based pumping and related functions unavailable."
       )
     if self.calibration.calibration_mode == "duration":

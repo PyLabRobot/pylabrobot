@@ -63,7 +63,7 @@ class MasterflexDriver(Driver):
   async def send_command(self, command: str):
     command = "\x02P02" + command + "\x0d"
     await self.io.write(command.encode())
-    return self.io.read()
+    return await self.io.read()
 
   def serialize(self):
     return {"type": self.__class__.__name__, "com_port": self.com_port}

@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
+from pylabrobot.capabilities.pumping.errors import NotCalibratedError
 from pylabrobot.capabilities.pumping.pumping import PumpingCapability
 
 
@@ -65,7 +66,7 @@ class TestPumpingCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_pump_volume_no_calibration(self):
     cap = await self._make_cap()
-    with self.assertRaises(TypeError):
+    with self.assertRaises(NotCalibratedError):
       await cap.pump_volume(speed=1, volume=1)
 
   async def test_not_setup_raises(self):

@@ -86,7 +86,7 @@ class PumpArray(Machine):
     if any(ch not in range(0, self.num_channels) for ch in use_channels):
       raise ValueError(
         f"Pump address out of range for this pump array. "
-        f"Value should be between 0 and {self.num_channels}"
+        f"Value should be between 0 and {self.num_channels - 1}"
       )
     if any(ch < 0 for ch in use_channels):
       raise ValueError("Channels in use channels must be positive.")
@@ -112,6 +112,8 @@ class PumpArray(Machine):
     channels = self._normalize_channels(use_channels)
     if isinstance(num_revolutions, (float, int)):
       num_revolutions = [float(num_revolutions)] * len(channels)
+    if len(num_revolutions) != len(channels):
+      raise ValueError("num_revolutions and use_channels must be the same length.")
     for ch, rev in zip(channels, num_revolutions):
       await self._pumps[ch].run_revolutions(num_revolutions=rev)
 

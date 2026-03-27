@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 
 from pylabrobot.legacy.pumps import PumpArray
-from pylabrobot.legacy.pumps.backend import PumpArrayBackend
+from pylabrobot.legacy.pumps.backend import PumpArrayBackend, PumpBackend
 from pylabrobot.legacy.pumps.calibration import PumpCalibration
 from pylabrobot.legacy.pumps.errors import NotCalibratedError
 from pylabrobot.legacy.pumps.pump import Pump
@@ -15,7 +15,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
   """
 
   def setUp(self):
-    self.mock_backend = AsyncMock()
+    self.mock_backend = Mock(spec=PumpBackend)
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=1)
 
   async def test_setup(self):

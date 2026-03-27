@@ -31,7 +31,7 @@ class PumpCalibration(SerializableMixin):
     """
 
     if any(value <= 0 for value in calibration):
-      raise ValueError("A value in the calibration is is outside expected parameters.")
+      raise ValueError("A value in the calibration is outside expected parameters.")
     if calibration_mode not in ["duration", "revolutions"]:
       raise ValueError("calibration_mode must be 'duration' or 'revolutions'")
     self.calibration = calibration

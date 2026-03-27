@@ -27,7 +27,7 @@ class MasterflexBackend(PumpBackend):
     await self._driver.stop()
 
   def serialize(self):
-    return self._driver.serialize()
+    return {"type": self.__class__.__name__, "com_port": self._driver.com_port}
 
   async def send_command(self, command: str):
     return await self._driver.send_command(command)

@@ -15,13 +15,13 @@ class _PumpAdapter(_NewPumpBackend):
     self._legacy = legacy
 
   async def run_revolutions(self, num_revolutions: float):
-    await self._legacy.run_revolutions(num_revolutions=num_revolutions)
+    self._legacy.run_revolutions(num_revolutions=num_revolutions)
 
   async def run_continuously(self, speed: float):
-    await self._legacy.run_continuously(speed=speed)
+    self._legacy.run_continuously(speed=speed)
 
   async def halt(self):
-    await self._legacy.halt()
+    self._legacy.halt()
 
 
 class Pump(Machine):
