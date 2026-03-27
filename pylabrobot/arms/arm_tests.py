@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.arms.arm import Arm
+from pylabrobot.arms.arm import GripperArm
 from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.backend import (
   GripperArmBackend,
@@ -59,7 +59,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
       setattr(self.mock_backend, method_name, AsyncMock())
 
     self.deck, self.site_a, self.site_b, self.plate = _make_deck_with_sites()
-    self.arm = Arm(backend=self.mock_backend, reference_resource=self.deck)
+    self.arm = GripperArm(backend=self.mock_backend, reference_resource=self.deck)
 
   async def test_pick_up_resource(self):
     # plate center: site_a(100,100,50) + child_loc(5,5,0) + center(60,40,10) = (165, 145, 60)
@@ -115,7 +115,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_grip_axis_y(self):
     """With grip_axis='y', resource_width should be the Y size."""
-    arm_y = Arm(backend=self.mock_backend, reference_resource=self.deck, grip_axis="y")
+    arm_y = GripperArm(backend=self.mock_backend, reference_resource=self.deck, grip_axis="y")
     await arm_y.pick_up_resource(self.plate, pickup_distance_from_top=2)
     call = self.mock_backend.pick_up_at_location.call_args
     # plate size_y=80

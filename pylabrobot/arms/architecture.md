@@ -7,17 +7,17 @@ _BaseArm(Capability)
   │  halt(), park(), get_gripper_location()
   │  resource tracking (pick_up/drop state)
   │
-  ├── Arm
-  │     Simple arm, no rotation. E.g. Hamilton core grippers.
-  │     open/close_gripper, pick_up/drop/move at location
-  │     pick_up_resource(), drop_resource(), move_resource() (convenience)
-  │
-  └── OrientableArm
-        Arm with rotation. E.g. Hamilton iSWAP, PreciseFlex.
-        pick_up/drop/move with direction parameter
+  └── GripperArm
+        │  open/close_gripper, is_gripper_closed
+        │  pick_up/drop/move at location
+        │  pick_up_resource(), drop_resource(), move_resource() (convenience)
+        │
+        └── OrientableArm
+              Arm with rotation. E.g. Hamilton iSWAP, PreciseFlex.
+              pick_up/drop/move with direction parameter
 ```
 
-Gripper vs suction is a backend distinction, not a frontend one.
+Frontend mirrors backend hierarchy exactly.
 Joint-space methods are backend-only (robot-specific), accessed via `arm.backend`.
 
 ## Backend hierarchy (capability backends)
@@ -60,7 +60,7 @@ class STAR(Device):
     driver = STARDriver(...)
     super().__init__(driver=driver)
     self.iswap = OrientableArm(backend=iSWAP(driver), reference_resource=deck)
-    self.core_gripper = Arm(backend=CoreGripper(driver), reference_resource=deck)
+    self.core_gripper = GripperArm(backend=CoreGripper(driver), reference_resource=deck)
     self._capabilities = [self.iswap, self.core_gripper]
 ```
 

@@ -1,6 +1,6 @@
 from typing import Optional, Union
 
-from pylabrobot.arms.arm import _BaseArm, _PickedUpState, GripOrientation
+from pylabrobot.arms.arm import GripperArm, _PickedUpState, GripOrientation
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.capabilities.capability import BackendParams
@@ -22,7 +22,7 @@ def _resolve_direction(direction: GripOrientation) -> float:
   return direction
 
 
-class OrientableArm(_BaseArm):
+class OrientableArm(GripperArm):
   """An arm with rotation capability. E.g. Hamilton iSWAP."""
 
   def __init__(self, backend: OrientableGripperArmBackend, reference_resource: Resource):

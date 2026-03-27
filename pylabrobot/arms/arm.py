@@ -67,25 +67,6 @@ class _BaseArm(Capability):
       return self._picked_up.resource
     return None
 
-  # -- gripper / motion control -----------------------------------------------
-
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    return await self.backend.open_gripper(
-      gripper_width=gripper_width, backend_params=backend_params
-    )
-
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    return await self.backend.close_gripper(
-      gripper_width=gripper_width, backend_params=backend_params
-    )
-
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    return await self.backend.is_gripper_closed(backend_params=backend_params)
-
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     """Stop any ongoing movement of the arm."""
     return await self.backend.halt(backend_params=backend_params)
@@ -313,8 +294,8 @@ class _BaseArm(Capability):
     self._assign_after_drop(resource, destination)
 
 
-class Arm(_BaseArm):
-  """A simple robotic arm without rotation capability. E.g. Hamilton core grippers."""
+class GripperArm(_BaseArm):
+  """A gripper arm without rotation capability. E.g. Hamilton core grippers."""
 
   def __init__(
     self,
@@ -325,6 +306,23 @@ class Arm(_BaseArm):
     super().__init__(backend=backend, reference_resource=reference_resource)
     self.backend: GripperArmBackend = backend
     self._grip_axis = grip_axis
+
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    return await self.backend.open_gripper(
+      gripper_width=gripper_width, backend_params=backend_params
+    )
+
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    return await self.backend.close_gripper(
+      gripper_width=gripper_width, backend_params=backend_params
+    )
+
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   def _resource_width(self, resource: Resource) -> float:
     if self._grip_axis == "y":
