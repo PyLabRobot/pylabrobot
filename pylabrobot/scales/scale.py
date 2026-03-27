@@ -1,3 +1,5 @@
+"""Frontend for analytical scales (zero, tare, read weight)."""
+
 import warnings
 from typing import Optional
 
@@ -52,16 +54,6 @@ class Scale(Resource, Machine):
     """
     await self.backend.tare(**backend_kwargs)
 
-  async def get_weight(self, **backend_kwargs) -> float:
-    """Deprecated: use :meth:`read_weight` instead."""
-    warnings.warn(
-      "scale.get_weight() is deprecated and will be removed in 2026-06. "
-      "Use scale.read_weight() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.backend.read_weight(**backend_kwargs)
-
   async def read_weight(self, **backend_kwargs) -> float:
     """Read the current weight in grams.
 
@@ -70,4 +62,17 @@ class Scale(Resource, Machine):
     behavior: ``"stable"`` waits for a settled reading, ``0`` returns
     immediately, or pass a number of seconds to wait at most that long.
     """
+    return await self.backend.read_weight(**backend_kwargs)
+
+  # # # Deprecated # # #
+  # TODO: remove after 2026-06
+
+  async def get_weight(self, **backend_kwargs) -> float:
+    """Deprecated: use :meth:`read_weight` instead."""
+    warnings.warn(
+      "scale.get_weight() is deprecated and will be removed in 2026-06. "
+      "Use scale.read_weight() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.backend.read_weight(**backend_kwargs)
