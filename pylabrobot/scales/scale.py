@@ -1,4 +1,5 @@
 from typing import Optional
+import warnings
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Resource, Rotation
@@ -42,4 +43,14 @@ class Scale(Resource, Machine):
 
   async def get_weight(self, **backend_kwargs) -> float:
     """Get the weight in grams"""
+    warnings.warn(
+        "Scale frontend `scale.get_weight is deprecated and will be removed in 2026-06"
+        "use `scale.read_weight instead",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     return await self.backend.get_weight(**backend_kwargs)
+
+  async def read_weight(self, **backend_kwargs) -> float:
+    """Get the weight in grams"""
+    return await self.backend.read_weight(**backend_kwargs)
