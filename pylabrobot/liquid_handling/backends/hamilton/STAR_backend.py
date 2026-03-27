@@ -4548,8 +4548,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     stop disk Z position used with :meth:`move_channel_stop_disk_z` for the same
     physical height above the deck.
     """
+    # TODO: remove after 2026-09
     warnings.warn(
-      "move_channel_z is deprecated. Use move_channel_stop_disk_z() for moves without a tip attached "
+      "move_channel_z is deprecated and will be removed after 2026-09 in legacy PLR. "
+      "Use move_channel_stop_disk_z() for moves without a tip attached "
       "or move_channel_tool_z() when a tip/tool is attached.",
       DeprecationWarning,
       stacklevel=2,
