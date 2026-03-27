@@ -1,5 +1,5 @@
-from typing import Optional
 import warnings
+from typing import Optional
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Resource, Rotation
@@ -55,18 +55,18 @@ class Scale(Resource, Machine):
   async def get_weight(self, **backend_kwargs) -> float:
     """Deprecated: use :meth:`read_weight` instead."""
     warnings.warn(
-        "scale.get_weight() is deprecated and will be removed in 2026-06. "
-        "Use scale.read_weight() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-      )
+      "scale.get_weight() is deprecated and will be removed in 2026-06. "
+      "Use scale.read_weight() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.backend.read_weight(**backend_kwargs)
 
   async def read_weight(self, **backend_kwargs) -> float:
     """Read the current weight in grams.
 
     The scale may take a moment to stabilize after loading.
-    Use the ``timeout`` backend kwarg to control stability 
+    Use the ``timeout`` backend kwarg to control stability
     behavior: ``"stable"`` waits for a settled reading, ``0`` returns
     immediately, or pass a number of seconds to wait at most that long.
     """
