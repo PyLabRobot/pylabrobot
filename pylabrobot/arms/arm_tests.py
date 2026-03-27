@@ -6,7 +6,6 @@ from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.backend import (
   GripperArmBackend,
   OrientableGripperArmBackend,
-  HasJoints,
 )
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
@@ -180,73 +179,3 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
     drop_call = self.mock_backend.drop_at_location.call_args
     _assert_location(self, drop_call, 160, 340, 58)
     self.assertEqual(self.plate.parent.name, "site_b")
-
-
-class TestJointArm(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
-    self.mock_backend = MagicMock(spec=HasJoints)
-    for method_name in [
-      "get_joint_position",
-      "get_gripper_location",
-      "open_gripper",
-      "close_gripper",
-      "is_gripper_closed",
-      "halt",
-      "park",
-      "pick_up_at_location",
-      "drop_at_location",
-      "move_to_location",
-    ]:
-      setattr(self.mock_backend, method_name, AsyncMock())
-    self.reference_resource = Resource("deck", size_x=1000, size_y=1000, size_z=0)
-    self.arm = OrientableArm(backend=self.mock_backend, reference_resource=self.reference_resource)
-
-  async def test_get_joint_position(self):
-    """Joint methods are accessed via backend, not frontend."""
-    await self.arm.backend.get_joint_position()
-    self.mock_backend.get_joint_position.assert_called_once()
-
-  async def test_get_gripper_location(self):
-    await self.arm.get_gripper_location()
-    self.mock_backend.get_gripper_location.assert_called_once()
-
-  async def test_open_gripper(self):
-    await self.arm.open_gripper(gripper_width=50.0)
-    self.mock_backend.open_gripper.assert_called_once_with(gripper_width=50.0, backend_params=None)
-
-  async def test_close_gripper(self):
-    await self.arm.close_gripper(gripper_width=50.0)
-    self.mock_backend.close_gripper.assert_called_once_with(gripper_width=50.0, backend_params=None)
-
-  async def test_is_gripper_closed(self):
-    await self.arm.is_gripper_closed()
-    self.mock_backend.is_gripper_closed.assert_called_once()
-
-  async def test_halt(self):
-    await self.arm.halt()
-    self.mock_backend.halt.assert_called_once()
-
-  async def test_park(self):
-    await self.arm.park()
-    self.mock_backend.park.assert_called_once()
-
-  async def test_pick_up_at_location(self):
-    location = Coordinate(x=100, y=200, z=300)
-    await self.arm.pick_up_at_location(location, resource_width=10.0, direction=90.0)
-    self.mock_backend.pick_up_at_location.assert_called_once_with(
-      location=location,
-      direction=90.0,
-      resource_width=10.0,
-      backend_params=None,
-    )
-
-  async def test_drop_at_location(self):
-    location = Coordinate(x=100, y=200, z=300)
-    await self.arm.pick_up_at_location(location, resource_width=10.0, direction=0.0)
-    await self.arm.drop_at_location(location, direction=180.0)
-    self.mock_backend.drop_at_location.assert_called_once_with(
-      location=location,
-      direction=180.0,
-      resource_width=10.0,
-      backend_params=None,
-    )

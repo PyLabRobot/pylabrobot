@@ -86,6 +86,26 @@ class HasJoints(metaclass=ABCMeta):
     """Get the current position of the arm in joint space."""
 
 
+class CanGrip(metaclass=ABCMeta):
+  """Mixin for arms that have a gripper."""
+
+  @abstractmethod
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Open the gripper to the specified width."""
+
+  @abstractmethod
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Close the gripper to the specified width."""
+
+  @abstractmethod
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    """Check if the gripper is currently closed."""
+
+
 class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
   @abstractmethod
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -102,24 +122,8 @@ class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
     """Get the current location and rotation of the gripper."""
 
 
-class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+class GripperArmBackend(_BaseArmBackend, CanGrip, metaclass=ABCMeta):
   """Backend for a simple arm (no rotation capability). E.g. Hamilton core grippers."""
-
-  @abstractmethod
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Open the arm's gripper."""
-
-  @abstractmethod
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Close the arm's gripper."""
-
-  @abstractmethod
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    """Check if the gripper is currently closed."""
 
   @abstractmethod
   async def pick_up_at_location(
@@ -146,7 +150,7 @@ class GripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     """Move the held object to the specified location."""
 
 
-class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+class OrientableGripperArmBackend(_BaseArmBackend, CanGrip, metaclass=ABCMeta):
   """Backend for an arm with rotation capability. E.g. Hamilton iSwap."""
 
   @abstractmethod
@@ -179,7 +183,7 @@ class OrientableGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
     """Move the held object to the specified location with rotation."""
 
 
-class ArticulatedGripperArmBackend(_BaseArmBackend, metaclass=ABCMeta):
+class ArticulatedGripperArmBackend(_BaseArmBackend, CanGrip, metaclass=ABCMeta):
   @abstractmethod
   async def pick_up_at_location(
     self,

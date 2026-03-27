@@ -232,7 +232,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     if isinstance(converted, dict):
       await self._new_backend.move_to_joint_position(converted)
     else:
-      await self._new_backend.move_to_location(converted.location, converted.rotation)
+      await self._new_backend.move_to_location(converted.location, converted.rotation.z)
 
   async def get_joint_position(self) -> Dict[int, float]:
     return await self._new_backend.get_joint_position()
@@ -356,7 +356,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return (type_code, station_index, x, y, z, yaw, pitch, roll)
 
   async def set_location_xyz(self, location_index, cartesian_position):
-    await self._new_backend._set_location_xyz(location_index, _to_new_coords(cartesian_position))
+    converted = _to_new_coords(cartesian_position)
+    if not isinstance(converted, _new_module.PreciseFlexGripperLocation):
+      raise TypeError("Expected cartesian coordinates, got joint position dict")
+    await self._new_backend._set_location_xyz(location_index, converted)
 
   async def get_location_z_clearance(self, location_index):
     data = await self.send_command(f"locZClearance {location_index}")
@@ -490,7 +493,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.send_command(f"moveOneAxis {axis_number} {destination_position} {profile_index}")
 
   async def move_c(self, profile_index, cartesian_coords):
-    await self._new_backend._move_c(profile_index, _to_new_coords(cartesian_coords))
+    converted = _to_new_coords(cartesian_coords)
+    if not isinstance(converted, _new_module.PreciseFlexGripperLocation):
+      raise TypeError("Expected cartesian coordinates, got joint position dict")
+    await self._new_backend._move_c(profile_index, converted)
 
   async def move_j(self, profile_index, joint_coords):
     await self._new_backend._move_j(profile_index, joint_coords)

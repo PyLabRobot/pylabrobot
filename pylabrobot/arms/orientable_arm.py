@@ -1,6 +1,6 @@
 from typing import Optional, Union
 
-from pylabrobot.arms.arm import GripperArm, _PickedUpState, GripOrientation
+from pylabrobot.arms.arm import _BaseArm, _PickedUpState, GripOrientation
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.capabilities.capability import BackendParams
@@ -22,12 +22,25 @@ def _resolve_direction(direction: GripOrientation) -> float:
   return direction
 
 
-class OrientableArm(GripperArm):
+class OrientableArm(_BaseArm):
   """An arm with rotation capability. E.g. Hamilton iSWAP."""
 
   def __init__(self, backend: OrientableGripperArmBackend, reference_resource: Resource):
     super().__init__(backend=backend, reference_resource=reference_resource)
-    self.backend: OrientableGripperArmBackend = backend  # type: ignore # Union, any OrientableArmBackend
+    self.backend: OrientableGripperArmBackend = backend  # type: ignore[assignment]
+
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    await self.backend.open_gripper(gripper_width=gripper_width, backend_params=backend_params)
+
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    await self.backend.close_gripper(gripper_width=gripper_width, backend_params=backend_params)
+
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   @staticmethod
   def _resource_width_for_direction(resource: Resource, direction: float) -> float:
@@ -85,7 +98,7 @@ class OrientableArm(GripperArm):
     direction: GripOrientation,
     backend_params: Optional[BackendParams] = None,
   ):
-    if not self.holding:
+    if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
     await self.backend.drop_at_location(
       location=location,
@@ -103,6 +116,8 @@ class OrientableArm(GripperArm):
     backend_params: Optional[BackendParams] = None,
   ):
     resource = self._prepare_drop(destination)
+    if self._picked_up is None:
+      raise RuntimeError("No resource picked up")
     drop_dir = _resolve_direction(direction)
     rotation_applied_by_move = (drop_dir - self._picked_up.rotation.z) % 360
     location, rotation = self._compute_drop(

@@ -365,7 +365,7 @@ class GripperArm(_BaseArm):
     location: Coordinate,
     backend_params: Optional[BackendParams] = None,
   ):
-    if not self.holding:
+    if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
     await self.backend.drop_at_location(
       location=location, resource_width=self._holding_resource_width, backend_params=backend_params
@@ -379,6 +379,8 @@ class GripperArm(_BaseArm):
     backend_params: Optional[BackendParams] = None,
   ):
     resource = self._prepare_drop(destination)
+    if self._picked_up is None:
+      raise RuntimeError("No resource picked up")
     location, rotation = self._compute_drop(
       resource=resource,
       destination=destination,
