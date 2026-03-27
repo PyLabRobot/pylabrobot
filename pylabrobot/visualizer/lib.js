@@ -1346,6 +1346,7 @@ class Container extends Resource {
     this.maxVolume = max_volume;
     this.volume = resourceData.volume || 0;
     this.material_z_thickness = material_z_thickness;
+    this.has_height_volume_data = resourceData.height_volume_data != null;
   }
 
   static _liquidRGB = null;
@@ -4421,6 +4422,7 @@ function getUmlAttributes(resource) {
     if (resource.material_z_thickness != null) {
       attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
     }
+    attrs.push({ key: "height_volume_data", value: resource.has_height_volume_data ? "exists" : "None" });
     attrs.push({ key: "max_volume", value: resource.maxVolume });
     attrs.push({ key: "volume", value: resource.volume });
   }
