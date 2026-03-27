@@ -84,6 +84,9 @@ class HasJoints(metaclass=ABCMeta):
     """Get the current position of the arm in joint space."""
 
 
+Smokes = HasJoints
+
+
 class CanGrip(metaclass=ABCMeta):
   """Mixin for arms that have a gripper."""
 
