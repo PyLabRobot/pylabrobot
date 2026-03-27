@@ -708,6 +708,10 @@ class Resource {
     this.resourceType = resourceData.type || this.constructor.name;
     this.category = resourceData.category || "";
     this.methods = resourceData.methods || [];
+    this.model = resourceData.model || null;
+    this.rotation = resourceData.rotation || null;
+    this.barcode = resourceData.barcode || null;
+    this.preferred_pickup_location = resourceData.preferred_pickup_location || null;
 
     this.color = "#5B6D8F";
 
@@ -1401,8 +1405,9 @@ class Well extends Container {
 
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    const { cross_section_type } = resourceData;
+    const { cross_section_type, bottom_type } = resourceData;
     this.cross_section_type = cross_section_type;
+    this.bottom_type = bottom_type || null;
   }
 
   serialize() {
@@ -4378,33 +4383,46 @@ function getUmlAttributes(resource) {
   var attrs = [];
   attrs.push({ key: "name", value: JSON.stringify(resource.name) });
   attrs.push({ key: "type", value: resource.resourceType || resource.constructor.name });
+  attrs.push({ key: "children", value: resource.children ? resource.children.length : 0 });
+  if (resource.model) {
+    attrs.push({ key: "model", value: resource.model });
+  }
+  var abs = resource.getAbsoluteLocation();
+  attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
+  if (resource.rotation) {
+    attrs.push({ key: "rotation", value: "(" + resource.rotation.x + ", " + resource.rotation.y + ", " + resource.rotation.z + ")" });
+  }
   attrs.push({ key: "size_x", value: resource.size_x });
   attrs.push({ key: "size_y", value: resource.size_y });
   attrs.push({ key: "size_z", value: resource.size_z });
   if (resource.location) {
     attrs.push({ key: "location", value: "(" + resource.location.x + ", " + resource.location.y + ", " + (resource.location.z || 0) + ")" });
   }
-  var abs = resource.getAbsoluteLocation();
-  attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
   attrs.push({ key: "parent", value: resource.parent ? JSON.stringify(resource.parent.name) : "none" });
-  attrs.push({ key: "children", value: resource.children ? resource.children.length : 0 });
-  if (resource.category) {
-    attrs.push({ key: "category", value: resource.category });
+  if (resource.barcode) {
+    attrs.push({ key: "barcode", value: resource.barcode.data + " (" + resource.barcode.symbology + ", " + resource.barcode.position_on_resource + ")" });
+  }
+  if (resource.preferred_pickup_location) {
+    var ppl = resource.preferred_pickup_location;
+    attrs.push({ key: "preferred_pickup_location", value: "(" + ppl.x + ", " + ppl.y + ", " + ppl.z + ")" });
   }
 
-  // Container (Well/Trough/Tube)
-  if (resource instanceof Container) {
-    attrs.push({ key: "max_volume", value: resource.maxVolume });
-    attrs.push({ key: "volume", value: resource.volume });
-    if (resource.material_z_thickness != null) {
-      attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
-    }
-  }
-  // Well-specific
+  // Well-specific (before general Container attrs)
   if (resource instanceof Well) {
     if (resource.cross_section_type) {
       attrs.push({ key: "cross_section_type", value: resource.cross_section_type });
     }
+    if (resource.bottom_type) {
+      attrs.push({ key: "bottom_type", value: resource.bottom_type });
+    }
+  }
+  // Container (Well/Trough/Tube)
+  if (resource instanceof Container) {
+    if (resource.material_z_thickness != null) {
+      attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
+    }
+    attrs.push({ key: "max_volume", value: resource.maxVolume });
+    attrs.push({ key: "volume", value: resource.volume });
   }
   // TipSpot
   if (resource instanceof TipSpot) {
