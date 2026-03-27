@@ -12,21 +12,23 @@ except ImportError as e:
   AsyncModbusSerialClient = None  # type: ignore
   _MODBUS_IMPORT_ERROR = e
 
+from pylabrobot.capabilities.capability import Capability
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
 from pylabrobot.capabilities.pumping.pumping import PumpingCapability
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 
 logger = logging.getLogger("pylabrobot")
 
 
-class AgrowDriver:
+class AgrowDriver(Driver):
   """Shared Modbus connection for an Agrow pump array.
 
-  Not a DeviceBackend — just the hardware communication layer.
+  Owns the hardware communication layer (Modbus) and manages the lifecycle.
   """
 
   def __init__(self, port: str, address: Union[int, str]):
+    super().__init__()
     if _MODBUS_IMPORT_ERROR is not None:
       raise RuntimeError(
         "pymodbus is not installed. Install with: pip install pylabrobot[modbus]. "
@@ -160,7 +162,7 @@ class AgrowChannelBackend(PumpBackend):
 
   def serialize(self):
     return {
-      **super().serialize(),
+      "type": self.__class__.__name__,
       "port": self._driver.port,
       "address": self._driver.address,
       "channel": self._channel,
@@ -179,21 +181,20 @@ class AgrowDosePumpArray(Device):
     address: Union[int, str],
     calibrations: Optional[List[Optional[PumpCalibration]]] = None,
   ):
-    self._driver = AgrowDriver(port=port, address=address)
-    # We need a DeviceBackend for Device.__init__; use channel 0's adapter as the "primary".
-    # The real lifecycle is managed via _connection.
+    self._agrow_driver = AgrowDriver(port=port, address=address)
     self._channel_backends: List[AgrowChannelBackend] = []
     self.pumps: List[PumpingCapability] = []
     self._calibrations = calibrations
-    # Defer full init until setup() when we know num_channels.
-    # Pass a placeholder backend — we'll override setup/stop.
-    super().__init__(backend=AgrowChannelBackend(self._driver, 0))
+    # Defer full channel init until setup() when we know num_channels.
+    super().__init__(driver=self._agrow_driver)
 
   async def setup(self):
-    await self._driver.setup()
-    num_channels = self._driver.num_channels
+    await self._agrow_driver.setup()
+    num_channels = self._agrow_driver.num_channels
 
-    self._channel_backends = [AgrowChannelBackend(self._driver, ch) for ch in range(num_channels)]
+    self._channel_backends = [
+      AgrowChannelBackend(self._agrow_driver, ch) for ch in range(num_channels)
+    ]
     self.pumps = []
     for i, backend in enumerate(self._channel_backends):
       cal = None
@@ -202,19 +203,19 @@ class AgrowDosePumpArray(Device):
       cap = PumpingCapability(backend=backend, calibration=cal)
       self.pumps.append(cap)
 
-    self._capabilities = list(self.pumps)
-    for cap in self._capabilities:
-      await cap._on_setup()
+    self._capabilities: List[Capability] = list(self.pumps)
+    for c in self._capabilities:
+      await c._on_setup()
     self._setup_finished = True
 
   async def stop(self):
     for cap in reversed(self._capabilities):
       await cap._on_stop()
-    await self._driver.stop()
+    await self._agrow_driver.stop()
     self._setup_finished = False
 
   def serialize(self):
     return {
-      "port": self._driver.port,
-      "address": self._driver.address,
+      "port": self._agrow_driver.port,
+      "address": self._agrow_driver.address,
     }

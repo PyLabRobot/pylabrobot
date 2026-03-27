@@ -1,1 +1,1 @@
-from .agrowdosepump_backend import AgrowChannelBackend, AgrowDriver, AgrowDosePumpArray
+from .agrowdosepump_backend import AgrowChannelBackend, AgrowDosePumpArray, AgrowDriver

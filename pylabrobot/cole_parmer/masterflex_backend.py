@@ -11,11 +11,11 @@ from typing import Optional
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
 from pylabrobot.capabilities.pumping.pumping import PumpingCapability
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 
 
-class MasterflexBackend(PumpBackend):
+class MasterflexBackend(Driver, PumpBackend):
   """Backend for the Cole Parmer Masterflex L/S pump
 
   tested on:
@@ -35,6 +35,7 @@ class MasterflexBackend(PumpBackend):
   """
 
   def __init__(self, com_port: str):
+    super().__init__()
     if not HAS_SERIAL:
       raise RuntimeError(
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
@@ -95,7 +96,6 @@ class MasterflexPump(Device):
     calibration: Optional[PumpCalibration] = None,
   ):
     backend = MasterflexBackend(com_port=com_port)
-    super().__init__(backend=backend)
-    self._backend: MasterflexBackend = backend
+    super().__init__(driver=backend)
     self.pumping = PumpingCapability(backend=backend, calibration=calibration)
     self._capabilities = [self.pumping]

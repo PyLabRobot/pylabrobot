@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 
-class PumpBackend(DeviceBackend, metaclass=ABCMeta):
+class PumpBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for a single pump."""
 
   @abstractmethod
