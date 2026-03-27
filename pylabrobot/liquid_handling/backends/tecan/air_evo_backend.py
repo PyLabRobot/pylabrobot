@@ -122,13 +122,53 @@ class AirEVOBackend(EVOBackend):
   async def setup(self):
     """Setup the Air EVO.
 
-    Performs ZaapMotion boot exit and motor configuration before the standard
-    EVO initialization sequence.
+    Checks if axes are already initialized (e.g. from a previous session).
+    If so, skips ZaapMotion configuration and PIA. Otherwise performs full
+    boot exit, motor configuration, and initialization.
     """
 
-    # Connect USB (TecanLiquidHandler.setup)
+    # Connect USB with short packet timeout for fast buffer drain
     logger.info("Connecting USB...")
+    saved_prt = self.io.packet_read_timeout
+    self.io.packet_read_timeout = 1
     await self.io.setup()
+    self.io.packet_read_timeout = saved_prt
+
+    # Check if already initialized
+    if await self._is_initialized():
+      logger.info("Axes already initialized — skipping ZaapMotion config + PIA.")
+      await self._setup_quick()
+    else:
+      logger.info("Axes not initialized — running full setup.")
+      await self._setup_full()
+
+  async def _is_initialized(self) -> bool:
+    """Check if the LiHa axes are already initialized."""
+    try:
+      resp = await self.send_command("C5", command="REE0")
+      err = resp["data"][0] if resp and resp.get("data") else ""
+      # A = init failed (1), G = not initialized (7) — these mean we need full init
+      # Any other code (including @=OK, Y=tip not fetched, etc.) means axes are initialized
+      if err and not any(c in ("A", "G") for c in err):
+        return True
+    except (TecanError, TimeoutError):
+      pass
+    return False
+
+  async def _setup_quick(self):
+    """Fast setup when axes are already initialized. Skips ZaapMotion config and PIA."""
+    self._liha_connected = True
+    self._mca_connected = False
+    self._roma_connected = False
+    self.liha = LiHa(self, EVOBackend.LIHA)
+    self._num_channels = await self.liha.report_number_tips()
+    self._x_range = await self.liha.report_x_param(5)
+    self._y_range = (await self.liha.report_y_param(5))[0]
+    self._z_range = (await self.liha.report_z_param(5))[0]
+    logger.info("Quick setup complete: %d channels, z_range=%d", self._num_channels, self._z_range)
+
+  async def _setup_full(self):
+    """Full setup: ZaapMotion config, safety module, PIA, dilutor init."""
 
     # Configure ZaapMotion controllers before PIA
     logger.info("Configuring ZaapMotion controllers...")
