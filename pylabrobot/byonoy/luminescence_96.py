@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.luminescence import (
   LuminescenceBackend,
   LuminescenceCapability,
@@ -30,7 +31,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96)
 
   @dataclass
-  class LuminescenceParams(SerializableMixin):
+  class LuminescenceParams(BackendParams):
     integration_time: float = 2
 
   async def read_luminescence(
@@ -239,8 +240,8 @@ class ByonoyLuminescence96(Resource, Device):
       model="Byonoy L96 Reader Unit",
       preferred_pickup_location=preferred_pickup_location,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: ByonoyLuminescence96Backend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: ByonoyLuminescence96Backend = backend
     self.luminescence = LuminescenceCapability(backend=backend)
     self._capabilities = [self.luminescence]
 

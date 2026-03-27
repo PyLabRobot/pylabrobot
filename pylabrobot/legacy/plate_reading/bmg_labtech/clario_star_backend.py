@@ -3,7 +3,13 @@
 import sys
 from typing import Dict, List, Optional, Tuple
 
-from pylabrobot.bmg_labtech import clariostar
+from pylabrobot.bmg_labtech.clariostar import (
+  CLARIOstarAbsorbanceBackend,
+  CLARIOstarAbsorbanceParams,
+  CLARIOstarDriver,
+  CLARIOstarFluorescenceBackend,
+  CLARIOstarLuminescenceBackend,
+)
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
@@ -15,30 +21,41 @@ else:
 
 
 class CLARIOstarBackend(PlateReaderBackend):
-  """Legacy. Use pylabrobot.bmg_labtech.CLARIOstarBackend instead."""
+  """Legacy. Use pylabrobot.bmg_labtech.CLARIOstar instead."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self._new = clariostar.CLARIOstarBackend(device_id=device_id)
+    self._driver = CLARIOstarDriver(device_id=device_id)
+    self._absorbance = CLARIOstarAbsorbanceBackend(self._driver)
+    self._luminescence = CLARIOstarLuminescenceBackend(self._driver)
+    self._fluorescence = CLARIOstarFluorescenceBackend(self._driver)
 
   async def setup(self):
-    await self._new.setup()
+    await self._driver.setup()
+    await self._absorbance._on_setup()
+    await self._luminescence._on_setup()
+    await self._fluorescence._on_setup()
 
   async def stop(self):
-    await self._new.stop()
+    await self._fluorescence._on_stop()
+    await self._luminescence._on_stop()
+    await self._absorbance._on_stop()
+    await self._driver.stop()
 
   def serialize(self) -> dict:
-    return self._new.serialize()
+    return self._driver.serialize()
 
   async def open(self):
-    await self._new.open()
+    await self._driver.open()
 
   async def close(self, plate: Optional[Plate] = None):
-    await self._new.close()
+    await self._driver.close()
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float = 13
   ) -> List[Dict]:
-    results = await self._new.read_luminescence(plate=plate, wells=wells, focal_height=focal_height)
+    results = await self._luminescence.read_luminescence(
+      plate=plate, wells=wells, focal_height=focal_height
+    )
     return [
       {
         "data": r.data,
@@ -55,10 +72,8 @@ class CLARIOstarBackend(PlateReaderBackend):
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
   ) -> List[Dict]:
-    from pylabrobot.bmg_labtech.clariostar import CLARIOstarBackend
-
-    params = CLARIOstarBackend.AbsorbanceParams(report=report)
-    results = await self._new.read_absorbance(
+    params = CLARIOstarAbsorbanceParams(report=report)
+    results = await self._absorbance.read_absorbance(
       plate=plate, wells=wells, wavelength=wavelength, backend_params=params
     )
     return [

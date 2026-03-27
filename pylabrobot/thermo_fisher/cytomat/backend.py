@@ -16,7 +16,7 @@ from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetriev
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.thermo_fisher.cytomat.constants import (
@@ -59,6 +59,7 @@ class CytomatBackend(
   TemperatureControllerBackend,
   HumidityControllerBackend,
   ShakerBackend,
+  Driver,
 ):
   default_baud = 9600
   serial_message_encoding = "utf-8"
@@ -102,14 +103,14 @@ class CytomatBackend(
     )
 
   async def setup(self):
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     await self.io.setup()
     await self.initialize()
     await self.wait_for_task_completion()
 
   async def stop(self):
     await self.io.stop()
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
 
   async def set_racks(self, racks: List[PlateCarrier]):
     self._racks = racks
@@ -436,7 +437,7 @@ class CytomatBackend(
 
   def serialize(self) -> dict:
     return {
-      **DeviceBackend.serialize(self),
+      **Driver.serialize(self),
       "model": self.model.value,
       "port": self.io.port,
     }

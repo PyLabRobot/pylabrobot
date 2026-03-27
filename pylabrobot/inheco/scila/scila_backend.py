@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 
 from .inheco_sila_interface import InhecoSiLAInterface
 
@@ -36,39 +36,43 @@ def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
 DrawerStatus = Literal["Opened", "Closed"]
 
 
-class SCILABackend(TemperatureControllerBackend):
-  """Backend for Inheco SciLa incubators.
+class SCILADriver(Driver):
+  """Hardware driver for Inheco SCILA incubators.
 
-  Communicates over HTTP/SOAP via the SiLA interface.
+  Owns the SiLA HTTP/SOAP connection and exposes generic send_command(),
+  plus device-level operations (drawers, status, CO2/valves).
   """
 
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
+    super().__init__()
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
   async def setup(self) -> None:
-    await DeviceBackend.setup(self)
     await self._sila_interface.setup()
     await self._reset_and_initialize()
 
   async def stop(self) -> None:
-    await DeviceBackend.stop(self)
     await self._sila_interface.close()
+
+  async def send_command(self, command: str, **kwargs) -> Any:
+    """Send a SiLA command and return the parsed response."""
+    return await self._sila_interface.send_command(command, **kwargs)
 
   async def _reset_and_initialize(self) -> None:
     event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"
-    await self._sila_interface.send_command(
+    await self.send_command(
       command="Reset", deviceId="MyController", eventReceiverURI=event_uri, simulationMode=False
     )
-    await self._sila_interface.send_command("Initialize")
+    await self.send_command("Initialize")
 
   # -- status queries --
 
   async def request_status(self) -> str:
-    resp = await self._sila_interface.send_command("GetStatus")
+    resp = await self.send_command("GetStatus")
     return resp.get("GetStatusResponse", {}).get("state", "Unknown")  # type: ignore
 
   async def request_liquid_level(self) -> str:
-    root = await self._sila_interface.send_command("GetLiquidLevel")
+    root = await self.send_command("GetLiquidLevel")
     return _get_param(root, "LiquidLevel")  # type: ignore
 
   # -- drawers --
@@ -76,17 +80,17 @@ class SCILABackend(TemperatureControllerBackend):
   async def open(self, drawer_id: int) -> None:
     if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    await self._sila_interface.send_command("PrepareForInput", position=drawer_id)
-    await self._sila_interface.send_command("OpenDoor")
+    await self.send_command("PrepareForInput", position=drawer_id)
+    await self.send_command("OpenDoor")
 
   async def close(self, drawer_id: int) -> None:
     if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
-    await self._sila_interface.send_command("CloseDoor")
+    await self.send_command("PrepareForOutput", position=drawer_id)
+    await self.send_command("CloseDoor")
 
   async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
-    root = await self._sila_interface.send_command("GetDoorStatus")
+    root = await self.send_command("GetDoorStatus")
     params = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])
     return {i: params[f"Drawer{i}"] for i in range(1, 5)}  # type: ignore
 
@@ -99,39 +103,12 @@ class SCILABackend(TemperatureControllerBackend):
   # -- CO2 / valves --
 
   async def request_co2_flow_status(self) -> str:
-    root = await self._sila_interface.send_command("GetCO2FlowStatus")
+    root = await self.send_command("GetCO2FlowStatus")
     return _get_param(root, "CO2FlowStatus")  # type: ignore
 
   async def request_valve_status(self) -> dict[str, str]:
-    root = await self._sila_interface.send_command("GetValveStatus")
+    root = await self.send_command("GetValveStatus")
     return _get_params(root, ["H2O", "CO2 Normal", "CO2 Boost"])  # type: ignore
-
-  # -- TemperatureControllerBackend --
-
-  @property
-  def supports_active_cooling(self) -> bool:
-    return False
-
-  async def request_temperature_information(self) -> dict[str, Any]:
-    root = await self._sila_interface.send_command("GetTemperature")
-    return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
-
-  async def set_temperature(self, temperature: float) -> None:
-    await self._sila_interface.send_command(
-      "SetTemperature", targetTemperature=temperature, temperatureControl=True
-    )
-
-  async def get_current_temperature(self) -> float:
-    return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
-
-  async def deactivate(self) -> None:
-    await self._sila_interface.send_command("SetTemperature", temperatureControl=False)
-
-  async def request_target_temperature(self) -> float:
-    return (await self.request_temperature_information())["TargetTemperature"]  # type: ignore
-
-  async def is_temperature_control_enabled(self) -> bool:
-    return (await self.request_temperature_information())["TemperatureControl"]  # type: ignore
 
   # -- serialization --
 
@@ -143,5 +120,37 @@ class SCILABackend(TemperatureControllerBackend):
     }
 
   @classmethod
-  def deserialize(cls, data: dict[str, Any]) -> "SCILABackend":
+  def deserialize(cls, data: dict[str, Any]) -> "SCILADriver":
     return cls(scila_ip=data["scila_ip"], client_ip=data.get("client_ip"))
+
+
+class SCILATemperatureBackend(TemperatureControllerBackend):
+  """Translates TemperatureControllerBackend interface into SCILA SiLA commands."""
+
+  def __init__(self, driver: SCILADriver) -> None:
+    self._driver = driver
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
+  async def request_temperature_information(self) -> dict[str, Any]:
+    root = await self._driver.send_command("GetTemperature")
+    return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
+
+  async def set_temperature(self, temperature: float) -> None:
+    await self._driver.send_command(
+      "SetTemperature", targetTemperature=temperature, temperatureControl=True
+    )
+
+  async def get_current_temperature(self) -> float:
+    return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
+
+  async def deactivate(self) -> None:
+    await self._driver.send_command("SetTemperature", temperatureControl=False)
+
+  async def request_target_temperature(self) -> float:
+    return (await self.request_temperature_information())["TargetTemperature"]  # type: ignore
+
+  async def is_temperature_control_enabled(self) -> bool:
+    return (await self.request_temperature_information())["TemperatureControl"]  # type: ignore

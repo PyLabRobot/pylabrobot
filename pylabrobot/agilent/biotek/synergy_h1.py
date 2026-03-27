@@ -123,8 +123,8 @@ class SynergyH1(Resource, Device):
       size_z=size_z,
       model="Agilent BioTek Synergy H1",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: SynergyH1Backend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: SynergyH1Backend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self.luminescence = LuminescenceCapability(backend=backend)
     self.fluorescence = FluorescenceCapability(backend=backend)
@@ -144,7 +144,7 @@ class SynergyH1(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self._backend.open(slow=slow)
+    await self._driver.open(slow=slow)
 
   async def close(self, slow: bool = False) -> None:
-    await self._backend.close(slow=slow)
+    await self._driver.close(slow=slow)

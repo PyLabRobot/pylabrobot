@@ -20,7 +20,6 @@ from pylabrobot.capabilities.microscopy.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.device import Device
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -58,12 +57,6 @@ class RecordingMicroscopyBackend(MicroscopyBackend):
   def __init__(self):
     self.calls: List[Tuple] = []
 
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
-
   async def capture(
     self,
     row: int,
@@ -84,26 +77,15 @@ class RecordingMicroscopyBackend(MicroscopyBackend):
     )
 
 
-class _TestMicroscope(Device):
-  def __init__(self, backend: MicroscopyBackend):
-    super().__init__(backend=backend)
-    self._backend = backend
-    self.microscopy = MicroscopyCapability(backend=backend)
-    self._capabilities = [self.microscopy]
-
-
 class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingMicroscopyBackend()
-    self.device = _TestMicroscope(backend=self.backend)
-    await self.device.setup()
+    self.cap = MicroscopyCapability(backend=self.backend)
+    await self.cap._on_setup()
     self.plate = _test_plate()
 
-  async def asyncTearDown(self):
-    await self.device.stop()
-
   async def test_capture_with_tuple_well(self):
-    result = await self.device.microscopy.capture(
+    result = await self.cap.capture(
       well=(2, 5),
       mode=ImagingMode.BRIGHTFIELD,
       objective=Objective.O_10X_PL_FL,
@@ -125,7 +107,7 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_with_well_object(self):
     well = self.plate.get_well("C7")
-    await self.device.microscopy.capture(
+    await self.cap.capture(
       well=well,
       mode=ImagingMode.DAPI,
       objective=Objective.O_20X_PL_FL,
@@ -144,7 +126,7 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(col, expected_col)
 
   async def test_capture_machine_auto(self):
-    await self.device.microscopy.capture(
+    await self.cap.capture(
       well=(0, 0),
       mode=ImagingMode.GFP,
       objective=Objective.O_4X_PL_FL,
@@ -171,11 +153,11 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
 class TestChatterboxBackend(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_capture(self):
     backend = MicroscopyChatterboxBackend()
-    device = _TestMicroscope(backend=backend)
-    await device.setup()
+    cap = MicroscopyCapability(backend=backend)
+    await cap._on_setup()
 
     plate = _test_plate()
-    result = await device.microscopy.capture(
+    result = await cap.capture(
       well=(0, 0),
       mode=ImagingMode.BRIGHTFIELD,
       objective=Objective.O_4X_PL_FL,
@@ -187,8 +169,6 @@ class TestChatterboxBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(result.images), 1)
     self.assertAlmostEqual(result.exposure_time, 10.0)
     self.assertAlmostEqual(result.focal_height, 1.0)
-
-    await device.stop()
 
 
 if __name__ == "__main__":

@@ -3,14 +3,14 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import List, Optional
 
+from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
-from pylabrobot.device import DeviceBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
 
-class FluorescenceBackend(DeviceBackend, metaclass=ABCMeta):
+class FluorescenceBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for fluorescence plate reading."""
 
   @abstractmethod

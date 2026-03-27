@@ -6,13 +6,15 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
 
 
-class InhecoTemperatureControllerBackend(TemperatureControllerBackend, metaclass=abc.ABCMeta):
+class InhecoTemperatureControllerBackend(
+  TemperatureControllerBackend, Driver, metaclass=abc.ABCMeta
+):
   """Universal backend for Inheco Temperature Controller devices such as ThermoShake and CPAC"""
 
   @property
@@ -99,7 +101,7 @@ class InhecoCPAC(ResourceHolder, Device):
     size_x: float,
     size_y: float,
     size_z: float,
-    backend: InhecoCPACBackend,
+    driver: InhecoCPACBackend,
     child_location: Coordinate,
     category: str = "temperature_controller",
     model: Optional[str] = None,
@@ -114,9 +116,9 @@ class InhecoCPAC(ResourceHolder, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: InhecoCPACBackend = backend
-    self.tc = TemperatureControlCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver: InhecoCPACBackend = driver
+    self.tc = TemperatureControlCapability(backend=driver)
     self._capabilities = [self.tc]
 
   def serialize(self) -> dict:
@@ -135,7 +137,7 @@ def inheco_cpac_ultraflat(name: str, control_box: InhecoTECControlBox, index: in
 
   return InhecoCPAC(
     name=name,
-    backend=InhecoCPACBackend(control_box=control_box, index=index),
+    driver=InhecoCPACBackend(control_box=control_box, index=index),
     size_x=113,  # from spec
     size_y=89,  # from spec
     size_z=129,  # from spec

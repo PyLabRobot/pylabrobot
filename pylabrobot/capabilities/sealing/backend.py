@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 
-class SealerBackend(DeviceBackend, metaclass=ABCMeta):
+class SealerBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for sealing devices."""
 
   @abstractmethod

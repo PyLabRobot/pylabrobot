@@ -6,27 +6,33 @@ from pylabrobot.molecular_devices.spectramax.backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
+  MolecularDevicesDriver,
   PmtGain,
   ReadOrder,
   ReadType,
   ShakeSettings,
   SpectrumSettings,
 )
-from pylabrobot.molecular_devices.spectramax.spectramax_384_plus import SpectraMax384PlusBackend
+from pylabrobot.molecular_devices.spectramax.spectramax_384_plus import (
+  SpectraMax384PlusAbsorbanceBackend,
+)
 from pylabrobot.resources.plate import Plate
 
 from .backend import MolecularDevicesBackend
 
 
 class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
-  """Legacy. Use pylabrobot.molecular_devices.spectramax.SpectraMax384PlusBackend instead.
+  """Legacy. Use pylabrobot.molecular_devices.spectramax.SpectraMax384Plus instead."""
 
-  Delegates to SpectraMax384PlusBackend (which has its own _set_readtype/_set_nvram/_set_tag
-  overrides), and raises NotImplementedError for unsupported read modes.
-  """
+  def _make_driver(self, port: str):
+    return MolecularDevicesDriver(
+      port=port, human_readable_device_name="Molecular Devices SpectraMax 384 Plus"
+    )
 
-  def _make_new_backend(self, port: str):
-    return SpectraMax384PlusBackend(port=port)
+  def __init__(self, port: str) -> None:
+    super().__init__(port)
+    # Override the absorbance backend with the 384-specific one
+    self._absorbance = SpectraMax384PlusAbsorbanceBackend(self._driver)
 
   async def read_fluorescence(  # type: ignore[override]
     self,

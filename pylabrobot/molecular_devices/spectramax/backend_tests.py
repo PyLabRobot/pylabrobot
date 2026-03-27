@@ -1,4 +1,3 @@
-import math
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -9,10 +8,9 @@ from pylabrobot.molecular_devices.spectramax.backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
-  MolecularDevicesBackend,
-  MolecularDevicesError,
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
   MolecularDevicesSettings,
-  MolecularDevicesUnrecognizedCommandError,
   PmtGain,
   ReadMode,
   ReadOrder,
@@ -20,12 +18,18 @@ from pylabrobot.molecular_devices.spectramax.backend import (
   ShakeSettings,
   SpectrumSettings,
 )
-from pylabrobot.molecular_devices.spectramax.spectramax_m5 import SpectraMaxM5Backend
+from pylabrobot.molecular_devices.spectramax.spectramax_m5 import (
+  SpectraMaxM5FluorescenceBackend,
+  SpectraMaxM5LuminescenceBackend,
+)
 from pylabrobot.resources.agenbio.plates import AGenBio_96_wellplate_Ub_2200ul
 
 
 class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
-  backend: MolecularDevicesBackend
+  """Tests for MolecularDevicesAbsorbanceBackend and the protocol mixin."""
+
+  backend: MolecularDevicesAbsorbanceBackend
+  driver: MolecularDevicesDriver
   mock_serial: MagicMock
   send_command_mock: AsyncMock
 
@@ -37,21 +41,22 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.mock_serial.readline = AsyncMock(return_value=b"OK>\r\n")
 
     with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
-      self.backend = MolecularDevicesBackend(port="COM1")
-      self.backend.io = self.mock_serial
-      self.send_command_mock = patch.object(
-        self.backend, "send_command", new_callable=AsyncMock
-      ).start()
+      self.driver = MolecularDevicesDriver(port="COM1")
+      self.driver.io = self.mock_serial
+    self.backend = MolecularDevicesAbsorbanceBackend(driver=self.driver)
+    self.send_command_mock = patch.object(
+      self.driver, "send_command", new_callable=AsyncMock
+    ).start()
     self.addCleanup(patch.stopall)
 
   async def test_setup_stop(self):
     with patch.object(
-      self.backend, "send_command", wraps=self.backend.send_command
+      self.driver, "send_command", wraps=self.driver.send_command
     ) as wrapped_send_command:
-      await self.backend.setup()
+      await self.driver.setup()
       self.mock_serial.setup.assert_called_once()
       wrapped_send_command.assert_called_with("!")
-      await self.backend.stop()
+      await self.driver.stop()
       self.mock_serial.stop.assert_called_once()
 
   async def test_set_clear(self):
@@ -456,54 +461,54 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     await self.backend._set_tag(settings)
     self.send_command_mock.assert_called_once_with("!TAG OFF")
 
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._wait_for_idle",
-    new_callable=AsyncMock,
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
-    new_callable=AsyncMock,
-    return_value=[{"data": [[0.1]], "wavelength": 500, "temperature": 25.0, "time": 12345.6}],
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._read_now",
-    new_callable=AsyncMock,
-  )
-  async def test_read_absorbance(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
-    results = await self.backend.read_absorbance(plate, plate.get_wells(), 500)
+  async def test_read_absorbance(self):
+    with (
+      patch.object(self.backend, "_read_now", new_callable=AsyncMock) as mock_read_now,
+      patch.object(self.driver, "wait_for_idle", new_callable=AsyncMock) as mock_wait,
+      patch.object(
+        self.backend,
+        "_transfer_data",
+        new_callable=AsyncMock,
+        return_value=[{"data": [[0.1]], "wavelength": 500, "temperature": 25.0, "time": 12345.6}],
+      ) as mock_transfer,
+    ):
+      plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+      results = await self.backend.read_absorbance(plate, plate.get_wells(), 500)
 
-    # Verify typed results
-    self.assertIsInstance(results, list)
-    self.assertEqual(len(results), 1)
-    self.assertIsInstance(results[0], AbsorbanceResult)
-    self.assertEqual(results[0].wavelength, 500)
-    self.assertEqual(results[0].temperature, 25.0)
-    self.assertEqual(results[0].timestamp, 12345.6)
+      self.assertIsInstance(results, list)
+      self.assertEqual(len(results), 1)
+      self.assertIsInstance(results[0], AbsorbanceResult)
+      self.assertEqual(results[0].wavelength, 500)
+      self.assertEqual(results[0].temperature, 25.0)
+      self.assertEqual(results[0].timestamp, 12345.6)
 
-    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
-    self.assertIn("!CLEAR DATA", commands)
-    self.assertIn("!STRIP 1 12", commands)
-    self.assertIn("!CSPEED 8", commands)
-    self.assertIn("!SHAKE OFF", commands)
-    self.assertIn("!WAVELENGTH 500", commands)
-    self.assertIn("!CALIBRATE ONCE", commands)
-    self.assertIn("!MODE ENDPOINT", commands)
-    self.assertIn("!ORDER COLUMN", commands)
-    self.assertIn("!SPEED OFF", commands)
+      commands = [c.args[0] for c in self.send_command_mock.call_args_list]
+      self.assertIn("!CLEAR DATA", commands)
+      self.assertIn("!STRIP 1 12", commands)
+      self.assertIn("!CSPEED 8", commands)
+      self.assertIn("!SHAKE OFF", commands)
+      self.assertIn("!WAVELENGTH 500", commands)
+      self.assertIn("!CALIBRATE ONCE", commands)
+      self.assertIn("!MODE ENDPOINT", commands)
+      self.assertIn("!ORDER COLUMN", commands)
+      self.assertIn("!SPEED OFF", commands)
 
-    readtype_call = next(
-      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE ABSPLA"
-    )
-    self.assertEqual(readtype_call.kwargs, {"num_res_fields": 2})
+      readtype_call = next(
+        c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE ABSPLA"
+      )
+      self.assertEqual(readtype_call.kwargs, {"num_res_fields": 2})
 
-    mock_read_now.assert_called_once()
-    mock_wait_for_idle.assert_called_once()
-    mock_transfer_data.assert_called_once()
+      mock_read_now.assert_called_once()
+      mock_wait.assert_called_once()
+      mock_transfer.assert_called_once()
 
 
 class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
-  backend: SpectraMaxM5Backend
+  """Tests for SpectraMaxM5 fluorescence and luminescence backends."""
+
+  flu_backend: SpectraMaxM5FluorescenceBackend
+  lum_backend: SpectraMaxM5LuminescenceBackend
+  driver: MolecularDevicesDriver
   mock_serial: MagicMock
   send_command_mock: AsyncMock
 
@@ -515,543 +520,114 @@ class TestSpectraMaxM5Backend(unittest.IsolatedAsyncioTestCase):
     self.mock_serial.readline = AsyncMock(return_value=b"OK>\r\n")
 
     with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
-      self.backend = SpectraMaxM5Backend(port="COM1")
-      self.backend.io = self.mock_serial
-      self.send_command_mock = patch.object(
-        self.backend, "send_command", new_callable=AsyncMock
-      ).start()
+      self.driver = MolecularDevicesDriver(
+        port="COM1", human_readable_device_name="Molecular Devices SpectraMax M5"
+      )
+      self.driver.io = self.mock_serial
+    self.flu_backend = SpectraMaxM5FluorescenceBackend(driver=self.driver)
+    self.lum_backend = SpectraMaxM5LuminescenceBackend(driver=self.driver)
+    self.send_command_mock = patch.object(
+      self.driver, "send_command", new_callable=AsyncMock
+    ).start()
     self.addCleanup(patch.stopall)
 
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._wait_for_idle",
-    new_callable=AsyncMock,
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
-    new_callable=AsyncMock,
-    return_value=[
-      {
-        "data": [[100.0]],
-        "ex_wavelength": 485,
-        "em_wavelength": 520,
-        "temperature": 25.0,
-        "time": 12345.6,
-      }
-    ],
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._read_now",
-    new_callable=AsyncMock,
-  )
-  async def test_read_fluorescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
-    results = await self.backend.read_fluorescence(
-      plate, plate.get_wells(), excitation_wavelength=485, emission_wavelength=520, focal_height=0
-    )
-
-    # Verify typed results
-    self.assertIsInstance(results, list)
-    self.assertEqual(len(results), 1)
-    self.assertIsInstance(results[0], FluorescenceResult)
-    self.assertEqual(results[0].excitation_wavelength, 485)
-    self.assertEqual(results[0].emission_wavelength, 520)
-    self.assertEqual(results[0].temperature, 25.0)
-    self.assertEqual(results[0].timestamp, 12345.6)
-
-    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
-    self.assertIn("!CLEAR DATA", commands)
-    self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
-    self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
-    self.assertIn("!STRIP 1 12", commands)
-    self.assertIn("!CSPEED 8", commands)
-    self.assertIn("!SHAKE OFF", commands)
-    self.assertIn("!FPW 10", commands)
-    self.assertIn("!AUTOPMT ON", commands)
-    self.assertIn("!EXWAVELENGTH 485", commands)
-    self.assertIn("!EMWAVELENGTH 520", commands)
-    self.assertIn("!PMTCAL ONCE", commands)
-    self.assertIn("!MODE ENDPOINT", commands)
-    self.assertIn("!ORDER COLUMN", commands)
-    self.assertIn("!READSTAGE TOP", commands)
-
-    readtype_call = next(
-      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE FLU"
-    )
-    self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
-
-    mock_read_now.assert_called_once()
-    mock_wait_for_idle.assert_called_once()
-    mock_transfer_data.assert_called_once()
-
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._wait_for_idle",
-    new_callable=AsyncMock,
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
-    new_callable=AsyncMock,
-    return_value=[{"data": [[1000.0]], "em_wavelength": 590, "temperature": 25.0, "time": 12345.6}],
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._read_now",
-    new_callable=AsyncMock,
-  )
-  async def test_read_luminescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
-    results = await self.backend.read_luminescence(
-      plate,
-      plate.get_wells(),
-      focal_height=0,
-      backend_params=SpectraMaxM5Backend.LuminescenceParams(emission_wavelengths=[590]),
-    )
-
-    # Verify typed results
-    self.assertIsInstance(results, list)
-    self.assertEqual(len(results), 1)
-    self.assertIsInstance(results[0], LuminescenceResult)
-    self.assertEqual(results[0].temperature, 25.0)
-    self.assertEqual(results[0].timestamp, 12345.6)
-
-    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
-    self.assertIn("!CLEAR DATA", commands)
-    self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
-    self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
-    self.assertIn("!STRIP 1 12", commands)
-    self.assertIn("!CSPEED 8", commands)
-    self.assertIn("!SHAKE OFF", commands)
-    self.assertIn("!EMWAVELENGTH 590", commands)
-    self.assertIn("!PMTCAL ONCE", commands)
-    self.assertIn("!MODE ENDPOINT", commands)
-    self.assertIn("!ORDER COLUMN", commands)
-    self.assertIn("!READSTAGE TOP", commands)
-
-    readtype_call = next(
-      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE LUM"
-    )
-    self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
-
-    mock_read_now.assert_called_once()
-    mock_wait_for_idle.assert_called_once()
-    mock_transfer_data.assert_called_once()
-
-  async def test_read_luminescence_requires_emission_wavelengths(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
-    with self.assertRaises(ValueError):
-      await self.backend.read_luminescence(plate, plate.get_wells(), focal_height=0)
-
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._wait_for_idle",
-    new_callable=AsyncMock,
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
-    new_callable=AsyncMock,
-    return_value="",
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._read_now",
-    new_callable=AsyncMock,
-  )
-  async def test_read_fluorescence_polarization(
-    self,
-    mock_read_now,
-    mock_transfer_data,
-    mock_wait_for_idle,
-  ):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
-    await self.backend.read_fluorescence_polarization(plate, [485], [520], [515])
-
-    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
-    self.assertIn("!CLEAR DATA", commands)
-    self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
-    self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
-    self.assertIn("!STRIP 1 12", commands)
-    self.assertIn("!CSPEED 8", commands)
-    self.assertIn("!SHAKE OFF", commands)
-    self.assertIn("!FPW 10", commands)
-    self.assertIn("!AUTOPMT ON", commands)
-    self.assertIn("!EXWAVELENGTH 485", commands)
-    self.assertIn("!EMWAVELENGTH 520", commands)
-    self.assertIn("!AUTOFILTER OFF", commands)
-    self.assertIn("!EMFILTER 515", commands)
-    self.assertIn("!PMTCAL ONCE", commands)
-    self.assertIn("!MODE ENDPOINT", commands)
-    self.assertIn("!ORDER COLUMN", commands)
-    self.assertIn("!READSTAGE TOP", commands)
-
-    readtype_call = next(
-      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE POLAR"
-    )
-    self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
-
-    mock_read_now.assert_called_once()
-    mock_wait_for_idle.assert_called_once()
-    mock_transfer_data.assert_called_once()
-
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._wait_for_idle",
-    new_callable=AsyncMock,
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._transfer_data",
-    new_callable=AsyncMock,
-    return_value="",
-  )
-  @patch(
-    "pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesBackend._read_now",
-    new_callable=AsyncMock,
-  )
-  async def test_read_time_resolved_fluorescence(
-    self,
-    mock_read_now,
-    mock_transfer_data,
-    mock_wait_for_idle,
-  ):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
-    await self.backend.read_time_resolved_fluorescence(
-      plate, [485], [520], [515], delay_time=10, integration_time=100
-    )
-
-    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
-    self.assertIn("!CLEAR DATA", commands)
-    self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
-    self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
-    self.assertIn("!STRIP 1 12", commands)
-    self.assertIn("!CSPEED 8", commands)
-    self.assertIn("!SHAKE OFF", commands)
-    self.assertIn("!FPW 50", commands)
-    self.assertIn("!AUTOPMT ON", commands)
-    self.assertIn("!EXWAVELENGTH 485", commands)
-    self.assertIn("!EMWAVELENGTH 520", commands)
-    self.assertIn("!AUTOFILTER OFF", commands)
-    self.assertIn("!EMFILTER 515", commands)
-    self.assertIn("!PMTCAL ONCE", commands)
-    self.assertIn("!MODE ENDPOINT", commands)
-    self.assertIn("!ORDER COLUMN", commands)
-    self.assertIn("!COUNTTIMEDELAY 10", commands)
-    self.assertIn("!COUNTTIME 0.1", commands)
-    self.assertIn("!READSTAGE TOP", commands)
-
-    readtype_call = next(
-      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE TIME 0 250"
-    )
-    self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
-
-    mock_read_now.assert_called_once()
-    mock_wait_for_idle.assert_called_once()
-    mock_transfer_data.assert_called_once()
-
-
-class TestDataParsing(unittest.IsolatedAsyncioTestCase):
-  send_command_mock: AsyncMock
-
-  def setUp(self):
-    with patch("pylabrobot.io.serial.Serial", return_value=MagicMock()):
-      self.backend = MolecularDevicesBackend(port="COM1")
-      self.send_command_mock = patch.object(
-        self.backend, "send_command", new_callable=AsyncMock
-      ).start()
-
-  def test_parse_absorbance_single_wavelength(self):
-    data_str = """
-    12345.6	25.1	96-well
-    L:	260
-    L:	260
-    1:	0.1	0.2
-    2:	0.3	0.4
-    """
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.ABS,
-      read_type=ReadType.ENDPOINT,
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      kinetic_settings=None,
-      spectrum_settings=None,
-    )
-
-    result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, list)
-    self.assertEqual(len(result), 1)
-    read = result[0]
-    self.assertEqual(read["wavelength"], 260)
-    self.assertEqual(read["time"], 12345.6)
-    self.assertEqual(read["temperature"], 25.1)
-    self.assertEqual(read["data"], [[0.1, 0.3], [0.2, 0.4]])
-
-  def test_parse_absorbance_multiple_wavelengths(self):
-    data_str = """
-    12345.6\t25.1\t96-well
-    L:\t260\t280
-    L:\t260
-    1:\t0.1\t0.2
-    2:\t0.3\t0.4
-    L:\t280
-    1:\t0.5\t0.6
-    2:\t0.7\t0.8
-    """
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.ABS,
-      read_type=ReadType.ENDPOINT,
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      kinetic_settings=None,
-      spectrum_settings=None,
-    )
-    result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, list)
-    self.assertEqual(len(result), 2)
-    self.assertEqual(result[0]["wavelength"], 260)
-    self.assertEqual(result[0]["data"], [[0.1, 0.3], [0.2, 0.4]])
-    self.assertEqual(result[1]["wavelength"], 280)
-    self.assertEqual(result[1]["data"], [[0.5, 0.7], [0.6, 0.8]])
-
-  def test_parse_fluorescence(self):
-    data_str = """
-    12345.6\t25.1\t96-well
-    exL:\t485
-    emL:\t520
-    L:\t485\t520
-    1:\t100\t200
-    2:\t300\t400
-    """
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.FLU,
-      read_type=ReadType.ENDPOINT,
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      kinetic_settings=None,
-      spectrum_settings=None,
-    )
-    result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, list)
-    self.assertEqual(len(result), 1)
-    read = result[0]
-    self.assertEqual(read["ex_wavelength"], 485)
-    self.assertEqual(read["em_wavelength"], 520)
-    self.assertEqual(read["time"], 12345.6)
-    self.assertEqual(read["temperature"], 25.1)
-    self.assertEqual(read["data"], [[100.0, 300.0], [200.0, 400.0]])
-
-  def test_parse_luminescence(self):
-    data_str = """
-    12345.6\t25.1\t96-well
-    emL:\t590
-    L:\t\t590
-    1:\t1000\t2000
-    2:\t3000\t4000
-    """
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.LUM,
-      read_type=ReadType.ENDPOINT,
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      kinetic_settings=None,
-      spectrum_settings=None,
-    )
-    result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, list)
-    self.assertEqual(len(result), 1)
-    read = result[0]
-    self.assertEqual(read["em_wavelength"], 590)
-    self.assertEqual(read["time"], 12345.6)
-    self.assertEqual(read["temperature"], 25.1)
-    self.assertEqual(read["data"], [[1000.0, 3000.0], [2000.0, 4000.0]])
-
-  def test_parse_data_with_sat_and_nan(self):
-    data_str = """
-    12345.6\t25.1\t96-well
-    L:\t260
-    L:\t260
-    1:\t0.1\t#SAT
-    2:\t0.3\t-
-    """
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.ABS,
-      read_type=ReadType.ENDPOINT,
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      kinetic_settings=None,
-      spectrum_settings=None,
-    )
-    result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, list)
-    self.assertEqual(len(result), 1)
-    read = result[0]
-    self.assertEqual(read["data"][1][0], float("inf"))
-    self.assertTrue(math.isnan(read["data"][1][1]))
-
-  async def test_parse_kinetic_absorbance(self):
-    def data_generator():
-      yield [
-        "OK",
-        """
-    12345.6\t25.1\t96-well
-    L:\t260
-    L:\t260
-    1:\t0.1\t0.2
-    2:\t0.3\t0.4
-    """,
-      ]
-      yield [
-        "OK",
-        """
-    12355.6\t25.2\t96-well
-    L:\t260
-    L:\t260
-    1:\t0.15\t0.25
-    2:\t0.35\t0.45
-    """,
-      ]
-
-    self.send_command_mock.side_effect = data_generator()
-
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.ABS,
-      read_type=ReadType.KINETIC,
-      kinetic_settings=KineticSettings(interval=10, num_readings=2),
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      spectrum_settings=None,
-    )
-
-    result = await self.backend._transfer_data(settings)
-    self.assertEqual(len(result), 2)
-    self.assertEqual(result[0]["wavelength"], 260)
-    self.assertEqual(result[0]["data"], [[0.1, 0.3], [0.2, 0.4]])
-    self.assertEqual(result[0]["time"], 12345.6)
-    self.assertEqual(result[1]["wavelength"], 260)
-    self.assertEqual(result[1]["data"], [[0.15, 0.35], [0.25, 0.45]])
-    self.assertEqual(result[1]["time"], 12355.6)
-
-  async def test_parse_spectrum_absorbance(self):
-    def data_generator():
-      yield [
-        "OK",
-        """
-    12345.6\t25.1\t96-well
-    L:\t260
-    L:\t260
-    1:\t0.1\t0.2
-    2:\t0.3\t0.4
-    """,
-      ]
-      yield [
-        "OK",
-        """
-    12355.6\t25.2\t96-well
-    L:\t270
-    L:\t270
-    1:\t0.15\t0.25
-    2:\t0.35\t0.45
-    """,
-      ]
-
-    self.send_command_mock.side_effect = data_generator()
-
-    settings = MolecularDevicesSettings(
-      plate=MagicMock(),
-      read_mode=ReadMode.ABS,
-      read_type=ReadType.SPECTRUM,
-      spectrum_settings=SpectrumSettings(start_wavelength=260, step=10, num_steps=2),
-      read_order=ReadOrder.COLUMN,
-      calibrate=Calibrate.ON,
-      shake_settings=None,
-      carriage_speed=CarriageSpeed.NORMAL,
-      speed_read=False,
-      kinetic_settings=None,
-    )
-
-    result = await self.backend._transfer_data(settings)
-    self.assertEqual(len(result), 2)
-
-    self.assertEqual(result[0]["wavelength"], 260)
-    self.assertEqual(result[0]["data"], [[0.1, 0.3], [0.2, 0.4]])
-    self.assertEqual(result[0]["time"], 12345.6)
-
-    self.assertEqual(result[1]["wavelength"], 270)
-    self.assertEqual(result[1]["data"], [[0.15, 0.35], [0.25, 0.45]])
-    self.assertEqual(result[1]["time"], 12355.6)
-
-
-class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
-    self.mock_serial = MagicMock()
-    self.mock_serial.setup = AsyncMock()
-    self.mock_serial.stop = AsyncMock()
-    self.mock_serial.write = AsyncMock()
-    self.mock_serial.readline = AsyncMock()
-
-    with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
-      self.backend = MolecularDevicesBackend(port="/dev/tty01")
-      self.backend.io = self.mock_serial
-
-  async def _mock_send_command_response(self, response_str: str):
-    self.mock_serial.readline.side_effect = [response_str.encode() + b">\r\n"]
-    return await self.backend.send_command("!TEST")
-
-  async def test_parse_basic_errors_fail_known_error_code(self):
-    with self.assertRaisesRegex(
-      MolecularDevicesUnrecognizedCommandError,
-      "Command '!TEST' failed with error 107: no data to transfer",
+  async def test_read_fluorescence(self):
+    with (
+      patch.object(self.flu_backend, "_read_now", new_callable=AsyncMock) as mock_read_now,
+      patch.object(self.driver, "wait_for_idle", new_callable=AsyncMock) as mock_wait,
+      patch.object(
+        self.flu_backend,
+        "_transfer_data",
+        new_callable=AsyncMock,
+        return_value=[
+          {
+            "data": [[100.0]],
+            "ex_wavelength": 485,
+            "em_wavelength": 520,
+            "temperature": 25.0,
+            "time": 12345.6,
+          }
+        ],
+      ) as mock_transfer,
     ):
-      await self._mock_send_command_response("OK\t\r\n>FAIL\t 107")
+      plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+      results = await self.flu_backend.read_fluorescence(
+        plate, plate.get_wells(), excitation_wavelength=485, emission_wavelength=520, focal_height=0
+      )
 
-  async def test_parse_basic_errors_fail_unknown_error_code(self):
-    with self.assertRaisesRegex(
-      MolecularDevicesError, "Command '!TEST' failed with unknown error code: 999"
+      self.assertIsInstance(results, list)
+      self.assertEqual(len(results), 1)
+      self.assertIsInstance(results[0], FluorescenceResult)
+      self.assertEqual(results[0].excitation_wavelength, 485)
+      self.assertEqual(results[0].emission_wavelength, 520)
+      self.assertEqual(results[0].temperature, 25.0)
+      self.assertEqual(results[0].timestamp, 12345.6)
+
+      commands = [c.args[0] for c in self.send_command_mock.call_args_list]
+      self.assertIn("!CLEAR DATA", commands)
+      self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
+      self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
+      self.assertIn("!STRIP 1 12", commands)
+      self.assertIn("!CSPEED 8", commands)
+      self.assertIn("!SHAKE OFF", commands)
+      self.assertIn("!FPW 10", commands)
+      self.assertIn("!AUTOPMT ON", commands)
+      self.assertIn("!EXWAVELENGTH 485", commands)
+      self.assertIn("!EMWAVELENGTH 520", commands)
+      self.assertIn("!PMTCAL ONCE", commands)
+      self.assertIn("!MODE ENDPOINT", commands)
+      self.assertIn("!ORDER COLUMN", commands)
+      self.assertIn("!READSTAGE TOP", commands)
+
+      readtype_call = next(
+        c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE FLU"
+      )
+      self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
+
+      mock_read_now.assert_called_once()
+      mock_wait.assert_called_once()
+      mock_transfer.assert_called_once()
+
+  async def test_read_luminescence(self):
+    with (
+      patch.object(self.lum_backend, "_read_now", new_callable=AsyncMock) as mock_read_now,
+      patch.object(self.driver, "wait_for_idle", new_callable=AsyncMock) as mock_wait,
+      patch.object(
+        self.lum_backend,
+        "_transfer_data",
+        new_callable=AsyncMock,
+        return_value=[
+          {"data": [[1000.0]], "em_wavelength": 590, "temperature": 25.0, "time": 12345.6}
+        ],
+      ) as mock_transfer,
     ):
-      await self._mock_send_command_response("FAIL\t 999")
+      plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+      results = await self.lum_backend.read_luminescence(
+        plate,
+        plate.get_wells(),
+        focal_height=0,
+        backend_params=SpectraMaxM5LuminescenceBackend.LuminescenceParams(
+          emission_wavelengths=[590]
+        ),
+      )
 
-  async def test_parse_basic_errors_fail_unparsable_error(self):
-    with self.assertRaisesRegex(
-      MolecularDevicesError, "Command '!TEST' failed with unparsable error: FAIL\t ABC"
-    ):
-      await self._mock_send_command_response("FAIL\t ABC")
+      self.assertIsInstance(results, list)
+      self.assertEqual(len(results), 1)
+      self.assertIsInstance(results[0], LuminescenceResult)
+      self.assertEqual(results[0].temperature, 25.0)
+      self.assertEqual(results[0].timestamp, 12345.6)
 
-  async def test_parse_basic_errors_empty_response(self):
-    self.mock_serial.readline.return_value = b""
-    with self.assertRaisesRegex(TimeoutError, "Timeout waiting for response to command: !TEST"):
-      await self.backend.send_command("!TEST", timeout=1)
+      commands = [c.args[0] for c in self.send_command_mock.call_args_list]
+      self.assertIn("!CLEAR DATA", commands)
+      self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
+      self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
+      self.assertIn("!STRIP 1 12", commands)
+      self.assertIn("!CSPEED 8", commands)
+      self.assertIn("!SHAKE OFF", commands)
+      self.assertIn("!EMWAVELENGTH 590", commands)
+      self.assertIn("!PMTCAL ONCE", commands)
+      self.assertIn("!MODE ENDPOINT", commands)
 
-  async def test_parse_basic_errors_warning_response(self):
-    self.mock_serial.readline.side_effect = [b"OK\tWarning: Something happened>\r\n"]
-    try:
-      await self.backend.send_command("!TEST")
-    except MolecularDevicesError:
-      self.fail("MolecularDevicesError raised for a warning response")
-
-  async def test_parse_basic_errors_ok_response(self):
-    self.mock_serial.readline.side_effect = [b"OK>\r\n"]
-    try:
-      response = await self.backend.send_command("!TEST")
-      self.assertEqual(response, ["OK"])
-    except MolecularDevicesError:
-      self.fail("MolecularDevicesError raised for a valid OK response")
-
-
-if __name__ == "__main__":
-  unittest.main()
+      mock_read_now.assert_called_once()
+      mock_wait.assert_called_once()
+      mock_transfer.assert_called_once()

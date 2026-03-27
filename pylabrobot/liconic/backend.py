@@ -18,7 +18,7 @@ from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.barcode import Barcode
@@ -51,6 +51,7 @@ class LiconicBackend(
   TemperatureControllerBackend,
   HumidityControllerBackend,
   ShakerBackend,
+  Driver,
 ):
   """Backend for Liconic incubators."""
 
@@ -97,7 +98,7 @@ class LiconicBackend(
     self.n2_installed: Optional[bool] = None
 
   async def setup(self):
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     try:
       await self.io.setup()
     except serial.SerialException as e:
@@ -137,7 +138,7 @@ class LiconicBackend(
 
   async def stop(self):
     await self.io.stop()
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
 
   async def set_racks(self, racks: List[PlateCarrier]):
     self._racks = racks
@@ -493,7 +494,7 @@ class LiconicBackend(
 
   def serialize(self) -> dict:
     return {
-      **DeviceBackend.serialize(self),
+      **Driver.serialize(self),
       "port": self.io.port,
       "model": self.model.value,
     }

@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 
-class HumidityControllerBackend(DeviceBackend, metaclass=ABCMeta):
+class HumidityControllerBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for humidity controllers."""
 
   @property

@@ -15,12 +15,6 @@ class AbsorbanceChatterboxBackend(AbsorbanceBackend):
   def __init__(self):
     self.dummy_absorbance: List[List[Optional[float]]] = [[0.0] * 12 for _ in range(8)]
 
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
-
   async def read_absorbance(
     self,
     plate: Plate,

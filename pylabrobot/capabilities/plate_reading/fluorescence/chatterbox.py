@@ -15,12 +15,6 @@ class FluorescenceChatterboxBackend(FluorescenceBackend):
   def __init__(self):
     self.dummy_fluorescence: List[List[Optional[float]]] = [[0.0] * 12 for _ in range(8)]
 
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
-
   async def read_fluorescence(
     self,
     plate: Plate,

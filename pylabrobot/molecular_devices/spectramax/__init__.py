@@ -4,13 +4,15 @@ from .backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
-  MolecularDevicesBackend,
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
   MolecularDevicesError,
   MolecularDevicesFirmwareError,
   MolecularDevicesHardwareError,
   MolecularDevicesMotionError,
   MolecularDevicesNVRAMError,
   MolecularDevicesSettings,
+  MolecularDevicesTemperatureBackend,
   MolecularDevicesUnrecognizedCommandError,
   PmtGain,
   ReadMode,
@@ -19,5 +21,9 @@ from .backend import (
   ShakeSettings,
   SpectrumSettings,
 )
-from .spectramax_384_plus import SpectraMax384Plus, SpectraMax384PlusBackend
-from .spectramax_m5 import SpectraMaxM5, SpectraMaxM5Backend
+from .spectramax_384_plus import SpectraMax384Plus, SpectraMax384PlusAbsorbanceBackend
+from .spectramax_m5 import (
+  SpectraMaxM5,
+  SpectraMaxM5FluorescenceBackend,
+  SpectraMaxM5LuminescenceBackend,
+)

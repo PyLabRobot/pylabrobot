@@ -281,8 +281,8 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, Device):
   def __init__(self, name: str = "byonoy_absorbance_96"):
     backend = ByonoyAbsorbance96Backend()
     ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
-    Device.__init__(self, backend=backend)
-    self._backend: ByonoyAbsorbance96Backend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: ByonoyAbsorbance96Backend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self._capabilities = [self.absorbance]
 

@@ -26,7 +26,7 @@ class NoFreeSiteError(Exception):
 
 class Cytomat(Resource, Device):
   _racks: List[PlateCarrier]
-  _backend: CytomatBackend
+  _driver: CytomatBackend
   loading_tray: PlateHolder
   retrieval: AutomatedRetrievalCapability
   tc: TemperatureControlCapability
@@ -36,7 +36,7 @@ class Cytomat(Resource, Device):
   def __init__(
     self,
     name: str,
-    backend: CytomatBackend,
+    driver: CytomatBackend,
     racks: List[PlateCarrier],
     loading_tray_location: Coordinate,
     size_x: float = 0,
@@ -57,8 +57,8 @@ class Cytomat(Resource, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: CytomatBackend = backend
+    Device.__init__(self, driver=driver)
+    self._driver: CytomatBackend = driver
 
     self.loading_tray = PlateHolder(
       name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
@@ -69,14 +69,14 @@ class Cytomat(Resource, Device):
     for rack in self._racks:
       self.assign_child_resource(rack, location=None)
 
-    self.retrieval = AutomatedRetrievalCapability(backend=backend)
-    self.tc = TemperatureControlCapability(backend=backend)
-    self.humidity = HumidityControlCapability(backend=backend)
+    self.retrieval = AutomatedRetrievalCapability(backend=driver)
+    self.tc = TemperatureControlCapability(backend=driver)
+    self.humidity = HumidityControlCapability(backend=driver)
 
     caps = [self.tc, self.humidity, self.retrieval]
 
-    if backend.model != CytomatType.C5C:
-      self.shaker = ShakingCapability(backend=backend)
+    if driver.model != CytomatType.C5C:
+      self.shaker = ShakingCapability(backend=driver)
       caps.append(self.shaker)
 
     self._capabilities = caps
@@ -87,7 +87,7 @@ class Cytomat(Resource, Device):
 
   async def setup(self, **backend_kwargs):
     await super().setup()
-    await self._backend.set_racks(self._racks)
+    await self._driver.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:
     return sum([len(rack.get_free_sites()) for rack in self._racks])

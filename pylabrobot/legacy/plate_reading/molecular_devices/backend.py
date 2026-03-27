@@ -7,12 +7,15 @@ from pylabrobot.molecular_devices.spectramax.backend import (  # noqa: F401
   Calibrate,
   CarriageSpeed,
   KineticSettings,
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
   MolecularDevicesError,
   MolecularDevicesFirmwareError,
   MolecularDevicesHardwareError,
   MolecularDevicesMotionError,
   MolecularDevicesNVRAMError,
   MolecularDevicesSettings,
+  MolecularDevicesTemperatureBackend,
   MolecularDevicesUnrecognizedCommandError,
   PmtGain,
   ReadMode,
@@ -21,76 +24,60 @@ from pylabrobot.molecular_devices.spectramax.backend import (  # noqa: F401
   ShakeSettings,
   SpectrumSettings,
 )
-from pylabrobot.molecular_devices.spectramax.spectramax_m5 import SpectraMaxM5Backend
+from pylabrobot.molecular_devices.spectramax.spectramax_m5 import (
+  SpectraMaxM5FluorescenceBackend,
+  SpectraMaxM5LuminescenceBackend,
+)
 from pylabrobot.resources.plate import Plate
 
 
 class MolecularDevicesBackend(PlateReaderBackend):
-  """Legacy. Use pylabrobot.molecular_devices.spectramax.MolecularDevicesBackend instead.
+  """Legacy. Use pylabrobot.molecular_devices.spectramax instead.
 
   Delegates to the new capability-based backend, adapting read method signatures
   and return types (List[Dict]) for backward compatibility.
   """
 
   def __init__(self, port: str) -> None:
-    self._new: SpectraMaxM5Backend = self._make_new_backend(port)
+    self._driver = self._make_driver(port)
+    self._absorbance = MolecularDevicesAbsorbanceBackend(self._driver)
+    self._temperature = MolecularDevicesTemperatureBackend(self._driver)
+    self._fluorescence = SpectraMaxM5FluorescenceBackend(self._driver)
+    self._luminescence = SpectraMaxM5LuminescenceBackend(self._driver)
 
-    # Bridge internal methods so test mocks on self.* intercept calls from _new.
-    self._real_send_command = self._new.send_command
-    self._real_read_now = self._new._read_now
-    self._real_wait_for_idle = self._new._wait_for_idle
-    self._real_transfer_data = self._new._transfer_data
-
-    async def _sc(*a, **kw):
-      return await self.send_command(*a, **kw)
-
-    async def _rn():
-      return await self._read_now()
-
-    async def _wfi(**kw):
-      return await self._wait_for_idle(**kw)
-
-    async def _td(*a, **kw):
-      return await self._transfer_data(*a, **kw)
-
-    self._new.send_command = _sc
-    self._new._read_now = _rn
-    self._new._wait_for_idle = _wfi
-    self._new._transfer_data = _td
-
-  def _make_new_backend(self, port: str):
-    return SpectraMaxM5Backend(port=port)
+  def _make_driver(self, port: str):
+    return MolecularDevicesDriver(port=port)
 
   # -- PlateReaderBackend / MachineBackend interface -----------------------
 
   async def setup(self) -> None:
-    await self._new.setup()
+    await self._driver.setup()
 
   async def stop(self) -> None:
-    await self._new.stop()
+    await self._driver.stop()
 
   async def open(self) -> None:
-    await self._new.open()
+    await self._driver.open()
 
   async def close(self, plate=None) -> None:
-    await self._new.close(plate=plate)
+    await self._driver.close()
 
   async def send_command(self, *args, **kwargs):
-    return await self._real_send_command(*args, **kwargs)
+    return await self._driver.send_command(*args, **kwargs)
 
   def serialize(self) -> dict:
-    return dict(self._new.serialize())
+    return dict(self._driver.serialize())
 
   # -- Bridged internals (must be explicit for class-level @patch) ---------
 
   async def _read_now(self):
-    return await self._real_read_now()
+    return await self._absorbance._read_now()
 
   async def _wait_for_idle(self, **kwargs):
-    return await self._real_wait_for_idle(**kwargs)
+    return await self._driver.wait_for_idle(**kwargs)
 
   async def _transfer_data(self, *args, **kwargs):
-    return await self._real_transfer_data(*args, **kwargs)
+    return await self._absorbance._transfer_data(*args, **kwargs)
 
   # -- Legacy read methods (delegate to _new, convert results) -------------
 
@@ -111,13 +98,9 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    from pylabrobot.molecular_devices.spectramax.backend import (
-      MolecularDevicesBackend as NewMDBackend,
-    )
-
     wl0 = wavelengths[0]
     wavelength = wl0[0] if isinstance(wl0, tuple) else wl0
-    params = NewMDBackend.AbsorbanceParams(
+    params = MolecularDevicesAbsorbanceBackend.AbsorbanceParams(
       wavelengths=wavelengths,
       read_type=read_type,
       read_order=read_order,
@@ -132,7 +115,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
       settling_time=settling_time,
       timeout=timeout,
     )
-    results = await self._new.read_absorbance(
+    results = await self._absorbance.read_absorbance(
       plate=plate,
       wells=[],
       wavelength=wavelength,
@@ -168,7 +151,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    params = SpectraMaxM5Backend.FluorescenceParams(
+    params = SpectraMaxM5FluorescenceBackend.FluorescenceParams(
       excitation_wavelengths=excitation_wavelengths,
       emission_wavelengths=emission_wavelengths,
       cutoff_filters=cutoff_filters,
@@ -186,7 +169,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
       settling_time=settling_time,
       timeout=timeout,
     )
-    results = await self._new.read_fluorescence(
+    results = await self._fluorescence.read_fluorescence(
       plate=plate,
       wells=[],
       excitation_wavelength=excitation_wavelengths[0],
@@ -223,7 +206,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    params = SpectraMaxM5Backend.LuminescenceParams(
+    params = SpectraMaxM5LuminescenceBackend.LuminescenceParams(
       emission_wavelengths=emission_wavelengths,
       read_type=read_type,
       read_order=read_order,
@@ -239,7 +222,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
       settling_time=settling_time,
       timeout=timeout,
     )
-    results = await self._new.read_luminescence(
+    results = await self._luminescence.read_luminescence(
       plate=plate,
       wells=[],
       focal_height=0,
@@ -267,7 +250,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    return await self._new.read_fluorescence_polarization(
+    return await self._fluorescence.read_fluorescence_polarization(
       plate=plate,
       excitation_wavelengths=excitation_wavelengths,
       emission_wavelengths=emission_wavelengths,
@@ -309,7 +292,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
-    return await self._new.read_time_resolved_fluorescence(
+    return await self._fluorescence.read_time_resolved_fluorescence(
       plate=plate,
       excitation_wavelengths=excitation_wavelengths,
       emission_wavelengths=emission_wavelengths,

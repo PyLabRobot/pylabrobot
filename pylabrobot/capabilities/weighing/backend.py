@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.capabilities.capability import CapabilityBackend
 
 
-class ScaleBackend(DeviceBackend, metaclass=ABCMeta):
+class ScaleBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for scales."""
 
   @abstractmethod

@@ -5,7 +5,7 @@ from typing import Dict, Literal, Optional
 
 from pylabrobot.capabilities.shaking import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 
 from .box import HamiltonHeaterShakerInterface
 
@@ -15,35 +15,46 @@ class PlateLockPosition(Enum):
   UNLOCKED = 0
 
 
-class HamiltonHeaterShakerBackend(TemperatureControllerBackend, ShakerBackend):
-  """Backend for Hamilton Heater Shaker devices."""
+class HamiltonHeaterShakerDriver(Driver):
+  """Driver for Hamilton Heater Shaker devices.
+
+  Owns the HamiltonHeaterShakerInterface I/O and setup/stop lifecycle.
+  Device-level operations (initialize lock, initialize shaker drive) live here.
+  """
 
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
+    super().__init__()
     assert index >= 0, "Shaker index must be non-negative"
     self.index = index
     self.interface = interface
 
-  @property
-  def supports_active_cooling(self) -> bool:
-    return False
-
   async def setup(self):
-    await DeviceBackend.setup(self)
-    await self._initialize_lock()
-    await self._initialize_shaker_drive()
+    pass
 
   async def stop(self):
-    await DeviceBackend.stop(self)
+    pass
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")
     return {
-      **DeviceBackend.serialize(self),
+      **super().serialize(),
       "index": self.index,
       "interface": None,
     }
 
-  # -- shaking --
+  async def send_command(self, command: str, **kwargs) -> str:
+    """Send a command to the heater shaker via the interface."""
+    return await self.interface.send_hhs_command(index=self.index, command=command, **kwargs)
+
+
+class HamiltonHeaterShakerShakerBackend(ShakerBackend):
+  """Translates ShakerBackend interface into Hamilton Heater Shaker driver commands."""
+
+  def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
+    self._driver = driver
+
+  async def _on_setup(self):
+    await self._driver.send_command("SI")
 
   async def start_shaking(
     self,
@@ -72,11 +83,11 @@ class HamiltonHeaterShakerBackend(TemperatureControllerBackend, ShakerBackend):
     await self._wait_for_stop()
 
   async def get_is_shaking(self) -> bool:
-    response = await self.interface.send_hhs_command(index=self.index, command="RD")
+    response = await self._driver.send_command("RD")
     return response.endswith("1")
 
   async def _move_plate_lock(self, position: PlateLockPosition):
-    return await self.interface.send_hhs_command(index=self.index, command="LP", lp=position.value)
+    return await self._driver.send_command("LP", lp=position.value)
 
   @property
   def supports_locking(self) -> bool:
@@ -88,34 +99,39 @@ class HamiltonHeaterShakerBackend(TemperatureControllerBackend, ShakerBackend):
   async def unlock_plate(self):
     await self._move_plate_lock(PlateLockPosition.UNLOCKED)
 
-  async def _initialize_lock(self):
-    return await self.interface.send_hhs_command(index=self.index, command="LI")
-
-  async def _initialize_shaker_drive(self):
-    return await self.interface.send_hhs_command(index=self.index, command="SI")
-
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     speed_str = str(speed).zfill(4)
     acceleration_str = str(acceleration).zfill(5)
-    return await self.interface.send_hhs_command(
-      index=self.index, command="SB", st=direction, sv=speed_str, sr=acceleration_str
-    )
+    return await self._driver.send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
 
   async def _stop_shaking(self):
-    return await self.interface.send_hhs_command(index=self.index, command="SC")
+    return await self._driver.send_command("SC")
 
   async def _wait_for_stop(self):
-    return await self.interface.send_hhs_command(index=self.index, command="SW")
+    return await self._driver.send_command("SW")
 
-  # -- temperature --
+
+class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
+  """Translates TemperatureControllerBackend interface into Hamilton Heater Shaker driver
+  commands."""
+
+  def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
+    self._driver = driver
+
+  async def _on_setup(self):
+    await self._driver.send_command("LI")
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
 
   async def set_temperature(self, temperature: float):
     assert 0 < temperature <= 105
     temp_str = f"{round(10 * temperature):04d}"
-    return await self.interface.send_hhs_command(index=self.index, command="TA", ta=temp_str)
+    return await self._driver.send_command("TA", ta=temp_str)
 
   async def _get_current_temperature(self) -> Dict[str, float]:
-    response = await self.interface.send_hhs_command(index=self.index, command="RT")
+    response = await self._driver.send_command("RT")
     response = response.split("rt")[1]
     middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
     edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
@@ -130,4 +146,4 @@ class HamiltonHeaterShakerBackend(TemperatureControllerBackend, ShakerBackend):
     return response["edge"]
 
   async def deactivate(self):
-    return await self.interface.send_hhs_command(index=self.index, command="TO")
+    return await self._driver.send_command("TO")

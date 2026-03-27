@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
   MicroscopyCapability,
@@ -747,7 +748,7 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     raise TimeoutError("max_image_read_attempts reached")
 
   @dataclass
-  class CaptureParams(SerializableMixin):
+  class CaptureParams(BackendParams):
     led_intensity: int = 10
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1)
     center_position: Optional[Tuple[float, float]] = None
@@ -877,8 +878,8 @@ class Cytation5(Resource, Device):
       size_z=size_z,
       model="Agilent BioTek Cytation 5",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: CytationBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: CytationBackend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self.luminescence = LuminescenceCapability(backend=backend)
     self.fluorescence = FluorescenceCapability(backend=backend)
@@ -899,10 +900,10 @@ class Cytation5(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self._backend.open(slow=slow)
+    await self._driver.open(slow=slow)
 
   async def close(self, slow: bool = False) -> None:
-    await self._backend.close(slow=slow)
+    await self._driver.close(slow=slow)
 
 
 class Cytation1(Resource, Device):
@@ -925,8 +926,8 @@ class Cytation1(Resource, Device):
       size_z=size_z,
       model="Agilent BioTek Cytation 1",
     )
-    Device.__init__(self, backend=backend)
-    self._backend: BioTekBackend = backend
+    Device.__init__(self, driver=backend)
+    self._driver: BioTekBackend = backend
     self.absorbance = AbsorbanceCapability(backend=backend)
     self.luminescence = LuminescenceCapability(backend=backend)
     self.fluorescence = FluorescenceCapability(backend=backend)
@@ -946,10 +947,10 @@ class Cytation1(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self._backend.open(slow=slow)
+    await self._driver.open(slow=slow)
 
   async def close(self, slow: bool = False) -> None:
-    await self._backend.close(slow=slow)
+    await self._driver.close(slow=slow)
 
 
 # Deprecated aliases

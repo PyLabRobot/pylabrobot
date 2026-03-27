@@ -6,9 +6,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance.backend import AbsorbanceBackend
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
@@ -64,6 +66,11 @@ COMMAND_TERMINATORS: Dict[str, int] = {
   "!COUNTTIME": 1,
   "!COUNTTIMEDELAY": 1,
 }
+
+
+# ---------------------------------------------------------------------------
+# Errors
+# ---------------------------------------------------------------------------
 
 
 class MolecularDevicesError(Exception):
@@ -143,6 +150,11 @@ ERROR_CODES: Dict[int, Tuple[str, type]] = {
 
 
 MolecularDevicesResponse = List[str]
+
+
+# ---------------------------------------------------------------------------
+# Enums & settings dataclasses
+# ---------------------------------------------------------------------------
 
 
 class ReadMode(Enum):
@@ -249,12 +261,16 @@ class MolecularDevicesSettings:
   settling_time: int = 0
 
 
-class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
-  """Backend for Molecular Devices plate readers. Supports absorbance reading.
+# ---------------------------------------------------------------------------
+# Driver — serial I/O and device-level operations
+# ---------------------------------------------------------------------------
 
-  Contains all serial protocol code, enums, dataclasses, and exceptions shared
-  across Molecular Devices SpectraMax instruments. Subclasses add fluorescence,
-  luminescence, and other capabilities.
+
+class MolecularDevicesDriver(Driver):
+  """Serial driver for Molecular Devices plate readers.
+
+  Owns the serial connection, command protocol, and device-level operations
+  (open/close tray, status, error log, shake).
   """
 
   def __init__(
@@ -311,7 +327,6 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     if not response:
       raise MolecularDevicesError(f"Command '{command}' failed with empty response.")
 
-    # Check for FAIL in the response
     error_code_msg = response[0] if "FAIL" in response[0] else response[-1]
     if "FAIL" in error_code_msg:
       parts = error_code_msg.split("\t")
@@ -334,71 +349,77 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     if "warning" in response[0].lower():
       logger.warning("Warning for command '%s': %s", command, response)
 
+  # -- device-level operations --
+
   async def open(self) -> None:
+    """Open the plate tray."""
     await self.send_command("!OPEN")
 
-  async def close(self, plate: Optional[Plate] = None) -> None:
+  async def close(self) -> None:
+    """Close the plate tray."""
     await self.send_command("!CLOSE")
 
   async def get_status(self) -> List[str]:
+    """Get the current device status."""
     res = await self.send_command("!STATUS")
     if len(res) > 1:
       return res[1].split()
     raise ValueError(f"Could not parse status from response: {res}")
 
   async def read_error_log(self) -> List[str]:
+    """Read the device error log."""
     res = await self.send_command("!ERROR")
     if len(res) > 1:
       return res[1].split()
     raise ValueError(f"Could not parse error log from response: {res}")
 
   async def clear_error_log(self) -> None:
+    """Clear the device error log."""
     await self.send_command("!CLEAR ERROR")
 
-  async def get_temperature(self) -> Tuple[float, float]:
-    res = await self.send_command("!TEMP")
-    if len(res) > 1:
-      parts = res[1].split()
-    else:
-      parts = res[0].replace("OK", "").split()
-
-    if len(parts) >= 2:
-      return (float(parts[1]), float(parts[0]))  # current, set_point
-    raise ValueError(f"Could not parse temperature from response: {res}")
-
-  @property
-  def supports_active_cooling(self) -> bool:
-    return False
-
-  async def get_current_temperature(self) -> float:
-    current, _ = await self.get_temperature()
-    return current
-
-  async def set_temperature(self, temperature: float) -> None:
-    if not (0 <= temperature <= 45):
-      raise ValueError("Temperature must be between 0 and 45°C.")
-    await self.send_command(f"!TEMP {temperature}")
-
-  async def deactivate(self) -> None:
-    await self.send_command("!TEMP 0")
-
   async def get_firmware_version(self) -> List[str]:
+    """Get the firmware version."""
     res = await self.send_command("!OPTION")
     return res[1].split()
 
   async def start_shake(self) -> None:
+    """Start shaking."""
     await self.send_command("!SHAKE NOW")
 
   async def stop_shake(self) -> None:
+    """Stop shaking."""
     await self.send_command("!SHAKE STOP")
 
+  async def wait_for_idle(self, timeout: int = 600):
+    """Wait for the plate reader to become idle."""
+    start_time = time.time()
+    while True:
+      if time.time() - start_time > timeout:
+        raise TimeoutError("Timeout waiting for plate reader to become idle.")
+      status = await self.get_status()
+      if status and status[1] == "IDLE":
+        break
+      await asyncio.sleep(1)
+
+
+# ---------------------------------------------------------------------------
+# Shared protocol helpers — used by all capability backends
+# ---------------------------------------------------------------------------
+
+
+class _MolecularDevicesProtocol:
+  """Mixin with shared _set_* command builders for Molecular Devices readers.
+
+  Subclasses must have ``self._driver: MolecularDevicesDriver``.
+  """
+
+  _driver: MolecularDevicesDriver
+
   async def _read_now(self) -> None:
-    await self.send_command("!READ")
+    await self._driver.send_command("!READ")
 
   async def _transfer_data(self, settings: MolecularDevicesSettings) -> List[Dict]:
-    """Transfer data from the plate reader. For kinetic/spectrum reads, this will transfer data
-    for each reading and combine them into a single collection.
-    """
+    """Transfer data from the plate reader."""
 
     if (settings.read_type == ReadType.KINETIC and settings.kinetic_settings) or (
       settings.read_type == ReadType.SPECTRUM and settings.spectrum_settings
@@ -412,14 +433,13 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
 
       all_reads = []
       for _ in range(num_readings):
-        res = await self.send_command("!TRANSFER")
+        res = await self._driver.send_command("!TRANSFER")
         data_str = res[1]
         read_data = self._parse_data(data_str, settings)
         all_reads.extend(read_data)
       return all_reads
 
-    # For ENDPOINT
-    res = await self.send_command("!TRANSFER")
+    res = await self._driver.send_command("!TRANSFER")
     data_str = res[1]
     return self._parse_data(data_str, settings)
 
@@ -427,29 +447,23 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     lines = re.split(r"\r\n|\n", data_str.strip())
     lines = [line.strip() for line in lines if line.strip()]
 
-    # 1. Parse header
     header_parts = lines[0].split("\t")
     measurement_time = float(header_parts[0])
     temperature = float(header_parts[1])
 
-    # 2. Parse wavelengths
     line_idx = 1
     while line_idx < len(lines):
       line = lines[line_idx]
       if line.startswith("L:") and line_idx > 1:
-        # Data section started
         break
       line_idx += 1
 
     data_collection = []
     cur_read_wavelengths = []
-    # 3. Parse data
     data_columns: List[List[float]] = []
-    # The data section starts at line_idx
     for i in range(line_idx, len(lines)):
       line = lines[i]
       if line.startswith("L:"):
-        # start of a new data with different wavelength
         cur_read_wavelengths.append(line.split("\t")[1:])
         if i > line_idx and data_columns:
           data_collection.append(data_columns)
@@ -469,7 +483,6 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     if data_columns:
       data_collection.append(data_columns)
 
-    # 4. Transpose data to be row-major
     data_collection_transposed = []
     for data_columns in data_collection:
       data_rows = []
@@ -505,7 +518,7 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     return measurements
 
   async def _set_clear(self) -> None:
-    await self.send_command("!CLEAR DATA")
+    await self._driver.send_command("!CLEAR DATA")
 
   async def _set_mode(self, settings: MolecularDevicesSettings) -> None:
     cmd = f"!MODE {settings.read_type.value}"
@@ -517,7 +530,7 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
       cmd = "!MODE"
       scan_type = ss.excitation_emission_type or "SPECTRUM"
       cmd += f" {scan_type} {ss.start_wavelength} {ss.step} {ss.num_steps}"
-    await self.send_command(cmd)
+    await self._driver.send_command(cmd)
 
   async def _set_wavelengths(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
@@ -527,15 +540,15 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
       wl_str = " ".join(wl_parts)
       if settings.path_check:
         wl_str += " 900 998"
-      await self.send_command(f"!WAVELENGTH {wl_str}")
+      await self._driver.send_command(f"!WAVELENGTH {wl_str}")
     elif settings.read_mode in (ReadMode.FLU, ReadMode.POLAR, ReadMode.TIME):
       ex_wl_str = " ".join(map(str, settings.excitation_wavelengths))
       em_wl_str = " ".join(map(str, settings.emission_wavelengths))
-      await self.send_command(f"!EXWAVELENGTH {ex_wl_str}")
-      await self.send_command(f"!EMWAVELENGTH {em_wl_str}")
+      await self._driver.send_command(f"!EXWAVELENGTH {ex_wl_str}")
+      await self._driver.send_command(f"!EMWAVELENGTH {em_wl_str}")
     elif settings.read_mode == ReadMode.LUM:
       wl_str = " ".join(map(str, settings.emission_wavelengths))
-      await self.send_command(f"!EMWAVELENGTH {wl_str}")
+      await self._driver.send_command(f"!EMWAVELENGTH {wl_str}")
     else:
       raise NotImplementedError(f"{settings.read_mode} not supported")
 
@@ -558,15 +571,15 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
 
     x_pos_cmd = f"!XPOS {top_left_well_center.x:.3f} {dx:.3f} {num_cols}"
     y_pos_cmd = f"!YPOS {size_y - top_left_well_center.y:.3f} {dy:.3f} {num_rows}"
-    await self.send_command(x_pos_cmd)
-    await self.send_command(y_pos_cmd)
+    await self._driver.send_command(x_pos_cmd)
+    await self._driver.send_command(y_pos_cmd)
 
   async def _set_strip(self, settings: MolecularDevicesSettings) -> None:
-    await self.send_command(f"!STRIP 1 {settings.plate.num_items_x}")
+    await self._driver.send_command(f"!STRIP 1 {settings.plate.num_items_x}")
 
   async def _set_shake(self, settings: MolecularDevicesSettings) -> None:
     if not settings.shake_settings:
-      await self.send_command("!SHAKE OFF")
+      await self._driver.send_command("!SHAKE OFF")
       return
     ss = settings.shake_settings
     shake_mode = "ON" if ss.before_read or ss.between_reads else "OFF"
@@ -578,31 +591,33 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     else:
       between_duration = 0
       wait_duration = 0
-    await self.send_command(f"!SHAKE {shake_mode}")
-    await self.send_command(f"!SHAKE {before_duration} {ki} {wait_duration} {between_duration} 0")
+    await self._driver.send_command(f"!SHAKE {shake_mode}")
+    await self._driver.send_command(
+      f"!SHAKE {before_duration} {ki} {wait_duration} {between_duration} 0"
+    )
 
   async def _set_carriage_speed(self, settings: MolecularDevicesSettings) -> None:
-    await self.send_command(f"!CSPEED {settings.carriage_speed.value}")
+    await self._driver.send_command(f"!CSPEED {settings.carriage_speed.value}")
 
   async def _set_read_stage(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
       stage = "BOT" if settings.read_from_bottom else "TOP"
-      await self.send_command(f"!READSTAGE {stage}")
+      await self._driver.send_command(f"!READSTAGE {stage}")
 
   async def _set_flashes_per_well(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
-      await self.send_command(f"!FPW {settings.flashes_per_well}")
+      await self._driver.send_command(f"!FPW {settings.flashes_per_well}")
 
   async def _set_pmt(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode not in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
       return
     gain = settings.pmt_gain
     if gain == PmtGain.AUTO:
-      await self.send_command("!AUTOPMT ON")
+      await self._driver.send_command("!AUTOPMT ON")
     else:
       gain_val = gain.value if isinstance(gain, PmtGain) else gain
-      await self.send_command("!AUTOPMT OFF")
-      await self.send_command(f"!PMT {gain_val}")
+      await self._driver.send_command("!AUTOPMT OFF")
+      await self._driver.send_command(f"!PMT {gain_val}")
 
   async def _set_filter(self, settings: MolecularDevicesSettings) -> None:
     if (
@@ -610,24 +625,24 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
       and settings.cutoff_filters
     ):
       cf_str = " ".join(map(str, settings.cutoff_filters))
-      await self.send_command("!AUTOFILTER OFF")
-      await self.send_command(f"!EMFILTER {cf_str}")
+      await self._driver.send_command("!AUTOFILTER OFF")
+      await self._driver.send_command(f"!EMFILTER {cf_str}")
     else:
-      await self.send_command("!AUTOFILTER ON")
+      await self._driver.send_command("!AUTOFILTER ON")
 
   async def _set_calibrate(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
-      await self.send_command(f"!CALIBRATE {settings.calibrate.value}")
+      await self._driver.send_command(f"!CALIBRATE {settings.calibrate.value}")
     else:
-      await self.send_command(f"!PMTCAL {settings.calibrate.value}")
+      await self._driver.send_command(f"!PMTCAL {settings.calibrate.value}")
 
   async def _set_order(self, settings: MolecularDevicesSettings) -> None:
-    await self.send_command(f"!ORDER {settings.read_order.value}")
+    await self._driver.send_command(f"!ORDER {settings.read_order.value}")
 
   async def _set_speed(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
       mode = "ON" if settings.speed_read else "OFF"
-      await self.send_command(f"!SPEED {mode}")
+      await self._driver.send_command(f"!SPEED {mode}")
 
   async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.POLAR:
@@ -636,13 +651,13 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     else:
       command = "CARCOL"
       value = settings.settling_time if settings.settling_time > 100 else 100
-    await self.send_command(f"!NVRAM {command} {value}")
+    await self._driver.send_command(f"!NVRAM {command} {value}")
 
   async def _set_tag(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.POLAR and settings.read_type == ReadType.KINETIC:
-      await self.send_command("!TAG ON")
+      await self._driver.send_command("!TAG ON")
     else:
-      await self.send_command("!TAG OFF")
+      await self._driver.send_command("!TAG OFF")
 
   async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
     """Set the READTYPE command and the expected number of response fields."""
@@ -666,14 +681,14 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     else:
       raise ValueError(f"Unsupported read mode: {settings.read_mode}")
 
-    await self.send_command(cmd, num_res_fields=num_res_fields)
+    await self._driver.send_command(cmd, num_res_fields=num_res_fields)
 
   async def _set_integration_time(
     self, settings: MolecularDevicesSettings, delay_time: int, integration_time: int
   ) -> None:
     if settings.read_mode == ReadMode.TIME:
-      await self.send_command(f"!COUNTTIMEDELAY {delay_time}")
-      await self.send_command(f"!COUNTTIME {integration_time * 0.001}")
+      await self._driver.send_command(f"!COUNTTIMEDELAY {delay_time}")
+      await self._driver.send_command(f"!COUNTTIME {integration_time * 0.001}")
 
   def _get_cutoff_filter_index_from_wavelength(self, wavelength: int) -> int:
     """Converts a wavelength to a cutoff filter index."""
@@ -700,19 +715,20 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
         return cutoff_filter_index
     raise ValueError(f"No cutoff filter found for wavelength {wavelength}")
 
-  async def _wait_for_idle(self, timeout: int = 600):
-    """Wait for the plate reader to become idle."""
-    start_time = time.time()
-    while True:
-      if time.time() - start_time > timeout:
-        raise TimeoutError("Timeout waiting for plate reader to become idle.")
-      status = await self.get_status()
-      if status and status[1] == "IDLE":
-        break
-      await asyncio.sleep(1)
+
+# ---------------------------------------------------------------------------
+# Capability backends
+# ---------------------------------------------------------------------------
+
+
+class MolecularDevicesAbsorbanceBackend(_MolecularDevicesProtocol, AbsorbanceBackend):
+  """Translates AbsorbanceBackend interface into Molecular Devices commands."""
+
+  def __init__(self, driver: MolecularDevicesDriver) -> None:
+    self._driver = driver
 
   @dataclass
-  class AbsorbanceParams(SerializableMixin):
+  class AbsorbanceParams(BackendParams):
     wavelengths: Optional[List[Union[int, Tuple[int, bool]]]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN
@@ -735,7 +751,7 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     if not isinstance(backend_params, self.AbsorbanceParams):
-      backend_params = MolecularDevicesBackend.AbsorbanceParams()
+      backend_params = MolecularDevicesAbsorbanceBackend.AbsorbanceParams()
 
     wavelengths = (
       backend_params.wavelengths if backend_params.wavelengths is not None else [wavelength]
@@ -773,7 +789,7 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._wait_for_idle(timeout=backend_params.timeout)
+    await self._driver.wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       AbsorbanceResult(
@@ -784,3 +800,38 @@ class MolecularDevicesBackend(AbsorbanceBackend, TemperatureControllerBackend):
       )
       for d in dicts
     ]
+
+
+class MolecularDevicesTemperatureBackend(TemperatureControllerBackend):
+  """Translates TemperatureControllerBackend interface into Molecular Devices commands."""
+
+  def __init__(self, driver: MolecularDevicesDriver) -> None:
+    self._driver = driver
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
+  async def get_temperature(self) -> Tuple[float, float]:
+    """Get (current_temp, set_point) from the device."""
+    res = await self._driver.send_command("!TEMP")
+    if len(res) > 1:
+      parts = res[1].split()
+    else:
+      parts = res[0].replace("OK", "").split()
+
+    if len(parts) >= 2:
+      return (float(parts[1]), float(parts[0]))
+    raise ValueError(f"Could not parse temperature from response: {res}")
+
+  async def get_current_temperature(self) -> float:
+    current, _ = await self.get_temperature()
+    return current
+
+  async def set_temperature(self, temperature: float) -> None:
+    if not (0 <= temperature <= 45):
+      raise ValueError("Temperature must be between 0 and 45°C.")
+    await self._driver.send_command(f"!TEMP {temperature}")
+
+  async def deactivate(self) -> None:
+    await self._driver.send_command("!TEMP 0")

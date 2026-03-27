@@ -24,12 +24,6 @@ except ImportError:
 class MicroscopyChatterboxBackend(MicroscopyBackend):
   """Mock microscopy backend for testing."""
 
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
-
   async def capture(
     self,
     row: int,

@@ -4,7 +4,7 @@ from pylabrobot.capabilities.microscopy import ImagingMode, MicroscopyCapability
 from pylabrobot.device import Device
 from pylabrobot.resources import Resource, Rotation
 
-from .backend import PicoBackend
+from .backend import PicoDriver, PicoMicroscopyBackend
 
 
 class Pico(Resource, Device):
@@ -37,12 +37,10 @@ class Pico(Resource, Device):
     category: Optional[str] = "microscope",
     model: Optional[str] = "ImageXpress Pico",
   ):
-    backend = PicoBackend(
+    driver = PicoDriver(
       host=host,
       port=port,
       lock_timeout=lock_timeout,
-      objectives=objectives,
-      filter_cubes=filter_cubes,
     )
     Resource.__init__(
       self,
@@ -54,8 +52,14 @@ class Pico(Resource, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: PicoBackend = backend
+    Device.__init__(self, driver=driver)
+    self._driver: PicoDriver = driver
 
-    self.microscopy = MicroscopyCapability(backend=backend)
+    self.microscopy = MicroscopyCapability(
+      backend=PicoMicroscopyBackend(
+        driver=driver,
+        objectives=objectives,
+        filter_cubes=filter_cubes,
+      )
+    )
     self._capabilities = [self.microscopy]

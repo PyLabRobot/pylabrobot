@@ -82,7 +82,7 @@ class InhecoThermoShake(ResourceHolder, Device):
     size_x: float,
     size_y: float,
     size_z: float,
-    backend: InhecoThermoshakeBackend,
+    driver: InhecoThermoshakeBackend,
     child_location: Coordinate,
     category: str = "heating_shaking",
     model: Optional[str] = None,
@@ -97,10 +97,10 @@ class InhecoThermoShake(ResourceHolder, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: InhecoThermoshakeBackend = backend
-    self.tc = TemperatureControlCapability(backend=backend)
-    self.shaker = ShakingCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver: InhecoThermoshakeBackend = driver
+    self.tc = TemperatureControlCapability(backend=driver)
+    self.shaker = ShakingCapability(backend=driver)
     self._capabilities = [self.tc, self.shaker]
 
   def serialize(self) -> dict:
@@ -124,7 +124,7 @@ def inheco_thermoshake_ac(
 
   return InhecoThermoShake(
     name=name,
-    backend=InhecoThermoshakeBackend(control_box=control_box, index=index),
+    driver=InhecoThermoshakeBackend(control_box=control_box, index=index),
     size_x=147,  # from spec
     size_y=104,  # from spec
     size_z=115.9,  # from spec
@@ -143,7 +143,7 @@ def inheco_thermoshake(
 
   return InhecoThermoShake(
     name=name,
-    backend=InhecoThermoshakeBackend(control_box=control_box, index=index),
+    driver=InhecoThermoshakeBackend(control_box=control_box, index=index),
     size_x=147,  # from spec
     size_y=104,  # from spec
     size_z=118,  # from spec
@@ -165,7 +165,7 @@ def inheco_thermoshake_rm(
 
   return InhecoThermoShake(
     name=name,
-    backend=InhecoThermoshakeBackend(control_box=control_box, index=index),
+    driver=InhecoThermoshakeBackend(control_box=control_box, index=index),
     size_x=147,  # from spec
     size_y=104,  # from spec
     size_z=116,  # from spec

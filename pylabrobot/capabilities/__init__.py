@@ -1,1 +1,1 @@
-from .capability import Capability, need_capability_ready
+from .capability import Capability, CapabilityBackend, need_capability_ready

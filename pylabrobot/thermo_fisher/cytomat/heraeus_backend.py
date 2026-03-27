@@ -16,7 +16,7 @@ from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetriev
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.device import DeviceBackend
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
@@ -29,6 +29,7 @@ class HeraeusCytomatBackend(
   TemperatureControllerBackend,
   HumidityControllerBackend,
   ShakerBackend,
+  Driver,
 ):
   """
   Backend for legacy (Heraeus) Cytomats.
@@ -66,7 +67,7 @@ class HeraeusCytomatBackend(
     )
 
   async def setup(self):
-    await DeviceBackend.setup(self)
+    await Driver.setup(self)
     try:
       await self.io.setup()
     except serial.SerialException as e:
@@ -106,7 +107,7 @@ class HeraeusCytomatBackend(
 
   async def stop(self):
     await self.io.stop()
-    await DeviceBackend.stop(self)
+    await Driver.stop(self)
 
   async def set_racks(self, racks: List[PlateCarrier]):
     self._racks = racks
@@ -234,7 +235,7 @@ class HeraeusCytomatBackend(
 
   def serialize(self) -> dict:
     return {
-      **DeviceBackend.serialize(self),
+      **Driver.serialize(self),
       "port": self.io.port,
     }
 

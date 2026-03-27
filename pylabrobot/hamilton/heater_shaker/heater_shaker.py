@@ -6,7 +6,12 @@ from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
 
-from .backend import HamiltonHeaterShakerBackend
+from .backend import (
+  HamiltonHeaterShakerDriver,
+  HamiltonHeaterShakerShakerBackend,
+  HamiltonHeaterShakerTemperatureBackend,
+)
+from .box import HamiltonHeaterShakerInterface
 
 
 class HamiltonHeaterShaker(PlateHolder, Device):
@@ -15,7 +20,8 @@ class HamiltonHeaterShaker(PlateHolder, Device):
   def __init__(
     self,
     name: str,
-    backend: HamiltonHeaterShakerBackend,
+    index: int,
+    interface: HamiltonHeaterShakerInterface,
     size_x: float = 146.2,
     size_y: float = 103.6,
     size_z: float = 74.11,
@@ -25,6 +31,7 @@ class HamiltonHeaterShaker(PlateHolder, Device):
     model: Optional[str] = None,
   ):
     raise NotImplementedError("HamiltonHeaterShaker resource definition is not verified.")
+    driver = HamiltonHeaterShakerDriver(index=index, interface=interface)
     PlateHolder.__init__(
       self,
       name=name,
@@ -36,10 +43,10 @@ class HamiltonHeaterShaker(PlateHolder, Device):
       category=category,
       model=model,
     )
-    Device.__init__(self, backend=backend)
-    self._backend: HamiltonHeaterShakerBackend = backend
-    self.tc = TemperatureControlCapability(backend=backend)
-    self.shaker = ShakingCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver: HamiltonHeaterShakerDriver = driver
+    self.tc = TemperatureControlCapability(backend=HamiltonHeaterShakerTemperatureBackend(driver))
+    self.shaker = ShakingCapability(backend=HamiltonHeaterShakerShakerBackend(driver))
     self._capabilities = [self.tc, self.shaker]
 
   def serialize(self) -> dict:

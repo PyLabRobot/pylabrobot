@@ -1,5 +1,7 @@
 from .temperature_module import (
-  OpentronsTemperatureModuleBackend,
-  OpentronsTemperatureModuleUSBBackend,
+  OpentronsTemperatureModuleDriver,
+  OpentronsTemperatureModuleTemperatureBackend,
+  OpentronsTemperatureModuleUSBDriver,
+  OpentronsTemperatureModuleUSBTemperatureBackend,
   OpentronsTemperatureModuleV2,
 )

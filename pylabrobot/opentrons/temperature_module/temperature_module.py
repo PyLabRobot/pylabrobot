@@ -4,11 +4,18 @@ from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
   TemperatureControllerBackend,
 )
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources import Coordinate, ItemizedResource, ResourceHolder
 from pylabrobot.resources.opentrons.module import OTModule
 
-from .backend import OpentronsTemperatureModuleBackend, OpentronsTemperatureModuleUSBBackend
+from .http_driver import (
+  OpentronsTemperatureModuleDriver,
+  OpentronsTemperatureModuleTemperatureBackend,
+)
+from .usb_driver import (
+  OpentronsTemperatureModuleUSBDriver,
+  OpentronsTemperatureModuleUSBTemperatureBackend,
+)
 
 
 class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
@@ -50,12 +57,15 @@ class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
     if opentrons_id is not None and serial_port is not None:
       raise ValueError("Exactly one of `opentrons_id` or `serial_port` must be provided.")
 
-    backend: TemperatureControllerBackend
+    driver: Driver
+    tc_backend: TemperatureControllerBackend
     if serial_port is not None:
-      backend = OpentronsTemperatureModuleUSBBackend(port=serial_port)
+      driver = OpentronsTemperatureModuleUSBDriver(port=serial_port)
+      tc_backend = OpentronsTemperatureModuleUSBTemperatureBackend(driver=driver)
     else:
       assert opentrons_id is not None
-      backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
+      driver = OpentronsTemperatureModuleDriver(opentrons_id=opentrons_id)
+      tc_backend = OpentronsTemperatureModuleTemperatureBackend(driver=driver)
 
     ResourceHolder.__init__(
       self,
@@ -67,9 +77,9 @@ class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
       category="temperature_controller",
       model="temperatureModuleV2",
     )
-    Device.__init__(self, backend=backend)
-    self._backend = backend
-    self.tc = TemperatureControlCapability(backend=backend)
+    Device.__init__(self, driver=driver)
+    self._driver = driver
+    self.tc = TemperatureControlCapability(backend=tc_backend)
     self._capabilities = [self.tc]
 
     if child is not None:

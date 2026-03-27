@@ -5,7 +5,7 @@ import sys
 from abc import ABC
 from typing import Any, Awaitable, Callable, TypeVar
 
-from pylabrobot.device import DeviceBackend
+from pylabrobot.serializer import SerializableMixin
 
 if sys.version_info < (3, 10):
   from typing_extensions import ParamSpec
@@ -14,6 +14,16 @@ else:
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R", bound=Awaitable[Any])
+
+
+class CapabilityBackend(ABC):
+  """Base class for capability-specific backends."""
+
+  async def _on_setup(self):
+    """Called when the parent capability is set up."""
+
+  async def _on_stop(self):
+    """Called when the parent capability is stopped."""
 
 
 def need_capability_ready(func: Callable[_P, _R]) -> Callable[_P, _R]:
@@ -37,15 +47,36 @@ def need_capability_ready(func: Callable[_P, _R]) -> Callable[_P, _R]:
   return wrapper
 
 
+class _BackendParamsMeta(type):
+  """Metaclass that makes isinstance checks survive notebook autoreload.
+
+  After autoreload, class objects are recreated so old instances fail normal
+  isinstance checks. This falls back to comparing the qualified class name
+  and module, which stay stable across reloads.
+  """
+
+  def __instancecheck__(cls, instance):
+    if super().__instancecheck__(instance):
+      return True
+    return (
+      type(instance).__qualname__ == cls.__qualname__
+      and type(instance).__module__ == cls.__module__
+    )
+
+
+class BackendParams(SerializableMixin, metaclass=_BackendParamsMeta):
+  """Base class for backend-specific parameter dataclasses."""
+
+
 class Capability(ABC):
   """Base class for device capabilities.
 
-  Capabilities are owned by a Device and share its backend. They are not Resources
+  Capabilities are owned by a Device and share its driver. They are not Resources
   and do not appear in the resource tree. The parent Device is responsible for calling
   `_on_setup()` and `_on_stop()` during its own setup/stop lifecycle.
   """
 
-  def __init__(self, backend: DeviceBackend):
+  def __init__(self, backend: CapabilityBackend):
     self.backend = backend
     self._setup_finished = False
 
@@ -54,9 +85,11 @@ class Capability(ABC):
     return self._setup_finished
 
   async def _on_setup(self):
-    """Called by the parent Device after backend.setup() completes."""
+    """Called by the parent Device after driver.setup() completes."""
+    await self.backend._on_setup()
     self._setup_finished = True
 
   async def _on_stop(self):
-    """Called by the parent Device before backend.stop()."""
+    """Called by the parent Device before driver.stop()."""
+    await self.backend._on_stop()
     self._setup_finished = False
