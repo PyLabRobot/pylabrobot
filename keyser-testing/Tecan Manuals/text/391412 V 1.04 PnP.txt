@@ -1,0 +1,1621 @@
+--- PAGE 1 ---
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 1 of 26 
+ 
+ 
+ 
+ 
+ 
+ 
+Command Set 
+ 
+ 
+ 
+Pick & Place Arm 
+ 
+ 
+ 
+ 
+P & P 
+ 
+ 
+ 
+Corresponds to Firmware Version: 
+ 
+ 
+ 
+ 
+ 
+V1.04 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Doc. No: 391412 
+V1.04 
+3 October, 2000 
+ 
+
+
+--- PAGE 2 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 2 of 26 
+ 
+Contents: 
+1 
+REVISION HISTORY ............................................................................................................................................. 4 
+2 
+INTRODUCTION ..................................................................................................................................................... 5 
+3 
+DEFINITION OF TERMS ....................................................................................................................................... 5 
+4 
+COMMANDS ............................................................................................................................................................ 5 
+4.1 POSITIONING, MOVE AND ACTION COMMANDS: ...................................................................................... 5 
+4.1.1 
+PIF ................................................................................................................................................................. 5 
+4.1.2 
+PIA ................................................................................................................................................................. 5 
+4.1.3 
+PIX InitSpeed* ............................................................................................................................................... 5 
+4.1.4 
+PIY InitSpeed* ............................................................................................................................................... 6 
+4.1.5 
+PIZ InitSpeed* ............................................................................................................................................... 6 
+4.1.6 
+PIR ................................................................................................................................................................. 6 
+4.1.7 
+PAX X* ........................................................................................................................................................... 6 
+4.1.8 
+PAY Y* ........................................................................................................................................................... 7 
+4.1.9 
+PAZ Z* ........................................................................................................................................................... 7 
+4.1.10 
+PAR R* ...................................................................................................................................................... 7 
+4.1.11 
+PAG G* ..................................................................................................................................................... 7 
+4.1.12 
+PRX +/- X* ................................................................................................................................................ 8 
+4.1.13 
+PRY +/- Y* ................................................................................................................................................. 8 
+4.1.14 
+PRZ +/- Z* ................................................................................................................................................. 8 
+4.1.15 
+PRR +/- R* ................................................................................................................................................ 8 
+4.1.16 
+PRG +/- G* ............................................................................................................................................... 8 
+4.1.17 
+MAX X*, SlowSpeed* ................................................................................................................................ 9 
+4.1.18 
+MAY Y*, SlowSpeed* ................................................................................................................................ 9 
+4.1.19 
+MAZ Z*, SlowSpeed* ................................................................................................................................ 9 
+4.1.20 
+MAR R*, SlowSpeed* .............................................................................................................................. 10 
+4.1.21 
+MAG G*, SlowSpeed* ............................................................................................................................. 10 
+4.1.22 
+MRX +/- X*, SlowSpeed* ........................................................................................................................ 10 
+4.1.23 
+MRY +/- Y*, SlowSpeed* ........................................................................................................................ 10 
+4.1.24 
+MRZ +/- Z*, SlowSpeed* ........................................................................................................................ 11 
+4.1.25 
+MRR +/- R* ............................................................................................................................................. 11 
+4.1.26 
+MRG +/- G*, ........................................................................................................................................... 11 
+4.1.27 
+PAA X*,Y*,Z*,R*,G* .............................................................................................................................. 12 
+4.1.28 
+PRA X*,Y*,Z*,R*,G* .............................................................................................................................. 12 
+4.1.29 
+MAA X*,Y*,Z*,R*,G* .............................................................................................................................. 12 
+4.1.30 
+MRA X*,Y*,Z*,R*,G* .............................................................................................................................. 13 
+4.1.31 
+AGR GripSearch*, GripOpen* ............................................................................................................... 13 
+4.1.32 
+APC GripSearch*,GripOpen*,Zpick*,Zup*,Rotation*, RotComp* ........................................................ 14 
+4.1.33 
+APL GripOpen*, Zplace*, Zup*, Rotation*, TubCheck*, WipeOffDist*, TubeLeftChck* ..................... 14 
+4.1.34 
+ATD Diameter ......................................................................................................................................... 15 
+4.1.35 
+ARX .......................................................................................................................................................... 15 
+4.1.36 
+ARY .......................................................................................................................................................... 15 
+4.1.37 
+ARZ .......................................................................................................................................................... 15 
+4.2 SET COMMANDS .................................................................................................................................................... 16 
+4.2.1 
+SGP PWMLimit*, GripSpeed*, MinSpace*, MaxSpace* ............................................................................ 16 
+4.2.2 
+SFX EndSp*, Accel* .................................................................................................................................... 16 
+4.2.3 
+SFY EndSp*, Accel* .................................................................................................................................... 16 
+4.2.4 
+SFZ EndSp*, Accel* .................................................................................................................................... 16 
+4.2.5 
+SFR EndSp*, Accel* .................................................................................................................................... 17 
+4.2.6 
+SOX InitOffset .............................................................................................................................................. 17 
+4.2.7 
+SOY InitOffset .............................................................................................................................................. 17 
+4.2.8 
+SOZ InitOffset .............................................................................................................................................. 17 
+
+
+--- PAGE 3 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 3 of 26 
+4.2.9 
+SOR InitOffset .............................................................................................................................................. 18 
+4.2.10 
+SAX ScaleAdjust ...................................................................................................................................... 18 
+4.2.11 
+SAY ScaleAdjust ...................................................................................................................................... 18 
+4.2.12 
+SXD Displacement ................................................................................................................................... 18 
+4.2.13 
+SMX Range .............................................................................................................................................. 19 
+4.2.14 
+SMY Range .............................................................................................................................................. 19 
+4.2.15 
+SMZ Range .............................................................................................................................................. 19 
+4.2.16 
+SCO AxisNo* ........................................................................................................................................... 20 
+4.2.17 
+SCS SubmergeRange ............................................................................................................................... 20 
+4.2.18 
+SSO OnOff ............................................................................................................................................... 20 
+4.3 REPORT COMMANDS ...................................................................................................................................... 21 
+4.3.1 
+RFV Selector ................................................................................................................................................ 21 
+4.3.2 
+RDF Selector ............................................................................................................................................... 21 
+4.3.3 
+REE . ............................................................................................................................................................ 21 
+4.3.4 
+RPX Selector* .............................................................................................................................................. 22 
+4.3.5 
+RPY Selector* .............................................................................................................................................. 22 
+4.3.6 
+RPZ Selector* .............................................................................................................................................. 23 
+4.3.7 
+RPR Selector* .............................................................................................................................................. 23 
+4.3.8 
+RPG Selector* ............................................................................................................................................. 24 
+4.3.9 
+RGP Selector ............................................................................................................................................... 24 
+4.3.10 
+RTD ......................................................................................................................................................... 25 
+4.3.11 
+RXD ......................................................................................................................................................... 25 
+5 
+ERROR CODES AND MESSAGES ................................................................................................................... 26 
+
+
+--- PAGE 4 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 4 of 26 
+ 
+1 Revision History 
+ 
+ 
+D.Bischof Changes in gate part (see C&G)
+PPx_V1.01
+D.Bischof diameter calculation improved 
+PPx_V1.03
+Z-accelleration reduced by 25%
+Z-speed reduced by 25%
+D.Bischof New features in <APL> command PPx_V1.04
+with WipeOff andTubeLeftcheck
+
+
+--- PAGE 5 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 5 of 26 
+2 Introduction 
+For Commands regarding General Gates see Command Set “General Gate Command Structure” 
+(New Conveyor), CS_Gate_V1.0. 
+3 Definition of Terms 
+4 Commands 
+4.1 POSITIONING, MOVE AND ACTION COMMANDS: 
+4.1.1 PIF 
+FAKE INITIALIZATION  X/Y/Z/R/G - AXIS:                
+The PIF command  initializes all axes. However, no physical initialization is executed. The current 
+position of each axis are still valid. If power is disconnected and turned on, using the PIF command 
+the axis  positions are not defined! CAUTION: Incorrect usage of this command may damage the 
+instrument. 
+EXAMPLE: #W2PIF 
+Fake initialization of the P&P. 
+RESPONSE: none 
+GENERATED ERRORS: none            
+4.1.2 PIA 
+POSITION INITIALIZATION  X/Y/Z/R/G - AXES: 
+This command initializes the P&P X/Y/Z/Rotator and Gripper axis. No movement command for the 
+arm will be accepted before the PIA command is executed. When the PIA command is entered, all 
+axis move to their initialization positions with a default init speed. After the init position of an axis 
+has been detected, it moves the defined offset steps in the opposite direction.  
+EXAMPLE: #W2PIA 
+Initialization of all arm axis.     
+4.1.3 PIX 
+InitSpeed* 
+POSITION INITIALIZATION  X - AXIS: 
+This function re-initializes only the X-axis. An override motor speed for axis initialization may be 
+placed at the end of the command. A command without any parameter uses the default speed to 
+initialize. 
+InitSpeed: 
+speed in 0.1 mm/s  [5...1500]  (default = 205) 
+EXAMPLE: #W2PIX250 
+Initialization of the P&P X-axis with an init speed of 25 mm/s. 
+RESPONSE: none 
+GENERATED ERRORS: (1) init failed, (3) invalid operand, (5) device not implemented 
+
+
+--- PAGE 6 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 6 of 26 
+4.1.4 PIY 
+InitSpeed* 
+POSITION INITIALIZATION  Y - AXIS:         
+This function reinitializes only the Y-axis on the P&P. An override motor speed for axis initialization 
+may be placed at the end of the command. A command without any parameter uses the default 
+speed for initialization. 
+InitSpeed: 
+speed in 0.1 mm/s  [5...1500]  (default = 505) 
+EXAMPLE: #W2PIY100 
+Initialization of the P&P Y- axis with an init speed of 10 mm/s. 
+RESPONSE: none 
+GENERATED ERRORS: (1) init failed, (3) invalid operand, (5) device not implemented 
+4.1.5 PIZ 
+InitSpeed* 
+POSITION INITIALIZATION  Z - AXIS:  
+This function reinitializes only the Z-axis on the P&P. An override motor speed for axis initialization 
+may be placed at the end of the command. A command without any parameters uses the default 
+speed and all tips to initialize. 
+InitSpeed: 
+speed in 0.1 mm/s  [5...1500]  (default = 296) 
+EXAMPLE: #W2PIZ170 
+Initialization of the P&P Z-axis with an init speed of 17 mm/s. 
+RESPONSE: none 
+GENERATED ERRORS: (1) init failed, (3) invalid operand, (5) device not implemented 
+4.1.6 PIR  
+POSITION INITIALIZATION ALL DEPENDENT AXES:  
+This function initializes all dependent axis of the P&P. First the Z-axis moves up, then the Y-axis 
+moves to a save position, the rotator and the gripper are initialized afterwards. Finally the Z-axis is 
+initialized again and moves to it’s offset position. It uses the default speed for initialization. 
+EXAMPLE: #W2PIR 
+Initialization of the P&P Z-axis, rotator and gripper. 
+RESPONSE: none 
+GENERATED ERRORS: (1) init failed, (5) device not implemented 
+4.1.7 PAX 
+X* 
+POSITION ABSOLUTE FOR X-AXIS: 
+Moves the X-axis to an absolute position, leaving the other axes positions unchanged. 
+X: 
+dist. in 0.1mm  [(-InitOffset + 10)...X-Range evaluated by ARX command] 
+EXAMPLE: #W2PAX1000 
+Absolute move in X-direction to 100mm from init position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+
+
+--- PAGE 7 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 7 of 26 
+4.1.8 PAY 
+Y* 
+POSITION ABSOLUTE FOR Y-AXIS: 
+Moves the Y-axis to an absolute position, leaving the other axes positions unchanged.  
+Y: 
+dist. in 0.1mm  [(-InitOffset + 10)...Y-Range evaluated by ARY command]                    
+EXAMPLE: #W2PAY500 
+Absolute move in Y-direction with 50 mm from init position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.9 PAZ 
+Z* 
+POSITION ABSOLUTE FOR Z-AXIS: 
+Moves the Z-axis to an absolute position,  leaving the other axes positions unchanged. The zero 
+position is somewhere near the worktable. CAUTION: use ARZ command for range evaluation 
+before using a PAZ command. 
+Z: 
+dist. in 0.1mm  [- SubmergeRange …(Range – SubmergeRange)] 
+(SubmergeRange set by the SCS command) 
+EXAMPLE: #W2PAZ100 
+Absolute move in Z-direction to 10 mm above worktable (max. Z-range). 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.10 PAR 
+R* 
+POSITION ABSOLUTE FOR R-AXIS: 
+Moves the Rotator-axis to an absolute position, leaving the other axes positions unchanged.  
+R: 
+dist. in 0.1dg  [(-7200...+7200] 
+EXAMPLE: #W2PAR500 
+Absolute move with Rotator-axis 50 dg from init position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.11 PAG 
+G* 
+POSITION ABSOLUTE FOR G-AXIS: 
+Moves the Gripper-axis to an absolute position, leaving the other axes position unchanged.  
+G: 
+dist. in 0.1mm [MinSpace..MaxSpace] 
+EXAMPLE: #W2PAG120 
+Gripper opens about 120mm 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+
+
+--- PAGE 8 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 8 of 26 
+4.1.12 PRX 
++/- X* 
+POSITION RELATIVE FOR X-AXIS: 
+Moves X-axis relative to its actual position. All other positions remain unchanged. 
++/-X: 
+dist. in 0.1mm  [within Range (-InitOffset + 10)...X-Range-InitOffset] 
+EXAMPLE: #W2PRX500 
+Move the X-axe 50 mm from the current position to the right. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.13 PRY 
++/- Y*  
+POSITION RELATIVE FOR Y-AXIS: 
+Moves Y- axis relative to its actual position. All other positions remain unchanged.  
++/-Y: 
+dist. in 0.1mm  [within Range (-InitOffset + 10)...Y-Range-InitOffset] 
+EXAMPLE: #W2PRY200 
+Move the Y-axis 20 mm from the current position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.14 PRZ 
++/- Z* 
+POSITION RELATIVE FOR Z-AXIS: 
+Move the Z-axis relative to its actual position, leaving the other axes unchanged. The zero position 
+is somewhere near the worktable. 
++/-Z: 
+dist. in 0.1mm  [within Range -SubmergeRange …(Range – SubmergeRange)] 
+EXAMPLE: #A1PRZ-100 
+Move the Z-axis down 10 mm from the current position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+ 
+4.1.15 PRR 
++/- R* 
+POSITION RELATIVE FOR ROTATOR-AXIS: 
+Moves the Rotator-axis relative to its actual position. All other positions remain unchanged.  
++/-R: dist. in 0.1dg  [within Range (-7200 +7200)] 
+EXAMPLE: #W2PRR200 
+Move the Rotator-axis 20 dg from the current position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.16 PRG 
++/- G* 
+POSITION RELATIVE FOR GRIPPER-AXIS: 
+
+
+--- PAGE 9 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 9 of 26 
+Moves the Gripper-axis relative to its actual position. All other positions remain unchanged. Moving 
+the gripper axis with relative commands sometimes creates rounding errors. However, the position 
+reported by the RPG command always correlates with the actual gripper position. 
++/-G: dist. in 0.1mm  [within Range MinSpace..MaxSpace] set by the SGP Cmd 
+EXAMPLE: #W2PRG200 
+Move the Gripper-axis 20 mm from the current position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.17 MAX X*, SlowSpeed* 
+MOVE ABSOLUTE SLOW SPEED FOR X-AXIS: 
+Moves the X-axis with a slow speed to an absolute position, leaving the other axes position 
+unchanged. If no speed is selected, the default speed stored in memory is used. 
+X: 
+ 
+dist. in 0.1mm  [(-InitOffset + 10)...X-Range evaluated by ARX command] 
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 750) 
+EXAMPLE: #W2MAX1000,500 
+Absolute move in X-direction to 100mm from init position with a slow speed of 50mm/s. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.18 MAY Y*, SlowSpeed* 
+MOVE ABSOLUTE SLOW SPEED FOR Y-AXIS: 
+Moves the Y-axis with a slow speed to an absolute position, leaving the other axis position 
+unchanged. If no speed is selected, the default speed stored in memory is used. 
+Y: 
+ 
+dist. in 0.1mm  [(-InitOffset + 10)...Y-Range evaluated by ARY command] 
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 1424) 
+EXAMPLE: #W2MAY1000,250 
+Absolute move in Y-direction to 100 mm from init position with a slow speed of 25 mm/s.   
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.19 MAZ 
+Z*, SlowSpeed*  
+MOVE ABSOLUTE SLOW SPEED FOR Z-AXIS: 
+Moves the Z-axis with a slow speed to an absolute position, leaving the other axes position 
+unchanged. If no speed is selected, the default speed stored in memory is used. The zero position 
+is somewhere near the worktable. 
+Z: 
+ 
+dist. in 0.1mm  [- SubmergeRange …(Range – SubmergeRange)] 
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 880) 
+EXAMPLE: #W2MAZ100,200 
+Move the Z-axis down to absolute position 10 mm with a speed of 20 mm/s. 
+
+
+--- PAGE 10 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 10 of 26 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.20 MAR R*, SlowSpeed*  
+MOVE ABSOLUTE SLOW SPEED FOR ROTATOR-AXIS: 
+Moves the Rotator-axis with a slow speed to an absolute position, leaving the other axis position 
+unchanged. If no speed is selected, the default speed stored in memory is used. 
+R: 
+ 
+dist. in 0.1dg  [-7200 +7200] 
+SlowSpeed: 
+speed in 0.1dg/s [5...10000] (default = 780) 
+EXAMPLE: #W2MAR1000,250 
+Absolute move with Rotator axis to 100 mm from init position with a slow speed of 25 dg/s.   
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.21 MAG G*, SlowSpeed*  
+MOVE ABSOLUTE SLOW SPEED FOR GRIPPER-AXIS: 
+Moves the Gripper-axis with a slow speed to an absolute position, leaving the other axis position 
+unchanged. If no speed is selected, the default speed stored in memory is used. 
+G: 
+ 
+dist. in 0.1mm  [MinSpace..MaxSpace]   
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 780) 
+EXAMPLE: #W2MAG1000,250 
+Absolute move with Gripper axis to 100 mm from init position with a slow speed of 25 mm/s.   
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.22 MRX +/- X*, SlowSpeed* 
+MOVE RELATIVE SLOW SPEED FOR X-AXIS: 
+Moves the X-axis with slow speed relative to its actual position, leaving the other axes unchanged. 
+If no speed is selected, the default speed stored in memory is used. 
++/-X: 
+ 
+dist. in 0.1mm  [within Range (-InitOffset + 10)...X-Range-InitOffset] 
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 750) 
+EXAMPLE: #W2MRX1000,500 
+Relative move in X-direction, 100mm from current position with a slow speed of 50mm/s. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.23 MRY +/- Y*, SlowSpeed* 
+MOVE RELATIVE SLOW SPEED FOR Y-AXIS: 
+
+
+--- PAGE 11 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 11 of 26 
+Moves the Y-axis with slow speed relative to its actual position, leaving  the other axes unchanged. 
+If no speed is selected, the default speed stored in memory is used. 
++/-Y: 
+ 
+dist. in 0.1mm  [within Range (-InitOffset + 10)...Y-Range-InitOffset] 
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 1424) 
+EXAMPLE: #W2MRY-500,50 
+Move Y-axis -50 mm from the current position back with a speed of 5 mm/s. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+4.1.24 MRZ 
++/- Z*, SlowSpeed*  
+MOVE RELATIVE SLOW SPEED FOR Z-AXIS:     
+Moves the Z-Axis to positions relative to their present position, leaving the other axes unchanged. 
+If no speed is selected, the default speed stored in memory is used. The zero position is 
+somewhere near the worktable. 
++/-Z: 
+ 
+dist. in 0.1mm  [within Range -SubmergeRange …(Range – SubmergeRange)] 
+SlowSpeed: 
+speed in 0.1mm/s [5...10000] (default = 880) 
+EXAMPLE: #W2MRZ100,200 
+Move Z-axis up from the current position with a speed of 20 mm/s.  
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+ 
+4.1.25 MRR +/- R*  
+MOVE RELATIVE SLOW SPEED FOR R-AXIS: 
+Moves the Rotator-axis with slow speed relative to its actual position, leaving  the other axes 
+unchanged. If no speed is selected, the default speed stored in memory is used. 
++/-R:  
+dist. in 0.1dg  [within Range (-7200 +7200)] 
+SlowSpeed: 
+speed in 0.1dg/s [5...10000] (default = 780) 
+EXAMPLE: #W2MRR-500 
+Move Rotator-axe -50 mm from the current position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init 
+ 
+ 
+4.1.26 MRG +/- G*,  
+MOVE RELATIVE SLOW SPEED FOR G-AXIS: 
+Moves the Gripper-axis with slow speed relative to its actual position, leaving the other axes 
+unchanged. If no speed is selected, the default speed stored in memory is used. 
++/-G:  
+dist. in 0.1mm  [within Range MinSpace..MaxSpace] set by the SGP Cmd 
+SlowSpeed: 
+speed in 0.1dg/s [5...10000] (default = 780) 
+EXAMPLE: #W2MRG-500 
+
+
+--- PAGE 12 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 12 of 26 
+Move Gripper-axis -50 mm from the current position. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init        
+4.1.27 PAA 
+X*,Y*,Z*,R*,G* 
+POSITIONING ALL AXIS SIMULTANEOUSLY ABSOLUTE: 
+Moves all axis with normal speed to an absolute position. If aparameter is not defined,  the related 
+keeps its current position unchanged. However, rotator and gripper movements are not allowed 
+simultaneously. CAUTION: Incorrect usage of this command may damage the instrument. 
+X: 
+ 
+dist. in 0.1mm [- X-Range ... + X-Range set by ARX cmd] 
+Y: 
+ 
+dist. in 0.1mm [- Y-Range ... +Y-Range set by ARY cmd] 
+Z: 
+ 
+dist. in 0.1mm  [-SubmergeRange …(Z-Range – SubmergeRange)] 
+R: 
+ 
+dist. in 0.1deg  [- 7200..7200] 
+G: 
+ 
+dist. in 0.1mm  [MinSpace..MaxSpace] 
+EXAMPLE: #W2PAA2000, 3000,1000,,250 
+Moves all axis to the selected absolute position. The rotator axis remains untouched. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (18) invalid axis combination        
+4.1.28 PRA 
+X*,Y*,Z*,R*,G* 
+POSITIONING ALL AXIS SIMULTANEOUSLY RELATIVE: 
+Moves all axis with normal speed to a relative position. If aparameter is not defined,  the related 
+axis keeps its current position unchanged. However, rotator and gripper movements are not 
+allowed simultaneously. CAUTION: Incorrect usage of this command may damage the instrument. 
+X: 
+ 
+dist. in 0.1mm [within Range - X-Range ... + X-Range set by ARX cmd] 
+Y: 
+ 
+dist. in 0.1mm [within Range - Y-Range ... +Y-Range set by ARY cmd] 
+Z: 
+ 
+dist. in 0.1mm  [within Range -SubmergeRange …(Z-Range – SubmergeRange)] 
+R: 
+ 
+dist. in 0.1deg  [within Range - 7200..7200] 
+G: 
+ 
+dist. in 0.1mm  [within Range MinSpace..MaxSpace] 
+EXAMPLE: #W2PAA-1000, 800,-1000,-900, 
+Moves all axis for the selected relative position. The gripper axis stays untouched. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (18) invalid axis combination 
+4.1.29 MAA X*,Y*,Z*,R*,G* 
+MOVE ALL AXIS SIMULTANEOUSLY SLOW ABSOLUTE: 
+Moves all axis with slow speed to an absolute position. If aparameter is not defined,  the related 
+keeps its current position unchanged. However, rotator and gripper movements are not allowed 
+simultaneously. This command can be used to move centrifuge buckets. CAUTION: Incorrect 
+usage of this command may damage the instrument. 
+
+
+--- PAGE 13 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 13 of 26 
+X: 
+ 
+dist. in 0.1mm [- X-Range ... + X-Range set by ARX cmd] 
+Y: 
+ 
+dist. in 0.1mm [- Y-Range ... +Y-Range set by ARY cmd] 
+Z: 
+ 
+dist. in 0.1mm  [-SubmergeRange …(Z-Range – SubmergeRange)] 
+R: 
+ 
+dist. in 0.1deg  [- 7200..7200] 
+G: 
+ 
+dist. in 0.1mm  [MinSpace..MaxSpace] 
+EXAMPLE: #W2PAA2000, 3000,1000,,250 
+Moves all axis to the selected absolute position. The rotator axis stays untouched. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (18) invalid axis combination 
+ 
+4.1.30 MRA X*,Y*,Z*,R*,G* 
+MOVE ALL AXIS SIMULTANEOUSLY SLOW RELATIVE: 
+Moves all axis with slow speed to a relative position. If aparameter is not defined,  the related axis 
+keeps its current position unchanged. However, rotator and gripper movements are not allowed 
+simultaneously. This command can be used to move centrifuge buckets. CAUTION: Incorrect 
+usage of this command may damage the instrument. 
+X: 
+ 
+dist. in 0.1mm [within Range - X-Range ... + X-Range set by ARX cmd] 
+Y: 
+ 
+dist. in 0.1mm [within Range - Y-Range ... +Y-Range set by ARY cmd] 
+Z: 
+ 
+dist. in 0.1mm  [within Range -SubmergeRange …(Z-Range – SubmergeRange)] 
+R: 
+ 
+dist. in 0.1deg  [within Range - 7200..7200] 
+G: 
+ 
+dist. in 0.1mm  [within Range MinSpace..MaxSpace] 
+ 
+EXAMPLE: #W2PAA-1000, 800,-1000,-900, 
+Moves all axis for the selected relative position. The gripper axis stays untouched. 
+RESPONSE: none 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (18) invalid axis combination 
+4.1.31 AGR GripSearch*, GripOpen*  
+GRIPP TUBE: 
+This command grips with the gripper drive at the current X, Y, Z position. The gripper searches for 
+a tube to the absolute GripSearch position. If there is no tube found, it re-opens to the absolute 
+GripOpen position. An error message (tube not fetched) is sent back.  
+GripSearch: 
+[MinSpace..MaxSpace]  
+ 
+GripOpen: 
+[MinSpace..MaxSpace] 
+EXAMPLE: #W2AGR 
+Grips a tube at the current position. 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (17) tube not fetched 
+
+
+--- PAGE 14 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 14 of 26 
+4.1.32 APC 
+GripSearch*,GripOpen*,Zpick*,Zup*,Rotation*, RotComp* 
+PICK TUBE: 
+This command grips with the gripper drive at the current X, Y position. The gripper moves down to 
+the absolute Zpick with a Gripper spacing defined by the absolute GripOpen parameter. Then it 
+searches for a tube until the GripSearch position is achieved. If no tube is found an error message 
+is sent back and the gripper re-opens to the defined GripOpen position. The Z-axis stays at Zpick. 
+If a tube is gripped successfully the z-axis moves up to for a tube to the absolute Zup position and 
+the Rotation is performed. The RotComp parameter modifies the InitOffset of the R-axis while a 
+tube is gripped!  The InitOffset is set back to its original value after a APL command or after a PIA 
+or PIR command takes place. 
+GripOpen: 
+Gripper Spacing in 0.1mm [MinSpace…MaxSpace] 
+GripSearch: 
+Gripper Spacing in 0.1m [MinSpace…MaxSpace] 
+Zpick:  
+Pick hight in 0.1mm above worktable  
+Zup: 
+ 
+Z Hight in 0.1mm after a successful pick 
+Rotation: 
+Rotation absolute in 0.1deg before pick [-7200..+7200] 
+RotComp:  
+Compensate rotation while grip  in 0.1 deg[0… 300]      
+EXAMPLE:  
+#W2APC300,120,1000,2500,1800,50 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (17) tube not  
+4.1.33 APL 
+GripOpen*, Zplace*, Zup*, Rotation*, TubCheck*, WipeOffDist*, TubeLeftChck* 
+PLACE TUBE: 
+This command places a tube at the current X, Y position. The gripper moves down to the absolute 
+Zplace. While it spaces to the GripOpen position, the tube is released. It again grips and releases 
+the tube if the TubCheck parameter is set. An error message (tube not fetched) is sent back if no 
+tube is found. The gripper re-opens to the absolute GripOpen position while the Z position stays at 
+Zplace.  If the WipeOff parameter is set Z moves down in order to wipe off a sticky tube.  The Z-
+axis moves up to the absolute Zup position if the tube check is successful or TubCheck  parameter 
+is not set. 
+GripOpen: 
+Gripper Spacing in 0.1mm [MinSpace...MaxSpace] 
+Zplace: 
+Place hight in 0.1mm above worktable  
+Zup: 
+ 
+Z Hight in 0.1mm after a successful place 
+Rotation: 
+Rotation absolute in 0.1deg before place [-7200..+7200] 
+TubeCheck: 
+[0..1] 0=inactive, 1=active [0,1] 
+WipeOffDist:  [-100..0] 
+TubeLeftChck:[0..1] 0=inactive, 1=active [0,1] 
+EXAMPLE:  
+#W2APC270,120,1000,2500,1800,1,-20,1 
+Place a tube at Z-position 300 and a rotation of 250 degree, check if the tube is still in the gripper, 
+Open gripper 27mm, move 2mm down in order to wipe off sticky tubes, move to Z-position 1000, 
+close gripper to check for left tube and open it again for 270mm. 
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, fetched, (16) Tube left in gripper 
+(17) tube not fetched 
+
+
+--- PAGE 15 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 15 of 26 
+4.1.34 ATD 
+Diameter  
+TEACH DIAMETER: 
+This command teaches the gripper to a known tube diameter at the current X, Y, Z position. The 
+gripper searches for a tube. This command should be used after a collision or exchange of a 
+gripper tool. The calculated factor is used only for the RTD command but not for gripper 
+positioning! The diameter for teaching needs to be set to 13.0mm. 
+Diameter: 130 [in 0.1mm] 
+ 
+EXAMPLE: #W2ATD130 
+Grips a tube at the current position.  
+GENERATED ERRORS:  (3) invalid operand, (7) device not init, (17) tube not fetched 
+4.1.35 ARX  
+AUTO RANGE X-AXIS: 
+This command moves to the right and the left stopper of the X-axis and sets the X-range. The 
+value can be stored into the non-volatile memory with the AWE command. 
+EXAMPLE: #W2ARX 
+Auto ranges X-axis. 
+GENERATED ERRORS: none 
+4.1.36 ARY  
+AUTO RANGE Y-AXIS: 
+This command moves to the right and the left stopper of the Y-axis and sets the the Y-range. The 
+value can be stored into the non-volatile memory with the AWE command. 
+EXAMPLE: #W2ARY 
+Auto ranges X-axis. 
+GENERATED ERRORS: none 
+4.1.37 ARZ  
+AUTO RANGE Z-AXIS: 
+This gripper moves down to the worktable, touches the surface and moves up to the upper 
+stopper. The worktable surface is now 0.  
+The value can be stored into the non-volatile memory with the AWE command. 
+EXAMPLE: #W2ARZ 
+Auto ranges Z-axis. 
+GENERATED ERRORS: none 
+
+
+--- PAGE 16 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 16 of 26 
+4.2 Set Commands 
+4.2.1 SGP 
+PWMLimit*, GripSpeed*, MinSpace*, MaxSpace* 
+SET GRIP PARAMETER: 
+The SGP command sets the PWM limit, the gripper speed, the minimum gripper spacing and the 
+maximum gripper spacing in the volatile memory. The parameters can be stored in non-volatile 
+memory by the AWE command. CAUTION: incorrect gripper parameter settings might damage the 
+servo drives!  
+PWMLimit*: 
+PWM Limit [0...249] (default = 80) 
+ 
+GripSpeed *: GripperSpeed [50..5000] (default= 3000) 
+MinSpace *: 
+Minimum gripper spacing (default=70) 
+MaxSpace *: Maximum gripper spacing (default=280) 
+EXAMPLE:  
+#W2SGP80, 3000, 90, 280 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.2 SFX 
+EndSp*, Accel*  
+SET X-RAMP PARAMETERS: 
+This command sets the X-axis DC-motor ramp settings in volatile memory. 
+EndSp*: 
+speed in 0.1mm/s.   [50....16000] (default = 15000)   
+Accel*:  
+acceleration in 0.1mm/ s²..  [50..16000] (default =  1500) 
+EXAMPLE:  
+#W2SFX5000,1000 
+Set End Speed to 500mm/s and the acceleration to 100mm/s².. 
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.3 SFY 
+EndSp*, Accel* 
+SET Y-RAMP PARAMETERS: 
+This command sets the Y-axis DC-motor ramp settings in volatile memory. 
+EndSp*: 
+speed in 0.1mm/s.   [50....10000] (default =  7449) 
+Accel*:  
+acceleration in 0.1mm/s²..  [50..10000] (default =  5385) 
+EXAMPLE:  
+#W2SFY1000,500 
+Set End Speed to 100mm/s and the acceleration to 50mm/s².. 
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.4 SFZ 
+EndSp*, Accel* 
+SET Z-RAMP PARAMETERS: 
+This command sets the Z-axis DC-motor ramp settings in volatile memory. 
+EndSp*: 
+speed in 0.1mm/s.   [50....10000] (default =  6614)           
+
+
+--- PAGE 17 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 17 of 26 
+Accel*:  
+acceleration in 0.1mm/s².  [50..10000] (default =  6614) 
+EXAMPLE: 
+#W2SFZ2500,3000 
+Set end Speed to 250mm/s and the acceleration to 300mm/s².. 
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.5 SFR 
+EndSp*, Accel* 
+SET ROTATOR-RAMP PARAMETERS: 
+This command sets the R-axis DC-motor ramp settings in volatile memory. This speed is also use 
+by the gripper since gripper and rotator needs the same speed and acceleration for its dependent 
+movements. 
+EndSp*: 
+speed in 0.1dg/s.   [50....10000] (default =  7798)           
+   
+Accel*:  
+acceleration in 0.1dg/ s²..  [50..10000] (default =  7798) 
+EXAMPLE: 
+#W2SFR2500,3000 
+Set end speed to 250mm/s and the acceleration to 300dg/s². 
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.6 SOX 
+InitOffset 
+SET INITIALIZATION OFFSET FOR X-AXIS: 
+This command sets the initialization offset for the X-axis. This parameter can be stored in non 
+volatile memory by the AWE command.        
+InitOffset: 
+dist. in 0.1mm  [0...1200] (default = 100) 
+EXAMPLE: 
+#W2SOX100 
+Set the X-Init offset to 10 mm from init position. 
+     
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.7 SOY 
+InitOffset 
+SET INITIALIZATION OFFSET FOR Y-AXIS: 
+This command sets the initialization offset for the Y-axis. This parameter can be stored in non 
+volatile memory by the AWE command.  
+InitOffset: 
+dist. in 0.1mm  [0...1200] (default = 100) 
+EXAMPLE: 
+#W2SOY200 
+Set the Y-Init offset to 20 mm from init position. 
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.8 SOZ 
+InitOffset 
+SET INITIALIZATION OFFSET FOR Z-AXIS: 
+
+
+--- PAGE 18 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 18 of 26 
+This command sets the initialization offset for the Z-axis. This parameter can be stored in non 
+volatile memory by the AWE command.  
+InitOffset: 
+dist. in 0.1mm  [0...1200] (default = 50) 
+EXAMPLE: 
+#W2SOZ100 
+Set the Z-Init offset to 10 mm from init position. 
+     
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.9 SOR 
+InitOffset 
+SET INITIALIZATION OFFSET FOR ROTATOR-AXIS: 
+This command sets the initialization offset for the R-axis. This parameter can be stored in non 
+volatile memory by the AWE command. The SOR command must not be used while a tube is 
+gripped with the APC command! 
+InitOffset: 
+dist. in 0.1dg  [0...1200] (default = 100) 
+EXAMPLE: 
+#W2SOR100 
+Set the R-Init offset to 10 dg from init position. 
+     
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.10 SAX 
+ScaleAdjust 
+SET SCALE ADJUST FACTOR FOR X-AXIS 
+This command is used for the X-axis scale factor fine-tuning. This value can be stored into the non-
+volatile memory with the AWE command. 
+ScaleAdjust: [10000 +/- 5%] (default = 10000) 
+EXAMPLE:  
+#W2SAX9975 
+Set the scale adjust factor to 0,9975. 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.11 SAY 
+ScaleAdjust 
+SET SCALE ADJUST FACTOR FOR Y-AXIS 
+This command is used for the Y-axis scale factor fine-tuning. This value can be stored into the non-
+volatile memory with the AWE command. 
+ScaleAdjust: [10000 +/- 5%] (default = 10000) 
+EXAMPLE:  
+#W2SAY10055 
+Set the scale adjust factor to 1,0055. 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.12 SXD 
+Displacement 
+SET DISPLACEMENT FOR X AXIS 
+The X-displacement will be subtracted from the x-coordinate of any absolute X-movement or X-
+
+
+--- PAGE 19 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 19 of 26 
+positioning command. This allows to operate different P&P arms on the same X-axis using a 
+common X-zero position. CAUTION: incorrect displacement parameter settings might damage the 
+instrument! The value can be stored into the non-volatile memory with the AWE command. 
+Displacement: [0..20000] (default = 0) 
+EXAMPLE:  
+#W2SXD600 
+Set the x-displacemt 600 mm to the right. 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.13 SMX 
+Range 
+SET OVERALL MACHINE LIMITATION X-AXIS ONLY 
+The SMX command sets the physical limitation range (in the volatile memory), for the X-axis to 
+ensure the X-axis range can not be set to invalid machine positions. After initial firmware 
+download, the SMX range is set to the default value. After definition, the maximal range can be 
+stored into the non-volatile memory with the AWE command. See also ARX for automated range 
+setting. 
+Range: 
+distance in 0.1 mm [0..100'000] (default = 15000) 
+EXAMPLE:  
+#W2SMX10000 
+Set machine limitation in X-axis to 1000 mm. 
+RESPONSE:   none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.14 SMY 
+Range 
+SET OVERALL MACHINE LIMITATION Y-AXIS ONLY 
+The SMY command sets the physical limitation range (in the volatile memory), for the Y-axis of the 
+P&P arm to ensure the Y-axis range can not be set to invalid machine positions. After initial 
+firmware download, the SMY range is set to the default value. After definition, the maximal range 
+can be stored into the non-volatile memory with the AWE command. See also ARY for automated 
+range setting. 
+Range: 
+distance in 0.1 mm [0..100'000] (default = 10000) 
+EXAMPLE:  
+#W2SMY10000 
+Set machine limitation in Y-axis to 1000 mm. 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.15 SMZ 
+Range 
+SET OVERALL MACHINE LIMITATION Z-AXIS ONLY 
+The SMZcommand sets the physical limitation range (in the volatile memory), for the Z-axis of the 
+P&P arm to ensure the Z-axis range can not be set to invalid machine positions. Submerge range 
+subtracted from the Z-range gives the Z-range above the worktable. After initial firmware 
+download, the SMY range is set to the default value. After definition, the maximal range can be 
+stored into the non-volatile memory with the AWE command. See also ARZ for automated range 
+setting. 
+
+
+--- PAGE 20 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 20 of 26 
+Range: 
+distance in 0.1 mm [0..100'000] (default = 3800) 
+EXAMPLE:  
+#W2SMZ3800 
+Set machine limitation in Z-axis to 3800 mm. 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.16 SCO 
+AxisNo* 
+SET CURRENT OFF: 
+This command sets the chosen axis off power. If no parameter is entered all axis or power off. 
+AxisNo: 
+  
+1 = X-axis 
+ 
+ 
+ 
+2 = Y-axis 
+ 
+ 
+ 
+3 = Z-axis 
+ 
+ 
+ 
+4 = R-axis 
+ 
+ 
+ 
+5 = G-axis 
+EXAMPLE:  
+#W2SCO 
+All axis power off.  
+RESPONSE:  none 
+GENERATED ERRORS:  (3) invalid operand 
+4.2.17 SCS 
+SubmergeRange 
+SET CENTRIFUGE SUBMERGE RANGE 
+The SCS command sets the physical limitation range (in the volatile memory), for the Z-axis 
+submerge. (Steps below the worktable surface). After definition, the maximal range can be stored 
+into the non-volatile memory with the AWE command.  
+SubmergeRange: 
+ 
+submerge range in 0.1 mm [1000..1400] (default = 1200) 
+EXAMPLE:  
+#W2SCS1200 
+Set submerge range to 120 mm. 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+4.2.18 SSO 
+OnOff 
+SET SOLENOID ON/OFF 
+The SSO command sets solenoid output on or off. The solenoid controls the Z-break.  
+OnOff:  
+0,1 (0=off;1=on) 
+EXAMPLE:  
+#W2SSO1 
+Release Z-break 
+RESPONSE: none 
+GENERATED ERRORS: (3) invalid operand 
+
+
+--- PAGE 21 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 21 of 26 
+4.3 REPORT COMMANDS 
+4.3.1 RFV 
+Selector 
+REPORT FIRMWARE VERSION 
+This command reports the Firmware and Bootware Version. Also the instruments parameters can 
+be reported. 
+Selector: 
+0 = Firmware Version (default) 
+ 
+ 
+1 = Bootware Version 
+ 
+ 
+2 = Serial Number 
+ 
+ 
+3 = Hardware Version 
+ 
+ 
+4 = TypeId 
+ 
+ 
+5 = Copyright 
+ 
+ 
+6 = Address Switch 
+EXAMPLE:  
+#W2RFV0 
+Reports the actual firmware version. 
+RESPONSE: "PPU-Vx.xx-MM/YY" for Pick&Place Unload 
+  
+ 
+“PPL_Vx.xx-MM/YY” for Pick&Place Load 
+GENERATED ERRORS: (3) invalid operand 
+4.3.2 RDF 
+Selector 
+REPORT DIAGNOSTIC FUNCTIONS: 
+All the diagnostic values will be saved at power off of the instrument or if a Power fail occurs. The 
+stored data can be read by this command. 
+Selector: 
+0 = Number of power ups (default) 
+ 
+ 
+1 = Report hour meter. 
+EXAMPLE: 
+#P1RDF1 
+Reports the sum of switched on time in hours. 
+RESPONSE: number of hours 
+GENERATED ERRORS: (3) invalid operand 
+4.3.3 REE 
+. 
+REPORT EXTENDED ERROR CODE 
+Get axis specific errors from a DC-Servo drive. To visualize the error codes as ASCII characters, 
+an offset of 40Hex is added to the error value. See error table of the DC-Servo Command Set 
+(TECAN DocNo. 
+390 249) 
+EXAMPLE:  
+#W2REE 
+RESPONSE: "@@@@@" = all axis are initialized and OK 
+ 
+"@@G@@" = Z-axis is not initialized 
+GENERATED ERRORS: none 
+
+
+--- PAGE 22 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 22 of 26 
+4.3.4 RPX 
+Selector*  
+REPORT CURRENT PARAMETER FOR X-AXIS: 
+This command reports the current parameter of the X-axis. Only one axis parameter can be 
+reported at a time. 
+Selector: 
+0 = Report current position in 1/10 mm 
+ 
+ 
+1 = Report acceleration in 1/10 mm/s2 
+ 
+ 
+2 = Report end speed in 1/10 mm/s 
+ 
+ 
+3 = Report init speed in 1/10 mm/s 
+ 
+ 
+4 = Report init offset in 1/10 mm 
+ 
+ 
+5 = Report actual machine range in 1/10 mm 
+ 
+ 
+6 = Report init error steps in encoder increments 
+ 
+ 
+7 = Report travel position in 1/10 mm 
+ 
+ 
+8 = Report scale factor 
+ 
+ 
+9 = Slow Speed 
+EXAMPLE: #W2RPX2 
+Reports the end speed of X-drive. 
+RESPONSE: one X-axis parameter. 
+GENERATED ERRORS:  (3) invalid operand 
+4.3.5 RPY 
+Selector* 
+REPORT CURRENT PARAMETER FOR Y-AXIS: 
+This command reports the current parameter of the Y-axis. Only one axis parameter can be 
+reported at a time. 
+Selector: 
+0 = Report current position in 1/10 mm 
+ 
+ 
+1 = Report acceleration in 1/10 mm/s2 
+ 
+ 
+2 = Report end speed in 1/10 mm/s 
+ 
+ 
+3 = Report init speed in 1/10 mm/s 
+ 
+ 
+4 = Report init offset in 1/10 mm 
+ 
+ 
+5 = Report actual machine range in 1/10 mm 
+ 
+ 
+6 = Report init error steps in encoder increments 
+ 
+ 
+7 = Report travel position in 1/10 mm 
+ 
+ 
+8 = Report scale factor 
+ 
+ 
+9 = Slow Speed 
+EXAMPLE: #W2RPY2 
+Reports the end speed of Y-drive.                  
+RESPONSE: one Y-axis parameter. 
+GENERATED ERRORS:  (3) invalid operand 
+
+
+--- PAGE 23 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 23 of 26 
+4.3.6 RPZ 
+Selector*  
+REPORT CURRENT PARAMETER FOR Z-AXIS: 
+This command reports the current parameter of the Z-axis. Only one axis parameter can be 
+reported at a time. 
+Selector: 
+0 = Report current position in 1/10 mm 
+ 
+ 
+1 = Report acceleration in 1/10 mm/s2 
+ 
+ 
+2 = Report end speed in 1/10 mm/s 
+ 
+ 
+3 = Report init speed in 1/10 mm/s 
+ 
+ 
+4 = Report init offset in 1/10 mm 
+ 
+ 
+5 = Report actual machine range in 1/10 mm 
+ 
+ 
+6 = Report init error steps in encoder increments 
+ 
+ 
+7 = Report travel position in 1/10 mm 
+ 
+ 
+8 = Report scale factor 
+ 
+ 
+9 = Slow Speed 
+EXAMPLE: #W2RPZ2 
+Reports the end speed of Z-drive.                  
+RESPONSE: one Z-axis parameter. 
+GENERATED ERRORS:  (3) invalid operand 
+4.3.7 RPR 
+Selector*  
+REPORT CURRENT PARAMETER FOR ROTATOR-AXIS: 
+This command reports the current parameter of the Rotator-axis. Only one axis parameter can be 
+reported at a time. 
+Selector: 
+0 = Report current position in 1/10 dg 
+ 
+ 
+1 = Report acceleration in 1/10 dg/s2 
+ 
+ 
+2 = Report end speed in 1/10 dg/s 
+ 
+ 
+3 = Report init speed in 1/10 dg/s 
+ 
+ 
+4 = Report init offset in 1/10 dg 
+ 
+ 
+5 = Report actual machine range in 1/10 dg 
+ 
+ 
+6 = Report init error steps in encoder increments 
+ 
+ 
+7 = Report travel position in 1/10 dg 
+ 
+ 
+8 = Report scale factor 
+ 
+ 
+9 = Slow Speed 
+EXAMPLE: #W2RPR2 
+Reports the end speed of rotator drive.                  
+RESPONSE: one R-axis parameter. 
+GENERATED ERRORS:  (3) invalid operand 
+
+
+--- PAGE 24 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 24 of 26 
+4.3.8 RPG 
+Selector*  
+REPORT CURRENT PARAMETER FOR GRIPPER-AXIS: 
+This command reports the current parameter of the gripper axis. Only one axis parameter can be 
+reported at a time. 
+Selector: 
+0 = Report current position in 1/10 mm 
+ 
+ 
+1 = Report acceleration in 1/10 mm/s2 
+ 
+ 
+2 = Report end speed in 1/10 mm/s 
+ 
+ 
+3 = Report init speed in 1/10 mm/s 
+ 
+ 
+4 = Report init offset in 1/10 mm 
+ 
+ 
+5 = Report actual machine range in 1/10 mm 
+ 
+ 
+6 = Report init error steps in encoder increments 
+ 
+ 
+7 = Report travel position in 1/10 mm 
+ 
+ 
+8 = Report scale factor 
+ 
+ 
+9 = Slow Speed 
+EXAMPLE: #W2RPG2 
+Reports the end speed of gripper drive.                  
+RESPONSE: one G-axis parameter. 
+GENERATED ERRORS:  (3) invalid operand 
+4.3.9 RGP 
+Selector 
+REPORT GLOBAL GRIPPER PARAMETER: 
+This command reports all Gripper Parameters 
+Selector: 
+0 = MinSpace 
+ 
+ 
+1 = MaxSpace 
+ 
+ 
+2 = GrippPWMLimit 
+ 
+ 
+3 = GripSpeed 
+ 
+ 
+4 = RotatOffset 
+ 
+ 
+2 = DiameterCal 
+ 
+ 
+6 = DiaTeachCorr 
+ 
+ 
+7 = GripperFlag 
+EXAMPLE: #W2RGP1 
+Report gripper MinSpace 
+RESPONSE: PWMLimit  
+GENERATED ERRORS:  (3) invalid operand 
+ 
+ 
+
+
+--- PAGE 25 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 25 of 26 
+4.3.10 RTD 
+REPORT TUBE DIAMETER 
+This command reports the diameter of a gripped tube. See ATD command for diameter calibration. 
+EXAMPLE: #W2RTD 
+RESPONSE: Diameter [0.1 mm]. 
+GENERATED ERRORS:  none 
+4.3.11 RXD 
+REPORT DISPLACEMENT FOR X AXIS 
+The X-displacement will be subtracted from the x-coordinate of any absolute X-movement or X-
+positioning command. It is set by the SXD command. This allows to operate different P&P arms on 
+the same X-axis using a common X-zero position.  
+Displacement: [0..20000] (default = 0) 
+EXAMPLE:  
+#W2RXD 
+RESPONSE: Displacement [0.1 mm]. 
+GENERATED ERRORS: none 
+ 
+
+
+--- PAGE 26 ---
+ 
+ 
+Pick & Place Arm 
+ 
+391412 V 1.04 PnP.doc 
+3 October, 2000 
+ 
+Page 26 of 26 
+ 
+5 Error Codes and Messages 
+ 
+Error 
+Mnemonic 
+Description and Comments 
+1 
+Initialization Error 
+ 
+2 
+Invalid Command 
+ 
+3 
+Invalid Operand 
+ 
+4 
+Invalid Cmd 
+Sequence 
+ 
+5 
+Device Not 
+Implemented 
+ 
+6 
+Timeout Error 
+ 
+7 
+Device not initialized 
+ 
+9 
+Break point not 
+reached 
+ 
+10 
+Drive no load 
+Drive with no load detected. <REE> reports which 
+drive. 
+12 
+No access to 
+parameter pages 
+No access to Flash parameter pages 
+15 
+Command overflow  
+An action command was sent while another action 
+command is still pending 
+16 
+Tube Left 
+Tube left back in gripper after place command 
+17 
+Tube not fetched 
+The tube was not succesfully fetched within the 
+specified gripper range.  
+18 
+Invalid axis 
+combination 
+Rotator an Gripper movements are not allowed 
+simultaneously. 
+ 
+
+

@@ -1,0 +1,4036 @@
+--- PAGE 1 ---
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+Getting Started Guide
+Freedom EVOware® Standard 2.3
+Freedom EVOware® Plus 2.3
+ 
+ 
+
+
+--- PAGE 2 ---
+© 2009, Tecan Schweiz AG, Switzerland, all rights reserved
+Information contained in this document is subject to change without notice.
+Document Status Sheet
+Title:
+Freedom EVOware Getting Started Guide
+Part number:
+10393318.09
+ID:
+393318, en, Version 2.3
+Translated from:
+-
+Version
+Revision
+Issue
+Document History
+1
+0
+2004-04-30
+New edition (released with Freedom EVOware V1.0)
+2
+1
+2005-03-30
+Correction of errors and updated for Freedom EVOware V1.1
+1
+2
+2005-08-18
+Updated for Freedom EVOware V1.19
+1
+3
+2005-12-16
+Updated for Freedom EVOware V1.20
+1
+4
+2006-03-31
+Updated for Freedom EVOware V1.21
+1
+5
+2006-06-30
+Updated for Freedom EVOware V1.3
+1
+6
+2006-09-30
+Updated for Freedom EVOware V1.4
+2
+0
+2006-12-31
+Updated for Freedom EVOware V2.0
+2
+1
+2007-12-01
+Updated for Freedom EVOware V2.1
+2
+2
+2008-09-05
+Updated for Freedom EVOware V2.2
+2
+3
+2009-04-01
+Updated for Freedom EVOware V2.3
+
+
+--- PAGE 3 ---
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+i
+Table of Contents
+Table of Contents
+G1
+About This Manual
+G1.1
+Conventions Used in This Manual . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G1-2
+G1.2
+Reference Documents . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G1-3
+G1.2.1
+Related Documentation and Software . . . . . . . . . . . . . . . . . . . . . . . . . 
+G1-3
+G1.3
+Trademarks . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G1-4
+G1.4
+Abbreviations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G1-4
+G1.5
+Context-Sensitive Help System . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G1-5
+G2
+Safety
+G2.1
+User Qualification. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-1
+G2.2
+Warning Notices Used in the Manuals. . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-2
+G2.3
+Use of the Software . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-2
+G2.4
+Specific Hazards  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-3
+G2.5
+Safety of the Overall System . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-4
+G2.6
+Safety Features of the Pipetting Instrument. . . . . . . . . . . . . . . . . . . . . . . . 
+G2-4
+G2.6.1
+Safe Operation of the Pipetting Instrument and the Doorlocks . . . . . . 
+G2-5
+G2.7
+General Safety Rules. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-6
+G2.8
+Specific Safety Rules . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G2-6
+G2.8.1
+Unintended or Unexpected Movement of Robot Arms and Other DevicesG2-6
+G2.8.2
+General Rules When Using the Pipetting Instrument  . . . . . . . . . . . . . 
+G2-6
+G3
+Product Description
+G3.1
+Overview of Freedom EVOware  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G3-1
+G3.1.1
+Freedom EVOware Standard and Freedom EVOware Plus . . . . . . . . 
+G3-2
+G3.1.2
+Hardlocks for Freedom EVOware Standard and Freedom EVOware PlusG3-2
+G3.1.3
+Tecan Software Add-ons for Freedom EVOware  . . . . . . . . . . . . . . . . 
+G3-3
+G3.1.4
+3D Simulation Tool for the Pipetting Instrument  . . . . . . . . . . . . . . . . . 
+G3-3
+G3.2
+Intended Use of the Freedom EVOware Software. . . . . . . . . . . . . . . . . . . 
+G3-3
+G3.3
+What’s New in Freedom EVOware 2.3  . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G3-4
+G3.4
+Supported Pipetting Instruments and Tecan Options  . . . . . . . . . . . . . . . . 
+G3-4
+G3.4.1
+Supported Combinations of Robot Arms . . . . . . . . . . . . . . . . . . . . . . . 
+G3-6
+G3.4.2
+Supported Firmware Versions for the Optional Devices  . . . . . . . . . . . 
+G3-6
+G3.5
+Computer Requirements . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G3-7
+G4
+Installation
+G4.1
+Before You Start. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G4-1
+G4.2
+Installing Freedom EVOware . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G4-2
+G4.3
+Modifying, Removing or Repairing Your Installation  . . . . . . . . . . . . . . . . . 
+G4-8
+G4.3.1
+Upgrading to the Latest Software Version . . . . . . . . . . . . . . . . . . . . . . 
+G4-11
+G4.3.2
+Installation of Service Packs and Hotfixes. . . . . . . . . . . . . . . . . . . . . . 
+G4-11
+G4.4
+The Freedom EVOware Hardlock . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G4-12
+G4.5
+Installing the USB driver for the Freedom EVO pipetting instrument. . . . . 
+G4-12
+G4.5.1
+USB Power Management Setting  . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G4-14
+G4.5.2
+USB Hubs  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G4-15
+
+
+--- PAGE 4 ---
+ii
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+Table of Contents
+G5
+Starting Freedom EVOware
+G5.1
+Login Screen  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-1
+G5.1.1
+Loading the device drivers  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-1
+G5.1.2
+Driver pre-loading. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-2
+G5.1.3
+Driver loading errors. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-3
+G5.1.4
+Instrument and Hardlock Detection . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-3
+G5.2
+Startup Wizard, Freedom EVOware Standard  . . . . . . . . . . . . . . . . . . . . . 
+G5-5
+G5.2.1
+Startup Wizard for Freedom EVOware Standard Operators . . . . . . . . 
+G5-6
+G5.3
+Startup Wizard, Freedom EVOware Plus. . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-7
+G5.3.1
+Startup Wizard for Freedom EVOware Plus Operators . . . . . . . . . . . . 
+G5-8
+G5.4
+Overview of the Main Window in Freedom EVOware . . . . . . . . . . . . . . . . 
+G5-9
+G5.4.1
+Control Bar. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G5-9
+G5.4.2
+Infopads . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G5-15
+G5.4.3
+The Process Editor (Freedom EVOware Plus) . . . . . . . . . . . . . . . . . . G5-17
+G5.4.4
+The Script Editor  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G5-19
+G5.4.5
+Worktable Editor. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G5-21
+G5.5
+Exiting Freedom EVOware. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G5-24
+G6
+Getting Started - Setting Up a New Script or Process
+G6.1
+First Steps  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-1
+G6.2
+Setting Up a New Pipetting Instrument  . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-1
+G6.3
+Pre-requirements . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-2
+G6.3.1
+Setting Up Carriers on the Worktable  . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-2
+G6.4
+Setting Up a Pipetting Script in Freedom EVOware Standard . . . . . . . . . . 
+G6-4
+G6.4.1
+Choosing Labware for a Pipetting Script . . . . . . . . . . . . . . . . . . . . . . . 
+G6-4
+G6.4.2
+Creating a Pipetting Script . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-5
+G6.4.3
+Adding Robot Movement Commands to the Script  . . . . . . . . . . . . . . . 
+G6-6
+G6.4.4
+Saving the Script . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-7
+G6.4.5
+Running the Script . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-7
+G6.4.6
+Example Scripts and Example Process . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-7
+G6.5
+Setting Up a Process in Freedom EVOware Plus . . . . . . . . . . . . . . . . . . . 
+G6-7
+G6.5.1
+Choosing Labware for a Process. . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
+G6-8
+G6.5.2
+Adding Device Commands to the Process. . . . . . . . . . . . . . . . . . . . . . G6-10
+G6.5.3
+Adding Robot Movement Commands to the Process  . . . . . . . . . . . . . G6-11
+G6.5.4
+Choosing Labware for a Pipette Command . . . . . . . . . . . . . . . . . . . . . G6-11
+G6.5.5
+Creating a Script for the Pipette Command . . . . . . . . . . . . . . . . . . . . . G6-12
+G6.5.6
+Closing the Script Editor. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G6-12
+G6.5.7
+Adding Final Position Icons to your Process . . . . . . . . . . . . . . . . . . . . G6-13
+G6.5.8
+Linking the Process Steps in the Order of Execution. . . . . . . . . . . . . . G6-13
+G6.5.9
+Adding On-the-fly Actions  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G6-15
+G6.5.10
+Saving the Process  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G6-15
+G6.5.11
+Running the Process . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G6-15
+G6.6
+Labware Generator (Freedom EVOware Plus) . . . . . . . . . . . . . . . . . . . . . G6-16
+G6.6.1
+Creating a labware repository in a feeder device. . . . . . . . . . . . . . . . . G6-16
+G6.6.2
+Creating a labware repository on the worktable. . . . . . . . . . . . . . . . . . G6-17
+G6.6.3
+Context Menu of the Labware Generator. . . . . . . . . . . . . . . . . . . . . . . G6-19
+G6.7
+Additional Information on Labware and Carriers . . . . . . . . . . . . . . . . . . . . G6-19
+G6.7.1
+Assigning a Label (Name) to the Labware  . . . . . . . . . . . . . . . . . . . . . G6-19
+G6.7.2
+Example of a Worktable With Several Carriers and Labware Items  . . G6-20
+G6.7.3
+System Liquid Icon. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . G6-20
+IX
+Index
+
+
+--- PAGE 5 ---
+G1 - About This Manual
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G1 - 1
+G1 About This Manual
+Purpose of This
+Manual
+The Freedom EVOware Getting Started Guide describes how to install and set up 
+the Freedom EVOware software.
+Please refer instead to the Freedom EVOware Software Manual (Doc ID 393172) 
+for detailed information on using Freedom EVOware, writing pipetting scripts and/
+or processes etc. The Freedom EVOware Software Manual is provided as a PDF 
+file on the Freedom EVOware installation CD. The Freedom EVOware Software 
+Manual contains all of the information which is included in the Getting Started 
+Guide. See also G1.5 “Context-Sensitive Help System”,  G1-5.
+Cross
+References
+The Getting Started Guide has a number of cross references to the Freedom 
+EVOware Software Manual:
+
+Cross-references within this manual are preceeded by a “G”, e.g. 
+G4.2 “Installing Freedom EVOware”,  G4-2. 
+
+All other cross-references refer to chapters in the Freedom EVOware 
+Software Manual, Document ID 393172, e.g. 13.1 “Overview of Script 
+Commands”,  13-1.
+Note: All cross-references start with the chapter or section number and end with 
+the page number. 
+Note: The context-sensitive help file for Freedom EVOware (Extended Device 
+Support) uses the same chapter and section numbers as the Freedom EVOware 
+Software Manual, Document ID 393172. You can open the help file with the button 
+in Start > All Programs > EVOware as soon as the software has been installed. 
+The manual and help file for Freedom EVOware (Limited Device Support) have 
+less chapters and different chapter numbers.
+Note: Some of the information in the Getting Started Guide refers to Freedom 
+EVOware features which are only intended for research applications. See 
+G3.4 “Supported Pipetting Instruments and Tecan Options”,  G3-4 and 
+G3.2 “Intended Use of the Freedom EVOware Software”,  G3-3.
+Target Group
+This manual is intended for application specialists who need to install the 
+Freedom EVOware software.
+For Your Safety
+Please read this manual carefully before installing and running the Freedom 
+EVOware software, in particular Chapter G2, “Safety”.
+ 
+Scope
+This manual applies to Freedom EVOware Standard 2.3 and Freedom EVOware 
+Plus 2.3. For additional information on the Freedom EVOware software, see 
+G3.4 “Supported Pipetting Instruments and Tecan Options”,  G3-4.
+
+
+--- PAGE 6 ---
+G1 - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G1 - About This Manual
+Conventions Used in This Manual
+G1.1 Conventions Used in This Manual
+The following list provides an overview of the conventions as used throughout this 
+manual:
+Names
+
+Freedom EVO: To facilitate reading, the term “pipetting instrument” stands for 
+the Freedom EVO series of pipetting instruments.
+User Interface
+
+Names of screens (menus, windows, dialog boxes, message boxes) are 
+printed in italic, e.g.: “The Select Components window appears.”
+
+Menus and command sequences are printed in bold type and connected 
+with a > sign, e.g., “Start the function with Options > Te-MO > Wash Unit.”
+
+Names of controls in dialog boxes, windows or message boxes 
+(command buttons, checkboxes, option buttons etc.) are printed in bold type, 
+e.g. “Select the Automatic checkbox.”
+
+Directory and file names are printed as follows:
+–
+Path and file names are quoted directly,
+e.g.: C:\Program Files\Tecan\EVOware\database
+–
+or a placeholder is given for the directory, e.g: <install_path>, which 
+stands for the “real” directory name (the default installation path for 
+Freedom EVOware is C:\Program Files\Tecan\EVOware. Also see the 
+next point.
+
+Placeholders (for file names, numbers dates etc.) are set in angle brackets
+< >, e.g.: TeSonic_<serial_number>_<date>_<time>.any.
+
+Cross references appear as follows, e.g: “Refer to section 1.1.1,  1-1
+–
+1.1.1 refers to the corresponding section number.
+–
+The symbol   denotes the page number.
+–
+1-1 stands for the chapter number followed by the page number.
+
+
+--- PAGE 7 ---
+G1 - About This Manual
+Reference Documents
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G1 - 3
+G1.2 Reference Documents
+This section provides a list of documents which are needed or may be useful in 
+connection with the Freedom EVOware software. They either concern the 
+pipetting instrument itself or the optional devices.
+G1.2.1 Related Documentation and Software
+The following Tecan documentation provides additional information which can be 
+useful when using this manual:
+What Does the
+Doc. ID Tell
+You?
+The Doc. IDs listed below are root numbers. Therefore, they do not contain 
+information about the language, document version or the medium (data storage 
+medium, hardcopy, downloadable file, etc.) of the document.
+Check the scope of the corresponding document to make sure that you are in 
+possession of the correct version.
+Note: The Doc. ID does not represent ordering information. For orders refer to the 
+number on the binder, CD casing, etc.
+Operating and
+Software
+Manuals
+
+Freedom EVOware Software Manual (Doc ID 393172 and 393804)
+
+Freedom EVOware Sample Oriented Add-On (Doc ID 394284 and 394285)
+
+Freedom EVOware Sample Tracking Add-On (Doc ID 393933)
+
+Hit-Picking Wizard for Freedom EVOware (Doc ID 395128)
+
+Normalization Software for Freedom EVOware (Doc ID 394288)
+
+Freedom EVOware Runtime Controller Manual (Doc ID 394329) 1)
+
+Freedom EVO Operating Manual (Doc ID 392886)
+
+Carousel Operating Manual (Doc ID 391209)
+
+Microplate Auto Sealer Operating Manual (Doc ID 391749)
+
+Te-Flow Operating Manual (Doc ID 391584)
+
+Te-MagS Operating Manual Doc ID 391237)
+
+Te-MO Operating Manual (Doc ID 391733)
+
+Te-MO 384 Multichannel Pipetting Option Operating Manual (Doc ID 391352)
+
+Te-MO 384 Pipetting Head Operating Manual (Doc ID 391358)
+
+Te-MO 384 WRS Operating Manual (Doc ID 391768)
+
+Te-MO 3/3 96 Operating Manual Multi-pipetting Option (Doc ID 392553)
+
+Te-MO 3/3 384 Operating Manual Multi-pipetting Option (Doc ID 392679)
+
+Te-MO Active Positioning Carrier Operating Instructions (Doc ID 391864)
+
+Te-Shake Operating Manual (Doc ID 391496)
+
+Te-Stack Operating Manual (Doc ID 391862)
+
+Te-VacS Operating Manual (Doc ID 391236)
+
+WRC Tower Operating Manual (Doc ID 391865)
+
+Columbus Washer (Doc ID 30008658)
+
+96PW Washer (Doc ID 30001495)
+
+PW384 Washer (Doc ID 30003394)
+
+Magellan Data Reduction Software (Doc ID 30001495)
+
+Magellan Data Reduction Software, two manuals (Doc ID I 117519)
+1)
+This manual is intended for operators of the pipetting instrument. The same information is also contained in 
+the Freedom EVOware Software Manual.
+
+
+--- PAGE 8 ---
+G1 - 4
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G1 - About This Manual
+Trademarks
+
+GENios, GENios FL, GENios plus (DocID 1 112904)
+
+GENios Pro (DocID 1 112935)
+
+Safire Microplate Reader (Doc ID I 112913)
+
+SpectraFluor Microplate Reader (Doc ID I 112903)
+
+SpectraFluor+ Microplate Reader (Doc ID I 112905)
+
+Sunrise Microplate Reader (Doc ID I 137301 and 1 137302)
+
+Ultra Evolution Microplate Reader (Doc ID I 112929)
+
+Cellerity system Operating Manual (DocID 394070)
+Firmware
+Manuals
+
+PosID-2 Command Set (Doc ID 391141)
+
+Te-Flow Commands (Doc ID 391845)
+
+Te-MagS Command Set (DocID 391294)
+
+Te-VacS Command Set SPE (DocID 3912216)
+
+Te-Shake ORBI Command Set (DocID 391543)
+
+Te-Stack Command Set (DocID 392118)
+The following Tecan documentation describes the Setup & Service software, 
+which is one of the components of the Tecan Instrument Software:
+
+Software Manual, Instrument Software (Doc ID 392888)
+The Setup & Service software is used for calibration, adjustment and 
+commissioning of the pipetting instrument. Setup and service must only be carried 
+out by suitably qualified personnel or by the Tecan Field Service Engineer.
+The above manuals can be ordered from your nearest Tecan representative (see 
+19 “Customer Support”,  19-1). 
+G1.3 Trademarks
+The following product names and any registered and unregistered trademarks 
+mentioned in this manual are used for identification purposes only and remain the 
+exclusive property of their respective owners (for simplicity reasons, the symbols 
+for trademarks, such as ® and ™ are not repeated later in the manual):
+
+Freedom EVOware®, Freedom EVO® and Genesis Freedom® are registered 
+trademarks of Tecan Group Ltd. in major countries.
+
+Windows® is a registered trademark of Microsoft Corporation.
+
+Excel® is a registered trademark of Microsoft Corporation.
+
+Roboflask® is a registered trademark of Corning Inc.
+G1.4 Abbreviations
+See D.1 “Glossary of Terms and Instrument Options”,  D-1 for information on 
+common abbreviations. You can also search for abbreviations in the index.
+
+
+--- PAGE 9 ---
+G1 - About This Manual
+Context-Sensitive Help System
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G1 - 5
+G1.5 Context-Sensitive Help System 
+Freedom EVOware is provided with extensive context-sensitive help (more than 
+900 pages when printed out). When Freedom EVOware is running, press F1 or 
+click the Help button to get help on the current screen, dialog box or operation you 
+are performing. Some of the dialog boxes do not have a Help button. Press F1 in 
+this case. You can also open the help file with the shortcut in Start > All Programs 
+> Tecan > EVOware.
+Note: The help system contains all of the information which is provided in the 
+Software Manual PDF file on the Freedom EVOware installation CD. It uses the 
+same numbering scheme for chapter headings, figures and tables as the software 
+manual. Help is not provided for standard Windows operations such as Cut and 
+Paste.
+The Index tab has the same entries as the index of the printed manual or PDF file.
+The Search tab (full text search function) lets you use the wild cards ? (one 
+additional character) and * (zero or more additional characters). For example, 
+scan* finds scan and scanner. The wild cards can also be used at the beginning of 
+the search string. For example, *allbarcodes will find the ReadAllBarcodes 
+command.
+If you specify more than one search term, they are treated as alternatives (OR 
+function). The search terms are not case sensitive. Use quotes "" to search for 
+strings which contain space characters (e.g. “file names”).
+Refer to the standard Microsoft documentation if you need more information on 
+using Microsoft HTML Help. 
+The Freedom EVOware Software Manual was written using Adobe FrameMaker. 
+The context-sensitive help was created from the FrameMaker files using a special 
+software tool.
+Glossary
+The Freedom EVOware Software Manual has an extensive glossary with 
+descriptions of general terms and instrument options (e.g. Te-MagS). The 
+glossary terms are included in the index of the printed manual or PDF file and the 
+Index tab of the online help. They are marked with “overview”, for example “Te-
+MagS (overview)”.
+Freedom EVOware commands
+See 13 “Overview of Freedom EVOware Commands”,  13-1 for an overview of 
+the Freedom EVOware commands in the Control Bar. Also see 5.4 “Overview of 
+the Main Window in Freedom EVOware”,  5-9.
+
+
+--- PAGE 10 ---
+G1 - 6
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G1 - About This Manual
+Context-Sensitive Help System
+
+
+--- PAGE 11 ---
+G2 - Safety
+User Qualification
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - 1
+G2 Safety
+Purpose of This
+Chapter
+This chapter covers only the general introductory safety instructions applicable to 
+the Freedom EVOware. Specific safety instructions of the hardware devices are 
+laid down in the respective hardware manuals.
+Significance of
+These Safety
+Instructions
+The Freedom EVOware is a pure software product and as such it does not contain 
+any hazardous parts. However, the software is used to control hardware devices 
+and options, which may contain parts that can move with great force and at 
+considerable speed.
+As a consequence, the safety of users and personnel can only be ensured if the 
+safety instructions in this Getting Started Guide as well as the safety instructions 
+of the hardware devices controlled with the software described here are strictly 
+observed and followed.
+Therefore, all relevant manuals must always be available to all users working with 
+the Freedom EVOware.
+G2.1 User Qualification
+What Users
+Must Know
+Users must be qualified and trained to run Freedom EVOware.
+In particular, they must fulfill the following qualifications:
+
+They must have a basic knowledge of the Windows operating system.
+
+They must have read and understood the instructions in this Software Manual.
+
+Only users that meet the qualifications prescribed here are authorized to run 
+the program described in this Software Manual.
+Training
+Courses
+Note: Tecan recommends that users attend a software training course. Please 
+ask your nearest Tecan representative about the available courses.
+
+
+--- PAGE 12 ---
+G2 - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - Safety
+Warning Notices Used in the Manuals
+G2.2 Warning Notices Used in the Manuals
+The symbols used for safety-related notices have the following significance:
+WARNING
+Symbols
+WARNING notices appear as follows:
+WARNING
+Generally, the triangular warning symbol indicates the possibility of personal injury 
+or even loss of life if the instructions are not followed.
+ATTENTION
+Symbols
+ATTENTION notes appear as follows:
+ATTENTION
+With the general “Read This!” symbol, ATTENTIONs indicate the possibility of 
+equipment damage, malfunctions or incorrect process results, if instructions are 
+not followed.
+ 
+G2.3 Use of the Software
+Intended Use
+The intended use of the Freedom EVOware software is defined in chapter 
+G3.2 “Intended Use of the Freedom EVOware Software”,  G3-3.
+The software must not be used for applications other than listed there.
+
+
+--- PAGE 13 ---
+G2 - Safety
+Specific Hazards
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - 3
+G2.4 Specific Hazards
+The following hazards are associated with the use of the Freedom EVOware 
+software:
+Cellular Phones
+If you have a cellular phone
+PROHIBITION
+Turn off all cellular phones. Do not use or keep them on standby within the 
+laboratory. The use of cellular phones may cause faulty liquid detection and 
+unreliable results.
+Electrostatic
+Discharge
+Care must be taken when it is unavoidable to touch delicate electronic circuits.
+ATTENTION
+Discharge static electricity from your body. Wear a wrist wrap that is connected to 
+ground when handling delicate electronic circuits.
+Risks Through
+Contamination
+Always make sure that the instrument is not contaminated chemically, biologically 
+or radioactively.
+WARNING
+
+Chemical, biological and radiative hazards can be associated with certain 
+substances used or processed with the instrument.
+
+The same applies to waste disposal.
+
+Always wear appropriate laboratory safety items such as gloves when working 
+on or operating the pipetting instrument.
+Always be aware of possible hazards associated with such substances. Request 
+a filled out and signed Decontamination Declaration before performing any setup 
+and test procedures.
+Movable Parts
+Keep in mind that arm and pipetting devices can move at great speed and with 
+considerable force.
+WARNING
+
+Keep your hands off the zone in which pipetting devices move.
+
+Never stick your head into the pipetting instrument when the power is 
+switched on.
+
+
+--- PAGE 14 ---
+G2 - 4
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - Safety
+Safety of the Overall System
+Laser
+Note that barcode readers such as the PosID or Symbol LS-1220 use laser 
+technology for scanning.
+WARNING
+Laser beam (Laser Class II).
+Radiation may be harmful to your eyes.
+
+Do not stare into beam.
+
+Always switch instrument off before servicing devices containing a laser 
+source.
+ 
+G2.5 Safety of the Overall System
+In addition to the safety instructions in this Getting Started Guide, the safety 
+instructions in the manuals of the hardware devices must also be observed and 
+followed.
+WARNING
+Hazards originating from the hardware devices controlled with this software.
+Mind the safety instructions of all instruments and options which are used in 
+connection with Freedom EVOware.
+G2.6 Safety Features of the Pipetting Instrument
+The Access/Status feature for the Freedom EVO pipetting instruments consists of 
+up to four electrically-operated doorlocks for safety hoods or safety doors which 
+prevent access to the instrument when it is operating, a status lamp and acoustic 
+alarm device which is mounted above the instrument at a conspicuous position to 
+ensure that it is visible to the operator from some distance away and an 
+electrically-operated pause/resume button to stop and then continue the pipetting 
+script.
+The Freedom EVO pipetting instrument is always fitted with two doorlocks. Two 
+additional doorlocks can be fitted to support special hardware arrangements.
+Freedom EVOware controls the status lamp and acoustic alarm device as follows:
+
+Green, red and acoustic alarm are off: Freedom EVOware is idle (not 
+executing a script).
+
+Green is continuously lit: A script is running and everything is ok.
+
+Green is flashing: The script has been paused by clicking the Pause button or 
+the script command “User prompt” or “Set Variable” with user query is 
+currently waiting for user input.
+
+Red is flashing and the acoustic alarm is on: An error message is being 
+displayed.
+
+
+--- PAGE 15 ---
+G2 - Safety
+Safety Features of the Pipetting Instrument
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - 5
+G2.6.1 Safe Operation of the Pipetting Instrument and the Doorlocks
+Freedom EVOware supports up to four electrically-operated doorlocks for the 
+pipetting instrument and the doorlocks are arranged in groups. The following 
+mechanisms are used to unlock and lock the doorlocks at the appropriate times. 
+All doorlocks are locked automatically when a pipetting script or process is 
+started. A mechanical interlock ensures that the script or process cannot be 
+started unless the safety hoods are closed and locked. The Doorlock Error is 
+displayed and the script or process will not run if the doorlocks cannot be locked.
+The doorlocks are unlocked when the script or process is finished, aborted or 
+paused by clicking the Pause button. 
+The doorlocks are locked again when the script or process is continued after 
+being paused by clicking the Pause button. 
+For safety reasons, it is not possible to unlock the doorlocks when the script or 
+process is running.
+For additional information on the operation of the doorlocks see 15.38 “User 
+Prompt Command”,  15-98.
+For maximum safety, please observe the following points:
+
+If you have fitted additional doorlocks, make sure that they are correctly 
+assigned in the Freedom EVOware configuration (see 8.4.2.7 “Doorlocks”, 
+ 8-31). 
+
+Above all when the instrument is put into service for the first time, run a test 
+script to check the correct mechanical and electrical function of the doorlocks. 
+Never unplug the electrical connections to the doorlocks.
+
+If an error message causes the script or process to pause, the doorlocks are 
+unlocked to allow operator intervention. 
+WARNING
+Risk of injury to operating personnel
+
+Take extra care when designing the script or process if you have programmed 
+operations which could cause parts of the instrument to move even when the 
+script or process is stopped. Asynchronous movements can be carried out 
+e.g. by stacker devices.
+ 
+
+
+--- PAGE 16 ---
+G2 - 6
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - Safety
+General Safety Rules
+G2.7 General Safety Rules
+Legal
+Regulations
+Legal regulations, such as local, state and federal laws which prescribe the use or 
+application as well as the handling of dangerous materials in connection with the 
+Freedom EVOware software must be strictly followed.
+Modifications
+Modifications to the Freedom EVOware software are not permitted. The 
+manufacturer will decline any claim resulting from unauthorized modifications.
+G2.8 Specific Safety Rules
+G2.8.1 Unintended or Unexpected Movement of Robot Arms and Other 
+Devices
+Safety-relevant situations which can cause unintended or unexpected movement 
+of robot arms and other devices include the following:
+
+The operator enters an incorrect value in a user prompt.
+
+The operator enters an incorrect value when teaching a robot movement 
+vector.
+
+Faulty algorithm in the user application.
+Accordingly:
+WARNING
+Risk of injury to operating personnel
+
+Keep your hands off the zone in which pipetting devices move.
+
+Never stick your head into the pipetting instrument when the power is 
+switched on. 
+
+You must not enter the working area of the pipetting instrument when teaching 
+a robot movement vector.
+G2.8.2 General Rules When Using the Pipetting Instrument
+The following rules must be observed to ensure operator safety, to ensure valid 
+results from the assays or methods and to avoid damage to the equipment:
+
+All persons working with the pipetting instrument and/or the Freedom 
+EVOware software must be suitably trained. See G2.1 “User Qualification”, 
+ G2-1 for more information.
+
+Users of the pipetting instrument and/or the Freedom EVOware software 
+should be aware of responsibility they carry to ensure that the results obtained 
+are correct and valid. When running Freedom EVOware scripts and 
+processes, users should remain alert and observant at all times to minimize 
+the risk of operator errors and to check for possible equipment malfunctions, 
+e.g. as a result of hardware failures or incorrect set up of the pipetting 
+instrument. See also C “Validation of Freedom EVOware Applications”,  C-1.
+
+If the pipetting instrument will be used with hazardous or contaminating 
+liquids, it is recommended to fit and activate the LICOS option. The LICOS 
+
+
+--- PAGE 17 ---
+G2 - Safety
+Specific Safety Rules
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - 7
+option is a device which monitors the liquid level in the waste liquid and 
+system liquid containers. It outputs a warning if the waste container is nearly 
+full or if the system liquid container is nearly empty.
+
+If DITIs are dropped by mistake, the pipetting instrument must be checked for 
+contamination. 
+
+To avoid contamination when DITIs are dropped on purpose (e.g. to pick up 
+new ones), we recommend you to use the Lower DITI Eject option.
+
+Always wear appropriate laboratory safety items such as gloves when working 
+on or operating the pipetting instrument.
+
+After setting up the pipetting instrument and installing the Freedom EVOware 
+software, use the Configuration Tool to check that the configured dilutor 
+capacity matches the size of the syringe which is fitted to the pipetting 
+instrument. The syringe size is on a label which is attached to the syringe. 
+
+All scripts and processes must be validated for correct functioning and for 
+correct results before they are used for pipetting with real samples. See 
+11.4.2.1 “Checking the Pipetting Script for Errors”,  11-5.
+
+Before running a script or process, you must set up the worktable with the 
+carriers, labware and devices which are needed by the application or assay. 
+The administrator or owner of the pipetting instrument must establish standard 
+operating procedures for setting up the worktable and make them available to 
+everyone who carries out pipetting.
+
+After setting up the worktable with the carriers, labware and devices which are 
+needed by the application or assay, inspect the paths that the instrument arms 
+(LiHa, RoMa, PnP) will take during the hardware initialization sequence to 
+make sure that there are no obstacles which could obstruct the movements. 
+See also 8.4.2.8 “Arm Initialization”,  8-31.
+
+Make sure that the RoMa will not interfere with the tubing and syringes at the 
+back of the pipetting instrument during the hardware initialization sequence 
+(the path that the RoMa will take depends to some extent on its initial position, 
+see 9.6.4 “Defining the Home Position for a RoMa”,  9-62).
+
+When programming movement vectors for the RoMa and/or PnP, inspect the 
+paths to make sure that there are no obstacles which could obstruct the 
+movements when the vector is used; make sure that the RoMa will not 
+interfere with the tubing and syringes at the back of the pipetting instrument.
+
+Manually initialize the arms of the pipetting instrument (e.g. using the Initialize 
+button in the Freedom EVOware toolbar), make a visual check that the 
+initialization sequence has been carried out correctly and check the log file for 
+initialization errors.
+
+Only use barcodes with fixed length and check digits for general purpose 
+pipetting applications in a regulated environment. This ensures that incorrectly 
+scanned barcodes are always detected.
+
+If you are using the PosID-3 for general purpose applications in a regulated 
+environment, you must always activate the Double Blind Entry feature if you 
+intend to enter barcodes manually when they cannot be read.
+
+When setting up an assay for a liquid which can clot, make sure that clot 
+detection is enabled in the liquid classes which are used to handle the liquid. 
+Refer to the Good Usage information in the Operating Manual for the pipetting 
+instrument for additional recommendations.
+
+When setting up an assay which uses a trough (container for a reagent liquid), 
+make sure that the liquid classes which are used for aspirating from the trough 
+are configured to immerse the tips in the liquid by at least 3 mm.
+
+If the system pauses for any reason when running a script or process, the 
+duration of the pipetting script, process step or procedure may differ from the 
+intended time. For example, sample incubation time may be outside of the 
+
+
+--- PAGE 18 ---
+G2 - 8
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G2 - Safety
+Specific Safety Rules
+specified limits. Depending on the application, this can make the assay 
+invalid. 
+–
+A system pause can be caused e.g. by clicking the Pause button in 
+Freedom EVOware’s Runtime Controller dialog box, by pressing the 
+Pause button on the pipetting instrument, by a pipetting error or by an 
+internal timeout if a process step has taken longer than expected or 
+specified.
+–
+System pauses are not shown in the Gantt chart in the Extended View of 
+the Runtime Controller (the Gantt chart is only available in Freedom 
+EVOware Plus).
+
+After running a script or process, you must check the log files to make sure 
+that the script or process has completed fully and without errors. 
+
+The results of an assay are only valid if the entire script or process completed 
+without errors. If this is not the case, the entire script or process must 
+repeated after rectifying the cause of the error(s).
+
+
+--- PAGE 19 ---
+G3 - Product Description
+Overview of Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - 1
+G3 Product Description
+Purpose of This
+Chapter
+This chapter provides a brief overview of the Freedom EVOware software and 
+defines its scope of application. In addition, it describes the features and specifies 
+the PC-requirements for running the software.
+G3.1 Overview of Freedom EVOware
+Freedom EVOware provides a graphical user interface for controlling Tecan’s 
+Freedom EVO series of pipetting instruments that facilitates the liquid handling 
+needs of a wide range of life science applications, including both routine and 
+research activities. 
+The Freedom EVOware software allows the user to develop pipetting programs 
+(which are called scripts) and to quickly visualize how a laboratory process or 
+experiment can be implemented. Commands are provided for a wide range of 
+Tecan hardware options and third-party devices and the scripting system is 
+designed for maximum flexibility when developing complex custom processes. 
+When the script or process is ready, Freedom EVOware controls the pipetting run 
+by sending control signals to the pipetting instrument and optional laboratory 
+devices through a data connection. If operator interaction is necessary, Freedom 
+EVOware can display a dialog box on the display of the workstation which 
+prompts for the information which is needed.
+Freedom EVOware has an external programming interface (API) which allows you 
+to integrate Freedom EVOware into third party products or custom applications or 
+to use Freedom EVOware components within other Tecan products running on 
+the same computer or on a different computer in the network. 
+Freedom EVOware’s modular device driver concept allows a wide range of Tecan 
+and third-party devices and options to be supported; a plug-in concept allows new 
+or updated drivers to be easily added to existing Freedom EVOware installations. 
+The Freedom EVOware CD contains drivers for the most commonly used 
+devices. Contact Tecan for information on additional drivers which are available 
+for special applications and third-party hardware.
+In addition, the device driver API allows external software specialists to develop 
+and integrate custom device drivers for third party hardware. Furthermore, the 
+modular help system lets you integrate your own HTML Help components within 
+the existing, extensive context-sensitive help system.
+Please contact the Tecan software specialists for information on the device driver 
+API and on extending the modular context-sensitive help.
+It is instructive for new users of Freedom EVOware to load the example scripts 
+and processes which are provided and to work through each of them by reviewing 
+the on-line help (see G6.4.6 “Example Scripts and Example Process”,  G6-7). 
+In addition, Freedom EVOware’s “Infopads” give useful tips for new users (see 
+5.4.2 “Infopads”,  5-15). Click the hyperlinks in the How To section of the Infopad 
+area to run short animations (films) which demonstrate various commonly needed 
+tasks. The animations are stored in AVI format and will be shown e.g. in Windows 
+Media Player.
+Also see D.1 “Glossary of Terms and Instrument Options”,  D-1. 
+This manual instructs the user how to:
+
+Install the Freedom EVOware software,
+
+Set up instrument and configuration data,
+
+
+--- PAGE 20 ---
+G3 - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - Product Description
+Overview of Freedom EVOware
+
+Define the pipetting worktable,
+
+Define the pipetting scheme,
+
+Set up pipetting scripts and processes,
+
+Run pipetting scripts and processes.
+G3.1.1 Freedom EVOware Standard and Freedom EVOware Plus
+Freedom EVOware Plus groups pipetting scripts and device commands into 
+processes. This concept makes it possible to optimize the efficiency and thus 
+maximize the throughput of the pipetting instrument through the use of multi-
+tasking and scheduling. This feature is not available for Freedom EVOware 
+Standard.
+In addition, Freedom EVOware Plus allows you to run several processes in 
+parallel. You can run several copies of the same process and/or several different 
+processes in parallel.
+The Freedom EVOware installation copies files for both versions of Freedom 
+EVOware to your PC. Activation of the appropriate Freedom EVOware version is 
+done using a hardlock (dongle).
+G3.1.2 Hardlocks for Freedom EVOware Standard and Freedom EVOware 
+Plus
+Freedom EVOware is available with two different feature levels - Freedom 
+EVOware Standard and Freedom EVOware Plus. In addition, a special version is 
+available for the Freedom EVO 75 pipetting instrument. Whereas the software on 
+the Freedom EVOware CD is the same in all cases, the additional features 
+provided by Freedom EVOware Plus are enabled by purchasing and fitting the 
+appropriate hardlock (an intelligent USB plug or “dongle”).
+Four different hardlocks are available:
+
+Freedom EVOware Standard
+
+Freedom EVOware Standard for Freedom EVO 75
+
+Freedom EVOware Plus
+
+Freedom EVOware Plus for Freedom EVO 75
+The hardlock version you are currently using is shown in the Freedom EVOware 
+status bar (see 6.7.3 “Status Bar”,  6-20, Dongle type). The Freedom EVOware 
+Plus hardlock also allows you to use Freedom EVOware Standard (but not vice 
+versa).
+Note: Freedom EVOware will run in offline mode if it cannot detect a hardlock 
+when it starts (see G5.1.4 “Instrument and Hardlock Detection”,  G5-3). 
+Firmware commands such as movement commands are not sent to the pipetting 
+instrument in offline mode (i.e. pipetting does not take place).
+It is not necessary to fit a hardlock if you want to run Freedom EVOware in offline 
+mode or if you are using the 3D simulation program EVOSim.
+Several software add-ons are available for Freedom EVOware which must be 
+puchased separately. They extend the functionality with special features (see 
+G3.1.3 “Tecan Software Add-ons for Freedom EVOware”,  G3-3). To allow the 
+use of the add-ons, the Freedom EVOware hardlock must be upgraded. This is 
+usually done using an activation tool (software). After purchasing the add-on 
+software, the activation tool is normally sent to you by eMail. The activation tool is 
+
+
+--- PAGE 21 ---
+G3 - Product Description
+Intended Use of the Freedom EVOware Software
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - 3
+specifically coded for the serial number of your hardlock and will not carry out the 
+upgrade if the serial number does not match.
+G3.1.3 Tecan Software Add-ons for Freedom EVOware
+Several software add-ons are available for Freedom EVOware which extend the 
+functionality with special features. The following add-ons are currently available:
+
+Freedom EVOware Sample Oriented Add-On
+
+Freedom EVOware Sample Tracking Add-On
+
+Hit-Picking Wizard for Freedom EVOware
+
+Normalization Software for Freedom EVOware
+See D “Glossary”,  D-1 for an overview of these products. See the help files and/
+or software manuals of these add-ons for full details (see G1.2.1 “Related 
+Documentation and Software”,  G1-3).
+G3.1.4 3D Simulation Tool for the Pipetting Instrument
+The Freedom EVOware setup program lets you install a 3D simulation tool 
+(EVOSim) which can be used to visualize the movements which are carried out by 
+the arms of the Freedom EVO pipetting instrument (LiHa, RoMa, PnP and MCA) 
+when running Freedom EVOware scripts and processes. It can also be used to 
+visualize several other devices such as the Te-MO and the PosID-3.
+EVOSim interprets the firmware (hardware) commands which are sent to the 
+pipetting instrument and sends the appropriate responses to Freedom EVOware. 
+To do this, the RS232 connection to the pipetting instrument is configured to 
+communicate with EVOSim instead.
+Using an additional tool, EVOSim can also be used to monitor the communication 
+between Freedom EVOware and the pipetting instrument.
+For more information, see A.14 “Configuring and Using the 3D Simulation Tool 
+EVOSim”,  A-103.
+G3.2 Intended Use of the Freedom EVOware Software
+Certain hardware options are only intended for research applications. If you install 
+device drivers which are not part of the general purpose configuration, you will 
+see a warning message during the installation that your Freedom EVOware 
+installation is now only suitable for research applications.
+Choose About in the Help menu to get information on the current configuration of 
+your Freedom EVOware installation. Refer to G3.4 “Supported Pipetting 
+Instruments and Tecan Options”,  G3-4 for a list of the options which are 
+supported by the current configuration. Refer to the Getting Started Guide for a list 
+of all of the options which are supported by the Freedom EVOware software.
+
+
+--- PAGE 22 ---
+G3 - 4
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - Product Description
+What’s New in Freedom EVOware 2.3
+G3.3 What’s New in Freedom EVOware 2.3
+In addition to a large number of detail improvements, the key new Freedom 
+EVOware features in version 2.3 are as follows:
+General & Usability
+Support for and commands for the Common Gripper Module (CGM) of the 
+MCA384 pipetting arm (see 15.69,  15-179).
+G3.4 Supported Pipetting Instruments and Tecan Options
+Freedom EVOware 2.3 is intended for the following Tecan pipetting instruments:
+
+Freedom EVO 100, 150, 200
+
+Freedom EVO 75
+Freedom EVOware 2.3 supports the following optional devices, instrument 
+options and systems:
+
+Liquid Handling Arm (LiHa) with 2, 4 or 8 tips
+
+8 Plus 1 Access option for the Freedom EVO 75 pipetting instrument
+
+Multi Channel Arm (MCA) with 96 tips 1)
+
+Multi Channel Arm 384 (MCA384) with 96 or 384 tips 1)
+
+CGM option (Common Gripper Module) for the MCA384 1)
+
+Tecan Pressure Monitored Pipetting (PMP) option
+
+XP dilutor
+
+XLP dilutor
+
+XMP dilutor (for the Freedom EVO 75 pipetting instrument)
+
+Standard tips, low volume tips and disposable tips (DITIs)
+
+Te-PS (Tecan Positioning System) for the Freedom EVO pipetting 
+instrument 1)
+
+Low Volume Option 1)
+
+Te-Fill Option 1)
+
+Lower DITI Tip Eject option
+
+Robot Manipulator (RoMa), standard and long version
+
+Pick and Place arm (PnP) 1)
+
+PosID-2 Barcode Scanner
+
+PosID-3 Barcode Scanner
+
+Fast Wash Option (FWO)
+
+Monitored Pump Option (MPO)
+
+SPO (Sensored Pump Option)
+
+Liquid Container Supervisor (LICOS)
+
+Vacuum Assisted Waste option for viscous liquids 1)
+
+Te-MO 3/3 and Te-MO 5/3 (Tecan Multi-pipetting Option) 1)
+
+Te-MO 96-tip pipetting head 1)
+
+Te-MO 384-tip pipetting head 1)
+
+Wash & Refill Center for the Te-MO 1)
+1)
+This option is only intended for research applications.
+
+
+--- PAGE 23 ---
+G3 - Product Description
+Supported Pipetting Instruments and Tecan Options
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - 5
+
+6 or 10 x Te-MO Active Positioning Carriers, depending on Te-MO version (2 
+solenoids) 1)
+
+1 x Te-Stack Labware Stacker for the Te-MO (up to 3 stacks per stacker) 1)
+
+4 x Te-Stack Labware Stacker, stand-alone (2 stacks per stacker) 1)
+
+Te-VacS (Tecan SPE Vacuum Separator) 1)
+
+Collector plate repositioner and de-salter valve options for the Te-VacS 1)
+
+Te-MagS (Tecan Magnetic Bead Separator)
+
+Te-Shake (Orbital Shaker)
+
+MIO (Monitored Incubator Option) with or without shaking option
+
+Carousel/Carousel HS with or without barcode scanner 1)
+
+Carousel NT 1)
+
+Connection Box for the Te-Flow (In Situ Hybridization) option 1)
+
+Lauda Waterbath for the Te-Flow (In Situ Hybridization) option (GenePaint 
+chamber racks) 1)
+
+Symbol LS-1220 Barcode Scanner
+
+Symbol MS-954 Barcode Scanner
+
+Hettich Centrifuge 1)
+
+Te-Link (transfer rail / conveyor system) 1)
+
+Mettler Balance 1)
+
+Mettler WM pooling balance (for the Liquid Arrival Check feature)
+
+96PW Washer 1)
+
+PW384 Washer (via WinWash Plus software) 1)
+
+PW384 Washer (via PW384GP driver)
+
+Columbus Plate Washer
+
+REMP Reatrix 2D barcode reader for REMP sample tubes 1)
+
+REMP PHS Portrait Heat Sealer for microplates 1)
+
+REMP ACD Automatic Capper Decapper 1)
+
+Tecan Safety features (4 x doorlocks and pause/resume button)
+
+Tecan Access/Status feature (status lamp and acoustic alarm device)
+
+Tecan Magellan data reduction and analysis software for Tecan microplate 
+readers.
+
+Tecan microplate readers (raw data mode): 
+–
+Sunrise 2)
+–
+SpectraFluor 1)
+–
+SpectraFluor+ 1)
+–
+Genios 1)
+–
+Genios Pro 1)
+–
+Safire 1)
+–
+Ultra 1)
+–
+Ultra Evolution 1)
+1)
+This option is only intended for research applications.
+2)
+The TW (Tuneable Wavelength) feature of the Sunrise reader is only intended for research applications.
+
+
+--- PAGE 24 ---
+G3 - 6
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - Product Description
+Supported Pipetting Instruments and Tecan Options
+G3.4.1 Supported Combinations of Robot Arms
+The Freedom EVO 100, 150 and 200 pipetting instruments can be configured with 
+a maximum of three robot arms on the X slide as follows:
+
+Up to two liquid handling arms (LiHa)
+
+One Multi Channel Arm (MCA) 1)
+
+One Multi Channel Arm 384 (MCA384), optionally fitted with one Common 
+Gripper Module (CGM) 1)
+
+Up to two plate robot (RoMa) arms
+
+Up to two tube robot (PnP) arms 1)
+The total number of arms of all types is three (e.g. 1 x LiHa and 2 x RoMa or 
+1 x LiHa, 1 x RoMa and 1 x PnP).
+The Freedom EVO 75 pipetting instrument can only be fitted with one liquid 
+handling arm.
+G3.4.2 Supported Firmware Versions for the Optional Devices
+The Device Information tab in the Devices section of the Configuration Tool lists 
+the device firmware version for which each of the Freedom EVOware device 
+drivers was originally developed. In many cases, the device driver will control the 
+device correctly even if the stated firmware version and the actual firmware 
+version of the device are not identical. See 8.4.1.1 “Device Information Tab”,  8-
+21.
+Some devices have a firmware command (e.g. Get_Version) which allows you to 
+interrogate their firmware version using the Freedom EVOware Configuration Tool 
+(see 8.4.3.4 “Test Tab”,  8-37). For descriptions of the pre-configured firmware 
+commands which are available for each device, see the section “Firmware 
+commands” for the device (see 8.5 “Device Driver Configuration”,  8-39). 
+1)
+This option is only intended for research applications.
+
+
+--- PAGE 25 ---
+G3 - Product Description
+Computer Requirements
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - 7
+G3.5 Computer Requirements
+The PC on which Freedom EVOware will be installed must meet the following 
+minimum requirements:
+Operating
+System
+Freedom EVOware 2.3 is compatible with the following operating system:
+
+Microsoft Windows XP Professional (Service Pack 3)
+
+Microsoft Windows Vista
+Hardware
+
+A CPU that is suitable for running Windows XP Professional (recommended 
+minimum specification Pentium 4 or Athlon cpu running at 3 GHz; optimum 
+dual core or multi processor system running at 2.33 GHz).
+
+RAM size should be suitable for running Windows XP Professional 
+(recommended minimum size 1 GB, optimum 1 GB for Freedom EVOware 
+Standard, 2 GB for Freedom EVOware Plus).
+
+Virtual memory as required by the operating system.
+
+An SVGA monitor with 32,768 colors or more and a minimum resolution of 
+1024x768 pixels (optimum 1280x1024 or higher). To ensure correct display of 
+the dialog boxes, we recommend you to configure your display settings in the 
+Control Panel for Small Fonts;
+
+Mouse.
+
+CD-ROM drive.
+
+Hard disk with about 5 GB of unused space for the Freedom EVOware 
+software, optional software components, scripts and log files;
+
+One serial interface for the data interface to the pipetting instrument (if you 
+intend to connect the pipetting instrument via RS232);
+
+Additional serial interfaces are required by some of the instrument options 
+(e.g. the Mettler balance);
+
+A hardlock (dongle) for either Freedom EVOware Standard or Freedom 
+EVOware Plus (a hardlock is a copy protection device which is plugged into 
+the USB port of your PC). See G3.1.2 “Hardlocks for Freedom EVOware 
+Standard and Freedom EVOware Plus”,  G3-2.
+
+One USB port for the hardlock;
+
+One USB port for the data interface to the pipetting instrument (if you intend to 
+connect the pipetting instrument via USB);
+
+Printer (optional).
+ATTENTION
+Risk of the script or process aborting.
+
+The PC must be configured to prevent it from going in to Sleep Mode even if 
+no user inputs take place for an extended period of time.
+
+The USB power management in Windows must be switched off to avoid losing 
+the connection to the pipetting instrument, which may otherwise occur in rare 
+cases. See G4.5.1 “USB Power Management Setting”,  G4-14 for more 
+information.
+If you want to connect the pipetting instrument via USB, it should be connected 
+directly to the PC. This also applies to USB connnections from hardware options, 
+if they have their own cable. The use of an external USB hub should be avoided. If 
+an external USB hub is absolutely necessary, use an active USB hub (i.e. with its 
+
+
+--- PAGE 26 ---
+G3 - 8
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G3 - Product Description
+Computer Requirements
+own power supply). Data transfer problems may occur if you use a passive USB 
+hub, especially if you are also using the PMP option. Please note that some port 
+replicators for laptops contain a USB hub.
+Security
+The following table shows which permissions are needed for installing and 
+running the Freedom EVOware 2.3 software.
+Freedom EVOware has four user levels – Administrator, Application Specialist, 
+Power User and Operator. The Freedom EVOware user levels are independent of 
+the MS Windows user levels.
+All four Freedom EVOware user levels need read/write access to the Freedom 
+EVOware directory and its subdirectories during program runtime. The Freedom 
+EVOware user level Operator cannot create or modify scripts or processes, but 
+Freedom EVOware still needs read/write access to write log and export files and 
+audit trail data.
+Tab. G3-1 Minimum Security Permissions
+Activity
+Windows XP 
+Professional
+Program installation
+MS Windows Local 
+Administrator
+Running the program
+MS Windows Power User
+
+
+--- PAGE 27 ---
+G4 - Installation
+Before You Start
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 1
+G4 Installation
+Purpose of This
+Chapter
+This chapter describes the installation of the Freedom EVOware software on a 
+target computer. Read it carefully before starting the installation.
+ 
+G4.1 Before You Start
+Cross
+References
+List of cross references to information provided in other sections:
+Target
+Computers
+Freedom EVOware must be installed on target computers that are or will be 
+connected to the pipetting instrument 
+Other
+Requirements
+The PW384 Plate Washer driver requires the Tecan WinWash Plus software, 
+which must be installed separately. It is normally provided with the washer. 
+WinWash Plus is not necessary for the PW384GP Plate Washer driver.
+Drivers for microplate readers (e.g. photometers) require the RdrOLE and XFluor4 
+software, which must be installed separately. It is normally provided with the 
+reader. Freedom EVOware can also control microplate readers using the 
+Magellan software.
+The Magellan driver requires the Tecan Magellan software, which must be 
+installed separately. The Magellan software has built-in drivers for Tecan 
+microplate readers. If you intend to use the Magellan software, it is not necessary 
+to install the driver for your reader when you install Freedom EVOware unless you 
+also want to use the reader in raw data mode.
+Note: You cannot run the FACTS 5.x dynamic scheduling software and Freedom 
+EVOware on the same computer. Please un-install FACTS before you install 
+Freedom EVOware.
+Who Should
+Install?
+The Freedom EVOware software must be installed by a properly trained 
+specialist.
+Access Rights
+To install Freedom EVOware on the target computer, you need local administrator 
+access rights for the Microsoft Windows XP operating system. Refer to the 
+Microsoft documentation for further information on access rights.
+For information on the access rights which are required to use Freedom 
+EVOware, see G3.5 “Computer Requirements”,  G3-7, Security.
+Saving User
+Data
+If Freedom EVOware is already installed on your PC, before running the 
+installation program we recommend you to back up your Freedom EVOware data 
+files, scripts and processes to exchangeable media or to a network or temporary 
+Information
+References
+Supported pipetting instruments and 
+Tecan options
+See section G3.4,  G3-4
+Computer requirements
+See section G3.5,  G3-7
+
+
+--- PAGE 28 ---
+G4 - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Installing Freedom EVOware
+directory (not within the Freedom EVOware <install_path>). See 8.2 “Backing Up 
+and Restoring Your Configuration”,  8-3. You can also use the Export Import tool 
+to save your scripts and processes and other configuration data (see 
+A.9.4 “Export/Import Tool”,  A-38).
+Saving these files is especially recommended in the following cases:
+
+Before un-installing (removing) the Freedom EVOware software.
+
+Before installing a newer version of Freedom EVOware.
+
+Before modifying an existing Freedom EVOware installation.
+Saving Audit
+Trail Data
+If you are required to comply with the FDA regulations, make sure you keep 
+archive copies of all audit trail, trace and log files. These files are located in the 
+<install_path>\AuditTrail directory. They are not backed up by the Backup function 
+- you should use the Audit Trail Archiving function instead. See A.9.6 “Audit Trail 
+Archiving tool”,  A-47 and B “Appendix B - FDA 21 CFR Part 11 Compliance”, 
+ B-1.
+ 
+G4.2 Installing Freedom EVOware 
+Installation
+Directory
+By default, Freedom EVOware will be installed into the <windrive>\Program 
+Files\Tecan\Freedom EVOware directory. <windrive> is the drive in which the 
+Windows operating system is installed. 
+We recommend you to accept this directory. However, you may install Freedom 
+EVOware into a different drive/directory if you want.
+The First Steps
+To install Freedom EVOware:
+1
+Finish all Windows programs that are currently running.
+2
+Make sure that anti-virus programs (if installed) are not running and that all all 
+processes associated with anti-virus programs are stopped. Anti-virus 
+programs can cause the installation of Microsoft .NET Framework and .NET 
+Framework components to fail.
+3
+Make sure that you are logged in as the local administrator.
+4
+Insert the installation CD in the computer’s CD-ROM drive.
+5
+In the Windows Explorer, open your CD-ROM drive and change to the
+Freedom EVOware\Disk1 directory.
+Certain hardware options are only intended for research applications. Refer to 
+“Supported pipetting instruments and Tecan options” in the Getting Started Guide 
+for a list of all of the options which are supported by the Freedom EVOware 
+software.
+6
+To install Freedom EVOware with the device drivers which are intended for 
+general purpose applications, run Setup.exe in the Disk1 directory. 
+7
+To install Freedom EVOware with all available device drivers (including drivers 
+for devices which are only intended for research applications), run 
+Setup_ro.exe in the Disk1 directory. 
+8
+The Welcome window appears.
+
+
+--- PAGE 29 ---
+G4 - Installation
+Installing Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 3
+9
+Click Next to continue.
+You are then shown a window displaying the license agreement.
+Note: The real window may look slightly different from the one shown below.
+License
+Agreement
+10 Read the license agreement and click I accept the terms ... if you are in 
+agreement. Continue with Next.
+Destination
+Path
+A destination path for the application is suggested in the Destination Folder 
+window.
+Fig. G4-1 Welcome window
+Fig. G4-2 License Agreement window
+
+
+--- PAGE 30 ---
+G4 - 4
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Installing Freedom EVOware
+11 Do one of the following:
+–
+In most cases, you can accept the suggested destination path. Continue 
+with Next in this case.
+–
+If necessary, choose a different destination folder with Change…. 
+Continue with Next when you are ready.
+Selecting
+Components
+The Custom Setup window appears.
+The choices you will see in the Custom Setup window depend on whether you are 
+installing the general purpose configuration or the research only configuration. 
+Certain Tecan options are only intended for research applications.
+The Custom Setup window lets you choose the components you wish to install. 
+You can expand the Instrument Configurations, the Devices and Options and 
+Fig. G4-3 Destination Folder window
+Fig. G4-4 Custom Setup window
+
+
+--- PAGE 31 ---
+G4 - Installation
+Installing Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 5
+the Software Options groups by clicking on the ’+’ box on the left side. This 
+shows the individual components in these groups. Click the ’-’ box if you want to 
+collapse the group again.
+When you highlight a group, additional information about the installation of the 
+group is shown in the Feature Description panel on the right side of the window.
+
+The EVOware group contains components which are always needed.
+
+The Instrument Configurations group contains the drivers for the robot arms 
+(liquid handling arm, LiHa; plate robots, RoMa; tube robot, PnP; MCA, multi-
+channel arm; PosID-3, barcode scanner). 
+
+The Options group contains drivers for optional hardware such as the Te-
+Shake orbital shaker and the Te-MagS magnetic bead separator. 
+
+The Storage Devices group contains drivers for optional hardware such as 
+the Te-Stack plate stacker and the Carousel. 
+
+The Incubators group contains drivers for optional hardware such as the MIO 
+heated incubator. 
+
+The Washers group contains drivers for optional hardware such as the 
+PW384 Power Washer.
+
+The Readers group contains drivers for optional hardware such as the 
+Sunrise microplate absorbance reader and the interface driver for the 
+Magellan option.
+
+The REMP group contains drivers for REMP hardware such as the Reatrix 2D 
+barcode scanner for REMP tubes.
+
+The 3rd Party group contains drivers for optional hardware from other 
+manufacturers such as the Hettich centrifuge.
+
+The Software Options group contains drivers for software options such as 
+Freedom EVOSim 3D Simulation Tool (see G3.1.4 “3D Simulation Tool for the 
+Pipetting Instrument”,  G3-3).
+
+The Legacy Drivers group contains drivers for optional legacy hardware 
+which is no longer sold by Tecan, such as the Columbus washer, which is now 
+superseded by other Tecan washers.
+
+For more information on the optional hardware see 16 “Device Commands”, 
+ 16-1.
+12 Click on each component you want to install and choose This feature will be 
+installed on local hard drive:
+
+
+--- PAGE 32 ---
+G4 - 6
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Installing Freedom EVOware
+You should select the devices and options that are currently available on your 
+pipetting instrument. In the above example, the first plate robot, the liquid handling 
+arm, the tube robot and the Te-Stack have already been selected for installation.
+Each pipetting instrument can be configured with a maximum of three robot arms 
+as follows:
+
+Up to two liquid handling arms (LiHa)
+
+One Multi Channel Arm (MCA)
+
+One Multi Channel Arm 384 (MCA384), optionally fitted with one Common 
+Gripper Module (CGM)
+
+Up to two plate robot (RoMa) arms
+
+Up to two tube robot (PnP) arms
+The total number of arms of all types is three (e.g. 1 x LiHa plus 2 x RoMa or 1 x 
+LiHa plus 1 x RoMa plus 1 x PnP).
+The PW384 Plate Washer driver requires the Tecan WinWash Plus software, 
+which must be installed separately. It is normally provided with the washer. 
+WinWash Plus is not necessary for the PW384GP Plate Washer driver.
+Drivers for microplate readers (e.g. photometers) require the RdrOLE and XFluor4 
+software, which must be installed separately. It is normally provided with the 
+reader. Freedom EVOware can also control microplate readers using the 
+Magellan software.
+The Magellan driver requires the Tecan Magellan software, which must be 
+installed separately. The Magellan software has built-in drivers for Tecan 
+microplate readers. If you intend to use the Magellan software, it is not necessary 
+to install the driver for your reader when you install Freedom EVOware unless you 
+also want to use the reader in raw data mode.
+If necessary, you can run the Freedom EVOware installation program again at a 
+later time and add missing components or remove components you no longer 
+need.
+When you highlight a component, additional information about that component is 
+shown in the Feature Description panel on the right side of the window.
+13 Click Next after you have made your choices.
+You will then be asked if you want to begin the installation:
+Fig. G4-5 Selecting components
+
+
+--- PAGE 33 ---
+G4 - Installation
+Installing Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 7
+Click Install if you want to continue. 
+If you have previously installed Tecan software components on your PC which use 
+the Tecan User Management System (such as Freedom EVOware or the Tecan 
+Magellan software), the Tecan User Management System needs to be updated 
+too and you will be prompted for the name and password of the Administrator 
+acccount.
+After entering the name and password, you will be shown the following window:
+Installation
+Complete
+When the installation is finished, the InstallShield Wizard Completed window is 
+shown:
+Fig. G4-6 Ready to Install window
+Fig. G4-7 Installing Freedom EVOware window
+
+
+--- PAGE 34 ---
+G4 - 8
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Modifying, Removing or Repairing Your Installation
+14 Confirm with Finish. The installation of the Freedom EVOware software is 
+now complete.
+15 Start Freedom EVOware as the Tecan administrator and carry out the 
+following checks:
+–
+Choose About in the Help menu and check that you have installed the 
+intended software version (version for general purpose applications or 
+version for scientific research applications with extended device support).
+–
+Check that the correct hardlock (dongle) is fitted to your PC. The hardlock 
+ID number is shown in the About box. If there is no hardlock fitted, “Non 
+upgradable hardlock” is shown. See also 6.7.3 “Status Bar”,  6-20, 
+Dongle type. 
+–
+Check that you are running the intended software feature level (Freedom 
+EVOware Standard or Freedom EVOware Plus). This is shown in the 
+status bar and is also dependent on your hardlock (see 6.7.3 “Status Bar”, 
+ 6-20, Feature level).
+Note: If you have made a backup copy of configuration and user data from a 
+previous Freedom EVOware installation, you should now use the Restore function 
+to restore it.
+G4.3 Modifying, Removing or Repairing Your Installation
+If you run the Freedom EVOware installation program when Freedom EVOware is 
+already installed, you are given the options of modifying, removing or repairing the 
+installation. 
+Note: You cannot modify, remove or repair Freedom EVOware by choosing Add 
+or Remove Programs in the Windows Control Panel.
+Insert the Freedom EVOware CD and proceed as described in G4.2 “Installing 
+Freedom EVOware”,  G4-2. The installation program automatically detects the 
+Fig. G4-8 InstallShield Wizard Completed window
+
+
+--- PAGE 35 ---
+G4 - Installation
+Modifying, Removing or Repairing Your Installation
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 9
+software components which you installed previously and will start the 
+Maintenance Program.
+After confirming the Welcome window by clicking Next you are shown the 
+Program Maintenance window:
+The three options which are provided are as follows:
+
+Modify: This function allows you to add further software components to the 
+existing Freedom EVOware installation or to remove software components 
+that are no longer needed.
+Certain software components are only intended for research applications. If 
+you use the installation program Setup_ro.exe to install options which are not 
+included in the general purpose configuration, you will see a warning 
+message during the installation that your Freedom EVOware installation is 
+now configured for research applications and is no longer intended for general 
+purpose applications.
+If you need to switch back to the general purpose configuration, you must 
+uninstall and then re-install Freedom EVOware.
+
+Repair: This function reinstalls all components of the current software 
+configuration on the target computer. Note that this option does not allow you 
+to add new functions or remove existing functions. Repairing an existing 
+installation may be necessary if the current installation does not run properly 
+(e.g. due to a corrupt file or a file that was deleted unintentionally).
+
+Remove: Completely uninstalls (removes) the Freedom EVOware software 
+from the target computer. 
+If you choose to un-install Freedom EVOware completely, you will be asked if you 
+also want to delete the user management data. Click No if you want to continue 
+using other Tecan software components such as Magellan (or if you plan to re-
+install Freedom EVOware again). If you click Yes, you will have to set up your 
+Tecan users and groups again (see 7 “Tecan User Management System”,  7-1).
+Note: Before modifying, repairing or removing Freedom EVOware, we 
+recommend you to back up your Freedom EVOware data files, scripts and 
+processes to exchangeable media or to a network or temporary directory (not 
+within the Freedom EVOware <install_path>). See 8.2 “Backing Up and Restoring 
+Your Configuration”,  8-3.
+Fig. G4-9 Program Maintenance window
+
+
+--- PAGE 36 ---
+G4 - 10
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Modifying, Removing or Repairing Your Installation
+Decide What
+to Do
+16 Click the appropriate option button:
+–
+Modify to add or remove components.
+–
+Repair to reinstall the program.
+–
+Remove to uninstall.
+17 Click Next and continue with your section. You should then follow the 
+instructions which are displayed.
+If you choose Modify, you can choose the Freedom EVOware components which 
+you want to add or remove (see Fig. G4-5 “Selecting components”,  G4-6). The 
+installation program automatically detects the software components which you 
+installed previously.
+Maintenance
+Complete
+When the selected operation is finished, the InstallShield Wizard Completed 
+window is shown:
+18 Click Finish to end the installation program.
+Fig. G4-10 InstallShield Wizard Completed window for an un-install operation
+
+
+--- PAGE 37 ---
+G4 - Installation
+Modifying, Removing or Repairing Your Installation
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 11
+G4.3.1 Upgrading to the Latest Software Version 
+To upgrade Freedom EVOware to the latest software version, insert the Freedom 
+EVOware CD and proceed as described in G4.2 “Installing Freedom EVOware”, 
+ G4-2. The installation program automatically detects the existing installation 
+and will start the upgrade process.
+Additional steps which may be required when upgrading are dependent in part on 
+the pipetting instrument and system options which you are already using. For this 
+reason upgrading is normally carried out by a Tecan representative. 
+Where applicable, please observe your local regulations for re-certification of your 
+pipetting system following a software upgrade. 
+We recommend you to back up your Freedom EVOware data files, scripts and 
+processes to exchangeable media or to a network or temporary directory before 
+upgrading (see 8.2 “Backing Up and Restoring Your Configuration”,  8-3).
+G4.3.1.1 Checking the software version which is currently installed
+Choose About Freedom EVOware in the Help menu if you want to check which 
+version of Freedom EVOware you are currently using. The dialog box shows the 
+Freedom EVOware version, the service pack level and the software build code.
+It also shows the intended use of your Freedom EVOware configuration - general 
+purpose applications or research use only. See G3.2 “Intended Use of the 
+Freedom EVOware Software”,  G3-3 for more information.
+Alternatively, click the Windows Start button and choose Control Panel. Then 
+double-click on Add or Remove Programs. Navigate in the list to the entry 
+EVOware and choose Click here for support information. You need local 
+administrator access rights for the Microsoft Windows XP operating system to use 
+the Control Panel.
+G4.3.2 Installation of Service Packs and Hotfixes
+Service packs are minor upgrades and/or are used to correct small faults in the 
+Freedom EVOware software. To install a service pack, follow the instructions 
+which are provided. 
+Note: Some types of service pack require Freedom EVOware to be re-installed. 
+Other types of service pack do not require Freedom EVOware to be re-installed. 
+You must backup up your system and data files before un-installing Freedom 
+EVOware (see 8.2 “Backing Up and Restoring Your Configuration”,  8-3). Then 
+use the Restore function after Freedom EVOware has been re-installed.
+Hotfixes are used to correct small faults in the Freedom EVOware software. 
+Hotfixes do not required Freedom EVOware to be re-installed. To install a hotfix, 
+follow the instructions which are provided.
+Choose About Freedom EVOware in the Help menu if you want to check which 
+version of Freedom EVOware you are currently using. The dialog box shows the 
+Freedom EVOware version, the service pack level and the software build code.
+
+
+--- PAGE 38 ---
+G4 - 12
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+The Freedom EVOware Hardlock
+G4.4 The Freedom EVOware Hardlock
+To use the full functionality of the Freedom EVOware software, you must attach a 
+hardlock (dongle) to a USB port on your PC. Freedom EVOware checks for the 
+presence of the hardlock when it starts and will switch to offline mode if the 
+hardlock cannot be found. See G3.1.2 “Hardlocks for Freedom EVOware 
+Standard and Freedom EVOware Plus”,  G3-2.
+G4.5 Installing the USB driver for the Freedom EVO 
+pipetting instrument
+If you want to connect the Freedom EVO pipetting instrument to the PC which is 
+running Freedom EVOware through USB instead of using the serial (RS232) port, 
+you must carry out the following steps to install the USB driver.
+The following steps are only necessary when you connect the pipetting instrument 
+to the PC for the first time. 
+Please install Freedom EVOware before connecting the USB cable.
+Switch on the PC, switch on the pipetting instrument and plug in the USB cable. 
+The following dialog box should appear:
+Click No, not this time and click Next. The following dialog box is shown:
+Fig. G4-11 Installing the USB driver, step 1
+
+
+--- PAGE 39 ---
+G4 - Installation
+Installing the USB driver for the Freedom EVO pipetting instrument
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 13
+Click Install the software automatically (Recommended) and click Next. The 
+following dialog box is shown while the driver is being installed:
+The following dialog box is shown when installation is nearly finished.:
+Fig. G4-12 Installing the USB driver, step 2
+Fig. G4-13 Installing the USB driver, step 3
+
+
+--- PAGE 40 ---
+G4 - 14
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Installing the USB driver for the Freedom EVO pipetting instrument
+Click Finish to complete the installation of the USB driver.
+The following figure shows a view of the PC’s Device Manager with the USB 
+driver correctly installed (at the bottom of the list).
+G4.5.1 USB Power Management Setting
+The USB power management in Windows must be switched off to avoid losing the 
+connection to the pipetting instrument, which may otherwise occur in rare cases.
+Fig. G4-14 Installing the USB driver, step 4
+Fig. G4-15 Device Manager showing the correctly installed USB driver
+
+
+--- PAGE 41 ---
+G4 - Installation
+Installing the USB driver for the Freedom EVO pipetting instrument
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - 15
+To switch off the USB power management in Windows, choose Start -> Control 
+Panel -> System -> Hardware -> Device Manager -> Universal Serial Bus 
+Controllers -> Power Management tab:
+G4.5.2 USB Hubs
+If you want to connect the pipetting instrument via USB, it should be connected 
+directly to the PC. This also applies to USB connnections from hardware options, 
+if they have their own cable. The use of an external USB hub should be avoided. If 
+an external USB hub is absolutely necessary, use an active USB hub (i.e. with its 
+own power supply). Data transfer problems may occur if you use a passive USB 
+hub, especially if you are also using the PMP option. Please note that some port 
+replicators for laptops contain a USB hub.
+Fig. G4-16 Device Manager, USB Power Management tab
+
+
+--- PAGE 42 ---
+G4 - 16
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G4 - Installation
+Installing the USB driver for the Freedom EVO pipetting instrument
+
+
+--- PAGE 43 ---
+G5 - Starting Freedom EVOware
+Login Screen
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 1
+G5 Starting Freedom EVOware
+This chapter describes how to start Freedom EVOware and gives an overview of 
+the main window.
+G5.1 Login Screen
+To start Freedom EVOware, click the Start button in the Windows Task Bar and 
+choose All Programs > Tecan > EVOware > EVOware Standard or EVOware 
+Plus, depending on which version you want to run. 
+You will be shown the Login dialog box:
+Enter you user name and password for Freedom EVOware and click the large 
+green arrow on the right. Contact your Freedom EVOware Administrator if you do 
+not have a user name and password.
+Note: When Freedom EVOware is started for the first time after installation, you 
+will be prompted to assign a user name and password for the Freedom EVOware 
+Administrator (see 7 “Tecan User Management System”,  7-1).
+G5.1.1 Loading the device drivers 
+After clicking the large green arrow you will be shown a progress bar as Freedom 
+EVOware loads all of the software components and device drivers:
+Fig. G5-1 Login dialog box
+
+
+--- PAGE 44 ---
+G5 - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Login Screen
+G5.1.2 Driver pre-loading
+To ensure that Freedom EVOware starts quickly, above all if you have chosen to 
+install and use a large number of device drivers, the installation program installs a 
+shortcut which automatically loads all of the Tecan drivers each time the PC is 
+started. The drivers remain loaded while the PC is running and it is no longer 
+necessary to load them each time you start Freedom EVOware.
+To unload the Tecan drivers when you quit Freedom EVOware, choose Exit, 
+unload drivers in the File menu. Alternatively, check the Unload drivers checkbox 
+in the Startup Wizard and click Exit. Driver pre-loading will be available again 
+when you restart your PC.
+Remove the shortcut “EVOware Prelaunch“ from the MS Windows Autostart 
+folder if you do not want the drivers to be loaded each time the PC is started. If 
+you do this, Freedom EVOware will take somewhat longer to start in future.
+The driver pre-loading feature can be disabled in the Configuration Tool (see 
+8.4.1.1 “Device Information Tab”,  8-21). 
+Fig. G5-2 Loading the device drivers
+
+
+--- PAGE 45 ---
+G5 - Starting Freedom EVOware
+Login Screen
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 3
+G5.1.3 Driver loading errors
+If errors are detected when loading the device drivers, the following dialog box will 
+show status messages:
+Use the scroll bar to inspect last column (Info), which explains the reason for the 
+error.
+If one of the error messages is shown truncated because it is too long, lengthen 
+the field in the dialog box and activate the horizontal scroll bar by double-clicking 
+on the divider (short vertical line in the header) at the end of the field.
+Some of the device drivers will output errors or warnings during loading if 
+Freedom EVOware detects configuration errors. 
+G5.1.4 Instrument and Hardlock Detection
+Freedom EVOware will run in offline mode if it cannot detect a hardlock (dongle) 
+when it starts. See G3.1.2 “Hardlocks for Freedom EVOware Standard and 
+Freedom EVOware Plus”,  G3-2.
+It will also run in offline mode if it cannot detect a pipetting instrument on one of 
+the USB ports or on the configured COM port (it checks the USB ports first).
+The following dialog box will be shown if Freedom EVOware cannot communicate 
+with the pipetting instrument: 
+Click No to continue with offline mode. See also G4.5.1 “USB Power Management 
+Setting”,  G4-14 and G4.5.2 “USB Hubs”,  G4-15.
+In offline mode, firmware commands such as movement commands are not sent 
+to the pipetting instrument (i.e. pipetting does not take place). 
+Fig. G5-3 Loading the device drivers - status messages and warnings
+Fig. G5-4 Starting Freedom EVOware - no pipetting instrument detected
+
+
+--- PAGE 46 ---
+G5 - 4
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Login Screen
+Freedom EVOware’s current operating mode is shown in the Status Bar (see 
+6.7.3 “Status Bar”,  6-20).
+See 8.4.3.3 “Com Ports Tab”,  8-36 for information on configuring the pipetting 
+instrument’s COM port. The USB ports do not need configuring.
+
+
+--- PAGE 47 ---
+G5 - Starting Freedom EVOware
+Startup Wizard, Freedom EVOware Standard
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 5
+G5.2 Startup Wizard, Freedom EVOware Standard 
+After all of the modules and drivers have been loaded and you have logged in as 
+the Freedom EVOware Administrator or Application Specialist, you will be shown 
+the Freedom EVOware Standard startup wizard.
+This dialog box is also shown if you choose Startup Wizard from the File menu.
+The options in the Startup Wizard are as follows:
+Run an existing script
+This option opens the Selection dialog box to allow you to choose the script 
+you want to run. After choosing the script you are shown the Runtime 
+Controller dialog box (see 12.1 “Running a Liquid Handling Script”,  12-1).
+Run maintenance
+This option is used to run instrument maintenance tasks.
+Create a new script
+This option opens the Selection dialog box to allow you to choose a template 
+for the new script. The template contains information on e.g. the worktable 
+layout.
+Edit an existing script
+This option opens the Selection dialog box to allow you to choose the script 
+you want to edit or view. After loading the script, you can also choose to run it.
+Configure system
+This option is used to configure general settings for the Freedom EVOware 
+software (see 8 “Configuration Tool”,  8-1).
+Do not show this dialog again
+Check this checkbox if you do not want Freedom EVOware to show the 
+Startup Wizard when it starts next time. In this case, Freedom EVOware 
+Standard will start by opening the Script Editor with the pipetting script which 
+was last used. To deactivate this feature again, open the Startup Wizard by 
+choosing Startup Wizard in the File menu or click the Startup button in the 
+Toolbar and uncheck the checkbox.
+Fig. G5-5 Freedom EVOware Standard startup wizard
+
+
+--- PAGE 48 ---
+G5 - 6
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Startup Wizard, Freedom EVOware Standard
+Unload drivers
+To ensure that Freedom EVOware starts quickly, all of the Tecan drivers you 
+have chosen to use are loaded each time the PC is started and remain loaded 
+while the PC is running (see G5.1.2 “Driver pre-loading”,  G5-2). Check this 
+checkbox before you click Exit if you want to unload the drivers when you quit 
+Freedom EVOware. The drivers should be unloaded e.g. if Freedom 
+EVOware reports an internal error. The drivers will be loaded again when you 
+re-start Freedom EVOware. 
+Note: If you have made configuration changes using the Configuration Tool, the 
+drivers will be unloaded automatically when you quit Freedom EVOware.
+Exit
+Quit Freedom EVOware.
+G5.2.1 Startup Wizard for Freedom EVOware Standard Operators
+Operators of Freedom EVOware Standard have less access rights than 
+Administrators or Application Specialists (see 7.2 “Freedom EVOware Access 
+Rights (User Levels)”,  7-3). Accordingly, they are presented with a startup 
+wizard which has less functions: 
+See G5.2 “Startup Wizard, Freedom EVOware Standard”,  G5-5 for a description 
+of the functions.
+Fig. G5-6 Freedom EVOware Standard startup wizard for Operators
+
+
+--- PAGE 49 ---
+G5 - Starting Freedom EVOware
+Startup Wizard, Freedom EVOware Plus
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 7
+G5.3 Startup Wizard, Freedom EVOware Plus
+After all of the modules and drivers have been loaded and you have logged in as 
+the Freedom EVOware Administrator or Application Specialist, you will be shown 
+the Freedom EVOware Plus startup wizard.
+This dialog box is also shown if you choose Startup Wizard from the File menu.
+The options in the Startup Wizard are as follows:
+Run an existing process
+This option is used run an existing process or method. Click the large green 
+arrow and choose the process or method you want to run in the Selection 
+dialog box which follows. After choosing the process or method, you are 
+shown the Runtime Controller dialog box (see 12.2 “Running and Optimizing a 
+Process (Freedom EVOware Plus)”,  12-5).
+A method is a set of one or more processes to be run together (either 
+sequentially or in parallel). The method file also contains information on the 
+runtime settings. Methods are created and saved in the Runtime Controller.
+Run maintenance
+This option is used to run instrument maintenance tasks. See 6.4.2 “Run 
+Maintenance”,  6-10.
+Create a new process
+This option opens the Selection dialog box to allow you to choose a template 
+for the new process. The template contains information on e.g. the worktable 
+layout.
+Edit an existing process
+This option opens the Selection dialog box to allow you to choose the process 
+you want to edit or view. After loading the process, you can also choose to run 
+it.
+Configure system
+This option is used to configure general settings for the Freedom EVOware 
+software (see 8 “Configuration Tool”,  8-1).
+Fig. G5-7 Freedom EVOware Plus startup wizard
+
+
+--- PAGE 50 ---
+G5 - 8
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Startup Wizard, Freedom EVOware Plus
+Do not show this dialog again
+Check this checkbox if you do not want Freedom EVOware to show the 
+Startup Wizard when it starts next time. In this case, Freedom EVOware Plus 
+will start by opening the Process Editor with the process which was last used. 
+To deactivate this feature again, open the Startup Wizard by choosing Startup 
+Wizard in the File menu or click the Startup button in the Toolbar and uncheck 
+the checkbox.
+Unload drivers
+To ensure that Freedom EVOware starts quickly, all of the Tecan drivers you 
+have chosen to use are loaded each time the PC is started and remain loaded 
+while the PC is running (see G5.1.2 “Driver pre-loading”,  G5-2). Check this 
+checkbox before you click Exit if you want to unload the drivers when you quit 
+Freedom EVOware. The drivers should be unloaded e.g. if Freedom 
+EVOware reports an internal error. The drivers will be loaded again when you 
+re-start Freedom EVOware. 
+Note: If you have made configuration changes using the Configuration Tool, the 
+drivers will be unloaded automatically when you quit Freedom EVOware.
+Exit
+Quit Freedom EVOware.
+G5.3.1 Startup Wizard for Freedom EVOware Plus Operators
+Operators of Freedom EVOware Plus have less access rights than Administrators 
+or Application Specialists (see 7.2 “Freedom EVOware Access Rights (User 
+Levels)”,  7-3). Accordingly, they are presented with a startup wizard which has 
+less functions: 
+See G5.3 “Startup Wizard, Freedom EVOware Plus”,  G5-7 for a description of 
+the functions.
+Fig. G5-8 Freedom EVOware Plus startup wizard for Operators
+
+
+--- PAGE 51 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 9
+G5.4 Overview of the Main Window in Freedom EVOware 
+The following section describes the key features of the Freedom EVOware main 
+window. See also 6 “Menus”,  6-1 and 13 “Overview of Freedom EVOware 
+Commands”,  13-1.
+G5.4.1 Control Bar
+The Control Bar is the vertical area at the left of the screen. It is used to select the 
+objects and commands which you need to set up your process or script. It is also 
+used to configure the liquid classes for the liquid you want to pipette and to set up 
+robot vectors. 
+The Control Bar is only visible for the user levels Administrator, Application 
+Specialist and Power User (not for operators).
+Six colored tabs can be seen to the right of the Control Bar. Click on the tabs to 
+select the type of object you want to work with. Each of the tabs contains a list of 
+objects which are arranged in groups. For example, the Labware tab contains 
+groups for Microplates, Tips, Wash and Waste, Troughs, Tubes, Miscellaneous 
+and Allowed Labware. Click 
+ in the group’s title bar to collapse the group. 
+Fig. G5-9 Control Bar showing the Commands tab
+
+
+--- PAGE 52 ---
+G5 - 10
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+If necessary, you can resize the Control Bar by dragging the divider to the left of 
+the colored tabs.
+G5.4.1.1 My Favorites
+Click this tab to view your favorite direct commands, device commands, liquid 
+handling commands, robot vectors and labware. The list already contains a few 
+standard items when Freedom EVOware has just been installed. To add a copy of 
+an object from another Control Bar group to My Favorites, right-click the object 
+and choose Add to favorites from the context menu. To remove the object again 
+from My Favorites, right-click the object (in the My Favorites section or in the 
+section where the object belongs) and choose Remove from favorites.
+If you click My Favorites and select a carrier, you will not see an Allowed Labware 
+section (below the Labware section) if none of your favorite labware items are 
+compatible with this carrier. Click the Labware tab instead to see all of the allowed 
+labware for this carrier.
+G5.4.1.2 Commands
+Click this tab to view the available script commands and device commands. The 
+commands are divided into groups (e.g. Liquid Handling Arm commands). 
+In addition, the Commands tab also contains up to seven direct commands (see 
+G5.4.1.3 “Direct commands”,  G5-10).
+In Freedom EVOware Plus, when the Script Editor is open the Commands tab of 
+the Control Bar only shows script commands (commands which are used for 
+writing pipetting scripts, see 13.1 “Overview of Script Commands”,  13-1). When 
+the Process Editor is open, the Commands tab of the Control Bar only shows 
+device commands (commands for the optional devices, see 13.2 “Overview of 
+Device Commands”,  13-12).
+In Freedom EVOware Standard, the Control Bar always shows both command 
+types (it does not have a Process Editor).
+If you cannot find the device that you want to use in the Control Bar, you must run 
+the installation program again and install the respective device driver (see 
+G4.3 “Modifying, Removing or Repairing Your Installation”,  G4-8). Also check 
+whether the driver has been installed but is currently deactivated (see 
+8.4.1.1 “Device Information Tab”,  8-21, Start checkbox).
+G5.4.1.3 Direct commands 
+Direct commands are used for service purposes, e.g. for picking up DITIs or 
+flushing the tips. They provide a convenient alternative to creating and running a 
+pipetting or maintenance script which carries out the same function. 
+The Control Bar only shows direct commands for devices whose device driver is 
+installed and loaded. For example, the direct command “Load the Te-MO” is only 
+shown in the Control Bar if you have installed and have chosen to load the Te-MO 
+driver. The DITI commands are only shown if the LiHa is configured with DITIs.
+To run a direct command, right click on the command and choose Run in the 
+context menu. 
+Direct commands are only meaningful If you are running Freedom EVOware in 
+real mode and the PC is connected to a pipetting instrument. If Freedom 
+EVOware is running in offline mode, in most cases the dialog box of the direct 
+command will not open when you double-click on the command.
+Many of the direct commands have an equivalent script command. In these 
+cases, click the cross-reference link and refer to the script command for a 
+description of the parameters which are required:
+
+
+--- PAGE 53 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 11
+
+Prime WRC: This direct command is used to prime the wash block of the Te-
+MO 96, Te-MO 384 or MCA. Choose the required wash block from the pull 
+down list. The list shows all wash blocks which are currently positioned in the 
+Worktable Editor. Then specify the required priming duration and click Start.
+
+Load the Te-MO: See 15.56.12 “Load the Te-MO Command”,  15-138.
+
+Fill Te-MO 384: See 15.56.13 “Fill system (Te-MO 384) Command”,  15-138.
+
+Flush: This is used to flush the LiHa. See 15.4 “Wash Tips Command”,  15-
+8.
+
+Prime Te-Fill: See 15.16 “Te-Fill Prime Command”,  15-26.
+
+Drop DITIs: See 15.8 “Drop DITIs Command”,  15-14. Note: Freedom 
+EVOware automatically opens the dialog box for this command if the Runtime 
+Controller encounters a Get DITIs command when tips are already mounted 
+from a previous pipetting operation.
+
+Set DITI Position: See 15.9 “Set DITI Position Command”,  15-15.
+
+Get DITIs: See 15.7 “Get DITIs Command”,  15-13.
+
+LiHa Safe Flush: This direct command is used to discard the contents of the 
+LiHa tips to a specified location (typically into a microplate, tube rack, a trough 
+or the wash station waste). If hazardous liquid is left in the tips after 
+completing a script or process, you can use this command to empty the tips 
+for safety reasons. It can also be used to recover the contents of the tips if the 
+script or process was aborted for some reason before it completed.
+If your pipetting instrument is fitted with more than one LiHa, choose the one 
+you want to use and select the labware you want to use by clicking on the 
+labware in the Worktable Editor. Then click on the well(s) you want to use. See 
+15.2 “Dispense Command”,  15-3 for information on the other parameters 
+you need to specify (e.g. tip selection).
+
+Send Firmware Command:
+–
+Command: Specify the firmware command you want to send to the 
+instrument. For example, “A1RPZ0” returns the current Z position of each 
+of the LiHa tips. See the respective instrument manual for a list of 
+firmware commands. Firmware commands are nearly always written 
+uppercase.
+–
+Response: Some firmware commands terminate with one or more return 
+parameters (numeric values) separated by commas. See the respective 
+instrument manual for information on return parameters from firmware 
+commands.
+–
+Error Code: All firmware commands terminate with an error code.The 
+error code is 0 if the command was executed with no errors.
+WARNING
+Risk of injury to operating personnel or damage to the equipment
+
+Take care when sending firmware commands. Sending the wrong commands 
+can damage the instrument or objects in its workspace, hurt yourself or other 
+people.
+G5.4.1.4 Direct commands for the MCA96 
+Direct commands are used for service purposes, e.g. for picking up DITIs or 
+flushing the tips. They provide a convenient alternative to creating and running a 
+pipetting or maintenance script which carries out the same function. For general 
+information on direct commands see G5.4.1.3 “Direct commands”,  G5-10.
+
+
+--- PAGE 54 ---
+G5 - 12
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+
+MCA96 Get Tips: This direct command is used to get MCA96 DITIs or tip 
+blocks. See 15.68.5 “MCA96 Get DITIs Command”,  15-167 and 
+15.68.7 “MCA96 Get Tip Block Command”,  15-170.
+
+MCA96 Drop Tips: This direct command is used to put down MCA96 DITIs or 
+tip blocks. See 15.68.6 “MCA96 Drop DITIs Command”,  15-168 and 
+15.68.8 “MCA96 Drop Tip Block Command”,  15-171.
+
+MCA96 Safe Flush: This direct command is used to discard the contents of 
+the MCA96 tips to a specified location (typically into a microplate or a trough). 
+If hazardous liquid is left in the tips after completing a script or process, you 
+can use this command to empty the tips for safety reasons. It can also be 
+used to recover the contents of the tips if the script or process was aborted for 
+some reason before it completed.
+G5.4.1.5 Direct commands for the MCA384 and the CGM 
+Direct commands are used for service purposes, e.g. for picking up DITIs or 
+flushing the tips. They provide a convenient alternative to creating and running a 
+pipetting or maintenance script which carries out the same function. For general 
+information on direct commands see G5.4.1.3 “Direct commands”,  G5-10.
+
+MCA384 Get DITIs: See 15.69.8 “MCA384 Get DITIs Command”,  15-191.
+
+MCA384 Drop DITIs: See 15.69.9 “MCA384 Drop DITIs Command”,  15-
+194.
+
+MCA384 Get Head Adapter: See 15.69.6 “MCA384 Get Head Adapter 
+Command”,  15-189.
+
+MCA384 Drop Head Adapter: See 15.69.7 “MCA384 Drop Head Adapter 
+Command”,  15-190.
+
+MCA384 Safe Flush: This direct command is used to discard the contents of 
+the MCA96 tips to a specified location (typically into a microplate or a trough). 
+If hazardous liquid is left in the tips after completing a script or process, you 
+can use this command to empty the tips for safety reasons. It can also be 
+used to recover the contents of the tips if the script or process was aborted for 
+some reason before it completed.
+
+Dock CGM. This direct command is used to dock the common gripper module 
+of the MCA384. See also 15.69.13 “MCA384 Dock CGM Command”,  15-
+204.
+
+Undock CGM. This direct command is used to undock the common gripper 
+module of the MCA384 and rotate the gripper to a specified angle (in 0.1 
+degrees steps). See also 15.69.14 “MCA384 Undock CGM Command”,  15-
+204.
+G5.4.1.6 Robot Vectors
+Click this tab to view the movement vectors which have been defined for the plate 
+robot, the multi channel arm and the tube robot. 
+This tab only shows home vectors and vectors which were not assigned to 
+carriers or labware items in the Edit Carrier or Edit Labware dialog boxes.
+Plate robot vectors specify movements to be carried out by the RoMa (Robot 
+Manipulator). Current Tecan pipetting instruments can be fitted with up to two 
+RoMas. See 9.6 “Creating and Editing Plate Robot Vectors”,  9-55.
+Multi channel arm vectors specify movements to be carried out by the MCA. 
+Current Tecan pipetting instruments can only be fitted with one MCA. MCA 
+vectors are very similar to RoMa vectors. See 9.8 “Creating and Editing MCA 
+Vectors”,  9-69.
+
+
+--- PAGE 55 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 13
+Tube robot vectors specify movements to be carried out by the PnP (Pick & Place 
+robot). Current Tecan pipetting instruments can be fitted with up to two PnP arms. 
+See 9.7 “Creating and Editing Tube Robot Vectors”,  9-63.
+Home vectors specify the movements to be carried out by the RoMa and/or PnP 
+in order to move the robot back to its home (parking) position. See 9.6.4 “Defining 
+the Home Position for a RoMa”,  9-62 and 9.7.4 “Defining the Home Position for 
+a PnP”,  9-69. You cannot and do not need to define a home vector for the multi 
+channel arm. 
+To create a new plate robot vector, right-click the group heading Robot Vectors, 
+choose New, enter a descriptive name of your choice and click OK to open the 
+Teach Plate Robot Vector dialog box (see 9.6.2 “Teach Plate Robot Vector Dialog 
+Box”,  9-59). 
+If your pipetting instrument is fitted with more than one plate robot, it is 
+recommended to suffix the vector name with “1” or “2”, e.g. “MoveBlock2” to 
+indicate which RoMa was used for teaching (Note: the vector name does not 
+influence which RoMa is used, either in Freedom EVOware Plus or in Freedom 
+EVOware Standard). In Freedom EVOware Standard, user-defined plate robot 
+vectors can be used in Transfer Labware and RoMa Vector commands. See also 
+17.3 “Site-specific RoMa vectors”,  17-13. 
+To create a new tube robot vector, right-click the group heading Robot Vectors 
+(Tubes), choose New, enter a descriptive name of your choice and click OK to 
+open the Teach Tube Robot Vector dialog box (see 9.7.2 “Teach Tube Robot 
+Vector Dialog Box”,  9-65). Use the name “Home1” to create a home vector for 
+tube robot 1.
+To create a new multi channel arm vector, right-click the group heading Multi 
+Channel Arm Vectors, choose New, enter a descriptive name of your choice and 
+click OK to open the Teach Multi Channel Arm Vector dialog box (see 9.6.2 “Teach 
+Plate Robot Vector Dialog Box”,  9-59). 
+To view and/or edit plate robot and multi channel arm vectors which are 
+associated with carriers, double click on the carrier in the Labware section of the 
+Control Bar and click Edit. To view and/or edit tube robot vectors which are 
+associated with labware items, double click on the labware item in the Labware 
+section of the Control Bar and click Edit.
+G5.4.1.7 Liquid Classes
+Click this tab to view the available liquid classes. A liquid class is a set of liquid 
+handling parameters. It specifies aspirating and dispensing speeds, airgaps, liquid 
+detection modes, etc. The values of the parameters are dependent on the 
+physical characteristics of the liquid. See 10 “Configuring Liquid Classes”,  10-1 
+for information on creating and editing liquid classes.
+G5.4.1.8 Carriers
+Click this tab to view the available carriers. A carrier is a removable support on the 
+instrument's worktable (i.e. deck) which holds one or more pieces of labware (e.g. 
+a microplate) in place. The carrier name indicates the type of labware for which it 
+is designed. Optional devices which can be placed on the worktable (e.g. the Te-
+Shake shaker) are also treated as carriers.
+Carriers are normally fitted to the instrument’s worktable at pre-defined grid 
+positions (see Fig. 11-8,  11-20).
+The Carriers tab is subdivided into groups for Devices, Hotels, Microplate 
+Carriers, DITI Carriers, Wash Stations, Trough Carriers, Tube Carriers (tube 
+racks) and Miscellaneous Carriers.
+See 9.5 “Configuring Carriers”,  9-39 for information on creating and editing 
+carrier templates.
+
+
+--- PAGE 56 ---
+G5 - 14
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+The Freedom EVOware database already contains a large selection of pre-
+defined carrier types. You only need to create or edit carriers if you cannot find a 
+standard item which is suitable for your needs.
+G5.4.1.9 Labware
+Click this tab to view the available labware. Labware refers to consumable items 
+such as microplates or sample tubes. Microplates have a regular arrangement of 
+containers or cavities (wells) for holding liquids or samples. To allow pipetting, 
+microplates are normally placed on microplate carriers and tubes are inserted in 
+tube racks.
+The Labware tab is subdivided into groups for Microplates, Tips, Wash and 
+Waste, Troughs, Tubes, Miscellaneous and Allowed Labware.
+Allowed Labware shows the labware types which are compatible with the 
+currently selected carrier. If you have already put a carrier onto the Worktable 
+Editor, click on it to see which labware types are allowed.
+See 9.4 “Configuring Labware”,  9-15 for information on creating and editing 
+labware templates.
+The Freedom EVOware database already contains a large selection of pre-
+defined labware types. You only need to create or edit labware if you cannot find a 
+standard item which is suitable for your needs.
+G5.4.1.10 Search
+Click this tab to view the Control Bar objects which were found using the search 
+function.
+G5.4.1.11 Searching for objects in the Control Bar
+To search for any object or command in the Control Bar, enter the name or part of 
+the name in the text field at the bottom and click 
+. The search results are shown 
+in the Search tab of the Control Bar.
+G5.4.1.12 Context Menu for Objects in the Control Bar
+Right-click on an object in the Control Bar to open the context menu. The context 
+menu is context sensitive and the options it contains depend on the currently 
+active Control Bar tab and on the object you have selected. The available options 
+in the context menu are as follows:
+Edit
+Edit the selected object.
+Delete
+Delete the selected object.
+New
+Create a new object of the same type.
+Duplicate
+Duplicate the selected object. You will be prompted for a new name.
+Rename
+Rename the selected object. You will be prompted for a new name.
+Add to favorites
+Add the selected object to the My Favorites tab of the Control Bar.
+Remove from favorites
+Remove the selected object from the My Favorites tab of the Control Bar.
+
+
+--- PAGE 57 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 15
+Hide
+Hides the selected object. Use this feature if you want to hide items which you 
+do not normally use. Depending on the Show/Hide status of the Control Bar, 
+the object will either disappear immediately or it will be shown in gray. See 
+G5.4.1.13 “Context Menu for Group Titles in the Control Bar”,  G5-15.
+Show
+Shows the selected object (cancels the hidden status). Before you can do this 
+you must make the hidden objects visible (see G5.4.1.13 “Context Menu for 
+Group Titles in the Control Bar”,  G5-15).
+Run Command
+This option is only available for device commands and is used for service 
+purposes, e.g. to initialize the device manually or to test correct functioning 
+(see 16.1 “Service Functions”,  16-1). See 6.4.2 “Run Maintenance”,  6-10 
+for information on instrument maintenance functions. Maintenance functions 
+are scripts which are created using the Script Editor.
+G5.4.1.13 Context Menu for Group Titles in the Control Bar
+Right click on a group title in the in the Control Bar to open the context menu. The 
+context menu is context sensitive and the options it contains depend on the 
+currently active Control Bar tab and on the group title you have selected (e.g. 
+“Carriers”). The available options in the context menu are as follows:
+Edit
+Edit the selected object.
+New
+Create a new object.
+Show hidden items
+Shows all objects you have marked as hidden in gray. This allows you to 
+cancel the hidden status of an object. To cancel the hidden status, right-click 
+on the object and choose Show. 
+Hide hidden items
+Completely hides all objects you have marked as hidden.
+G5.4.2 Infopads
+Infopads are small windows which contain prompts, hints or context-related 
+information on the task which is currently being carried out or the object which is 
+currently selected. The Infopads are positioned to the right of the Control Bar.
+
+
+--- PAGE 58 ---
+G5 - 16
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+If your pipetting script contains Comment commands, the comment texts and the 
+corresponding script line numbers are listed as hyperlinks in the upper Infopad. 
+Click on one of the entries to jump to the script line which contains the Comment 
+command (script navigation feature). See 15.37 “Comment Command”,  15-
+97 for more information.
+If you need more space for the Process Editor or the Worktable Editor, you can 
+collapse the upper and/or lower Infopad by clicking 
+ in the title bars. You can 
+also resize the windows by dragging the dividers between the windows.
+The hyperlinks in the How To section of the infopads take you to short animations 
+(films) which demonstrate the currently selected task. The animations are stored 
+in AVI format and will be shown e.g. in Windows Media Player.
+G5.4.2.1 Hyperlinks in the Infopads
+The infopads are provided with hyperlinks (blue underlined text) which are 
+shortcuts to commonly needed actions. The hyperlinks are context sensitive and 
+the available options depend on what you have selected (e.g. a carrier or labware 
+item in the Worktable Editor):
+Edit carrier type
+This option is shown when you select a carrier or a carrier which is a device. It 
+opens the Edit Carrier dialog box and is equivalent to double-clicking the 
+selected carrier in the Control Bar.
+Edit labware type
+This option is shown when you select a labware item. It opens the Edit 
+Labware dialog box and is equivalent to double-clicking the selected labware 
+item in the Control Bar.
+Edit liquid class
+This opens the Liquid Class Editor and is equivalent to double-clicking the 
+selected liquid class in the Control Bar.
+Fig. G5-10 Lower infopad with a labware item selected
+
+
+--- PAGE 59 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 17
+Show labware
+This option is shown when you select a carrier or a carrier which is a device. It 
+opens the Labware tab of the Control Panel. Allowed Labware then shows the 
+labware types which are compatible with the selected carrier.
+Show me
+This runs a short animation (film) to demonstrate the currently selected task. 
+The animations are stored in AVI format and will be shown e.g. in Windows 
+Media Player.
+G5.4.3 The Process Editor (Freedom EVOware Plus) 
+In Freedom EVOware Plus, the sequence of steps which are required to carry out 
+a particular application or experiment, for example to extract the substance you 
+are looking for, is called a process. The process specifies the operations you want 
+the pipetting instrument to execute. Processes are set up in the Process Editor, 
+which is shown at the top right of the screen.
+In the Process Editor, each process step (such as centrifuging a plate or pipetting 
+to a plate) is shown as an icon, whereby each icon is associated with a single 
+device such as a centrifuge, a storage device or the liquid handling arm. 
+See 13.2 “Overview of Device Commands”,  13-12 for a list of device commands 
+which are provided with the standard Freedom EVOware installation. When 
+installing Freedom EVOware, you normally only install the device drivers which 
+you want to use. 
+There are four basic types of icon - process steps, labware source icons, final 
+position icons and on-the-fly icons: 
+If you need more space for the Process Editor, you can collapse the Worktable 
+Editor by clicking 
+ in the title bar. In addition, you can collapse the Infopad 
+windows by clicking 
+ in the title bars. You can also resize the windows by 
+dragging the dividers between the windows.
+Process steps are created by dragging commands from the Control Bar onto the 
+Process Editor. A process is then created by interlinking the process steps to 
+create the workflow which is required by your application or experiment. 
+The bottom part of each process step icon shows the name or names of the 
+labware items which are involved in the operation (so-called object parameters).
+Fig. G5-11 Process Editor showing an example process
+
+
+--- PAGE 60 ---
+G5 - 18
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Each process step is associated with a single device, and devices can typically 
+carry out several different functions. For example, a plate washer may have a 
+washing function, a priming function and an initialization function. This is handled 
+by associating the process step with a command. Each device driver contains a 
+pre-configured command for each of the device functions (the available 
+commands are shown in the Commands section of the Control Bar, below the 
+symbol for the device). Many of the commands have one or more execution 
+parameters (such as the duration of the washing operation). When you create a 
+process step by dragging the command onto the Process Editor, you will be 
+prompted to specify the execution parameters.
+Each command can be associated with pre-actions and/or post-actions – 
+additional commands which are carried out before and after the main command. 
+For example, if you want to scan a plate in a Tecan Ultra reader with the Measure 
+command, it is necessary to move the plate to the reader using the plate robot 
+(with the RoMa_MoveObject command) and to open the reader door before the 
+plate gets there (with an Ultra_Open command). Another RoMa_MoveObject 
+command and an Ultra_Close command are needed when the scanning operation 
+is finished. The process diagram is simplified by implementing these standard 
+actions using pre-actions and post-actions which are linked to the Measure 
+command. It avoids having to specify additional process steps. In most cases, 
+Freedom EVOware configures suitable pre-actions and post-actions for you 
+automatically. This applies above all to the plate robot (RoMa_MoveObject 
+command). 
+Freedom EVOware keeps track of the location of the labware on your instrument, 
+and - to take the above example - automatically configures a suitable 
+RoMa_MoveObject command to move the plate from its current location to the 
+reader.
+The pipette command for the liquid handling arm has a large number of sub-
+commands which are used for writing so-called scripts. In Freedom EVOware 
+Plus, if you drag the pipette command onto the Process Editor, this opens 
+scripting mode and the Process Editor is replaced by the Script Editor (see 
+below).
+Labware source icons are used at the start of a process to represent the source of 
+the labware items (e.g. microplates or tubes) which are needed by the process. 
+See 11.6 “Labware Generator (Freedom EVOware Plus)”,  11-16 for information 
+on creating labware source icons.
+Final position icons are used to specify the final position of the labware after the 
+process has finished. They are often associated with a storage device such as a 
+hotel or with a waste position for discarding used labware. Final position icons are 
+not necessary if you want to return the labware to its original position after the 
+process has finished, for example back to a storage device such as a carousel 
+(the “base” location). Final position icons are created by right-clicking on the 
+background of the Process Editor and choosing Choose Final Position from the 
+context menu. 
+On-the-fly icons represent on-the-fly devices. Such devices always require the 
+use of a plate robot (RoMa) to carry out their function. A typical example of this 
+type of icon is the Symbol barcode scanner which is rigidly fixed to the 
+instrument's deck and cannot move towards the labware to scan it. Instead, a 
+plate robot is used to move the labware past the barcode scanner “on-the-fly” 
+while carrying out something else, for example when moving the labware from 
+one carrier (or process step) to another. The barcode scanner is then instructed to 
+perform a read operation when the plate robot presents the labware. An on-the-fly 
+icon for the barcode scanner is created by dragging the Barcode scanner 
+command from the Control Bar onto a line which links two process steps.
+See 11 “Getting Started - Setting Up a New Script or Process”,  11-1 for more 
+information.
+
+
+--- PAGE 61 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 19
+G5.4.3.1 Context Menu for the Process Editor
+Right-click on the Process Editor to open the context menu. The context menu is 
+context sensitive and the options it contains depend on what you have selected (a 
+process step icon or the background). The available options in the context menu 
+are as follows if you select the background of the Process Editor:
+Choose Final Position
+This option adds a final position icon for labware. Final position icons are used 
+to specify the final position of the labware after the process has finished. Final 
+position icons are not necessary if you want to return the labware to its original 
+position after the process has finished. See the above description of the 
+Process Editor.
+Paste
+This option is available if you have selected a process step and choose Copy.
+Arrows
+This option allows you to choose between Rectangular and Straight arrows for 
+the lines which connect the process steps. The choice you make solely 
+depends on your personal taste.
+See 9.10 “Local Settings for Process Steps (Context Menu)”,  9-70 and 
+9.11 “Local Settings for Labware Source Icons (Context Menu)”,  9-77 for 
+information on the options in the context menu if you select a process step.
+G5.4.4 The Script Editor
+The Script Editor, which is shown at the top right of the screen, is used to set up a 
+pipetting (liquid handling) script. 
+Freedom
+EVOware Plus
+To open the Script Editor in Freedom EVOware Plus, select the Pipette command 
+in the Control Bar (Liquid Handling Arm section) and drag it to the Process Editor 
+window. 
+After creating the script, click the Accept to accept your changes and return to the 
+Process Editor. If you want to edit or view the script later, you can open the Script 
+Editor again by double-clicking on the icon for the Pipette command in the 
+Process Editor. 
+Freedom
+EVOware
+Standard
+Freedom EVOware Standard does not have a Process Editor, and displays the 
+Script Editor as soon as it has started.
+
+
+--- PAGE 62 ---
+G5 - 20
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+If you have opened more than one pipetting script, click the tabs below the Script 
+Editor window if you want to view, edit, save or close one of the other scripts.
+If you need more space for the Script Editor, you can collapse the Worktable 
+Editor by clicking 
+ in the title bar. In addition, you can collapse the Infopad 
+windows by clicking 
+ in the title bars. You can also resize the windows by 
+dragging the dividers between the windows.
+G5.4.4.1 Context Menu for the Script Editor
+Right-click on the Script Editor to open the context menu. The available options in 
+the context menu are as follows:
+Edit
+Edit the selected script line.
+Delete
+Delete the selected script line(s).
+Cut
+Cut the selected script line(s).
+Copy
+Copy the selected script line(s).
+Paste
+Paste the script line(s) in the clipboard at the current cursor position.
+Seach & Replace
+Opens the Search and Replace dialog box which allows you to replace strings 
+in the pipetting script (e.g. the string you have specified in the User Prompt 
+command). If you do not specify a string in the Replace with field, matching 
+strings are deleted (you cannot carry out a search without replacing).
+Context Menu for the Tabs of the Script Editor
+Save
+Save the selected script.
+Close
+Close the selected script.
+Fig. G5-12 Script Editor with three scripts open
+
+
+--- PAGE 63 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 21
+Open
+Open an additional script.
+G5.4.5 Worktable Editor
+The Worktable Editor at the bottom right of the screen is a graphical 
+representation of the pipetting instrument's worktable (deck). It shows the carriers 
+and labware that are physically placed on the worktable. It also shows icons for 
+the devices which are installed. 
+The gray area in the Worktable Editor represents that part of the worktable which 
+can be accessed by the Liquid Handling Arm. This is called the pipetting area. The 
+real worktable is normally larger than this. For example, hotels (storage shelves 
+for plates) are normally put at the rear of the worktable, behind the pipetting area.
+The displayed size of the worktable is scaled automatically depending on the size 
+of the Worktable Editor window. The displayed size of the worktable will be very 
+small if the Worktable Editor window is small and/or a large number of device 
+icons are visible (i.e. you have installed a large number of devices).
+In the above figure, 84 microplates have been put in the carousel.
+If you need more space for the Worktable Editor, you can collapse the Infopad 
+windows by clicking 
+ in the title bars. You can also resize the windows by 
+dragging the dividers between the windows. In addition, you can rearrange the 
+device icons by dragging them to the required position.
+Before programming your pipetting operations, you need to place the carriers and 
+labware which you want to use on to the worktable.
+The worktable layout is stored in the script or process file together with the 
+information on the script or process.
+G5.4.5.1 Shared worktable layouts 
+Freedom EVOware detects automatically if scripts, processes, maintenance 
+scripts and templates use an identical worktable layout. If you save one of these 
+file types after changing the worktable layout, you will be asked whether you also 
+want to update the worktable information in the other files which share the same 
+worktable.
+Fig. G5-13 Example worktable showing carriers, labware and labware labels
+
+
+--- PAGE 64 ---
+G5 - 22
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+If you are saving a pipetting script, you will only be prompted about other pipetting 
+scripts, maintenance scripts or script templates which share the same worktable 
+layout. If you are saving a process, you will only be prompted about other 
+processes or process templates which share the same worktable layout.
+Select the files whose worktable you also want to update or choose Cancel 
+saving. The list shows all files of the selected file types (Scripts / Processes), 
+Maintenance and Templates) which share the same worktable layout.
+The following options are available:
+Cancel saving
+Cancel the saving operation.
+Only save the active file
+Update the file you are saving but do not update the other files which share 
+this worktable.
+Save the file and update the worktable for the selected items too
+Update the worktable information for the active file and for the files you have 
+selected.
+If one of the other scripts which shares the same worktable layout is also 
+currently open in the Script Editor, you will be prompted to save it first before 
+updating.
+Do not show this dialog again
+Check this checkbox to hide this dialog box in future. In this case, Freedom 
+EVOware will only save worktable layout changes for the current file in future. 
+To make this dialog box appear again (i.e. to uncheck the checkbox), press 
+the Shift key when you choose Save. 
+G5.4.5.2 Context Menu for the Worktable Editor
+Right-click on the Worktable Editor to open the context menu. The context menu 
+is context sensitive and the options it contains depend on what you have selected 
+(a carrier, a labware item or the background). The available options in the context 
+menu are as follows:
+Fig. G5-14 Prompt when saving worktable layouts which are shared
+
+
+--- PAGE 65 ---
+G5 - Starting Freedom EVOware
+Overview of the Main Window in Freedom EVOware
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - 23
+Set Grid
+This option is used to move a robot-only device (a device which is not 
+accessible to the liquid handling arm) to a new position on the worktable. 
+Choose the required grid position and click OK. Tip: If you click on a device 
+icon in the Worktable Editor, an orange line shows the grid position which is 
+occupied by the device. 
+To move a carrier to a new position, click the edge of the carrier to select it 
+and drag to the required position.
+Modify labware
+This option is only available for generated labware (labware in feeder devices 
+or a labware repository on the worktable) and is only for Freedom EVOware 
+Plus. It opens the labware generator to allow you to edit the settings you have 
+made (see G6.6 “Labware Generator (Freedom EVOware Plus)”,  G6-16).
+Edit labware type
+This option is used to edit labware definitions.
+Set label
+This option is used to assign a label (i.e. a user-defined name) to the selected 
+labware item.
+Edit carrier
+This option is used to edit carrier definitions.
+Delete
+This deletes the selected object. You cannot delete carriers if labware is 
+already positioned on the carrier (you must delete the labware first).
+Automatic replace
+This activates the automatic DITI handling feature for the selected site. This 
+option is only available for Freedom EVOware Plus and is only available for 
+DITI racks. See 17.1 “Using the Automatic DITI Handling feature”,  17-1.
+Waste for DiTi racks
+This activates the automatic DITI rack waste feature for the selected site. This 
+option is only available for Freedom EVOware Plus and is only available for 
+the DITI waste site of a DITI carrier with waste. It is intended for discarding 
+empty stackable DITI racks and spacers. See 17.1 “Using the Automatic DITI 
+Handling feature”,  17-1.
+Save worktable as template
+This option is used to save the current worktable layout as a template. The 
+template file which is saved contains configuration settings for Freedom 
+EVOware, for example the positions of the devices and the labware in the 
+Worktable Editor. To choose this option, right click on the worktable (but not on 
+labware items).
+
+
+--- PAGE 66 ---
+G5 - 24
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G5 - Starting Freedom EVOware
+Exiting Freedom EVOware
+G5.5 Exiting Freedom EVOware
+To exit Freedom EVOware, choose Exit or Exit, unload drivers in the File menu. 
+In the latter case, you will be shown a progress bar as Freedom EVOware 
+unloads all of the software components and device drivers. If errors are detected 
+when unloading the device drivers, a dialog box will appear with status messages. 
+Use the scroll bar to inspect last column (Info), which explains the reason for the 
+error. 
+In Freedom EVOware Plus, you must first close the Script Editor before you can 
+exit.
+
+
+--- PAGE 67 ---
+G6 - Getting Started - Setting Up a New Script or Process
+First Steps
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 1
+G6 Getting Started - Setting Up a New Script or 
+Process
+This chapter describes the steps which are required to set up a new pipetting 
+script (Freedom EVOware Standard) or process (Freedom EVOware Plus). 
+Processes and scripts can only be created and/or modified by users with Freedom 
+EVOware Administrator or Application Specialist rights. 
+G6.1 First Steps
+Freedom
+EVOware
+Standard
+Start Freedom EVOware and choose Create a new script in the Startup Wizard 
+(see G5.2 “Startup Wizard, Freedom EVOware Standard”,  G5-5). This opens 
+the main window of Freedom EVOware. Initially, the Worktable Editor at the 
+bottom right of the screen will be empty (i.e. it does not contain any carriers or 
+labware etc.). The Script Editor at the top right of the screen will also empty be 
+until you add some pipetting commands. Until you save the script for the first time 
+and assign a name of your choice, the title bar of the Script Editor will show a 
+generic name.
+Freedom
+EVOware Plus
+Start Freedom EVOware and choose Create a new process in the Startup Wizard 
+(see G5.3 “Startup Wizard, Freedom EVOware Plus”,  G5-7). This opens the 
+main window of Freedom EVOware. Initially, the Worktable Editor at the bottom 
+right of the screen will be empty (i.e. it does not contain any carriers or labware 
+etc.). The Process Editor at the top right of the screen will also empty be empty 
+until you add some process steps. Until you save the script for the first time and 
+assign a name of your choice, the title bar of the Process Editor will show a 
+generic name.
+The various elements of the Freedom EVOware main window are described in 
+G5.4 “Overview of the Main Window in Freedom EVOware”,  G5-9. 
+G6.2 Setting Up a New Pipetting Instrument
+Please proceed as follows when setting up a new pipetting instrument:
+
+Use the Setup & Service software to check and calibrate the reference 
+coordinates of the hardware. This is normally done for you by the Tecan Field 
+Service Engineer when installing the pipetting instrument and the optional 
+devices. See G1.2 “Reference Documents”,  G1-3 for information on this 
+software.
+
+Edit the settings for the LiHa (see 8.4.2.1 “LiHa (Liquid Handling Arm)”,  8-
+22).
+
+If necessary, edit the settings for the PosID barcode scanner (see 
+8.4.2.2,  8-28), the MPO/LICOS system (see 8.4.2.3,  8-29), the Chemical 
+System (see 8.4.2.5,  8-30) and the doorlocks (see 8.4.2.7,  8-31).
+
+
+--- PAGE 68 ---
+G6 - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Pre-requirements
+G6.3 Pre-requirements
+Before you can set up a process or script, you have to configure the infrastructure 
+of your system as follows:
+
+Check that the optional devices you want to use (such as barcode scanners) 
+are installed on your pipetting instrument and that the devices are present in 
+the Control Bar (Commands section) and/or visible in the Worktable Editor. If 
+the icons are missing, then you need to run the installation program again and 
+install the device drivers which are missing (see 13.2 “Overview of Device 
+Commands”,  13-12 and G4.3 “Modifying, Removing or Repairing Your 
+Installation”,  G4-8). In general, the device drivers are pre-configured during 
+installation with appropriate global settings. For information on configuring the 
+global settings see 8.4 “Device Settings”,  8-21.
+
+Check that the general settings for the Freedom EVOware software are 
+configured appropriately (see 8 “Configuration Tool”,  8-1). Among other 
+things, check that the COM ports have been configured for the optional 
+devices and that the I/O state is switched ON for the devices that you want to 
+use (this enables the COM interface for the respective device). See 8.4.3.1 “I/
+O State Tab”,  8-36.
+
+Check that the carriers and labware you want to use for your process are 
+visible in Freedom EVOware in the Control Bar (Labware section). If you are 
+using custom carriers and/or labware items which are not in the list, you need 
+to create them in Freedom EVOware before you can set up your process. See 
+9.5 “Configuring Carriers”,  9-39 and 9.4 “Configuring Labware”,  9-15. In 
+the case of carriers, this involves e.g. specifying the carrier dimensions and 
+how many labware items can be put on the carrier. In the case of labware, this 
+involves e.g. specifying the labware dimensions.
+
+Check that liquid classes are available for the liquids you want to pipette (see 
+10.1 “Liquid Classes Editor”,  10-1). A liquid class is a set of liquid handling 
+parameters. It specifies aspirating and dispensing speeds, airgaps, liquid 
+detection modes, etc.
+
+Rectangular labware such as microplates is moved to and from carriers and 
+other devices such as carousels using a plate robot (RoMa; robot 
+manipulator). Tubes are moved to and from tube racks using a tube robot 
+(PnP; Pick & Place arm). Movement commands for the RoMa and PnP are 
+called robot vectors. The robot vectors for the RoMa are associated with the 
+carrier definitions. The robot vectors for the PnP are associated with the 
+labware definitions. Appropriate robot vectors may already be provided with 
+your Freedom EVOware installation. Check in the respective carrier and 
+labware definitions to see whether the robot vectors you want to use are 
+already present. Otherwise you will need to configure a new vector. See 
+9.6 “Creating and Editing Plate Robot Vectors”,  9-55 and 9.7 “Creating and 
+Editing Tube Robot Vectors”,  9-63.
+
+Additional RoMa and PnP vectors are needed to move the RoMa or PnP back 
+to a home (or parking) position when not in use. Such vectors can be seen in 
+the Robot Vectors section of the Control Bar. See 9.6.4 “Defining the Home 
+Position for a RoMa”,  9-62 and 9.7.4 “Defining the Home Position for a 
+PnP”,  9-69 for more information.
+G6.3.1 Setting Up Carriers on the Worktable
+The Worktable Editor at the bottom right of the screen is a graphical 
+representation of the pipetting instrument's worktable (deck). It shows icons for 
+
+
+--- PAGE 69 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Pre-requirements
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 3
+the devices which are installed and the arrangement of the carriers and labware. 
+See 13.2 “Overview of Device Commands”,  13-12.
+Before programming your process or pipetting script, you need to move the 
+carriers and labware etc. which you want to use on to the Worktable Editor to 
+match the real arrangement of these objects on the pipetting instrument. 
+This section describes how to add carriers; putting labware on the carriers is 
+described in G6.4.1 “Choosing Labware for a Pipetting Script”,  G6-4, 
+G6.5.1 “Choosing Labware for a Process”,  G6-8 and G6.5.4 “Choosing 
+Labware for a Pipette Command”,  G6-11.
+Note: Each script or process has its own worktable layout, and the worktable 
+layout is automatically saved with the script or process. Click on the worktable and 
+click Save worktable as template if you want to save the worktable layout as a 
+template for use in another script or process. The worktable template contains 
+information on the carriers you have chosen. If you have already put labware onto 
+the carriers, the template also contains information on the labware you have 
+chosen.
+Carriers can only be placed on the Worktable Editor at specified grid positions 
+which correspond to the positioning pins on the instrument’s worktable. One grid 
+unit is 25.0 mm. The choice and the positions of carriers and labware are chosen 
+according to the requirements of your application or experiment. 
+You can change the carrier positions later by dragging with the mouse without 
+needing to change your script or process, for example if it turns out that the 
+carriers are too close together to position additional objects in between.
+You can change the size of the Worktable Editor by moving the mouse over the 
+one of the edges until the double arrow cursor appears. Then click and drag until 
+the required size has been reached. 
+When required by the script or process, Freedom EVOware uses the RoMa 
+(Robot Manipulator) to move labware during runtime to new positions (carrier 
+sites). However, carriers and devices always stay at the same position. 
+Accordingly, you must set up the initial worktable with all of the carriers you need 
+in the correct positions. 
+There are two basic types of carrier - normal carriers on which you can place 
+labware for pipetting and carriers which are devices. The latter type are used as 
+placeholders on the worktable for devices such as the orbital shaker or the 
+incubator. Depending on the type of device, such carriers are often not available 
+for pipetting, even though you can place labware on (or into) them. When the 
+carrier is configured, this is specified by unchecking the Accessible for liquid 
+handling arm checkbox.
+To create the worktable layout, select the required carrier type from the Control 
+Bar (Labware section) and drag it onto the worktable at the required position. 
+Make sure that there is enough space on the worktable for the carrier. If 
+necessary, drag already positioned objects to the left or right to make space. 
+Remember that the final positions you choose must correspond to the actual 
+position of the objects on the pipetting instrument. Large objects such as the Te-
+MO need a lot of space to allow them to be positioned. 
+Repeat this process to add all of the carriers to the worktable that you need. The 
+choice and the positions of the carriers is based on the requirements of your 
+application or experiment. 
+To move a carrier to a new position, click the edge of the carrier to select it and 
+drag it to the required position. When dragging the carrier, the current grid position 
+is shown in the small yellow tab at the bottom left. To delete a carrier, click on it 
+and drag it off of the worktable. 
+To make a copy of a carrier which is already on the worktable, press the Ctrl 
+button, click on the carrier and drag the cursor to the required grid position. 
+
+
+--- PAGE 70 ---
+G6 - 4
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Pipetting Script in Freedom EVOware Standard
+When adding, deleting or moving carriers, a special cursor is shown to indicate 
+the action you are performing (“+”, “del” or “move”).
+If you click on a carrier (click on the edge, not on the labware on the carrier), 
+information on the carrier is shown in the lower infopad.
+Carrier types can be assigned unique colors in the Freedom EVOware 
+configuration make it easier for you to identify them in the Worktable Editor 
+(see “Color”,  9-41).
+Carriers which are designed for one type of labware only (such as tube racks and 
+the wash station) are put on the worktable with a full complement of labware. For 
+other carrier types, you need to add the labware by hand (see later).
+See also G6.7.2 “Example of a Worktable With Several Carriers and Labware 
+Items”,  G6-20.
+G6.4 Setting Up a Pipetting Script in Freedom EVOware 
+Standard
+After setting up the worktable with the carriers and devices you want to use, 
+before you write the pipetting script you must to choose the labware you need.
+G6.4.1 Choosing Labware for a Pipetting Script
+Select the required labware type from the Labware section of the Control Bar and 
+drag it onto the required carrier site on the worktable. To help you, Freedom 
+EVOware highlights all carrier sites which are suitable for the chosen labware 
+item. 
+Note: If you click on the carrier and scroll down to Allowed Labware, Freedom 
+EVOware will show you the labware types which are compatible with the selected 
+carrier.
+Repeat this process to add all of the labware to the worktable that you need. The 
+choice and the positions of the labware is based on the requirements of your 
+application or experiment.
+To move labware to a new position, click on the labware to select it and drag to the 
+required carrier site.To delete labware, click on it and drag it off of the worktable.
+To make a copy of a labware item which is already on the worktable, press the Ctrl 
+button, click on the labware and drag the cursor to the required carrier site. 
+When adding, deleting or moving labware, a special cursor is shown to indicate 
+the action you are performing (“+”, “del” or “move”). 
+Labware types can be assigned unique colors in the Freedom EVOware 
+configuration make it easier for you to identify them in the Worktable Editor 
+(see “Color”,  9-19). 
+In addition, labware items can be assigned labels (names) to make it easier to 
+identify them in the Worktable Editor (see G6.7.1 “Assigning a Label (Name) to 
+the Labware”,  G6-19). Labware labels are shown in yellow. 
+If you click on a labware item, information on the item is shown in the lower 
+infopad. See Fig. G6-8,  G6-20 for an example of a worktable.
+
+
+--- PAGE 71 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Pipetting Script in Freedom EVOware Standard
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 5
+G6.4.2 Creating a Pipetting Script
+The pipetting program (or script) is created by choosing script commands in the 
+Control Bar and dragging them to the Script Editor window (see 5.4.4 “The Script 
+Editor”,  5-19). See 13.1 “Overview of Script Commands”,  13-1.
+Because Freedom EVOware normally executes a script in a linear sequence, you 
+should add the commands in the order that you want the script to be executed. 
+Each script is associated with its own worktable layout (carriers, devices and 
+labware), which must be specified before you write the script. 
+When you drag a script command to the Script Editor, a blue line helps you to 
+choose where the new command should be inserted.
+When you drop the command onto the Script Editor, a dialog box is opened where 
+you can specify the command parameters. After making your entries, click OK to 
+add the command to the script. To change the command parameters later, double-
+click the script line to open the dialog box again (or click on the script line and 
+press Enter).
+If your script uses device commands, it is also necessary to put labware of the 
+correct type onto the device icon(s). This is shown by a grey rectangle inside the 
+icon. This is not necessary in Freedom EVOware Plus. Tip: If you click on the grey 
+rectangle, the chosen labware type is shown in the lower Infopad.
+The currently selected script line is highlighted in orange. The associated object in 
+the Worktable Editor is highlighted using the same color. The cursor keys can be 
+used to move through the script one line at a time.
+The Cut, Copy, and Paste functions in the Edit menu (and in the Script Editor’s 
+context menu) can also be used when creating a script. Select one or more script 
+lines, choose Cut or Copy, select where you want to insert the command(s) and 
+then choose Paste.
+To select several script lines, click on the first line you want to select and shift-click 
+on the last line (click while pressing the Shift key). To clear the selection, click on a 
+line outside of the selected range. To move a line, click on it and drag it to the 
+required position.
+See also 17 “Special Features, Example Scripts and Processes,”,  17-1.
+G6.4.2.1 Checking the Pipetting Script for Errors
+Each time you insert a new command in your script or edit an existing command, 
+Freedom EVOware validates the entire script to check for errors and shows all 
+commands which have errors in red. If you select a faulty command, the infopad 
+will show information on the error. Double-click on the command in the Script 
+Editor to open a dialog box where you can change the command parameters.
+Choose Auto-Validation in the Edit menu if you want to switch off automatic 
+validation of pipetting scripts (see 6.2.5 “Auto-Validation”,  6-9). You then need 
+to validate the script manually (by choosing Validate Script in the Edit menu).
+If your script contains conditional jumps or branches, validation only checks those 
+parts of the script which are executed with the default values of the IF variables in 
+Condition commands. For this reason, it is not recommended to declare variables 
+(e.g. with the Set Variable command) within conditional parts of the script (see 
+14.1.12 “Validating a Script Which Contains Variables”,  14-18).
+If your script contains conditional jumps or branches, you should separately 
+validate those parts of the script which are not executed with the default values of 
+the IF variables. To do this, temporarily modify the values of the IF variables to 
+ensure that all of the script branches have been tested.
+Freedom EVOware chooses multi-dispensing mode automatically if the pipetting 
+script specifies an aspirate command followed by several consecutive dispense 
+commands. In turn, this influences the liquid class parameters which are used. 
+
+
+--- PAGE 72 ---
+G6 - 6
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Pipetting Script in Freedom EVOware Standard
+The decision between single dispensing mode and multi-dispensing mode is 
+made when the script is validated and not when the script is run. Scripts are 
+validated when they are modified and also when they are opened for running 
+without being modified. Validation is done using default values for the variables. 
+If the number of consecutive dispense commands is controlled by a variable 
+whose value can change during runtime, it is recommended to design the script 
+with branches or separate groups of commands for single-pipetting mode (one 
+dispense operation) and multi-pipetting mode (more than one dispense 
+operation). This ensures that the correct pipetting mode and liquid class 
+parameters will be chosen at runtime.
+See also 14.3.4 “Validating a Script Which Contains Sub-Routines”,  14-22.
+See also C “Validation of Freedom EVOware Applications”,  C-1.
+G6.4.3 Adding Robot Movement Commands to the Script
+Plate Robot
+Movement commands for the plate robot (RoMa vectors) are associated with 
+carriers. They are specified in the carrier definition (see 9.6 “Creating and Editing 
+Plate Robot Vectors”,  9-55).
+In Freedom EVOware Standard, RoMa movements are initiated by script 
+commands (see 15.58 “RoMa Vector Command”,  15-141 and 15.59 “Transfer 
+Labware Command”,  15-143). Simple RoMa movements are carried out with 
+the Move RoMa command, which does not need a RoMa vector (see 15.57,  15-
+140).
+For Freedom EVOware Plus see G6.5.3 “Adding Robot Movement Commands to 
+the Process”,  G6-11.
+Tube Robot
+Movement commands for the tube robot (PnP vectors) are associated with 
+labware such as tube racks. They are specified in the labware definition (see 
+9.7 “Creating and Editing Tube Robot Vectors”,  9-63). 
+In both Freedom EVOware Standard and Freedom EVOware Plus, PnP 
+movements are initiated by script commands (see 15.61 “PnP Vector Command”, 
+ 15-146, and 15.62 “Transfer Tube Command”,  15-148). Simple PnP 
+movements are carried out with the Move PnP command, which does not need a 
+PnP vector (see 15.60,  15-145).
+In Freedom EVOware Plus, you first must use a special process step to open the 
+script editor (see 16.25.1 “Tube Robot - ExecuteScript Command”,  16-83).
+Multi channel
+arm (MCA)
+Movement commands for the MCA96 or the MCA384 (MCA vectors) are 
+associated with carriers. They are specified in the carrier definition (see 
+9.8 “Creating and Editing MCA Vectors”,  9-69). MCA vectors are very similar to 
+RoMa vectors.
+In Freedom EVOware Standard, MCA movements are initiated by script 
+commands (see 15.68.11 “MCA96 Vector Command”,  15-175, 
+15.68.12 “MCA96 Transfer Labware Command”,  15-177, 15.69.11 “MCA384 
+Vector Command”,  15-199 and 15.69.12 “MCA384 Transfer Labware 
+Command”,  15-201). Also see 9.8 “Creating and Editing MCA Vectors”,  9-69.
+For Freedom EVOware Plus see G6.5.3 “Adding Robot Movement Commands to 
+the Process”,  G6-11.
+
+
+--- PAGE 73 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 7
+G6.4.4 Saving the Script
+Save the script you have created by clicking Save in the toolbar or by choosing 
+Save from the File menu. Then enter a name for the script in the Save File dialog 
+box or select an existing script which you want to overwrite and click the green 
+arrow. You can also save the script as a script template by choosing Save As from 
+the File menu and clicking the Template button in the Save File dialog box.
+G6.4.5 Running the Script
+See 12.1 “Running a Liquid Handling Script”,  12-1.
+G6.4.6 Example Scripts and Example Process
+Freedom EVOware is provided with a number of example scripts which illustrate 
+various aspects of script programming. It is instructive for new users of Freedom 
+EVOware to load the scripts which are provided and to study each command 
+while looking at the on-line help. For learning purposes, some of the scripts can 
+also be run in offline mode. The scripts are stored as script templates. To load 
+them, click New and select the required template. Script templates have a yellow 
+icon.
+Note that scripts will indicate errors (marked in red in the Script Editor) if the 
+configuration of the pipetting instrument is unsuitable. For example, if the script 
+uses DITIs, errors which be shown if the liquid handling arm is not configured with 
+DITIs. Conversely, if the liquid handling arm is configured with DITIs, Aspirate 
+commands must be preceeded by Get DITI commands. Errors will also be shown 
+if the script uses liquid classes or volume ranges which are not currently available.
+In many cases, the purpose of each of the scripts is explained in a Comment 
+command at the start of the script.
+The Freedom EVOware installation contains a number of maintenance scripts 
+(see 6.4.2 “Run Maintenance”,  6-10). Maintenance scripts can be run by both 
+Freedom EVOware versions but can only be created and edited with Freedom 
+EVOware Standard. Script files and maintenance scripts have a green icon.
+Freedom EVOware Plus is also provided with an example process template, 
+which is for the ELISA test (Enzyme immunoassay). Process templates have a 
+blue icon. 
+G6.5 Setting Up a Process in Freedom EVOware Plus
+In Freedom EVOware Plus, the sequence of steps which are required to carry out 
+a particular application or experiment, for example to extract the substance you 
+are looking for, is called a process. The process specifies the operations you want 
+the pipetting instrument to execute. Processes are set up in the Process Editor, 
+which is shown at the top right of the screen (see G5.4.3 “The Process Editor 
+(Freedom EVOware Plus)”,  G5-17).
+
+
+--- PAGE 74 ---
+G6 - 8
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+G6.5.1 Choosing Labware for a Process
+After setting up the worktable with the carriers and devices you want to use, you 
+then need to choose the labware you need. There are several ways to do this 
+depending on the situation:
+⌦ The labware will always stay at the same position and does not need to 
+be moved when you run the process
+This option is typically used for reagent troughs.
+Select the required labware type in the Control Bar (Labware section) and drag it 
+onto the required carrier site on the worktable. To help you, Freedom EVOware 
+highlights all carrier sites which are suitable for the chosen labware item. 
+Note: If you click on the carrier and scroll down to Allowed Labware, Freedom 
+EVOware will show you the labware types which are compatible with the selected 
+carrier.
+Repeat this process to add all of the labware to the worktable that you need. The 
+choice and the positions of the labware is based on the requirements of your 
+application or experiment.
+To move labware to a new position, click on the labware to select it and drag to the 
+required carrier site.To delete labware, click on it and drag it off of the worktable.
+To make a copy of a labware item which is already on the worktable, press the Ctrl 
+button, click on the labware and drag the cursor to the required carrier site. 
+When adding, deleting or moving labware, a special cursor is shown to indicate 
+the action you are performing (“+”, “del” or “move”). 
+Labware types can be assigned unique colors in the Freedom EVOware 
+configuration make it easier for you to identify them in the Worktable Editor 
+(see “Color”,  9-19). 
+In addition, labware can be assigned labels (names) to make them easier to 
+identify in the Worktable Editor (see G6.7.1 “Assigning a Label (Name) to the 
+Labware”,  G6-19). The label is shown in yellow. 
+If you click on a labware item, information on the item is shown in the lower 
+infopad.
+⌦ You want to create a repository of labware in a feeder device such as a 
+carousel
+Before you run a process which contains a pipetting script, you must put all of the 
+labware on the worktable that the pipetting script will need. You also need to tell 
+Freedom EVOware how many labware items you will be using. When you run the 
+process, Freedom EVOware will take labware items from the feeder device as 
+and when needed by the pipetting script and move them using the RoMa to the 
+empty carriers which you have put aside for the pipetting operations.
+Proceed as follows to create a labware repository in a feeder device: Select the 
+required labware type in the Control Bar (Labware section) and drag it onto the 
+icon for the carousel (or another feeder device or a hotel) in the Worktable Editor. 
+This opens the Labware Generator dialog box, which allows you specify how 
+many labware items you need. See G6.6 “Labware Generator (Freedom 
+EVOware Plus)”,  G6-16.
+The Labware Generator will insert a labware source icon in the Process Editor. 
+Notes:
+
+
+--- PAGE 75 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 9
+
+The chosen number of labware items is shown in the carousel device icon 
+(see Fig. G6-8 “Example worktable showing carriers, labware and labware 
+labels”,  G6-20).
+
+Repeat the above procedure to create additional labware source icons if the 
+carousel will be filled with different labware types in different towers.
+
+The number of towers and the storage capacity of the feeder device are 
+configured in the Edit Carrier dialog box for the feeder (see 9.5,  9-39). See 
+also 9.5.5.3 “Carousel Carrier Attributes”,  9-50 and 16.33 “Commands for 
+the Te-Stack Te-MO”,  16-105.
+⌦ You want to create a repository of labware on the worktable
+This option is only used for special applications; labware repositories (storage 
+areas) are normally created in feeder devices.
+Before you run a process which contains a pipetting script, you must put all of the 
+labware on the worktable that the pipetting script will need. You may decide to 
+use, say, the left side of the worktable as a storage area for all of the labware 
+which you will need and the right side of the worktable for pipetting. You also need 
+to tell Freedom EVOware how many labware items you will be using. When you 
+run the process, Freedom EVOware will take the required labware items from the 
+storage area when needed by the pipetting script and move them using the RoMa 
+to the carrier sites which you have chosen to use for the pipetting operations.
+Proceed as follows to create a labware repository on the worktable: Make sure 
+that you have already put enough carriers in the Worktable Editor, select the 
+required labware type in the Control Bar (Labware section), press Ctrl and drag 
+the labware icon onto one of the carriers in the Worktable Editor.
+This opens the Labware Generator dialog box, which allows you specify how 
+many labware items you need and which carriers to place them on. See 
+G6.6 “Labware Generator (Freedom EVOware Plus)”,  G6-16.
+The Labware Generator will insert a labware source icon in the Process Editor. 
+⌦ The labware will be used dynamically by a pipetting script
+When you run a process with a pipetting script, Freedom EVOware Plus will take 
+the required labware items from the storage device or storage area when needed 
+by the pipetting script and move them using the RoMa to the carrier sites which 
+you have chosen to use for the pipetting operations. Labware which is used 
+dynamically by the pipetting script should be positioned in the Worktable Editor 
+when you create the script. See G6.5.4 “Choosing Labware for a Pipette 
+Command”,  G6-11.
+Note: Labware which you position when the Script Editor is open is shown in grey 
+when you return to the Process Editor. This is because it is only moved to the 
+pipetting position during process runtime and is initially kept elsewhere (typically 
+in a carousel).
+G6.5.1.1 Labware in the Worktable Editor of Freedom EVOware Plus
+In the figure below, the labware on sites 1 and 2 of the first carrier (at grid position 
+2) will always stay at the same position. The labware was dragged from the 
+Control Bar to the carrier directly.
+Sites 1 and 2 of the second carrier (at grid position 10) are used as a labware 
+repository. The labware was dragged from the Control Bar to the carrier while 
+pressing the Ctrl button to open the Labware Generator.
+Sites 1 and 2 of the third carrier (at grid position 18) show (in grey) labware which 
+will be used dynamically by a pipetting script and will be moved to this position 
+
+
+--- PAGE 76 ---
+G6 - 10
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+during process runtime. The labware was dragged from the Control Bar to the 
+carrier when the Script Editor was open. 
+See Fig. G6-8,  G6-20 for a worktable example where the labware is taken from 
+a carousel.
+G6.5.2 Adding Device Commands to the Process
+To add a device command to your process, click the Commands tab in the Control 
+Bar, look for the device you want to use and drag the command from the Control 
+Bar onto the Process Editor window. If you need to specify any execution 
+parameters for the command, the Parameters dialog box will open automatically 
+when you do this. For example, the MoveToCartridge command for the Carousel 
+requires you to specify the number of the required tower. The Pipette command of 
+the Liquid Handling Arm requires you to specify a pipetting script.
+The device command is then shown as a process step icon in the Process Editor. 
+You can change the position of a process step icon by dragging it to the required 
+location. 
+To edit the execution parameters of the command (or the pipetting script) later, 
+double-click on the icon (or right click on the icon and choose Edit Parameters). 
+The Parameters dialog box will only be shown if the command has parameters.
+To edit the runtime parameters for the command, right click on the icon and 
+choose Adjust Time/Error handling. See 9.10.2 “Adjust Time/Error handling”,  9-
+71. These parameters are set automatically to appropriate values and do not 
+normally need to be changed.
+To edit the pre-actions and post-actions for the command, right click on the icon 
+and choose Pre-actions / Post-actions. See 9.10.3 “Pre-actions / Post-actions 
+(Custom)”,  9-72. The pre-actions and post-actions are normally configured 
+through the global settings of the device driver and only need to be changed for 
+special applications.
+To delete a process step, select the icon and press Del (or right click on the icon 
+and choose Delete in the context menu).
+Fig. G6-1 Labware in the Worktable Editor of Freedom EVOware Plus
+
+
+--- PAGE 77 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 11
+G6.5.3 Adding Robot Movement Commands to the Process
+Plate Robot
+Movement commands for the plate robot (RoMa vectors) are associated with 
+carriers. They are specified in the carrier definition (see 9.6 “Creating and Editing 
+Plate Robot Vectors”,  9-55).
+In Freedom EVOware Plus, RoMa vectors are mainly used by pre-actions and 
+post-actions of device commands. The pre-actions and post-actions and thus the 
+RoMa movements are executed automatically when the process step is executed. 
+If your process involves pipetting to a plate which is initially stored in a carousel, 
+Freedom EVOware first uses the robot vector associated with the carousel to take 
+the plate from the carousel and then uses the robot vector associated with the 
+carrier to put the plate on the carrier. You do not need to specify the RoMa vectors 
+- Freedom EVOware gets them from the carrier and device definitions. You only 
+need to make sure that the RoMa vectors which you want to use are already set 
+up in the Freedom EVOware configuration.
+Tube Robot
+Movement commands for the tube robot (PnP vectors) are associated with 
+labware such as tube racks. They are specified in the labware definition (see 
+9.7 “Creating and Editing Tube Robot Vectors”,  9-63). 
+In both Freedom EVOware Standard and Freedom EVOware Plus, PnP vectors 
+are executed using script commands (see 15.61 “PnP Vector Command”,  15-
+146, and 15.62 “Transfer Tube Command”,  15-148). Simple PnP movements 
+are executed with the Move PnP command, which does not need a PnP vector 
+(see 15.60,  15-145). 
+In Freedom EVOware Plus, you first must use a special process step to open the 
+script editor (see 16.25.1 “Tube Robot - ExecuteScript Command”,  16-83). 
+Multi channel
+arm (MCA)
+Movement commands for the MCA96 or the MCA384 (MCA vectors) are 
+associated with carriers. They are specified in the carrier definition (see 
+9.8 “Creating and Editing MCA Vectors”,  9-69).
+G6.5.4 Choosing Labware for a Pipette Command
+Script (e.g. pipetting) commands are carried out by the liquid handling arm and 
+are defined in the Script Editor. To open the Script Editor, select the Pipette 
+command in the Control Bar (Liquid Handling Arm group) and drag it to the 
+Process Editor window. 
+Before you can specify script commands such as Aspirate or Dispense, you must 
+put the labware you want to use onto the carriers. When you run the process, 
+Freedom EVOware Plus will take the specified labware items from the storage 
+device or storage area as and when needed and move them using the RoMa to 
+the carrier sites which you allocated for the pipetting operations. 
+Select the required labware type from the Labware section of the Control Bar and 
+drag it onto the required carrier site on the worktable (you cannot choose sites 
+which are already occupied by labware). To help you, Freedom EVOware 
+highlights all carrier sites which are suitable for the chosen labware item. 
+Note: If you click on the carrier and scroll down to Allowed Labware, Freedom 
+EVOware will show you the labware types which are compatible with the selected 
+carrier.
+Repeat this process to add all of the labware to the worktable that you need. The 
+choice and the positions of the labware is based on the requirements of your 
+application or experiment.
+
+
+--- PAGE 78 ---
+G6 - 12
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+To move labware to a new position, click on the labware to select it and drag to the 
+required carrier site.To delete labware, click on it and drag it off of the worktable.
+To make a copy of a labware item which is already on the worktable, press the Ctrl 
+button, click on the labware and drag the cursor to the required carrier site. 
+When adding, deleting or moving labware, a special cursor is shown to indicate 
+the action you are performing (“+”, “del” or “move”). 
+Labware can be assigned unique colors in the Freedom EVOware configuration 
+make it easier for you to identify them in the Worktable Editor (see “Color”,  9-
+19). 
+In addition, labware can be assigned labels (names) to make them easier to 
+identify in the Worktable Editor (see G6.7.1 “Assigning a Label (Name) to the 
+Labware”,  G6-19). The label is shown in yellow. 
+If you click on a labware item, information on the item is shown in the lower 
+infopad.
+Note: Labware which you position when the Script Editor is open is shown in grey 
+when you return to the Process Editor. This is because it is only moved to the 
+pipetting position during process runtime and is initially kept elsewhere (typically 
+in a carousel). 
+Since the labware is only moved to the pipetting position during process runtime, 
+if your process has more than one pipetting script you can specify the same 
+carrier sites for pipetting operations in different scripts. The carrier sites you 
+choose are used as placeholders. When you run the process, Freedom EVOware 
+Plus may decide to use different sites to maximize the throughout (efficiency) of 
+the process.
+See Fig. G6-8,  G6-20 for an example of a worktable.
+G6.5.5 Creating a Script for the Pipette Command
+Script (e.g. pipetting) commands are carried out by the liquid handling arm and 
+are defined in the Script Editor (see G5.4.4 “The Script Editor”,  G5-19). To open 
+the Script Editor, select the Pipette command in the Control Bar (Liquid Handling 
+Arm group) and drag it to the Process Editor window. 
+The pipetting script is then created by choosing script commands in the Control 
+Bar and dragging them to the Script Editor window. 
+Note: In Freedom EVOware Plus, when the Script Editor is open the Commands 
+tab of the Control Bar only shows script commands (commands which are used 
+for writing pipetting scripts). When the Process Editor is open, the Commands tab 
+of the Control Bar only shows device commands (commands for the optional 
+devices).
+The procedure to follow to create a script is the same for Freedom EVOware Plus 
+and Freedom EVOware Standard See G6.4.2 “Creating a Pipetting Script”,  G6-
+5 for more information.
+See also 13.1 “Overview of Script Commands”,  13-1.
+G6.5.6 Closing the Script Editor
+When you have finished adding all of the script commands you need, click Accept 
+at the top right of the Script Editor window to return to the Process Editor. This 
+stores the script in memory and creates a Pipette process step icon. To 
+
+
+--- PAGE 79 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 13
+permanently save the script you must save the process as described in 
+G6.5.10 “Saving the Process”,  G6-15.
+Click Reject if you do not want to keep the changes you have made to the script. 
+Click Save as template if you want to save the script as a template for use in 
+another process or process step. 
+Labware which you positioned when the Script Editor was open is shown in grey 
+when you return to the Process Editor. When you run the process, Freedom 
+EVOware Plus will move the labware to these carrier sites automatically.
+If your process uses more than one pipetting script, insert another Pipette 
+command in your process using the procedure described above.
+To edit an existing pipetting script, double-click the Pipette process step to open 
+the Script Editor again. Alternatively, select the Pipette process step and click Edit 
+Parameters in the Infopad.
+G6.5.7 Adding Final Position Icons to your Process
+Final position icons are used to specify the final position of the labware after the 
+process has finished. They are often associated with a storage device such as a 
+hotel. Final position icons are not necessary if you want Freedom EVOware to 
+return the labware to its original position after the process has finished, for 
+example back to a storage device such as a carousel (the “base” location). Final 
+position icons are created by right-clicking on the background of the Process 
+Editor and choosing Choose Final Position from the context menu. 
+G6.5.8 Linking the Process Steps in the Order of Execution
+After adding all of the process steps you need in the Process Editor, you must 
+specify the order in which you want to execute them by linking the icons together.
+Start by clicking the pointed end of a labware source icon. Then drag and drop the 
+arrow cursor which appears onto the labware field (“object parameter”) of the first 
+process step that will handle this labware. A connecting line will be drawn from the 
+labware source icon to the process step to visualize the connection and the 
+default labware name “MP” in the labware field changes to the labware name of 
+the source labware (e.g. “sample_1”). 
+If the process step can handle more than one labware item at a time (for example 
+if the LiHa command needs two microplates), repeat this process to connect more 
+labware source icons to the labware fields.
+Then drag the next process step to be adjacent or close to the first process step 
+and link them together in the same way. Click the black arrow on the labware field 
+of the first process step and drag and drop the arrow cursor onto the labware field 
+of the second process step.
+
+
+--- PAGE 80 ---
+G6 - 14
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+Proceed until you have connected all of your process steps in the order you want.
+Note: You cannot save the process until you have connected all of the process 
+steps (Freedom EVOware will display an error message).
+Note: If you make a mistake when connecting the process steps or change your 
+mind, right-click on the connecting line and choose Delete.
+Note: Make sure that the labware source icons and labware fields which you 
+connect together use the same physical labware type. For example, do not 
+connect a labware source icon for a microplate to a labware field for a deep well 
+plate. Freedom EVOware does not check the labware types when you make the 
+connections. However, you are allowed to connect landscape and portrait 
+versions of the same physical labware together (e.g. 96 Well Microplate and 96 
+Well Microplate portrait). In this case, Freedom EVOware will automatically use 
+the RoMa to rotate the labware by 90° if necessary.
+G6.5.8.1 Reserving and Linking Devices
+Some process steps, typically initialize or prime commands for devices, do not 
+need labware and do not have labware fields. In such cases, click the right edge 
+of the process step and drag and drop the arrow cursor onto the icon of the 
+following process step:
+In the above example, the connecting line makes sure that priming takes place 
+before the plate washer is used to wash the plate.
+This type of connection can also be used to reserve a device. In the following 
+example, a magnetic separation is carried out using the Te-MagS and a pipetting 
+operation is then carried out. The plate is then returned to the Te-MagS for 
+another separation step. The line linking the two Te-MagS process steps makes 
+Fig. G6-2 Process Editor showing process icons
+Fig. G6-3 Linking a process step which does not have a labware field
+
+
+--- PAGE 81 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Setting Up a Process in Freedom EVOware Plus
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 15
+sure that the Te-MagS is reserved and thus immediately available for use when 
+the pipetting operation has finished:
+Freedom EVOware Plus lets you run several processes in parallel. If you don’t 
+reserve the Te-MagS, it may be occupied by another process when the first 
+process wants to use it. The first process will then have to wait until it becomes 
+free again. Depending on your application or experiment, the waiting may be 
+inacceptable.
+G6.5.9 Adding On-the-fly Actions
+Some devices require the use of the RoMa (plate robot) to carry out their function. 
+A typical example of this is the Symbol LS-1220 barcode scanner which is rigidly 
+fixed to the instrument's deck and cannot move towards the labware to scan it. 
+Instead, the RoMa is used to move the labware past the barcode scanner “on-the-
+fly” while carrying out something else, for example when moving the labware from 
+one carrier to another. The barcode scanner is then instructed to perform a read 
+operation when the RoMa presents the labware. Such devices are called on-the-
+fly devices.
+Add an on-the-fly device to your process by dragging it from the Control Bar onto 
+the line which links two process steps. The corresponding actions will then be 
+executed when the labware moves between the two process steps. 
+For example, If you want to read the barcodes of your labware items as they move 
+from the washer to the pipetting station, drag the Barcode Scanner device onto 
+the line which links these two process steps.
+See Fig. 5-11 “Process Editor showing an example process”,  5-17.
+G6.5.10 Saving the Process
+Save the process you have created by clicking Save in the toolbar or by choosing 
+Save from the File menu. Then enter a name for the process in the Save File 
+dialog box or select an existing process which you want to overwrite and click the 
+green arrow. You can also save the process as a process template by choosing 
+Save As from the File menu and clicking the Template button in the Save File 
+dialog box.
+G6.5.11 Running the Process
+See 12.2 “Running and Optimizing a Process (Freedom EVOware Plus)”,  12-5.
+Fig. G6-4 Reserving a device
+
+
+--- PAGE 82 ---
+G6 - 16
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Labware Generator (Freedom EVOware Plus)
+G6.6 Labware Generator (Freedom EVOware Plus) 
+The labware generator is used to specify the type and quantity of labware items 
+which you will need for the pipetting script commands in your process (LiHa 
+Pipette process steps). 
+G6.6.1 Creating a labware repository in a feeder device
+Select the required labware type in the Control Bar (Labware section) and drag it 
+onto the icon for the feeder device (e.g. carousel) in the Worktable Editor. If the 
+chosen labware type is allowed for the feeder device, this opens the labware 
+generator dialog box:
+The rectangles at the top of the dialog box show all of the labware storage 
+positions (sites) in the feeder device. For the carousel or Te-Stack stacker, each 
+column is one tower (cartridge). 
+The number of towers and the storage capacity of the feeder device are 
+configured in the Edit Carrier dialog box for the feeder (see 9.5,  9-39). See also 
+9.5.5.3 “Carousel Carrier Attributes”,  9-50 and 16.33 “Commands for the Te-
+Stack Te-MO”,  16-105.
+Storage positions which are yellow (occupied) or red (unavailable) cannot be used 
+for generating labware since they are already in use.
+Enter the number of labware items you want to create in the Create field and click 
+on the first site you want to use. The message area at the bottom of the labware 
+generator will tell you if sufficient sites are available for the chosen number of 
+items. Adjust your entries until the labware generator indicates that your selection 
+is valid and click Create to create the specified labware. The newly created 
+Fig. G6-5 Labware generator when generating labware for the carousel
+
+
+--- PAGE 83 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Labware Generator (Freedom EVOware Plus)
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 17
+labware changes colour from green (selected position) to yellow (occupied 
+position). This creates a labware group (a set of labware associated with a 
+labware source icon in the Process Editor). 
+If you move the cursor over the coloured rectangles, the Labware ID field shows 
+the ID (internal labware name) of the selected labware item. If you click on a 
+labware item (yellow rectangle), the starting position and the name of the 
+associated labware group are shown. Click Delete if you want to delete all of the 
+labware in the group.
+Right click a labware item to open the context menu (see G6.6.3 “Context Menu of 
+the Labware Generator”,  G6-19).
+Repeat this process if you want to create further labware of a different type or 
+using a different group name (i.e. an additional labware source icon). 
+Click Close when you have created all of the labware you need. This closes the 
+labware generator. The labware you have created is shown as one or more 
+labware source icons in the Process Editor and the total number of storage 
+positions containing labware is shown in the icon for the feeder device.
+Note: When the Process Editor is open, right-click on the icon for the feeder 
+device and choose Modify Labware in the context menu if you want to 
+subsequently edit the settings you have made.
+G6.6.2 Creating a labware repository on the worktable
+This option is only used for special applications; labware repositories are normally 
+created in feeder devices such as the carousel.
+Make sure that you have already put enough carriers in the Worktable Editor, 
+select the required labware type from the Control Bar (Labware section), press 
+Ctrl and drag the labware icon onto a suitable carrier type in the Worktable Editor. 
+This opens the labware generator dialog box:
+
+
+--- PAGE 84 ---
+G6 - 18
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Labware Generator (Freedom EVOware Plus)
+The rectangles at the top of the dialog box show the sites of all of the suitable 
+carriers on the worktable. Sites marked occupied or not available cannot be used 
+for generating labware since they are already in use. If you have already created a 
+pipetting script, sites which are used by the pipetting script must not be used 
+either. Freedom EVOware will put the labware onto these sites during process 
+runtime, and they must not be occupied by a labware repository.
+Note: Labware which you position when the Script Editor is open is shown in grey 
+when you return to the Process Editor.
+Note: Carrier sites which are used for a labware repository cannot be used in your 
+script for pipetting. Make sure you have kept enough unused sites for your 
+pipetting script. Put another carrier on the worktable if necessary.
+Enter the number of labware items you want to create in the Create field and click 
+on the first site you want to use. The message area at the bottom of the labware 
+generator will tell you if sufficient sites are available for the chosen number of 
+items. Adjust your entries until the labware generator indicates that your selection 
+is valid and click Create to create the specified labware. The newly created 
+labware changes colour from green (selected position) to yellow (occupied 
+position). This creates a labware group (a set of labware associated with a 
+labware source icon in the Process Editor). 
+If you move the cursor over the coloured rectangles, the Labware ID field shows 
+the ID (internal labware name) of the selected labware item. If you click on a 
+labware item (yellow rectangle), the starting position and the name of the 
+associated labware group are shown. Click Delete if you want to delete all of the 
+labware in the group.
+Right click a labware item to open the context menu (see G6.6.3 “Context Menu of 
+the Labware Generator”,  G6-19).
+Fig. G6-6 Labware generator when generating labware for three microplate carriers on the worktable
+
+
+--- PAGE 85 ---
+G6 - Getting Started - Setting Up a New Script or Process
+Additional Information on Labware and Carriers
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - 19
+Click Close when you have created all of the labware you need. This closes the 
+labware generator. The labware you have created is shown as a labware source 
+icon in the Process Editor and is also visible on the worktable.
+Note: When the Process Editor is open, right-click on the generated labware and 
+choose Modify Labware in the context menu if you want to subsequently edit the 
+settings you have made.
+If you use labware barcodes to specify source and/or destination positions in the 
+worklist, do not use a labware repository on the worktable if the labware will be 
+moved during runtime to another worktable position for pipetting. This can lead to 
+pipetting at the wrong worktable position. Use a labware repository in a feeder 
+device (e.g. hotel or carousel) instead.
+G6.6.3 Context Menu of the Labware Generator
+Right click a labware item (yellow rectangle) in the labware generator to open the 
+context menu. The menu item are as follows:
+Enter barcode
+Choose this option to enter a barcode manually for the selected labware item. 
+This option is mainly used for testing since it is inflexible in a production 
+environment to store barcodes within the process. You should normally use a 
+barcode scanner instead.
+Read barcodes from file
+Choose this option to import a list of barcodes for the selected labware group. 
+This feature is mainly intended for testing or training. For information on the 
+syntax see A.2.4 “Barcode File for the Labware Generator”,  A-14.
+Rename labware
+Choose this option to change the name of the labware group.
+Delete labware
+Choose this option to delete all of the labware in the group.
+G6.7 Additional Information on Labware and Carriers
+G6.7.1 Assigning a Label (Name) to the Labware 
+You can assign a label (i.e. a user-defined name) to each labware item by double 
+clicking on the labware in the Worktable Editor and typing the required name in 
+the Name field of the Edit Labware Name dialog box: 
+Fig. G6-7 Specifying labels for objects on the worktable
+
+
+--- PAGE 86 ---
+G6 - 20
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+G6 - Getting Started - Setting Up a New Script or Process
+Additional Information on Labware and Carriers
+The label is shown in yellow. The label for the currently selected labware item is 
+also shown in the Infopad together with the other properties.
+Labware labels can be used in scripts and worklist files to make them easier to 
+understand for other persons (see 15.24 “Worklist Command”,  15-36). They are 
+also used by Freedom EVOware in log files. If you don’t specify labware labels, 
+the scripts, worklists and log files contain the generic labware name instead, e.g. 
+Microplate, landscape.
+G6.7.2 Example of a Worktable With Several Carriers and Labware Items
+The following figure shows an example worktable with carriers, labware and 
+labware labels: 
+In this example, the labware generator was used to assign 84 microplates to the 
+carousel.
+G6.7.3 System Liquid Icon
+When you specify a script command which involves aspiration, click on the 
+System icon at the bottom right of the Worktable Editor if you want to aspirate the 
+system liquid. If you need to aspirate large volumes of the system liquid, this 
+avoids having to place a trough on the worktable. See 8.4.2.5 “System Liquids”, 
+ 8-30 for further information.
+Fig. G6-8 Example worktable showing carriers, labware and labware labels
+
+
+--- PAGE 87 ---
+IX - Index
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+IX - 1
+IX Index
+Purpose of This
+Chapter
+This chapter contains an alphabetical index which offers you help in finding 
+information more quickly.
+ 
+Numerics
+3D Simulation tool . . . . . . . . . G3-3
+A
+About Help. . . . . . . . . . . . . . G1-5
+Access rights . . . . . . . . . . . . G3-8
+Access/Status option . . . . . . . G2-4
+Animations (short films in AVI format)
+G5-16
+C
+Context menu
+Control Bar . . . . . . . . . .
+G5-14
+labware generator  . . . . .
+G6-19
+Process Editor. . . . . . . .
+G5-19
+Script Editor . . . . . . . . .
+G5-20
+Worktable Editor  . . . . . .
+G5-22
+Control Bar. . . . . . . . . . . . . . G5-9
+Conventions . . . . . . . . . . . . . G1-2
+D
+Direct commands
+for the MCA384 . . . . . . .
+G5-12
+for the MCA96. . . . . . . .
+G5-11
+Direct commands in the Control Bar G5-
+10
+Dongle  . . . . . . . . . . . . . . . . G3-2
+Doorlocks  . . . . . . . . . . . . . . G2-4
+F
+FACTS
+co-existence with EVOware G4-1
+Feature levels of the EVOware software
+G3-2
+Final position icons (process editor) G5-
+17
+Firmware
+compatibility . . . . . . . . . . G3-6
+G
+Glossary . . . . . . . . . . . . . . . G1-5
+H
+Hardlock . . . . . . . . . . . . . . . G3-2
+Help
+using . . . . . . . . . . . . . . 
+G1-5
+Hyperlinks
+in infopads  . . . . . . . . . . G5-16
+I
+Installation
+Add software components 
+G4-9
+Modify . . . . . . . . . . . . . 
+G4-9
+Remove software . . . . . . 
+G4-9
+Repair . . . . . . . . . . . . . 
+G4-9
+Installing EVOware  . . . . . . . 
+G4-1
+Intended audience for this manual G1-1
+L
+Label
+for labware . . . . . . . . . . G6-19
+Labware label (labware name) G6-19
+Labware source icons (process editor)
+G5-17
+N
+Name (label) for labware, assigning G6-
+19
+New pipetting instrument
+setting up . . . . . . . . . . . 
+G6-1
+O
+On-the-fly devices . . . . . . . . G6-15
+On-the-fly icons (process editor) G5-17
+Orange lines in the Worktable Editor G5-
+23
+P
+Permissions . . . . . . . . . . . . 
+G3-8
+Process step icons. . . . . . . . G5-17
+R
+Red
+script line is marked red. . 
+G6-5
+Reference Documents  . . . . . 
+G1-3
+Remove software. . . . . . . . . 
+G4-9
+Repair
+Reinstalling software. . . . 
+G4-9
+
+
+--- PAGE 88 ---
+IX - 2
+Freedom EVOware Getting Started Guide, 393318, en, V2.3
+IX - Index
+S
+Safe operation of the instrument and the
+doorlocks . . . . . . . . . . . . . . 
+G2-5
+Safety features for the pipetting instru-
+ment
+Status lamp and acoustic alarm de-
+vice. . . . . . . . . . 
+G2-4
+Saving the worktable layout . . 
+G6-3
+Scope . . . . . . . . . . . . . . . . 
+G1-1
+Script commands
+in EVOware Plus  . . . . . 
+G6-12
+marked red due to errors . 
+G6-5
+Script Editor
+opening in EVOware Plus
+G6-12
+Scripts . . . . . . . . . . . . . . . . 
+G3-1
+Security . . . . . . . . . . . . . . . 
+G3-8
+Setting up a new pipetting instrument.
+G6-1
+Setup & Service software. . . . 
+G1-4
+T
+Target group . . . . . . . . . . . . 
+G1-1
+U
+Uninstall
+see Remove software
+Upgrading EVOware. . . . . . 
+G4-11
+USB
+installing the driver for the pipetting in-
+strument. . . . . . 
+G4-12
+power management. . . . 
+G4-14
+solving problems with the connection
+G4-15
+USB, problems with  . . . . . . . G3-7
+User data, backing up . . . . . . G4-1
+Using Help . . . . . . . . . . . . . G1-5
+V
+Validating
+pipetting script . . . . . . . . G6-5
+Version of EVOware which is installed
+how to check . . . . . . . . 
+G4-11
+Versions
+device firmware  . . . . . . . G3-6
+W
+Worktable Editor
+changing the size . . . . . . G6-3
+Worktable layout, saving . . . . G6-3
+Y
+Yellow label (labware name). 
+G6-19
+
+
