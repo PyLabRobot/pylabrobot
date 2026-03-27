@@ -17,6 +17,11 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
     """Read the weight in grams"""
     ...
 
+  @abstractmethod
+  async def request_tare_weight(self) -> float:
+    """Request the current tare weight value in grams."""
+    ...
+
   # Deprecated: for backward compatibility
   async def get_weight(self) -> float:
     """Deprecated: Use read_weight() instead.
