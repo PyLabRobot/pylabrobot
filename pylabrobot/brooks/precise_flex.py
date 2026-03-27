@@ -7,15 +7,14 @@ from enum import IntEnum
 from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
-from pylabrobot.brooks.error_codes import ERROR_CODES
 from pylabrobot.arms.orientable_arm import OrientableArm
 from pylabrobot.arms.standard import GripperLocation
+from pylabrobot.brooks.error_codes import ERROR_CODES
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 from pylabrobot.resources.resource import Resource
-from pylabrobot.capabilities.capability import BackendParams
-
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,11 @@
+import logging
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
-import logging
-
-from pylabrobot.arms.backend import _BaseArmBackend, GripperArmBackend
+from pylabrobot.arms.backend import GripperArmBackend, _BaseArmBackend
 from pylabrobot.arms.standard import GripDirection, GripperLocation
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import BackendParams, Capability
+from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
   Coordinate,
   Lid,
@@ -17,9 +17,6 @@ from pylabrobot.resources import (
   Trash,
 )
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.legacy.tilting.tilter import Tilter
-from pylabrobot.capabilities.capability import BackendParams
-
 
 logger = logging.getLogger(__name__)
 

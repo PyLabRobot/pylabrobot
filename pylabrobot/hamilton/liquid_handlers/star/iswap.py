@@ -3,9 +3,9 @@ from typing import Optional, cast
 
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripperLocation
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
-from pylabrobot.capabilities.capability import BackendParams
 
 
 def _direction_degrees_to_grip_direction(degrees: float) -> int:

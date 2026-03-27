@@ -7,12 +7,15 @@ from pylabrobot.molecular_devices.spectramax.backend import (  # noqa: F401
   Calibrate,
   CarriageSpeed,
   KineticSettings,
+  MolecularDevicesAbsorbanceBackend,
+  MolecularDevicesDriver,
   MolecularDevicesError,
   MolecularDevicesFirmwareError,
   MolecularDevicesHardwareError,
   MolecularDevicesMotionError,
   MolecularDevicesNVRAMError,
   MolecularDevicesSettings,
+  MolecularDevicesTemperatureBackend,
   MolecularDevicesUnrecognizedCommandError,
   PmtGain,
   ReadMode,
@@ -20,11 +23,6 @@ from pylabrobot.molecular_devices.spectramax.backend import (  # noqa: F401
   ReadType,
   ShakeSettings,
   SpectrumSettings,
-)
-from pylabrobot.molecular_devices.spectramax.backend import (
-  MolecularDevicesAbsorbanceBackend,
-  MolecularDevicesDriver,
-  MolecularDevicesTemperatureBackend,
 )
 from pylabrobot.molecular_devices.spectramax.spectramax_m5 import (
   SpectraMaxM5FluorescenceBackend,

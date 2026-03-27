@@ -1,12 +1,11 @@
 from typing import Optional, Union
 
-from pylabrobot.arms.arm import _BaseArm, _PickedUpState, GripOrientation
+from pylabrobot.arms.arm import GripOrientation, _BaseArm, _PickedUpState
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder, ResourceStack
 from pylabrobot.resources.rotation import Rotation
-
 
 _GRIP_DIRECTION_TO_DEGREES = {
   GripDirection.FRONT: 0.0,

@@ -1346,8 +1346,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
-    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
     from pylabrobot.hamilton.liquid_handlers.star.core import CoreGripper
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
 
     self._new_iswap = iSWAP(interface=self)
     self._new_core = CoreGripper(interface=self)

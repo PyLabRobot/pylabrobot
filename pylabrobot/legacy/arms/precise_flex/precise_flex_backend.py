@@ -15,7 +15,6 @@ from pylabrobot.legacy.arms.backend import (
 from pylabrobot.legacy.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.resources import Coordinate, Rotation
 
-
 PreciseFlexError = _new_module.PreciseFlexError
 
 

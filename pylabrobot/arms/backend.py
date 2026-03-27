@@ -2,11 +2,9 @@ from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional
 
 from pylabrobot.arms.standard import GripperLocation
-from pylabrobot.capabilities.capability import CapabilityBackend
+from pylabrobot.capabilities.capability import BackendParams, CapabilityBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.capabilities.capability import BackendParams
-
 
 # ArmBackend:
 # - pick_up_at_location

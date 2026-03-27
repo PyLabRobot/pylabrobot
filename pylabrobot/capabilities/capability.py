@@ -7,7 +7,6 @@ from typing import Any, Awaitable, Callable, TypeVar
 
 from pylabrobot.serializer import SerializableMixin
 
-
 if sys.version_info < (3, 10):
   from typing_extensions import ParamSpec
 else:
