@@ -1,10 +1,27 @@
-import asyncio
 from typing import Optional, Union
 
+from pylabrobot.capabilities.pumping.backend import PumpBackend as _NewPumpBackend
+from pylabrobot.capabilities.pumping.pumping import PumpingCapability
 from pylabrobot.legacy.machines.machine import Machine
 
 from .backend import PumpBackend
 from .calibration import PumpCalibration
+
+
+class _PumpAdapter(_NewPumpBackend):
+  """Adapts a legacy PumpBackend to the new PumpBackend (CapabilityBackend)."""
+
+  def __init__(self, legacy: PumpBackend):
+    self._legacy = legacy
+
+  async def run_revolutions(self, num_revolutions: float):
+    self._legacy.run_revolutions(num_revolutions=num_revolutions)
+
+  async def run_continuously(self, speed: float):
+    self._legacy.run_continuously(speed=speed)
+
+  async def halt(self):
+    self._legacy.halt()
 
 
 class Pump(Machine):
@@ -16,10 +33,19 @@ class Pump(Machine):
     calibration: Optional[PumpCalibration] = None,
   ):
     super().__init__(backend=backend)
-    self.backend: PumpBackend = backend  # fix type
+    self.backend: PumpBackend = backend
     if calibration is not None and len(calibration) != 1:
       raise ValueError("Calibration may only have a single item for this pump")
     self.calibration = calibration
+    self._pumping = PumpingCapability(backend=_PumpAdapter(backend), calibration=calibration)
+
+  async def setup(self, **backend_kwargs):
+    await super().setup(**backend_kwargs)
+    await self._pumping._on_setup()
+
+  async def stop(self):
+    await self._pumping._on_stop()
+    await super().stop()
 
   def serialize(self) -> dict:
     if self.calibration is None:
@@ -39,63 +65,16 @@ class Pump(Machine):
     return super().deserialize(data_copy)
 
   async def run_revolutions(self, num_revolutions: float):
-    """Run a given number of revolutions. This method will return after the command has been sent,
-    and the pump will run until `halt` is called.
-
-    Args:
-      num_revolutions: number of revolutions to run
-    """
-
-    self.backend.run_revolutions(num_revolutions=num_revolutions)
+    await self._pumping.run_revolutions(num_revolutions=num_revolutions)
 
   async def run_continuously(self, speed: float):
-    """Run continuously at a given speed. This method will return after the command has been sent,
-    and the pump will run until `halt` is called.
-
-    If speed is 0, the pump will be halted.
-
-    Args:
-      speed: speed in rpm/pump-specific units.
-    """
-
-    self.backend.run_continuously(speed=speed)
+    await self._pumping.run_continuously(speed=speed)
 
   async def run_for_duration(self, speed: Union[float, int], duration: Union[float, int]):
-    """Run the pump at specified speed for the specified duration.
-
-    Args:
-      speed: speed in rpm/pump-specific units.
-      duration: duration to run pump.
-    """
-
-    if duration < 0:
-      raise ValueError("Duration must be positive.")
-    await self.run_continuously(speed=speed)
-    await asyncio.sleep(duration)
-    await self.run_continuously(speed=0)
+    await self._pumping.run_for_duration(speed=speed, duration=duration)
 
   async def pump_volume(self, speed: Union[float, int], volume: Union[float, int]):
-    """Run the pump at specified speed for the specified volume. Note that this function requires
-    the pump to be calibrated at the input speed.
-
-    Args:
-      speed: speed in rpm/pump-specific units.
-      volume: volume to pump.
-    """
-
-    if self.calibration is None:
-      raise TypeError(
-        "Pump is not calibrated. Volume based pumping and related functions unavailable."
-      )
-    if self.calibration.calibration_mode == "duration":
-      duration = volume / self.calibration[0]
-      await self.run_for_duration(speed=speed, duration=duration)
-    elif self.calibration.calibration_mode == "revolutions":
-      num_revolutions = volume / self.calibration[0]
-      await self.run_revolutions(num_revolutions=num_revolutions)
-    else:
-      raise ValueError("Calibration mode not recognized.")
+    await self._pumping.pump_volume(speed=speed, volume=volume)
 
   async def halt(self):
-    """Halt the pump."""
-    self.backend.halt()
+    await self._pumping.halt()
