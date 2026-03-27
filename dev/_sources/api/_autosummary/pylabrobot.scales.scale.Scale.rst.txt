@@ -59,6 +59,7 @@
       ~Scale.load_state
       ~Scale.load_state_from_file
       ~Scale.named
+      ~Scale.read_weight
       ~Scale.register_did_assign_resource_callback
       ~Scale.register_did_unassign_resource_callback
       ~Scale.register_state_update_callback

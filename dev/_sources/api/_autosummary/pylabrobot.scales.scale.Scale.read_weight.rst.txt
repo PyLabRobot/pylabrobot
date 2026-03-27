@@ -1,0 +1,6 @@
+pylabrobot.scales.scale.Scale.read\_weight
+==========================================
+
+.. currentmodule:: pylabrobot.scales.scale
+
+.. automethod:: Scale.read_weight

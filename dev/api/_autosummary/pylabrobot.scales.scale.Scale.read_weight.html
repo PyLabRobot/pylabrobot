@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.scales.scale.Scale.zero &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.scales.scale.Scale.read_weight &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.scales.scale.Scale.zero';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.scales.scale.Scale.read_weight';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -55,12 +55,12 @@
             true;
         </script>
     <script src="../../_static/plr_cards.js?v=0d03ad13"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.scales.scale.Scale.zero.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.scales.scale.Scale.read_weight.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.scales.chatterbox.ScaleChatterboxBackend" href="pylabrobot.scales.chatterbox.ScaleChatterboxBackend.html" />
-    <link rel="prev" title="pylabrobot.scales.scale.Scale.unassign_child_resource" href="pylabrobot.scales.scale.Scale.unassign_child_resource.html" />
+    <link rel="next" title="pylabrobot.scales.scale.Scale.register_did_assign_resource_callback" href="pylabrobot.scales.scale.Scale.register_did_assign_resource_callback.html" />
+    <link rel="prev" title="pylabrobot.scales.scale.Scale.named" href="pylabrobot.scales.scale.Scale.named.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -537,7 +537,7 @@
     
     <li class="breadcrumb-item"><a href="pylabrobot.scales.scale.Scale.html" class="nav-link">pylabrobot.scales.scale.Scale</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.scales.scale.Scale.zero</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.scales.scale.Scale.read_weight</span></li>
   </ul>
 </nav>
 </div>
@@ -554,18 +554,19 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-scales-scale-scale-zero">
-<h1>pylabrobot.scales.scale.Scale.zero<a class="headerlink" href="#pylabrobot-scales-scale-scale-zero" title="Link to this heading">#</a></h1>
+  <section id="pylabrobot-scales-scale-scale-read-weight">
+<h1>pylabrobot.scales.scale.Scale.read_weight<a class="headerlink" href="#pylabrobot-scales-scale-scale-read-weight" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.scales.scale.Scale.zero">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Scale.</span></span><span class="sig-name descname"><span class="pre">zero</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">backend_kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.scales.scale.Scale.zero" title="Link to this definition">#</a></dt>
-<dd><p>Calibrate the scale’s zero point to the current load.</p>
-<p>Establishes the baseline “empty” reading. Unlike tare, this
-does not account for container weight - it simply resets what
-the scale considers zero. Does not restore scale capacity.</p>
+<dt class="sig sig-object py" id="pylabrobot.scales.scale.Scale.read_weight">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Scale.</span></span><span class="sig-name descname"><span class="pre">read_weight</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">backend_kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></span><a class="headerlink" href="#pylabrobot.scales.scale.Scale.read_weight" title="Link to this definition">#</a></dt>
+<dd><p>Read the current weight in grams.</p>
+<p>The scale may take a moment to stabilize after loading.
+Use the <code class="docutils literal notranslate"><span class="pre">timeout</span></code> backend kwarg to control stability
+behavior: <code class="docutils literal notranslate"><span class="pre">&quot;stable&quot;</span></code> waits for a settled reading, <code class="docutils literal notranslate"><span class="pre">0</span></code> returns
+immediately, or pass a number of seconds to wait at most that long.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>None</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -583,20 +584,20 @@ the scale considers zero. Does not restore scale capacity.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.scales.scale.Scale.unassign_child_resource.html"
+       href="pylabrobot.scales.scale.Scale.named.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.scales.scale.Scale.unassign_child_resource</p>
+        <p class="prev-next-title">pylabrobot.scales.scale.Scale.named</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.scales.chatterbox.ScaleChatterboxBackend.html"
+       href="pylabrobot.scales.scale.Scale.register_did_assign_resource_callback.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.scales.chatterbox.ScaleChatterboxBackend</p>
+        <p class="prev-next-title">pylabrobot.scales.scale.Scale.register_did_assign_resource_callback</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -619,7 +620,7 @@ the scale considers zero. Does not restore scale capacity.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.scales.scale.Scale.zero"><code class="docutils literal notranslate"><span class="pre">Scale.zero()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.scales.scale.Scale.read_weight"><code class="docutils literal notranslate"><span class="pre">Scale.read_weight()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -627,7 +628,7 @@ the scale considers zero. Does not restore scale capacity.</p>
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.scales.scale.Scale.zero.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.scales.scale.Scale.read_weight.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -643,7 +644,7 @@ the scale considers zero. Does not restore scale capacity.</p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="../../_sources/api/_autosummary/pylabrobot.scales.scale.Scale.zero.rst.txt"
+      <li><a href="../../_sources/api/_autosummary/pylabrobot.scales.scale.Scale.read_weight.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div></div>

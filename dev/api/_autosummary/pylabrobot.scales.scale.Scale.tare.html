@@ -558,8 +558,17 @@
 <h1>pylabrobot.scales.scale.Scale.tare<a class="headerlink" href="#pylabrobot-scales-scale-scale-tare" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.scales.scale.Scale.tare">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Scale.</span></span><span class="sig-name descname"><span class="pre">tare</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">backend_kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.scales.scale.Scale.tare" title="Link to this definition">#</a></dt>
-<dd><p>Tare the scale</p>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Scale.</span></span><span class="sig-name descname"><span class="pre">tare</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">backend_kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.scales.scale.Scale.tare" title="Link to this definition">#</a></dt>
+<dd><p>Reset the displayed weight to zero, storing the current
+weight as the tare value.</p>
+<p>Use this to measure only the weight of material added after
+taring (e.g. ignoring a container).
+Note: taring does not restore scale capacity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
