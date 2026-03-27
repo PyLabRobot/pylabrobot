@@ -2,8 +2,9 @@ from typing import Optional
 
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControlCapability,
+  TemperatureControllerBackend,
 )
-from pylabrobot.device import Device
+from pylabrobot.device import Device, Driver
 from pylabrobot.resources import Coordinate, ItemizedResource, ResourceHolder
 from pylabrobot.resources.opentrons.module import OTModule
 
@@ -56,6 +57,8 @@ class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
     if opentrons_id is not None and serial_port is not None:
       raise ValueError("Exactly one of `opentrons_id` or `serial_port` must be provided.")
 
+    driver: Driver
+    tc_backend: TemperatureControllerBackend
     if serial_port is not None:
       driver = OpentronsTemperatureModuleUSBDriver(port=serial_port)
       tc_backend = OpentronsTemperatureModuleUSBTemperatureBackend(driver=driver)

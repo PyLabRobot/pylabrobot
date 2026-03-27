@@ -9,7 +9,6 @@ from pylabrobot.capabilities.plate_reading.absorbance.chatterbox import (
   AbsorbanceChatterboxBackend,
 )
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
-from pylabrobot.device import Device, Driver
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -41,14 +40,6 @@ def _test_plate() -> Plate:
   )
 
 
-class _NullDriver(Driver):
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
-
-
 class RecordingAbsorbanceBackend(AbsorbanceBackend):
   """Backend that records all read_absorbance calls for assertion."""
 
@@ -72,26 +63,16 @@ class RecordingAbsorbanceBackend(AbsorbanceBackend):
     return [AbsorbanceResult(data=data, wavelength=wavelength, temperature=None, timestamp=0.0)]
 
 
-class _TestDevice(Device):
-  def __init__(self, backend):
-    super().__init__(driver=_NullDriver())
-    self.absorbance = AbsorbanceCapability(backend=backend)
-    self._capabilities = [self.absorbance]
-
-
 class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingAbsorbanceBackend()
-    self.device = _TestDevice(backend=self.backend)
-    await self.device.setup()
+    self.cap = AbsorbanceCapability(backend=self.backend)
+    await self.cap._on_setup()
     self.plate = _test_plate()
-
-  async def asyncTearDown(self):
-    await self.device.stop()
 
   async def test_read_with_wells(self):
     wells = [self.plate.get_well("A1"), self.plate.get_well("B2")]
-    results = await self.device.absorbance.read(plate=self.plate, wavelength=450, wells=wells)
+    results = await self.cap.read(plate=self.plate, wavelength=450, wells=wells)
     self.assertEqual(len(self.backend.calls), 1)
     _, recorded_wells, recorded_wl = self.backend.calls[0]
     self.assertEqual(recorded_wells, wells)
@@ -100,7 +81,7 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[0].wavelength, 450)
 
   async def test_read_all_wells(self):
-    results = await self.device.absorbance.read(plate=self.plate, wavelength=600)
+    results = await self.cap.read(plate=self.plate, wavelength=600)
     self.assertEqual(len(self.backend.calls), 1)
     _, recorded_wells, _ = self.backend.calls[0]
     self.assertEqual(len(recorded_wells), 96)
@@ -116,20 +97,18 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
 class TestAbsorbanceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = AbsorbanceChatterboxBackend()
-    device = _TestDevice(backend=backend)
-    await device.setup()
+    cap = AbsorbanceCapability(backend=backend)
+    await cap._on_setup()
 
     plate = _test_plate()
     wells = [plate.get_well("A1"), plate.get_well("H12")]
-    results = await device.absorbance.read(plate=plate, wavelength=450, wells=wells)
+    results = await cap.read(plate=plate, wavelength=450, wells=wells)
     self.assertEqual(len(results), 1)
     self.assertEqual(results[0].wavelength, 450)
     # Only requested wells should have data
     self.assertIsNotNone(results[0].data[0][0])  # A1
     self.assertIsNotNone(results[0].data[7][11])  # H12
     self.assertIsNone(results[0].data[0][1])  # A2 not requested
-
-    await device.stop()
 
 
 if __name__ == "__main__":

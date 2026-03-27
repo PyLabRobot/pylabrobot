@@ -86,13 +86,13 @@ class A4SDriver(Driver):
     )
 
   async def setup(self):
-    await super().setup()
+    await super().setup()  # type: ignore[safe-super]
     await self.io.setup()
     await self.system_reset()
 
   async def stop(self):
     await self.set_heater(on=False)
-    await super().stop()
+    await super().stop()  # type: ignore[safe-super]
     await self.io.stop()
 
   # -- serial protocol --

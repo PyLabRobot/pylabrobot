@@ -724,7 +724,7 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     snap_params["focusSettings"]["baseZPositionUm"] = base_z_um
 
     labware_params = _labware_params_from_plate(plate)
-    images = await self._driver._snap_images(labware_params, snap_params)
+    images = await self._snap_images(labware_params, snap_params)
 
     result_images: List = []
     actual_exposure_us = exposure_us

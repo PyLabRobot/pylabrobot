@@ -97,14 +97,14 @@ class Liconic(Resource, Device):
 
   async def setup(self, **backend_kwargs):
     if self.barcode_scanner is not None:
-      await self.barcode_scanner.backend.setup()
+      await self.barcode_scanner.backend._on_setup()
     await super().setup()
     await self._driver.set_racks(self._racks)
 
   async def stop(self):
     await super().stop()
     if self.barcode_scanner is not None:
-      await self.barcode_scanner.backend.stop()
+      await self.barcode_scanner.backend._on_stop()
 
   def get_num_free_sites(self) -> int:
     return sum(len(rack.get_free_sites()) for rack in self._racks)
