@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.thermocycling.inheco.odtc_backend import ODTCBackend
 from pylabrobot.thermocycling.inheco.odtc_model import (
+  ODTCPID,
   PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ODTCMethodSet,
   ODTCProgress,
@@ -28,6 +29,22 @@ from pylabrobot.storage.inheco.scila.inheco_sila_interface import SiLAState
 from pylabrobot.thermocycling.inheco.odtc_sila_interface import (
   ODTCSiLAInterface,
 )
+
+
+_REQUIRED_DEFAULTS = dict(
+  variant=96, plate_type=0, fluid_quantity=0, post_heating=False,
+  start_block_temperature=25.0, start_lid_temperature=110.0,
+  steps=[], pid_set=[ODTCPID(number=1)],
+)
+
+
+def _make_method(**kwargs: Any) -> ODTCProtocol:
+  return ODTCProtocol(**{**_REQUIRED_DEFAULTS, "kind": "method", **kwargs})
+
+
+def _make_premethod(**kwargs: Any) -> ODTCProtocol:
+  defaults = {**_REQUIRED_DEFAULTS, "start_block_temperature": 0.0, "start_lid_temperature": 0.0}
+  return ODTCProtocol(**{**defaults, "kind": "premethod", **kwargs})
 
 
 def _minimal_data_event_payload(remaining_s: float = 300.0) -> Dict[str, Any]:
@@ -118,15 +135,12 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
 
   def test_empty_method_returns_zero(self):
     """Method with no steps has zero duration."""
-    odtc = ODTCProtocol(
-      kind="method", name="empty", start_block_temperature=20.0, steps=[], stages=[]
-    )
+    odtc = _make_method(name="empty", start_block_temperature=20.0)
     self.assertEqual(estimate_method_duration_seconds(odtc), 0.0)
 
   def test_single_step_no_loop(self):
     """Single step: ramp + plateau + overshoot. Ramp = |95 - 20| / 4.4 ≈ 17.045 s."""
-    odtc = ODTCProtocol(
-      kind="method",
+    odtc = _make_method(
       name="single",
       start_block_temperature=20.0,
       steps=[
@@ -140,7 +154,6 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
           loop_number=0,
         ),
       ],
-      stages=[],
     )
     # Ramp: 75 / 4.4 ≈ 17.045; plateau: 30; overshoot: 5
     got = estimate_method_duration_seconds(odtc)
@@ -148,8 +161,7 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
 
   def test_single_step_zero_slope_clamped(self):
     """Zero slope is clamped to avoid division by zero; duration is finite."""
-    odtc = ODTCProtocol(
-      kind="method",
+    odtc = _make_method(
       name="zero_slope",
       start_block_temperature=20.0,
       steps=[
@@ -163,7 +175,6 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
           loop_number=0,
         ),
       ],
-      stages=[],
     )
     # Ramp: 75 / 0.1 = 750 s (clamped); plateau: 10
     got = estimate_method_duration_seconds(odtc)
@@ -171,8 +182,7 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
 
   def test_two_steps_with_loop(self):
     """Two steps with loop: step 1 -> step 2 (goto 1, loop 2) = run 1,2,1,2."""
-    odtc = ODTCProtocol(
-      kind="method",
+    odtc = _make_method(
       name="loop",
       start_block_temperature=20.0,
       steps=[
@@ -195,7 +205,6 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
           loop_number=1,  # repeat_count = 2
         ),
       ],
-      stages=[],
     )
     # Execution: step1, step2, step1, step2
     got = estimate_method_duration_seconds(odtc)
@@ -208,11 +217,9 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
 
   def test_premethod_elapsed_zero(self):
     """Premethod at elapsed 0: step 0, cycle 0, setpoint = target_block_temperature."""
-    odtc = ODTCProtocol(
-      kind="premethod",
+    odtc = _make_premethod(
       name="Pre37",
       target_block_temperature=37.0,
-      stages=[],
     )
     payload = _data_event_payload_with_elapsed(0.0)
     progress = build_progress_from_data_event(payload, odtc)
@@ -227,11 +234,9 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
 
   def test_premethod_elapsed_mid_run(self):
     """Premethod mid-run: same step/cycle/setpoint, remaining_hold decreases."""
-    odtc = ODTCProtocol(
-      kind="premethod",
+    odtc = _make_premethod(
       name="Pre37",
       target_block_temperature=37.0,
-      stages=[],
     )
     payload = _data_event_payload_with_elapsed(300.0)
     progress = build_progress_from_data_event(payload, odtc)
@@ -246,11 +251,9 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
 
   def test_premethod_elapsed_beyond_duration(self):
     """Premethod beyond estimated duration: remaining_hold_s = 0."""
-    odtc = ODTCProtocol(
-      kind="premethod",
+    odtc = _make_premethod(
       name="Pre37",
       target_block_temperature=37.0,
-      stages=[],
     )
     beyond = PREMETHOD_ESTIMATED_DURATION_SECONDS + 60.0
     payload = _data_event_payload_with_elapsed(beyond)
@@ -263,13 +266,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
 
   def test_method_no_steps(self):
     """Method with no steps: step 0, cycle 0."""
-    odtc = ODTCProtocol(
-      kind="method",
-      name="empty",
-      start_block_temperature=20.0,
-      steps=[],
-      stages=[],
-    )
+    odtc = _make_method(name="empty", start_block_temperature=20.0)
     payload = _data_event_payload_with_elapsed(0.0)
     progress = build_progress_from_data_event(payload, odtc)
     self.assertEqual(progress.current_step_index, 0)
@@ -279,8 +276,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
 
   def test_method_single_step(self):
     """Method with single step: step 0, cycle 0, setpoint from step."""
-    odtc = ODTCProtocol(
-      kind="method",
+    odtc = _make_method(
       name="single",
       start_block_temperature=20.0,
       steps=[
@@ -294,7 +290,6 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
           loop_number=0,
         ),
       ],
-      stages=[],
     )
     payload = _data_event_payload_with_elapsed(0.0)
     progress = build_progress_from_data_event(payload, odtc)
@@ -310,8 +305,7 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
 
   def test_method_multi_step_with_loops(self):
     """Method with 3 steps x 2 cycles: step_index and cycle_index advance with elapsed."""
-    odtc = ODTCProtocol(
-      kind="method",
+    odtc = _make_method(
       name="pcr",
       start_block_temperature=20.0,
       steps=[
@@ -343,7 +337,6 @@ class TestODTCProgressPositionFromElapsed(unittest.TestCase):
           loop_number=2,
         ),
       ],
-      stages=[],
     )
     payload0 = _data_event_payload_with_elapsed(0.0)
     progress0 = build_progress_from_data_event(payload0, odtc)
@@ -385,12 +378,7 @@ class TestODTCProgress(unittest.TestCase):
   def test_from_data_event_premethod(self):
     """from_data_event(payload, premethod): step 0, cycle 0, setpoint; estimated/remaining duration."""
     payload = _data_event_payload_with_elapsed_and_temps(100.0, current_temp_c=35.0)
-    premethod = ODTCProtocol(
-      kind="premethod",
-      name="Pre37",
-      target_block_temperature=37.0,
-      stages=[],
-    )
+    premethod = _make_premethod(name="Pre37", target_block_temperature=37.0)
     progress = build_progress_from_data_event(payload, odtc_protocol=premethod)
     self.assertIsInstance(progress, ODTCProgress)
     self.assertEqual(progress.elapsed_s, 100.0)
@@ -411,8 +399,7 @@ class TestODTCProgress(unittest.TestCase):
   def test_from_data_event_method(self):
     """from_data_event(payload, method): step_index, cycle_index, remaining_hold_s from position."""
     payload = _data_event_payload_with_elapsed(0.0)
-    odtc = ODTCProtocol(
-      kind="method",
+    odtc = _make_method(
       name="pcr",
       start_block_temperature=20.0,
       steps=[
@@ -426,7 +413,6 @@ class TestODTCProgress(unittest.TestCase):
           loop_number=0,
         ),
       ],
-      stages=[],
     )
     progress = build_progress_from_data_event(payload, odtc_protocol=odtc)
     self.assertIsInstance(progress, ODTCProgress)
@@ -635,7 +621,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
-    protocol = ODTCProtocol(kind="method", name="MyMethod", stages=[])
+    protocol = _make_method(name="MyMethod")
     await self.backend.execute_method(protocol, wait=True)
     self.backend._sila.send_command_async.assert_called_once()
     call_kwargs = self.backend._sila.send_command_async.call_args[1]
@@ -676,12 +662,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_get_progress_snapshot_with_registered_protocol_returns_enriched(self):
     """With protocol registered and DataEvent with elapsed_s, get_progress_snapshot returns step/cycle/hold."""
     request_id = 12345
-    premethod = ODTCProtocol(
-      kind="premethod",
-      name="Pre37",
-      target_block_temperature=37.0,
-      stages=[],
-    )
+    premethod = _make_premethod(name="Pre37", target_block_temperature=37.0)
     self.backend._current_request_id = request_id
     self.backend._current_protocol = premethod
     self.backend._sila.get_data_events = MagicMock(  # type: ignore[method-assign]
@@ -698,12 +679,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_get_current_step_index_and_get_hold_time_with_registered_protocol(self):
     """With protocol registered and DataEvent, get_current_step_index and get_hold_time return values."""
     request_id = 12346
-    premethod = ODTCProtocol(
-      kind="premethod",
-      name="Pre37",
-      target_block_temperature=37.0,
-      stages=[],
-    )
+    premethod = _make_premethod(name="Pre37", target_block_temperature=37.0)
     self.backend._current_request_id = request_id
     self.backend._current_protocol = premethod
     self.backend._sila.get_data_events = MagicMock(  # type: ignore[method-assign]
@@ -718,12 +694,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_execute_method_premethod_stores_protocol(self):
     """When executing a premethod, _current_protocol is set."""
-    premethod = ODTCProtocol(
-      kind="premethod",
-      name="Pre37",
-      target_block_temperature=37.0,
-      stages=[],
-    )
+    premethod = _make_premethod(name="Pre37", target_block_temperature=37.0)
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.send_command_async = AsyncMock(return_value=(fut, 99999))  # type: ignore[method-assign]
@@ -759,7 +730,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test get_protocol returns None for premethod names (runnable protocols only)."""
     method_set = ODTCMethodSet(
       methods=[],
-      premethods=[ODTCProtocol(kind="premethod", name="Pre25", stages=[])],
+      premethods=[_make_premethod(name="Pre25")],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     result = await self.backend.get_protocol("Pre25")
@@ -769,11 +740,9 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test get_protocol returns ODTCProtocol for runnable method."""
     method_set = ODTCMethodSet(
       methods=[
-        ODTCProtocol(
-          kind="method",
+        _make_method(
           name="PCR_30",
           steps=[ODTCStep(number=1, plateau_temperature=95.0, plateau_time=30.0)],
-          stages=[],
         )
       ],
       premethods=[],
@@ -789,7 +758,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_run_stored_protocol_calls_execute_method(self):
     """Test run_stored_protocol calls execute_method with resolved protocol."""
-    method = ODTCProtocol(kind="method", name="MyMethod", stages=[])
+    method = _make_method(name="MyMethod")
     method_set = ODTCMethodSet(methods=[method])
     self.backend.execute_method = AsyncMock(return_value=None)  # type: ignore[method-assign]
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
@@ -919,39 +888,6 @@ class TestODTCStageAndRoundTrip(unittest.TestCase):
       self.assertEqual(a.number, b.number, f"step {i} number")
       self.assertEqual(a.goto_number, b.goto_number, f"step {i} goto_number")
       self.assertEqual(a.loop_number, b.loop_number, f"step {i} loop_number")
-
-  def test_round_trip_via_stages_serializes_and_reparses(self):
-    """Build ODTCProtocol from ODTCStage tree only (no .steps); serialize uses _odtc_stages_to_steps; re-parse matches."""
-    # Build tree with ODTCStep (ODTC-native, lossless): outer 1 and 5, inner 2-4 x 5; outer repeats=30
-    step1 = ODTCStep(slope=4.4, plateau_temperature=95.0, plateau_time=10.0)
-    step2 = ODTCStep(slope=2.2, plateau_temperature=55.0, plateau_time=10.0)
-    step3 = ODTCStep(slope=4.4, plateau_temperature=72.0, plateau_time=10.0)
-    step4 = ODTCStep(slope=4.4, plateau_temperature=95.0, plateau_time=10.0)
-    step5 = ODTCStep(slope=2.2, plateau_temperature=50.0, plateau_time=20.0)
-    inner = ODTCStage(steps=[step2, step3, step4], repeats=5, inner_stages=None)
-    outer = ODTCStage(steps=[step1, step5], repeats=30, inner_stages=[inner])
-    odtc = ODTCProtocol(
-      kind="method",
-      name="FromStages",
-      variant=96,
-      start_block_temperature=25.0,
-      start_lid_temperature=110.0,
-      steps=[],  # No steps; serialization will use stages
-      stages=[outer],
-    )
-    xml_str = method_set_to_xml(
-      ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc])
-    )
-    method_set = parse_method_set(xml_str)
-    self.assertEqual(len(method_set.methods), 1)
-    reparsed = method_set.methods[0]
-    self.assertEqual(len(reparsed.steps), 5)
-    # Check loop structure: step 4 goto 2 loop 5, step 5 goto 1 loop 30
-    by_num = {s.number: s for s in reparsed.steps}
-    self.assertEqual(by_num[4].goto_number, 2)
-    self.assertEqual(by_num[4].loop_number, 5)
-    self.assertEqual(by_num[5].goto_number, 1)
-    self.assertEqual(by_num[5].loop_number, 30)
 
   def test_flat_method_produces_flat_stage_list(self):
     """Flat method (single loop 1-2 x 3) produces flat list of stages (regression)."""

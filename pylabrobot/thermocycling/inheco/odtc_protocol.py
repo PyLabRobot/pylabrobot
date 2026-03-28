@@ -197,7 +197,6 @@ def protocol_to_odtc_protocol(
     creator=config.creator,
     description=config.description,
     datetime=resolved_datetime,
-    stages=[],
   )
   if config.name is not None:
     odtc_protocol.name = config.name

@@ -11,6 +11,7 @@ from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 from .odtc_model import (
+  ODTCPID,
   ODTCConfig,
   ODTCHardwareConstraints,
   ODTCMethodSet,
@@ -689,7 +690,14 @@ class ODTCBackend(ThermocyclerBackend):
       target_lid_temp = constraints.max_lid_temp
 
     protocol = ODTCProtocol(
-      stages=[],
+      variant=self._variant,
+      plate_type=0,
+      fluid_quantity=0,
+      post_heating=False,
+      start_block_temperature=0.0,
+      start_lid_temperature=0.0,
+      steps=[],
+      pid_set=[ODTCPID(number=1)],
       kind="premethod",
       target_block_temperature=block_temp,
       target_lid_temperature=target_lid_temp,

@@ -22,7 +22,7 @@ from typing import (
   Tuple,
 )
 
-from pylabrobot.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.thermocycling.standard import Stage, Step
 
 if TYPE_CHECKING:
   pass  # Protocol used at runtime for ODTCProtocol base
@@ -491,19 +491,30 @@ class ODTCStage(Stage):
 
 
 # =============================================================================
-# ODTCProtocol (protocol + config; subclasses Protocol for resource API)
+# ODTCProtocol (ODTC internal representation)
 # =============================================================================
 
 
 @dataclass
-class ODTCProtocol(Protocol):
-  """ODTC runnable unit: protocol + config (method or premethod).
+class ODTCProtocol:
+  """ODTC runnable unit (method or premethod).
 
-  Subclasses Protocol so Thermocycler.run_protocol(protocol, ...) accepts
-  ODTCProtocol. For kind='method', stages is the cycle; for kind='premethod',
-  pass stages=[] (premethods run by name only).
+  Internal representation for the ODTC device. Config-driven fields have no
+  defaults — they must be set explicitly (from ODTCConfig during conversion,
+  or from parsed XML).
   """
 
+  # Config-driven fields
+  variant: ODTCVariant
+  plate_type: int
+  fluid_quantity: int
+  post_heating: bool
+  start_block_temperature: float
+  start_lid_temperature: float
+  steps: List[ODTCStep]
+  pid_set: List[ODTCPID]
+
+  # Identity / metadata
   kind: Literal["method", "premethod"] = "method"
   name: str = "plr_currentProtocol"
   is_scratch: bool = True
@@ -512,17 +523,6 @@ class ODTCProtocol(Protocol):
   datetime: str = field(default_factory=generate_odtc_timestamp)
   target_block_temperature: float = 0.0
   target_lid_temperature: float = 0.0
-  variant: ODTCVariant = 96
-  plate_type: int = 0
-  fluid_quantity: int = 0
-  post_heating: bool = False
-  start_block_temperature: float = 0.0
-  start_lid_temperature: float = 0.0
-  steps: List[ODTCStep] = field(default_factory=list)
-  pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
-  step_settings: Dict[int, ODTCStepSettings] = field(default_factory=dict)
-  default_heating_slope: float = 4.4
-  default_cooling_slope: float = 2.2
 
   def __str__(self) -> str:
     """Human-readable summary: name, kind, steps or target temps, key config."""

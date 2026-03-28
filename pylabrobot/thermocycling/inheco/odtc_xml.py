@@ -24,21 +24,17 @@ from typing import (
 )
 
 
-from pylabrobot.thermocycling.standard import Step
-
 from .odtc_model import (
   ODTCPID,
   ODTCMethodSet,
   ODTCProtocol,
   ODTCSensorValues,
-  ODTCStage,
   ODTCStep,
   XMLField,
   XMLFieldType,
   _variant_to_device_code,
   normalize_variant,
 )
-from .odtc_protocol import _odtc_stages_to_steps
 
 T = TypeVar("T")
 
@@ -276,7 +272,6 @@ def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
     start_lid_temperature=start_lid_temperature,
     steps=steps,
     pid_set=pid_set,
-    stages=[],  # Not built on parse; built on demand in odtc_protocol_to_protocol
   )
 
 
@@ -289,6 +284,14 @@ def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   target_block_temperature = float(_read_opt_elem(elem, "TargetBlockTemperature") or 0.0)
   target_lid_temperature = float(_read_opt_elem(elem, "TargetLidTemp") or 0.0)
   return ODTCProtocol(
+    variant=96,
+    plate_type=0,
+    fluid_quantity=0,
+    post_heating=False,
+    start_block_temperature=0.0,
+    start_lid_temperature=0.0,
+    steps=[],
+    pid_set=[ODTCPID(number=1)],
     kind="premethod",
     name=name,
     is_scratch=False,
@@ -297,29 +300,12 @@ def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
     datetime=datetime_,
     target_block_temperature=target_block_temperature,
     target_lid_temperature=target_lid_temperature,
-    stages=[],
   )
 
 
 def _get_steps_for_serialization(odtc_protocol: ODTCProtocol) -> List[ODTCStep]:
-  """Return canonical ODTCStep list for serializing an ODTCProtocol (kind='method').
-
-  Uses odtc_protocol.steps when present; otherwise builds from odtc_protocol.stages via _odtc_stages_to_steps.
-  """
-  if odtc_protocol.steps:
-    return odtc_protocol.steps
-  if odtc_protocol.stages:
-    stages_as_odtc = []
-    for s in odtc_protocol.stages:
-      if isinstance(s, ODTCStage):
-        stages_as_odtc.append(s)
-      else:
-        steps_odtc = [st if isinstance(st, ODTCStep) else ODTCStep.from_step(st) for st in s.steps]
-        stages_as_odtc.append(
-          ODTCStage(steps=cast(List[Step], steps_odtc), repeats=s.repeats, inner_stages=None)
-        )
-    return _odtc_stages_to_steps(stages_as_odtc)
-  return []
+  """Return canonical ODTCStep list for serializing an ODTCProtocol (kind='method')."""
+  return odtc_protocol.steps
 
 
 def _odtc_protocol_to_method_xml(odtc_protocol: ODTCProtocol, parent: ET.Element) -> ET.Element:
