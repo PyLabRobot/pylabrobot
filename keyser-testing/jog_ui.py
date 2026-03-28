@@ -606,6 +606,7 @@ async def init_evo():
   """Initialize the EVO in the async event loop."""
   global evo, driver
 
+  from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted
   from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
   from pylabrobot.resources.tecan.tecan_decks import EVO150Deck
   from pylabrobot.tecan.evo import TecanEVO
