@@ -1,4 +1,4 @@
-from pylabrobot.io.sila.discovery import SiLADevice, discover
+from pylabrobot.io.sila.discovery import SiLADevice, discover, discover_iter
 from pylabrobot.io.sila.grpc import (
   WIRE_32BIT,
   WIRE_64BIT,

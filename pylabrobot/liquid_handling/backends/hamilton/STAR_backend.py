@@ -1303,6 +1303,9 @@ class Head96Information:
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STARBackend."""
 
+  PIP_X_MIN_WITH_LEFT_SIDE_PANEL: float = 320.0
+  HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL: float = 0.0
+
   def __init__(
     self,
     device_address: Optional[int] = None,
@@ -1310,6 +1313,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    left_side_panel_installed: bool = False,
   ):
     """Create a new STAR interface.
 
@@ -1321,6 +1325,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
+      left_side_panel_installed: if True, restrict PIP channels to x >= 320mm and
+        the 96-head to x >= 0mm to prevent collisions with the left side panel.
     """
 
     super().__init__(
@@ -1332,6 +1338,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
 
+    self.left_side_panel_installed = left_side_panel_installed
     self._machine_conf: Optional[MachineConfiguration] = None
 
     self._iswap_parked: Optional[bool] = None
@@ -1363,6 +1370,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
       return math.ceil(spacing * 10) / 10
     return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
+
+  def _ops_to_fw_positions(
+    self, ops: Sequence[PipettingOp], use_channels: List[int]
+  ) -> Tuple[List[int], List[int], List[bool]]:
+    x_positions, y_positions, channels_involved = super()._ops_to_fw_positions(ops, use_channels)
+    if self.left_side_panel_installed:
+      min_x = round(self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL * 10)
+      for x, involved in zip(x_positions, channels_involved):
+        if involved and x < min_x:
+          raise ValueError(
+            f"PIP channel x={x / 10}mm is below the minimum "
+            f"{self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm (left side panel is installed)"
+          )
+    return x_positions, y_positions, channels_involved
 
   @property
   def machine_conf(self) -> MachineConfiguration:
@@ -4466,6 +4487,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_x(self, channel: int, x: float):
     """Move a channel in the x direction."""
+    if self.left_side_panel_installed and x < self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL:
+      raise ValueError(
+        f"PIP channel x={x}mm is below the minimum {self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm "
+        f"(left side panel is installed)"
+      )
     await self.position_left_x_arm_(round(x * 10))
 
   @need_iswap_parked
@@ -4504,9 +4530,135 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def move_channel_z(self, channel: int, z: float):
-    """Move a channel in the z direction."""
+    """Move a channel in the Z direction.
+
+    .. deprecated::
+      Use :meth:`move_channel_stop_disk_z` for moves without a tip attached (stop disk)
+      or :meth:`move_channel_tool_z` when a tip or tool is attached (tip/tool end).
+
+    The Hamilton firmware interprets this Z position based on its internal
+    "tip mounted" state for the specified channel. When the firmware state
+    indicates that no tip is mounted, the absolute Z position refers to the
+    bottom of the stop disk. In that case, this command is effectively
+    equivalent to :meth:`move_channel_stop_disk_z` for the same numeric Z value.
+
+    When the firmware state indicates that a tip is mounted on the channel,
+    the same Z position instead refers to the physical end of the tip. In
+    this case, the numeric Z value used with this method may differ from the
+    stop disk Z position used with :meth:`move_channel_stop_disk_z` for the same
+    physical height above the deck.
+    """
+    # TODO: remove after 2026-09
+    warnings.warn(
+      "move_channel_z is deprecated and will be removed after 2026-09 in legacy PLR. "
+      "Use move_channel_stop_disk_z() for moves without a tip attached "
+      "or move_channel_tool_z() when a tip/tool is attached.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
+    )
+
+  async def move_channel_stop_disk_z(
+    self,
+    channel_idx: int,
+    z: float,
+    speed: float = 125.0,
+    acceleration: float = 800.0,
+    current_limit: int = 3,
+  ):
+    """Move a channel's Z-drive to an absolute stop disk position.
+
+    Communicates directly with the individual channel rather than through the
+    master module.
+
+    Args:
+      channel_idx: Channel index (0-based, backmost = 0).
+      z: Target Z position in mm (stop disk).
+      speed: Max Z-drive speed in mm/sec. Default 125.0 mm/s.
+      acceleration: Acceleration in mm/sec². Default 800.0. Valid range: ~53.6 to 1609.
+      current_limit: Current limit (0-7). Default 3.
+    """
+
+    z_increment = STARBackend.mm_to_z_drive_increment(z)
+    speed_increment = STARBackend.mm_to_z_drive_increment(speed)
+    acceleration_increment = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
+
+    if not isinstance(channel_idx, int):
+      raise ValueError(f"channel_idx must be an int, got {type(channel_idx).__name__}")
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(
+        f"channel index {channel_idx} out of range for instrument with {self.num_channels} channels"
+      )
+    assert 9320 <= z_increment <= 31200, (
+      f"z must be between {STARBackend.z_drive_increment_to_mm(9320)} and "
+      f"{STARBackend.z_drive_increment_to_mm(31200)} mm, got {z} mm"
+    )
+    assert 20 <= speed_increment <= 15000, (
+      f"speed must be between {STARBackend.z_drive_increment_to_mm(20)} and "
+      f"{STARBackend.z_drive_increment_to_mm(15000)} mm/s, got {speed} mm/s"
+    )
+    assert 5 <= acceleration_increment <= 150, (
+      f"acceleration must be between ~53.6 and ~1609 mm/s², got {acceleration} mm/s²"
+    )
+    assert 0 <= current_limit <= 7, f"current_limit must be between 0 and 7, got {current_limit}"
+
+    return await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="ZA",
+      za=f"{z_increment:05}",
+      zv=f"{speed_increment:05}",
+      zr=f"{acceleration_increment:03}",
+      zw=f"{current_limit:01}",
+    )
+
+  async def move_channel_tool_z(self, channel_idx: int, z: float):
+    """Move a channel in the Z direction (tip/tool end reference).
+
+    Requires a tip or tool to be attached. Use :meth:`move_channel_stop_disk_z`
+    for moves without a tip.
+
+    Args:
+      channel_idx: Channel index (0-based, backmost = 0).
+      z: Target Z position in mm (tip/tool end).
+    """
+
+    if not isinstance(channel_idx, int):
+      raise ValueError(f"channel_idx must be an int, got {type(channel_idx).__name__}")
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(
+        f"channel index {channel_idx} out of range for instrument with {self.num_channels} channels"
+      )
+
+    tip_presence = await self.request_tip_presence()
+
+    if not tip_presence[channel_idx]:
+      raise ValueError(
+        f"Channel {channel_idx} does not have a tip or tool attached. "
+        "Use move_channel_stop_disk_z() for Z moves without a tip attached."
+      )
+
+    tip_len = await self.request_tip_len_on_channel(channel_idx)
+
+    # The firmware command operates in "tip space" (Z refers to the tip/tool end).
+    # Convert the head-space limits to tip-space limits:
+    #   tip_space = head_space - tip_len + fitting_depth
+    max_tip_z = (
+      STARBackend.MAXIMUM_CHANNEL_Z_POSITION - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    )
+    min_tip_z = (
+      STARBackend.MINIMUM_CHANNEL_Z_POSITION - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    )
+
+    if not (min_tip_z <= z <= max_tip_z):
+      raise ValueError(
+        f"z={z} mm out of safe range [{min_tip_z}, {max_tip_z}] mm "
+        f"for tip length {tip_len} mm on channel {channel_idx}"
+      )
+
+    await self.position_single_pipetting_channel_in_z_direction(
+      pipetting_channel_index=channel_idx + 1, z_position=round(z * 10)
     )
 
   async def move_channel_x_relative(self, channel: int, distance: float):
@@ -4521,6 +4673,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_z_relative(self, channel: int, distance: float):
     """Move a channel in the z direction by a relative amount."""
+    # TODO: determine whether this refers to stop disk or tip bottom
     current_z = await self.request_z_pos_channel_n(channel)
     await self.move_channel_z(channel, current_z + distance)
 
@@ -4664,8 +4817,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # TODO: these are values for a STARBackend. Find them for a STARlet.
 
+    x_min = self.HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL if self.left_side_panel_installed else -271.0
+
     errors = []
-    if not (-271.0 <= c.x <= 974.0):
+    if not (x_min <= c.x <= 974.0):
       errors.append(f"x={c.x}")
     if not (108.0 <= c.y <= 560.0):
       errors.append(f"y={c.y}")
@@ -4676,7 +4831,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(
         "Illegal 96 head position: "
         + ", ".join(errors)
-        + " (allowed ranges: x [-271, 974], y [108, 560], z [180.5, 342.5])"
+        + f" (allowed ranges: x [{x_min}, 974], y [108, 560], z [180.5, 342.5])"
       )
 
   # ============== Firmware Commands ==============
@@ -6745,6 +6900,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         pattern parameter 'tm'). Must be between 0 and 3600. Default 0.
     """
 
+    if self.left_side_panel_installed:
+      min_x = round(self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL * 10)
+      if x_positions < min_x:
+        raise ValueError(
+          f"PIP channel x={x_positions / 10}mm is below the minimum "
+          f"{self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm (left side panel is installed)"
+        )
     assert 0 <= x_positions <= 25000, "x_positions must be between 0 and 25000"
     assert 0 <= y_positions <= 6500, "y_positions must be between 0 and 6500"
     assert 0 <= minimum_traverse_height_at_beginning_of_command <= 3600, (
@@ -7286,10 +7448,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Raises:
       RuntimeError: If 96-head is not installed.
-      AssertionError: If parameter out of range.
     """
-    assert -271 <= x <= 974, "x must be between -271.0 and 974.0 mm"
-
     current_pos = await self.head96_request_position()
     return await self.head96_move_to_coordinate(
       Coordinate(x, current_pos.y, current_pos.z),
