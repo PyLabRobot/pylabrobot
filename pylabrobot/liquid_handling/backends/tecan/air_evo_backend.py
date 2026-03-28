@@ -398,7 +398,12 @@ class AirEVOBackend(EVOBackend):
 
     from pylabrobot.resources import TecanPlate
 
-    ys = int(ops[0].resource.get_absolute_size_y() * 10)
+    # Y-spacing: use the plate's well pitch (item_dy), not individual well size
+    plate = ops[0].resource.parent
+    if hasattr(plate, "item_dy"):
+      ys = int(plate.item_dy * 10)
+    else:
+      ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
     for i, channel in enumerate(use_channels):
       par = ops[i].resource.parent
@@ -411,12 +416,32 @@ class AirEVOBackend(EVOBackend):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+
+    # The z_positions from _liha_positions use get_z_position which adds carrier
+    # offset and tip_length to absolute Z values — producing out-of-range results.
+    # Use the plate's z_start/z_dispense directly instead.
+    from pylabrobot.resources import TecanPlate as _TP
+
+    first_par = ops[0].resource.parent
+    if isinstance(first_par, _TP):
+      z_travel = [self._z_range] * self.num_channels
+      z_aspirate = [None] * self.num_channels
+      for i, channel in enumerate(use_channels):
+        z_aspirate[channel] = int(first_par.z_start)
+    else:
+      z_travel = [z if z else self._z_range for z in z_positions["travel"]]
+      z_aspirate = z_positions["start"]
+
+    paa_y = y - yi * ys
+    print(f"  [DEBUG] PAA: x={x}, y={paa_y}, ys={ys}, z_travel={z_travel}")
+    print(f"  [DEBUG] z_range={self._z_range}, z_aspirate={z_aspirate}")
+
+    await self.liha.set_z_travel_height(z_travel)
     await self.liha.position_absolute_all_axis(
       x,
-      y - yi * ys,
+      paa_y,
       ys,
-      [z if z else self._z_range for z in z_positions["travel"]],
+      z_travel,
     )
 
     # Aspirate leading airgap (with force mode)
@@ -468,7 +493,11 @@ class AirEVOBackend(EVOBackend):
 
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
-    ys = int(ops[0].resource.get_absolute_size_y() * 10)
+    plate = ops[0].resource.parent
+    if hasattr(plate, "item_dy"):
+      ys = int(plate.item_dy * 10)
+    else:
+      ys = int(ops[0].resource.get_absolute_size_y() * 10)
 
     tecan_liquid_classes = [
       get_liquid_class(
@@ -505,12 +534,16 @@ class AirEVOBackend(EVOBackend):
       f"DiTis can only be configured for the last {self.diti_count} channels"
     )
 
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
+    # Use _liha_positions for X/Y only; Z for tip pickup is computed directly
+    # from the tip rack's z_start (absolute Tecan Z coordinate).
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
+    # TODO: calibrate X offset properly in resource definitions
+    x += 60  # temporary 6mm X offset from taught position
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
       x, y - yi * ys, ys, [self._z_range] * self.num_channels
@@ -530,10 +563,18 @@ class AirEVOBackend(EVOBackend):
     await self.liha.move_plunger_relative(ppr)
     await self._zaapmotion_force_off()
 
-    first_z_start, _ = self._first_valid(z_positions["start"])
-    assert first_z_start is not None, "Could not find a valid z_start position"
+    # AGT Z-start: use the tip rack's z_start directly.
+    # Tecan Z coordinates: 0=top (home), z_range=worktable.
+    # z_start is an absolute position — the force feedback handles the rest.
+    from pylabrobot.resources import TecanTipRack
+
+    par = ops[0].resource.parent
+    assert isinstance(par, TecanTipRack), f"Expected TecanTipRack, got {type(par)}"
+    agt_z_start = int(par.z_start)
+    agt_z_search = abs(int(par.z_max - par.z_start))
+    logger.info("AGT z_start=%d, z_search=%d", agt_z_start, agt_z_search)
     await self.liha.get_disposable_tip(
-      self._bin_use_channels(use_channels), first_z_start - 227, 210
+      self._bin_use_channels(use_channels), agt_z_start, agt_z_search
     )
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):

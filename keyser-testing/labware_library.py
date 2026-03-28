@@ -116,9 +116,9 @@ def DiTi_50ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
     size_y=86.0,
     size_z=45.0,
     model="DiTi_50ul_SBS_LiHa_Air",
-    z_start=1360.0,
-    z_dispense=1360.0,
-    z_max=1660.0,
+    z_start=800.0,  # taught: tip engagement at Z=770, start search above
+    z_dispense=720.0,
+    z_max=600.0,  # search range: 300 units (30mm) below z_start
     area=33.2,
     ordered_items=create_ordered_items_2d(
       TipSpot,

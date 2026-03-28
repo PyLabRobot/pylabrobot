@@ -80,25 +80,25 @@ async def main():
     # --- Test 1: Pick up 8 tips ---
     print("\n--- Test 1: Pick Up Tips ---")
     input("Press Enter to pick up 8 tips from column 1...")
-    await lh.pick_up_tips(tip_rack["A1":"H1"])
+    await lh.pick_up_tips(tip_rack.get_items(["A1","B1","C1","D1","E1","F1","G1","H1"]))
     print("Tips picked up!")
 
     # --- Test 2: Aspirate ---
     print("\n--- Test 2: Aspirate 25uL ---")
     input("Press Enter to aspirate 25uL from source column 1...")
-    await lh.aspirate(source_plate["A1":"H1"], vols=[25] * 8)
+    await lh.aspirate(source_plate.get_items(["A1","B1","C1","D1","E1","F1","G1","H1"]), vols=[25] * 8)
     print("Aspirated!")
 
     # --- Test 3: Dispense ---
     print("\n--- Test 3: Dispense 25uL ---")
     input("Press Enter to dispense 25uL to dest column 1...")
-    await lh.dispense(dest_plate["A1":"H1"], vols=[25] * 8)
+    await lh.dispense(dest_plate.get_items(["A1","B1","C1","D1","E1","F1","G1","H1"]), vols=[25] * 8)
     print("Dispensed!")
 
     # --- Test 4: Drop tips ---
     print("\n--- Test 4: Drop Tips ---")
     input("Press Enter to drop tips back to tip rack...")
-    await lh.drop_tips(tip_rack["A1":"H1"])
+    await lh.drop_tips(tip_rack.get_items(["A1","B1","C1","D1","E1","F1","G1","H1"]))
     print("Tips dropped!")
 
     print("\n*** PIPETTING TEST PASSED ***")
