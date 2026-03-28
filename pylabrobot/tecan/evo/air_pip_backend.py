@@ -1,0 +1,398 @@
+"""PIPBackend for the Tecan EVO with Air LiHa (ZaapMotion controllers).
+
+Overrides conversion factors and adds ZaapMotion boot exit, motor
+configuration, and force mode wrapping around plunger operations.
+
+See keyser-testing/AirLiHa_Investigation.md for reverse-engineering details.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import List, Optional
+
+from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
+from pylabrobot.resources import Resource, TecanTipRack
+
+from pylabrobot.tecan.evo.driver import TecanEVODriver
+from pylabrobot.tecan.evo.errors import TecanError
+from pylabrobot.tecan.evo.pip_backend import EVOPIPBackend
+
+logger = logging.getLogger(__name__)
+
+# ZaapMotion motor configuration sequence, sent via transparent pipeline T2x.
+# Captured from EVOware USB traffic (zaapmotiondriver.dll scan phase).
+ZAAPMOTION_CONFIG = [
+  "CFE 255,500",
+  "CAD ADCA,0,12.5",
+  "CAD ADCB,1,12.5",
+  "EDF1",
+  "EDF4",
+  "CDO 11",
+  "EDF5",
+  "SIC 10,5",
+  "SEA ADD,H,4,STOP,1,0,0",
+  "CMTBLDC,1",
+  "CETQEP2,256,R",
+  "CECPOS,QEP2",
+  "CECCUR,QEP2",
+  "CEE OFF",
+  "STL80",
+  "SVL12,8,16",
+  "SVL24,20,28",
+  "SCL1,900,3.5",
+  "SCE HOLD,500",
+  "SCE MOVE,500",
+  "CIR0",
+  "PIDHOLD,D,1.2,1,-1,0.003,0,0,OFF",
+  "PIDMOVE,D,0.8,1,-1,0.004,0,0,OFF",
+  "PIDHOLD,Q,1.2,1,-1,0.003,0,0,OFF",
+  "PIDMOVE,Q,0.8,1,-1,0.004,0,0,OFF",
+  "PIDHOLD,POS,0.2,1,-1,0.02,4,0,OFF",
+  "PIDMOVE,POS,0.35,1,-1,0.1,3,0,OFF",
+  "PIDSPDELAY,0",
+  "SFF 0.045,0.4,0.041",
+  "SES 0",
+  "SPO0",
+  "SIA 0.01, 0.28, 0.0",
+  "WRP",
+]
+
+
+class AirEVOPIPBackend(EVOPIPBackend):
+  """PIPBackend for the Tecan EVO with Air LiHa (ZaapMotion controllers).
+
+  Air displacement uses BLDC motor controllers instead of syringe dilutors.
+  After power cycle, the ZaapMotion controllers boot into bootloader mode
+  and require firmware exit + motor configuration before PIA can succeed.
+
+  Conversion factors for ZaapMotion (air displacement):
+    - Volume: 106.4 full plunger steps per uL
+    - Speed: 213 half-steps/sec per uL/s
+  """
+
+  STEPS_PER_UL = 106.4
+  SPEED_FACTOR = 213.0
+
+  # ZaapMotion force ramp values
+  SFR_ACTIVE = 133120
+  SFR_IDLE = 3752
+  SDP_DEFAULT = 1400
+
+  def __init__(
+    self,
+    driver: TecanEVODriver,
+    deck: Resource,
+    diti_count: int = 0,
+  ):
+    super().__init__(driver=driver, deck=deck, diti_count=diti_count)
+
+  async def _on_setup(self) -> None:
+    """Configure ZaapMotion controllers, then run standard LiHa init."""
+
+    # Check if already initialized (skip ZaapMotion config + PIA)
+    if await self._is_initialized():
+      logger.info("Axes already initialized — skipping ZaapMotion config + PIA.")
+      await self._setup_quick()
+      return
+
+    logger.info("Running full Air LiHa setup...")
+    await self._configure_zaapmotion()
+    await self._setup_safety_module()
+
+    # ZaapMotion SDO config (from EVOware: sent right before PIA)
+    try:
+      await self._driver.send_command("C5", command="T23SDO11,1")
+    except TecanError:
+      pass
+
+    # Standard LiHa init (PIA, plunger init, etc.)
+    await super()._on_setup()
+
+  async def _is_initialized(self) -> bool:
+    """Check if LiHa axes are already initialized."""
+    try:
+      resp = await self._driver.send_command("C5", command="REE0")
+      err = resp["data"][0] if resp and resp.get("data") else ""
+      # A = init failed (1), G = not initialized (7)
+      if err and not any(c in ("A", "G") for c in err):
+        return True
+    except (TecanError, TimeoutError):
+      pass
+    return False
+
+  async def _setup_quick(self) -> None:
+    """Fast setup when axes are already initialized."""
+    from pylabrobot.tecan.evo.firmware import LiHa
+
+    self.liha = LiHa(self._driver, "C5")
+    self._num_channels = await self.liha.report_number_tips()
+    self._x_range = await self.liha.report_x_param(5)
+    self._y_range = (await self.liha.report_y_param(5))[0]
+    self._z_range = (await self.liha.report_z_param(5))[0]
+    logger.info("Quick setup complete: %d channels, z_range=%d", self._num_channels, self._z_range)
+
+  async def _configure_zaapmotion(self) -> None:
+    """Exit boot mode and configure all 8 ZaapMotion motor controllers."""
+    for tip in range(8):
+      prefix = f"T2{tip}"
+
+      # Check current mode
+      try:
+        resp = await self._driver.send_command("C5", command=f"{prefix}RFV")
+        firmware = resp["data"][0] if resp and resp.get("data") else ""
+      except TecanError:
+        firmware = ""
+
+      if "BOOT" in str(firmware):
+        logger.info("ZaapMotion tip %d in boot mode, sending exit command", tip + 1)
+        await self._driver.send_command("C5", command=f"{prefix}X")
+        await asyncio.sleep(1)
+
+        # Verify transition
+        try:
+          resp = await self._driver.send_command("C5", command=f"{prefix}RFV")
+          firmware = resp["data"][0] if resp and resp.get("data") else ""
+        except TecanError:
+          firmware = ""
+
+        if "BOOT" in str(firmware):
+          raise TecanError(f"ZaapMotion tip {tip + 1} failed to exit boot mode", "C5", 1)
+
+      # Check if already configured
+      try:
+        await self._driver.send_command("C5", command=f"{prefix}RCS")
+        logger.info("ZaapMotion tip %d already configured, skipping", tip + 1)
+        continue
+      except TecanError:
+        pass
+
+      # Send motor configuration
+      logger.info("Configuring ZaapMotion tip %d (%d commands)", tip + 1, len(ZAAPMOTION_CONFIG))
+      for cmd in ZAAPMOTION_CONFIG:
+        try:
+          await self._driver.send_command("C5", command=f"{prefix}{cmd}")
+        except TecanError as e:
+          logger.warning("ZaapMotion tip %d config '%s' failed: %s", tip + 1, cmd, e)
+
+  async def _setup_safety_module(self) -> None:
+    """Send safety module commands to enable motor power."""
+    try:
+      await self._driver.send_command("O1", command="SPN")
+      await self._driver.send_command("O1", command="SPS3")
+    except TecanError as e:
+      logger.warning("Safety module command failed: %s", e)
+
+  # ============== ZaapMotion force mode ==============
+
+  async def _zaapmotion_force_on(self) -> None:
+    """Enable ZaapMotion force mode before plunger operations."""
+    for tip in range(8):
+      await self._driver.send_command("C5", command=f"T2{tip}SFR{self.SFR_ACTIVE}")
+    for tip in range(8):
+      await self._driver.send_command("C5", command=f"T2{tip}SFP1")
+
+  async def _zaapmotion_force_off(self) -> None:
+    """Restore ZaapMotion to idle after plunger operations."""
+    for tip in range(8):
+      await self._driver.send_command("C5", command=f"T2{tip}SFR{self.SFR_IDLE}")
+    for tip in range(8):
+      await self._driver.send_command("C5", command=f"T2{tip}SDP{self.SDP_DEFAULT}")
+
+  # ============== Override operations with force mode ==============
+
+  async def pick_up_tips(
+    self,
+    ops: List[Pickup],
+    use_channels: List[int],
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    assert self.liha is not None and self._z_range is not None
+
+    assert min(use_channels) >= self.num_channels - self.diti_count, (
+      f"DiTis can only be configured for the last {self.diti_count} channels"
+    )
+
+    # Use _liha_positions for X/Y only; Z comes from tip rack directly
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
+    ys = self._get_ys(ops)
+    x, _ = self._first_valid(x_positions)
+    y, yi = self._first_valid(y_positions)
+    assert x is not None and y is not None
+
+    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+    await self.liha.position_absolute_all_axis(
+      x, y - yi * ys, ys, [self._z_range] * self.num_channels
+    )
+
+    # Aspirate small air gap with force mode
+    pvl: List[Optional[int]] = [None] * self.num_channels
+    sep: List[Optional[int]] = [None] * self.num_channels
+    ppr: List[Optional[int]] = [None] * self.num_channels
+    for channel in use_channels:
+      pvl[channel] = 0
+      sep[channel] = int(70 * self.SPEED_FACTOR)
+      ppr[channel] = int(10 * self.STEPS_PER_UL)
+    await self._zaapmotion_force_on()
+    await self.liha.position_valve_logical(pvl)
+    await self.liha.set_end_speed_plunger(sep)
+    await self.liha.move_plunger_relative(ppr)
+    await self._zaapmotion_force_off()
+
+    # AGT using tip rack z_start directly
+    par = ops[0].resource.parent
+    assert isinstance(par, TecanTipRack), f"Expected TecanTipRack, got {type(par)}"
+    agt_z_start = int(par.z_start)
+    agt_z_search = abs(int(par.z_max - par.z_start))
+    await self.liha.get_disposable_tip(
+      self._bin_use_channels(use_channels), agt_z_start, agt_z_search
+    )
+
+  async def drop_tips(
+    self,
+    ops: List[TipDrop],
+    use_channels: List[int],
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    assert self.liha is not None and self._z_range is not None
+
+    assert min(use_channels) >= self.num_channels - self.diti_count, (
+      f"DiTis can only be configured for the last {self.diti_count} channels"
+    )
+
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
+    ys = self._get_ys(ops)
+    x, _ = self._first_valid(x_positions)
+    y, yi = self._first_valid(y_positions)
+    assert x is not None and y is not None
+
+    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+    await self.liha.position_absolute_all_axis(
+      x, y - yi * ys, ys, [self._z_range] * self.num_channels
+    )
+
+    # Empty plunger before discard
+    await self.liha.position_valve_logical([0] * self.num_channels)
+    sep_vals: List[Optional[int]] = [int(600 * self.SPEED_FACTOR)] * self.num_channels
+    await self._zaapmotion_force_on()
+    await self.liha.set_end_speed_plunger(sep_vals)
+    await self._driver.send_command("C5", command="PPA" + ",".join(["0"] * self.num_channels))
+    await self._zaapmotion_force_off()
+
+    # Set DiTi discard parameters and drop
+    await self._driver.send_command("C5", command="SDT1,1000,200")
+    await self.liha.drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=1)
+
+  async def aspirate(
+    self,
+    ops: List[Aspiration],
+    use_channels: List[int],
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    assert self.liha is not None and self._z_range is not None
+
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
+    tecan_liquid_classes = self._get_liquid_classes(ops)
+
+    from pylabrobot.resources import TecanPlate
+
+    ys = self._get_ys(ops)
+    zadd: List[Optional[int]] = [0] * self.num_channels
+    for i, channel in enumerate(use_channels):
+      par = ops[i].resource.parent
+      if par is None:
+        continue
+      if not isinstance(par, TecanPlate):
+        raise ValueError(f"Operation is not supported by resource {par}.")
+      zadd[channel] = round(ops[i].volume / par.area * 10)
+
+    x, _ = self._first_valid(x_positions)
+    y, yi = self._first_valid(y_positions)
+    assert x is not None and y is not None
+
+    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+    await self.liha.position_absolute_all_axis(
+      x,
+      y - yi * ys,
+      ys,
+      [z if z else self._z_range for z in z_positions["travel"]],
+    )
+
+    # Leading airgap with force mode
+    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "lag")
+    if any(ppr):
+      await self._zaapmotion_force_on()
+      await self.liha.position_valve_logical(pvl)
+      await self.liha.set_end_speed_plunger(sep)
+      await self.liha.move_plunger_relative(ppr)
+      await self._zaapmotion_force_off()
+
+    # Liquid level detection
+    if any(tlc.aspirate_lld if tlc is not None else None for tlc in tecan_liquid_classes):
+      tlc, _ = self._first_valid(tecan_liquid_classes)
+      assert tlc is not None
+      await self.liha.set_detection_mode(tlc.lld_mode, tlc.lld_conductivity)
+      ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
+      await self.liha.set_search_speed(ssl)
+      await self.liha.set_search_retract_distance(sdl)
+      await self.liha.set_search_z_start(z_positions["start"])
+      await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
+      await self.liha.set_search_submerge(sbl)
+      shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
+      await self.liha.set_z_travel_height(shz)
+      await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
+      await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+
+    # Aspirate + retract with force mode
+    zadd = [min(z, 32) if z else None for z in zadd]
+    ssz, sep, stz, mtr, ssz_r = self._aspirate_action(ops, use_channels, tecan_liquid_classes, zadd)
+    await self.liha.set_slow_speed_z(ssz)
+    await self._zaapmotion_force_on()
+    await self.liha.set_end_speed_plunger(sep)
+    await self.liha.set_tracking_distance_z(stz)
+    await self.liha.move_tracking_relative(mtr)
+    await self._zaapmotion_force_off()
+    await self.liha.set_slow_speed_z(ssz_r)
+    await self.liha.move_absolute_z(z_positions["start"])
+
+    # Trailing airgap with force mode
+    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
+    await self._zaapmotion_force_on()
+    await self.liha.position_valve_logical(pvl)
+    await self.liha.set_end_speed_plunger(sep)
+    await self.liha.move_plunger_relative(ppr)
+    await self._zaapmotion_force_off()
+
+  async def dispense(
+    self,
+    ops: List[Dispense],
+    use_channels: List[int],
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    assert self.liha is not None and self._z_range is not None
+
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
+    tecan_liquid_classes = self._get_liquid_classes(ops)
+
+    ys = self._get_ys(ops)
+    x, _ = self._first_valid(x_positions)
+    y, yi = self._first_valid(y_positions)
+    assert x is not None and y is not None
+
+    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
+    await self.liha.position_absolute_all_axis(
+      x,
+      y - yi * ys,
+      ys,
+      [z if z else self._z_range for z in z_positions["dispense"]],
+    )
+
+    sep, spp, stz, mtr = self._dispense_action(ops, use_channels, tecan_liquid_classes)
+    await self._zaapmotion_force_on()
+    await self.liha.set_end_speed_plunger(sep)
+    await self.liha.set_stop_speed_plunger(spp)
+    await self.liha.set_tracking_distance_z(stz)
+    await self.liha.move_tracking_relative(mtr)
+    await self._zaapmotion_force_off()
