@@ -562,7 +562,21 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">move_channel_z</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_z" title="Link to this definition">#</a></dt>
-<dd><p>Move a channel in the z direction.</p>
+<dd><p>Move a channel in the Z direction.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version Use: </span><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z"><code class="xref py py-meth docutils literal notranslate"><span class="pre">move_channel_stop_disk_z()</span></code></a> for moves without a tip attached (stop disk)
+or <a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_tool_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_tool_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_tool_z"><code class="xref py py-meth docutils literal notranslate"><span class="pre">move_channel_tool_z()</span></code></a> when a tip or tool is attached (tip/tool end).</p>
+</div>
+<p>The Hamilton firmware interprets this Z position based on its internal
+“tip mounted” state for the specified channel. When the firmware state
+indicates that no tip is mounted, the absolute Z position refers to the
+bottom of the stop disk. In that case, this command is effectively
+equivalent to <a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z"><code class="xref py py-meth docutils literal notranslate"><span class="pre">move_channel_stop_disk_z()</span></code></a> for the same numeric Z value.</p>
+<p>When the firmware state indicates that a tip is mounted on the channel,
+the same Z position instead refers to the physical end of the tip. In
+this case, the numeric Z value used with this method may differ from the
+stop disk Z position used with <a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_channel_stop_disk_z"><code class="xref py py-meth docutils literal notranslate"><span class="pre">move_channel_stop_disk_z()</span></code></a> for the same
+physical height above the deck.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

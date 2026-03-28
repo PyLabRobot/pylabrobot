@@ -168,6 +168,8 @@
       ~STAR.move_autoload_to_save_z_position
       ~STAR.move_autoload_to_slot
       ~STAR.move_autoload_to_track
+      ~STAR.move_channel_stop_disk_z
+      ~STAR.move_channel_tool_z
       ~STAR.move_channel_x
       ~STAR.move_channel_x_relative
       ~STAR.move_channel_y
