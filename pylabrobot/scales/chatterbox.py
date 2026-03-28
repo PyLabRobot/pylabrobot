@@ -1,3 +1,5 @@
+"""Chatterbox scale backend for device-free testing and simulation."""
+
 from pylabrobot.scales.scale_backend import ScaleBackend
 
 

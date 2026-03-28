@@ -16,7 +16,7 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | Notes |
 |---------|------------------------------------------|-----------|--------|-------|
-| @       | Cancel / reset to determined state       | 16        | HIGH   | Spec recommends sending on connect (Section 2.2). Response is I4-style. |
+| @       | Cancel / reset to determined state       | 16        | DONE   | cancel(). Sent during setup(). Response is I4-style. |
 | I0      | List all implemented commands + levels   | 96        | MED    | Useful for runtime capability discovery. Multi-response (B status). |
 | I1      | MT-SICS level and level versions         | 97        | DONE   | Queried during setup(). |
 | I2      | Device data (type and capacity)          | 98        | DONE   | Split into request_device_type() and request_capacity(). |
@@ -34,7 +34,7 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | Notes |
 |---------|------------------------------------------|-----------|--------|-------|
-| C       | Cancel all pending commands              | 23        | HIGH   | Like @ but doesn't reset state. |
+| C       | Cancel all pending commands              | 23        | DONE   | cancel_all(). Multi-response (B then A). |
 | D       | Write text to display                    | 52        | DONE   | set_display_text(). |
 | DW      | Show weight on display                   | 61        | DONE   | set_weight_display(). |
 | K       | Keys control                             | 153       | LOW    | Lock/unlock terminal keys. |
@@ -255,8 +255,6 @@ Status key:
 ## Priority Summary
 
 ### HIGH (should implement next)
-- @ (cancel) - spec-recommended for setup
-- C (cancel all) - Level 1
 - E01/E02/E03 (error monitoring) - Level 2
 - SIX1 (gross, net, tare in one call) - Level 2
 

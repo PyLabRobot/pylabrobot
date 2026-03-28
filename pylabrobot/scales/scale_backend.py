@@ -1,3 +1,5 @@
+"""Abstract base class for scale backends."""
+
 from abc import ABCMeta, abstractmethod
 
 from pylabrobot.machines.backend import MachineBackend
@@ -7,10 +9,10 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a scale"""
 
   @abstractmethod
-  async def zero(self): ...
+  async def zero(self) -> None: ...
 
   @abstractmethod
-  async def tare(self): ...
+  async def tare(self) -> None: ...
 
   @abstractmethod
   async def read_weight(self) -> float:
