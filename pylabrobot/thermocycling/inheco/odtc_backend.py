@@ -721,26 +721,33 @@ class ODTCBackend(ThermocyclerBackend):
 
   async def run_protocol(
     self,
-    protocol: Union[Protocol, ODTCProtocol],
+    protocol: Protocol,
     block_max_volume: float,
+    config: Optional[ODTCConfig] = None,
   ) -> None:
-    """Execute thermocycler protocol. Converts to ODTCProtocol if needed, uploads, and executes."""
-    if isinstance(protocol, ODTCProtocol):
-      odtc_protocol = protocol
-    else:
+    """Execute a PLR Protocol on the ODTC.
+
+    Args:
+      protocol: Standard PLR Protocol.
+      block_max_volume: Max volume in wells (uL), used to select fluid_quantity.
+      config: Optional ODTCConfig overrides. If None, defaults are used with
+        variant from this backend and fluid_quantity derived from block_max_volume.
+    """
+    if config is None:
       fluid_quantity = (
         volume_to_fluid_quantity(block_max_volume) if 0 < block_max_volume <= 100 else 1
       )
       config = ODTCConfig(variant=self._variant, fluid_quantity=fluid_quantity)
-      odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
+    odtc_protocol = protocol_to_odtc_protocol(protocol, config=config)
+    await self.run_odtc_protocol(odtc_protocol)
 
-    # Set block/lid to the method's start temperatures and wait for stabilization
+  async def run_odtc_protocol(self, odtc_protocol: ODTCProtocol) -> None:
+    """Execute a pre-built ODTCProtocol: pre-heat, upload, and start."""
     await self.set_block_temperature(
       temperature=[odtc_protocol.start_block_temperature],
       lid_temperature=[odtc_protocol.start_lid_temperature],
       wait=True,
     )
-
     await self.upload_protocol(odtc_protocol, allow_overwrite=True)
     await self.execute_method(odtc_protocol, wait=False)
 
