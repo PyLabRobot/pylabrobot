@@ -1,12 +1,120 @@
 import logging
 from typing import Dict, List, Optional, cast
 
+from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
+from pylabrobot.capabilities.plate_reading.absorbance.backend import (
+  AbsorbanceBackend as _NewAbsorbanceBackend,
+)
+from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
+from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
+from pylabrobot.capabilities.plate_reading.fluorescence.backend import (
+  FluorescenceBackend as _NewFluorescenceBackend,
+)
+from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
+from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.luminescence.backend import (
+  LuminescenceBackend as _NewLuminescenceBackend,
+)
+from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
+from pylabrobot.legacy._backend_params import _DictBackendParams
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.legacy.plate_reading.standard import NoPlateError
 from pylabrobot.resources import Coordinate, Plate, Resource, ResourceHolder, Rotation, Well
+from pylabrobot.serializer import SerializableMixin
 
 logger = logging.getLogger(__name__)
+
+
+class _AbsorbanceAdapter(_NewAbsorbanceBackend):
+  """Adapts PlateReaderBackend.read_absorbance to AbsorbanceBackend."""
+
+  def __init__(self, legacy: PlateReaderBackend):
+    self._legacy = legacy
+
+  async def read_absorbance(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> List[AbsorbanceResult]:
+    kwargs = backend_params.kwargs if isinstance(backend_params, _DictBackendParams) else {}
+    dicts = await self._legacy.read_absorbance(
+      plate=plate, wells=wells, wavelength=wavelength, **kwargs
+    )
+    return [
+      AbsorbanceResult(
+        data=d["data"],
+        wavelength=d["wavelength"],
+        temperature=d.get("temperature"),
+        timestamp=d.get("time", 0),
+      )
+      for d in dicts
+    ]
+
+
+class _LuminescenceAdapter(_NewLuminescenceBackend):
+  """Adapts PlateReaderBackend.read_luminescence to LuminescenceBackend."""
+
+  def __init__(self, legacy: PlateReaderBackend):
+    self._legacy = legacy
+
+  async def read_luminescence(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> List[LuminescenceResult]:
+    kwargs = backend_params.kwargs if isinstance(backend_params, _DictBackendParams) else {}
+    dicts = await self._legacy.read_luminescence(
+      plate=plate, wells=wells, focal_height=focal_height, **kwargs
+    )
+    return [
+      LuminescenceResult(
+        data=d["data"],
+        temperature=d.get("temperature"),
+        timestamp=d.get("time", 0),
+      )
+      for d in dicts
+    ]
+
+
+class _FluorescenceAdapter(_NewFluorescenceBackend):
+  """Adapts PlateReaderBackend.read_fluorescence to FluorescenceBackend."""
+
+  def __init__(self, legacy: PlateReaderBackend):
+    self._legacy = legacy
+
+  async def read_fluorescence(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float,
+    backend_params: Optional[SerializableMixin] = None,
+  ) -> List[FluorescenceResult]:
+    kwargs = backend_params.kwargs if isinstance(backend_params, _DictBackendParams) else {}
+    dicts = await self._legacy.read_fluorescence(
+      plate=plate,
+      wells=wells,
+      excitation_wavelength=excitation_wavelength,
+      emission_wavelength=emission_wavelength,
+      focal_height=focal_height,
+      **kwargs,
+    )
+    return [
+      FluorescenceResult(
+        data=d["data"],
+        excitation_wavelength=d["ex_wavelength"],
+        emission_wavelength=d["em_wavelength"],
+        temperature=d.get("temperature"),
+        timestamp=d.get("time", 0),
+      )
+      for d in dicts
+    ]
 
 
 class PlateReader(ResourceHolder, Machine):
@@ -52,6 +160,22 @@ class PlateReader(ResourceHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type
+
+    self._absorbance_cap = AbsorbanceCapability(backend=_AbsorbanceAdapter(backend))
+    self._luminescence_cap = LuminescenceCapability(backend=_LuminescenceAdapter(backend))
+    self._fluorescence_cap = FluorescenceCapability(backend=_FluorescenceAdapter(backend))
+
+  async def setup(self, **backend_kwargs):
+    await super().setup(**backend_kwargs)
+    await self._absorbance_cap._on_setup()
+    await self._luminescence_cap._on_setup()
+    await self._fluorescence_cap._on_setup()
+
+  async def stop(self):
+    await self._fluorescence_cap._on_stop()
+    await self._luminescence_cap._on_stop()
+    await self._absorbance_cap._on_stop()
+    await super().stop()
 
   def assign_child_resource(
     self,
@@ -100,12 +224,21 @@ class PlateReader(ResourceHolder, Machine):
         "data": List[List[float]]
     """
 
-    result = await self.backend.read_luminescence(
-      plate=self.get_plate(),
-      wells=wells or self.get_plate().get_all_items(),
+    plate = self.get_plate()
+    results = await self._luminescence_cap.read(
+      plate=plate,
+      wells=wells or plate.get_all_items(),
       focal_height=focal_height,
-      **backend_kwargs,
+      backend_params=_DictBackendParams(kwargs=backend_kwargs) if backend_kwargs else None,
     )
+    result = [
+      {
+        "time": r.timestamp,
+        "temperature": r.temperature,
+        "data": r.data,
+      }
+      for r in results
+    ]
 
     if not use_new_return_type:
       logger.warning(
@@ -137,12 +270,22 @@ class PlateReader(ResourceHolder, Machine):
         "data": List[List[float]]
     """
 
-    result = await self.backend.read_absorbance(
-      plate=self.get_plate(),
-      wells=wells or self.get_plate().get_all_items(),
+    plate = self.get_plate()
+    results = await self._absorbance_cap.read(
+      plate=plate,
+      wells=wells or plate.get_all_items(),
       wavelength=wavelength,
-      **backend_kwargs,
+      backend_params=_DictBackendParams(kwargs=backend_kwargs) if backend_kwargs else None,
     )
+    result = [
+      {
+        "wavelength": r.wavelength,
+        "time": r.timestamp,
+        "temperature": r.temperature,
+        "data": r.data,
+      }
+      for r in results
+    ]
 
     if not use_new_return_type:
       logger.warning(
@@ -184,14 +327,26 @@ class PlateReader(ResourceHolder, Machine):
         "Excitation wavelength is greater than emission wavelength. This is unusual and may indicate an error."
       )
 
-    result = await self.backend.read_fluorescence(
-      plate=self.get_plate(),
-      wells=wells or self.get_plate().get_all_items(),
+    plate = self.get_plate()
+    results = await self._fluorescence_cap.read(
+      plate=plate,
+      wells=wells or plate.get_all_items(),
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,
-      **backend_kwargs,
+      backend_params=_DictBackendParams(kwargs=backend_kwargs) if backend_kwargs else None,
     )
+    result = [
+      {
+        "ex_wavelength": r.excitation_wavelength,
+        "em_wavelength": r.emission_wavelength,
+        "time": r.timestamp,
+        "temperature": r.temperature,
+        "data": r.data,
+      }
+      for r in results
+    ]
+
     if not use_new_return_type:
       logger.warning(
         "The return type of read_fluorescence will change in a future version. Please set "
