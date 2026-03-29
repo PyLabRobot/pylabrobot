@@ -58,6 +58,8 @@ class STARChatterboxDriver(STARDriver):
 
     self.pip = STARPIPBackend(self)
 
+    self._channels_minimum_y_spacing = [9.0] * self._num_channels
+
     if self.extended_conf.left_x_drive.core_96_head_installed:
       from .head96_backend import STARHead96Backend
 
@@ -66,9 +68,9 @@ class STARChatterboxDriver(STARDriver):
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      from .iswap import iSWAP
+      from .iswap import iSWAPBackend
 
-      self.iswap = iSWAP(driver=self)
+      self.iswap = iSWAPBackend(driver=self)
       self.iswap._version = "chatterbox"
       self.iswap._parked = True
     else:
@@ -107,6 +109,7 @@ class STARChatterboxDriver(STARDriver):
   async def stop(self):
     self.machine_conf = None
     self.extended_conf = None
+    self._channels_minimum_y_spacing = []
     self.head96 = None
     self.iswap = None
     self.autoload = None

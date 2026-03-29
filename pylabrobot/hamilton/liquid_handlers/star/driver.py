@@ -1,10 +1,12 @@
 """STARDriver: inherits HamiltonLiquidHandler, adds STAR-specific config and error handling."""
 
+import asyncio
 import datetime
 import enum
+import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pylabrobot.capabilities.liquid_handling.head96_backend import Head96Backend
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
@@ -15,6 +17,13 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import (
   star_firmware_string_to_error,
 )
 from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
+
+if TYPE_CHECKING:
+  from .autoload import STARAutoload
+  from .cover import STARCover
+  from .iswap import iSWAPBackend
+  from .wash_station import STARWashStation
+  from .x_arm import STARXArm
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +140,7 @@ class STARDriver(HamiltonLiquidHandler):
     # Populated during setup().
     self.machine_conf: Optional[MachineConfiguration] = None
     self.extended_conf: Optional[ExtendedConfiguration] = None
+    self._channels_minimum_y_spacing: List[float] = []
     self.pip: PIPBackend  # set in setup()
     self.head96: Optional[Head96Backend] = None  # set in setup() if installed
     self.iswap: Optional["iSWAPBackend"] = None  # set in setup() if installed
@@ -223,6 +233,8 @@ class STARDriver(HamiltonLiquidHandler):
 
     self.pip = STARPIPBackend(self)
 
+    self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
+
     if self.extended_conf.left_x_drive.core_96_head_installed:
       from .head96_backend import STARHead96Backend
 
@@ -231,9 +243,9 @@ class STARDriver(HamiltonLiquidHandler):
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      from .iswap import iSWAP
+      from .iswap import iSWAPBackend
 
-      self.iswap = iSWAP(driver=self)
+      self.iswap = iSWAPBackend(driver=self)
     else:
       self.iswap = None
 
@@ -272,6 +284,7 @@ class STARDriver(HamiltonLiquidHandler):
     await super().stop()
     self.machine_conf = None
     self.extended_conf = None
+    self._channels_minimum_y_spacing = []
     self.head96 = None
     self.iswap = None
     self.autoload = None
@@ -989,3 +1002,80 @@ class STARDriver(HamiltonLiquidHandler):
   async def pre_initialize_instrument(self):
     """Pre-initialize instrument"""
     return await self.send_command(module="C0", command="VI", read_timeout=300)
+
+  # -- PIP channel helpers ---------------------------------------------------
+
+  y_drive_mm_per_increment = 0.046302082
+
+  @staticmethod
+  def channel_id(channel_idx: int) -> str:
+    """Return the firmware module identifier for a PIP channel.
+
+    Args:
+      channel_idx: 0-indexed channel index (0 = backmost).
+
+    Returns:
+      Module string like ``"P1"`` ... ``"PG"``.
+    """
+    channel_ids = "123456789ABCDEFG"
+    return "P" + channel_ids[channel_idx]
+
+  @staticmethod
+  def y_drive_increment_to_mm(value_increments: int) -> float:
+    """Convert Y-axis hardware increments to mm."""
+    return round(value_increments * STARDriver.y_drive_mm_per_increment, 2)
+
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
+    """Query the minimum Y spacing for a single channel.
+
+    Args:
+      channel_idx: 0-indexed channel index.
+
+    Returns:
+      The minimum Y spacing in mm.
+    """
+    if not 0 <= channel_idx <= self.num_channels - 1:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="VY",
+      fmt="yc### (n)",
+    )
+    return self.y_drive_increment_to_mm(resp["yc"][1])
+
+  async def channels_request_y_minimum_spacing(self) -> List[float]:
+    """Query the minimum Y spacing for all channels in parallel.
+
+    Returns:
+      A list of minimum Y spacings in mm, one per channel.
+    """
+    return list(
+      await asyncio.gather(
+        *(
+          self.channel_request_y_minimum_spacing(channel_idx=idx)
+          for idx in range(self.num_channels)
+        )
+      )
+    )
+
+  def _min_spacing_between(self, i: int, j: int) -> float:
+    """Return the conservative minimum Y spacing required between channels *i* and *j*.
+
+    For adjacent channels, the constraint is the larger of the two channels' individual minimum
+    spacings, ceiling'd to 1 decimal place for safe movement.
+
+    For non-adjacent channels, the spacing is the sum of all intermediate adjacent-pair spacings.
+    """
+    if not self._channels_minimum_y_spacing:
+      if self.extended_conf is not None:
+        return abs(j - i) * self.extended_conf.min_raster_pitch_pip_channels
+      return abs(j - i) * 9.0
+
+    lo, hi = min(i, j), max(i, j)
+    if hi - lo == 1:
+      spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
+      return math.ceil(spacing * 10) / 10
+    return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))

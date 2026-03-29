@@ -8,7 +8,9 @@ Split the monolithic `STARBackend` (~12k lines) into the new Driver + Capability
 - PIP and Head96 (capability backends)
 - iSWAP and CoRe gripper (arm backends)
 - AutoLoad, Cover, X-Arms, Wash Station (plain helper classes on the driver)
+- Multi-channel PIP operations: channel positioning, initialization, foil piercing (on STARPIPBackend)
 - ~44 generic driver infrastructure methods (firmware queries, EEPROM, area reservation, configuration)
+- Channel minimum Y spacing query and enforcement
 
 ## Layers
 
@@ -70,9 +72,9 @@ class STARDriver(HamiltonLiquidHandler):
     # Plain subsystems
     autoload: Optional[STARAutoload] = None      # if autoload installed
     left_x_arm: Optional[STARXArm] = None        # always present
-    right_x_arm: Optional[STARXArm] = None       # always present
+    right_x_arm: Optional[STARXArm] = None       # if right X-drive installed
     cover: Optional[STARCover] = None             # always present
-    wash_station: Optional[STARWashStation] = None # always present
+    wash_station: Optional[STARWashStation] = None # if wash station installed
 ```
 
 ### Responsibilities
@@ -80,7 +82,8 @@ class STARDriver(HamiltonLiquidHandler):
 - **USB I/O**: Connect/disconnect via `pylabrobot.io.usb.USB`. Background reading thread for async command/response matching.
 - **Firmware protocol**: `send_command(module, command, **params)` assembles the STAR text protocol, sends it, waits for matching response, parses it.
 - **Machine configuration**: On `setup()`, queries `RM` (machine config) and `QM` (extended config) to discover installed hardware. Stores as `self.machine_conf` and `self.extended_conf`.
-- **Backend/subsystem creation**: During `setup()`, creates backends based on discovered config. Conditional for autoload (needs `auto_load_installed`), Head96 (needs `core_96_head_installed`), iSWAP (needs `iswap_installed`). Unconditional for PIP, X-arms, cover, wash station.
+- **Backend/subsystem creation**: During `setup()`, creates backends based on discovered config. Conditional for autoload (`auto_load_installed`), Head96 (`core_96_head_installed`), iSWAP (`iswap_installed`), right X-arm (`right_x_drive_large`), wash station (`wash_station_*_installed`). Unconditional for PIP, left X-arm, cover.
+- **Channel spacing**: Queries per-channel minimum Y spacing from firmware during `setup()` and stores in `_channels_minimum_y_spacing`. Used by `_min_spacing_between()` for collision-safe channel positioning.
 - **Generic instrument operations**: Firmware queries, EEPROM read/write, runtime control (halt, single-step), area reservation, instrument configuration. ~44 methods directly on the driver.
 - **Tip type registration**: `_tth2tti` mapping shared across PIP and Head96.
 - **Error parsing**: Firmware error codes → Python exceptions.
@@ -167,7 +170,13 @@ Methods: `request_settings(station)`, `initialize_valves(station)`, `fill_chambe
 
 Implements `PIPBackend`. Translates PIP operations into STAR firmware commands.
 
-Key methods: `pick_up_tips`, `drop_tips`, `aspirate`, `dispense`.
+Key methods:
+- **Liquid handling**: `pick_up_tips`, `drop_tips`, `aspirate`, `dispense`
+- **Channel positioning**: `position_channels_in_y_direction`, `position_channels_in_z_direction`, `get_channels_y_positions`, `get_channels_z_positions`, `move_all_pipetting_channels_to_defined_position`, `position_max_free_y_for_n`, `move_all_channels_in_z_safety`, `spread_pip_channels`, `move_channel_z`
+- **Initialization**: `initialize_pip`, `initialize_pipetting_channels`
+- **Foil operations**: `pierce_foil(deck=...)`, `step_off_foil(deck=...)`
+
+Methods that move channels in Y check `self._driver.iswap` and park it if needed. Parameters use mm (PLR standard); conversion to 0.1mm firmware units is done internally.
 
 ### STARHead96Backend
 
@@ -212,7 +221,9 @@ await star.setup()
   │    2. Query RM → MachineConfiguration
   │    3. Query QM → ExtendedConfiguration
   │    4. Create backends: pip (always), head96 (if installed), iswap (if installed)
-  │    5. Create subsystems: autoload (if installed), x_arms, cover, wash_station (if installed)
+  │    5. Create subsystems: autoload (if installed), left x_arm, right x_arm (if installed),
+  │       cover, wash_station (if installed)
+  │    6. Query per-channel minimum Y spacing
   │
   ├─ Wire capability frontends to backends (on STAR device)
   │    self.pip = PIP(backend=driver.pip)
@@ -237,7 +248,7 @@ On the driver:
 star._driver.autoload       # None if no autoload module
 star._driver.wash_station   # None if no wash station
 star._driver.left_x_arm     # always present
-star._driver.right_x_arm    # always present
+star._driver.right_x_arm   # None if no right X-drive
 star._driver.cover          # always present
 ```
 
@@ -279,6 +290,10 @@ self._new_cover = STARCover(driver=self)
 self._new_left_x_arm = STARXArm(driver=self, side="left")
 self._new_right_x_arm = STARXArm(driver=self, side="right")
 self._new_wash_station = STARWashStation(driver=self)
+
+# Public aliases so STARPIPBackend (which sees self as its driver) can access these.
+self.left_x_arm = self._new_left_x_arm
+self.iswap = None  # legacy handles iSWAP parking via @need_iswap_parked decorator
 ```
 
 Migrated methods delegate to these instances (with Carrier→int conversion where needed). All delegating methods have one-line deprecation docstrings:
@@ -287,14 +302,20 @@ Migrated methods delegate to these instances (with Carrier→int conversion wher
 async def park_autoload(self):
     """Deprecated: use ``star.autoload.park()``."""
     return await self._new_autoload.park()
+
+async def pierce_foil(self, wells, ...):
+    """Deprecated: use ``star.pip.backend.pierce_foil()``."""
+    await self._new_pip.pierce_foil(wells=wells, ..., deck=self.deck)
 ```
 
 Generic driver methods (firmware queries, EEPROM, etc.) exist on both `STARDriver` and the legacy `STARBackend` — the legacy versions have deprecation docstrings but keep their original implementation bodies unchanged.
 
+The `left_x_arm` and `iswap` public aliases are needed because `STARPIPBackend` accesses `self._driver.left_x_arm` (for x-arm movement in `pierce_foil`) and `self._driver.iswap` (for iSWAP-parked checks). Since the legacy backend passes `self` as the driver to `STARPIPBackend`, these attributes must exist. `iswap = None` means the iSWAP park check safely no-ops on the legacy path (legacy handles it via its own `@need_iswap_parked` decorator).
+
 ## What stays in legacy
 
 - Probing/LLD: `probe_liquid_heights`, CLLD/PLLD methods
-- Foil piercing: `pierce_foil`, `step_off_foil`
 - Hotel mode: `put_in_hotel`, `get_from_hotel`
 - Heater-shaker: HHC temperature control methods
+- Single-channel positioning: `move_channel_y`, `position_single_pipetting_channel_in_y/z_direction`
 - Some lower-level PIP/Head96/iSWAP firmware commands not yet migrated to backends

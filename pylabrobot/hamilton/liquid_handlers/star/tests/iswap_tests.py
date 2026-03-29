@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAP
+from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
 from pylabrobot.resources import Coordinate
 
 
@@ -12,7 +12,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.mock_driver = MagicMock()
     self.mock_driver.send_command = AsyncMock()
-    self.iswap = iSWAP(driver=self.mock_driver)
+    self.iswap = iSWAPBackend(driver=self.mock_driver)
 
   async def test_pick_up_at_location(self):
     """C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"""
@@ -131,7 +131,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(self.iswap.parked)
 
   async def test_park_custom_height(self):
-    await self.iswap.park(backend_params=iSWAP.ParkParams(minimum_traverse_height=200.0))
+    await self.iswap.park(backend_params=iSWAPBackend.ParkParams(minimum_traverse_height=200.0))
 
     self.mock_driver.send_command.assert_called_once_with(
       module="C0",
@@ -151,7 +151,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
   async def test_close_gripper(self):
     await self.iswap.close_gripper(
       gripper_width=86.0,
-      backend_params=iSWAP.CloseGripperParams(grip_strength=5, plate_width_tolerance=0),
+      backend_params=iSWAPBackend.CloseGripperParams(grip_strength=5, plate_width_tolerance=0),
     )
 
     self.mock_driver.send_command.assert_called_once_with(

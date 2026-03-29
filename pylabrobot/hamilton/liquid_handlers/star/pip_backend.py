@@ -5,16 +5,20 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
+from pylabrobot.capabilities.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
 )
-from pylabrobot.resources import Tip, TipSpot, Well
+from pylabrobot.resources import Resource, Tip, TipSpot, Well
 from pylabrobot.resources.hamilton import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import (
   STARFirmwareError,
@@ -191,9 +195,8 @@ class STARPIPBackend(PIPBackend):
 
   async def _ensure_iswap_parked(self) -> None:
     """Park the iSWAP if it is installed and not already parked."""
-    iswap = getattr(self._driver, 'iswap', None)
-    if iswap is not None and hasattr(iswap, 'parked') and not iswap.parked:
-      await iswap.park()
+    if self._driver.iswap is not None and not self._driver.iswap.parked:
+      await self._driver.iswap.park()
 
   def _ensure_can_reach_position(
     self,
@@ -205,8 +208,8 @@ class STARPIPBackend(PIPBackend):
     if self._driver.extended_conf is None:
       return  # skip validation if config not available (e.g. chatterbox)
     ext = self._driver.extended_conf
-    spacings = getattr(self._driver, '_channels_minimum_y_spacing', None)
-    if spacings is None:
+    spacings = self._driver._channels_minimum_y_spacing
+    if not spacings:
       spacings = [ext.min_raster_pitch_pip_channels] * self.num_channels
 
     cant_reach = []
@@ -1032,3 +1035,499 @@ class STARPIPBackend(PIPBackend):
     if tip.tip_size in {TipSize.XL}:
       return False
     return True
+
+  # -- multi-channel PIP operations ------------------------------------------
+
+  async def spread_pip_channels(self):
+    """Spread PIP channels (C0:JE)."""
+    return await self._driver.send_command(module="C0", command="JE")
+
+  async def move_all_channels_in_z_safety(self):
+    """Move all pipetting channels to Z-safety position (C0:ZA)."""
+    return await self._driver.send_command(module="C0", command="ZA")
+
+  async def position_max_free_y_for_n(self, pipetting_channel_index: int):
+    """Position all pipetting channels so that there is maximum free Y range for channel n (C0:JP).
+
+    Args:
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and num_channels - 1.
+    """
+    if self._driver.iswap is not None and not self._driver.iswap.parked:
+      await self._driver.iswap.park()
+
+    assert 0 <= pipetting_channel_index < self.num_channels, (
+      "pipetting_channel_index must be between 0 and num_channels - 1"
+    )
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index_fw = pipetting_channel_index + 1
+
+    return await self._driver.send_command(
+      module="C0",
+      command="JP",
+      pn=f"{pipetting_channel_index_fw:02}",
+    )
+
+  async def move_all_pipetting_channels_to_defined_position(
+    self,
+    tip_pattern: bool = True,
+    x_positions: float = 0.0,
+    y_positions: float = 0.0,
+    minimum_traverse_height_at_beginning_of_command: float = 360.0,
+    z_endpos: float = 0.0,
+  ):
+    """Move all pipetting channels to defined position (C0:JM).
+
+    Args:
+      tip_pattern: Tip pattern (channels involved). Default True.
+      x_positions: x positions [mm]. Must be between 0 and 2500. Default 0.
+      y_positions: y positions [mm]. Must be between 0 and 650. Default 0.
+      minimum_traverse_height_at_beginning_of_command: Minimum traverse height at beginning of a
+        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 360. Default 360.
+      z_endpos: Z-Position at end of a command [mm] (refers to all channels independent of tip
+        pattern parameter 'tm'). Must be between 0 and 360. Default 0.
+    """
+
+    if self._driver.iswap is not None and not self._driver.iswap.parked:
+      await self._driver.iswap.park()
+
+    assert 0 <= x_positions <= 2500, "x_positions must be between 0 and 2500"
+    assert 0 <= y_positions <= 650, "y_positions must be between 0 and 650"
+    assert 0 <= minimum_traverse_height_at_beginning_of_command <= 360, (
+      "minimum_traverse_height_at_beginning_of_command must be between 0 and 360"
+    )
+    assert 0 <= z_endpos <= 360, "z_endpos must be between 0 and 360"
+
+    return await self._driver.send_command(
+      module="C0",
+      command="JM",
+      tm=tip_pattern,
+      xp=round(x_positions * 10),
+      yp=round(y_positions * 10),
+      th=round(minimum_traverse_height_at_beginning_of_command * 10),
+      zp=round(z_endpos * 10),
+    )
+
+  async def get_channels_y_positions(self) -> Dict[int, float]:
+    """Get the Y position of all channels in mm (C0:RY)."""
+    resp = await self._driver.send_command(
+      module="C0",
+      command="RY",
+      fmt="ry#### (n)",
+    )
+    y_positions = [round(y / 10, 2) for y in resp["ry"]]
+
+    # sometimes there is (likely) a floating point error and channels are reported to be
+    # less than their minimum spacing apart (typically 9 mm). (When you set channels using
+    # position_channels_in_y_direction, it will raise an error.) The minimum y is 6mm,
+    # so we fix that first (in case that value is misreported). Then, we traverse the
+    # list in reverse and enforce pairwise minimum spacing.
+    if self._driver.extended_conf is not None:
+      min_y = self._driver.extended_conf.left_arm_min_y_position
+    else:
+      min_y = 6.0
+
+    if y_positions[-1] < min_y - 0.2:
+      raise RuntimeError(
+        "Channels are reported to be too close to the front of the machine. "
+        f"The known minimum is {min_y}, which will be fixed automatically for "
+        f"{min_y - 0.2}<y<{min_y}. "
+        f"Reported values: {y_positions}."
+      )
+    elif min_y - 0.2 <= y_positions[-1] < min_y:
+      y_positions[-1] = min_y
+
+    for i in range(len(y_positions) - 2, -1, -1):
+      spacing = self._driver._min_spacing_between(i, i + 1)
+      if y_positions[i] - y_positions[i + 1] < spacing:
+        y_positions[i] = y_positions[i + 1] + spacing
+
+    return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
+
+  async def position_channels_in_y_direction(
+    self, ys: Dict[int, float], make_space: bool = True
+  ):
+    """Position all channels simultaneously in the Y direction (C0:JY).
+
+    Args:
+      ys: A dictionary mapping channel index to the desired Y position in mm. The channel index is
+        0-indexed from the back.
+      make_space: If True, the channels will be moved to ensure they respect each channel pair's
+        minimum Y spacing and are in descending order, after the channels in ``ys`` have been put
+        at the desired locations. Note that an error may still be raised, if there is insufficient
+        space to move the channels or if the requested locations are not valid. Set this to False
+        if you want to avoid inadvertently moving other channels.
+    """
+
+    if self._driver.iswap is not None and not self._driver.iswap.parked:
+      await self._driver.iswap.park()
+
+    # check that the locations of channels after the move will respect pairwise minimum
+    # spacing and be in descending order
+    channel_locations = await self.get_channels_y_positions()
+
+    for channel_idx, y in ys.items():
+      channel_locations[channel_idx] = y
+
+    if make_space:
+      use_channels = list(ys.keys())
+      back_channel = min(use_channels)
+      front_channel = max(use_channels)
+
+      # Position channels in between used channels
+      for intermediate_ch in range(back_channel + 1, front_channel):
+        if intermediate_ch not in ys:
+          channel_locations[intermediate_ch] = channel_locations[
+            intermediate_ch - 1
+          ] - self._driver._min_spacing_between(intermediate_ch - 1, intermediate_ch)
+
+      # For the channels to the back of `back_channel`, make sure the space between them is
+      # >=min_spacing. We start with the channel closest to `back_channel`, and make sure the
+      # channel behind it is at least min_spacing away, updating if needed.
+      for channel_idx in range(back_channel, 0, -1):
+        spacing = self._driver._min_spacing_between(channel_idx - 1, channel_idx)
+        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < spacing:
+          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + spacing
+
+      # Similarly for the channels to the front of `front_channel`, make sure they are all
+      # spaced >= min_spacing apart.
+      for channel_idx in range(front_channel, self._driver.num_channels - 1):
+        spacing = self._driver._min_spacing_between(channel_idx, channel_idx + 1)
+        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < spacing:
+          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - spacing
+
+    # Quick checks before movement.
+    if channel_locations[0] > 650:
+      raise ValueError("Channel 0 would hit the back of the robot")
+
+    if channel_locations[self._driver.num_channels - 1] < 6:
+      raise ValueError("Channel N would hit the front of the robot")
+
+    for i in range(len(channel_locations) - 1):
+      required = self._driver._min_spacing_between(i, i + 1)
+      actual = channel_locations[i] - channel_locations[i + 1]
+      if round(actual * 1000) < round(required * 1000):  # compare in um to avoid float issues
+        raise ValueError(
+          f"Channels {i} and {i + 1} must be at least {required}mm apart, "
+          f"but are {actual:.2f}mm apart."
+        )
+
+    yp = " ".join([f"{round(y * 10):04}" for y in channel_locations.values()])
+    return await self._driver.send_command(
+      module="C0",
+      command="JY",
+      yp=yp,
+    )
+
+  async def get_channels_z_positions(self) -> Dict[int, float]:
+    """Get the Z position of all channels in mm (C0:RZ)."""
+    resp = await self._driver.send_command(
+      module="C0",
+      command="RZ",
+      fmt="rz#### (n)",
+    )
+    return {channel_idx: round(z / 10, 2) for channel_idx, z in enumerate(resp["rz"])}
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    """Position channels in the Z direction (C0:JZ).
+
+    Args:
+      zs: A dictionary mapping channel index to the desired Z position in mm.
+    """
+    channel_locations = await self.get_channels_z_positions()
+
+    for channel_idx, z in zs.items():
+      channel_locations[channel_idx] = z
+
+    return await self._driver.send_command(
+      module="C0",
+      command="JZ",
+      zp=[f"{round(z * 10):04}" for z in channel_locations.values()],
+    )
+
+  async def initialize_pip(self):
+    """Wrapper around initialize_pipetting_channels firmware command.
+
+    Computes Y positions and calls initialize_pipetting_channels with default parameters.
+    """
+    dy_01mm = (4050 - 2175) // (self.num_channels - 1)  # integer division in 0.1mm, matching legacy
+    y_positions = [round((4050 - i * dy_01mm) / 10, 1) for i in range(self.num_channels)]
+
+    tip_waste_x = 0.0
+    if self._driver.extended_conf is not None:
+      tip_waste_x = self._driver.extended_conf.tip_waste_x_position
+
+    await self.initialize_pipetting_channels(
+      x_positions=[tip_waste_x],
+      y_positions=y_positions,
+      begin_of_tip_deposit_process=_DEFAULT_TRAVERSAL_HEIGHT,
+      end_of_tip_deposit_process=122.0,
+      z_position_at_end_of_a_command=360.0,
+      tip_pattern=[True] * self.num_channels,
+      tip_type=4,
+      discarding_method=0,
+    )
+
+  async def initialize_pipetting_channels(
+    self,
+    x_positions: Optional[List[float]] = None,
+    y_positions: Optional[List[float]] = None,
+    begin_of_tip_deposit_process: float = 0.0,
+    end_of_tip_deposit_process: float = 0.0,
+    z_position_at_end_of_a_command: float = 360.0,
+    tip_pattern: Optional[List[bool]] = None,
+    tip_type: int = 16,
+    discarding_method: int = 1,
+  ):
+    """Initialize pipetting channels (discard tips) (C0:DI).
+
+    Args:
+      x_positions: X-Position [mm] (discard position). Must be between 0 and 2500. Default [0].
+      y_positions: y-Position [mm] (discard position). Must be between 0 and 650. Default [0].
+      begin_of_tip_deposit_process: Begin of tip deposit process (Z-discard range) [mm]. Must be
+        between 0 and 360. Default 0.
+      end_of_tip_deposit_process: End of tip deposit process (Z-discard range) [mm]. Must be
+        between 0 and 360. Default 0.
+      z_position_at_end_of_a_command: Z-Position at end of a command [mm]. Must be between 0 and
+        360. Default 360.
+      tip_pattern: Tip pattern (channels involved). Default [True].
+      tip_type: Tip type (recommended is index of longest tip see command 'TT'). Must be
+        between 0 and 99. Default 16.
+      discarding_method: discarding method. 0 = place & shift (tp/ tz = tip cone end height), 1 =
+        drop (no shift) (tp/ tz = stop disk height). Must be between 0 and 1. Default 1.
+    """
+
+    if x_positions is None:
+      x_positions = [0.0]
+    if y_positions is None:
+      y_positions = [0.0]
+    if tip_pattern is None:
+      tip_pattern = [True]
+
+    # Convert mm to 0.1mm for firmware
+    x_positions_fw = [round(x * 10) for x in x_positions]
+    y_positions_fw = [round(y * 10) for y in y_positions]
+    begin_fw = round(begin_of_tip_deposit_process * 10)
+    end_fw = round(end_of_tip_deposit_process * 10)
+    z_end_fw = round(z_position_at_end_of_a_command * 10)
+
+    assert all(0 <= xp <= 25000 for xp in x_positions_fw), (
+      "x_positions must be between 0 and 2500 mm"
+    )
+    assert all(0 <= yp <= 6500 for yp in y_positions_fw), (
+      "y_positions must be between 0 and 650 mm"
+    )
+    assert 0 <= begin_fw <= 3600, "begin_of_tip_deposit_process must be between 0 and 360 mm"
+    assert 0 <= end_fw <= 3600, "end_of_tip_deposit_process must be between 0 and 360 mm"
+    assert 0 <= z_end_fw <= 3600, "z_position_at_end_of_a_command must be between 0 and 360 mm"
+    assert 0 <= tip_type <= 99, "tip_type must be between 0 and 99"
+    assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
+
+    return await self._driver.send_command(
+      module="C0",
+      command="DI",
+      read_timeout=120,
+      xp=[f"{xp:05}" for xp in x_positions_fw],
+      yp=[f"{yp:04}" for yp in y_positions_fw],
+      tp=f"{begin_fw:04}",
+      tz=f"{end_fw:04}",
+      te=f"{z_end_fw:04}",
+      tm=[f"{tm:01}" for tm in tip_pattern],
+      tt=f"{tip_type:02}",
+      ti=discarding_method,
+    )
+
+  # -- single-channel movement ------------------------------------------------
+
+
+  async def move_channel_z(self, channel: int, z: float):
+    """Move a single channel in the Z direction (mm).
+
+    Args:
+      channel: 0-indexed channel index.
+      z: Target Z position in mm.
+    """
+    assert 0 <= channel < self._driver.num_channels, \
+      f"channel must be between 0 and {self._driver.num_channels - 1}"
+    assert 0 <= z <= 334.7, "z must be between 0 and 334.7 mm"
+
+    return await self._driver.send_command(
+      module="C0",
+      command="KZ",
+      pn=f"{channel + 1:02}",
+      zj=f"{round(z * 10):04}",
+    )
+
+  # -- foil piercing ----------------------------------------------------------
+
+  def _get_maximum_minimum_spacing_between_channels(self, use_channels: List[int]) -> float:
+    """Get the maximum of the set of minimum spacing requirements between the channels being used."""
+    sorted_channels = sorted(use_channels)
+    return max(
+      self._driver._min_spacing_between(hi, lo)
+      for hi, lo in zip(sorted_channels[1:], sorted_channels[:-1])
+    )
+
+  async def pierce_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    piercing_channels: List[int],
+    hold_down_channels: List[int],
+    move_inwards: float,
+    deck: Resource,
+    spread: Literal["wide", "tight"] = "wide",
+    one_by_one: bool = False,
+    distance_from_bottom: float = 20.0,
+  ):
+    """Pierce the foil of the media source plate at the specified column. Throw away the tips
+    after piercing because there will be a bit of foil stuck to the tips. Use this method
+    before aspirating from a foil-sealed plate to make sure the tips are clean and the
+    aspirations are accurate.
+
+    Args:
+      wells: Well or wells in the plate to pierce the foil. If multiple wells, they must be on one
+        column.
+      piercing_channels: The channels to use for piercing the foil.
+      hold_down_channels: The channels to use for holding down the plate when moving up the
+        piercing channels.
+      move_inwards: mm to move inwards when stepping off the foil.
+      deck: The deck resource, used to compute absolute positions of wells.
+      spread: The spread of the piercing channels in the well.
+      one_by_one: If True, the channels will pierce the foil one by one. If False, all channels
+        will pierce the foil simultaneously.
+      distance_from_bottom: mm above the cavity bottom to position the piercing channels.
+    """
+
+    x: float
+    ys: List[float]
+    z: float
+
+    # if only one well is given, but in a list, convert to Well so we fall into single-well logic.
+    if isinstance(wells, list) and len(wells) == 1:
+      wells = wells[0]
+
+    if isinstance(wells, Well):
+      well = wells
+      x, y, z = well.get_location_wrt(deck, "c", "c", "cavity_bottom")
+
+      if spread == "wide":
+        offsets = get_wide_single_resource_liquid_op_offsets(
+          resource=well,
+          num_channels=len(piercing_channels),
+          min_spacing=self._get_maximum_minimum_spacing_between_channels(piercing_channels),
+        )
+      else:
+        offsets = get_tight_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      ys = [y + offset.y for offset in offsets]
+    else:
+      assert len(set(w.get_location_wrt(deck).x for w in wells)) == 1, (
+        "Wells must be on the same column"
+      )
+      absolute_center = wells[0].get_location_wrt(deck, "c", "c", "cavity_bottom")
+      x = absolute_center.x
+      ys = [well.get_location_wrt(deck, x="c", y="c").y for well in wells]
+      z = absolute_center.z
+
+    await self._driver.left_x_arm.move_to(x)
+
+    await self.position_channels_in_y_direction(
+      {channel: y for channel, y in zip(piercing_channels, ys)}
+    )
+
+    zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
+    if one_by_one:
+      for channel in piercing_channels:
+        await self.move_channel_z(channel, z + distance_from_bottom)
+    else:
+      await self.position_channels_in_z_direction(
+        {channel: z for channel, z in zip(piercing_channels, zs)}
+      )
+
+    await self.step_off_foil(
+      [wells] if isinstance(wells, Well) else wells,
+      back_channel=hold_down_channels[0],
+      front_channel=hold_down_channels[1],
+      move_inwards=move_inwards,
+      deck=deck,
+    )
+
+  async def step_off_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    front_channel: int,
+    back_channel: int,
+    deck: Resource,
+    move_inwards: float = 2,
+    move_height: float = 15,
+  ):
+    """Hold down a plate by placing two channels on the edges of a plate that is sealed with foil
+    while moving up the channels that are still within the foil. This is useful when, for
+    example, aspirating from a plate that is sealed: without holding it down, the tips might get
+    stuck in the plate and move it up when retracting. Putting plates on the edge prevents this.
+
+    Args:
+      wells: Wells in the plate to hold down. (x-coordinate of channels will be at center of wells).
+        Must be sorted from back to front.
+      front_channel: The channel to place on the front of the plate.
+      back_channel: The channel to place on the back of the plate.
+      deck: The deck resource, used to compute absolute positions of wells and plates.
+      move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
+      move_height: mm to move upwards after piercing the foil. front_channel and back_channel will
+        hold the plate down.
+    """
+
+    if front_channel <= back_channel:
+      raise ValueError(
+        "front_channel should be in front of back_channel. Channels are 0-indexed from the back."
+      )
+
+    if isinstance(wells, Well):
+      wells = [wells]
+
+    plates = set(well.parent for well in wells)
+    assert len(plates) == 1, "All wells must be in the same plate"
+    plate = plates.pop()
+    assert plate is not None
+
+    z_location = plate.get_location_wrt(deck, z="top").z
+
+    if plate.get_absolute_rotation().z % 360 == 0:
+      back_location = plate.get_location_wrt(deck, y="b")
+      front_location = plate.get_location_wrt(deck, y="f")
+    elif plate.get_absolute_rotation().z % 360 == 90:
+      back_location = plate.get_location_wrt(deck, x="r")
+      front_location = plate.get_location_wrt(deck, x="l")
+    elif plate.get_absolute_rotation().z % 360 == 180:
+      back_location = plate.get_location_wrt(deck, y="f")
+      front_location = plate.get_location_wrt(deck, y="b")
+    elif plate.get_absolute_rotation().z % 360 == 270:
+      back_location = plate.get_location_wrt(deck, x="l")
+      front_location = plate.get_location_wrt(deck, x="r")
+    else:
+      raise ValueError("Plate rotation must be a multiple of 90 degrees")
+
+    try:
+      # Then move all channels in the y-space simultaneously.
+      await self.position_channels_in_y_direction(
+        {
+          front_channel: front_location.y + move_inwards,
+          back_channel: back_location.y - move_inwards,
+        }
+      )
+
+      await self.move_channel_z(front_channel, z_location)
+      await self.move_channel_z(back_channel, z_location)
+    finally:
+      # Move channels that are lower than the `front_channel` and `back_channel` to
+      # the just above the foil, in case the foil pops up.
+      zs = await self.get_channels_z_positions()
+      indices = [channel_idx for channel_idx, z in zs.items() if z < z_location]
+      idx = {
+        idx: z_location + move_height for idx in indices if idx not in (front_channel, back_channel)
+      }
+      await self.position_channels_in_z_direction(idx)
+
+      # After that, all channels are clear to move up.
+      await self.move_all_channels_in_z_safety()
