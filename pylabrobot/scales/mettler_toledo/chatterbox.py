@@ -75,7 +75,11 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     self.device_type = self._simulated_device_type
     self.capacity = self._simulated_capacity
     logger.info(
-      "[scale] Connected (simulation): %s (S/N: %s, capacity: %.1f g, MT-SICS levels: %s)",
+      "[MT Scale] Connected to Mettler Toledo scale (simulation)\n"
+      "Device type: %s\n"
+      "Serial number: %s\n"
+      "Capacity: %.1f g\n"
+      "MT-SICS levels: %s",
       self.device_type,
       self.serial_number,
       self.capacity,
@@ -91,7 +95,13 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     return responses[0][2].replace('"', "")
 
   async def send_command(self, command: str, timeout: int = 60) -> List[MettlerToledoResponse]:
-    logger.log(LOG_LEVEL_IO, "[scale] Sent command: %s", command)
+    logger.log(LOG_LEVEL_IO, "[MT Scale] Sent command: %s", command)
+    responses = self._build_response(command)
+    for resp in responses:
+      logger.log(LOG_LEVEL_IO, "[MT Scale] Received response: %s", " ".join(resp))
+    return responses
+
+  def _build_response(self, command: str) -> List[MettlerToledoResponse]:
     cmd = command.split()[0]
     net = round(self._sensor_reading - self.zero_offset - self.tare_weight, 5)
 

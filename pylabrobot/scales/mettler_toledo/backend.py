@@ -111,7 +111,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.capacity = await self.request_capacity()
 
     logger.info(
-      "[scale] Connected: %s (S/N: %s, capacity: %.1f g, MT-SICS levels: %s)",
+      "[MT Scale] Connected to Mettler Toledo scale on %s\n"
+      "Device type: %s\n"
+      "Serial number: %s\n"
+      "Capacity: %.1f g\n"
+      "MT-SICS levels: %s",
+      self.io.port,
       self.device_type,
       self.serial_number,
       self.capacity,
@@ -257,7 +262,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       timeout: The timeout in seconds (applies across all response lines).
     """
 
-    logger.log(LOG_LEVEL_IO, "[scale] Sent command: %s", command)
+    logger.log(LOG_LEVEL_IO, "[MT Scale] Sent command: %s", command)
     await self.io.write(command.encode() + b"\r\n")
 
     responses: List[MettlerToledoResponse] = []
@@ -271,7 +276,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
           raise TimeoutError("Timeout while waiting for response from scale.")
         await asyncio.sleep(0.001)
 
-      logger.log(LOG_LEVEL_IO, "[scale] Received response: %s", raw_response)
+      logger.log(LOG_LEVEL_IO, "[MT Scale] Received response: %s", raw_response)
       response = raw_response.decode("utf-8").strip().split()
       self._parse_basic_errors(response)
       responses.append(response)  # type: ignore[arg-type]
