@@ -10,7 +10,7 @@ from typing import Optional
 
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
-from pylabrobot.capabilities.pumping.pumping import PumpingCapability
+from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 
@@ -110,5 +110,5 @@ class MasterflexPump(Device):
     driver = MasterflexDriver(com_port=com_port)
     super().__init__(driver=driver)
     self._driver: MasterflexDriver
-    self.pumping = PumpingCapability(backend=MasterflexBackend(driver), calibration=calibration)
+    self.pumping = Pump(backend=MasterflexBackend(driver), calibration=calibration)
     self._capabilities = [self.pumping]

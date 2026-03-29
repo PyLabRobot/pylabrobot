@@ -11,7 +11,7 @@ from typing import Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
-from pylabrobot.capabilities.centrifuging import CentrifugingCapability
+from pylabrobot.capabilities.centrifuging import Centrifuge
 from pylabrobot.capabilities.centrifuging.errors import (
   BucketHasPlateError,
   BucketNoPlateError,
@@ -655,7 +655,7 @@ class VSpin(Resource, Device):
     self.assign_child_resource(bucket1, location=Coordinate.zero())
     self.assign_child_resource(bucket2, location=Coordinate.zero())
 
-    self.centrifuging = CentrifugingCapability(
+    self.centrifuging = Centrifuge(
       backend=VSpinCentrifugeBackend(driver), buckets=(bucket1, bucket2)
     )
     self._capabilities = [self.centrifuging]

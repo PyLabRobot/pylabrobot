@@ -4,7 +4,7 @@ from pylabrobot.resources.barcode import Barcode
 from .backend import BarcodeScannerBackend
 
 
-class BarcodeScanningCapability(Capability):
+class BarcodeScanner(Capability):
   """Barcode scanning capability."""
 
   def __init__(self, backend: BarcodeScannerBackend):

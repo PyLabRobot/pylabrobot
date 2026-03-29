@@ -1,6 +1,6 @@
 from .backend import MicroscopyBackend
 from .microscopy import (
-  MicroscopyCapability,
+  Microscopy,
   evaluate_focus_nvmg_sobel,
   fraction_overexposed,
   max_pixel_at_fraction,

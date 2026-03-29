@@ -31,7 +31,7 @@ from .standard import (
 logger = logging.getLogger("pylabrobot")
 
 
-class Head96Capability(Capability):
+class Head96(Capability):
   """96-head liquid handling: pick up tips, aspirate, dispense, drop tips.
 
   Faithfully ports the 96-head logic from the legacy LiquidHandler, including

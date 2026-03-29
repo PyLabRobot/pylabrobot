@@ -1,2 +1,2 @@
 from .backend import ScaleBackend
-from .weighing import WeighingCapability
+from .weighing import Scale

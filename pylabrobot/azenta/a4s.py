@@ -12,9 +12,9 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.sealing import SealerBackend, SealingCapability
+from pylabrobot.capabilities.sealing import SealerBackend, Sealer
 from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureControlCapability,
+  TemperatureController,
   TemperatureControllerBackend,
 )
 from pylabrobot.device import Device, Driver
@@ -308,8 +308,8 @@ class A4S(PlateHolder, Device):
     )
     Device.__init__(self, driver=driver)
     self._driver: A4SDriver = driver
-    self.sealer = SealingCapability(backend=A4SSealerBackend(driver))
-    self.tc = TemperatureControlCapability(backend=A4STemperatureBackend(driver))
+    self.sealer = Sealer(backend=A4SSealerBackend(driver))
+    self.tc = TemperatureController(backend=A4STemperatureBackend(driver))
     self._capabilities = [self.tc, self.sealer]
 
   def serialize(self) -> dict:

@@ -1,2 +1,2 @@
 from .backend import BarcodeScannerBackend, BarcodeScannerError
-from .barcode_scanning import BarcodeScanningCapability
+from .barcode_scanning import BarcodeScanner

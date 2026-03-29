@@ -227,7 +227,7 @@ await star.setup()
   │
   ├─ Wire capability frontends to backends (on STAR device)
   │    self.pip = PIP(backend=driver.pip)
-  │    self.head96 = Head96Capability(backend=driver.head96)   # if installed
+  │    self.head96 = Head96(backend=driver.head96)   # if installed
   │    self.iswap = OrientableArm(backend=driver.iswap)        # if installed
   │
   └─ Call _on_setup() for each Capability

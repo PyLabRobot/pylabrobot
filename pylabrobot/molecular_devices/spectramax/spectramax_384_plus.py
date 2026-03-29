@@ -1,5 +1,5 @@
-from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
@@ -58,8 +58,8 @@ class SpectraMax384Plus(Resource, Device):
     )
     Device.__init__(self, driver=driver)
     self._driver: MolecularDevicesDriver = driver
-    self.absorbance = AbsorbanceCapability(backend=SpectraMax384PlusAbsorbanceBackend(driver))
-    self.tc = TemperatureControlCapability(backend=MolecularDevicesTemperatureBackend(driver))
+    self.absorbance = Absorbance(backend=SpectraMax384PlusAbsorbanceBackend(driver))
+    self.tc = TemperatureController(backend=MolecularDevicesTemperatureBackend(driver))
     self._capabilities = [self.absorbance, self.tc]
 
     self.plate_holder = PlateHolder(

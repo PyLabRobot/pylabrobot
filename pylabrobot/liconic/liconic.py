@@ -1,11 +1,11 @@
 import random
 from typing import List, Literal, Optional, Union, cast
 
-from pylabrobot.capabilities.automated_retrieval import AutomatedRetrievalCapability
-from pylabrobot.capabilities.barcode_scanning import BarcodeScanningCapability
-from pylabrobot.capabilities.humidity_controlling import HumidityControlCapability
-from pylabrobot.capabilities.shaking import ShakingCapability
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval
+from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
+from pylabrobot.capabilities.humidity_controlling import HumidityController
+from pylabrobot.capabilities.shaking import Shaker
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
@@ -33,7 +33,7 @@ class Liconic(Resource, Device):
     racks: List[PlateCarrier],
     loading_tray_location: Coordinate,
     has_shaker: bool = False,
-    barcode_scanner: Optional[BarcodeScanningCapability] = None,
+    barcode_scanner: Optional[BarcodeScanner] = None,
     size_x: float = 0,
     size_y: float = 0,
     size_z: float = 0,
@@ -67,16 +67,16 @@ class Liconic(Resource, Device):
     for rack in self._racks:
       self.assign_child_resource(rack, location=None)
 
-    self.retrieval = AutomatedRetrievalCapability(backend=backend)
+    self.retrieval = AutomatedRetrieval(backend=backend)
     self.tc = (
-      TemperatureControlCapability(backend=backend)
+      TemperatureController(backend=backend)
       if liconic_model.has_temperature_control
       else None
     )
     self.humidity_controller = (
-      HumidityControlCapability(backend=backend) if liconic_model.has_humidity_control else None
+      HumidityController(backend=backend) if liconic_model.has_humidity_control else None
     )
-    self.shaker = ShakingCapability(backend=backend) if has_shaker else None
+    self.shaker = Shaker(backend=backend) if has_shaker else None
     self.barcode_scanner = barcode_scanner
 
     self._capabilities = [

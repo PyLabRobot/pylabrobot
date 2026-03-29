@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureControlCapability,
+  TemperatureController,
   TemperatureControllerBackend,
 )
 from pylabrobot.device import Device, Driver
@@ -79,7 +79,7 @@ class OpentronsTemperatureModuleV2(ResourceHolder, Device, OTModule):
     )
     Device.__init__(self, driver=driver)
     self._driver = driver
-    self.tc = TemperatureControlCapability(backend=tc_backend)
+    self.tc = TemperatureController(backend=tc_backend)
     self._capabilities = [self.tc]
 
     if child is not None:

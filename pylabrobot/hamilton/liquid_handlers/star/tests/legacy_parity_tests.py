@@ -76,9 +76,9 @@ class TestLegacyParity(unittest.IsolatedAsyncioTestCase):
     from .head96_backend import STARHead96Backend
     self.star._driver.head96 = STARHead96Backend(self.new_driver)
     from pylabrobot.capabilities.liquid_handling.pip import PIP
-    from pylabrobot.capabilities.liquid_handling.head96 import Head96Capability
+    from pylabrobot.capabilities.liquid_handling.head96 import Head96
     self.star.pip = PIP(backend=self.star._driver.pip)
-    self.star.head96 = Head96Capability(backend=self.star._driver.head96)
+    self.star.head96 = Head96(backend=self.star._driver.head96)
     self.star._capabilities = [self.star.pip, self.star.head96]
     for cap in self.star._capabilities:
       await cap._on_setup()

@@ -1,4 +1,4 @@
-"""Tests for MicroscopyCapability."""
+"""Tests for Microscopy."""
 
 import unittest
 from typing import List, Optional, Tuple
@@ -11,7 +11,7 @@ import numpy  # noqa: E402
 
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
 from pylabrobot.capabilities.microscopy.chatterbox import MicroscopyChatterboxBackend
-from pylabrobot.capabilities.microscopy.microscopy import MicroscopyCapability
+from pylabrobot.capabilities.microscopy.microscopy import Microscopy
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
   FocalPosition,
@@ -77,10 +77,10 @@ class RecordingMicroscopyBackend(MicroscopyBackend):
     )
 
 
-class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
+class TestMicroscopy(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingMicroscopyBackend()
-    self.cap = MicroscopyCapability(backend=self.backend)
+    self.cap = Microscopy(backend=self.backend)
     await self.cap._on_setup()
     self.plate = _test_plate()
 
@@ -140,7 +140,7 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_requires_setup(self):
     backend = RecordingMicroscopyBackend()
-    cap = MicroscopyCapability(backend=backend)
+    cap = Microscopy(backend=backend)
     with self.assertRaises(RuntimeError):
       await cap.capture(
         well=(0, 0),
@@ -153,7 +153,7 @@ class TestMicroscopyCapability(unittest.IsolatedAsyncioTestCase):
 class TestChatterboxBackend(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_capture(self):
     backend = MicroscopyChatterboxBackend()
-    cap = MicroscopyCapability(backend=backend)
+    cap = Microscopy(backend=backend)
     await cap._on_setup()
 
     plate = _test_plate()

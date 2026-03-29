@@ -1,10 +1,10 @@
 import random
 from typing import List, Literal, Optional, Union, cast
 
-from pylabrobot.capabilities.automated_retrieval import AutomatedRetrievalCapability
-from pylabrobot.capabilities.humidity_controlling import HumidityControlCapability
-from pylabrobot.capabilities.shaking import ShakingCapability
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval
+from pylabrobot.capabilities.humidity_controlling import HumidityController
+from pylabrobot.capabilities.shaking import Shaker
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
@@ -28,10 +28,10 @@ class Cytomat(Resource, Device):
   _racks: List[PlateCarrier]
   _driver: CytomatBackend
   loading_tray: PlateHolder
-  retrieval: AutomatedRetrievalCapability
-  tc: TemperatureControlCapability
-  humidity: HumidityControlCapability
-  shaker: ShakingCapability
+  retrieval: AutomatedRetrieval
+  tc: TemperatureController
+  humidity: HumidityController
+  shaker: Shaker
 
   def __init__(
     self,
@@ -69,14 +69,14 @@ class Cytomat(Resource, Device):
     for rack in self._racks:
       self.assign_child_resource(rack, location=None)
 
-    self.retrieval = AutomatedRetrievalCapability(backend=driver)
-    self.tc = TemperatureControlCapability(backend=driver)
-    self.humidity = HumidityControlCapability(backend=driver)
+    self.retrieval = AutomatedRetrieval(backend=driver)
+    self.tc = TemperatureController(backend=driver)
+    self.humidity = HumidityController(backend=driver)
 
     caps = [self.tc, self.humidity, self.retrieval]
 
     if driver.model != CytomatType.C5C:
-      self.shaker = ShakingCapability(backend=driver)
+      self.shaker = Shaker(backend=driver)
       caps.append(self.shaker)
 
     self._capabilities = caps

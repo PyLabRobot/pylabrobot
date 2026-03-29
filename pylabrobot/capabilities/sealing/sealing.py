@@ -3,7 +3,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import SealerBackend
 
 
-class SealingCapability(Capability):
+class Sealer(Capability):
   """Sealing capability."""
 
   def __init__(self, backend: SealerBackend):

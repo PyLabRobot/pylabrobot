@@ -3,7 +3,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import ScaleBackend
 
 
-class WeighingCapability(Capability):
+class Scale(Capability):
   """Weighing capability."""
 
   def __init__(self, backend: ScaleBackend):

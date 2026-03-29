@@ -11,7 +11,7 @@ from pylabrobot.agilent.biotek.biotek import BioTekBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
-  MicroscopyCapability,
+  Microscopy,
 )
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
@@ -22,9 +22,10 @@ from pylabrobot.capabilities.microscopy.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
-from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
-from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
+from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
+from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
 from pylabrobot.serializer import SerializableMixin
@@ -880,11 +881,12 @@ class Cytation5(Resource, Device):
     )
     Device.__init__(self, driver=backend)
     self._driver: CytationBackend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
-    self.luminescence = LuminescenceCapability(backend=backend)
-    self.fluorescence = FluorescenceCapability(backend=backend)
-    self.microscopy = MicroscopyCapability(backend=backend)
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.microscopy]
+    self.absorbance = Absorbance(backend=backend)
+    self.luminescence = Luminescence(backend=backend)
+    self.fluorescence = Fluorescence(backend=backend)
+    self.microscopy = Microscopy(backend=backend)
+    self.temperature = TemperatureController(backend=backend)
+    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.microscopy, self.temperature]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
@@ -928,10 +930,9 @@ class Cytation1(Resource, Device):
     )
     Device.__init__(self, driver=backend)
     self._driver: BioTekBackend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
-    self.luminescence = LuminescenceCapability(backend=backend)
-    self.fluorescence = FluorescenceCapability(backend=backend)
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence]
+    self.microscopy = Microscopy(backend=backend)
+    self.temperature = TemperatureController(backend=backend)
+    self._capabilities = [self.microscopy, self.temperature]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
@@ -951,7 +952,3 @@ class Cytation1(Resource, Device):
 
   async def close(self, slow: bool = False) -> None:
     await self._driver.close(slow=slow)
-
-
-# Deprecated aliases
-Cytation5ImagingConfig = CytationImagingConfig

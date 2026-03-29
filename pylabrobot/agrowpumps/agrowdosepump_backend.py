@@ -15,7 +15,7 @@ except ImportError as e:
 from pylabrobot.capabilities.capability import Capability
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
-from pylabrobot.capabilities.pumping.pumping import PumpingCapability
+from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.device import Device, Driver
 
 logger = logging.getLogger("pylabrobot")
@@ -160,7 +160,7 @@ class AgrowChannelBackend(PumpBackend):
 class AgrowDosePumpArray(Device):
   """Agrow dose pump array device.
 
-  Exposes each channel as an individual PumpingCapability via `self.pumps`.
+  Exposes each channel as an individual Pump via `self.pumps`.
   """
 
   def __init__(
@@ -170,7 +170,7 @@ class AgrowDosePumpArray(Device):
     calibrations: Optional[List[Optional[PumpCalibration]]] = None,
   ):
     self._channel_backends: List[AgrowChannelBackend] = []
-    self.pumps: List[PumpingCapability] = []
+    self.pumps: List[Pump] = []
     self._calibrations = calibrations
     super().__init__(driver=AgrowDriver(port=port, address=address))
     self._driver: AgrowDriver
@@ -185,7 +185,7 @@ class AgrowDosePumpArray(Device):
       cal = None
       if self._calibrations is not None and i < len(self._calibrations):
         cal = self._calibrations[i]
-      cap = PumpingCapability(backend=backend, calibration=cal)
+      cap = Pump(backend=backend, calibration=cal)
       self.pumps.append(cap)
 
     self._capabilities: List[Capability] = list(self.pumps)

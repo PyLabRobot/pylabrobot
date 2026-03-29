@@ -1,9 +1,9 @@
 import asyncio
 from typing import Optional, Union
 
-from pylabrobot.capabilities.shaking import ShakerBackend, ShakingCapability
+from pylabrobot.capabilities.shaking import ShakerBackend, Shaker
 from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureControlCapability,
+  TemperatureController,
   TemperatureControllerBackend,
 )
 from pylabrobot.device import Device, Driver
@@ -278,15 +278,15 @@ class BioShake(PlateHolder, Device):
     Device.__init__(self, driver=driver)
     self._driver: BioShakeDriver = driver
 
-    self.shaker: Optional[ShakingCapability] = None
-    self.tc: Optional[TemperatureControlCapability] = None
+    self.shaker: Optional[Shaker] = None
+    self.tc: Optional[TemperatureController] = None
     self._capabilities = []
 
     if has_shaking:
-      self.shaker = ShakingCapability(backend=BioShakeShakerBackend(driver))
+      self.shaker = Shaker(backend=BioShakeShakerBackend(driver))
       self._capabilities.append(self.shaker)
     if has_temperature:
-      self.tc = TemperatureControlCapability(
+      self.tc = TemperatureController(
         backend=BioShakeTemperatureBackend(driver, supports_active_cooling=supports_active_cooling)
       )
       self._capabilities.append(self.tc)

@@ -1,2 +1,2 @@
 from .backend import ShakerBackend
-from .shaking import ShakingCapability
+from .shaking import Shaker

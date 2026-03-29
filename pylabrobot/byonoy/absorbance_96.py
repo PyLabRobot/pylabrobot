@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
 from pylabrobot.capabilities.plate_reading.absorbance import (
   AbsorbanceBackend,
-  AbsorbanceCapability,
+  Absorbance,
   AbsorbanceResult,
 )
 from pylabrobot.device import Device
@@ -283,7 +283,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, Device):
     ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
     Device.__init__(self, driver=backend)
     self._driver: ByonoyAbsorbance96Backend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
+    self.absorbance = Absorbance(backend=backend)
     self._capabilities = [self.absorbance]
 
   def serialize(self) -> dict:

@@ -2,14 +2,14 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
-from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
+from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
+from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
-from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
 from pylabrobot.capabilities.plate_reading.luminescence.backend import LuminescenceBackend
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from pylabrobot.resources.plate import Plate
@@ -381,10 +381,10 @@ class SpectraMaxM5(Resource, Device):
     )
     Device.__init__(self, driver=driver)
     self._driver: MolecularDevicesDriver = driver
-    self.absorbance = AbsorbanceCapability(backend=MolecularDevicesAbsorbanceBackend(driver))
-    self.luminescence = LuminescenceCapability(backend=SpectraMaxM5LuminescenceBackend(driver))
-    self.fluorescence = FluorescenceCapability(backend=SpectraMaxM5FluorescenceBackend(driver))
-    self.tc = TemperatureControlCapability(backend=MolecularDevicesTemperatureBackend(driver))
+    self.absorbance = Absorbance(backend=MolecularDevicesAbsorbanceBackend(driver))
+    self.luminescence = Luminescence(backend=SpectraMaxM5LuminescenceBackend(driver))
+    self.fluorescence = Fluorescence(backend=SpectraMaxM5FluorescenceBackend(driver))
+    self.tc = TemperatureController(backend=MolecularDevicesTemperatureBackend(driver))
     self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.tc]
 
     self.plate_holder = PlateHolder(

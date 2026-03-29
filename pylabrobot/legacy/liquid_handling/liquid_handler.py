@@ -21,7 +21,7 @@ from typing import (
   Union,
 )
 
-from pylabrobot.capabilities.liquid_handling.head96 import Head96Capability
+from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.head96_backend import (
   Head96Backend as _NewHead96Backend,
 )
@@ -341,7 +341,7 @@ class LiquidHandler(Resource, Machine):
 
     # New capability instances — created during setup()
     self._lh_cap: Optional[PIP] = None
-    self._head96_cap: Optional[Head96Capability] = None
+    self._head96_cap: Optional[Head96] = None
 
     # Default offset applied to all 96-head operations. Any offset passed to a 96-head method is
     # added to this value.
@@ -374,7 +374,7 @@ class LiquidHandler(Resource, Machine):
     await self._lh_cap._on_setup()
 
     if self.backend.head96_installed:
-      self._head96_cap = Head96Capability(
+      self._head96_cap = Head96(
         backend=_Head96Adapter(self.backend),
       )
       await self._head96_cap._on_setup()

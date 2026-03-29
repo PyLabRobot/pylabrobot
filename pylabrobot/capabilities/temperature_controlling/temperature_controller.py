@@ -7,7 +7,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import TemperatureControllerBackend
 
 
-class TemperatureControlCapability(Capability):
+class TemperatureController(Capability):
   """Temperature control capability, for heating or cooling."""
 
   def __init__(self, backend: TemperatureControllerBackend):

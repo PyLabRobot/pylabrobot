@@ -3,7 +3,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import HumidityControllerBackend
 
 
-class HumidityControlCapability(Capability):
+class HumidityController(Capability):
   """Humidity control capability."""
 
   def __init__(self, backend: HumidityControllerBackend):
