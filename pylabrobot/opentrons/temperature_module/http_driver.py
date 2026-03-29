@@ -57,7 +57,7 @@ class OpentronsTemperatureModuleTemperatureBackend(TemperatureControllerBackend)
   async def deactivate(self):
     ot_api.modules.temperature_module_deactivate(module_id=self._driver.opentrons_id)
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     modules = ot_api.modules.list_connected_modules()
     for module in modules:
       if module["id"] == self._driver.opentrons_id:

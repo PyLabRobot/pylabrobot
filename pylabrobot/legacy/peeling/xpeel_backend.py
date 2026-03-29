@@ -33,22 +33,22 @@ class XPeelBackend(PeelerBackend):
     return await self._driver.reset()
 
   async def get_status(self):
-    return await self._driver.get_status()
+    return await self._driver.request_status()
 
   async def get_version(self):
-    return await self._driver.get_version()
+    return await self._driver.request_version()
 
   async def seal_check(self):
     return await self._driver.seal_check()
 
   async def get_tape_remaining(self):
-    return await self._driver.get_tape_remaining()
+    return await self._driver.request_tape_remaining()
 
   async def enable_plate_check(self, enabled=True):
     return await self._driver.enable_plate_check(enabled=enabled)
 
   async def get_seal_sensor_status(self):
-    return await self._driver.get_seal_sensor_status()
+    return await self._driver.request_seal_sensor_status()
 
   async def set_seal_threshold_upper(self, value: int):
     return await self._driver.set_seal_threshold_upper(value=value)

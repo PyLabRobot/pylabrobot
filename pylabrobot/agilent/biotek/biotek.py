@@ -84,10 +84,10 @@ class BioTekBackend(
     await self.io.set_rts(True)
 
     try:
-      self._version = await self.get_firmware_version()
+      self._version = await self.request_firmware_version()
     except TimeoutError:
       await self.io.set_baudrate(38_461)
-      self._version = await self.get_firmware_version()
+      self._version = await self.request_firmware_version()
 
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
@@ -185,12 +185,12 @@ class BioTekBackend(
 
     return response
 
-  async def get_serial_number(self) -> str:
+  async def request_serial_number(self) -> str:
     resp = await self.send_command("C", timeout=1)
     assert resp is not None
     return resp[1:].split(b" ")[0].decode()
 
-  async def get_firmware_version(self) -> str:
+  async def request_firmware_version(self) -> str:
     resp = await self.send_command("e", timeout=1)
     assert resp is not None
     return " ".join(resp[1:-1].decode().split(" ")[3:4])
@@ -215,7 +215,7 @@ class BioTekBackend(
   async def home(self):
     return await self.send_command("i", "x")
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     resp = await self.send_command("h", timeout=1)
     assert resp is not None
     return int(resp[1:-1]) / 100000
@@ -225,7 +225,7 @@ class BioTekBackend(
       raise NotImplementedError(f"{self.__class__.__name__} does not support temperature control.")
 
     tmin, tmax = self.temperature_range
-    current_temperature = await self.get_current_temperature()
+    current_temperature = await self.request_current_temperature()
 
     if (tmin is not None and temperature < tmin) or (tmax is not None and temperature > tmax):
       raise ValueError(
@@ -357,7 +357,7 @@ class BioTekBackend(
             all_data[r][c] = parsed_data[r][c]
 
     try:
-      temp = await self.get_current_temperature()
+      temp = await self.request_current_temperature()
     except TimeoutError:
       temp = None
 
@@ -425,7 +425,7 @@ class BioTekBackend(
             all_data[r][c] = parsed_data[r][c]
 
     try:
-      temp = await self.get_current_temperature()
+      temp = await self.request_current_temperature()
     except TimeoutError:
       temp = None
 
@@ -492,7 +492,7 @@ class BioTekBackend(
             all_data[r][c] = parsed_data[r][c]
 
     try:
-      temp = await self.get_current_temperature()
+      temp = await self.request_current_temperature()
     except TimeoutError:
       temp = None
 

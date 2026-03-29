@@ -72,11 +72,11 @@ class _BaseArm(Capability):
     """Park the arm to its default position."""
     return await self.backend.park(backend_params=backend_params)
 
-  async def get_gripper_location(
+  async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
     """Get the current location and rotation of the gripper."""
-    return await self.backend.get_gripper_location(backend_params=backend_params)
+    return await self.backend.request_gripper_location(backend_params=backend_params)
 
   # -- holding state -----------------------------------------------------------
 

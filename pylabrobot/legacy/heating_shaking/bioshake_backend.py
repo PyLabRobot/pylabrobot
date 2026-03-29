@@ -58,7 +58,7 @@ class BioShake(HeaterShakerBackend):
     await self._temp.set_temperature(temperature)
 
   async def get_current_temperature(self) -> float:
-    return await self._temp.get_current_temperature()
+    return await self._temp.request_current_temperature()
 
   async def deactivate(self):
     await self._temp.deactivate()

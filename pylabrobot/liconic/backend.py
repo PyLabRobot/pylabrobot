@@ -188,7 +188,7 @@ class LiconicBackend(
     await self._send_command(f"WR DM890 {temp_str}")
     await self._wait_ready()
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM982")
@@ -213,7 +213,7 @@ class LiconicBackend(
     await self._send_command(f"WR DM893 {str(humidity_val).zfill(5)}")
     await self._wait_ready()
 
-  async def get_current_humidity(self) -> float:
+  async def request_current_humidity(self) -> float:
     if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM983")
@@ -394,7 +394,7 @@ class LiconicBackend(
     logger.info("Scanned barcode: %s", barcode.data)
     return barcode
 
-  async def get_target_temperature(self) -> float:
+  async def request_target_temperature(self) -> float:
     if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM890")
@@ -403,7 +403,7 @@ class LiconicBackend(
     except ValueError:
       raise RuntimeError(f"Invalid set temperature value received from incubator: {resp!r}")
 
-  async def get_target_humidity(self) -> float:
+  async def request_target_humidity(self) -> float:
     if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM893")
@@ -412,7 +412,7 @@ class LiconicBackend(
     except ValueError:
       raise RuntimeError(f"Invalid set humidity value received from incubator: {resp!r}")
 
-  async def get_shaker_speed(self) -> float:
+  async def request_shaker_speed(self) -> float:
     speed_val = await self._send_command("RD DM39")
     speed = int(speed_val) / 10.0
     await self._wait_ready()
@@ -423,14 +423,14 @@ class LiconicBackend(
     await self._send_command(f"WR DM894 {str(co2_val).zfill(5)}")
     await self._wait_ready()
 
-  async def get_co2_level(self) -> float:
+  async def request_co2_level(self) -> float:
     resp = await self._send_command("RD DM984")
     try:
       return int(resp) / 10000.0
     except ValueError:
       raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
 
-  async def get_target_co2_level(self) -> float:
+  async def request_target_co2_level(self) -> float:
     resp = await self._send_command("RD DM894")
     try:
       return int(resp) / 10000.0
@@ -442,14 +442,14 @@ class LiconicBackend(
     await self._send_command(f"WR DM895 {str(n2_val).zfill(5)}")
     await self._wait_ready()
 
-  async def get_n2_level(self) -> float:
+  async def request_n2_level(self) -> float:
     resp = await self._send_command("RD DM985")
     try:
       return int(resp) / 10000.0
     except ValueError:
       raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
 
-  async def get_target_n2_level(self) -> float:
+  async def request_target_n2_level(self) -> float:
     resp = await self._send_command("RD DM895")
     try:
       return int(resp) / 10000.0

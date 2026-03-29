@@ -37,7 +37,7 @@ class SCILABackend(MachineBackend):
     return await self._temp.request_temperature_information()
 
   async def measure_temperature(self) -> float:
-    return await self._temp.get_current_temperature()
+    return await self._temp.request_current_temperature()
 
   async def request_target_temperature(self) -> float:
     return await self._temp.request_target_temperature()

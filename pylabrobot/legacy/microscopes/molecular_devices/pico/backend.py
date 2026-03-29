@@ -80,7 +80,7 @@ class ExperimentalPicoBackend(ImagerBackend):
     await self._driver.stop()
 
   async def get_configuration(self) -> dict:
-    return await self._driver.get_configuration()
+    return await self._driver.request_configuration()
 
   async def open_door(self) -> None:
     await self._driver.open_door()
@@ -95,10 +95,10 @@ class ExperimentalPicoBackend(ImagerBackend):
     await self._microscopy.exit_objective_maintenance()
 
   async def get_available_objectives(self, position: int) -> List[dict]:
-    return await self._microscopy.get_available_objectives(position)
+    return await self._microscopy.request_available_objectives(position)
 
   async def get_available_filter_cubes(self) -> List[dict]:
-    return await self._microscopy.get_available_filter_cubes()
+    return await self._microscopy.request_available_filter_cubes()
 
   async def change_objective(self, position: int, objective_id: str) -> None:
     await self._microscopy.change_objective(position, objective_id)

@@ -146,12 +146,12 @@ class XPeelDriver(Driver):
 
     return responses
 
-  async def get_status(self) -> Tuple[int, int, int]:
+  async def request_status(self) -> Tuple[int, int, int]:
     """Request instrument status; returns three error codes."""
     resp = await self.send_command("*stat")
     return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
 
-  async def get_version(self):
+  async def request_version(self):
     """Request firmware version."""
     return await self.send_command("*version")
 
@@ -177,7 +177,7 @@ class XPeelDriver(Driver):
       f"Unexpected seal check code: {code}, interpreted as: {self.describe_error(code)}"
     )
 
-  async def get_tape_remaining(self):
+  async def request_tape_remaining(self):
     """Query remaining tape. Returns (supply_remaining, takeup_remaining) in number of deseals."""
     resp = await self.send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
     tape_line = resp[-1]
@@ -191,7 +191,7 @@ class XPeelDriver(Driver):
     flag = "y" if enabled else "n"
     return await self.send_command(f"*platecheck:{flag}", expect_ack=True, wait_for_ready=True)
 
-  async def get_seal_sensor_status(self):
+  async def request_seal_sensor_status(self):
     """Get seal sensor threshold value (0-999)."""
     return await self.send_command("*sealstat", expect_ack=True, wait_for_ready=True)
 

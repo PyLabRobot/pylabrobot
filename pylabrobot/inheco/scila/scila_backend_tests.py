@@ -202,7 +202,7 @@ class TestSCILATemperatureBackend(unittest.IsolatedAsyncioTestCase):
     )
     self.mock_sila_interface.send_command.assert_called_with("GetTemperature")
 
-  async def test_get_current_temperature(self):
+  async def test_request_current_temperature(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
       "<Response>"
       "  <Parameter name='CurrentTemperature'><Float64>25.0</Float64></Parameter>"
@@ -210,7 +210,7 @@ class TestSCILATemperatureBackend(unittest.IsolatedAsyncioTestCase):
       "  <Parameter name='TemperatureControl'><Boolean>true</Boolean></Parameter>"
       "</Response>"
     )
-    temp = await self.backend.get_current_temperature()
+    temp = await self.backend.request_current_temperature()
     self.assertEqual(temp, 25.0)
 
   async def test_request_target_temperature(self):

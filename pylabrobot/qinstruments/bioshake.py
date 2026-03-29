@@ -233,7 +233,7 @@ class BioShakeTemperatureBackend(TemperatureControllerBackend):
     await self._driver.send_command(cmd=f"setTempTarget{temperature_tenths}", delay=0.2)
     await self._driver.send_command(cmd="tempOn", delay=0.2)
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     response = await self._driver.send_command(cmd="getTempActual", delay=0.2)
     return float(response)
 

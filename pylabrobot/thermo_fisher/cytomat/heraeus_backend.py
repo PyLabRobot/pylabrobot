@@ -142,7 +142,7 @@ class HeraeusCytomatBackend(
   async def set_temperature(self, temperature: float):
     raise NotImplementedError("Temperature control not implemented yet")
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     raise NotImplementedError("Temperature query not implemented yet")
 
   async def deactivate(self):
@@ -157,7 +157,7 @@ class HeraeusCytomatBackend(
   async def set_humidity(self, humidity: float):
     raise NotImplementedError("Humidity control not implemented yet")
 
-  async def get_current_humidity(self) -> float:
+  async def request_current_humidity(self) -> float:
     raise NotImplementedError("Humidity query not implemented yet")
 
   # -- ShakerBackend --

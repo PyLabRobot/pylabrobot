@@ -49,7 +49,7 @@ class CytomatBackend(IncubatorBackend):
     return await self._new.set_temperature(*args, **kwargs)
 
   async def get_temperature(self) -> float:
-    return await self._new.get_current_temperature()
+    return await self._new.request_current_temperature()
 
   async def start_shaking(self, frequency: float, shakers: Optional[List[int]] = None):
     return await self._new.start_shaking(speed=frequency, shakers=shakers)
@@ -69,13 +69,13 @@ class CytomatBackend(IncubatorBackend):
     return await self._new.send_action(command_type, command, params, timeout=timeout)
 
   async def get_overview_register(self):
-    return await self._new.get_overview_register()
+    return await self._new.request_overview_register()
 
   async def get_warning_register(self):
-    return await self._new.get_warning_register()
+    return await self._new.request_warning_register()
 
   async def get_error_register(self):
-    return await self._new.get_error_register()
+    return await self._new.request_error_register()
 
   async def reset_error_register(self):
     return await self._new.reset_error_register()
@@ -90,13 +90,13 @@ class CytomatBackend(IncubatorBackend):
     return await self._new.shovel_out()
 
   async def get_action_register(self):
-    return await self._new.get_action_register()
+    return await self._new.request_action_register()
 
   async def get_swap_register(self):
-    return await self._new.get_swap_register()
+    return await self._new.request_swap_register()
 
   async def get_sensor_register(self):
-    return await self._new.get_sensor_register()
+    return await self._new.request_sensor_register()
 
   async def action_transfer_to_storage(self, site):
     return await self._new.action_transfer_to_storage(site)
@@ -144,16 +144,16 @@ class CytomatBackend(IncubatorBackend):
     return await self._new.set_shaking_frequency(frequency, shakers)
 
   async def get_incubation_query(self, query):
-    return await self._new.get_incubation_query(query)
+    return await self._new.request_incubation_query(query)
 
   async def get_co2(self):
-    return await self._new.get_co2()
+    return await self._new.request_co2()
 
   async def get_humidity(self):
-    return await self._new.get_humidity()
+    return await self._new.request_humidity()
 
   async def get_o2(self):
-    return await self._new.get_o2()
+    return await self._new.request_o2()
 
   def serialize(self) -> dict:
     return self._new.serialize()

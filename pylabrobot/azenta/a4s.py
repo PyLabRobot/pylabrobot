@@ -120,7 +120,7 @@ class A4SDriver(Driver):
 
   # -- status --
 
-  async def get_status(self) -> A4SStatus:
+  async def request_status(self) -> A4SStatus:
     while True:
       message = await self.read_message()
       if message[1] == "T":
@@ -156,7 +156,7 @@ class A4SDriver(Driver):
   async def wait_for_status(self, statuses: Set[A4SStatus.SystemStatus]) -> A4SStatus:
     start = time.time()
     while True:
-      status = await self.get_status()
+      status = await self.request_status()
 
       if status.system_status == A4SStatus.SystemStatus.error:
         raise RuntimeError(f"An error occurred: {status.error_code}")
@@ -174,7 +174,7 @@ class A4SDriver(Driver):
   ) -> A4SStatus:
     start = time.time()
     while True:
-      status = await self.get_status()
+      status = await self.request_status()
       if status.sensor_status.shuttle_open_sensor == shuttle_open:
         return status
       if time.time() - start > timeout:
@@ -196,8 +196,8 @@ class A4SDriver(Driver):
     command = f"*00DT={deciseconds:04d}zz!"
     return await self.send_command(command)
 
-  async def get_remaining_time(self) -> int:
-    status = await self.get_status()
+  async def request_remaining_time(self) -> int:
+    status = await self.request_status()
     return status.remaining_time
 
   def serialize(self) -> dict:
@@ -231,7 +231,7 @@ class A4SSealerBackend(SealerBackend):
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
     start = time.time()
     while True:
-      status = await self._driver.get_status()
+      status = await self._driver.request_status()
       if abs(status.current_temperature - degrees) < tolerance:
         break
       if time.time() - start > timeout:
@@ -259,15 +259,15 @@ class A4STemperatureBackend(TemperatureControllerBackend):
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
     start = time.time()
     while True:
-      current_temperature = await self.get_current_temperature()
+      current_temperature = await self.request_current_temperature()
       if abs(current_temperature - degrees) < tolerance:
         break
       if time.time() - start > timeout:
         raise TimeoutError("Timeout while waiting for temperature")
       await asyncio.sleep(0.1)
 
-  async def get_current_temperature(self) -> float:
-    status = await self._driver.get_status()
+  async def request_current_temperature(self) -> float:
+    status = await self._driver.request_status()
     return status.current_temperature
 
   async def deactivate(self):

@@ -260,7 +260,7 @@ class STARPIPBackend(PIPBackend):
       raise ValueError("Cannot mix tips with different tip types.")
     ham_tip = tips.pop()
     assert isinstance(ham_tip, HamiltonTip)
-    ttti = await self._driver.get_or_assign_tip_type_index(ham_tip)
+    ttti = await self._driver.request_or_assign_tip_type_index(ham_tip)
 
     # Z computations (absolute coordinates).
     max_z = max(

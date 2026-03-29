@@ -62,7 +62,7 @@ class CLARIOstarAbsorbanceBackend(AbsorbanceBackend):
     await self._driver.read_order_values()
     await self._driver.status_hw()
 
-    vals = await self._driver.get_measurement_values()
+    vals = await self._driver.request_measurement_values()
     num_wells = plate.num_items
     div = b"\x00" * 6
     start_idx = vals.index(div) + len(div)

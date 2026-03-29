@@ -45,7 +45,7 @@ class CLARIOstarLuminescenceBackend(LuminescenceBackend):
     await self._driver.read_order_values()
     await self._driver.status_hw()
 
-    vals = await self._driver.get_measurement_values()
+    vals = await self._driver.request_measurement_values()
     num_wells = plate.num_items
     start_idx = vals.index(b"\x00\x00\x00\x00\x00\x00") + len(b"\x00\x00\x00\x00\x00\x00")
     data = list(vals)[start_idx : start_idx + num_wells * 4]

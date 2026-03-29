@@ -141,7 +141,7 @@ class CLARIOstarDriver(Driver):
     resp = await self.send(b"\x02\x00\x09\x0c\x81\x00")
     return await self._wait_for_ready_and_return(resp)
 
-  async def get_measurement_values(self) -> bytes:
+  async def request_measurement_values(self) -> bytes:
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
   def plate_bytes(self, plate: Plate) -> bytes:

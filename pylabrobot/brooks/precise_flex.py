@@ -175,7 +175,7 @@ class PreciseFlexDriver(Driver):
 
   ResponseMode = Literal["pc", "verbose"]
 
-  async def get_mode(self) -> ResponseMode:
+  async def request_mode(self) -> ResponseMode:
     """Get the current response mode.
 
     Returns:
@@ -241,7 +241,7 @@ class PreciseFlexDriver(Driver):
     else:
       await self.send_command(f"hp {power_state} {timeout}")
 
-  async def get_power_state(self) -> int:
+  async def request_power_state(self) -> int:
     """Get the current robot power state.
 
     Returns:
@@ -388,9 +388,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Set the speed percentage of the arm's movement (0-100)."""
     await self.set_profile_speed(self.profile_index, speed_percent)
 
-  async def _get_speed(self) -> float:
+  async def _request_speed(self) -> float:
     """Get the current speed percentage of the arm's movement."""
-    return await self.get_profile_speed(self.profile_index)
+    return await self.request_profile_speed(self.profile_index)
 
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -528,11 +528,11 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       backend_params = PreciseFlexArmBackend.MoveToJointPositionParams()
     if backend_params.speed is not None:
       await self._set_speed(backend_params.speed)
-    current = await self.get_joint_position()
+    current = await self.request_joint_position()
     joint_coords = {**current, **position}
     await self._move_j(profile_index=self.profile_index, joint_coords=joint_coords)
 
-  async def get_joint_position(
+  async def request_joint_position(
     self, backend_params: Optional[BackendParams] = None
   ) -> Dict[int, float]:
     """Get the current joint position of the arm."""
@@ -547,7 +547,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
     return self._parse_angles_response(parts)
 
-  async def get_gripper_location(
+  async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> PreciseFlexGripperLocation:
     """Get the current position of the arm in Cartesian space."""
@@ -563,7 +563,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
     config = int(parts[6])
     elbow_orientation = self._convert_orientation_int_to_str(config)
-    rail_position = (await self.get_joint_position())[PFAxis.RAIL] if self._has_rail else None
+    rail_position = (await self.request_joint_position())[PFAxis.RAIL] if self._has_rail else None
 
     return PreciseFlexGripperLocation(
       location=Coordinate(x, y, z),
@@ -808,7 +808,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   # -- GENERAL COMMANDS ------------------------------------------------------
 
-  async def get_base(self) -> tuple[float, float, float, float]:
+  async def request_base(self) -> tuple[float, float, float, float]:
     """Get the robot base offset.
 
     Returns:
@@ -837,7 +837,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"base {x_offset} {y_offset} {z_offset} {z_rotation}")
 
-  async def get_monitor_speed(self) -> int:
+  async def request_monitor_speed(self) -> int:
     """Get the global system (monitor) speed.
 
     Returns:
@@ -867,7 +867,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command("nop")
 
-  async def get_payload(self) -> int:
+  async def request_payload(self) -> int:
     """Get the payload percent value for the current robot.
 
     Returns:
@@ -928,7 +928,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       else:
         await self._driver.send_command(f"pc {data_id} {value}")
 
-  async def get_parameter(
+  async def request_parameter(
     self,
     data_id: int,
     unit_number: Optional[int] = None,
@@ -976,7 +976,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError("Robot number must be greater than zero")
     await self._driver.send_command(f"reset {robot_number}")
 
-  async def get_selected_robot(self) -> int:
+  async def request_selected_robot(self) -> int:
     """Get the number of the currently selected robot.
 
     Returns:
@@ -997,7 +997,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"selectRobot {robot_number}")
 
-  async def get_signal(self, signal_number: int) -> int:
+  async def request_signal(self, signal_number: int) -> int:
     """Get the value of the specified digital input or output signal.
 
     Args:
@@ -1019,7 +1019,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"sig {signal_number} {value}")
 
-  async def get_system_state(self) -> int:
+  async def request_system_state(self) -> int:
     """Get the global system state code.
 
     Returns:
@@ -1028,7 +1028,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     response = await self._driver.send_command("sysState")
     return int(response)
 
-  async def get_tool_transformation_values(self) -> tuple[float, float, float, float, float, float]:
+  async def request_tool_transformation_values(self) -> tuple[float, float, float, float, float, float]:
     """Get the current tool transformation values.
 
     Returns:
@@ -1060,7 +1060,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"tool {x} {y} {z} {yaw} {pitch} {roll}")
 
-  async def get_version(self) -> str:
+  async def request_version(self) -> str:
     """Get the current version of TCS and any installed plug-ins.
 
     Returns:
@@ -1225,7 +1225,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   # -- PROFILE COMMANDS ------------------------------------------------------
 
-  async def get_profile_speed(self, profile_index: int) -> float:
+  async def request_profile_speed(self, profile_index: int) -> float:
     """Get the speed property of the specified profile.
 
     Args:
@@ -1248,7 +1248,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"Speed {profile_index} {speed_percent}")
 
-  async def get_profile_speed2(self, profile_index: int) -> float:
+  async def request_profile_speed2(self, profile_index: int) -> float:
     """Get the speed2 property of the specified profile.
 
     Args:
@@ -1271,7 +1271,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"Speed2 {profile_index} {speed2_percent}")
 
-  async def get_profile_accel(self, profile_index: int) -> float:
+  async def request_profile_accel(self, profile_index: int) -> float:
     """Get the acceleration property of the specified profile.
 
     Args:
@@ -1294,7 +1294,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"Accel {profile_index} {accel_percent}")
 
-  async def get_profile_accel_ramp(self, profile_index: int) -> float:
+  async def request_profile_accel_ramp(self, profile_index: int) -> float:
     """Get the acceleration ramp property of the specified profile.
 
     Args:
@@ -1316,7 +1316,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"AccRamp {profile_index} {accel_ramp_seconds}")
 
-  async def get_profile_decel(self, profile_index: int) -> float:
+  async def request_profile_decel(self, profile_index: int) -> float:
     """Get the deceleration property of the specified profile.
 
     Args:
@@ -1339,7 +1339,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"Decel {profile_index} {decel_percent}")
 
-  async def get_profile_decel_ramp(self, profile_index: int) -> float:
+  async def request_profile_decel_ramp(self, profile_index: int) -> float:
     """Get the deceleration ramp property of the specified profile.
 
     Args:
@@ -1361,7 +1361,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"DecRamp {profile_index} {decel_ramp_seconds}")
 
-  async def get_profile_in_range(self, profile_index: int) -> float:
+  async def request_profile_in_range(self, profile_index: int) -> float:
     """Get the InRange property of the specified profile.
 
     Args:
@@ -1394,7 +1394,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError("InRange value must be between -1 and 100")
     await self._driver.send_command(f"InRange {profile_index} {in_range_value}")
 
-  async def get_profile_straight(self, profile_index: int) -> bool:
+  async def request_profile_straight(self, profile_index: int) -> bool:
     """Get the Straight property of the specified profile.
 
     Args:
@@ -1470,7 +1470,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       f"{acceleration_ramp} {deceleration_ramp} {in_range} {straight_int}"
     )
 
-  async def get_motion_profile_values(
+  async def request_motion_profile_values(
     self, profile: int
   ) -> tuple[int, float, float, float, float, float, float, float, bool]:
     """
@@ -1678,7 +1678,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"ChangeConfig2 {grip_mode}")
 
-  async def _get_grasp_data(self) -> tuple[float, float, float]:
+  async def _request_grasp_data(self) -> tuple[float, float, float]:
     """Get the data to be used for the next force-controlled PickPlate command grip operation.
 
     Returns:
@@ -1706,7 +1706,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"GraspData {plate_width} {finger_speed_percent} {grasp_force}")
 
-  async def _get_grip_close_pos(self) -> float:
+  async def _request_grip_close_pos(self) -> float:
     """Get the gripper close position for the servoed gripper.
 
     Returns:
@@ -1725,7 +1725,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self._driver.send_command(f"GripClosePos {close_position}")
 
-  async def _get_grip_open_pos(self) -> float:
+  async def _request_grip_open_pos(self) -> float:
     """Get the gripper open position for the servoed gripper.
 
     Returns:

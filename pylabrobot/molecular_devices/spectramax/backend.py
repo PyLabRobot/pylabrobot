@@ -359,7 +359,7 @@ class MolecularDevicesDriver(Driver):
     """Close the plate tray."""
     await self.send_command("!CLOSE")
 
-  async def get_status(self) -> List[str]:
+  async def request_status(self) -> List[str]:
     """Get the current device status."""
     res = await self.send_command("!STATUS")
     if len(res) > 1:
@@ -377,7 +377,7 @@ class MolecularDevicesDriver(Driver):
     """Clear the device error log."""
     await self.send_command("!CLEAR ERROR")
 
-  async def get_firmware_version(self) -> List[str]:
+  async def request_firmware_version(self) -> List[str]:
     """Get the firmware version."""
     res = await self.send_command("!OPTION")
     return res[1].split()
@@ -396,7 +396,7 @@ class MolecularDevicesDriver(Driver):
     while True:
       if time.time() - start_time > timeout:
         raise TimeoutError("Timeout waiting for plate reader to become idle.")
-      status = await self.get_status()
+      status = await self.request_status()
       if status and status[1] == "IDLE":
         break
       await asyncio.sleep(1)
@@ -812,7 +812,7 @@ class MolecularDevicesTemperatureBackend(TemperatureControllerBackend):
   def supports_active_cooling(self) -> bool:
     return False
 
-  async def get_temperature(self) -> Tuple[float, float]:
+  async def request_temperature(self) -> Tuple[float, float]:
     """Get (current_temp, set_point) from the device."""
     res = await self._driver.send_command("!TEMP")
     if len(res) > 1:
@@ -824,8 +824,8 @@ class MolecularDevicesTemperatureBackend(TemperatureControllerBackend):
       return (float(parts[1]), float(parts[0]))
     raise ValueError(f"Could not parse temperature from response: {res}")
 
-  async def get_current_temperature(self) -> float:
-    current, _ = await self.get_temperature()
+  async def request_current_temperature(self) -> float:
+    current, _ = await self.request_temperature()
     return current
 
   async def set_temperature(self, temperature: float) -> None:

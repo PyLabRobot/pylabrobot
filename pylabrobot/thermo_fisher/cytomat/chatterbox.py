@@ -17,4 +17,4 @@ class CytomatChatterbox(CytomatBackend):
     return "0" * 8
 
   async def wait_for_transfer_station(self, occupied: bool = False):
-    _ = await self.get_overview_register()
+    _ = await self.request_overview_register()

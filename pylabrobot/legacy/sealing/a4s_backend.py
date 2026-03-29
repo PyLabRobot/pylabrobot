@@ -38,7 +38,7 @@ class A4SBackend(SealerBackend):
     await self._temperature.set_temperature(temperature=temperature)
 
   async def get_temperature(self) -> float:
-    return await self._temperature.get_current_temperature()
+    return await self._temperature.request_current_temperature()
 
   async def set_heater(self, on: bool):
     await self._driver.set_heater(on=on)
@@ -50,7 +50,7 @@ class A4SBackend(SealerBackend):
     await self._driver.set_time(seconds=seconds)
 
   async def get_remaining_time(self) -> int:
-    return await self._driver.get_remaining_time()
+    return await self._driver.request_remaining_time()
 
   async def get_status(self):
-    return await self._driver.get_status()
+    return await self._driver.request_status()

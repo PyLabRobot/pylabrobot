@@ -10,7 +10,7 @@ from pylabrobot.resources.rotation import Rotation
 # - pick_up_at_location
 # - drop_at_location
 # - move_to_location
-# - get_gripper_location
+# - request_gripper_location
 # - is_holding_resource
 
 # CanGrip
@@ -29,7 +29,7 @@ from pylabrobot.resources.rotation import Rotation
 # Joints
 # - pick_up_at_joint_position
 # - drop_at_joint_position
-# - get_joint_position
+# - request_joint_position
 
 
 class CanFreedrive(metaclass=ABCMeta):
@@ -78,7 +78,7 @@ class HasJoints(metaclass=ABCMeta):
     """Move the arm to the specified joint position."""
 
   @abstractmethod
-  async def get_joint_position(
+  async def request_joint_position(
     self, backend_params: Optional[BackendParams] = None
   ) -> Dict[int, float]:
     """Get the current position of the arm in joint space."""
@@ -117,7 +117,7 @@ class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
     """Park the arm to its default position."""
 
   @abstractmethod
-  async def get_gripper_location(
+  async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
     """Get the current location and rotation of the gripper."""

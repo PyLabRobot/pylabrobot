@@ -453,7 +453,7 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
   ):
     """Tip/needle definition in firmware."""
 
-  async def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
+  async def request_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
     """Get a tip type table index for the tip.
 
     If the tip has previously been defined, used that index. Otherwise, define a new tip type.

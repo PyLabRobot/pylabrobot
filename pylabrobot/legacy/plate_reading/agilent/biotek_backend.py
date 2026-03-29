@@ -114,10 +114,10 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     return await self._new._read_until(terminator, timeout)
 
   async def get_serial_number(self):
-    return await self._new.get_serial_number()
+    return await self._new.request_serial_number()
 
   async def get_firmware_version(self):
-    return await self._new.get_firmware_version()
+    return await self._new.request_firmware_version()
 
   async def open(self, slow=False):
     return await self._new.open(slow=slow)
@@ -129,7 +129,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     return await self._new.home()
 
   async def get_current_temperature(self):
-    return await self._new.get_current_temperature()
+    return await self._new.request_current_temperature()
 
   async def set_temperature(self, temperature):
     return await self._new.set_temperature(temperature)

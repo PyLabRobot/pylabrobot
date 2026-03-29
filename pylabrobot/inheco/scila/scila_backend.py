@@ -143,7 +143,7 @@ class SCILATemperatureBackend(TemperatureControllerBackend):
       "SetTemperature", targetTemperature=temperature, temperatureControl=True
     )
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
 
   async def deactivate(self) -> None:

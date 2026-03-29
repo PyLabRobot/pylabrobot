@@ -32,9 +32,9 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
   async def setup(self, **backend_kwargs) -> None:
     await super().setup(**backend_kwargs)
     await self.initialize_measurements()
-    self.available_wavelengths = await self.get_available_absorbance_wavelengths()
+    self.available_wavelengths = await self.request_available_absorbance_wavelengths()
 
-  async def get_available_absorbance_wavelengths(self) -> List[float]:
+  async def request_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
       report_id=0x0330,
       payload=b"\x00" * 60,

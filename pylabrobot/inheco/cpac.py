@@ -42,7 +42,7 @@ class InhecoTemperatureControllerBackend(
     await self.set_target_temperature(temperature)
     await self.start_temperature_control()
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     response = await self.interface.send_command(f"{self.index}RAT0")
     return float(response) / 10
 
@@ -65,7 +65,7 @@ class InhecoTemperatureControllerBackend(
 
   # --- firmware misc
 
-  async def get_device_info(self, info_type: int):
+  async def request_device_info(self, info_type: int):
     """Get device information
 
     - 0 Bootstrap Version

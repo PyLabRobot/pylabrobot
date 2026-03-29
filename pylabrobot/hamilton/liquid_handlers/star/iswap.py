@@ -38,8 +38,8 @@ class iSWAP(OrientableGripperArmBackend):
   def parked(self) -> bool:
     return self._parked is True
 
-  async def get_gripper_location(self, backend_params=None) -> GripperLocation:
-    raise NotImplementedError("iSWAP does not support get_gripper_location")
+  async def request_gripper_location(self, backend_params=None) -> GripperLocation:
+    raise NotImplementedError("iSWAP does not support request_gripper_location")
 
   async def _on_setup(self) -> None:
     if self._version is None:

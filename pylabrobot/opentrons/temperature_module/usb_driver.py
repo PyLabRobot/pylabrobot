@@ -84,5 +84,5 @@ class OpentronsTemperatureModuleUSBTemperatureBackend(TemperatureControllerBacke
   async def deactivate(self):
     await self._driver.send_and_check(b"M18\r\n")
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     return await self._driver.query_temperature()

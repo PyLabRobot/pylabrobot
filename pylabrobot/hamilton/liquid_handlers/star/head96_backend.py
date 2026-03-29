@@ -88,7 +88,7 @@ class STARHead96Backend(Head96Backend):
     if not isinstance(prototypical_tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
 
-    ttti = await self._driver.get_or_assign_tip_type_index(prototypical_tip)
+    ttti = await self._driver.request_or_assign_tip_type_index(prototypical_tip)
 
     tip_length = prototypical_tip.total_tip_length
     fitting_depth = prototypical_tip.fitting_depth

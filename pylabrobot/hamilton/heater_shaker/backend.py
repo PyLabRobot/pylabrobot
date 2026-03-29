@@ -73,7 +73,7 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
     now = time.time()
     while True:
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
-      if await self.get_is_shaking():
+      if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
         raise TimeoutError("Failed to start shaking within timeout")
@@ -82,7 +82,7 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
     await self._stop_shaking()
     await self._wait_for_stop()
 
-  async def get_is_shaking(self) -> bool:
+  async def request_is_shaking(self) -> bool:
     response = await self._driver.send_command("RD")
     return response.endswith("1")
 
@@ -130,19 +130,19 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
     temp_str = f"{round(10 * temperature):04d}"
     return await self._driver.send_command("TA", ta=temp_str)
 
-  async def _get_current_temperature(self) -> Dict[str, float]:
+  async def _request_current_temperature(self) -> Dict[str, float]:
     response = await self._driver.send_command("RT")
     response = response.split("rt")[1]
     middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
     edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
     return {"middle": middle_temp, "edge": edge_temp}
 
-  async def get_current_temperature(self) -> float:
-    response = await self._get_current_temperature()
+  async def request_current_temperature(self) -> float:
+    response = await self._request_current_temperature()
     return response["middle"]
 
-  async def get_edge_temperature(self) -> float:
-    response = await self._get_current_temperature()
+  async def request_edge_temperature(self) -> float:
+    response = await self._request_current_temperature()
     return response["edge"]
 
   async def deactivate(self):

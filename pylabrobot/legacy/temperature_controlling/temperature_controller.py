@@ -27,7 +27,7 @@ class _TemperatureControlAdapter(_NewTCBackend):
   async def set_temperature(self, temperature: float):
     await self._legacy.set_temperature(temperature)
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     return await self._legacy.get_current_temperature()
 
   async def deactivate(self):

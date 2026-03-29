@@ -45,7 +45,7 @@ class Access2Backend(LoaderBackend):
     return await self._driver.send_command(command)
 
   async def get_status(self) -> bytes:
-    return await self._driver.get_status()
+    return await self._driver.request_status()
 
   async def park(self):
     await self._driver.park()
@@ -112,25 +112,25 @@ class VSpinBackend(CentrifugeBackend):
     await self._centrifuge.set_bucket_1_position_to_current()
 
   async def get_bucket_1_position(self) -> int:
-    return await self._centrifuge.get_bucket_1_position()
+    return await self._centrifuge.request_bucket_1_position()
 
   async def get_position(self) -> int:
-    return await self._driver.get_position()
+    return await self._driver.request_position()
 
   async def get_tachometer(self) -> int:
-    return await self._driver.get_tachometer()
+    return await self._driver.request_tachometer()
 
   async def get_home_position(self) -> int:
-    return await self._driver.get_home_position()
+    return await self._driver.request_home_position()
 
   async def get_bucket_locked(self) -> bool:
-    return await self._driver.get_bucket_locked()
+    return await self._driver.request_bucket_locked()
 
   async def get_door_open(self) -> bool:
-    return await self._driver.get_door_open()
+    return await self._driver.request_door_open()
 
   async def get_door_locked(self) -> bool:
-    return await self._driver.get_door_locked()
+    return await self._driver.request_door_locked()
 
   async def open_door(self):
     await self._centrifuge.open_door()

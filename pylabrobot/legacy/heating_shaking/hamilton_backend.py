@@ -71,7 +71,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     await self._shaker.stop_shaking()
 
   async def get_is_shaking(self) -> bool:
-    return await self._shaker.get_is_shaking()
+    return await self._shaker.request_is_shaking()
 
   async def lock_plate(self):
     await self._shaker.lock_plate()
@@ -83,13 +83,13 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     await self._temp.set_temperature(temperature=temperature)
 
   async def get_current_temperature(self) -> float:
-    return await self._temp.get_current_temperature()
+    return await self._temp.request_current_temperature()
 
   async def _get_current_temperature(self) -> Dict[str, float]:
-    return await self._temp._get_current_temperature()
+    return await self._temp._request_current_temperature()
 
   async def get_edge_temperature(self) -> float:
-    return await self._temp.get_edge_temperature()
+    return await self._temp.request_edge_temperature()
 
   async def deactivate(self):
     await self._temp.deactivate()

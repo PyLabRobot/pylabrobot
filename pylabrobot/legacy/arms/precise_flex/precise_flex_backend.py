@@ -134,7 +134,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_backend._set_speed(speed_percent)
 
   async def get_speed(self) -> float:
-    return await self._new_backend._get_speed()
+    return await self._new_backend._request_speed()
 
   async def open_gripper(self, gripper_width: float):
     await self._new_backend.open_gripper(gripper_width)
@@ -234,10 +234,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
       await self._new_backend.move_to_location(converted.location, converted.rotation.z)
 
   async def get_joint_position(self) -> Dict[int, float]:
-    return await self._new_backend.get_joint_position()
+    return await self._new_backend.request_joint_position()
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
-    result = await self._new_backend.get_gripper_location()
+    result = await self._new_backend.request_gripper_location()
     return _from_new_coords(result)
 
   async def send_command(self, command: str) -> str:
@@ -264,25 +264,25 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_backend.set_base(x_offset, y_offset, z_offset, z_rotation)
 
   async def get_base(self) -> tuple[float, float, float, float]:
-    return await self._new_backend.get_base()
+    return await self._new_backend.request_base()
 
   async def exit(self) -> None:
     await self._new_driver.exit()
 
   async def get_power_state(self) -> int:
-    return await self._new_driver.get_power_state()
+    return await self._new_driver.request_power_state()
 
   async def set_power(self, enable: bool, timeout: int = 0) -> None:
     await self._new_driver.set_power(enable, timeout)
 
   async def get_mode(self):
-    return await self._new_driver.get_mode()
+    return await self._new_driver.request_mode()
 
   async def set_response_mode(self, mode) -> None:
     await self._new_driver.set_response_mode(mode)
 
   async def get_monitor_speed(self) -> int:
-    return await self._new_backend.get_monitor_speed()
+    return await self._new_backend.request_monitor_speed()
 
   async def set_monitor_speed(self, speed_percent: int) -> None:
     await self._new_backend.set_monitor_speed(speed_percent)
@@ -291,7 +291,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_backend.nop()
 
   async def get_payload(self) -> int:
-    return await self._new_backend.get_payload()
+    return await self._new_backend.request_payload()
 
   async def set_payload(self, payload_percent: int) -> None:
     await self._new_backend.set_payload(payload_percent)
@@ -300,34 +300,34 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_backend.set_parameter(data_id, value, unit_number, sub_unit, array_index)
 
   async def get_parameter(self, data_id, unit_number=None, sub_unit=None, array_index=None):
-    return await self._new_backend.get_parameter(data_id, unit_number, sub_unit, array_index)
+    return await self._new_backend.request_parameter(data_id, unit_number, sub_unit, array_index)
 
   async def reset(self, robot_number: int) -> None:
     await self._new_backend.reset(robot_number)
 
   async def get_selected_robot(self) -> int:
-    return await self._new_backend.get_selected_robot()
+    return await self._new_backend.request_selected_robot()
 
   async def select_robot(self, robot_number: int) -> None:
     await self._new_backend.select_robot(robot_number)
 
   async def get_signal(self, signal_number: int) -> int:
-    return await self._new_backend.get_signal(signal_number)
+    return await self._new_backend.request_signal(signal_number)
 
   async def set_signal(self, signal_number: int, value: int) -> None:
     await self._new_backend.set_signal(signal_number, value)
 
   async def get_system_state(self) -> int:
-    return await self._new_backend.get_system_state()
+    return await self._new_backend.request_system_state()
 
   async def get_tool_transformation_values(self):
-    return await self._new_backend.get_tool_transformation_values()
+    return await self._new_backend.request_tool_transformation_values()
 
   async def set_tool_transformation_values(self, x, y, z, yaw, pitch, roll):
     await self._new_backend.set_tool_transformation_values(x, y, z, yaw, pitch, roll)
 
   async def get_version(self) -> str:
-    return await self._new_backend.get_version()
+    return await self._new_backend.request_version()
 
   async def get_location_angles(self, location_index):
     data = await self.send_command(f"locAngles {location_index}")
@@ -402,49 +402,49 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_backend.here_c(location_index)
 
   async def get_profile_speed(self, profile_index):
-    return await self._new_backend.get_profile_speed(profile_index)
+    return await self._new_backend.request_profile_speed(profile_index)
 
   async def set_profile_speed(self, profile_index, speed_percent):
     await self._new_backend.set_profile_speed(profile_index, speed_percent)
 
   async def get_profile_speed2(self, profile_index):
-    return await self._new_backend.get_profile_speed2(profile_index)
+    return await self._new_backend.request_profile_speed2(profile_index)
 
   async def set_profile_speed2(self, profile_index, speed2_percent):
     await self._new_backend.set_profile_speed2(profile_index, speed2_percent)
 
   async def get_profile_accel(self, profile_index):
-    return await self._new_backend.get_profile_accel(profile_index)
+    return await self._new_backend.request_profile_accel(profile_index)
 
   async def set_profile_accel(self, profile_index, accel_percent):
     await self._new_backend.set_profile_accel(profile_index, accel_percent)
 
   async def get_profile_accel_ramp(self, profile_index):
-    return await self._new_backend.get_profile_accel_ramp(profile_index)
+    return await self._new_backend.request_profile_accel_ramp(profile_index)
 
   async def set_profile_accel_ramp(self, profile_index, accel_ramp_seconds):
     await self._new_backend.set_profile_accel_ramp(profile_index, accel_ramp_seconds)
 
   async def get_profile_decel(self, profile_index):
-    return await self._new_backend.get_profile_decel(profile_index)
+    return await self._new_backend.request_profile_decel(profile_index)
 
   async def set_profile_decel(self, profile_index, decel_percent):
     await self._new_backend.set_profile_decel(profile_index, decel_percent)
 
   async def get_profile_decel_ramp(self, profile_index):
-    return await self._new_backend.get_profile_decel_ramp(profile_index)
+    return await self._new_backend.request_profile_decel_ramp(profile_index)
 
   async def set_profile_decel_ramp(self, profile_index, decel_ramp_seconds):
     await self._new_backend.set_profile_decel_ramp(profile_index, decel_ramp_seconds)
 
   async def get_profile_in_range(self, profile_index):
-    return await self._new_backend.get_profile_in_range(profile_index)
+    return await self._new_backend.request_profile_in_range(profile_index)
 
   async def set_profile_in_range(self, profile_index, in_range_value):
     await self._new_backend.set_profile_in_range(profile_index, in_range_value)
 
   async def get_profile_straight(self, profile_index):
-    return await self._new_backend.get_profile_straight(profile_index)
+    return await self._new_backend.request_profile_straight(profile_index)
 
   async def set_profile_straight(self, profile_index, straight_mode):
     await self._new_backend.set_profile_straight(profile_index, straight_mode)
@@ -474,7 +474,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     )
 
   async def get_motion_profile_values(self, profile):
-    return await self._new_backend.get_motion_profile_values(profile)
+    return await self._new_backend.request_motion_profile_values(profile)
 
   async def move_to_stored_location(self, location_index, profile_index):
     await self._new_backend._move_to_stored_location(location_index, profile_index)
@@ -522,19 +522,19 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_backend.change_config2(grip_mode)
 
   async def get_grasp_data(self):
-    return await self._new_backend._get_grasp_data()
+    return await self._new_backend._request_grasp_data()
 
   async def set_grasp_data(self, plate_width, finger_speed_percent, grasp_force):
     await self._new_backend._set_grasp_data(plate_width, finger_speed_percent, grasp_force)
 
   async def _get_grip_close_pos(self):
-    return await self._new_backend._get_grip_close_pos()
+    return await self._new_backend._request_grip_close_pos()
 
   async def _set_grip_close_pos(self, close_position):
     await self._new_backend._set_grip_close_pos(close_position)
 
   async def _get_grip_open_pos(self):
-    return await self._new_backend._get_grip_open_pos()
+    return await self._new_backend._request_grip_open_pos()
 
   async def _set_grip_open_pos(self, open_position):
     await self._new_backend._set_grip_open_pos(open_position)

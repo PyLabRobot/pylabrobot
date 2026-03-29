@@ -41,4 +41,4 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
     await self._backend.deactivate()
 
   async def get_current_temperature(self) -> float:
-    return await self._backend.get_current_temperature()
+    return await self._backend.request_current_temperature()

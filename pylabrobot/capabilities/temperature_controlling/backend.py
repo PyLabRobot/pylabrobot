@@ -16,7 +16,7 @@ class TemperatureControllerBackend(CapabilityBackend, metaclass=ABCMeta):
     """Set the temperature of the temperature controller in Celsius."""
 
   @abstractmethod
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     """Get the current temperature of the temperature controller in Celsius"""
 
   @abstractmethod

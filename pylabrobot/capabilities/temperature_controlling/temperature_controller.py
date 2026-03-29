@@ -25,7 +25,7 @@ class TemperatureControlCapability(Capability):
         This can be used for backends that do not support active cooling or to
         explicitly disable active cooling when it is available.
     """
-    current = await self.backend.get_current_temperature()
+    current = await self.backend.request_current_temperature()
 
     self.target_temperature = temperature
 
@@ -43,9 +43,9 @@ class TemperatureControlCapability(Capability):
 
     return await self.backend.set_temperature(temperature)
 
-  async def get_temperature(self) -> float:
+  async def request_temperature(self) -> float:
     """Get the current temperature of the temperature controller in Celsius."""
-    return await self.backend.get_current_temperature()
+    return await self.backend.request_current_temperature()
 
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     """Wait for the temperature to reach the target temperature. The target temperature must be
@@ -59,7 +59,7 @@ class TemperatureControlCapability(Capability):
       raise RuntimeError("Target temperature is not set.")
     start = time.time()
     while time.time() - start < timeout:
-      temperature = await self.get_temperature()
+      temperature = await self.request_temperature()
       if abs(temperature - self.target_temperature) < tolerance:
         return
       await asyncio.sleep(1.0)

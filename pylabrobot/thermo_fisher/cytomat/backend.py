@@ -135,8 +135,8 @@ class CytomatBackend(
   async def set_temperature(self, temperature: float):
     raise NotImplementedError("Temperature is configured via the Cytomat device UI")
 
-  async def get_current_temperature(self) -> float:
-    return (await self.get_incubation_query("it")).actual_value
+  async def request_current_temperature(self) -> float:
+    return (await self.request_incubation_query("it")).actual_value
 
   async def deactivate(self):
     pass  # no-op: temperature is device-managed
@@ -150,8 +150,8 @@ class CytomatBackend(
   async def set_humidity(self, humidity: float):
     raise NotImplementedError("Humidity is configured via the Cytomat device UI")
 
-  async def get_current_humidity(self) -> float:
-    return (await self.get_incubation_query("ih")).actual_value
+  async def request_current_humidity(self) -> float:
+    return (await self.request_incubation_query("ih")).actual_value
 
   # -- ShakerBackend --
 
@@ -198,7 +198,7 @@ class CytomatBackend(
       if key == CytomatActionResponse.ERROR.value:
         logger.error("Command %s failed with: '%s'", command_str, resp)
         if value == "03":
-          error_register = await self.get_error_register()
+          error_register = await self.request_error_register()
           await self.reset_error_register()
           raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
         if int(value, base=16) in error_map:
@@ -253,7 +253,7 @@ class CytomatBackend(
 
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
-  async def get_overview_register(self) -> OverviewRegisterState:
+  async def request_overview_register(self) -> OverviewRegisterState:
     num_tries = 10
     for _ in range(num_tries):
       try:
@@ -263,9 +263,9 @@ class CytomatBackend(
         continue
       return OverviewRegisterState.from_resp(resp)
     await self.reset_error_register()
-    raise CytomatCommandUnknownError("Could not get overview register")
+    raise CytomatCommandUnknownError("Could not request overview register")
 
-  async def get_warning_register(self) -> WarningRegister:
+  async def request_warning_register(self) -> WarningRegister:
     hex_value = await self.send_command("ch", "bw", "")
     for member in WarningRegister:
       if hex_value == member.value:
@@ -273,7 +273,7 @@ class CytomatBackend(
     await self.reset_error_register()
     raise Exception(f"Unknown warning register value: {hex_value}")
 
-  async def get_error_register(self) -> ErrorRegister:
+  async def request_error_register(self) -> ErrorRegister:
     hex_value = await self.send_command("ch", "be", "")
     for member in ErrorRegister:
       if hex_value == member.value:
@@ -299,7 +299,7 @@ class CytomatBackend(
   async def shovel_out(self):
     return await self.send_action("ll", "sp", "002")
 
-  async def get_action_register(self) -> ActionRegisterState:
+  async def request_action_register(self) -> ActionRegisterState:
     hex_value = await self.send_command("ch", "ba", "")
     binary_repr = hex_to_binary(hex_value)
     target, action = binary_repr[:3], binary_repr[3:]
@@ -320,7 +320,7 @@ class CytomatBackend(
 
     return ActionRegisterState(target=target_enum, action=action_enum)
 
-  async def get_swap_register(self) -> SwapStationState:
+  async def request_swap_register(self) -> SwapStationState:
     value = await self.send_command("ch", "sw", "")
     return SwapStationState(
       position=SwapStationPosition(int(value[0])),
@@ -328,7 +328,7 @@ class CytomatBackend(
       load_status_at_processor=LoadStatusAtProcessor(int(value[2])),
     )
 
-  async def get_sensor_register(self) -> SensorStates:
+  async def request_sensor_register(self) -> SensorStates:
     hex_value = await self.send_command("ch", "ts", "")
     binary_values = hex_to_base_twelve(hex_value)
     return SensorStates(
@@ -387,16 +387,16 @@ class CytomatBackend(
 
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
-    while (await self.get_overview_register()).transfer_station_occupied != occupied:
+    while (await self.request_overview_register()).transfer_station_occupied != occupied:
       await asyncio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60) -> OverviewRegisterState:
     start = time.time()
     while True:
-      overview_register = await self.get_overview_register()
+      overview_register = await self.request_overview_register()
       if not overview_register.busy_bit_set:
         if overview_register.error_register_set:
-          error_register = await self.get_error_register()
+          error_register = await self.request_error_register()
           await self.reset_error_register()
           raise error_register_map[error_register]
         return overview_register
@@ -414,7 +414,7 @@ class CytomatBackend(
     assert all(shaker in [1, 2] for shaker in shakers), "Shaker index must be 1 or 2"
     return [await self.send_command("se", f"pb 2{idx - 1}", f"{frequency:04}") for idx in shakers]
 
-  async def get_incubation_query(
+  async def request_incubation_query(
     self, query: Literal["ic", "ih", "io", "it"]
   ) -> CytomatIncupationResponse:
     resp = await self.send_command("ch", query, "")
@@ -423,17 +423,17 @@ class CytomatBackend(
       nominal_value=float(nominal.lstrip("+")), actual_value=float(actual.lstrip("+"))
     )
 
-  async def get_co2(self) -> CytomatIncupationResponse:
-    return await self.get_incubation_query("ic")
+  async def request_co2(self) -> CytomatIncupationResponse:
+    return await self.request_incubation_query("ic")
 
-  async def get_humidity(self) -> CytomatIncupationResponse:
-    return await self.get_incubation_query("ih")
+  async def request_humidity(self) -> CytomatIncupationResponse:
+    return await self.request_incubation_query("ih")
 
-  async def get_o2(self) -> CytomatIncupationResponse:
-    return await self.get_incubation_query("io")
+  async def request_o2(self) -> CytomatIncupationResponse:
+    return await self.request_incubation_query("io")
 
-  async def get_temperature(self) -> float:
-    return (await self.get_incubation_query("it")).actual_value
+  async def request_temperature(self) -> float:
+    return (await self.request_incubation_query("it")).actual_value
 
   def serialize(self) -> dict:
     return {
