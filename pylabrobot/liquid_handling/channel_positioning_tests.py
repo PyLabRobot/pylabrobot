@@ -7,7 +7,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trough import Trough, TroughBottomType
 
-from pylabrobot.liquid_handling.utils import (
+from pylabrobot.liquid_handling.channel_positioning import (
   GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
   MIN_SPACING_EDGE,
   _get_compartments,

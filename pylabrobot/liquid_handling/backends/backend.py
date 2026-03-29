@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.liquid_handling.utils import GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
+from pylabrobot.liquid_handling.channel_positioning import GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Tip
 from pylabrobot.resources.tip_tracker import TipTracker

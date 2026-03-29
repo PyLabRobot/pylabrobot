@@ -14,7 +14,7 @@ from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
-from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
+from pylabrobot.liquid_handling.channel_positioning import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,

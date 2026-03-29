@@ -29,7 +29,7 @@ from pylabrobot.liquid_handling.strictness import (
   Strictness,
   get_strictness,
 )
-from pylabrobot.liquid_handling.utils import (
+from pylabrobot.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
 from pylabrobot.machines.machine import Machine, need_setup_finished
