@@ -1,10 +1,14 @@
+import logging
 import math
 import warnings
 from typing import List, Optional, Tuple
 
+from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+
+logger = logging.getLogger(__name__)
 
 GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS = 9
 MIN_SPACING_BETWEEN_CHANNELS = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
@@ -49,11 +53,11 @@ def _get_compartments(
     if usable_hi > usable_lo:
       usable.append((usable_lo, usable_hi))
     elif raw_width > 0:
-      warnings.warn(
-        f"Compartment Y=[{lo:.1f}, {hi:.1f}] (width={raw_width:.1f}mm) is smaller than "
-        f"2 * edge_clearance ({2 * edge_clearance:.1f}mm). Automatic channel positioning will "
-        f"skip this compartment. Ensure the attached tip physically fits in the container.",
-        stacklevel=3,
+      logger.info(
+        "Compartment Y=[%.1f, %.1f] (width=%.1fmm) is smaller than "
+        "2 * edge_clearance (%.1fmm). Automatic channel positioning will "
+        "skip this compartment. Ensure the attached tip physically fits in the container.",
+        lo, hi, raw_width, 2 * edge_clearance,
       )
   return usable
 
@@ -202,8 +206,9 @@ def _distribute_channels(
 ) -> List[int]:
   """Distribute channels across compartments proportionally to compartment width.
 
-  Channels are ordered and assigned contiguously. Wider compartments get more channels.
-  Falls back to shifting channels between neighbors if proportional assignment doesn't fit.
+  Uses largest-remainder rounding to convert fractional per-compartment ideal_channel_counts into integers,
+  then iteratively shifts channels from overloaded compartments to neighbors until all groups
+  fit. Detects cycles to avoid infinite loops.
 
   Args:
     compartments: List of (y_min, y_max) usable compartment ranges.
@@ -214,22 +219,22 @@ def _distribute_channels(
     List of channel counts per compartment.
 
   Raises:
-    ValueError: If no valid distribution exists.
+    ChannelsDoNotFitError: If no valid distribution exists.
   """
   n_comp = len(compartments)
   widths = [hi - lo for lo, hi in compartments]
   total_width = sum(widths)
 
-  # Proportional targets (largest-remainder rounding)
-  targets = [w / total_width * num_channels for w in widths]
-  distribution = [int(t) for t in targets]
-  remainders = [t - int(t) for t in targets]
-  deficit = num_channels - sum(distribution)
+  # Proportional ideal_channel_counts (largest-remainder rounding)
+  ideal_channel_counts = [w / total_width * num_channels for w in widths]
+  channel_distribution = [int(t) for t in ideal_channel_counts]
+  remainders = [t - int(t) for t in ideal_channel_counts]
+  deficit = num_channels - sum(channel_distribution)
   # Give extra channels to compartments with largest remainders.
   # Break ties by preferring back compartments (higher index = further back).
   for _ in range(deficit):
     idx = max(range(n_comp), key=lambda i: (remainders[i], i))
-    distribution[idx] += 1
+    channel_distribution[idx] += 1
     remainders[idx] = -1  # don't pick again
 
   # Validate: check each group fits
@@ -246,44 +251,42 @@ def _distribute_channels(
       idx += n_ch
     return True
 
-  if _fits(distribution):
-    return distribution
+  # Shift channels from overloaded compartments to neighbors until everything fits.
+  seen = set()
+  while not _fits(channel_distribution):
+    key = tuple(channel_distribution)
+    if key in seen:
+      raise ChannelsDoNotFitError(
+        "Cannot distribute channels across compartments while respecting spacing constraints."
+      )
+    seen.add(key)
 
-  # Try shifting channels from overloaded compartments to neighbors
-  for _ in range(num_channels):
     improved = False
     idx = 0
     for comp_idx in range(n_comp):
-      n_ch = distribution[comp_idx]
+      n_ch = channel_distribution[comp_idx]
       if n_ch == 0:
         continue
       group = spacings[idx : idx + n_ch]
       needed = _space_needed(group)
       if needed > widths[comp_idx] and n_ch > 1:
-        # Try shifting last channel to next compartment
         if comp_idx + 1 < n_comp:
-          distribution[comp_idx] -= 1
-          distribution[comp_idx + 1] += 1
+          channel_distribution[comp_idx] -= 1
+          channel_distribution[comp_idx + 1] += 1
           improved = True
           break
-        # Try shifting first channel to previous compartment
         if comp_idx - 1 >= 0:
-          distribution[comp_idx] -= 1
-          distribution[comp_idx - 1] += 1
+          channel_distribution[comp_idx] -= 1
+          channel_distribution[comp_idx - 1] += 1
           improved = True
           break
       idx += n_ch
     if not improved:
-      break
-    if _fits(distribution):
-      return distribution
+      raise ChannelsDoNotFitError(
+        "Cannot distribute channels across compartments while respecting spacing constraints."
+      )
 
-  if _fits(distribution):
-    return distribution
-
-  raise ValueError(
-    "Cannot distribute channels across compartments while respecting spacing constraints."
-  )
+  return channel_distribution
 
 
 def compute_channel_offsets(
@@ -313,7 +316,8 @@ def compute_channel_offsets(
     List of Y offsets relative to the resource center, sorted back-to-front (descending Y).
 
   Raises:
-    ValueError: If channels cannot fit, or if spread is not "wide", "tight", or "custom".
+    ChannelsDoNotFitError: If channels cannot fit within the resource's compartments.
+    ValueError: If spread is not "wide", "tight", or "custom".
   """
   if spread == "custom":
     return [Coordinate.zero()] * num_channels
@@ -330,10 +334,10 @@ def compute_channel_offsets(
   spacings_front_to_back = list(reversed(spacings))
 
   # Container with no-go zones: distribute across compartments
-  if isinstance(resource, Container) and resource.no_go_zones:
+  if isinstance(resource, Container) and len(resource.no_go_zones) > 0:
     compartments = _get_compartments(resource)
     if not compartments:
-      raise ValueError(
+      raise ChannelsDoNotFitError(
         f"Cannot fit {num_channels} channels into the compartments of "
         f"'{resource.name}' while respecting its no-go zones. "
         f"Use fewer channels or spread='custom' with manual offsets."
@@ -356,7 +360,7 @@ def compute_channel_offsets(
 
       if n_ch == 1:
         if comp_width <= 0:
-          raise ValueError(
+          raise ChannelsDoNotFitError(
             f"Cannot fit {num_channels} channels into the compartments of "
             f"'{resource.name}' while respecting its no-go zones. "
             f"Use fewer channels or spread='custom' with manual offsets."
@@ -373,7 +377,7 @@ def compute_channel_offsets(
         usable = comp_width - first_radius - last_radius
 
         if usable < needed:
-          raise ValueError(
+          raise ChannelsDoNotFitError(
             f"Cannot fit {num_channels} channels into the compartments of "
             f"'{resource.name}' while respecting its no-go zones. "
             f"Use fewer channels or spread='custom' with manual offsets."
@@ -420,7 +424,7 @@ def compute_channel_offsets(
       required = required_spacing_between(spacings_front_to_back, spacing_idx_a, spacing_idx_b)
       actual = first_in_b - last_in_a
       if actual < required - 0.05:
-        raise ValueError(
+        raise ChannelsDoNotFitError(
           f"Cannot fit {num_channels} channels into the compartments of "
           f"'{resource.name}' while respecting spacing constraints across no-go zones "
           f"(gap {actual:.1f}mm < required {required:.1f}mm between compartments "
@@ -442,7 +446,7 @@ def compute_channel_offsets(
 
 
 # ---------------------------------------------------------------------------
-# Deprecated wrappers (remove after 2026-09)
+# Deprecated wrappers (remove in v1)
 # ---------------------------------------------------------------------------
 
 
@@ -453,7 +457,7 @@ def get_wide_single_resource_liquid_op_offsets(
 ) -> List[Coordinate]:
   """Deprecated. Use ``compute_channel_offsets(resource, num_channels, spread='wide')`` instead."""
   warnings.warn(
-    "get_wide_single_resource_liquid_op_offsets() is deprecated and will be removed after 2026-09. "
+    "get_wide_single_resource_liquid_op_offsets() is deprecated and will be removed in v1. "
     "Use compute_channel_offsets(resource, num_channels, spread='wide') instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -471,7 +475,7 @@ def get_tight_single_resource_liquid_op_offsets(
 ) -> List[Coordinate]:
   """Deprecated. Use ``compute_channel_offsets(resource, num_channels, spread='tight')`` instead."""
   warnings.warn(
-    "get_tight_single_resource_liquid_op_offsets() is deprecated and will be removed after 2026-09. "
+    "get_tight_single_resource_liquid_op_offsets() is deprecated and will be removed in v1. "
     "Use compute_channel_offsets(resource, num_channels, spread='tight') instead.",
     DeprecationWarning,
     stacklevel=2,
