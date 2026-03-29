@@ -92,71 +92,83 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
   async def cancel(self) -> str:
     responses = await self.send_command("@")
     self._validate_response(responses[0], 3, "@")
-    return responses[0][2].replace('"', "")
+    return responses[0].data[0].replace('"', "")
 
   async def send_command(self, command: str, timeout: int = 60) -> List[MettlerToledoResponse]:
     logger.log(LOG_LEVEL_IO, "[MT Scale] Sent command: %s", command)
     responses = self._build_response(command)
     for resp in responses:
-      logger.log(LOG_LEVEL_IO, "[MT Scale] Received response: %s", " ".join(resp))
+      logger.log(
+        LOG_LEVEL_IO,
+        "[MT Scale] Received response: %s %s %s",
+        resp.command,
+        resp.status,
+        " ".join(resp.data),
+      )
+      self._parse_basic_errors(resp)
     return responses
 
   def _build_response(self, command: str) -> List[MettlerToledoResponse]:
+    R = MettlerToledoResponse
     cmd = command.split()[0]
     net = round(self._sensor_reading - self.zero_offset - self.tare_weight, 5)
 
     # Identification
     if cmd == "@":
-      return [["I4", "A", f'"{self._simulated_serial_number}"']]
+      return [R("I4", "A", [f'"{self._simulated_serial_number}"'])]
     if cmd == "I1":
       levels = "".join(str(lvl) for lvl in sorted(self._simulated_mt_sics_levels))
-      return [["I1", "A", f'"{levels}"']]
+      return [R("I1", "A", [f'"{levels}"'])]
     if cmd == "I2":
       return [
-        ["I2", "A", f'"{self._simulated_device_type}"', f"{self._simulated_capacity:.4f}", "g"]
+        R("I2", "A", [f'"{self._simulated_device_type}"', f"{self._simulated_capacity:.4f}", "g"])
       ]
     if cmd == "I4":
-      return [["I4", "A", f'"{self._simulated_serial_number}"']]
+      return [R("I4", "A", [f'"{self._simulated_serial_number}"'])]
 
     # Zero
     if cmd in ("Z", "ZI", "ZC"):
       self.zero_offset = self._sensor_reading
-      return [[cmd, "A"]]
+      return [R(cmd, "A")]
 
     # Tare
     if cmd in ("T", "TI", "TC"):
       self.tare_weight = self._sensor_reading - self.zero_offset
-      return [[cmd, "S", f"{self.tare_weight:.5f}", "g"]]
+      return [R(cmd, "S", [f"{self.tare_weight:.5f}", "g"])]
     if cmd == "TA":
-      return [["TA", "A", f"{self.tare_weight:.5f}", "g"]]
+      return [R("TA", "A", [f"{self.tare_weight:.5f}", "g"])]
     if cmd == "TAC":
       self.tare_weight = 0.0
-      return [["TAC", "A"]]
+      return [R("TAC", "A")]
 
     # Weight reading
     if cmd in ("S", "SI", "SC"):
-      return [[cmd, "S", f"{net:.5f}", "g"]]
+      return [R(cmd, "S", [f"{net:.5f}", "g"])]
 
     # Cancel
     if cmd == "C":
-      return [["C", "B"], ["C", "A"]]
+      return [R("C", "B"), R("C", "A")]
 
     # Display
     if cmd in ("D", "DW"):
-      return [[cmd, "A"]]
+      return [R(cmd, "A")]
 
     # Configuration
     if cmd == "M21":
-      return [["M21", "A"]]
+      return [R("M21", "A")]
+
+    # Temperature
+    if cmd == "M28":
+      return [R("M28", "A", ["1", "22.5"])]
 
     # Remaining weighing range
     if cmd == "I50":
       remaining = self._simulated_capacity - self._sensor_reading
       return [
-        ["I50", "B", "0", f"{remaining:.3f}", "g"],
-        ["I50", "B", "1", "0.000", "g"],
-        ["I50", "A", "2", f"{remaining:.3f}", "g"],
+        R("I50", "B", ["0", f"{remaining:.3f}", "g"]),
+        R("I50", "B", ["1", "0.000", "g"]),
+        R("I50", "A", ["2", f"{remaining:.3f}", "g"]),
       ]
 
     # Unknown command
-    return [["ES"]]
+    return [R("ES", "")]

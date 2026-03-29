@@ -7,6 +7,7 @@ import functools
 import logging
 import time
 import warnings
+from dataclasses import dataclass, field
 from typing import Any, Callable, List, Literal, Optional, Set, TypeVar, Union
 
 from pylabrobot.io.serial import Serial
@@ -16,7 +17,18 @@ from pylabrobot.scales.scale_backend import ScaleBackend
 
 logger = logging.getLogger("pylabrobot")
 
-MettlerToledoResponse = List[str]
+
+@dataclass
+class MettlerToledoResponse:
+  """A single parsed MT-SICS response line.
+
+  Format: <command> <status> [<data> ...] CR LF
+  See protocol.md for full format description.
+  """
+
+  command: str
+  status: str
+  data: List[str] = field(default_factory=list)
 
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -143,23 +155,26 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     responses = await self.send_command("I1")
     # I1 A "0123" "2.00" "2.20" "1.00" "1.50"
     self._validate_response(responses[0], 3, "I1")
-    level_string = responses[0][2].replace('"', "")
+    level_string = responses[0].data[0].replace('"', "")
     return {int(c) for c in level_string}
 
   # === Response parsing ===
 
   @staticmethod
-  def _validate_response(response: List[str], min_length: int, command: str) -> None:
-    """Validate that a parsed response has the expected minimum number of fields.
+  def _validate_response(response: MettlerToledoResponse, min_fields: int, command: str) -> None:
+    """Validate that a parsed response has the expected minimum total field count.
+
+    min_fields counts all fields (command + status + data). For example,
+    a weight response "S S 0.00006 g" has 4 fields total.
 
     Raises:
-      MettlerToledoError: if the response is too short.
+      MettlerToledoError: if the response has fewer fields than expected.
     """
-    if len(response) < min_length:
+    total = 1 + (1 if response.status else 0) + len(response.data)
+    if total < min_fields:
       raise MettlerToledoError(
         title="Unexpected response",
-        message=f"Expected at least {min_length} fields for '{command}', "
-        f"got {len(response)}: {' '.join(response)}",
+        message=f"Expected at least {min_fields} fields for '{command}', got {total}: {response}",
       )
 
   @staticmethod
@@ -175,60 +190,43 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         message=f"Expected 'g' for '{command}', got '{unit}'",
       )
 
-  def _parse_basic_errors(self, response: List[str]) -> None:
+  def _parse_basic_errors(self, response: MettlerToledoResponse) -> None:
     """Helper function for parsing basic errors that are common to many commands. If an error is
     detected, a 'MettlerToledoError' exception is raised.
 
-    These are in the first place of the response:
-      - ES: syntax error: The weigh module/balance has not recognized the received command or the
-        command is not allowed
-      - ET: transmission error: The weigh module/balance has received a "faulty" command, e.g. owing
-        to a parity error or interface break
-      - EL: logical error: The weigh module/balance can not execute the received command
-
-    These are in the second place of the response (MT-SICS spec p.10, sec 2.1.3.1):
-      - A: Command executed successfully
-      - B: Command not yet terminated, additional responses following
-      - I: Internal error (e.g. balance not ready yet)
-      - L: Logical error (e.g. parameter not allowed)
-      - +: Balance in overload range
-      - -: Balance in underload range
+    Error commands (ES, ET, EL) have status="" and no data.
+    Status codes I, L, +, - indicate command-specific errors.
 
     Note: B status (multi-response) is handled by send_command, which reads all lines
     until status A. Each line is validated through this method individually.
     """
 
-    if len(response) == 0:
-      raise MettlerToledoError(
-        title="Empty response",
-        message="Received empty response from scale",
-      )
-
-    # General error messages are single-token: ES, ET, EL
-    if response[0] == "ES":
+    # General error messages: ES, ET, EL (status is "" for these)
+    if response.command == "ES":
       raise MettlerToledoError.syntax_error()
-    if response[0] == "ET":
+    if response.command == "ET":
       raise MettlerToledoError.transmission_error()
-    if response[0] == "EL":
+    if response.command == "EL":
       raise MettlerToledoError.logical_error()
 
-    if len(response) < 2:
-      raise MettlerToledoError(
-        title="Unexpected response",
-        message=f"Expected at least 2 fields, got: {' '.join(response)}",
-      )
-
-    if response[1] == "I":
+    # Status code errors
+    if response.status == "I":
       raise MettlerToledoError.executing_another_command()
-    if response[1] == "L":
+    if response.status == "L":
       raise MettlerToledoError.incorrect_parameter()
-    if response[1] == "+":
+    if response.status == "+":
       raise MettlerToledoError.overload()
-    if response[1] == "-":
+    if response.status == "-":
       raise MettlerToledoError.underload()
 
-    if len(response) >= 4 and response[0] == "S" and response[1] == "S" and response[2] == "Error":
-      error_code = response[3]
+    # Weight response error: S S Error <code><trigger>
+    if (
+      response.command == "S"
+      and response.status == "S"
+      and len(response.data) >= 2
+      and response.data[0] == "Error"
+    ):
+      error_code = response.data[1]
       code, source = error_code[:-1], error_code[-1]
       from_terminal = source == "t"
       if code == "1":
@@ -277,12 +275,18 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         await asyncio.sleep(0.001)
 
       logger.log(LOG_LEVEL_IO, "[MT Scale] Received response: %s", raw_response)
-      response = raw_response.decode("utf-8").strip().split()
+      fields = raw_response.decode("utf-8").strip().split()
+      if len(fields) >= 2:
+        response = MettlerToledoResponse(command=fields[0], status=fields[1], data=fields[2:])
+      elif len(fields) == 1:
+        response = MettlerToledoResponse(command=fields[0], status="", data=[])
+      else:
+        response = MettlerToledoResponse(command="", status="", data=[])
       self._parse_basic_errors(response)
-      responses.append(response)  # type: ignore[arg-type]
+      responses.append(response)
 
       # Status B means more responses follow; anything else (A, etc.) is final
-      if len(response) < 2 or response[1] != "B":
+      if response.status != "B":
         break
 
     return responses
@@ -304,7 +308,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     responses = await self.send_command("@")
     # @ responds with I4-style: I4 A "<SNR>"
     self._validate_response(responses[0], 3, "@")
-    return responses[0][2].replace('"', "")
+    return responses[0].data[0].replace('"', "")
 
   async def cancel_all(self) -> None:
     """C - Cancel all active and pending interface commands.
@@ -319,7 +323,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     responses = await self.send_command("C")
     # send_command reads both C B (started) and C A (complete) automatically
     self._validate_response(responses[0], 2, "C")
-    if responses[0][1] == "E":
+    if responses[0].status == "E":
       raise MettlerToledoError(
         title="Error while canceling",
         message=f"C command returned error: {responses[0]}",
@@ -331,22 +335,22 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """Get the serial number of the scale. (I4 command)"""
     responses = await self.send_command("I4")
     self._validate_response(responses[0], 3, "I4")
-    return responses[0][2].replace('"', "")
+    return responses[0].data[0].replace('"', "")
 
   async def request_device_type(self) -> str:
     """Query the device type string. (I2 command)"""
     responses = await self.send_command("I2")
-    # After split(): ["I2", "A", '"WXS205SDU"', "220.0000", "g"]
+    # data: ['"WXS205SDU"', "220.0000", "g"]
     self._validate_response(responses[0], 5, "I2")
-    return responses[0][2].replace('"', "")
+    return responses[0].data[0].replace('"', "")
 
   async def request_capacity(self) -> float:
     """Query the maximum weighing capacity in grams. (I2 command)"""
     responses = await self.send_command("I2")
-    # After split(): ["I2", "A", '"WXS205SDU"', "220.0000", "g"]
+    # data: ['"WXS205SDU"', "220.0000", "g"]
     self._validate_response(responses[0], 5, "I2")
-    self._validate_unit(responses[0][4], "I2")
-    return float(responses[0][3])
+    self._validate_unit(responses[0].data[2], "I2")
+    return float(responses[0].data[1])
 
   @requires_mt_sics_level(2)
   async def request_remaining_weighing_range(self) -> float:
@@ -365,8 +369,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     # responses[1]: I50 B 1 <Range> <Unit> (RangeNo 1 = internal adjustment range)
     # responses[2]: I50 A 2 <Range> <Unit> (RangeNo 2 = external adjustment range)
     self._validate_response(responses[0], 5, "I50")
-    self._validate_unit(responses[0][4], "I50")
-    return float(responses[0][3])
+    self._validate_unit(responses[0].data[2], "I50")
+    return float(responses[0].data[1])
 
   # # Zero commands # #
 
@@ -461,8 +465,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     responses = await self.send_command("TA")
     self._validate_response(responses[0], 4, "TA")
-    self._validate_unit(responses[0][3], "TA")
-    return float(responses[0][2])
+    self._validate_unit(responses[0].data[1], "TA")
+    return float(responses[0].data[0])
 
   async def clear_tare(self) -> List[MettlerToledoResponse]:
     """TAC - Clear tare weight value (MEM-WRITE command)"""
@@ -481,8 +485,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     responses = await self.send_command("S")
     self._validate_response(responses[0], 4, "S")
-    self._validate_unit(responses[0][3], "S")
-    return float(responses[0][2])
+    self._validate_unit(responses[0].data[1], "S")
+    return float(responses[0].data[0])
 
   async def read_dynamic_weight(self, timeout: float) -> float:
     """Read a stable weight value from the machine within a given timeout, or
@@ -496,8 +500,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     responses = await self.send_command(f"SC {timeout}")
     self._validate_response(responses[0], 4, "SC")
-    self._validate_unit(responses[0][3], "SC")
-    return float(responses[0][2])
+    self._validate_unit(responses[0].data[1], "SC")
+    return float(responses[0].data[0])
 
   async def read_weight_value_immediately(self) -> float:
     """Read a weight value immediately from the scale. (MEASUREMENT command)
@@ -508,8 +512,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     responses = await self.send_command("SI")
     self._validate_response(responses[0], 4, "SI")
-    self._validate_unit(responses[0][3], "SI")
-    return float(responses[0][2])
+    self._validate_unit(responses[0].data[1], "SI")
+    return float(responses[0].data[0])
 
   async def read_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
     """High level function to read a weight value from the scale. (MEASUREMENT command)
@@ -551,6 +555,19 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def set_host_unit_grams(self) -> List[MettlerToledoResponse]:
     """Set the host output unit to grams. (M21 command)"""
     return await self.send_command("M21 0 0")
+
+  @requires_mt_sics_level(2)
+  async def measure_temperature(self) -> float:
+    """Query the current temperature from the scale's internal sensor in degrees C. (M28 command)
+
+    The number of temperature sensors depends on the product. This method returns
+    the value from the first sensor. Useful for gravimetric verification where
+    temperature affects liquid density and evaporation rate.
+    """
+    responses = await self.send_command("M28")
+    # M28 A 1 22.5 (single sensor) or M28 B 1 22.5 ... M28 A 2 23.0 (multi-sensor)
+    self._validate_response(responses[0], 4, "M28")
+    return float(responses[0].data[1])
 
   # # # Deprecated alias with warning # # #
 
