@@ -4,7 +4,7 @@ from typing import Optional, cast
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
+from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 from pylabrobot.resources import Coordinate
 
 
@@ -22,8 +22,8 @@ def _direction_degrees_to_grip_direction(degrees: float) -> int:
 
 
 class iSWAP(OrientableGripperArmBackend):
-  def __init__(self, interface: HamiltonLiquidHandler):
-    self.interface = interface
+  def __init__(self, driver: STARDriver):
+    self.driver = driver
     self._version: Optional[str] = None
     self._parked: Optional[bool] = None
 
@@ -42,15 +42,16 @@ class iSWAP(OrientableGripperArmBackend):
     raise NotImplementedError("iSWAP does not support get_gripper_location")
 
   async def _on_setup(self) -> None:
-    self._version = await self._request_version()
+    if self._version is None:
+      self._version = await self._request_version()
 
   async def _request_version(self) -> str:
     """Request the iSWAP firmware version from the device."""
-    return cast(str, (await self.interface.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
+    return cast(str, (await self.driver.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
   @dataclass
   class ParkParams(BackendParams):
-    minimum_traverse_height: float = 284.0
+    minimum_traverse_height: float = 280.0
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the iSWAP.
@@ -64,7 +65,7 @@ class iSWAP(OrientableGripperArmBackend):
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="PG",
       th=round(backend_params.minimum_traverse_height * 10),
@@ -83,7 +84,7 @@ class iSWAP(OrientableGripperArmBackend):
     if not 0 <= gripper_width <= 999.9:
       raise ValueError("gripper_width must be between 0 and 999.9")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0", command="GF", go=f"{round(gripper_width * 10):04}"
     )
 
@@ -111,7 +112,7 @@ class iSWAP(OrientableGripperArmBackend):
     if not 0 <= backend_params.plate_width_tolerance <= 9.9:
       raise ValueError("plate_width_tolerance must be between 0 and 9.9")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="GC",
       gw=backend_params.grip_strength,
@@ -178,7 +179,7 @@ class iSWAP(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="PP",
       xs=f"{abs(round(location.x * 10)):05}",
@@ -249,7 +250,7 @@ class iSWAP(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="PR",
       xs=f"{abs(round(location.x * 10)):05}",
@@ -273,7 +274,7 @@ class iSWAP(OrientableGripperArmBackend):
     Returns:
       True if holding a plate, False otherwise.
     """
-    resp = await self.interface.send_command(module="C0", command="QP", fmt="ph#")
+    resp = await self.driver.send_command(module="C0", command="QP", fmt="ph#")
     return resp is not None and resp["ph"] == 1
 
   @dataclass
@@ -316,7 +317,7 @@ class iSWAP(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="PM",
       xs=f"{abs(round(location.x * 10)):05}",

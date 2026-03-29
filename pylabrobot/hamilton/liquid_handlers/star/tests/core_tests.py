@@ -10,9 +10,9 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
   STARBackend equivalents."""
 
   async def asyncSetUp(self):
-    self.mock_interface = MagicMock()
-    self.mock_interface.send_command = AsyncMock()
-    self.core = CoreGripper(interface=self.mock_interface)
+    self.mock_driver = MagicMock()
+    self.mock_driver.send_command = AsyncMock()
+    self.core = CoreGripper(driver=self.mock_driver)
 
   async def test_pick_up_at_location(self):
     """ZP with default params, plate width 86mm at (347.9, 114.2, 187.4)."""
@@ -21,7 +21,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       resource_width=86.0,
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZP",
       xs="03479",
@@ -51,7 +51,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       ),
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZP",
       xs="05000",
@@ -74,7 +74,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       resource_width=86.0,
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZR",
       xs="03479",
@@ -101,7 +101,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       ),
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZR",
       xs="05000",
@@ -121,7 +121,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       location=Coordinate(500.0, 200.0, 150.0),
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZM",
       xs="05000",
@@ -144,7 +144,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       ),
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZM",
       xs="08000",
@@ -160,7 +160,7 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
     """ZO command."""
     await self.core.open_gripper(gripper_width=0)
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZO",
     )

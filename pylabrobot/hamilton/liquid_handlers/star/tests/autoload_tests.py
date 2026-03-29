@@ -276,3 +276,102 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(calls[0].kwargs["command"], "CL")
     self.assertEqual(calls[0].kwargs["bd"], "0")  # vertical when no barcode
     self.assertEqual(calls[0].kwargs["cn"], "00")  # no scanning
+
+  async def test_load_carrier_from_belt_with_barcode(self):
+    """Test loading a carrier from the belt with barcode scanning enabled."""
+    self.mock_driver.send_command.side_effect = [
+      None,  # CB command (set_1d_barcode_type)
+      "C0CLid0001bb/ABC123/DEF456/00/GHI789/JKL012",  # CL command with barcodes
+      None,  # safe z (park)
+      None,  # park XP
+    ]
+    result = await self.autoload.load_carrier_from_belt(
+      barcode_reading=True,
+      barcode_reading_direction="horizontal",
+      barcode_symbology="Code 128 (Subset B and C)",
+      no_container_per_carrier=5,
+      park_autoload_after=True,
+    )
+    # Verify set_1d_barcode_type was called (CB command)
+    calls = self.mock_driver.send_command.call_args_list
+    self.assertEqual(calls[0].kwargs["module"], "C0")
+    self.assertEqual(calls[0].kwargs["command"], "CB")
+    # Verify CL command
+    self.assertEqual(calls[1].kwargs["module"], "C0")
+    self.assertEqual(calls[1].kwargs["command"], "CL")
+    self.assertEqual(calls[1].kwargs["bd"], "1")  # horizontal
+    # Verify returned barcode dict
+    self.assertEqual(len(result), 5)
+    self.assertIsNotNone(result[0])
+    self.assertEqual(result[0].data, "ABC123")
+    self.assertIsNotNone(result[1])
+    self.assertEqual(result[1].data, "DEF456")
+    self.assertIsNone(result[2])  # "00" means no barcode
+    self.assertIsNotNone(result[3])
+    self.assertEqual(result[3].data, "GHI789")
+    self.assertIsNotNone(result[4])
+    self.assertEqual(result[4].data, "JKL012")
+
+  async def test_load_carrier(self):
+    """Test high-level load_carrier orchestration."""
+    self.mock_driver.send_command.side_effect = [
+      {"ct": 1},       # CT: presence check returns True
+      "C0CIid0001",    # CI: carrier barcode scan (no barcode reading)
+      "C0CLid0001",    # CL: belt load (no barcode reading)
+      None,             # IV: safe z (park)
+      None,             # XP: park
+    ]
+    result = await self.autoload.load_carrier(
+      carrier_end_rail=10,
+      barcode_reading=False,
+      carrier_barcode_reading=False,
+    )
+    self.assertIsNone(result["carrier_barcode"])
+    self.assertIsNone(result["container_barcodes"])
+    # Verify CT was called for presence check
+    calls = self.mock_driver.send_command.call_args_list
+    self.assertEqual(calls[0].kwargs["command"], "CT")
+    # Verify CI was called
+    self.assertEqual(calls[1].kwargs["command"], "CI")
+    # Verify CL was called
+    self.assertEqual(calls[2].kwargs["command"], "CL")
+
+  async def test_take_carrier_out_to_belt_error_recovery(self):
+    """Test that move_to_safe_z_position (IV) is called before RuntimeError on CN failure."""
+    self.mock_driver.send_command.side_effect = [
+      {"ct": 0},                      # CT: carrier NOT present on tray
+      RuntimeError("CN firmware error"),  # CN: raises exception
+      None,                            # IV: move_to_safe_z_position
+    ]
+    with self.assertRaises(RuntimeError):
+      await self.autoload.take_carrier_out_to_belt(carrier_end_rail=10)
+    # Verify move_to_safe_z_position (IV) was called after the CN error
+    calls = self.mock_driver.send_command.call_args_list
+    self.assertEqual(calls[2].kwargs["command"], "IV")
+
+  async def test_unload_carrier_after_barcode_scanning_error_recovery(self):
+    """Test that move_to_safe_z_position (IV) is called before RuntimeError on CA failure."""
+    self.mock_driver.send_command.side_effect = [
+      RuntimeError("CA firmware error"),  # CA: raises exception
+      None,                               # IV: move_to_safe_z_position
+    ]
+    with self.assertRaises(RuntimeError):
+      await self.autoload.unload_carrier_after_barcode_scanning()
+    # Verify move_to_safe_z_position (IV) was called
+    calls = self.mock_driver.send_command.call_args_list
+    self.assertEqual(calls[1].kwargs["command"], "IV")
+
+  async def test_load_carrier_from_tray_and_scan_carrier_barcode_error_recovery(self):
+    """Test that move_to_safe_z_position (IV) is called before RuntimeError on CI failure."""
+    self.mock_driver.send_command.side_effect = [
+      RuntimeError("CI firmware error"),  # CI: raises exception
+      None,                               # IV: move_to_safe_z_position
+    ]
+    with self.assertRaises(RuntimeError):
+      await self.autoload.load_carrier_from_tray_and_scan_carrier_barcode(
+        carrier_end_rail=10,
+        carrier_barcode_reading=True,
+      )
+    # Verify move_to_safe_z_position (IV) was called
+    calls = self.mock_driver.send_command.call_args_list
+    self.assertEqual(calls[1].kwargs["command"], "IV")

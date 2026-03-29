@@ -4,7 +4,7 @@ from typing import Optional
 from pylabrobot.arms.backend import GripperArmBackend
 from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
+from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 from pylabrobot.resources import Coordinate
 
 
@@ -15,8 +15,8 @@ class CoreGripper(GripperArmBackend):
   Tool management (pick up / return) is handled by the STAR backend.
   """
 
-  def __init__(self, interface: HamiltonLiquidHandler):
-    self.interface = interface
+  def __init__(self, driver: STARDriver):
+    self.driver = driver
 
   # -- lifecycle --------------------------------------------------------------
 
@@ -65,7 +65,7 @@ class CoreGripper(GripperArmBackend):
     if not 0 <= backend_params.z_position_at_end <= 360.0:
       raise ValueError("z_position_at_end must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ZP",
       xs=f"{abs(round(location.x * 10)):05}",
@@ -117,7 +117,7 @@ class CoreGripper(GripperArmBackend):
     if not 0 <= backend_params.z_position_at_end <= 360.0:
       raise ValueError("z_position_at_end must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ZR",
       xs=f"{abs(round(location.x * 10)):05}",
@@ -160,7 +160,7 @@ class CoreGripper(GripperArmBackend):
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ZM",
       xs=f"{abs(round(location.x * 10)):05}",
@@ -176,7 +176,7 @@ class CoreGripper(GripperArmBackend):
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Open the CoRe gripper."""
-    await self.interface.send_command(module="C0", command="ZO")
+    await self.driver.send_command(module="C0", command="ZO")
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None

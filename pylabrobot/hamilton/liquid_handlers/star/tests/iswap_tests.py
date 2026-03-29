@@ -10,9 +10,9 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
   STARBackend equivalents."""
 
   async def asyncSetUp(self):
-    self.mock_interface = MagicMock()
-    self.mock_interface.send_command = AsyncMock()
-    self.iswap = iSWAP(interface=self.mock_interface)
+    self.mock_driver = MagicMock()
+    self.mock_driver.send_command = AsyncMock()
+    self.iswap = iSWAP(driver=self.mock_driver)
 
   async def test_pick_up_at_location(self):
     """C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"""
@@ -22,7 +22,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       resource_width=127.76,
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="PP",
       xs="03479",
@@ -50,7 +50,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       resource_width=127.76,
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="PP",
       xs="10427",
@@ -78,7 +78,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       resource_width=127.76,
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="PR",
       xs="03479",
@@ -103,7 +103,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       resource_width=127.76,
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="PR",
       xs="10427",
@@ -123,17 +123,17 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
   async def test_park(self):
     await self.iswap.park()
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="PG",
-      th=2840,
+      th=2800,
     )
     self.assertTrue(self.iswap.parked)
 
   async def test_park_custom_height(self):
     await self.iswap.park(backend_params=iSWAP.ParkParams(minimum_traverse_height=200.0))
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="PG",
       th=2000,
@@ -142,7 +142,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
   async def test_open_gripper(self):
     await self.iswap.open_gripper(gripper_width=130.8)
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="GF",
       go="1308",
@@ -154,7 +154,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       backend_params=iSWAP.CloseGripperParams(grip_strength=5, plate_width_tolerance=0),
     )
 
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="GC",
       gw=5,
@@ -163,17 +163,17 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_is_gripper_closed(self):
-    self.mock_interface.send_command.return_value = {"ph": 1}
+    self.mock_driver.send_command.return_value = {"ph": 1}
     result = await self.iswap.is_gripper_closed()
     self.assertTrue(result)
-    self.mock_interface.send_command.assert_called_once_with(
+    self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="QP",
       fmt="ph#",
     )
 
   async def test_is_gripper_open(self):
-    self.mock_interface.send_command.return_value = {"ph": 0}
+    self.mock_driver.send_command.return_value = {"ph": 0}
     result = await self.iswap.is_gripper_closed()
     self.assertFalse(result)
 
