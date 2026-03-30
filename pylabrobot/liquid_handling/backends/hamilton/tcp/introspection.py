@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Union, cast
+from typing import Dict, List, Optional, Set, TypeVar, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -284,18 +284,27 @@ class ParameterType:
     """True if this is an enum reference (type 32 in struct context, 78/81/82/85 in method)."""
     return self.type_id in {32, 35, 78, 81, 82, 85}
 
-  def resolve_name(self, registry: Optional["TypeRegistry"] = None) -> str:
-    """Resolve to a human-readable name, optionally using a TypeRegistry."""
+  def resolve_name(
+    self,
+    registry: Optional["TypeRegistry"] = None,
+    ho_interface_id: Optional[int] = None,
+  ) -> str:
+    """Resolve to a human-readable name, optionally using a TypeRegistry.
+
+    For source_id=2 (local) refs, pass ``ho_interface_id`` (the HOI interface id
+    of the method or struct owning this type) so resolution uses that interface's
+    table only. If omitted, registry falls back to multi-interface heuristics.
+    """
     base = resolve_introspection_type_name(self.type_id)
     if not self.is_complex or self.source_id is None or self.ref_id is None:
       return base
     if registry is None:
       return f"{base}(iface={self.source_id}, id={self.ref_id})"
     if self.is_struct_ref:
-      s = registry.resolve_struct(self.source_id, self.ref_id)
+      s = registry.resolve_struct(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
       return s.name if s else f"{base}(iface={self.source_id}, id={self.ref_id})"
     if self.is_enum_ref:
-      e = registry.resolve_enum(self.source_id, self.ref_id)
+      e = registry.resolve_enum(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
       return e.name if e else f"{base}(iface={self.source_id}, id={self.ref_id})"
     return f"{base}(iface={self.source_id}, id={self.ref_id})"
 
@@ -393,8 +402,9 @@ class MethodInfo:
     If a TypeRegistry is provided, struct/enum references are resolved to
     their names (e.g. PickupTipParameters instead of struct(iface=1, id=57)).
     """
+    iid = self.interface_id
     if self.parameter_types:
-      param_type_names = [pt.resolve_name(registry) for pt in self.parameter_types]
+      param_type_names = [pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types]
       if self.parameter_labels and len(self.parameter_labels) == len(param_type_names):
         params = [
           f"{label}: {type_name}"
@@ -407,7 +417,7 @@ class MethodInfo:
       param_str = "void"
 
     if self.return_types:
-      return_type_names = [rt.resolve_name(registry) for rt in self.return_types]
+      return_type_names = [rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types]
       return_categories = [get_introspection_type_category(rt.type_id) for rt in self.return_types]
       if any(cat == "ReturnElement" for cat in return_categories):
         if self.return_labels and len(self.return_labels) == len(return_type_names):
@@ -431,6 +441,35 @@ class MethodInfo:
     return f"[{self.interface_id}:{self.method_id}] {self.name}({param_str}) -> {return_str}"
 
 
+_TLocal = TypeVar("_TLocal")
+
+
+def _lookup_local_table_entry(
+  tables: Dict[int, Dict[int, _TLocal]],
+  ref_id: int,
+) -> Optional[_TLocal]:
+  """Resolve source_id=2 (local) refs when HOI interface id is unknown.
+
+  ref_id is 1-based; struct/enum_id in tables is 0-based. Tables are keyed by HOI
+  interface id from InterfaceDescriptors (e.g. 1 for API, 0 for introspection), not
+  by the literal ``2`` in the wire triple. Prefers interface 1 when present, then
+  scans other non-zero keys — unsafe if two interfaces reuse the same local index
+  with different meanings. Prefer ``TypeRegistry.resolve_*(..., ho_interface_id=…)``.
+  """
+  idx = ref_id - 1
+  if idx < 0:
+    return None
+  if 1 in tables:
+    hit = tables[1].get(idx)
+    if hit is not None:
+      return hit
+  for iid in sorted(k for k in tables if k != 0 and k != 1):
+    hit = tables[iid].get(idx)
+    if hit is not None:
+      return hit
+  return None
+
+
 @dataclass
 class TypeRegistry:
   """Resolved type information for one object.
@@ -439,10 +478,25 @@ class TypeRegistry:
   interface info so method signatures can be fully resolved without additional
   device calls. Use build_type_registry() to create.
 
-  Source ID semantics (from piglet):
-    source_id=1: Global pool (shared type definitions from global objects)
-    source_id=2: Local to the current object's interface
-    source_id=3: Built-in NetworkResult error type
+  Source ID semantics (from piglet — the middle byte of a struct/enum type triple):
+    source_id=1: Global pool (shared type definitions from global objects); ref_id is
+      1-based into that flat list (see GlobalTypePool.resolve_struct).
+    source_id=2: Local types on this object; ref_id is 1-based into the per-interface
+      struct/enum maps in self.structs / self.enums (struct_id / enum_id from GetStructs
+      / GetEnums is 0-based). This is NOT ``HOI interface id 2``; ``2`` means *local*
+      in the type encoding; tables are keyed by real interface ids (typically ``1`` for
+      ``[1:*]`` methods alongside introspection on ``0``).
+    source_id=3: Built-in / network types (e.g. NetworkResult-shaped); resolve_struct
+      does not decode these yet — validate behavior vs Piglet or device captures.
+
+  source_id=0 (same-interface references) appears in nested struct field type bytes;
+  indexing for method-level params and whether to use GlobalTypePool.resolve_struct_local
+  vs. this registry should be validated on hardware — do not assume the same 1-based rule
+  as source_id=2 locals.
+
+  For source_id=2, pass ``ho_interface_id`` on ``resolve_struct`` / ``resolve_enum`` whenever
+  the owning method or struct's interface is known (strict table lookup). Omitting it uses
+  a legacy multi-interface fallback that may be ambiguous if two interfaces share a local index.
 
   Example:
     registry = await intro.build_type_registry(mph_addr)
@@ -457,27 +511,55 @@ class TypeRegistry:
   methods: List[MethodInfo] = field(default_factory=list)
   global_pool: Optional["GlobalTypePool"] = None
 
-  def resolve_struct(self, source_id: int, ref_id: int) -> Optional["StructInfo"]:
+  def resolve_struct(
+    self,
+    source_id: int,
+    ref_id: int,
+    *,
+    ho_interface_id: Optional[int] = None,
+  ) -> Optional["StructInfo"]:
     """Look up a struct by source_id and ref_id.
 
-    source_id=1: Global pool (1-based index, piglet subtracts 1)
-    source_id=2: Local interface structs (keyed by interface_id in self.structs)
+    source_id=1: Global pool (1-based ref_id; see GlobalTypePool.resolve_struct).
+    source_id=2: Local structs (1-based ref_id -> 0-based struct_id in
+      ``self.structs[ho_interface_id]``). Pass ``ho_interface_id`` for strict,
+      interface-scoped resolution; if omitted, uses multi-interface fallback
+      (see _lookup_local_table_entry).
     """
     if source_id == 1 and self.global_pool is not None:
       return self.global_pool.resolve_struct(ref_id)
     if source_id == 2:
-      return self.structs.get(source_id, {}).get(ref_id)
+      idx = ref_id - 1
+      if idx < 0:
+        return None
+      if ho_interface_id is not None:
+        return self.structs.get(ho_interface_id, {}).get(idx)
+      return _lookup_local_table_entry(self.structs, ref_id)
     logger.warning("resolve_struct: unhandled source_id=%d ref_id=%d", source_id, ref_id)
     return None
 
-  def resolve_enum(self, source_id: int, ref_id: int) -> Optional["EnumInfo"]:
+  def resolve_enum(
+    self,
+    source_id: int,
+    ref_id: int,
+    *,
+    ho_interface_id: Optional[int] = None,
+  ) -> Optional["EnumInfo"]:
     """Look up an enum by source_id and ref_id.
 
-    source_id=1: Global pool (1-based index)
-    source_id=2: Local interface enums
+    source_id=1: Global pool (1-based ref_id).
+    source_id=2: Local enums (same rules as resolve_struct). Pass ``ho_interface_id``
+      for strict resolution; if omitted, multi-interface fallback applies.
     """
     if source_id == 1 and self.global_pool is not None:
       return self.global_pool.resolve_enum(ref_id)
+    if source_id == 2:
+      idx = ref_id - 1
+      if idx < 0:
+        return None
+      if ho_interface_id is not None:
+        return self.enums.get(ho_interface_id, {}).get(idx)
+      return _lookup_local_table_entry(self.enums, ref_id)
     return self.enums.get(source_id, {}).get(ref_id)
 
   def get_method(self, interface_id: int, method_id: int) -> Optional[MethodInfo]:
@@ -553,8 +635,10 @@ class StructInfo:
     If a TypeRegistry is provided, complex references (struct/enum fields)
     are resolved to their names.
     """
+    ho_iid = self.interface_id
     field_strs = [
-      f"{name}: {_resolve_struct_field_type(pt, registry)}" for name, pt in self.fields.items()
+      f"{name}: {_resolve_struct_field_type(pt, registry, ho_interface_id=ho_iid)}"
+      for name, pt in self.fields.items()
     ]
     fields_str = "\n  ".join(field_strs) if field_strs else "  (empty)"
     return f"struct {self.name} {{\n  {fields_str}\n}}"
@@ -613,21 +697,26 @@ class GlobalTypePool:
 def _resolve_struct_field_type(
   pt: ParameterType,
   registry: Optional["TypeRegistry"] = None,
+  *,
+  ho_interface_id: Optional[int] = None,
 ) -> str:
   """Resolve a struct field's ParameterType to a human-readable type name.
 
   Struct field type_ids use the HamiltonDataType wire namespace (e.g. 40=F32,
   23=BOOL) -- not the method-parameter introspection namespace. Complex
   references (30=STRUCTURE, 32=ENUM) are resolved via the TypeRegistry when provided.
+
+  Pass ``ho_interface_id`` as the owning struct's HOI interface id for local
+  (source_id=2) field references.
   """
   if pt.is_complex and pt.source_id is not None and pt.ref_id is not None:
     if registry is not None:
       if pt.is_struct_ref:
-        s = registry.resolve_struct(pt.source_id, pt.ref_id)
+        s = registry.resolve_struct(pt.source_id, pt.ref_id, ho_interface_id=ho_interface_id)
         if s:
           return f"struct({s.name})"
       elif pt.is_enum_ref:
-        e = registry.resolve_enum(pt.source_id, pt.ref_id)
+        e = registry.resolve_enum(pt.source_id, pt.ref_id, ho_interface_id=ho_interface_id)
         if e:
           return e.name
     return f"ref(iface={pt.source_id}, id={pt.ref_id})"
@@ -1405,7 +1494,7 @@ class HamiltonIntrospection:
         lines.append(f"  Expected params: {', '.join(method.parameter_labels)}")
       for pt in method.parameter_types:
         if pt.is_complex:
-          resolved = pt.resolve_name(registry)
+          resolved = pt.resolve_name(registry, ho_interface_id=method.interface_id)
           lines.append(f"  Param type {pt.type_id}: {resolved}")
     else:
       lines.append(f"  Method [{interface_id}:{method_id}] <not found>")
@@ -1594,18 +1683,21 @@ def validate_struct(
   dataclass_cls,
   introspected: StructInfo,
   pool: Optional[GlobalTypePool] = None,
+  registry: Optional["TypeRegistry"] = None,
 ) -> ValidationResult:
   """Compare a hand-crafted dataclass against an introspected StructInfo.
 
   Checks field count, field names (snake_case → PascalCase), field types
   (extracts type_id from Annotated metadata), and field order. For nested
   structs (Annotated[X, Struct()]), recursively validates the child struct
-  if a GlobalTypePool is provided.
+  when a GlobalTypePool and/or TypeRegistry can resolve the nested ref
+  (global, same-interface, or local source_id=2 with registry + interface id).
 
   Args:
     dataclass_cls: The hand-crafted dataclass class (not an instance).
     introspected: The introspected StructInfo from the device.
-    pool: Optional GlobalTypePool for resolving nested struct refs.
+    pool: Optional GlobalTypePool for nested global (1) and same-interface (0) refs.
+    registry: Optional TypeRegistry for nested local (source_id=2) refs.
 
   Returns:
     ValidationResult with pass/fail and detailed mismatches.
@@ -1696,24 +1788,28 @@ def validate_struct(
 
     # 5. Recursive validation for nested structs
     if (
-      pool is not None
-      and intro_pt.is_complex
+      intro_pt.is_complex
       and intro_pt.source_id is not None
       and intro_pt.ref_id is not None
       and intro_pt.type_id == 30
     ):  # STRUCTURE
       nested_cls = _get_nested_dataclass(annotation)
       if nested_cls:
-        if intro_pt.source_id == 1:
-          # Global pool ref (1-based index)
+        nested_struct: Optional[StructInfo] = None
+        if intro_pt.source_id == 1 and pool is not None:
           nested_struct = pool.resolve_struct(intro_pt.ref_id)
-        elif intro_pt.source_id == 0 and introspected.interface_id is not None:
-          # Same-interface ref: look up within that interface's struct group
+        elif intro_pt.source_id == 0 and pool is not None and introspected.interface_id is not None:
           nested_struct = pool.resolve_struct_local(introspected.interface_id, intro_pt.ref_id)
-        else:
-          nested_struct = None
+        elif (
+          intro_pt.source_id == 2
+          and registry is not None
+          and introspected.interface_id is not None
+        ):
+          nested_struct = registry.resolve_struct(
+            2, intro_pt.ref_id, ho_interface_id=introspected.interface_id
+          )
         if nested_struct:
-          child_result = validate_struct(nested_cls, nested_struct, pool)
+          child_result = validate_struct(nested_cls, nested_struct, pool, registry=registry)
           result.children.append(child_result)
 
   result.passed = len(mismatches) == 0 and all(c.passed for c in result.children)
@@ -1784,16 +1880,19 @@ def validate_command(
   for (pf, annotation), pt in zip(struct_fields, struct_params):
     ref_id = pt.ref_id
     assert ref_id is not None, "struct_params filtered for ref_id is not None"
-    if pt.source_id == 1:
-      intro_struct = pool.resolve_struct(ref_id)
-    elif pt.source_id == 0:
-      # Same-interface ref: would need interface_id context; skip for now
+    if pt.source_id == 0:
+      # Same-interface ref: needs correct HOI interface id for GlobalTypePool.resolve_struct_local
+      # vs. registry — validate on hardware before wiring method-level validation here.
       intro_struct = None
+    elif pt.source_id == 2:
+      intro_struct = registry.resolve_struct(
+        pt.source_id, ref_id, ho_interface_id=method.interface_id
+      )
     else:
-      intro_struct = pool.resolve_struct(ref_id)
+      intro_struct = registry.resolve_struct(pt.source_id, ref_id)
     nested_cls = _get_nested_dataclass(annotation)
     if intro_struct and nested_cls:
-      child_result = validate_struct(nested_cls, intro_struct, pool)
+      child_result = validate_struct(nested_cls, intro_struct, pool, registry=registry)
       child_result.name = f"{pf.name} → {intro_struct.name} (ref={pt.ref_id})"
       result.children.append(child_result)
 
