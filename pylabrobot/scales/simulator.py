@@ -1,15 +1,15 @@
-"""Generic scale chatterbox for testing the Scale frontend and ScaleBackend interface.
+"""Generic scale simulator for testing the Scale frontend and ScaleBackend interface.
 
-This chatterbox is protocol-agnostic - it tests the abstract scale contract (zero, tare,
+This simulator is protocol-agnostic - it tests the abstract scale contract (zero, tare,
 read_weight, request_tare_weight) without any device-specific protocol. For MT-SICS
-protocol-level simulation, use MettlerToledoChatterboxBackend instead.
+protocol-level simulation, use MettlerToledoSICSSimulator instead.
 """
 
 from pylabrobot.scales.scale_backend import ScaleBackend
 
 
-class ScaleChatterboxBackend(ScaleBackend):
-  """Chatter box backend for device-free testing.
+class ScaleSimulator(ScaleBackend):
+  """Generic scale simulator for device-free testing.
 
   Simulates scale behavior: tracks zero offset, tare weight, and platform load.
   The total sensor reading is ``platform_weight + sample_weight``.
@@ -20,7 +20,7 @@ class ScaleChatterboxBackend(ScaleBackend):
 
   Example - zero::
 
-    backend = ScaleChatterboxBackend()
+    backend = ScaleSimulator()
     backend.platform_weight = 2.0    # residue on empty platform
     await scale.zero()               # zero_offset = 2.0
     await scale.read_weight()        # returns 0.0
@@ -29,7 +29,7 @@ class ScaleChatterboxBackend(ScaleBackend):
 
   Example - tare::
 
-    backend = ScaleChatterboxBackend()
+    backend = ScaleSimulator()
     backend.platform_weight = 50.0   # place a 50g beaker
     await scale.tare()               # tare_weight = 50.0
     backend.sample_weight = 10.0     # add 10g of liquid

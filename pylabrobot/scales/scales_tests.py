@@ -1,16 +1,16 @@
-"""Tests for generic scale behavior via the chatterbox physics simulation."""
+"""Tests for generic scale behavior via the scale physics simulation."""
 
 import unittest
 
-from pylabrobot.scales.chatterbox import ScaleChatterboxBackend
 from pylabrobot.scales.scale import Scale
+from pylabrobot.scales.simulator import ScaleSimulator
 
 
-class ScaleChatterboxTests(unittest.IsolatedAsyncioTestCase):
-  """Tests for the chatterbox physics simulation via the Scale frontend."""
+class ScaleSimulatorTests(unittest.IsolatedAsyncioTestCase):
+  """Tests for the physics simulation via the Scale frontend."""
 
   async def asyncSetUp(self):
-    self.backend = ScaleChatterboxBackend()
+    self.backend = ScaleSimulator()
     self.scale = Scale(
       name="test_scale",
       backend=self.backend,

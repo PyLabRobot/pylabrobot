@@ -1,4 +1,4 @@
-"""Tests for MT-SICS response parsing, validation, and chatterbox protocol simulation."""
+"""Tests for MT-SICS response parsing, validation, and protocol simulation."""
 
 import unittest
 
@@ -6,15 +6,15 @@ from pylabrobot.scales.mettler_toledo.backend import (
   MettlerToledoResponse,
   MettlerToledoWXS205SDUBackend,
 )
-from pylabrobot.scales.mettler_toledo.chatterbox import MettlerToledoChatterboxBackend
 from pylabrobot.scales.mettler_toledo.errors import MettlerToledoError
+from pylabrobot.scales.mettler_toledo.simulator import MettlerToledoSICSSimulator
 from pylabrobot.scales.scale import Scale
 
 R = MettlerToledoResponse
 
 
 class MTSICSResponseParsingTests(unittest.TestCase):
-  """Tests for response parsing helpers - no hardware or chatterbox needed."""
+  """Tests for response parsing helpers - no hardware or simulator needed."""
 
   def setUp(self):
     self.backend = MettlerToledoWXS205SDUBackend.__new__(MettlerToledoWXS205SDUBackend)
@@ -98,13 +98,13 @@ class MTSICSResponseParsingTests(unittest.TestCase):
     self.assertEqual(resp.data, [])
 
 
-class MTSICSChatterboxTests(unittest.IsolatedAsyncioTestCase):
-  """Tests for the MT-SICS protocol chatterbox.
+class MTSICSSimulatorTests(unittest.IsolatedAsyncioTestCase):
+  """Tests for the MT-SICS protocol simulator.
   These exercise the full stack: send_command -> mock response -> parse -> validate -> return.
   Catches dataclass construction bugs, index mapping errors, and response format mismatches."""
 
   async def asyncSetUp(self):
-    self.backend = MettlerToledoChatterboxBackend()
+    self.backend = MettlerToledoSICSSimulator()
     self.scale = Scale(
       name="test_scale",
       backend=self.backend,
@@ -161,7 +161,7 @@ class MTSICSChatterboxTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_unknown_command_returns_syntax_error(self):
     """Unknown commands must return ES (syntax error) response.
-    Ensures the chatterbox correctly simulates the device rejecting invalid commands."""
+    Ensures the simulator correctly simulates the device rejecting invalid commands."""
     with self.assertRaises(MettlerToledoError) as ctx:
       await self.backend.send_command("XYZNOTREAL")
     self.assertIn("Syntax error", str(ctx.exception))
@@ -175,7 +175,7 @@ class MTSICSChatterboxTests(unittest.IsolatedAsyncioTestCase):
   async def test_measure_temperature_blocked_when_unsupported(self):
     """measure_temperature must raise when M28 is not in the device's command list.
     Validates that I0-based command gating works correctly."""
-    backend = MettlerToledoChatterboxBackend(
+    backend = MettlerToledoSICSSimulator(
       supported_commands={"@", "I0", "I2", "I4", "S", "SI", "Z", "ZI", "T", "TI", "TA", "TAC"},
     )
     scale = Scale(name="limited_scale", backend=backend, size_x=0, size_y=0, size_z=0)

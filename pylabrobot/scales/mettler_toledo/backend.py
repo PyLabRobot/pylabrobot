@@ -7,7 +7,6 @@ import functools
 import logging
 import shlex
 import time
-import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Literal, Optional, Set, TypeVar, Union
 
@@ -136,6 +135,17 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       await self.set_host_unit_grams()
 
   async def stop(self) -> None:
+    """Reset the device to a clean state and close the serial connection.
+
+    Sends @ to cancel any pending commands before disconnecting. If the
+    serial port is already broken (e.g. kernel crash), the reset is skipped
+    and the port is closed anyway.
+    """
+    try:
+      await self.cancel()
+    except Exception:
+      logger.warning("[MT Scale] Could not reset device before disconnecting")
+    logger.info("[MT Scale] Disconnected from %s", self.io.port)
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -605,66 +615,3 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     # M28 A 1 22.5 (single sensor) or M28 B 1 22.5 ... M28 A 2 23.0 (multi-sensor)
     self._validate_response(responses[0], 4, "M28")
     return float(responses[0].data[1])
-
-  # # # Deprecated alias with warning # # #
-
-  # TODO: remove after 2026-03
-
-  async def get_serial_number(self) -> str:
-    """Deprecated: Use request_serial_number() instead."""
-    warnings.warn(
-      "get_serial_number() is deprecated and will be removed in 2026-03. "
-      "Use request_serial_number() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.request_serial_number()
-
-  async def get_tare_weight(self) -> float:
-    """Deprecated: Use request_tare_weight() instead."""
-    warnings.warn(
-      "get_tare_weight() is deprecated and will be removed in 2026-03. "
-      "Use request_tare_weight() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.request_tare_weight()
-
-  async def get_stable_weight(self) -> float:
-    """Deprecated: Use read_stable_weight() instead."""
-    warnings.warn(
-      "get_stable_weight() is deprecated and will be removed in 2026-03. "
-      "Use read_stable_weight() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.read_stable_weight()
-
-  async def get_dynamic_weight(self, timeout: float) -> float:
-    """Deprecated: Use read_dynamic_weight() instead."""
-    warnings.warn(
-      "get_dynamic_weight() is deprecated and will be removed in 2026-03. "
-      "Use read_dynamic_weight() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.read_dynamic_weight(timeout)
-
-  async def get_weight_value_immediately(self) -> float:
-    """Deprecated: Use read_weight_value_immediately() instead."""
-    warnings.warn(
-      "get_weight_value_immediately() is deprecated and will be removed in 2026-03. "
-      "Use read_weight_value_immediately() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.read_weight_value_immediately()
-
-  async def get_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
-    """Deprecated: Use read_weight() instead."""
-    warnings.warn(
-      "get_weight() is deprecated and will be removed in 2026-03. Use read_weight() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.read_weight(timeout)

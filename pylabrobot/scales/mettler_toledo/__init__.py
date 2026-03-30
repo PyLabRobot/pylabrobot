@@ -4,5 +4,5 @@ from pylabrobot.scales.mettler_toledo.backend import (
   MettlerToledoResponse,
   MettlerToledoWXS205SDUBackend,
 )
-from pylabrobot.scales.mettler_toledo.chatterbox import MettlerToledoChatterboxBackend
 from pylabrobot.scales.mettler_toledo.errors import MettlerToledoError
+from pylabrobot.scales.mettler_toledo.simulator import MettlerToledoSICSSimulator

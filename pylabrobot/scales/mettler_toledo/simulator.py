@@ -1,11 +1,11 @@
-"""MT-SICS protocol-level chatterbox for device-free testing.
+"""MT-SICS protocol-level simulator for device-free testing.
 
 Inherits from MettlerToledoWXS205SDUBackend and overrides send_command to return
 mock MT-SICS responses. All high-level methods (zero, tare, read_weight, etc.)
 work unchanged because they call send_command which is intercepted here.
 
-This follows the same pattern as STARChatterboxBackend (inherits from STARBackend
-and overrides the low-level command transmission).
+This follows the same pattern as STARChatterboxBackend in PLR (inherits from
+the hardware backend and overrides the low-level command transmission).
 """
 
 import logging
@@ -21,7 +21,7 @@ from pylabrobot.scales.scale_backend import ScaleBackend
 logger = logging.getLogger("pylabrobot")
 
 
-class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
+class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
   """MT-SICS protocol simulator for testing without hardware.
 
   Inherits all MT-SICS methods from MettlerToledoWXS205SDUBackend.
@@ -32,7 +32,7 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
 
   Example::
 
-    backend = MettlerToledoChatterboxBackend()
+    backend = MettlerToledoSICSSimulator()
     scale = Scale(name="scale", backend=backend, size_x=0, size_y=0, size_z=0)
     await scale.setup()
     # backend.device_type == "WXS205SDU", backend.capacity == 220.0
@@ -63,7 +63,7 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     self._simulated_device_type = device_type
     self._simulated_serial_number = serial_number
     self._simulated_capacity = capacity
-    # Default: all commands the chatterbox can mock
+    # Default: all commands the simulator can mock
     self._simulated_supported_commands = supported_commands or {
       "@",
       "I0",
@@ -113,7 +113,7 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     )
 
   async def stop(self) -> None:
-    pass
+    logger.info("[MT Scale] Disconnected (simulation)")
 
   async def cancel(self) -> str:
     responses = await self.send_command("@")
