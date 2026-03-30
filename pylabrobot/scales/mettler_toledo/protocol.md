@@ -101,14 +101,14 @@ Device sends: C B\r\n                   -- cancel started
 
 ## Exceptions to the standard format
 
-### @ (cancel) response echoes I4, not @
+### @ (reset) response echoes I4, not @
 
 ```
 PLR sends:    @\r\n
 Device sends: I4 A "B207696838"\r\n
 ```
 
-The @ command resets the device and responds with the serial number using the I4 response format, not the @ command name.
+The @ command resets the device to its power-on state and responds with the serial number using the I4 response format, not the @ command name.
 
 ### Commands not supported on WXS205SDU (bridge mode)
 
@@ -130,10 +130,10 @@ The device type can contain spaces. Parse from the right: unit is the last
 token, capacity is second-to-last, type is everything before.
 `shlex.split` is used to handle quoted strings correctly.
 
-### I15 uptime format varies
+### I15 uptime is in minutes
 
-Some devices return `I15 A <days> <hours> <minutes> <seconds>` (4 values).
-The WXS205SDU returns `I15 A <days>` (single value). The parser handles both.
+I15 returns uptime in minutes since last start or restart, with +/- 5% accuracy.
+Response: `I15 A <Minutes>`. Example: `I15 A 123014` = ~85 days.
 
 ## Command discovery
 
@@ -154,7 +154,7 @@ the authoritative list of implemented commands.
 
 | Level | Description | Availability |
 |-------|-------------|-------------|
-| 0 | Basic set: identification, weighing, zero, tare, cancel | Always available |
+| 0 | Basic set: identification, weighing, zero, tare, reset (@) | Always available |
 | 1 | Elementary: tare memory, timed commands, repeat | Always available |
 | 2 | Extended: configuration, device info, diagnostics | Model-dependent |
 | 3 | Application-specific: filling, dosing, calibration | Model-dependent |
@@ -162,7 +162,7 @@ the authoritative list of implemented commands.
 ## Write safety
 
 Commands that modify device settings (M01 set, M02 set, M03 set, etc.) persist
-to memory and survive power cycles. They cannot be undone with @ cancel - only
+to memory and survive power cycles. They cannot be undone with @ reset - only
 via FSET (factory reset) or the terminal menu. Write methods are commented out
 in the backend to prevent accidental modification.
 

@@ -91,6 +91,13 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   # === Constructor ===
 
   def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
+    """Create a new MT-SICS backend.
+
+    Args:
+      port: Serial port path. If None, auto-detected by VID:PID.
+      vid: USB vendor ID (default 0x0403 = FTDI).
+      pid: USB product ID (default 0x6001 = FT232R).
+    """
     super().__init__()
 
     self.io = Serial(
@@ -103,11 +110,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     )
 
   async def setup(self) -> None:
+    """Connect to the scale, reset to clean state, discover identity and supported commands."""
     await self.io.setup()
 
     # Reset device to clean state (spec Section 2.2)
-    # cancel() clears the input buffer and sends @, which returns the serial number
-    self.serial_number = await self.cancel()
+    # reset() clears the input buffer and sends @, which returns the serial number
+    self.serial_number = await self.reset()
 
     # Discover supported commands via I0 (the definitive source per spec Section 2.2)
     self._supported_commands: Set[str] = await self._request_supported_commands()
@@ -119,7 +127,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.capacity = await self.request_capacity()
 
     # Firmware version and configuration
-    self.firmware_version = await self.request_software_version()
+    self.firmware_version = await self.request_firmware_version()
     # I2 device_type encodes the configuration: "WXS205SDU WXA-Bridge" = bridge only
     self.configuration = "Bridge" if "Bridge" in self.device_type else "Balance"
 
@@ -145,7 +153,9 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     if fw_version_short not in CONFIRMED_FIRMWARE_VERSIONS:
       logger.warning(
         "[MT Scale] Firmware version %r has not been tested with this driver. "
-        "Confirmed versions: %s. Proceed with caution.",
+        "Confirmed versions: %s. "
+        "If this version works correctly, please contribute it to "
+        "confirmed_firmware_versions.py so others can benefit.",
         self.firmware_version,
         ", ".join(sorted(CONFIRMED_FIRMWARE_VERSIONS)),
       )
@@ -162,7 +172,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     and the port is closed anyway.
     """
     try:
-      await self.cancel()
+      await self.reset()
     except Exception:
       logger.warning("[MT Scale] Could not reset device before disconnecting")
     logger.info("[MT Scale] Disconnected from %s", self.io.port)
@@ -304,6 +314,10 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         raise MettlerToledoError.weight_module_electronic_mismatch(from_terminal=from_terminal)
       if code == "15":
         raise MettlerToledoError.adjustment_needed(from_terminal=from_terminal)
+      raise MettlerToledoError(
+        title="Unknown weight error",
+        message=f"Unrecognized error code '{error_code}' in weight response",
+      )
 
   # === Command Layer ===
 
@@ -348,16 +362,17 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     return responses
 
-  # === Public high-level API ===
+  # === Public API ===
+  # Organized by function: cancel, identity, zero, tare, weight, measurement,
+  # configuration (read), display, configuration (write).
 
-  # # Cancel commands # #
+  # # Reset and cancel # #
 
-  async def cancel(self) -> str:
+  async def reset(self) -> str:
     """@ - Reset the device to a determined state (spec Section 2.2).
 
-    Equivalent to a power cycle: empties volatile memories, cancels all pending
-    commands, resets key control to default. Tare memory is NOT reset.
-    The cancel command is always executed, even when the device is busy.
+    Equivalent to a power cycle: empties volatile memories, resets key control
+    to default. Tare memory is NOT reset. Always executed, even when busy.
 
     Returns the serial number from the I4-style response.
     """
@@ -370,7 +385,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def cancel_all(self) -> None:
     """C - Cancel all active and pending interface commands.
 
-    Unlike cancel() (@), this does not reset the device - it only cancels
+    Unlike reset() (@), this does not reset the device - it only cancels
     commands that were requested via this interface. Typically used to stop
     repeating commands (SIR, SR) or abort adjustment procedures.
 
@@ -386,7 +401,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         message=f"C command returned error: {responses[0]}",
       )
 
-  # # Identification commands # #
+  # # Device identity # #
 
   async def request_serial_number(self) -> str:
     """Get the serial number of the scale. (I4 command)"""
@@ -419,11 +434,11 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_unit(parts[-1], "I2")
     return float(parts[-2])
 
-  async def request_software_version(self) -> str:
-    """Query the software version and type definition number. (I3 command)
+  async def request_firmware_version(self) -> str:
+    """Query the firmware version and type definition number. (I3 command)
 
-    Returns the version string (e.g. "2.10 10.28.0.493.142").
-    For bridge mode (no terminal), returns the bridge software version.
+    Returns the version string (e.g. "1.10 18.6.4.1361.772").
+    For bridge mode (no terminal), returns the bridge firmware version.
     """
     responses = await self.send_command("I3")
     self._validate_response(responses[0], 3, "I3")
@@ -491,33 +506,15 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     return await self.send_command(f"I14 {category}")
 
   @requires_mt_sics_command("I15")
-  async def request_uptime(self) -> dict:
-    """Query the device uptime. (I15 command)
+  async def request_uptime_minutes(self) -> int:
+    """Query the uptime in minutes since last start or restart. (I15 command)
 
-    Returns a dict with keys "days", "hours", "minutes", "seconds".
-    Counts time since last power-on, including short interruptions.
-    Not reset by @ cancel or restart.
-
-    Some devices return a single value (total days) instead of the
-    full days/hours/minutes/seconds breakdown.
+    Returns the number of minutes the device has been running since
+    the last power-on, start, or reset. Accuracy +/- 5%.
     """
     responses = await self.send_command("I15")
     self._validate_response(responses[0], 3, "I15")
-    data = responses[0].data
-    if len(data) >= 4:
-      return {
-        "days": int(data[0]),
-        "hours": int(data[1]),
-        "minutes": int(data[2]),
-        "seconds": int(data[3]),
-      }
-    # Single-value format (some devices return total days only)
-    return {
-      "days": int(data[0]),
-      "hours": 0,
-      "minutes": 0,
-      "seconds": 0,
-    }
+    return int(responses[0].data[0])
 
   @requires_mt_sics_command("DAT")
   async def request_date(self) -> str:
@@ -539,125 +536,111 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_response(responses[0], 3, "TIM")
     return responses[0].data[0]
 
-  @requires_mt_sics_command("I50")
-  async def request_remaining_weighing_range(self) -> float:
-    """Query remaining maximum weighing range in grams. (I50 command)
+  @requires_mt_sics_command("I16")
+  async def request_next_service_date(self) -> str:
+    """Query the date when the balance is next due to be serviced. (I16 command)"""
+    responses = await self.send_command("I16")
+    self._validate_response(responses[0], 3, "I16")
+    return " ".join(responses[0].data)
 
-    Returns the remaining capacity accounting for all loads currently on the
-    weighing platform (pre-load, tare, net load). A negative value means the
-    maximum weighing range has been exceeded.
+  @requires_mt_sics_command("I21")
+  async def request_assortment_type_revision(self) -> str:
+    """Query the revision of assortment type tolerances. (I21 command)"""
+    responses = await self.send_command("I21")
+    self._validate_response(responses[0], 3, "I21")
+    return responses[0].data[0]
 
-    I50 is a multi-response command: the device sends up to 3 lines
-    (RangeNo 0 with B, RangeNo 1 with B, RangeNo 2 with A). We extract the
-    value from the first response and drain the remaining ones.
-    """
-    responses = await self.send_command("I50")
-    # responses[0]: I50 B 0 <Range> <Unit> (RangeNo 0 = max weighing range)
-    # responses[1]: I50 B 1 <Range> <Unit> (RangeNo 1 = internal adjustment range)
-    # responses[2]: I50 A 2 <Range> <Unit> (RangeNo 2 = external adjustment range)
-    self._validate_response(responses[0], 5, "I50")
-    self._validate_unit(responses[0].data[2], "I50")
-    return float(responses[0].data[1])
+  @requires_mt_sics_command("I26")
+  async def request_operating_mode_after_restart(self) -> List[MettlerToledoResponse]:
+    """Query the operating mode after restart. (I26 command)"""
+    return await self.send_command("I26")
 
-  # # Zero commands # #
+  # # Zero # #
 
   async def zero_immediately(self) -> List[MettlerToledoResponse]:
-    """Zero the scale immediately. (ACTION command)"""
+    """Zero the scale immediately. (ZI command)"""
     return await self.send_command("ZI")
 
   async def zero_stable(self) -> List[MettlerToledoResponse]:
-    """Zero the scale when the weight is stable. (ACTION command)"""
+    """Zero the scale when the weight is stable. (Z command)"""
     return await self.send_command("Z")
 
   async def zero_timeout(self, timeout: float) -> List[MettlerToledoResponse]:
-    """Zero the scale after a given timeout. (ACTION command)"""
-    # For some reason, this will always return a syntax error (ES), even though it should be allowed
-    # according to the docs.
+    """Zero the scale after a given timeout. (ZC command)
+
+    Not supported on WXS205SDU (returns ES despite being in the spec).
+    """
     timeout = int(timeout * 1000)
     return await self.send_command(f"ZC {timeout}")
 
   async def zero(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
   ) -> List[MettlerToledoResponse]:
-    """High level function to zero the scale. (ACTION command)
+    """Zero the scale.
 
     Args:
-      timeout: The timeout in seconds. If "stable", the scale will zero when the weight is stable.
-        If 0, the scale will zero immediately. If a float/int, the scale will zero after the given
-        timeout (in seconds).
+      timeout: "stable" waits for stable reading, 0 zeros immediately,
+        float/int zeros after that many seconds.
     """
-
     if timeout == "stable":
       return await self.zero_stable()
-
     if not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
-
     if timeout < 0:
       raise ValueError("timeout must be greater than or equal to 0")
-
     if timeout == 0:
       return await self.zero_immediately()
-
     return await self.zero_timeout(timeout)
 
-  # # Tare commands # #
+  # # Tare # #
 
   async def tare_stable(self) -> List[MettlerToledoResponse]:
-    """Tare the scale when the weight is stable. (ACTION command)"""
+    """Tare the scale when the weight is stable. (T command)"""
     return await self.send_command("T")
 
   async def tare_immediately(self) -> List[MettlerToledoResponse]:
-    """Tare the scale immediately. (ACTION command)"""
+    """Tare the scale immediately. (TI command)"""
     return await self.send_command("TI")
 
   async def tare_timeout(self, timeout: float) -> List[MettlerToledoResponse]:
-    """Tare the scale after a given timeout. (ACTION command)"""
-    # For some reason, this will always return a syntax error (ES), even though it should be allowed
-    # according to the docs.
+    """Tare the scale after a given timeout. (TC command)
+
+    Not supported on WXS205SDU (returns ES despite being in the spec).
+    """
     timeout = int(timeout * 1000)  # convert to milliseconds
     return await self.send_command(f"TC {timeout}")
 
   async def tare(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
   ) -> List[MettlerToledoResponse]:
-    """High level function to tare the scale. (ACTION command)
+    """Tare the scale.
 
     Args:
-      timeout: The timeout in seconds. If "stable", the scale will tare when the weight is stable.
-        If 0, the scale will tare immediately. If a float/int, the scale will tare after the given
-        timeout (in seconds).
+      timeout: "stable" waits for stable reading, 0 tares immediately,
+        float/int tares after that many seconds.
     """
-
     if timeout == "stable":
-      # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
       return await self.tare_stable()
-
     if not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
-
     if timeout < 0:
       raise ValueError("timeout must be greater than or equal to 0")
-
     if timeout == 0:
       return await self.tare_immediately()
     return await self.tare_timeout(timeout)
 
-  # # Weight reading commands # #
-
   async def request_tare_weight(self) -> float:
-    """Request tare weight value from scale's memory. (MEM-READ command)
-    "Use TA to query the current tare value or preset a known tare value."
-    """
-
+    """Query tare weight value from scale's memory. (TA command)"""
     responses = await self.send_command("TA")
     self._validate_response(responses[0], 4, "TA")
     self._validate_unit(responses[0].data[1], "TA")
     return float(responses[0].data[0])
 
   async def clear_tare(self) -> List[MettlerToledoResponse]:
-    """TAC - Clear tare weight value (MEM-WRITE command)"""
+    """Clear tare weight value. (TAC command)"""
     return await self.send_command("TAC")
+
+  # # Weight measurement # #
 
   async def read_stable_weight(self) -> float:
     """Read a stable weight value from the scale. (MEASUREMENT command)
@@ -725,38 +708,45 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     return await self.read_dynamic_weight(timeout)
 
-  # Commands for (optional) display manipulation
-
-  async def set_display_text(self, text: str) -> List[MettlerToledoResponse]:
-    """Set the display text of the scale. Return to the normal weight display with
-    self.set_weight_display()."""
-    return await self.send_command(f'D "{text}"')
-
-  async def set_weight_display(self) -> List[MettlerToledoResponse]:
-    """Return the display to the normal weight display."""
-    return await self.send_command("DW")
-
-  # # Configuration commands # #
-
-  @requires_mt_sics_command("M21")
-  async def set_host_unit_grams(self) -> List[MettlerToledoResponse]:
-    """Set the host output unit to grams. (M21 command)"""
-    return await self.send_command("M21 0 0")
-
   @requires_mt_sics_command("M28")
   async def measure_temperature(self) -> float:
-    """Query the current temperature from the scale's internal sensor in degrees C. (M28 command)
+    """Read the current temperature from the scale's internal sensor in degrees C. (M28 command)
 
     The number of temperature sensors depends on the product. This method returns
     the value from the first sensor. Useful for gravimetric verification where
     temperature affects liquid density and evaporation rate.
     """
     responses = await self.send_command("M28")
-    # M28 A 1 22.5 (single sensor) or M28 B 1 22.5 ... M28 A 2 23.0 (multi-sensor)
     self._validate_response(responses[0], 4, "M28")
     return float(responses[0].data[1])
 
-  # # Batch 2 - Configuration queries (read-only) # #
+  @requires_mt_sics_command("SIS")
+  async def request_net_weight_with_status(self) -> MettlerToledoResponse:
+    """Query net weight with unit and weighing status in one call. (SIS command)
+
+    Response data fields:
+      data[0] = State: 0=stable, 1=dynamic, 2=stable inaccurate (MinWeigh),
+                3=dynamic inaccurate, 4=overload, 5=underload, 6=error
+      data[1] = Net weight value
+      data[2] = Unit code: 0=g, 1=kg, 3=mg, 4=ug, 5=ct, 7=lb, 8=oz, etc.
+      data[3] = Readability (number of decimal places, 0-6)
+      data[4] = Step: 1, 2, 5, 10, 20, 50, or 100
+      data[5] = Approval: 0=standard (not approved), 1=e=d, 10=e=10d, 100=e=100d, -1=unapproved
+      data[6] = Info: 0=without tare, 1=net with weighed tare, 2=net with stored tare
+    """
+    responses = await self.send_command("SIS")
+    return responses[0]
+
+  @requires_mt_sics_command("SNR")
+  async def read_stable_weight_repeat_on_change(self) -> List[MettlerToledoResponse]:
+    """Start sending stable weight values on every stable weight change. (SNR command)
+
+    The device sends a new value each time the weight changes and stabilizes.
+    Use reset() to stop.
+    """
+    return await self.send_command("SNR")
+
+  # # Device configuration (read-only) # #
 
   @requires_mt_sics_command("M01")
   async def request_weighing_mode(self) -> int:
@@ -768,6 +758,11 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_response(responses[0], 3, "M01")
     return int(responses[0].data[0])
 
+  # @requires_mt_sics_command("M01")
+  # async def set_weighing_mode(self, mode: int) -> None:
+  #   """Set weighing mode. (M01) WRITES TO DEVICE MEMORY."""
+  #   await self.send_command(f"M01 {mode}")
+
   @requires_mt_sics_command("M02")
   async def request_environment_condition(self) -> int:
     """Query the current environment condition setting. (M02 command)
@@ -778,6 +773,11 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     responses = await self.send_command("M02")
     self._validate_response(responses[0], 3, "M02")
     return int(responses[0].data[0])
+
+  # @requires_mt_sics_command("M02")
+  # async def set_environment_condition(self, condition: int) -> None:
+  #   """Set environment condition. (M02) WRITES TO DEVICE MEMORY."""
+  #   await self.send_command(f"M02 {condition}")
 
   @requires_mt_sics_command("M03")
   async def request_auto_zero(self) -> int:
@@ -791,6 +791,182 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_response(responses[0], 3, "M03")
     return int(responses[0].data[0])
 
+  # @requires_mt_sics_command("M03")
+  # async def set_auto_zero(self, enabled: int) -> None:
+  #   """Set auto zero. (M03) WRITES TO DEVICE MEMORY."""
+  #   await self.send_command(f"M03 {enabled}")
+
+  @requires_mt_sics_command("M17")
+  async def request_profact_time_criteria(self) -> List[MettlerToledoResponse]:
+    """Query ProFACT single time criteria. (M17 command)"""
+    return await self.send_command("M17")
+
+  # @requires_mt_sics_command("M17")
+  # async def set_profact_time_criteria(self, ...) -> None:
+  #   """Set ProFACT time criteria. (M17) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M18")
+  async def request_profact_temperature_criterion(self) -> List[MettlerToledoResponse]:
+    """Query ProFACT/FACT temperature criterion. (M18 command)"""
+    return await self.send_command("M18")
+
+  # @requires_mt_sics_command("M18")
+  # async def set_profact_temperature_criterion(self, ...) -> None:
+  #   """Set ProFACT temperature criterion. (M18) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M19")
+  async def request_adjustment_weight(self) -> List[MettlerToledoResponse]:
+    """Query the adjustment weight setting. (M19 command)"""
+    return await self.send_command("M19")
+
+  # @requires_mt_sics_command("M19")
+  # async def set_adjustment_weight(self, ...) -> None:
+  #   """Set adjustment weight. (M19) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M20")
+  async def request_test_weight(self) -> List[MettlerToledoResponse]:
+    """Query the test weight setting. (M20 command)"""
+    return await self.send_command("M20")
+
+  # @requires_mt_sics_command("M20")
+  # async def set_test_weight(self, ...) -> None:
+  #   """Set test weight. (M20) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M29")
+  async def request_weighing_value_release(self) -> List[MettlerToledoResponse]:
+    """Query the weighing value release setting. (M29 command)"""
+    return await self.send_command("M29")
+
+  # @requires_mt_sics_command("M29")
+  # async def set_weighing_value_release(self, ...) -> None:
+  #   """Set weighing value release. (M29) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M31")
+  async def request_operating_mode(self) -> List[MettlerToledoResponse]:
+    """Query the operating mode after restart. (M31 command)"""
+    return await self.send_command("M31")
+
+  # @requires_mt_sics_command("M31")
+  # async def set_operating_mode(self, ...) -> None:
+  #   """Set operating mode after restart. (M31) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M32")
+  async def request_profact_time(self) -> List[MettlerToledoResponse]:
+    """Query ProFACT time criteria. (M32 command)"""
+    return await self.send_command("M32")
+
+  # @requires_mt_sics_command("M32")
+  # async def set_profact_time(self, ...) -> None:
+  #   """Set ProFACT time. (M32) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M33")
+  async def request_profact_day(self) -> List[MettlerToledoResponse]:
+    """Query ProFACT day of the week. (M33 command)"""
+    return await self.send_command("M33")
+
+  # @requires_mt_sics_command("M33")
+  # async def set_profact_day(self, ...) -> None:
+  #   """Set ProFACT day of the week. (M33) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("M35")
+  async def request_zeroing_mode(self) -> List[MettlerToledoResponse]:
+    """Query the zeroing mode at startup. (M35 command)"""
+    return await self.send_command("M35")
+
+  # @requires_mt_sics_command("M35")
+  # async def set_zeroing_mode(self, ...) -> None:
+  #   """Set zeroing mode at startup. (M35) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("UPD")
+  async def request_update_rate(self) -> float:
+    """Query the current update rate for SIR/SIRU streaming. (UPD command)
+
+    Returns the update rate in values per second.
+    """
+    responses = await self.send_command("UPD")
+    self._validate_response(responses[0], 3, "UPD")
+    return float(responses[0].data[0])
+
+  # @requires_mt_sics_command("UPD")
+  # async def set_update_rate(self, rate: float) -> None:
+  #   """Set streaming update rate. (UPD) WRITES TO DEVICE MEMORY."""
+  #   await self.send_command(f"UPD {rate}")
+
+  @requires_mt_sics_command("C0")
+  async def request_adjustment_setting(self) -> List[MettlerToledoResponse]:
+    """Query the current adjustment setting. (C0 command)"""
+    return await self.send_command("C0")
+
+  # @requires_mt_sics_command("C0")
+  # async def set_adjustment_setting(self, ...) -> None:
+  #   """Set adjustment setting. (C0) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("COM")
+  async def request_serial_parameters(self) -> List[MettlerToledoResponse]:
+    """Query current serial interface parameters. (COM command)"""
+    return await self.send_command("COM")
+
+  # @requires_mt_sics_command("COM")
+  # async def set_serial_parameters(self, ...) -> None:
+  #   """Set serial port parameters. (COM) WRITES TO DEVICE MEMORY.
+  #   WARNING: changing baud rate will lose communication."""
+  #   ...
+
+  @requires_mt_sics_command("FCUT")
+  async def request_filter_cutoff(self) -> List[MettlerToledoResponse]:
+    """Query the filter cut-off frequency. (FCUT command)"""
+    return await self.send_command("FCUT")
+
+  # @requires_mt_sics_command("FCUT")
+  # async def set_filter_cutoff(self, frequency: float) -> None:
+  #   """Set filter cut-off frequency. (FCUT) WRITES TO DEVICE MEMORY."""
+  #   await self.send_command(f"FCUT {frequency}")
+
+  @requires_mt_sics_command("USTB")
+  async def request_stability_criteria(self) -> List[MettlerToledoResponse]:
+    """Query the user-defined stability criteria. (USTB command)"""
+    return await self.send_command("USTB")
+
+  # @requires_mt_sics_command("USTB")
+  # async def set_stability_criteria(self, ...) -> None:
+  #   """Set stability criteria. (USTB) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("TST0")
+  async def request_test_settings(self) -> List[MettlerToledoResponse]:
+    """Query current test function settings. (TST0 command)"""
+    return await self.send_command("TST0")
+
+  # @requires_mt_sics_command("TST0")
+  # async def set_test_settings(self, ...) -> None:
+  #   """Set test function settings. (TST0) WRITES TO DEVICE MEMORY."""
+  #   ...
+
+  @requires_mt_sics_command("I50")
+  async def request_remaining_weighing_range(self) -> float:
+    """Query remaining maximum weighing range in grams. (I50 command)
+
+    Returns the remaining capacity accounting for all loads currently on the
+    weighing platform (pre-load, tare, net load). A negative value means the
+    maximum weighing range has been exceeded.
+
+    Multi-response: the device sends up to 3 lines (B, B, A).
+    """
+    responses = await self.send_command("I50")
+    self._validate_response(responses[0], 5, "I50")
+    self._validate_unit(responses[0].data[2], "I50")
+    return float(responses[0].data[1])
+
   @requires_mt_sics_command("M27")
   async def request_adjustment_history(self) -> List[MettlerToledoResponse]:
     """Query the adjustment (calibration) history. (M27 command)
@@ -800,102 +976,92 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """
     return await self.send_command("M27")
 
-  @requires_mt_sics_command("SIS")
-  async def request_net_weight_with_status(self) -> MettlerToledoResponse:
-    """Query net weight with unit and weighing status. (SIS command)
+  @requires_mt_sics_command("LST")
+  async def request_user_settings(self) -> List[MettlerToledoResponse]:
+    """Query all current user-configurable settings. (LST command)
 
-    Returns a single response with weight value, unit, and additional
-    status information (actual unit and weighing status) in one call.
+    Returns a multi-response listing every configurable parameter and its value.
     """
-    responses = await self.send_command("SIS")
-    return responses[0]
+    return await self.send_command("LST")
 
-  @requires_mt_sics_command("SNR")
-  async def read_stable_weight_repeat_on_change(self) -> List[MettlerToledoResponse]:
-    """Start sending stable weight values on every stable weight change. (SNR command)
+  @requires_mt_sics_command("RDB")
+  async def request_readability(self) -> List[MettlerToledoResponse]:
+    """Query the readability setting. (RDB command)"""
+    return await self.send_command("RDB")
 
-    The device will send a new weight value each time the weight changes
-    and stabilizes. Use cancel() or cancel_all() to stop.
+  # # Display # #
+
+  async def set_display_text(self, text: str) -> List[MettlerToledoResponse]:
+    """Write text to the display. (D command) Not available in bridge mode.
+
+    Use set_weight_display() to restore the normal weight display.
     """
-    return await self.send_command("SNR")
+    return await self.send_command(f'D "{text}"')
 
-  @requires_mt_sics_command("UPD")
-  async def request_update_rate(self) -> float:
-    """Query the current update rate for SIR/SIRU streaming commands. (UPD command)
+  async def set_weight_display(self) -> List[MettlerToledoResponse]:
+    """Restore the normal weight display. (DW command)"""
+    return await self.send_command("DW")
 
-    Returns the update rate in values per second.
+  # # Configuration (write - no corresponding query) # #
+
+  @requires_mt_sics_command("M21")
+  async def set_host_unit_grams(self) -> List[MettlerToledoResponse]:
+    """Set the host output unit to grams. (M21 command)
+
+    Called automatically during setup() if supported.
     """
-    responses = await self.send_command("UPD")
-    self._validate_response(responses[0], 3, "UPD")
-    return float(responses[0].data[0])
+    return await self.send_command("M21 0 0")
 
-  # WARNING: The following set commands permanently modify device settings.
-  # They persist across power cycles and cannot be undone with @ cancel.
-  # The only way to reset is via FSET (factory reset) or terminal menu.
+  # # Commented out - standalone write commands # #
   #
-  # @requires_mt_sics_command("M01")
-  # async def set_weighing_mode(self, mode: int) -> None:
-  #   """Set the weighing mode. (M01 command) WRITES TO DEVICE MEMORY.
-  #   0=Normal, 1=Dosing, 2=Sensor, 3=Check weighing, 6=Raw/No filter."""
-  #   await self.send_command(f"M01 {mode}")
-  #
-  # @requires_mt_sics_command("M02")
-  # async def set_environment_condition(self, condition: int) -> None:
-  #   """Set the environment condition. (M02 command) WRITES TO DEVICE MEMORY.
-  #   0=Very stable, 1=Stable, 2=Standard, 3=Unstable, 4=Very unstable, 5=Automatic."""
-  #   await self.send_command(f"M02 {condition}")
-  #
-  # @requires_mt_sics_command("M03")
-  # async def set_auto_zero(self, enabled: int) -> None:
-  #   """Set the auto zero function. (M03 command) WRITES TO DEVICE MEMORY.
-  #   0=off, 1=on."""
-  #   await self.send_command(f"M03 {enabled}")
-  #
-  # @requires_mt_sics_command("UPD")
-  # async def set_update_rate(self, rate: float) -> None:
-  #   """Set the update rate for SIR/SIRU. (UPD command) WRITES TO DEVICE MEMORY."""
-  #   await self.send_command(f"UPD {rate}")
-  #
-  # @requires_mt_sics_command("COM")
-  # async def set_serial_parameters(self, ...) -> None:
-  #   """Set serial port parameters. (COM command) WRITES TO DEVICE MEMORY.
-  #   WARNING: changing baud rate will lose communication."""
-  #   ...
+  # @requires_mt_sics_command("I10")
+  # async def set_device_id(self, device_id: str) -> None:
+  #   """Set device name. (I10) WRITES TO EEPROM. Max 20 chars."""
+  #   await self.send_command(f'I10 "{device_id}"')
   #
   # @requires_mt_sics_command("FSET")
   # async def factory_reset(self, exclusion: int = 0) -> None:
-  #   """Reset ALL settings to factory defaults. (FSET command) DESTRUCTIVE.
-  #   0=reset all, 1=keep comm params, 2=keep comm+adjustment."""
+  #   """Reset ALL settings to factory defaults. (FSET) DESTRUCTIVE."""
   #   await self.send_command(f"FSET {exclusion}")
 
-  # # Batch 3 - Calibration and streaming (require physical interaction or architecture changes) # #
-
-  # WARNING: Adjustment commands move internal calibration weights.
-  # Do not run during a weighing protocol.
+  # # Commented out - require physical interaction or architecture changes # #
   #
   # @requires_mt_sics_command("C1")
   # async def start_adjustment(self) -> List[MettlerToledoResponse]:
-  #   """Start adjustment according to current settings. (C1 command)
-  #   Multi-response: sends progress updates until complete."""
+  #   """Start adjustment. (C1) Moves internal calibration weights."""
   #   return await self.send_command("C1")
+  #
+  # @requires_mt_sics_command("C2")
+  # async def start_adjustment_external_weight(self) -> List[MettlerToledoResponse]:
+  #   """Adjust with external weight. (C2) Requires placing calibration weight."""
+  #   return await self.send_command("C2")
   #
   # @requires_mt_sics_command("C3")
   # async def start_adjustment_builtin_weight(self) -> List[MettlerToledoResponse]:
-  #   """Start adjustment with built-in weight. (C3 command)
-  #   Multi-response: sends progress updates until complete."""
+  #   """Adjust with built-in weight. (C3) Moves internal weights."""
   #   return await self.send_command("C3")
-
-  # NOTE: SIR and SR streaming commands require an async iterator or callback
-  # architecture to handle continuous responses. Not yet implemented.
+  #
+  # @requires_mt_sics_command("TST1")
+  # async def start_test(self) -> List[MettlerToledoResponse]:
+  #   """Run test according to current settings. (TST1) Moves internal weights."""
+  #   return await self.send_command("TST1")
+  #
+  # @requires_mt_sics_command("TST2")
+  # async def start_test_external_weight(self) -> List[MettlerToledoResponse]:
+  #   """Run test with external weight. (TST2) Requires placing test weight."""
+  #   return await self.send_command("TST2")
+  #
+  # @requires_mt_sics_command("TST3")
+  # async def start_test_builtin_weight(self) -> List[MettlerToledoResponse]:
+  #   """Run test with built-in weight. (TST3) Moves internal weights."""
+  #   return await self.send_command("TST3")
   #
   # @requires_mt_sics_command("SIR")
   # async def read_weight_immediately_repeat(self) -> ...:
-  #   """Start streaming weight values at the update rate. (SIR command)
-  #   Use cancel() to stop."""
+  #   """Stream weight values at update rate. (SIR) Needs async iterator."""
   #   ...
   #
   # @requires_mt_sics_command("SR")
   # async def read_stable_weight_repeat(self) -> ...:
-  #   """Start sending stable weight on any weight change. (SR command)
-  #   Use cancel() to stop."""
+  #   """Stream stable weight on change. (SR) Needs async iterator."""
   #   ...

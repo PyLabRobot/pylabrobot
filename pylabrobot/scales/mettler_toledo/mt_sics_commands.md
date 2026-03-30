@@ -26,11 +26,11 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| @       | Cancel / reset to determined state       | 16        | DONE   | yes | cancel(). Sent during setup(). Response is I4-style. |
+| @       | Reset device to determined state         | 16        | DONE   | yes | reset(). Sent during setup(). Response is I4-style. |
 | I0      | List all implemented commands + levels   | 96        | DONE   | yes | _request_supported_commands(). Queried during setup(). |
 | I1      | MT-SICS level and level versions         | 97        | DONE   | yes | Not used for gating - I0 is authoritative. |
 | I2      | Device data (type and capacity)          | 98        | DONE   | yes | request_device_type() and request_capacity(). Response is one quoted string parsed with shlex. |
-| I3      | Software version and type definition     | 99        | DONE   | yes | request_software_version(). Returns "1.10 18.6.4.1361.772" on test device. |
+| I3      | Firmware version and type definition     | 99        | DONE   | yes | request_firmware_version(). Returns "1.10 18.6.4.1361.772" on test device. |
 | I4      | Serial number                            | 100       | DONE   | yes | request_serial_number(). |
 | I5      | Software material number                 | 101       | DONE   | yes | request_software_material_number(). Returns "11671158C" on test device. |
 | S       | Stable weight value                      | 223       | DONE   | yes | read_stable_weight(). |
@@ -66,9 +66,9 @@ Status key:
 | I10     | Device identification                    | 102       | DONE   | yes | request_device_id() (read). set_device_id() commented out (EEPROM write). |
 | I11     | Model designation                        | 103       | DONE   | yes | request_model_designation(). Returns "WXS205SDU" on test device. |
 | I14     | Device information (detailed)            | 104       | DONE   | yes | request_device_info(). Multi-response with config, descriptions, SW IDs, serial numbers. |
-| I15     | Uptime                                   | 106       | DONE   | yes | request_uptime(). WXS205SDU returns single value (days), not days/h/m/s. |
-| I16     | Date of next service                     | 107       | LOW    | yes | |
-| I21     | Revision of assortment type tolerances   | 108       | LOW    | yes | |
+| I15     | Uptime in minutes since start/restart     | 106       | DONE   | yes | request_uptime_minutes(). Returns minutes, accuracy +/- 5%. |
+| I16     | Date of next service                     | 107       | DONE   | yes | request_next_service_date(). |
+| I21     | Revision of assortment type tolerances   | 108       | DONE   | yes | request_assortment_type_revision(). |
 | I29     | Filter configuration                     | 111       | LOW    | - | |
 | I32     | Voltage monitoring                       | 112       | MED    | - | |
 | I43     | Selectable units for host unit           | 113       | LOW    | - | |
@@ -113,22 +113,22 @@ Status key:
 | M21     | Unit (host/display)                      | 165       | DONE   | yes | set_host_unit_grams(). |
 | M23     | Readability (1d/xd)                      | 169       | LOW    | - | |
 | M28     | Temperature value                        | 172       | DONE   | yes | measure_temperature(). Returns 19.8-19.9 C on test device. |
-| M35     | Zeroing mode at startup                  | 178       | LOW    | yes | |
+| M35     | Zeroing mode at startup                  | 178       | DONE   | yes | request_zeroing_mode() (read). set commented out (persists to memory). |
 | M49     | Permanent tare mode                      | 188       | LOW    | - | |
 | M67     | Timeout                                  | 191       | LOW    | - | |
 | M68     | Behavior of serial interfaces            | 192       | LOW    | - | |
-| COM     | Serial interface parameters              | 46        | LOW    | yes | Baud rate, parity, etc. |
+| COM     | Serial interface parameters              | 46        | DONE   | yes | request_serial_parameters(). set commented out (persists to memory). |
 | ECHO    | Echo mode                                | 66        | LOW    | - | |
-| LST     | Current user settings                    | 156       | LOW    | yes | Level 3 on WXS205SDU. |
+| LST     | Current user settings                    | 156       | DONE   | yes | request_user_settings(). Level 3 on WXS205SDU. |
 | PROT    | Protocol mode                            | 220       | LOW    | - | |
 
 ### Adjustment / Calibration
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| C0      | Adjustment setting                       | 24        | LOW    | yes | |
+| C0      | Adjustment setting                       | 24        | DONE   | yes | request_adjustment_setting() (read). set commented out (persists to memory). |
 | C1      | Start adjustment (current settings)      | 26        | STUB   | yes | Commented out (moves internal weights). Multi-response. |
-| C2      | Start adjustment (external weight)       | 28        | LOW    | yes | |
+| C2      | Start adjustment (external weight)       | 28        | STUB   | yes | Commented out (requires placing external weight). |
 | C3      | Start adjustment (built-in weight)       | 30        | STUB   | yes | Commented out (moves internal weights). Multi-response. |
 | C4      | Standard / initial adjustment            | 31        | LOW    | - | |
 | C5      | Enable/disable step control              | 33        | LOW    | - | |
@@ -136,17 +136,17 @@ Status key:
 | C7      | Customer standard calibration            | 37        | LOW    | - | |
 | C8      | Sensitivity adjustment                   | 40        | LOW    | - | |
 | C9      | Scale placement sensitivity adjustment   | 43        | LOW    | - | |
-| M19     | Adjustment weight                        | 163       | LOW    | yes | |
+| M19     | Adjustment weight                        | 163       | DONE   | yes | request_adjustment_weight() (read). set commented out (persists to memory). |
 | M27     | Adjustment history                       | 171       | DONE   | yes | request_adjustment_history(). Multi-response. |
 
 ### Testing
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| TST0    | Query/set test function settings         | 259       | LOW    | yes | |
-| TST1    | Test according to current settings       | 260       | LOW    | yes | |
-| TST2    | Test with external weight                | 262       | LOW    | yes | |
-| TST3    | Test with built-in weight                | 264       | LOW    | yes | |
+| TST0    | Query/set test function settings         | 259       | DONE   | yes | request_test_settings() (read). set commented out (persists to memory). |
+| TST1    | Test according to current settings       | 260       | STUB   | yes | Commented out (moves internal weights). |
+| TST2    | Test with external weight                | 262       | STUB   | yes | Commented out (requires placing test weight). |
+| TST3    | Test with built-in weight                | 264       | STUB   | yes | Commented out (moves internal weights). |
 | TST5    | Module test with built-in weights        | 265       | LOW    | - | |
 
 ### Weight Variants (alternative read commands)
@@ -159,7 +159,7 @@ Status key:
 | SIU     | Weight in display unit immediately       | 237       | LOW    | - | |
 | SIUM    | Weight + MinWeigh info immediately       | 238       | LOW    | - | |
 | SIX1    | Current gross, net, and tare values      | 239       | HIGH   | - | Not on WXS205SDU. |
-| SNR     | Stable weight + repeat on stable change  | 241       | DONE   | yes | read_stable_weight_repeat_on_change(). Use cancel() to stop. |
+| SNR     | Stable weight + repeat on stable change  | 241       | DONE   | yes | read_stable_weight_repeat_on_change(). Use reset() to stop. |
 | ST      | Stable weight on Transfer key press      | 249       | N/A    | - | Manual operation. |
 | SU      | Stable weight in display unit            | 250       | LOW    | - | |
 | SUM     | Stable weight + MinWeigh info            | 251       | LOW    | - | |
@@ -200,9 +200,9 @@ Status key:
 | E03     | Current system errors and warnings       | 65        | HIGH   | - | Not on WXS205SDU. |
 | FSET    | Reset all settings to factory defaults   | 95        | LOW    | yes | Level 3 on WXS205SDU. Destructive. |
 | RO1     | Restart device                           | 221       | MED    | - | |
-| RDB     | Readability                              | 222       | LOW    | yes | Level 3 on WXS205SDU. |
+| RDB     | Readability                              | 222       | DONE   | yes | request_readability(). Level 3 on WXS205SDU. |
 | UPD     | Update rate for SIR/SIRU                 | 267       | DONE   | yes | request_update_rate() (read). set commented out (persists to memory). |
-| USTB    | User defined stability criteria          | 268       | LOW    | yes | Level 3 on WXS205SDU. |
+| USTB    | User defined stability criteria          | 268       | DONE   | yes | request_stability_criteria() (read). set commented out. Level 3 on WXS205SDU. |
 
 ### Network (not relevant for serial)
 
@@ -233,15 +233,15 @@ Status key:
 | CW03    | Triggered weight value                   | 50        | N/A    | - | |
 | CW11    | Check weighing: weight calculation mode  | 51        | N/A    | - | |
 | F01-F16 | Filling functions (16 commands)          | 69-91     | N/A    | - | Filling/dosing application. |
-| FCUT    | Filter cut-off frequency                 | 92        | N/A    | yes | Level 3 on WXS205SDU. |
+| FCUT    | Filter cut-off frequency                 | 92        | DONE   | yes | request_filter_cutoff() (read). set commented out. Level 3 on WXS205SDU. |
 | FCUT2   | Alt weight path cut-off frequency        | 93        | N/A    | - | |
 | WMCF    | Weight monitoring functions              | 270       | N/A    | - | |
-| M17     | ProFACT: Single time criteria            | 160       | N/A    | yes | Level 2 on WXS205SDU. |
-| M18     | ProFACT/FACT: Temperature criterion      | 162       | N/A    | yes | Level 2 on WXS205SDU. |
+| M17     | ProFACT: Single time criteria            | 160       | DONE   | yes | request_profact_time_criteria() (read). set commented out. Level 2 on WXS205SDU. |
+| M18     | ProFACT/FACT: Temperature criterion      | 162       | DONE   | yes | request_profact_temperature_criterion() (read). set commented out. Level 2 on WXS205SDU. |
 | M22     | Custom unit definitions                  | 168       | N/A    | - | |
-| M31     | Operating mode after restart             | 174       | N/A    | yes | Level 2 on WXS205SDU. |
-| M32     | ProFACT: Time criteria                   | 175       | N/A    | yes | Level 2 on WXS205SDU. |
-| M33     | ProFACT: Day of the week                 | 176       | N/A    | yes | Level 2 on WXS205SDU. |
+| M31     | Operating mode after restart             | 174       | DONE   | yes | request_operating_mode() (read). set commented out. Level 2 on WXS205SDU. |
+| M32     | ProFACT: Time criteria                   | 175       | DONE   | yes | request_profact_time() (read). set commented out. Level 2 on WXS205SDU. |
+| M33     | ProFACT: Day of the week                 | 176       | DONE   | yes | request_profact_day() (read). set commented out. Level 2 on WXS205SDU. |
 | M34     | MinWeigh: Method                         | 177       | N/A    | - | |
 | M38     | Selective parameter reset                | 179       | N/A    | - | |
 | M39     | SmartTrac: Graphic                       | 180       | N/A    | - | |
@@ -264,11 +264,15 @@ Status key:
 
 ## Priority Summary
 
-### HIGH (should implement next)
-- E01/E02/E03 (error monitoring) - not available on WXS205SDU
-- SIX1 (gross, net, tare in one call) - not available on WXS205SDU
+### HIGH (not available on WXS205SDU)
+- E01/E02/E03 (error monitoring)
+- SIX1 (gross, net, tare in one call)
 
 ### MED (useful but not urgent)
 - SIR/SR (continuous streaming) - needs async iterator architecture
-- C1/C3 (adjustment) - commented out, needs physical interaction
 - DATI (date + time combined) - not on WXS205SDU
+
+### STUB (commented out, require physical interaction)
+- C1/C3 (internal weight adjustment)
+- C2 (external weight adjustment)
+- TST1-TST3 (test procedures)

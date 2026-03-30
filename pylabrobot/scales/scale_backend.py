@@ -9,10 +9,14 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a scale"""
 
   @abstractmethod
-  async def zero(self) -> None: ...
+  async def zero(self) -> None:
+    """Zero the scale."""
+    ...
 
   @abstractmethod
-  async def tare(self) -> None: ...
+  async def tare(self) -> None:
+    """Tare the scale."""
+    ...
 
   @abstractmethod
   async def read_weight(self) -> float:

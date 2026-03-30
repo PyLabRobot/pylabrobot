@@ -136,7 +136,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
   async def stop(self) -> None:
     logger.info("[MT Scale] Disconnected (simulation)")
 
-  async def cancel(self) -> str:
+  async def reset(self) -> str:
     responses = await self.send_command("@")
     self._validate_response(responses[0], 3, "@")
     return responses[0].data[0]
@@ -175,7 +175,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     if cmd == "I4":
       return [R("I4", "A", [self._simulated_serial_number])]
     if cmd == "I3":
-      return [R("I3", "A", ["2.10 10.28.0.493.142"])]
+      return [R("I3", "A", [self.firmware_version])]
     if cmd == "I5":
       return [R("I5", "A", ["12121306C"])]
     if cmd == "I10":
@@ -192,7 +192,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
         R("I14", "A", ["1", "1", self._simulated_device_type]),
       ]
     if cmd == "I15":
-      return [R("I15", "A", ["42", "3", "15", "30"])]
+      return [R("I15", "A", ["1440"])]  # 1440 minutes = 24 hours
     if cmd == "DAT":
       return [R("DAT", "A", ["30.03.2026"])]
     if cmd == "TIM":
@@ -211,7 +211,10 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
         R("M27", "A", ["2", "15", "3", "2026", "10", "30", "1", "200.1234 g"]),
       ]
     if cmd == "SIS":
-      return [R("SIS", "S", [f"{net:.5f}", "g", "S"])]
+      # State, NetWeight, Unit(0=g), Readability, Step, Approval, Info(0=no tare, 1=weighed tare)
+      state = "0"  # stable
+      info = "0" if self.tare_weight == 0 else "1"
+      return [R("SIS", "A", [state, f"{net:.5f}", "0", "5", "1", "0", info])]
     if cmd == "SNR":
       return [R("SNR", "S", [f"{net:.5f}", "g"])]
     if cmd == "UPD":
