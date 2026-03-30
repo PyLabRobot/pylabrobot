@@ -199,25 +199,31 @@ HTML = """
   </div>
 
   <div class="panel right">
-    <!-- Teach -->
-    <div class="teach-section">
-      <h2 style="font-size:14px;color:#e94560;margin-bottom:8px;">TEACH POSITION</h2>
-      <div class="teach-row">
-        <input type="text" id="teach-label" placeholder="Label (e.g. tip_load)">
-        <button class="btn" onclick="recordPosition()">Record</button>
+    <!-- Labware Inspector -->
+    <div>
+      <h2 style="font-size:14px;color:#e94560;margin-bottom:8px;">LABWARE</h2>
+      <div class="controls" id="labware-tabs"></div>
+      <div id="labware-detail" style="background:#16213e;border-radius:8px;padding:12px;
+           border:1px solid #0f3460;font-size:12px;margin-bottom:12px;">
+        <i style="color:#666">Select labware above</i>
       </div>
+    </div>
+
+    <!-- Teach -->
+    <div>
+      <h2 style="font-size:14px;color:#e94560;margin-bottom:8px;">TEACH FROM CURRENT Z</h2>
       <div class="teach-row">
-        <select id="teach-field">
+        <select id="teach-field" style="width:110px">
           <option value="z_start">z_start</option>
           <option value="z_dispense">z_dispense</option>
           <option value="z_max">z_max</option>
         </select>
-        <select id="teach-labware">
-          <option value="tips">tips</option>
-          <option value="source">source</option>
-          <option value="dest">dest</option>
-        </select>
-        <button class="btn" onclick="teachLabware()">Teach</button>
+        <select id="teach-labware"></select>
+        <button class="btn" onclick="teachLabware()">Set</button>
+      </div>
+      <div class="teach-row" style="margin-top:6px">
+        <input type="text" id="teach-label" placeholder="Label (e.g. tip_top)" style="width:160px">
+        <button class="btn" onclick="recordPosition()">Record Position</button>
       </div>
     </div>
 
@@ -233,7 +239,7 @@ HTML = """
     </div>
 
     <!-- Saved positions -->
-    <div class="saved-positions">
+    <div class="saved-positions" style="margin-top:12px;">
       <h2 style="font-size:14px;color:#e94560;margin-bottom:8px;">SAVED POSITIONS</h2>
       <div id="saved-list"></div>
     </div>
@@ -355,6 +361,7 @@ async function teachLabware() {
     });
     const data = await resp.json();
     log('  ' + (data.message || data.error), data.error ? 'err' : 'ok');
+    loadLabware();  // refresh to show EDITED tag
   } catch(e) { log('  Teach failed: ' + e, 'err'); }
 }
 
@@ -443,10 +450,76 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'End') { sendJog('roma', 'r', 1); return; }
 });
 
+let labwareData = {};
+
+async function loadLabware() {
+  try {
+    const resp = await fetch('/labware');
+    labwareData = await resp.json();
+    const tabs = document.getElementById('labware-tabs');
+    const select = document.getElementById('teach-labware');
+    tabs.innerHTML = '';
+    select.innerHTML = '';
+    for (const name of Object.keys(labwareData)) {
+      const btn = document.createElement('button');
+      btn.className = 'btn small';
+      btn.textContent = name;
+      btn.onclick = () => showLabware(name);
+      tabs.appendChild(btn);
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+    // Show first by default
+    const first = Object.keys(labwareData)[0];
+    if (first) showLabware(first);
+  } catch(e) { log('Failed to load labware: ' + e, 'err'); }
+}
+
+function showLabware(name) {
+  const lw = labwareData[name];
+  if (!lw) return;
+  // Highlight active tab
+  document.querySelectorAll('#labware-tabs .btn').forEach(b => {
+    b.className = 'btn small' + (b.textContent === name ? ' active' : '');
+  });
+  // Also set the teach dropdown
+  document.getElementById('teach-labware').value = name;
+
+  let html = '<div style="margin-bottom:8px">';
+  html += '<b style="color:#e94560;font-size:13px">' + name + '</b>';
+  html += '<span style="color:#666;margin-left:8px">' + lw.type + '</span>';
+  html += '</div>';
+  html += '<div style="color:#888;margin-bottom:6px">' + lw.model + '</div>';
+  html += '<table style="width:100%;font-family:monospace;font-size:11px;border-collapse:collapse">';
+
+  const rows = [
+    ['Size', lw.size_x + ' x ' + lw.size_y + ' x ' + lw.size_z + ' mm'],
+    ['Location (deck)', 'x=' + lw.loc_x + '  y=' + lw.loc_y + '  z=' + lw.loc_z + ' mm'],
+  ];
+  if (lw.z_start !== undefined) rows.push(['z_start', lw.z_start + ' (' + (lw.z_start/10).toFixed(1) + 'mm)' + (lw.edited_z_start ? ' <span style="color:#e9c46a">EDITED</span>' : '')]);
+  if (lw.z_dispense !== undefined) rows.push(['z_dispense', lw.z_dispense + ' (' + (lw.z_dispense/10).toFixed(1) + 'mm)' + (lw.edited_z_dispense ? ' <span style="color:#e9c46a">EDITED</span>' : '')]);
+  if (lw.z_max !== undefined) rows.push(['z_max', lw.z_max + ' (' + (lw.z_max/10).toFixed(1) + 'mm)' + (lw.edited_z_max ? ' <span style="color:#e9c46a">EDITED</span>' : '')]);
+  if (lw.area !== undefined) rows.push(['area', lw.area + ' mm²']);
+  if (lw.item_dy !== undefined) rows.push(['well pitch', lw.item_dy + ' mm']);
+  if (lw.num_items !== undefined) rows.push(['wells/tips', lw.num_items + ' (' + lw.num_items_x + 'x' + lw.num_items_y + ')']);
+  if (lw.tip_length !== undefined) rows.push(['tip length', lw.tip_length + ' mm']);
+  if (lw.tip_type !== undefined) rows.push(['tip type', lw.tip_type]);
+
+  for (const [label, val] of rows) {
+    html += '<tr><td style="padding:2px 8px 2px 0;color:#aaa;white-space:nowrap">' + label + '</td>';
+    html += '<td style="padding:2px 0">' + val + '</td></tr>';
+  }
+  html += '</table>';
+  document.getElementById('labware-detail').innerHTML = html;
+}
+
 // Start polling
 polling = setInterval(pollPositions, 1000);
 pollPositions();
 loadSaved();
+loadLabware();
 </script>
 </body>
 </html>
@@ -552,6 +625,69 @@ def action():
 @app.route("/saved")
 def saved():
   return jsonify(load_json_file(POSITIONS_FILE))
+
+
+@app.route("/labware")
+def labware_info():
+  """Return all labware properties for the UI."""
+  edits = load_json_file(LABWARE_FILE)
+  result = {}
+
+  # Find all labware on the deck (carriers and their contents)
+  def find_labware(resource, deck_ref):
+    items = {}
+    for child in resource.children:
+      if hasattr(child, "sites"):  # carrier
+        for site in child.sites:
+          for content in site.children:
+            name = content.name
+            loc = content.get_location_wrt(deck_ref)
+            info = {
+              "type": type(content).__name__,
+              "model": getattr(content, "model", ""),
+              "size_x": round(content.get_size_x(), 1),
+              "size_y": round(content.get_size_y(), 1),
+              "size_z": round(content.get_size_z(), 1),
+              "loc_x": round(loc.x, 1),
+              "loc_y": round(loc.y, 1),
+              "loc_z": round(loc.z, 1),
+            }
+            # TecanPlate / TecanTipRack Z params
+            for attr in ("z_start", "z_dispense", "z_max", "area"):
+              if hasattr(content, attr):
+                val = getattr(content, attr)
+                info[attr] = val
+                # Check if edited
+                if name in edits and attr in edits[name]:
+                  info[attr] = edits[name][attr]
+                  info[f"edited_{attr}"] = True
+            # Well/tip info
+            if hasattr(content, "num_items"):
+              info["num_items"] = content.num_items
+            if hasattr(content, "num_items_x"):
+              info["num_items_x"] = content.num_items_x
+            if hasattr(content, "num_items_y"):
+              info["num_items_y"] = content.num_items_y
+            if hasattr(content, "item_dy"):
+              info["item_dy"] = round(content.item_dy, 2)
+            # Tip info (from first tip)
+            if hasattr(content, "get_tip"):
+              try:
+                tip = content.get_tip("A1")
+                info["tip_length"] = tip.total_tip_length
+                if hasattr(tip, "tip_type"):
+                  info["tip_type"] = str(tip.tip_type.value)
+              except Exception:
+                pass
+            items[name] = info
+      find_labware(child, deck_ref)
+    return items
+
+  if evo is not None:
+    deck_ref = evo.children[0] if evo.children else evo
+    result = find_labware(deck_ref, deck_ref)
+
+  return jsonify(result)
 
 
 # ============== Async helpers ==============
