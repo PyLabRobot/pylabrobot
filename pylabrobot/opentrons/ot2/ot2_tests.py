@@ -51,12 +51,12 @@ class TestSimulatorDriverWireMethods(unittest.IsolatedAsyncioTestCase):
     await self.driver.setup()
 
   async def test_move_arm_tracks_position(self):
-    self.driver.move_arm(pipette_id="sim-left", location_x=10, location_y=20, location_z=30)
-    pos = self.driver.save_position("sim-left")["data"]["result"]["position"]
+    self.driver._move_arm(pipette_id="sim-left", location_x=10, location_y=20, location_z=30)
+    pos = self.driver._save_position("sim-left")["data"]["result"]["position"]
     self.assertAlmostEqual(pos["x"], 10.0)
 
   async def test_define_labware_returns_valid_uri(self):
-    result = self.driver.define_labware({"metadata": {"displayName": "rack"}})
+    result = self.driver._define_labware({"metadata": {"displayName": "rack"}})
     self.assertEqual(len(result["data"]["definitionUri"].split("/")), 3)
 
 
@@ -126,17 +126,15 @@ class TestPerMountPIPBackend(unittest.IsolatedAsyncioTestCase):
       await self.right.drop_tips([TipDrop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)], [0])
 
   def test_get_ot_name_stable(self):
-    self.assertEqual(self.left.get_ot_name("r"), self.left.get_ot_name("r"))
+    self.assertEqual(self.driver.get_ot_name("r"), self.driver.get_ot_name("r"))
 
   def test_get_ot_name_unique(self):
-    self.assertNotEqual(self.left.get_ot_name("a"), self.left.get_ot_name("b"))
+    self.assertNotEqual(self.driver.get_ot_name("a"), self.driver.get_ot_name("b"))
 
   async def test_on_stop_clears_state(self):
     self.left._has_tip = True
-    self.left._plr_name_to_load_name["foo"] = "bar"
     await self.left._on_stop()
     self.assertFalse(self.left._has_tip)
-    self.assertEqual(self.left._plr_name_to_load_name, {})
 
   def test_no_pipette_num_channels_zero(self):
     driver = OpentronsOT2SimulatorDriver(left_pipette_name=None, right_pipette_name=None)

@@ -41,6 +41,8 @@ class OpentronsOT2SimulatorDriver(Driver):
     self.left_pipette: Optional[Dict[str, str]] = None
     self.right_pipette: Optional[Dict[str, str]] = None
     self._positions: Dict[str, Coordinate] = {}
+    self._tip_racks: Dict[str, int] = {}
+    self._plr_name_to_load_name: Dict[str, str] = {}
 
   def _init_pipettes(self):
     self.left_pipette = (
@@ -59,12 +61,16 @@ class OpentronsOT2SimulatorDriver(Driver):
 
   async def setup(self):
     self._init_pipettes()
+    self._tip_racks = {}
+    self._plr_name_to_load_name = {}
     logger.info("OpentronsOT2SimulatorDriver setup: left=%s, right=%s",
                 self._left_pipette_name, self._right_pipette_name)
 
   async def stop(self):
     self.left_pipette = None
     self.right_pipette = None
+    self._tip_racks = {}
+    self._plr_name_to_load_name = {}
     logger.info("OpentronsOT2SimulatorDriver stopped.")
 
   async def home(self):
@@ -78,42 +84,59 @@ class OpentronsOT2SimulatorDriver(Driver):
             "left_pipette_name": self._left_pipette_name,
             "right_pipette_name": self._right_pipette_name}
 
-  # -- wire methods (no-op / logging) --
+  # -- shared labware registry (no-op for simulator) --
 
-  def move_arm(self, pipette_id, location_x, location_y, location_z,
-               minimum_z_height=None, speed=None, force_direct=False):
+  def get_ot_name(self, plr_resource_name: str) -> str:
+    if plr_resource_name not in self._plr_name_to_load_name:
+      import uuid
+      self._plr_name_to_load_name[plr_resource_name] = uuid.uuid4().hex
+    return self._plr_name_to_load_name[plr_resource_name]
+
+  def assign_tip_rack(self, tip_rack, tip) -> None:
+    if tip_rack.name in self._tip_racks:
+      return
+    self._tip_racks[tip_rack.name] = 0
+    logger.info("assign_tip_rack %s (simulated)", tip_rack.name)
+
+  def is_tip_rack_assigned(self, tip_rack_name: str) -> bool:
+    return tip_rack_name in self._tip_racks
+
+  # -- private wire methods (no-op / logging) --
+
+  def _move_arm(self, pipette_id, location_x, location_y, location_z,
+                minimum_z_height=None, speed=None, force_direct=False):
     loc = Coordinate(location_x, location_y, location_z)
     self._positions[pipette_id] = loc
     logger.info("Moved %s to %s (simulated).", pipette_id, loc)
 
-  def pick_up_tip_raw(self, labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
-    logger.info("pick_up_tip_raw %s well=%s pipette=%s (simulated)", labware_id, well_name, pipette_id)
+  def _pick_up_tip(self, labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
+    logger.info("_pick_up_tip %s well=%s pipette=%s (simulated)", labware_id, well_name, pipette_id)
 
-  def drop_tip_raw(self, labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
-    logger.info("drop_tip_raw %s well=%s pipette=%s (simulated)", labware_id, well_name, pipette_id)
+  def _drop_tip(self, labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
+    logger.info("_drop_tip %s well=%s pipette=%s (simulated)", labware_id, well_name, pipette_id)
 
-  def aspirate_in_place(self, volume, flow_rate, pipette_id):
-    logger.info("aspirate_in_place %.2f µL pipette=%s (simulated)", volume, pipette_id)
+  def _aspirate_in_place(self, volume, flow_rate, pipette_id):
+    logger.info("_aspirate_in_place %.2f µL pipette=%s (simulated)", volume, pipette_id)
 
-  def dispense_in_place(self, volume, flow_rate, pipette_id):
-    logger.info("dispense_in_place %.2f µL pipette=%s (simulated)", volume, pipette_id)
+  def _dispense_in_place(self, volume, flow_rate, pipette_id):
+    logger.info("_dispense_in_place %.2f µL pipette=%s (simulated)", volume, pipette_id)
 
-  def define_labware(self, definition):
+  def _define_labware(self, definition):
     name = definition.get("metadata", {}).get("displayName", "unknown")
     return {"data": {"definitionUri": f"pylabrobot/{name}/1"}}
 
-  def add_labware(self, load_name, namespace, ot_location, version, labware_id, display_name):
-    logger.info("add_labware %s at slot %s (simulated)", display_name, ot_location)
+  def _add_labware(self, load_name, namespace, ot_location, version, labware_id, display_name):
+    logger.info("_add_labware %s at slot %s (simulated)", display_name, ot_location)
 
-  def save_position(self, pipette_id):
+  def _save_position(self, pipette_id):
     pos = self._positions.get(pipette_id, Coordinate.zero())
     return {"data": {"result": {"position": {"x": pos.x, "y": pos.y, "z": pos.z}}}}
 
-  def move_to_addressable_area_for_drop_tip(self, pipette_id, offset_x, offset_y, offset_z):
-    logger.info("move_to_addressable_area_for_drop_tip pipette=%s (simulated)", pipette_id)
+  def _move_to_addressable_area_for_drop_tip(self, pipette_id, offset_x, offset_y, offset_z):
+    logger.info("_move_to_addressable_area_for_drop_tip pipette=%s (simulated)", pipette_id)
 
-  def drop_tip_in_place(self, pipette_id):
-    logger.info("drop_tip_in_place pipette=%s (simulated)", pipette_id)
+  def _drop_tip_in_place(self, pipette_id):
+    logger.info("_drop_tip_in_place pipette=%s (simulated)", pipette_id)
 
 
 class OpentronsOT2SimulatorPIPBackend(OpentronsOT2PIPBackend):

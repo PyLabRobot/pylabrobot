@@ -185,7 +185,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   # -- expose internals for test/legacy compatibility --
 
   def get_ot_name(self, plr_resource_name: str) -> str:
-    return self._left_pip.get_ot_name(plr_resource_name)
+    return self._ot2_driver.get_ot_name(plr_resource_name)
 
   @property
   def left_pipette(self):
