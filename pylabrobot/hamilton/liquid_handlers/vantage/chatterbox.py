@@ -1,7 +1,5 @@
 """VantageChatterboxDriver: prints commands instead of sending them over USB."""
 
-from typing import List, Optional
-
 from .driver import VantageDriver
 
 

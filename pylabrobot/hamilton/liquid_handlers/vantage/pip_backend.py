@@ -222,12 +222,12 @@ class VantagePIPBackend(PIPBackend):
       minimal_traverse_height_at_begin_of_command=[
         round(th * 10)
         for th in backend_params.minimal_traverse_height_at_begin_of_command
-        or [traversal]
-      ] * len(ops),
+        or [traversal] * len(ops)
+      ],
       minimal_height_at_command_end=[
         round(th * 10)
-        for th in backend_params.minimal_height_at_command_end or [traversal]
-      ] * len(ops),
+        for th in backend_params.minimal_height_at_command_end or [traversal] * len(ops)
+      ],
       tip_handling_method=[1 for _ in ops],  # always appears to be 1
       blow_out_air_volume=[0] * len(ops),
     )
@@ -269,12 +269,12 @@ class VantagePIPBackend(PIPBackend):
       minimal_traverse_height_at_begin_of_command=[
         round(th * 10)
         for th in backend_params.minimal_traverse_height_at_begin_of_command
-        or [traversal]
-      ] * len(ops),
+        or [traversal] * len(ops)
+      ],
       minimal_height_at_command_end=[
         round(th * 10)
-        for th in backend_params.minimal_height_at_command_end or [traversal]
-      ] * len(ops),
+        for th in backend_params.minimal_height_at_command_end or [traversal] * len(ops)
+      ],
       tip_handling_method=[0 for _ in ops],  # Always appears to be 0, even in trash.
       TODO_TR_2=0,
     )
@@ -411,12 +411,12 @@ class VantagePIPBackend(PIPBackend):
       tip_pattern=channels_involved,
       minimal_traverse_height_at_begin_of_command=[
         round(th * 10)
-        for th in backend_params.minimal_traverse_height_at_begin_of_command or [traversal]
-      ] * n,
+        for th in backend_params.minimal_traverse_height_at_begin_of_command or [traversal] * n
+      ],
       minimal_height_at_command_end=[
         round(th * 10)
-        for th in backend_params.minimal_height_at_command_end or [traversal]
-      ] * n,
+        for th in backend_params.minimal_height_at_command_end or [traversal] * n
+      ],
       lld_search_height=[round(ls * 10) for ls in lld_search_heights],
       clot_detection_height=[
         round(cdh * 10) for cdh in backend_params.clot_detection_height or [0] * n
@@ -682,7 +682,7 @@ class VantagePIPBackend(PIPBackend):
         for mp in backend_params.mix_position_in_z_direction_from_liquid_surface or [0] * n
       ],
       mix_speed=[
-        round(op.mix.flow_rate * 100) if op.mix is not None else 10 for op in ops
+        round(op.mix.flow_rate * 10) if op.mix is not None else 10 for op in ops
       ],
       surface_following_distance_during_mixing=[
         round(sfdm * 10)
