@@ -15,7 +15,7 @@ import asyncio
 import logging
 from typing import List, Optional, Sequence, Tuple, Union
 
-from pylabrobot.liquid_handling.backends.tecan.EVO_backend import EVOBackend, LiHa
+from pylabrobot.liquid_handling.backends.tecan.EVO_backend import EVOBackend, EVOArm, LiHa
 from pylabrobot.liquid_handling.backends.tecan.errors import TecanError
 from pylabrobot.liquid_handling.liquid_classes.tecan import (
   TecanLiquidClass,
@@ -23,6 +23,7 @@ from pylabrobot.liquid_handling.liquid_classes.tecan import (
 )
 from pylabrobot.liquid_handling.standard import (
   Drop,
+  Mix,
   Pickup,
   SingleChannelAspiration,
   SingleChannelDispense,
@@ -69,6 +70,42 @@ ZAAPMOTION_CONFIG = [
   "SIA 0.01, 0.28, 0.0",
   "WRP",
 ]
+
+
+class ZaapMotion:
+  """Commands for ZaapMotion motor controllers (T2x pipeline)."""
+
+  def __init__(self, backend: EVOBackend, module: str = "C5"):
+    self.backend = backend
+    self.module = module
+
+  def _prefix(self, tip: int) -> str:
+    return f"T2{tip}"
+
+  async def exit_boot_mode(self, tip: int) -> None:
+    await self.backend.send_command(self.module, command=f"{self._prefix(tip)}X")
+
+  async def read_firmware_version(self, tip: int) -> str:
+    resp = await self.backend.send_command(self.module, command=f"{self._prefix(tip)}RFV")
+    return str(resp["data"][0]) if resp and resp.get("data") else ""
+
+  async def read_config_status(self, tip: int) -> None:
+    await self.backend.send_command(self.module, command=f"{self._prefix(tip)}RCS")
+
+  async def set_force_ramp(self, tip: int, value: int) -> None:
+    await self.backend.send_command(self.module, command=f"{self._prefix(tip)}SFR{value}")
+
+  async def set_force_mode(self, tip: int) -> None:
+    await self.backend.send_command(self.module, command=f"{self._prefix(tip)}SFP1")
+
+  async def set_default_position(self, tip: int, value: int) -> None:
+    await self.backend.send_command(self.module, command=f"{self._prefix(tip)}SDP{value}")
+
+  async def configure_motor(self, tip: int, command: str) -> None:
+    await self.backend.send_command(self.module, command=f"{self._prefix(tip)}{command}")
+
+  async def set_sdo(self, param: str) -> None:
+    await self.backend.send_command(self.module, command=f"T23SDO{param}")
 
 
 class AirEVOBackend(EVOBackend):
@@ -118,6 +155,7 @@ class AirEVOBackend(EVOBackend):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
     )
+    self.zaap: Optional[ZaapMotion] = None
 
   async def setup(self):
     """Setup the Air EVO.
@@ -145,8 +183,9 @@ class AirEVOBackend(EVOBackend):
   async def _is_initialized(self) -> bool:
     """Check if the LiHa axes are already initialized."""
     try:
-      resp = await self.send_command("C5", command="REE0")
-      err = resp["data"][0] if resp and resp.get("data") else ""
+      arm = EVOArm(self, "C5")
+      err = await arm.read_error_register(0)
+      err = str(err)
       # A = init failed (1), G = not initialized (7) — these mean we need full init
       # Any other code (including @=OK, Y=tip not fetched, etc.) means axes are initialized
       if err and not any(c in ("A", "G") for c in err):
@@ -161,6 +200,7 @@ class AirEVOBackend(EVOBackend):
     self._mca_connected = False
     self._roma_connected = False
     self.liha = LiHa(self, EVOBackend.LIHA)
+    self.zaap = ZaapMotion(self)
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
     self._y_range = (await self.liha.report_y_param(5))[0]
@@ -179,8 +219,9 @@ class AirEVOBackend(EVOBackend):
     await self._setup_safety_module()
 
     # ZaapMotion SDO config (from EVOware: sent right before PIA)
+    assert self.zaap is not None
     try:
-      await self.send_command("C5", command="T23SDO11,1")
+      await self.zaap.set_sdo("11,1")
     except TecanError:
       pass  # may fail if already in app mode, non-critical
 
@@ -224,27 +265,22 @@ class AirEVOBackend(EVOBackend):
     This sends the 'X' command to jump to application firmware, then sends
     33 motor configuration commands (PID gains, current limits, encoder config).
     """
-
+    zaap = ZaapMotion(self)
     for tip in range(8):
-      prefix = f"T2{tip}"
-
       # Check current mode
       try:
-        resp = await self.send_command("C5", command=f"{prefix}RFV")
-        firmware = resp["data"][0] if resp and resp.get("data") else ""
+        firmware = await zaap.read_firmware_version(tip)
       except TecanError:
         firmware = ""
 
       if "BOOT" in str(firmware):
-        # Exit boot mode
         logger.info("ZaapMotion tip %d in boot mode, sending exit command", tip + 1)
-        await self.send_command("C5", command=f"{prefix}X")
+        await zaap.exit_boot_mode(tip)
         await asyncio.sleep(1)
 
         # Verify transition
         try:
-          resp = await self.send_command("C5", command=f"{prefix}RFV")
-          firmware = resp["data"][0] if resp and resp.get("data") else ""
+          firmware = await zaap.read_firmware_version(tip)
         except TecanError:
           firmware = ""
 
@@ -253,7 +289,7 @@ class AirEVOBackend(EVOBackend):
 
       # Check if already configured (RCS returns OK if configured)
       try:
-        await self.send_command("C5", command=f"{prefix}RCS")
+        await zaap.read_config_status(tip)
         logger.info("ZaapMotion tip %d already configured, skipping", tip + 1)
         continue
       except TecanError:
@@ -263,9 +299,11 @@ class AirEVOBackend(EVOBackend):
       logger.info("Configuring ZaapMotion tip %d (%d commands)", tip + 1, len(ZAAPMOTION_CONFIG))
       for cmd in ZAAPMOTION_CONFIG:
         try:
-          await self.send_command("C5", command=f"{prefix}{cmd}")
+          await zaap.configure_motor(tip, cmd)
         except TecanError as e:
           logger.warning("ZaapMotion tip %d config command '%s' failed: %s", tip + 1, cmd, e)
+
+    self.zaap = zaap
 
   async def _setup_safety_module(self):
     """Send safety module commands to enable motor power."""
@@ -279,17 +317,33 @@ class AirEVOBackend(EVOBackend):
 
   async def _zaapmotion_force_on(self):
     """Enable ZaapMotion force mode before plunger operations."""
+    assert self.zaap is not None
     for tip in range(8):
-      await self.send_command("C5", command=f"T2{tip}SFR{self.SFR_ACTIVE}")
+      await self.zaap.set_force_ramp(tip, self.SFR_ACTIVE)
     for tip in range(8):
-      await self.send_command("C5", command=f"T2{tip}SFP1")
+      await self.zaap.set_force_mode(tip)
 
   async def _zaapmotion_force_off(self):
     """Restore ZaapMotion to idle after plunger operations."""
+    assert self.zaap is not None
     for tip in range(8):
-      await self.send_command("C5", command=f"T2{tip}SFR{self.SFR_IDLE}")
+      await self.zaap.set_force_ramp(tip, self.SFR_IDLE)
     for tip in range(8):
-      await self.send_command("C5", command=f"T2{tip}SDP{self.SDP_DEFAULT}")
+      await self.zaap.set_default_position(tip, self.SDP_DEFAULT)
+
+  # ============== Force-mode overrides for mixing and blow-out ==============
+
+  async def _perform_mix(self, mix: Mix, use_channels: List[int]) -> None:
+    await self._zaapmotion_force_on()
+    await super()._perform_mix(mix, use_channels)
+    await self._zaapmotion_force_off()
+
+  async def _perform_blow_out(
+    self, ops: List[SingleChannelDispense], use_channels: List[int]
+  ) -> None:
+    await self._zaapmotion_force_on()
+    await super()._perform_blow_out(ops, use_channels)
+    await self._zaapmotion_force_off()
 
   # ============== Override conversion factors ==============
 
@@ -604,9 +658,9 @@ class AirEVOBackend(EVOBackend):
     await self._zaapmotion_force_on()
     sep_vals: List[Optional[int]] = [int(600 * self.SPEED_FACTOR)] * self.num_channels
     await self.liha.set_end_speed_plunger(sep_vals)
-    await self.send_command("C5", command="PPA" + ",".join(["0"] * self.num_channels))
+    await self.liha.position_plunger_absolute([0] * self.num_channels)
     await self._zaapmotion_force_off()
 
     # Set DiTi discard parameters and drop
-    await self.send_command("C5", command="SDT1,1000,200")
+    await self.liha.set_disposable_tip_params(1, 1000, 200)
     await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=1)

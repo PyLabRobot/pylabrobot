@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, call
 
 from pylabrobot.liquid_handling.backends.tecan.air_evo_backend import (
   AirEVOBackend,
+  ZaapMotion,
   ZAAPMOTION_CONFIG,
 )
 from pylabrobot.liquid_handling.backends.tecan.EVO_backend import LiHa
@@ -42,7 +43,7 @@ class AirEVOTestBase(unittest.IsolatedAsyncioTestCase):
         return {"data": [2100]}
       if command == "RNT":
         return {"data": [8]}
-      if command.startswith("REE"):
+      if command == "REE":
         if params and params[0] == 1:
           return {"data": ["XYSZZZZZZZZ"]}
         return {"data": ["@@@@@@@@@@@"]}
@@ -66,6 +67,7 @@ class AirEVOTestBase(unittest.IsolatedAsyncioTestCase):
     self.evo._roma_connected = False
     self.evo._mca_connected = False
     self.evo.liha = LiHa(self.evo, "C5")
+    self.evo.zaap = ZaapMotion(self.evo)
 
     # Deck setup
     self.tip_carrier = DiTi_3Pos(name="tip_carrier")
@@ -193,7 +195,7 @@ class InitSkipTests(AirEVOTestBase):
     """REE0 with 'A' (init failed) should mean not initialized."""
 
     async def send_cmd(module, command, params=None, **kwargs):
-      if command == "REE0":
+      if command == "REE":
         return {"data": ["GGGAAAAAAAA"]}
       return {"data": []}
 
@@ -205,7 +207,7 @@ class InitSkipTests(AirEVOTestBase):
     """REE0 with 'G' (not initialized) should mean not initialized."""
 
     async def send_cmd(module, command, params=None, **kwargs):
-      if command == "REE0":
+      if command == "REE":
         return {"data": ["GGGGGGGGGGG"]}
       return {"data": []}
 
@@ -217,7 +219,7 @@ class InitSkipTests(AirEVOTestBase):
     """REE0 with 'Y' (tip not fetched) means axes ARE initialized."""
 
     async def send_cmd(module, command, params=None, **kwargs):
-      if command == "REE0":
+      if command == "REE":
         return {"data": ["@@@YYYYYYY@"]}
       return {"data": []}
 
