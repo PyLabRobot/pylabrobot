@@ -79,6 +79,8 @@ async def main():
   try:
     # --- Test 1: Pick up 8 tips ---
     print("\n--- Test 1: Pick Up Tips ---")
+    print(f"  Tip rack z_start={tip_rack.z_start} z_max={tip_rack.z_max}")
+    print(f"  x_offset={getattr(tip_rack, 'x_offset', 0)} y_offset={getattr(tip_rack, 'y_offset', 0)}")
     input("Press Enter to pick up 8 tips from column 1...")
     await evo.pip.pick_up_tips(tip_rack.get_items(COLUMN_1))
     print("Tips picked up!")

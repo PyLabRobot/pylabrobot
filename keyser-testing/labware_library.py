@@ -123,9 +123,9 @@ def DiTi_50ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
     size_y=86.0,
     size_z=45.0,
     model="DiTi_50ul_SBS_LiHa_Air",
-    z_start=820.0,  # taught tip top at Z=780, start slightly above
-    z_dispense=820.0,
-    z_max=600.0,  # search down ~22mm from z_start
+    z_start=850.0,  # start search above taught tip top (Z=780)
+    z_dispense=850.0,
+    z_max=550.0,  # search down 30mm to ensure tips fully seat
     area=33.2,
     ordered_items=create_ordered_items_2d(
       TipSpot,
