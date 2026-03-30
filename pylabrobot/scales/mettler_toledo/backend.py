@@ -399,6 +399,105 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_unit(parts[-1], "I2")
     return float(parts[-2])
 
+  async def request_software_version(self) -> str:
+    """Query the software version and type definition number. (I3 command)
+
+    Returns the version string (e.g. "2.10 10.28.0.493.142").
+    For bridge mode (no terminal), returns the bridge software version.
+    """
+    responses = await self.send_command("I3")
+    self._validate_response(responses[0], 3, "I3")
+    return responses[0].data[0]
+
+  async def request_software_material_number(self) -> str:
+    """Query the software material number (SW-ID). (I5 command)
+
+    Unique per software release: 8-digit number + alphabetic index.
+    For bridge mode (no terminal), returns the bridge SW-ID.
+    """
+    responses = await self.send_command("I5")
+    self._validate_response(responses[0], 3, "I5")
+    return responses[0].data[0]
+
+  @requires_mt_sics_command("I10")
+  async def request_device_id(self) -> str:
+    """Query the user-assigned device identification string. (I10 command)
+
+    This is a user-configurable name (max 20 chars) to identify
+    individual scales in multi-device setups. Retained after @ cancel.
+    """
+    responses = await self.send_command("I10")
+    self._validate_response(responses[0], 3, "I10")
+    return responses[0].data[0]
+
+  @requires_mt_sics_command("I10")
+  async def set_device_id(self, device_id: str) -> None:
+    """Set the user-assigned device identification string. (I10 command)
+
+    Max 20 alphanumeric characters. Retained after @ cancel.
+    Useful for labeling individual scales in multi-device setups.
+    """
+    await self.send_command(f'I10 "{device_id}"')
+
+  @requires_mt_sics_command("I11")
+  async def request_model_designation(self) -> str:
+    """Query the model designation string. (I11 command)
+
+    Returns the weigh module model type (e.g. "WMS404C-L/10").
+    Abbreviations: DR=Delta Range, DU=Dual Range, /M or /A=Approved.
+    """
+    responses = await self.send_command("I11")
+    self._validate_response(responses[0], 3, "I11")
+    return responses[0].data[0]
+
+  @requires_mt_sics_command("I14")
+  async def request_device_info(self) -> List[MettlerToledoResponse]:
+    """Query detailed device information including all components. (I14 command)
+
+    Returns multi-response with instrument configuration (No=0),
+    descriptions (No=1), SW identification numbers (No=2),
+    SW versions (No=3), serial numbers (No=4), and TDNR numbers (No=5).
+    Each category reports data for bridge, terminal, options, etc.
+    """
+    return await self.send_command("I14")
+
+  @requires_mt_sics_command("I15")
+  async def request_uptime(self) -> dict:
+    """Query the device uptime. (I15 command)
+
+    Returns a dict with keys "days", "hours", "minutes", "seconds".
+    Counts time since last power-on, including short interruptions.
+    Not reset by @ cancel or restart.
+    """
+    responses = await self.send_command("I15")
+    self._validate_response(responses[0], 6, "I15")
+    return {
+      "days": int(responses[0].data[0]),
+      "hours": int(responses[0].data[1]),
+      "minutes": int(responses[0].data[2]),
+      "seconds": int(responses[0].data[3]),
+    }
+
+  @requires_mt_sics_command("DAT")
+  async def request_date(self) -> str:
+    """Query the current date from the device. (DAT command)
+
+    Returns the date string as reported by the device.
+    """
+    responses = await self.send_command("DAT")
+    self._validate_response(responses[0], 3, "DAT")
+    return responses[0].data[0]
+
+  @requires_mt_sics_command("TIM")
+  async def request_time(self) -> str:
+    """Query the current time from the device. (TIM command)
+
+    Returns the time string as reported by the device.
+    """
+    responses = await self.send_command("TIM")
+    self._validate_response(responses[0], 3, "TIM")
+    return responses[0].data[0]
+
   @requires_mt_sics_command("I50")
   async def request_remaining_weighing_range(self) -> float:
     """Query remaining maximum weighing range in grams. (I50 command)

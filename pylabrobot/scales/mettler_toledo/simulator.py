@@ -69,7 +69,14 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       "I0",
       "I1",
       "I2",
+      "I3",
       "I4",
+      "I5",
+      "I10",
+      "I11",
+      "I14",
+      "I15",
+      "I50",
       "S",
       "SI",
       "Z",
@@ -84,9 +91,10 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       "C",
       "D",
       "DW",
+      "DAT",
+      "TIM",
       "M21",
       "M28",
-      "I50",
       "SR",
       "SIR",
     }
@@ -153,6 +161,29 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       return [R("I2", "A", [f"{self._simulated_device_type} {self._simulated_capacity:.5f} g"])]
     if cmd == "I4":
       return [R("I4", "A", [self._simulated_serial_number])]
+    if cmd == "I3":
+      return [R("I3", "A", ["2.10 10.28.0.493.142"])]
+    if cmd == "I5":
+      return [R("I5", "A", ["12121306C"])]
+    if cmd == "I10":
+      # I10 can be query or set
+      parts = command.split(maxsplit=1)
+      if len(parts) > 1:
+        return [R("I10", "A")]
+      return [R("I10", "A", ["SimScale"])]
+    if cmd == "I11":
+      return [R("I11", "A", [self._simulated_device_type])]
+    if cmd == "I14":
+      return [
+        R("I14", "B", ["0", "1", "Bridge"]),
+        R("I14", "A", ["1", "1", self._simulated_device_type]),
+      ]
+    if cmd == "I15":
+      return [R("I15", "A", ["42", "3", "15", "30"])]
+    if cmd == "DAT":
+      return [R("DAT", "A", ["30.03.2026"])]
+    if cmd == "TIM":
+      return [R("TIM", "A", ["12:00:00"])]
 
     # Zero
     if cmd in ("Z", "ZI", "ZC"):
