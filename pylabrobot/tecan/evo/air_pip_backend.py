@@ -312,12 +312,21 @@ class AirEVOPIPBackend(EVOPIPBackend):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
+    # Use plate z_start directly (absolute Tecan Z coordinate)
+    first_par = ops[0].resource.parent
+    if isinstance(first_par, TecanPlate):
+      z_asp = [None] * self.num_channels
+      for i, channel in enumerate(use_channels):
+        z_asp[channel] = int(first_par.z_start)
+    else:
+      z_asp = z_positions.get("start", [self._z_range] * self.num_channels)
+
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
       ys,
-      [z if z else self._z_range for z in z_positions["travel"]],
+      [self._z_range] * self.num_channels,
     )
 
     # Leading airgap with force mode
@@ -355,7 +364,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     await self.liha.move_tracking_relative(mtr)
     await self._zaapmotion_force_off()
     await self.liha.set_slow_speed_z(ssz_r)
-    await self.liha.move_absolute_z(z_positions["start"])
+    await self.liha.move_absolute_z(z_asp)  # retract to aspirate start height
 
     # Trailing airgap with force mode
     pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
@@ -376,17 +385,28 @@ class AirEVOPIPBackend(EVOPIPBackend):
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
     tecan_liquid_classes = self._get_liquid_classes(ops)
 
+    from pylabrobot.resources import TecanPlate
+
     ys = self._get_ys(ops)
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
-    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
+    # Use plate z_dispense directly (absolute Tecan Z coordinate)
+    first_par = ops[0].resource.parent
+    if isinstance(first_par, TecanPlate):
+      z_disp = [None] * self.num_channels
+      for i, channel in enumerate(use_channels):
+        z_disp[channel] = int(first_par.z_dispense)
+    else:
+      z_disp = [z if z else self._z_range for z in z_positions["dispense"]]
+
+    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
       ys,
-      [z if z else self._z_range for z in z_positions["dispense"]],
+      z_disp,
     )
 
     sep, spp, stz, mtr = self._dispense_action(ops, use_channels, tecan_liquid_classes)

@@ -49,7 +49,8 @@ def Eppendorf_96_wellplate_250ul_Vb_skirted(name: str) -> TecanPlate:
   TecanPlate version with z-positions for LiHa operations, marked as skirted
   for compatibility with MP_3Pos carrier PlateHolder.
 
-  Z-positions based on Microplate_96_Well from EVOware defaults.
+  Z-positions taught from jog tool (absolute Tecan Z, 0=deck, higher=up).
+  Taught Z at plate top surface: ~260-295 (varies by position, use average).
 
   Eppendorf cat. no.: 0030133374
   """
@@ -60,9 +61,9 @@ def Eppendorf_96_wellplate_250ul_Vb_skirted(name: str) -> TecanPlate:
     size_z=20.3,
     lid=None,
     model="Eppendorf_96_wellplate_250ul_Vb_skirted",
-    z_start=1957.0,
-    z_dispense=1975.0,
-    z_max=2005.0,
+    z_start=300.0,     # taught: ~260-295, start slightly above plate top
+    z_dispense=200.0,  # dispense inside wells (~6mm below top)
+    z_max=100.0,       # max depth (~10mm below dispense)
     area=33.2,
     ordered_items=create_ordered_items_2d(
       Well,
@@ -116,9 +117,9 @@ def DiTi_50ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
     size_y=86.0,
     size_z=45.0,
     model="DiTi_50ul_SBS_LiHa_Air",
-    z_start=800.0,  # taught: tip engagement at Z=770, start search above
-    z_dispense=720.0,
-    z_max=600.0,  # search range: 300 units (30mm) below z_start
+    z_start=820.0,  # taught tip top at Z=780, start slightly above
+    z_dispense=820.0,
+    z_max=600.0,  # search down ~22mm from z_start
     area=33.2,
     ordered_items=create_ordered_items_2d(
       TipSpot,
