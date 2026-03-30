@@ -124,7 +124,10 @@ HTML = """
 <body>
 <div class="header">
   <h1>Tecan EVO Jog & Teach</h1>
-  <div class="status" id="status">Connecting...</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <button class="btn" id="btn-connect" onclick="toggleConnect()" style="background:#0f3460">Connect</button>
+    <div class="status" id="status">Disconnected</div>
+  </div>
 </div>
 <div class="main">
   <div class="panel left">
@@ -282,6 +285,7 @@ function log(msg, cls) {
 let busy = false;
 
 async function sendJog(armName, axis, direction) {
+  if (!isConnected) { log('Not connected — click Connect first', 'err'); return; }
   if (busy) { log('Busy — wait for move to finish', 'err'); return; }
   busy = true;
   document.getElementById('status').textContent = 'Moving...';
@@ -387,15 +391,13 @@ function updatePositions(data) {
 }
 
 async function pollPositions() {
-  if (busy) return;  // skip poll while command is in flight
+  if (busy || !isConnected) return;
   try {
     const resp = await fetch('/positions');
-    if (busy) return;  // command started while we were fetching
+    if (busy || !isConnected) return;
     const data = await resp.json();
-    if (busy) return;
+    if (busy || !isConnected) return;
     updatePositions(data);
-    document.getElementById('status').textContent = 'Connected';
-    document.getElementById('status').style.color = '#4ec9b0';
   } catch(e) {
     document.getElementById('status').textContent = 'Disconnected';
     document.getElementById('status').style.color = '#e94560';
@@ -449,6 +451,53 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Home') { sendJog('roma', 'r', -1); return; }
   if (e.key === 'End') { sendJog('roma', 'r', 1); return; }
 });
+
+let isConnected = false;
+
+async function toggleConnect() {
+  const btn = document.getElementById('btn-connect');
+  const status = document.getElementById('status');
+  if (isConnected) {
+    btn.textContent = 'Disconnecting...';
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/disconnect', {method: 'POST'});
+      const data = await resp.json();
+      isConnected = data.connected;
+    } catch(e) { log('Disconnect failed: ' + e, 'err'); }
+  } else {
+    btn.textContent = 'Connecting...';
+    btn.disabled = true;
+    status.textContent = 'Connecting...';
+    status.style.color = '#e9c46a';
+    log('> Connecting to EVO...', '');
+    try {
+      const resp = await fetch('/connect', {method: 'POST'});
+      const data = await resp.json();
+      isConnected = data.connected;
+      if (data.message) log('  ' + data.message, 'ok');
+      if (data.error) log('  ' + data.error, 'err');
+    } catch(e) { log('  Connect failed: ' + e, 'err'); }
+  }
+  updateConnectButton();
+}
+
+function updateConnectButton() {
+  const btn = document.getElementById('btn-connect');
+  const status = document.getElementById('status');
+  btn.disabled = false;
+  if (isConnected) {
+    btn.textContent = 'Disconnect';
+    btn.style.background = '#e94560';
+    status.textContent = 'Connected';
+    status.style.color = '#4ec9b0';
+  } else {
+    btn.textContent = 'Connect';
+    btn.style.background = '#0f3460';
+    status.textContent = 'Disconnected';
+    status.style.color = '#888';
+  }
+}
 
 let labwareData = {};
 
@@ -538,8 +587,9 @@ def index():
 
 @app.route("/positions")
 def positions():
+  if not connected:
+    return jsonify({})
   if not _usb_lock.acquire(blocking=False):
-    # Another command is using USB — return stale/empty rather than interleave
     return jsonify({})
   try:
     liha_pos = run_async(get_liha_position())
@@ -787,9 +837,12 @@ def save_json_file(path, data):
     json.dump(data, f, indent=2)
 
 
-async def init_evo():
-  """Initialize the EVO in the async event loop."""
-  global evo, driver
+connected = False
+
+
+def build_deck():
+  """Build the deck and EVO device WITHOUT connecting to hardware."""
+  global evo
 
   from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted
   from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
@@ -818,10 +871,58 @@ async def init_evo():
   carrier[1] = dest_plate
   carrier[2] = tip_rack
 
-  print("Initializing EVO...")
+  print("Deck built (not connected).")
+
+
+async def connect_evo():
+  """Connect to the EVO hardware."""
+  global driver, connected
+  print("Connecting to EVO...")
   await evo.setup()
   driver = evo._driver
-  print("EVO ready!")
+  connected = True
+  print("EVO connected!")
+
+
+async def disconnect_evo():
+  """Disconnect from the EVO hardware."""
+  global driver, connected
+  print("Disconnecting...")
+  await evo.stop()
+  driver = None
+  connected = False
+  print("Disconnected.")
+
+
+@app.route("/connect", methods=["POST"])
+def connect():
+  global connected
+  if connected:
+    return jsonify({"message": "Already connected", "connected": True})
+  try:
+    future = asyncio.run_coroutine_threadsafe(connect_evo(), loop)
+    future.result(timeout=180)
+    return jsonify({"message": "Connected!", "connected": True})
+  except Exception as e:
+    return jsonify({"error": str(e), "connected": False})
+
+
+@app.route("/disconnect", methods=["POST"])
+def disconnect():
+  global connected
+  if not connected:
+    return jsonify({"message": "Not connected", "connected": False})
+  try:
+    future = asyncio.run_coroutine_threadsafe(disconnect_evo(), loop)
+    future.result(timeout=30)
+    return jsonify({"message": "Disconnected", "connected": False})
+  except Exception as e:
+    return jsonify({"error": str(e), "connected": connected})
+
+
+@app.route("/connection_status")
+def connection_status():
+  return jsonify({"connected": connected})
 
 
 def run_event_loop(lp):
@@ -831,15 +932,6 @@ def run_event_loop(lp):
 
 
 if __name__ == "__main__":
-  # Create event loop in background thread
-  loop = asyncio.new_event_loop()
-  thread = threading.Thread(target=run_event_loop, args=(loop,), daemon=True)
-  thread.start()
-
-  # Initialize EVO
-  future = asyncio.run_coroutine_threadsafe(init_evo(), loop)
-  future.result(timeout=180)
-
   # Install flask
   try:
     import flask  # noqa: F401
@@ -848,8 +940,17 @@ if __name__ == "__main__":
 
     subprocess.check_call([sys.executable, "-m", "pip", "install", "flask", "-q"])
 
+  # Create event loop in background thread
+  loop = asyncio.new_event_loop()
+  thread = threading.Thread(target=run_event_loop, args=(loop,), daemon=True)
+  thread.start()
+
+  # Build deck (no hardware connection)
+  build_deck()
+
   print("\n" + "=" * 50)
   print("  Open http://localhost:5050 in your browser")
+  print("  Click 'Connect' to connect to the EVO")
   print("=" * 50 + "\n")
 
   app.run(host="0.0.0.0", port=5050, debug=False)
