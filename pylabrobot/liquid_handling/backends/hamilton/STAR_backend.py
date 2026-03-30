@@ -3,7 +3,6 @@ import datetime
 import enum
 import functools
 import logging
-import math
 import re
 import sys
 import warnings
@@ -40,6 +39,11 @@ from pylabrobot.liquid_handling.backends.hamilton.base import (
 )
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
+from pylabrobot.liquid_handling.channel_positioning import (
+  MIN_SPACING_EDGE,
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
@@ -61,11 +65,6 @@ from pylabrobot.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
-)
-from pylabrobot.liquid_handling.utils import (
-  MIN_SPACING_EDGE,
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -1358,15 +1357,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._setup_done = False
 
   def _min_spacing_between(self, i: int, j: int) -> float:
-    """Return the conservative minimum Y spacing required between channels *i* and *j*.
+    """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
 
-    For adjacent channels, the constraint is the larger of the two channels' individual minimum
-    spacings, ceiling'd to 1 decimal place for safe movement.
-
-    For non-adjacent channels, the spacing is the sum of all intermediate adjacent-pair spacings.
+    Uses max() of both channels' spacings for firmware safety (conservative).
+    For adjacent channels, ceiling-rounded to 0.1mm.
+    For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
     """
     lo, hi = min(i, j), max(i, j)
     if hi - lo == 1:
+      import math
+
       spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
       return math.ceil(spacing * 10) / 10
     return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
@@ -2214,10 +2214,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
           min_ch = min(use_channels)
           offsets = [all_offsets[ch - min_ch] for ch in use_channels]
-
-          if num_channels_in_span % 2 != 0:
-            y_offset = 5.5
-            offsets = [offset + Coordinate(0, y_offset, 0) for offset in offsets]
         # else: container too small to fit all channels — fall back to center offsets.
         # Y sub-batching will serialize channels that can't coexist.
 
@@ -2328,8 +2324,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Notes:
       - All specified channels must have tips attached
       - Containers at different X positions are probed in sequential groups (single X carriage)
-      - For single containers with odd channel counts, Y-offsets are applied to avoid
-        center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
+      - For single containers with no-go zones, Y-offsets are computed to avoid
+        obstructed regions (e.g. center dividers in troughs)
     """
 
     if move_to_z_safety_after is not None:
@@ -4548,9 +4544,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     stop disk Z position used with :meth:`move_channel_stop_disk_z` for the same
     physical height above the deck.
     """
-    # TODO: remove after 2026-09
+    # TODO: remove in v1
     warnings.warn(
-      "move_channel_z is deprecated and will be removed after 2026-09 in legacy PLR. "
+      "move_channel_z is deprecated and will be removed in v1. "
       "Use move_channel_stop_disk_z() for moves without a tip attached "
       "or move_channel_tool_z() when a tip/tool is attached.",
       DeprecationWarning,
@@ -4676,6 +4672,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # TODO: determine whether this refers to stop disk or tip bottom
     current_z = await self.request_z_pos_channel_n(channel)
     await self.move_channel_z(channel, current_z + distance)
+
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    return [self._channels_minimum_y_spacing[ch] for ch in sorted(use_channels)]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, HamiltonTip):
