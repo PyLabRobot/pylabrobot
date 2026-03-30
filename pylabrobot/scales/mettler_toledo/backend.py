@@ -143,7 +143,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       "Serial number: %s\n"
       "Firmware: %s\n"
       "Capacity: %.1f g\n"
-      "Supported commands: %s",
+      "Supported commands (%d): %s",
       self.io._human_readable_device_name,
       self.io.port,
       self.device_type,
@@ -151,7 +151,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       self.serial_number,
       self.firmware_version,
       self.capacity,
-      sorted(self._supported_commands),
+      len(self._supported_commands),
+      ", ".join(sorted(self._supported_commands)),
     )
 
     # Check major.minor version only (TDNR varies by hardware revision)
@@ -180,7 +181,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """
     try:
       await self.reset()
-    except Exception:
+    except (OSError, TimeoutError, MettlerToledoError):
       logger.warning(
         "[%s] Could not reset device before disconnecting", self.io._human_readable_device_name
       )
@@ -338,38 +339,57 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     logger.log(LOG_LEVEL_IO, "[%s] Sent command: %s", self.io._human_readable_device_name, command)
     await self.io.write(command.encode() + b"\r\n")
 
-    responses: List[MettlerToledoResponse] = []
-    timeout_time = time.time() + timeout
-    while True:
+    try:
+      responses: List[MettlerToledoResponse] = []
+      timeout_time = time.time() + timeout
       while True:
-        raw_response = await self.io.readline()
-        if raw_response != b"":
+        while True:
+          raw_response = await self.io.readline()
+          if raw_response != b"":
+            break
+          if time.time() > timeout_time:
+            raise TimeoutError("Timeout while waiting for response from scale.")
+          await asyncio.sleep(0.001)
+
+        logger.log(
+          LOG_LEVEL_IO,
+          "[%s] Received response: %s",
+          self.io._human_readable_device_name,
+          raw_response,
+        )
+        fields = shlex.split(raw_response.decode("utf-8").strip())
+        if len(fields) >= 2:
+          response = MettlerToledoResponse(command=fields[0], status=fields[1], data=fields[2:])
+        elif len(fields) == 1:
+          response = MettlerToledoResponse(command=fields[0], status="", data=[])
+        else:
+          response = MettlerToledoResponse(command="", status="", data=[])
+        self._parse_basic_errors(response)
+        responses.append(response)
+
+        # Status B means more responses follow; anything else (A, etc.) is final
+        if response.status != "B":
           break
-        if time.time() > timeout_time:
-          raise TimeoutError("Timeout while waiting for response from scale.")
-        await asyncio.sleep(0.001)
 
-      logger.log(
-        LOG_LEVEL_IO,
-        "[%s] Received response: %s",
-        self.io._human_readable_device_name,
-        raw_response,
-      )
-      fields = shlex.split(raw_response.decode("utf-8").strip())
-      if len(fields) >= 2:
-        response = MettlerToledoResponse(command=fields[0], status=fields[1], data=fields[2:])
-      elif len(fields) == 1:
-        response = MettlerToledoResponse(command=fields[0], status="", data=[])
+      return responses
+
+    except (KeyboardInterrupt, asyncio.CancelledError):
+      # Cancel pending commands without resetting device state (zero/tare).
+      # Use C (cancel all) if available; otherwise just flush the buffer.
+      # Never send @ here - it clears zero/tare which the user wants to keep.
+      if hasattr(self, "_supported_commands") and "C" in self._supported_commands:
+        logger.warning(
+          "[%s] Command interrupted, sending C to cancel pending commands",
+          self.io._human_readable_device_name,
+        )
+        await self.io.write(b"C\r\n")
       else:
-        response = MettlerToledoResponse(command="", status="", data=[])
-      self._parse_basic_errors(response)
-      responses.append(response)
-
-      # Status B means more responses follow; anything else (A, etc.) is final
-      if response.status != "B":
-        break
-
-    return responses
+        logger.warning(
+          "[%s] Command interrupted, flushing serial buffer",
+          self.io._human_readable_device_name,
+        )
+      await self.io.reset_input_buffer()
+      raise
 
   # === Public API ===
   # Organized by function: cancel, identity, zero, tare, weight, measurement,
@@ -607,8 +627,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   @requires_mt_sics_command("ZC")
   async def zero_timeout(self, timeout: float) -> List[MettlerToledoResponse]:
     """Zero the scale after a given timeout. (ZC command)"""
-    timeout = int(timeout * 1000)
-    return await self.send_command(f"ZC {timeout}")
+    timeout_ms = int(timeout * 1000)
+    return await self.send_command(f"ZC {timeout_ms}")
 
   async def zero(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
@@ -642,8 +662,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   @requires_mt_sics_command("TC")
   async def tare_timeout(self, timeout: float) -> List[MettlerToledoResponse]:
     """Tare the scale after a given timeout. (TC command)"""
-    timeout = int(timeout * 1000)  # convert to milliseconds
-    return await self.send_command(f"TC {timeout}")
+    timeout_ms = int(timeout * 1000)
+    return await self.send_command(f"TC {timeout_ms}")
 
   async def tare(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
@@ -695,27 +715,20 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   @requires_mt_sics_command("SC")
   async def read_dynamic_weight(self, timeout: float) -> float:
-    """Read a stable weight value from the machine within a given timeout, or
-    return the current weight value if not possible. (MEASUREMENT command)
+    """Read a stable weight value within a given timeout, or return the current
+    weight value if stability is not reached. (SC command)
 
     Args:
       timeout: The timeout in seconds.
     """
-
-    timeout = int(timeout * 1000)  # convert to milliseconds
-
-    responses = await self.send_command(f"SC {timeout}")
+    timeout_ms = int(timeout * 1000)
+    responses = await self.send_command(f"SC {timeout_ms}")
     self._validate_response(responses[0], 4, "SC")
     self._validate_unit(responses[0].data[1], "SC")
     return float(responses[0].data[0])
 
   async def read_weight_value_immediately(self) -> float:
-    """Read a weight value immediately from the scale. (MEASUREMENT command)
-
-    "Use SI to immediately send the current weight value, along with the host unit, from the
-    balance to the connected communication partner via the interface."
-    """
-
+    """Read a weight value immediately from the scale. (SI command)"""
     responses = await self.send_command("SI")
     self._validate_response(responses[0], 4, "SI")
     self._validate_unit(responses[0].data[1], "SI")

@@ -45,7 +45,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
 
   def __init__(
     self,
-    device_type: str = "WXS205SDU",
+    device_type: str = "WXS205SDU WXA-Bridge",
     serial_number: str = "SIM0000001",
     capacity: float = 220.0,
     supported_commands: Optional[Set[str]] = None,
@@ -91,7 +91,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     self.test_weight: str = "200.00000 g"
     self.profact_day: str = "0"
     self.zeroing_mode: str = "0"
-    self.uptime_minutes: int = 1440
+    self.uptime_minutes: int = 60 * 24 # 1 day in minutes
     # Default: all commands the simulator can mock
     self._supported_commands = supported_commands or {
       "@",
@@ -157,10 +157,6 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     return self.platform_weight + self.sample_weight
 
   async def setup(self) -> None:
-    self.serial_number = self.serial_number
-    self._supported_commands = self._supported_commands
-    self.device_type = self.device_type
-    self.capacity = self.capacity
     self.firmware_version = "1.10 18.6.4.1361.772"
     self.configuration = "Bridge" if "Bridge" in self.device_type else "Balance"
     logger.info(
@@ -170,14 +166,15 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       "Serial number: %s\n"
       "Firmware: %s\n"
       "Capacity: %.1f g\n"
-      "Supported commands: %s",
+      "Supported commands (%d): %s",
       self._human_readable_device_name,
       self.device_type,
       self.configuration,
       self.serial_number,
       self.firmware_version,
       self.capacity,
-      sorted(self._supported_commands),
+      len(self._supported_commands),
+      ", ".join(sorted(self._supported_commands)),
     )
 
   async def stop(self) -> None:
@@ -208,9 +205,13 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     cmd = command.split()[0]
     net = round(self._sensor_reading - self.zero_offset - self.tare_weight, 5)
 
-    # Identification (shlex strips quotes, so mock responses should not include them)
+    # Reset and cancel
     if cmd == "@":
       return [R("I4", "A", [self.serial_number])]
+    if cmd == "C":
+      return [R("C", "B"), R("C", "A")]
+
+    # Device identity
     if cmd == "I0":
       cmds = sorted(self._supported_commands)
       responses = [R("I0", "B", ["0", c]) for c in cmds[:-1]]
@@ -220,10 +221,10 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       return [R("I1", "A", ["01"])]
     if cmd == "I2":
       return [R("I2", "A", [f"{self.device_type} {self.capacity:.5f} g"])]
-    if cmd == "I4":
-      return [R("I4", "A", [self.serial_number])]
     if cmd == "I3":
       return [R("I3", "A", [self.firmware_version])]
+    if cmd == "I4":
+      return [R("I4", "A", [self.serial_number])]
     if cmd == "I5":
       return [R("I5", "A", [self.software_material_number])]
     if cmd == "I10":
@@ -233,7 +234,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
         return [R("I10", "A")]
       return [R("I10", "A", [self.device_id])]
     if cmd == "I11":
-      return [R("I11", "A", [self.device_type])]
+      return [R("I11", "A", [self.device_type.split()[0]])]
     if cmd == "I14":
       return [
         R("I14", "B", ["0", "1", "Bridge"]),
@@ -263,7 +264,41 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       h, mi, s = self.time.split(":")
       return [R("TIM", "A", [h, mi, s])]
 
-    # Configuration queries
+    # Zero
+    if cmd in ("Z", "ZI", "ZC"):
+      self.zero_offset = self._sensor_reading
+      return [R(cmd, "A")]
+
+    # Tare
+    if cmd in ("T", "TI", "TC"):
+      self.tare_weight = self._sensor_reading - self.zero_offset
+      return [R(cmd, "S", [f"{self.tare_weight:.5f}", "g"])]
+    if cmd == "TA":
+      return [R("TA", "A", [f"{self.tare_weight:.5f}", "g"])]
+    if cmd == "TAC":
+      self.tare_weight = 0.0
+      return [R("TAC", "A")]
+
+    # Weight measurement
+    if cmd in ("S", "SI", "SC"):
+      return [R(cmd, "S", [f"{net:.5f}", "g"])]
+    if cmd == "M28":
+      return [R("M28", "A", ["1", str(self.temperature)])]
+    if cmd == "SIS":
+      state = "0"
+      info = "0" if self.tare_weight == 0 else "1"
+      return [R("SIS", "A", [state, f"{net:.5f}", "0", "5", "1", "0", info])]
+    if cmd == "SNR":
+      return [R("SNR", "S", [f"{net:.5f}", "g"])]
+    if cmd == "I50":
+      remaining = self.capacity - self.platform_weight - self.sample_weight
+      return [
+        R("I50", "B", ["0", f"{remaining:.3f}", "g"]),
+        R("I50", "B", ["1", "0.000", "g"]),
+        R("I50", "A", ["2", f"{remaining:.3f}", "g"]),
+      ]
+
+    # Device configuration (read-only)
     if cmd == "M01":
       return [R("M01", "A", [self.weighing_mode])]
     if cmd == "M02":
@@ -283,13 +318,6 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
         R("M27", "B", ["1", "1", "1", "2026", "8", "0", "0", ""]),
         R("M27", "A", ["2", "15", "3", "2026", "10", "30", "1", "200.1234 g"]),
       ]
-    if cmd == "SIS":
-      # State, NetWeight, Unit(0=g), Readability, Step, Approval, Info(0=no tare, 1=weighed tare)
-      state = "0"  # stable
-      info = "0" if self.tare_weight == 0 else "1"
-      return [R("SIS", "A", [state, f"{net:.5f}", "0", "5", "1", "0", info])]
-    if cmd == "SNR":
-      return [R("SNR", "S", [f"{net:.5f}", "g"])]
     if cmd == "M29":
       return [R("M29", "A", [self.weighing_value_release])]
     if cmd == "M31":
@@ -333,49 +361,13 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
         R("LST", "A", ["UPD", self.update_rate]),
       ]
 
-    # Zero
-    if cmd in ("Z", "ZI", "ZC"):
-      self.zero_offset = self._sensor_reading
-      return [R(cmd, "A")]
-
-    # Tare
-    if cmd in ("T", "TI", "TC"):
-      self.tare_weight = self._sensor_reading - self.zero_offset
-      return [R(cmd, "S", [f"{self.tare_weight:.5f}", "g"])]
-    if cmd == "TA":
-      return [R("TA", "A", [f"{self.tare_weight:.5f}", "g"])]
-    if cmd == "TAC":
-      self.tare_weight = 0.0
-      return [R("TAC", "A")]
-
-    # Weight reading
-    if cmd in ("S", "SI", "SC"):
-      return [R(cmd, "S", [f"{net:.5f}", "g"])]
-
-    # Cancel
-    if cmd == "C":
-      return [R("C", "B"), R("C", "A")]
-
     # Display
     if cmd in ("D", "DW"):
       return [R(cmd, "A")]
 
-    # Configuration
+    # Configuration (write)
     if cmd == "M21":
       return [R("M21", "A")]
-
-    # Temperature
-    if cmd == "M28":
-      return [R("M28", "A", ["1", str(self.temperature)])]
-
-    # Remaining weighing range
-    if cmd == "I50":
-      remaining = self.capacity - self._sensor_reading
-      return [
-        R("I50", "B", ["0", f"{remaining:.3f}", "g"]),
-        R("I50", "B", ["1", "0.000", "g"]),
-        R("I50", "A", ["2", f"{remaining:.3f}", "g"]),
-      ]
 
     # Unknown command
     return [R("ES", "")]

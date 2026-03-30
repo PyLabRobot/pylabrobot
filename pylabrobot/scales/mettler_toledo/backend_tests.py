@@ -114,10 +114,13 @@ class MTSICSSimulatorTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.scale.setup()
 
+  async def asyncTearDown(self):
+    await self.scale.stop()
+
   async def test_setup_populates_device_identity(self):
     """setup() must populate device_type, serial_number, capacity, and MT-SICS levels.
     If any of these are missing, downstream methods that depend on them will fail."""
-    self.assertEqual(self.backend.device_type, "WXS205SDU")
+    self.assertEqual(self.backend.device_type, "WXS205SDU WXA-Bridge")
     self.assertEqual(self.backend.serial_number, "SIM0000001")
     self.assertEqual(self.backend.capacity, 220.0)
     self.assertIn("S", self.backend._supported_commands)
@@ -158,6 +161,11 @@ class MTSICSSimulatorTests(unittest.IsolatedAsyncioTestCase):
     Must correctly parse the serial number despite the unusual response format."""
     sn = await self.backend.reset()
     self.assertEqual(sn, "SIM0000001")
+
+  async def test_cancel_all(self):
+    """cancel_all() sends C which returns multi-response (C B, C A).
+    Must consume both lines without raising."""
+    await self.backend.cancel_all()
 
   async def test_unknown_command_returns_syntax_error(self):
     """Unknown commands must return ES (syntax error) response.
@@ -275,9 +283,9 @@ class MTSICSSimulatorTests(unittest.IsolatedAsyncioTestCase):
     self.assertGreater(len(self.backend.firmware_version), 0)
 
   async def test_setup_populates_configuration(self):
-    """setup() must detect 'Balance' for default simulator (no 'Bridge' in type).
+    """setup() must detect 'Bridge' for default simulator (WXS205SDU WXA-Bridge).
     Drives which commands are expected to work on the device."""
-    self.assertEqual(self.backend.configuration, "Balance")
+    self.assertEqual(self.backend.configuration, "Bridge")
 
   # -- Weight dispatch --
 
