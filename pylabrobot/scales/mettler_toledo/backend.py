@@ -630,9 +630,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     timeout_ms = int(timeout * 1000)
     return await self.send_command(f"ZC {timeout_ms}")
 
-  async def zero(
-    self, timeout: Union[Literal["stable"], float, int] = "stable"
-  ) -> None:
+  async def zero(self, timeout: Union[Literal["stable"], float, int] = "stable") -> None:
     """Zero the scale.
 
     Args:
@@ -666,9 +664,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     timeout_ms = int(timeout * 1000)
     return await self.send_command(f"TC {timeout_ms}")
 
-  async def tare(
-    self, timeout: Union[Literal["stable"], float, int] = "stable"
-  ) -> None:
+  async def tare(self, timeout: Union[Literal["stable"], float, int] = "stable") -> None:
     """Tare the scale.
 
     Args:

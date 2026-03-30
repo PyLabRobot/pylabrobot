@@ -91,7 +91,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     self.test_weight: str = "200.00000 g"
     self.profact_day: str = "0"
     self.zeroing_mode: str = "0"
-    self.uptime_minutes: int = 60 * 24 # 1 day in minutes
+    self.uptime_minutes: int = 60 * 24  # 1 day in minutes
     # Default: all commands the simulator can mock
     self._supported_commands = supported_commands or {
       "@",
