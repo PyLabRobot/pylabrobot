@@ -1,4 +1,9 @@
-"""Chatterbox scale backend for device-free testing and simulation."""
+"""Generic scale chatterbox for testing the Scale frontend and ScaleBackend interface.
+
+This chatterbox is protocol-agnostic - it tests the abstract scale contract (zero, tare,
+read_weight, request_tare_weight) without any device-specific protocol. For MT-SICS
+protocol-level simulation, use MettlerToledoChatterboxBackend instead.
+"""
 
 from pylabrobot.scales.scale_backend import ScaleBackend
 

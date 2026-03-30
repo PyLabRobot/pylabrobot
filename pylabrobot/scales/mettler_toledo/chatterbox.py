@@ -92,7 +92,7 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
   async def cancel(self) -> str:
     responses = await self.send_command("@")
     self._validate_response(responses[0], 3, "@")
-    return responses[0].data[0].replace('"', "")
+    return responses[0].data[0]
 
   async def send_command(self, command: str, timeout: int = 60) -> List[MettlerToledoResponse]:
     logger.log(LOG_LEVEL_IO, "[MT Scale] Sent command: %s", command)
@@ -113,18 +113,16 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     cmd = command.split()[0]
     net = round(self._sensor_reading - self.zero_offset - self.tare_weight, 5)
 
-    # Identification
+    # Identification (shlex strips quotes, so mock responses should not include them)
     if cmd == "@":
-      return [R("I4", "A", [f'"{self._simulated_serial_number}"'])]
+      return [R("I4", "A", [self._simulated_serial_number])]
     if cmd == "I1":
       levels = "".join(str(lvl) for lvl in sorted(self._simulated_mt_sics_levels))
-      return [R("I1", "A", [f'"{levels}"'])]
+      return [R("I1", "A", [levels])]
     if cmd == "I2":
-      return [
-        R("I2", "A", [f'"{self._simulated_device_type}"', f"{self._simulated_capacity:.4f}", "g"])
-      ]
+      return [R("I2", "A", [f"{self._simulated_device_type} {self._simulated_capacity:.5f} g"])]
     if cmd == "I4":
-      return [R("I4", "A", [f'"{self._simulated_serial_number}"'])]
+      return [R("I4", "A", [self._simulated_serial_number])]
 
     # Zero
     if cmd in ("Z", "ZI", "ZC"):

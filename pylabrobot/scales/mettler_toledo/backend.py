@@ -5,6 +5,7 @@
 import asyncio
 import functools
 import logging
+import shlex
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -155,7 +156,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     responses = await self.send_command("I1")
     # I1 A "0123" "2.00" "2.20" "1.00" "1.50"
     self._validate_response(responses[0], 3, "I1")
-    level_string = responses[0].data[0].replace('"', "")
+    level_string = responses[0].data[0]
     return {int(c) for c in level_string}
 
   # === Response parsing ===
@@ -275,7 +276,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         await asyncio.sleep(0.001)
 
       logger.log(LOG_LEVEL_IO, "[MT Scale] Received response: %s", raw_response)
-      fields = raw_response.decode("utf-8").strip().split()
+      fields = shlex.split(raw_response.decode("utf-8").strip())
       if len(fields) >= 2:
         response = MettlerToledoResponse(command=fields[0], status=fields[1], data=fields[2:])
       elif len(fields) == 1:
@@ -308,7 +309,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     responses = await self.send_command("@")
     # @ responds with I4-style: I4 A "<SNR>"
     self._validate_response(responses[0], 3, "@")
-    return responses[0].data[0].replace('"', "")
+    return responses[0].data[0]
 
   async def cancel_all(self) -> None:
     """C - Cancel all active and pending interface commands.
@@ -335,22 +336,32 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """Get the serial number of the scale. (I4 command)"""
     responses = await self.send_command("I4")
     self._validate_response(responses[0], 3, "I4")
-    return responses[0].data[0].replace('"', "")
+    return responses[0].data[0]
 
   async def request_device_type(self) -> str:
-    """Query the device type string. (I2 command)"""
+    """Query the device type string. (I2 command)
+
+    The I2 response packs type, capacity, and unit into a single quoted string:
+    I2 A "WXS205SDU WXA-Bridge 220.00900 g"
+    The type is everything before the last two tokens (capacity and unit).
+    """
     responses = await self.send_command("I2")
-    # data: ['"WXS205SDU"', "220.0000", "g"]
-    self._validate_response(responses[0], 5, "I2")
-    return responses[0].data[0].replace('"', "")
+    self._validate_response(responses[0], 3, "I2")
+    parts = responses[0].data[0].split()
+    return " ".join(parts[:-2])
 
   async def request_capacity(self) -> float:
-    """Query the maximum weighing capacity in grams. (I2 command)"""
+    """Query the maximum weighing capacity in grams. (I2 command)
+
+    The I2 response packs type, capacity, and unit into a single quoted string:
+    I2 A "WXS205SDU WXA-Bridge 220.00900 g"
+    Capacity is the second-to-last token, unit is the last.
+    """
     responses = await self.send_command("I2")
-    # data: ['"WXS205SDU"', "220.0000", "g"]
-    self._validate_response(responses[0], 5, "I2")
-    self._validate_unit(responses[0].data[2], "I2")
-    return float(responses[0].data[1])
+    self._validate_response(responses[0], 3, "I2")
+    parts = responses[0].data[0].split()
+    self._validate_unit(parts[-1], "I2")
+    return float(parts[-2])
 
   @requires_mt_sics_level(2)
   async def request_remaining_weighing_range(self) -> float:

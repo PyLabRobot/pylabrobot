@@ -60,7 +60,7 @@ class MTSICSResponseParsingTests(unittest.TestCase):
       MettlerToledoWXS205SDUBackend._validate_response(R("I4", "A"), 3, "I4")
 
     # should not raise
-    MettlerToledoWXS205SDUBackend._validate_response(R("I4", "A", ['"B207696838"']), 3, "I4")
+    MettlerToledoWXS205SDUBackend._validate_response(R("I4", "A", ["B207696838"]), 3, "I4")
 
   def test_validate_unit_rejects_wrong(self):
     """Non-gram unit responses must be rejected.
