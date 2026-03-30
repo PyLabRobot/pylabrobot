@@ -110,19 +110,60 @@ Device sends: I4 A "B207696838"\r\n
 
 The @ command resets the device and responds with the serial number using the I4 response format, not the @ command name.
 
-### Commands that always fail on WXS205SDU
+### Commands not supported on WXS205SDU (bridge mode)
 
-`ZC` (zero with timeout) and `TC` (tare with timeout) return `ES` (syntax error) on the WXS205SDU despite being listed in the MT-SICS spec. These commands may work on other MT-SICS devices.
+The following commands return `ES` (syntax error) on the WXS205SDU WXA-Bridge
+despite being listed in the MT-SICS spec. They may work on other MT-SICS devices
+or on the same model with a terminal attached.
+
+- `C` (cancel all), `SC` (timed read), `ZC` (timed zero), `TC` (timed tare)
+- `D`, `DW` (display commands - no terminal in bridge mode)
+- `I50` (remaining weighing range)
+
+### I2 response format
+
+The I2 response packs type, capacity, and unit into a single quoted string:
+```
+I2 A "WXS205SDU WXA-Bridge 220.00900 g"
+```
+The device type can contain spaces. Parse from the right: unit is the last
+token, capacity is second-to-last, type is everything before.
+`shlex.split` is used to handle quoted strings correctly.
+
+### I15 uptime format varies
+
+Some devices return `I15 A <days> <hours> <minutes> <seconds>` (4 values).
+The WXS205SDU returns `I15 A <days>` (single value). The parser handles both.
+
+## Command discovery
+
+**I0 is the definitive source of command support**, not I1.
+
+I1 reports which standardized level sets are fully implemented. However, a device
+can have individual commands from levels it does not fully support. The WXS205SDU
+reports I1 levels [0, 1] but I0 discovers 62 commands across levels 0-3, including
+M21, M28, and many other Level 2 commands.
+
+During `setup()`, the backend queries I0 to discover all available commands.
+Methods decorated with `@requires_mt_sics_command("CMD")` check against this list.
 
 ## Command levels
 
-MT-SICS commands are grouped into levels. The device reports which levels it supports via the I1 command.
+MT-SICS commands are grouped into levels. I1 reports level compliance but I0 is
+the authoritative list of implemented commands.
 
 | Level | Description | Availability |
 |-------|-------------|-------------|
 | 0 | Basic set: identification, weighing, zero, tare, cancel | Always available |
-| 1 | Elementary: display, tare memory, timed commands | Always available |
+| 1 | Elementary: tare memory, timed commands, repeat | Always available |
 | 2 | Extended: configuration, device info, diagnostics | Model-dependent |
 | 3 | Application-specific: filling, dosing, calibration | Model-dependent |
+
+## Write safety
+
+Commands that modify device settings (M01 set, M02 set, M03 set, etc.) persist
+to memory and survive power cycles. They cannot be undone with @ cancel - only
+via FSET (factory reset) or the terminal menu. Write methods are commented out
+in the backend to prevent accidental modification.
 
 See `mt_sics_commands.md` for the full command reference with implementation status.

@@ -107,9 +107,9 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| M01     | Weighing mode                            | 157       | MED    | yes | |
-| M02     | Environment condition                    | 158       | MED    | yes | Affects filter/stability. |
-| M03     | Auto zero function                       | 159       | MED    | yes | |
+| M01     | Weighing mode                            | 157       | DONE   | yes | request_weighing_mode() (read). set commented out (persists to memory). |
+| M02     | Environment condition                    | 158       | DONE   | yes | request_environment_condition() (read). set commented out (persists to memory). |
+| M03     | Auto zero function                       | 159       | DONE   | yes | request_auto_zero() (read). set commented out (persists to memory). |
 | M21     | Unit (host/display)                      | 165       | DONE   | yes | set_host_unit_grams(). |
 | M23     | Readability (1d/xd)                      | 169       | LOW    | - | |
 | M28     | Temperature value                        | 172       | DONE   | yes | measure_temperature(). Returns 19.8-19.9 C on test device. |
@@ -127,9 +127,9 @@ Status key:
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
 | C0      | Adjustment setting                       | 24        | LOW    | yes | |
-| C1      | Start adjustment (current settings)      | 26        | MED    | yes | Multi-response (B status). |
+| C1      | Start adjustment (current settings)      | 26        | STUB   | yes | Commented out (moves internal weights). Multi-response. |
 | C2      | Start adjustment (external weight)       | 28        | LOW    | yes | |
-| C3      | Start adjustment (built-in weight)       | 30        | MED    | yes | Internal calibration. Multi-response. |
+| C3      | Start adjustment (built-in weight)       | 30        | STUB   | yes | Commented out (moves internal weights). Multi-response. |
 | C4      | Standard / initial adjustment            | 31        | LOW    | - | |
 | C5      | Enable/disable step control              | 33        | LOW    | - | |
 | C6      | Customer linearization + sensitivity     | 34        | LOW    | - | |
@@ -137,7 +137,7 @@ Status key:
 | C8      | Sensitivity adjustment                   | 40        | LOW    | - | |
 | C9      | Scale placement sensitivity adjustment   | 43        | LOW    | - | |
 | M19     | Adjustment weight                        | 163       | LOW    | yes | |
-| M27     | Adjustment history                       | 171       | MED    | yes | |
+| M27     | Adjustment history                       | 171       | DONE   | yes | request_adjustment_history(). Multi-response. |
 
 ### Testing
 
@@ -155,11 +155,11 @@ Status key:
 |---------|------------------------------------------|-----------|--------|-----------|-------|
 | SIC1    | Weight with CRC16 immediately            | 226       | LOW    | - | |
 | SIC2    | HighRes weight with CRC16 immediately    | 227       | LOW    | - | |
-| SIS     | Net weight with unit + weighing status   | 234       | MED    | yes | |
+| SIS     | Net weight with unit + weighing status   | 234       | DONE   | yes | request_net_weight_with_status(). |
 | SIU     | Weight in display unit immediately       | 237       | LOW    | - | |
 | SIUM    | Weight + MinWeigh info immediately       | 238       | LOW    | - | |
 | SIX1    | Current gross, net, and tare values      | 239       | HIGH   | - | Not on WXS205SDU. |
-| SNR     | Stable weight + repeat on stable change  | 241       | LOW    | yes | |
+| SNR     | Stable weight + repeat on stable change  | 241       | DONE   | yes | read_stable_weight_repeat_on_change(). Use cancel() to stop. |
 | ST      | Stable weight on Transfer key press      | 249       | N/A    | - | Manual operation. |
 | SU      | Stable weight in display unit            | 250       | LOW    | - | |
 | SUM     | Stable weight + MinWeigh info            | 251       | LOW    | - | |
@@ -201,7 +201,7 @@ Status key:
 | FSET    | Reset all settings to factory defaults   | 95        | LOW    | yes | Level 3 on WXS205SDU. Destructive. |
 | RO1     | Restart device                           | 221       | MED    | - | |
 | RDB     | Readability                              | 222       | LOW    | yes | Level 3 on WXS205SDU. |
-| UPD     | Update rate for SIR/SIRU                 | 267       | LOW    | yes | |
+| UPD     | Update rate for SIR/SIRU                 | 267       | DONE   | yes | request_update_rate() (read). set commented out (persists to memory). |
 | USTB    | User defined stability criteria          | 268       | LOW    | yes | Level 3 on WXS205SDU. |
 
 ### Network (not relevant for serial)
@@ -269,10 +269,6 @@ Status key:
 - SIX1 (gross, net, tare in one call) - not available on WXS205SDU
 
 ### MED (useful but not urgent)
-- SIR/SR (continuous streaming) - available on WXS205SDU
-- SIS (net weight + status) - available on WXS205SDU
-- C1/C3 (adjustment) - available on WXS205SDU, multi-response
-- M01/M02/M03 (weighing mode, environment, auto-zero) - available on WXS205SDU
-- M27 (adjustment history) - available on WXS205SDU
-- SNR (stable weight + repeat on change) - available on WXS205SDU
-- UPD (update rate) - available on WXS205SDU
+- SIR/SR (continuous streaming) - needs async iterator architecture
+- C1/C3 (adjustment) - commented out, needs physical interaction
+- DATI (date + time combined) - not on WXS205SDU
