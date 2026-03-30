@@ -1,9 +1,11 @@
 import json
 import unittest
 
+from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.serializer import serialize
 
 from .container import Container
+from .coordinate import Coordinate
 
 
 class TestContainer(unittest.TestCase):
@@ -41,6 +43,7 @@ class TestContainer(unittest.TestCase):
         "compute_volume_from_height": serialize(compute_volume_from_height),
         "compute_height_from_volume": serialize(compute_height_from_volume),
         "height_volume_data": None,
+        "no_go_zones": [],
         "parent_name": None,
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "type": "Container",
@@ -165,3 +168,115 @@ class TestContainer(unittest.TestCase):
       Container(
         name="c", size_x=10, size_y=10, size_z=10, height_volume_data={0: 0}
       )  # only 1 point
+
+  def test_no_go_zones_default_empty(self):
+    c = Container(name="c", size_x=10, size_y=10, size_z=10)
+    self.assertEqual(c.no_go_zones, [])
+
+  def test_no_go_zones_stored(self):
+    zones = [(Coordinate(0, 44, 0), Coordinate(10, 46, 10))]
+    c = Container(name="c", size_x=10, size_y=90, size_z=10, no_go_zones=zones)
+    self.assertEqual(len(c.no_go_zones), 1)
+    self.assertEqual(c.no_go_zones[0][0], Coordinate(0, 44, 0))
+    self.assertEqual(c.no_go_zones[0][1], Coordinate(10, 46, 10))
+
+  def test_no_go_zones_serialize(self):
+    zones = [(Coordinate(0, 44, 0), Coordinate(10, 46, 10))]
+    c = Container(name="c", size_x=10, size_y=90, size_z=10, no_go_zones=zones)
+    serialized = c.serialize()
+    self.assertEqual(
+      serialized["no_go_zones"],
+      [
+        (
+          {"type": "Coordinate", "x": 0, "y": 44, "z": 0},
+          {"type": "Coordinate", "x": 10, "y": 46, "z": 10},
+        )
+      ],
+    )
+
+  def test_no_go_zones_multiple(self):
+    zones = [
+      (Coordinate(0, 34.6, 0), Coordinate(10, 36.6, 10)),
+      (Coordinate(0, 70.2, 0), Coordinate(10, 72.2, 10)),
+      (Coordinate(0, 105.9, 0), Coordinate(10, 107.9, 10)),
+    ]
+    c = Container(name="c", size_x=10, size_y=142, size_z=10, no_go_zones=zones)
+    self.assertEqual(len(c.no_go_zones), 3)
+
+
+class TestNoGoZoneCollision(unittest.TestCase):
+  def _make_container(self, size_y, no_go_zones=None):
+    return Container(name="c", size_x=10, size_y=size_y, size_z=10, no_go_zones=no_go_zones)
+
+  def test_no_zones_uses_standard_spread(self):
+    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+
+    c = self._make_container(90)
+    result = compute_channel_offsets(c, num_channels=1)
+    self.assertEqual(len(result), 1)
+    # No no-go zones: single channel goes to center (offset 0)
+    self.assertAlmostEqual(result[0].y, 0.0)
+
+  def test_1_channel_in_2_compartments(self):
+    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+
+    # 90mm container, divider at Y=44-46 -> 2 compartments [0,44] and [46,90]
+    # edge_clearance = 2.0
+    # Usable: [2.0, 42.0] and [48.0, 88.0]
+    # 1 channel -> center-out back-first -> goes to back compartment (index 1)
+    # Center of back usable = (48.0 + 88.0) / 2 = 68.0
+    # Container center = 45.0, offset = 68.0 - 45.0 = 23.0
+    c = self._make_container(
+      90,
+      no_go_zones=[(Coordinate(0, 44, 0), Coordinate(10, 46, 10))],
+    )
+    result = compute_channel_offsets(c, num_channels=1)
+    self.assertEqual(len(result), 1)
+    self.assertAlmostEqual(result[0].y, 23.0)
+
+  def test_2_channels_across_2_compartments(self):
+    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+
+    c = self._make_container(
+      90,
+      no_go_zones=[(Coordinate(0, 44, 0), Coordinate(10, 46, 10))],
+    )
+    result = compute_channel_offsets(c, num_channels=2)
+    self.assertEqual(len(result), 2)
+    # Sorted descending by Y (back-to-front)
+    self.assertGreater(result[0].y, result[1].y)
+
+  def test_4_channels_across_2_compartments(self):
+    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+
+    c = self._make_container(
+      90,
+      no_go_zones=[(Coordinate(0, 44, 0), Coordinate(10, 46, 10))],
+    )
+    result = compute_channel_offsets(c, num_channels=4)
+    self.assertEqual(len(result), 4)
+
+  def test_raises_when_impossible(self):
+    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+
+    # Entire container is no-go
+    c = self._make_container(
+      12,
+      no_go_zones=[(Coordinate(0, 0, 0), Coordinate(10, 12, 10))],
+    )
+    with self.assertRaises(ChannelsDoNotFitError):
+      compute_channel_offsets(c, num_channels=1)
+
+  def test_3_compartments_6_channels(self):
+    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+
+    # 150mm container, 2 dividers -> 3 compartments, 6 channels -> 2 per compartment
+    c = self._make_container(
+      150,
+      no_go_zones=[
+        (Coordinate(0, 49, 0), Coordinate(10, 51, 10)),
+        (Coordinate(0, 99, 0), Coordinate(10, 101, 10)),
+      ],
+    )
+    result = compute_channel_offsets(c, num_channels=6)
+    self.assertEqual(len(result), 6)

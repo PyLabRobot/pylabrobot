@@ -69,12 +69,12 @@ class Scale(Resource, Machine):
     return await self.backend.read_weight(**backend_kwargs)
 
   # # # Deprecated # # #
-  # TODO: remove after 2026-06
+  # TODO: remove in v1
 
   async def get_weight(self, **backend_kwargs) -> float:
     """Deprecated: use :meth:`read_weight` instead."""
     warnings.warn(
-      "scale.get_weight() is deprecated and will be removed in 2026-06. "
+      "scale.get_weight() is deprecated and will be removed in v1. "
       "Use scale.read_weight() instead.",
       DeprecationWarning,
       stacklevel=2,
