@@ -3,184 +3,170 @@
 ## Pre-Test Setup
 
 ### Equipment Required
-- [ ] EVO 150 powered on
-- [ ] USB cable connected to pylabrobot PC
-- [ ] EVOware PC disconnected from USB (only one client at a time)
-- [ ] DiTi 50uL SBS tips loaded (position 3 on MP_3Pos at rail 16)
-- [ ] Eppendorf 96-well plate with water in column 1 (position 1)
-- [ ] Empty Eppendorf 96-well plate (position 2)
-- [ ] `.venv` activated, `pip install -e ".[usb]"` done
+- [x] EVO 150 powered on
+- [x] USB cable connected to pylabrobot PC
+- [x] EVOware PC disconnected from USB (only one client at a time)
+- [x] DiTi 50uL SBS tips loaded (position 3 on MP_3Pos at rail 16)
+- [x] Eppendorf 96-well plate with water in column 1 (position 1)
+- [x] Empty Eppendorf 96-well plate (position 2)
+- [x] `.venv` activated, `pip install -e ".[usb]"` done
 
 ### Software
-- [ ] `v1b1-tecan-evo` branch checked out
-- [ ] `keyser-testing/labware_library.py` has correct Z values (taught from jog tool)
+- [x] `v1b1-tecan-evo` branch checked out
+- [x] `keyser-testing/labware_library.py` has taught Z values from jog tool
 
 ---
 
-## Test 1: Initialization (Cold Boot)
+## Test 1: Initialization (Cold Boot) ✅ PASSED
 
 **Script:** `keyser-testing/test_v1b1_init.py`
-
-### Steps
-1. Power cycle the EVO
-2. Run the init test script
-3. Verify each phase completes:
+**Date:** 2026-03-30
 
 | Step | Expected | Pass? |
 |------|----------|-------|
-| USB connection | "USB connected" | [ ] |
-| ZaapMotion boot exit | All 8 tips XP2000/ZMA | [ ] |
-| ZaapMotion motor config | 33 commands × 8 tips OK | [ ] |
-| Safety module (SPN/SPS3) | OK | [ ] |
-| PIA (all axes) | REE0 = `@@@@@@@@@@@` | [ ] |
-| RoMa init + park | OK | [ ] |
-| LiHa range queries | num_channels=8, z_range~2100 | [ ] |
-| Plunger init | PID, PVL, PPR sequence completes | [ ] |
-
-### Failure Actions
-- ZaapMotion boot exit fails → check USB connection, retry
-- PIA fails → check REE0 for which axis, use jog tool to investigate
-- RoMa fails with error 5 → RoMa not present, set `has_roma=False`
+| USB connection | "USB connected" | [x] ~3s |
+| ZaapMotion boot exit | All 8 tips XP2000/ZMA | [x] |
+| ZaapMotion motor config | 33 commands × 8 tips OK | [x] |
+| Safety module (SPN/SPS3) | OK | [x] |
+| PIA (all axes) | REE0 = `@@@@@@@@@@@` | [x] |
+| RoMa init + park | OK (~56s first time) | [x] |
+| LiHa range queries | num_channels=8, z_range~2100 | [x] |
+| Plunger init | PID, PVL, PPR sequence completes | [x] |
 
 ---
 
-## Test 2: Initialization (Warm Reconnect)
+## Test 2: Initialization (Warm Reconnect) ✅ PASSED
 
-### Steps
-1. Run Test 1 successfully
-2. Stop the device (`evo.stop()`)
-3. Run the init test again WITHOUT power cycling
+**Date:** 2026-03-30
 
 | Step | Expected | Pass? |
 |------|----------|-------|
-| REE0 check | Not "A" or "G" → skip full init | [ ] |
-| Quick setup | Channel count + ranges loaded fast | [ ] |
-| Total time | < 5 seconds (vs ~45s for full init) | [ ] |
+| REE0 check | Not "A" or "G" → skip full init | [x] |
+| RoMa REE check | `@@@@@` → skip RoMa PIA | [x] |
+| Quick setup | Channel count + ranges loaded fast | [x] |
+| Total time | **3.4 seconds** (vs ~60s for full init) | [x] |
+
+### Notes
+- Fixed RoMa warm reconnect: now checks REE before PIA (was 56s, now 0.0s)
+- Fixed USB buffer drain: uses 1s packet timeout instead of 30s
+- Fixed `_is_initialized`: REE0 response cast to str (was int for some states)
 
 ---
 
-## Test 3: Tip Pickup
+## Test 3: Tip Pickup — IN PROGRESS
 
-**Script:** `keyser-testing/test_v1b1_tips.py`
+**Script:** `keyser-testing/test_v1b1_pipette.py`
 
-### Steps
-1. Initialize EVO
-2. Pick up 8 tips from column 1
+### Z-Calibration Done
+- Taught positions recorded via `jog_ui.py`:
+  - tip top: X=3893, Y=146, Z=780
+  - plate top-dest: X=3883, Y=1087, Z=260
+  - plate top-source: X=3878, Y=2047, Z=295
+- Labware library updated with taught Z values
+- Tip rack: z_start=850, z_max=550 (search range 300)
+
+### X/Y Calibration Done
+- Per-labware calibration offsets added:
+  - Tips: x_offset=+62 (+6.2mm), y_offset=+18 (+1.8mm)
+  - Plates: x_offset=+103 (+10.3mm), y_offset=-6 (-0.6mm)
+- Applied via `_apply_calibration_offsets()` in all operations
+
+### Current Status
+- Channels move to approximately correct X/Y position
+- AGT (tip search) executes but returns error 26 "Tip not mounted"
+- Likely issue: Z search range or tip engagement depth needs tuning
+- **TODO**: Fine-tune X/Y offset and Z search parameters
 
 | Step | Expected | Pass? |
 |------|----------|-------|
-| X/Y positioning | Channels aligned over tip column | [ ] |
-| Z approach | Channels descend to tips | [ ] |
-| Tip engagement | Force feedback engages all 8 tips | [ ] |
+| X/Y positioning | Channels aligned over tip column | [~] Close but needs fine-tuning |
+| Z approach | Channels descend to tips | [x] AGT executes |
+| Tip engagement | Force feedback engages all 8 tips | [ ] Error 26 |
 | Z retract | Channels lift with tips mounted | [ ] |
 | RTS check | Tip status = 255 (all mounted) | [ ] |
 
-### Calibration Notes
-- If X is off by > 2mm: adjust X offset in labware or jog tool
-- If Z doesn't reach tips: adjust z_start in tip rack definition
-- If some tips don't engage: check individual channel alignment
+---
+
+## Test 4: Tip Drop — NOT STARTED
+
+Blocked by Test 3 (need tips mounted first).
 
 ---
 
-## Test 4: Tip Drop
+## Test 5: Aspirate — NOT STARTED
 
-### Steps
-1. With tips mounted, drop all 8 back to the rack
+Blocked by Test 3.
 
-| Step | Expected | Pass? |
-|------|----------|-------|
-| Move to drop position | Same X/Y as pickup | [ ] |
-| Plunger empty (PPA0) | Plunger returns to zero | [ ] |
-| SDT + AST | Tips ejected cleanly | [ ] |
-| RTS check | Tip status = 0 (none mounted) | [ ] |
+### Preparation Done
+- Aspirate/dispense Z adjusted for mounted tip length
+  (tip_ext = total_tip_length * 10 - 50 nesting = 531 units)
+- Plate z_start=300, z_dispense=200 (taught from bare channel positions)
+- Y-spacing fix in place (uses plate.item_dy not well.size_y)
 
 ---
 
-## Test 5: Aspirate
+## Test 6: Dispense — NOT STARTED
 
-### Steps
-1. Pick up tips
-2. Move to source plate (position 1)
-3. Aspirate 25µL from column 1
-
-| Step | Expected | Pass? |
-|------|----------|-------|
-| X/Y positioning | Channels over well column 1 | [ ] |
-| Y-spacing (ys) | 90 (9mm well pitch) | [ ] |
-| Leading airgap | PVL + SEP + PPR with force mode | [ ] |
-| LLD detection | MDT finds liquid surface | [ ] |
-| Aspirate tracking | MTR with correct steps (~2660 for 25µL) | [ ] |
-| Z retract | Channels lift after aspiration | [ ] |
-| Trailing airgap | PPR with force mode | [ ] |
-| Visual check | No dripping, liquid in tips | [ ] |
-
-### Known Issues
-- Z-start may be too high — use jog tool to teach correct plate Z
-- If error 3 on PAA: check ys value (must be 90-380)
+Blocked by Test 5.
 
 ---
 
-## Test 6: Dispense
-
-### Steps
-1. After aspirating, move to destination plate (position 2)
-2. Dispense 25µL into column 1
-
-| Step | Expected | Pass? |
-|------|----------|-------|
-| X/Y positioning | Channels over dest well column 1 | [ ] |
-| Dispense tracking | MTR with negative steps (~-2660) | [ ] |
-| Visual check | Liquid dispensed into wells | [ ] |
-
----
-
-## Test 7: Full Cycle
-
-### Steps
-1. Initialize
-2. Pick up 8 tips
-3. Aspirate 25µL from source column 1
-4. Dispense 25µL to dest column 1
-5. Drop tips
+## Test 7: Full Cycle — NOT STARTED
 
 | Step | Pass? | Notes |
 |------|-------|-------|
-| Init | [ ] | |
-| Tip pickup | [ ] | |
+| Init | [x] | Cold + warm both work |
+| Tip pickup | [ ] | Error 26, needs Z/X tuning |
 | Aspirate | [ ] | |
 | Dispense | [ ] | |
 | Tip drop | [ ] | |
-| Clean stop | [ ] | |
+| Clean stop | [x] | |
 
 ---
 
-## Test 8: RoMa Plate Handling (if applicable)
+## Test 8: RoMa Plate Handling — NOT STARTED
 
-### Steps
-1. Initialize with `has_roma=True`
-2. Pick up plate from position 1
-3. Drop plate at position 2
-
-| Step | Expected | Pass? |
-|------|----------|-------|
-| RoMa init + park | Arm moves to park position | [ ] |
-| Move to plate | Arm positions over carrier | [ ] |
-| Gripper open | Gripper opens to plate width | [ ] |
-| Descend + grip | Gripper closes on plate | [ ] |
-| Lift + transfer | Plate moved safely | [ ] |
-| Place + release | Plate placed at destination | [ ] |
-| Arm park | Arm returns to park | [ ] |
+RoMa init works (cold + warm). Plate handling not yet tested.
 
 ---
 
 ## Z-Calibration Procedure
 
-Use `keyser-testing/jog_liha.py` to teach positions:
+Use `keyser-testing/jog_ui.py` (web UI at http://localhost:5050):
 
-1. **Tip rack z_start**: Jog to just above tip tops, record Z → set as `z_start` in labware
-2. **Tip rack z_max**: Jog to bottom of tip search range, record Z → set as `z_max`
-3. **Plate z_start**: Jog tip into well liquid surface, record Z → set as plate `z_start`
-4. **Plate z_dispense**: Jog to dispense height (above well bottom), record Z → set as `z_dispense`
-5. **Plate z_max**: Jog to maximum depth, record Z → set as `z_max`
+1. **Tip rack z_start**: Jog to just above tip tops, teach `z_start` for `tips`
+2. **Tip rack z_max**: Jog to bottom of tip search range, teach `z_max` for `tips`
+3. **Plate z_start**: Jog bare channel to plate top surface, teach `z_start` for plate
+4. **Plate z_dispense**: Jog to dispense height, teach `z_dispense` for plate
+5. **Plate z_max**: Jog to maximum depth, teach `z_max` for plate
 
-Save all taught positions in `keyser-testing/taught_positions.json` for reference.
+Taught positions saved in `keyser-testing/taught_positions.json`.
+Labware edits saved in `keyser-testing/labware_edits.json`.
+
+### Important Z Notes
+- Tecan Z coordinate system: 0 = deck surface, z_range (~2100) = top/home
+- Taught positions are measured with **bare channels** (no tip mounted)
+- For aspirate/dispense with tips: Z target = plate.z_start + tip_extension
+  - tip_extension = total_tip_length * 10 - nesting_depth (50 units / 5mm)
+- AGT z_start/z_max are used directly (no tip extension needed — tips not yet mounted)
+
+---
+
+## Tools Available
+
+| Tool | Purpose |
+|------|---------|
+| `keyser-testing/jog_ui.py` | Web UI for jogging, teaching, labware inspection |
+| `keyser-testing/jog_and_teach.py` | CLI jog/teach tool |
+| `keyser-testing/tips_off.py` | Emergency tip removal |
+| `keyser-testing/test_v1b1_init.py` | Init test with timing |
+| `keyser-testing/test_v1b1_pipette.py` | Full pipetting cycle test |
+
+---
+
+## Known Issues / TODO
+
+1. **Tip pickup X/Y still slightly off** — calibration offsets close but may need further refinement
+2. **Tip pickup Z** — AGT returns error 26 "Tip not mounted", search range or depth needs adjustment
+3. **Aspirate/Dispense Z** — not yet tested, tip extension calculation needs hardware validation
+4. **X offset root cause** — systematic 6-10mm offset between resource model and physical positions, currently compensated with per-labware offsets. Root cause may be deck origin definition or carrier off_x interpretation.
