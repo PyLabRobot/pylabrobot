@@ -239,6 +239,13 @@ HTML = """
         <button class="btn" onclick="sendAction('tips_status')">Check Tips</button>
         <button class="btn" onclick="sendAction('ree')">Axis Status</button>
       </div>
+      <div class="controls" style="margin-top:4px">
+        <button class="btn" onclick="sendAction('lamp_green')" style="border-color:#4ec9b0">Lamp Green</button>
+        <button class="btn" onclick="sendAction('lamp_off')">Lamp Off</button>
+        <button class="btn" onclick="sendAction('lamp_test')">Lamp Test</button>
+        <button class="btn" onclick="sendAction('power_on')" style="border-color:#e9c46a">Motor Power</button>
+        <button class="btn" onclick="sendAction('power_off')">Power Off</button>
+      </div>
     </div>
 
     <!-- Saved positions -->
@@ -824,6 +831,34 @@ async def do_action(action):
       label = f"{ax}{i - 2}" if ax == "Z" else ax
       lines.append(f"{label}={names.get(code, f'err{code}')}")
     return " | ".join(lines)
+  elif action == "lamp_green":
+    await driver.send_command("O1", command="SSL1,1")
+    return "Lamp: SSL1,1 (green on)"
+  elif action == "lamp_off":
+    await driver.send_command("O1", command="SSL1,0")
+    return "Lamp: SSL1,0 (off)"
+  elif action == "lamp_test":
+    # Try various commands to find what controls the lamp
+    results = []
+    for cmd in ["SSL1,1", "SSL2,1", "SPS1", "SPS2", "SPS3"]:
+      try:
+        await driver.send_command("O1", command=cmd)
+        results.append(f"O1,{cmd}: OK")
+      except Exception as e:
+        results.append(f"O1,{cmd}: {e}")
+      import asyncio
+      await asyncio.sleep(1)
+    # Reset
+    await driver.send_command("O1", command="SSL1,0")
+    await driver.send_command("O1", command="SPS0")
+    return " | ".join(results)
+  elif action == "power_on":
+    await driver.send_command("O1", command="SPN")
+    await driver.send_command("O1", command="SPS3")
+    return "Motor power: SPN + SPS3"
+  elif action == "power_off":
+    await driver.send_command("O1", command="SPS0")
+    return "Motor power: SPS0 (off)"
   return f"Unknown action: {action}"
 
 
