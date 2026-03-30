@@ -4,6 +4,7 @@
 
 import asyncio
 import functools
+import inspect
 import logging
 import shlex
 import time
@@ -46,8 +47,6 @@ def requires_mt_sics_command(mt_sics_command: str) -> Callable[[F], F]:
   """
 
   def decorator(func: F) -> F:
-    func._mt_sics_command = mt_sics_command  # type: ignore[attr-defined]
-
     @functools.wraps(func)
     async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
       if hasattr(self, "_supported_commands") and self._supported_commands is not None:
@@ -59,9 +58,15 @@ def requires_mt_sics_command(mt_sics_command: str) -> Callable[[F], F]:
           )
       return await func(self, *args, **kwargs)
 
+    # Register in the class-level command-to-method mapping.
+    _MT_SICS_COMMAND_REGISTRY[func.__name__] = mt_sics_command
     return wrapper  # type: ignore[return-value]
 
   return decorator
+
+
+# Maps method name -> MT-SICS command string, populated by @requires_mt_sics_command.
+_MT_SICS_COMMAND_REGISTRY: dict[str, str] = {}
 
 
 # TODO: rename to MTSICSDriver in v1.0.0-beta
@@ -132,13 +137,14 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.configuration = "Bridge" if "Bridge" in self.device_type else "Balance"
 
     logger.info(
-      "[MT Scale] Connected to Mettler Toledo scale on %s\n"
+      "[%s] Connected on %s\n"
       "Device type: %s\n"
       "Configuration: %s\n"
       "Serial number: %s\n"
       "Firmware: %s\n"
       "Capacity: %.1f g\n"
       "Supported commands: %s",
+      self.io._human_readable_device_name,
       self.io.port,
       self.device_type,
       self.configuration,
@@ -152,10 +158,11 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     fw_version_short = self.firmware_version.split()[0] if self.firmware_version else ""
     if fw_version_short not in CONFIRMED_FIRMWARE_VERSIONS:
       logger.warning(
-        "[MT Scale] Firmware version %r has not been tested with this driver. "
+        "[%s] Firmware version %r has not been tested with this driver. "
         "Confirmed versions: %s. "
         "If this version works correctly, please contribute it to "
         "confirmed_firmware_versions.py so others can benefit.",
+        self.io._human_readable_device_name,
         self.firmware_version,
         ", ".join(sorted(CONFIRMED_FIRMWARE_VERSIONS)),
       )
@@ -174,8 +181,8 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     try:
       await self.reset()
     except Exception:
-      logger.warning("[MT Scale] Could not reset device before disconnecting")
-    logger.info("[MT Scale] Disconnected from %s", self.io.port)
+      logger.warning("[%s] Could not reset device before disconnecting", self.io._human_readable_device_name)
+    logger.info("[%s] Disconnected from %s", self.io._human_readable_device_name, self.io.port)
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -208,22 +215,17 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     Undecorated methods (Level 0/1) are always included.
     """
     supported: List[str] = []
-    for name in dir(self):
-      if name.startswith("_"):
+    for name in sorted(inspect.getmembers(self, predicate=inspect.ismethod), key=lambda m: m[0]):
+      method_name = name[0]
+      if method_name.startswith("_"):
         continue
-      attr = getattr(type(self), name, None)
-      if not callable(attr):
-        continue
-      # Check if the method has a command gate
-      mt_cmd = getattr(attr, "_mt_sics_command", None)
-      if mt_cmd is not None:
+      if method_name in _MT_SICS_COMMAND_REGISTRY:
+        mt_cmd = _MT_SICS_COMMAND_REGISTRY[method_name]
         if hasattr(self, "_supported_commands") and mt_cmd in self._supported_commands:
-          supported.append(name)
-        # If _supported_commands not yet populated (before setup), skip
+          supported.append(method_name)
       else:
-        # Undecorated public methods are always available
-        supported.append(name)
-    return sorted(supported)
+        supported.append(method_name)
+    return supported
 
   # === Response parsing ===
 
@@ -331,7 +333,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       timeout: The timeout in seconds (applies across all response lines).
     """
 
-    logger.log(LOG_LEVEL_IO, "[MT Scale] Sent command: %s", command)
+    logger.log(LOG_LEVEL_IO, "[%s] Sent command: %s", self.io._human_readable_device_name, command)
     await self.io.write(command.encode() + b"\r\n")
 
     responses: List[MettlerToledoResponse] = []
@@ -345,7 +347,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
           raise TimeoutError("Timeout while waiting for response from scale.")
         await asyncio.sleep(0.001)
 
-      logger.log(LOG_LEVEL_IO, "[MT Scale] Received response: %s", raw_response)
+      logger.log(LOG_LEVEL_IO, "[%s] Received response: %s", self.io._human_readable_device_name, raw_response)
       fields = shlex.split(raw_response.decode("utf-8").strip())
       if len(fields) >= 2:
         response = MettlerToledoResponse(command=fields[0], status=fields[1], data=fields[2:])

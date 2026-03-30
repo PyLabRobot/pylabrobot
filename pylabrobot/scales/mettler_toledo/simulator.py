@@ -60,6 +60,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     self.tare_weight: float = 0.0
 
     # Simulated device identity
+    self._human_readable_device_name = "Mettler Toledo Scale"
     self._simulated_device_type = device_type
     self._simulated_serial_number = serial_number
     self._simulated_capacity = capacity
@@ -118,13 +119,14 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     self.firmware_version = "1.10 18.6.4.1361.772"
     self.configuration = "Bridge" if "Bridge" in self.device_type else "Balance"
     logger.info(
-      "[MT Scale] Connected to Mettler Toledo scale (simulation)\n"
+      "[%s] Connected (simulation)\n"
       "Device type: %s\n"
       "Configuration: %s\n"
       "Serial number: %s\n"
       "Firmware: %s\n"
       "Capacity: %.1f g\n"
       "Supported commands: %s",
+      self._human_readable_device_name,
       self.device_type,
       self.configuration,
       self.serial_number,
@@ -134,7 +136,7 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     )
 
   async def stop(self) -> None:
-    logger.info("[MT Scale] Disconnected (simulation)")
+    logger.info("[%s] Disconnected (simulation)", self._human_readable_device_name)
 
   async def reset(self) -> str:
     responses = await self.send_command("@")
@@ -142,12 +144,13 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     return responses[0].data[0]
 
   async def send_command(self, command: str, timeout: int = 60) -> List[MettlerToledoResponse]:
-    logger.log(LOG_LEVEL_IO, "[MT Scale] Sent command: %s", command)
+    logger.log(LOG_LEVEL_IO, "[%s] Sent command: %s", self._human_readable_device_name, command)
     responses = self._build_response(command)
     for resp in responses:
       logger.log(
         LOG_LEVEL_IO,
-        "[MT Scale] Received response: %s %s %s",
+        "[%s] Received response: %s %s %s",
+        self._human_readable_device_name,
         resp.command,
         resp.status,
         " ".join(resp.data),

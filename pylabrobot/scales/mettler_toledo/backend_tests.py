@@ -153,7 +153,7 @@ class MTSICSSimulatorTests(unittest.IsolatedAsyncioTestCase):
     remaining = await self.backend.request_remaining_weighing_range()
     self.assertEqual(remaining, 170.0)
 
-  async def test_cancel_returns_serial_number(self):
+  async def test_reset_returns_serial_number(self):
     """reset() sends @ which responds with I4-style (command echo is I4, not @).
     Must correctly parse the serial number despite the unusual response format."""
     sn = await self.backend.reset()
