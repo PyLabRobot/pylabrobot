@@ -30,9 +30,9 @@ Status key:
 | I0      | List all implemented commands + levels   | 96        | DONE   | yes | _request_supported_commands(). Queried during setup(). |
 | I1      | MT-SICS level and level versions         | 97        | DONE   | yes | Not used for gating - I0 is authoritative. |
 | I2      | Device data (type and capacity)          | 98        | DONE   | yes | request_device_type() and request_capacity(). Response is one quoted string parsed with shlex. |
-| I3      | Software version and type definition     | 99        | MED    | yes | |
+| I3      | Software version and type definition     | 99        | DONE   | yes | request_software_version(). Returns "1.10 18.6.4.1361.772" on test device. |
 | I4      | Serial number                            | 100       | DONE   | yes | request_serial_number(). |
-| I5      | Software material number                 | 101       | LOW    | yes | |
+| I5      | Software material number                 | 101       | DONE   | yes | request_software_material_number(). Returns "11671158C" on test device. |
 | S       | Stable weight value                      | 223       | DONE   | yes | read_stable_weight(). |
 | SI      | Weight value immediately                 | 225       | DONE   | yes | read_weight_value_immediately(). |
 | SIR     | Weight immediately + repeat              | 232       | MED    | yes | Continuous streaming. |
@@ -63,10 +63,10 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| I10     | Device identification                    | 102       | MED    | yes | |
-| I11     | Model designation                        | 103       | MED    | yes | |
-| I14     | Device information (detailed)            | 104       | MED    | yes | |
-| I15     | Uptime                                   | 106       | MED    | yes | |
+| I10     | Device identification                    | 102       | DONE   | yes | request_device_id() (read). set_device_id() commented out (EEPROM write). |
+| I11     | Model designation                        | 103       | DONE   | yes | request_model_designation(). Returns "WXS205SDU" on test device. |
+| I14     | Device information (detailed)            | 104       | DONE   | yes | request_device_info(). Multi-response with config, descriptions, SW IDs, serial numbers. |
+| I15     | Uptime                                   | 106       | DONE   | yes | request_uptime(). WXS205SDU returns single value (days), not days/h/m/s. |
 | I16     | Date of next service                     | 107       | LOW    | yes | |
 | I21     | Revision of assortment type tolerances   | 108       | LOW    | yes | |
 | I29     | Filter configuration                     | 111       | LOW    | - | |
@@ -177,9 +177,9 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| DAT     | Date                                     | 53        | LOW    | yes | |
+| DAT     | Date                                     | 53        | DONE   | yes | request_date(). |
 | DATI    | Date and time                            | 54        | MED    | - | |
-| TIM     | Time                                     | 258       | LOW    | yes | |
+| TIM     | Time                                     | 258       | DONE   | yes | request_time(). |
 
 ### Digital I/O
 
@@ -269,13 +269,10 @@ Status key:
 - SIX1 (gross, net, tare in one call) - not available on WXS205SDU
 
 ### MED (useful but not urgent)
-- I3 (software version) - available on WXS205SDU
-- I11 (model designation) - available on WXS205SDU
-- I14/I15 (device info, uptime) - available on WXS205SDU
-- SIR/SR (continuous streaming)
+- SIR/SR (continuous streaming) - available on WXS205SDU
 - SIS (net weight + status) - available on WXS205SDU
-- C1/C3 (adjustment) - available on WXS205SDU
+- C1/C3 (adjustment) - available on WXS205SDU, multi-response
 - M01/M02/M03 (weighing mode, environment, auto-zero) - available on WXS205SDU
 - M27 (adjustment history) - available on WXS205SDU
-- DATI (date/time) - not on WXS205SDU
-- RO1 (restart) - not on WXS205SDU
+- SNR (stable weight + repeat on change) - available on WXS205SDU
+- UPD (update rate) - available on WXS205SDU

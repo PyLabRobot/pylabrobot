@@ -430,14 +430,17 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_response(responses[0], 3, "I10")
     return responses[0].data[0]
 
-  @requires_mt_sics_command("I10")
-  async def set_device_id(self, device_id: str) -> None:
-    """Set the user-assigned device identification string. (I10 command)
-
-    Max 20 alphanumeric characters. Retained after @ cancel.
-    Useful for labeling individual scales in multi-device setups.
-    """
-    await self.send_command(f'I10 "{device_id}"')
+  # WARNING: set_device_id writes to EEPROM and permanently changes the stored device name.
+  # Uncomment only if you need to relabel a scale in a multi-device setup.
+  #
+  # @requires_mt_sics_command("I10")
+  # async def set_device_id(self, device_id: str) -> None:
+  #   """Set the user-assigned device identification string. (I10 command)
+  #
+  #   Max 20 alphanumeric characters. Retained after @ cancel.
+  #   Useful for labeling individual scales in multi-device setups.
+  #   """
+  #   await self.send_command(f'I10 "{device_id}"')
 
   @requires_mt_sics_command("I11")
   async def request_model_designation(self) -> str:
@@ -468,14 +471,26 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     Returns a dict with keys "days", "hours", "minutes", "seconds".
     Counts time since last power-on, including short interruptions.
     Not reset by @ cancel or restart.
+
+    Some devices return a single value (total days) instead of the
+    full days/hours/minutes/seconds breakdown.
     """
     responses = await self.send_command("I15")
-    self._validate_response(responses[0], 6, "I15")
+    self._validate_response(responses[0], 3, "I15")
+    data = responses[0].data
+    if len(data) >= 4:
+      return {
+        "days": int(data[0]),
+        "hours": int(data[1]),
+        "minutes": int(data[2]),
+        "seconds": int(data[3]),
+      }
+    # Single-value format (some devices return total days only)
     return {
-      "days": int(responses[0].data[0]),
-      "hours": int(responses[0].data[1]),
-      "minutes": int(responses[0].data[2]),
-      "seconds": int(responses[0].data[3]),
+      "days": int(data[0]),
+      "hours": 0,
+      "minutes": 0,
+      "seconds": 0,
     }
 
   @requires_mt_sics_command("DAT")
