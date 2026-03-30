@@ -130,9 +130,16 @@ class TecanEVODriver(Driver):
     return self.parse_response(resp)
 
   async def setup(self) -> None:
-    """Open USB connection to the Tecan EVO."""
+    """Open USB connection to the Tecan EVO.
+
+    Uses a short packet timeout for buffer drain to avoid long waits
+    on first connection.
+    """
     logger.info("Opening USB connection to Tecan EVO...")
+    saved_prt = self.io.packet_read_timeout
+    self.io.packet_read_timeout = 1  # fast buffer drain
     await self.io.setup()
+    self.io.packet_read_timeout = saved_prt
     logger.info("USB connected.")
 
   async def stop(self) -> None:

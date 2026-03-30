@@ -39,7 +39,26 @@ class EVORoMaBackend(GripperArmBackend):
     self.roma: Optional[RoMa] = None
 
   async def _on_setup(self) -> None:
-    """Initialize RoMa arm: PIA + park."""
+    """Initialize RoMa arm. Skips PIA if already initialized."""
+
+    # Check if RoMa is present and already initialized
+    try:
+      resp = await self._driver.send_command(ROMA, command="REE")
+      roma_err = resp["data"][0] if resp and resp.get("data") else ""
+    except TecanError as e:
+      if e.error_code == 5:
+        logger.info("RoMa not present (error 5).")
+        return
+      roma_err = ""
+
+    if roma_err and all(c == "@" for c in roma_err):
+      # Already initialized — skip PIA, just set up firmware wrapper
+      logger.info("RoMa already initialized (REE=%s), skipping PIA.", roma_err)
+      self.roma = RoMa(self._driver, ROMA)
+      return
+
+    # Full init: PIA + park
+    logger.info("RoMa needs initialization, running PIA...")
     try:
       await self._driver.send_command(ROMA, command="PIA")
     except TecanError as e:
