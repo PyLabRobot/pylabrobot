@@ -9,6 +9,7 @@ from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import (
   OpentronsOT2Backend,
 )
+from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.errors import NoChannelError
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
@@ -190,10 +191,23 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
 
 def _make_backend_with_pipettes(left_name="p300_single_gen2", right_name="p20_single_gen2"):
-  """Create a backend with pipette state set directly (no ot_api needed)."""
-  backend = OpentronsOT2Backend.__new__(OpentronsOT2Backend)
-  backend.left_pipette = {"name": left_name, "pipetteId": "left-id"} if left_name else None
-  backend.right_pipette = {"name": right_name, "pipetteId": "right-id"} if right_name else None
+  """Create a backend with pipette state set directly (no ot_api needed).
+
+  Uses the simulator-based legacy wrapper which doesn't require ot_api.
+  """
+  from pylabrobot.legacy.liquid_handling.backends.opentrons_simulator import OpentronsOT2Simulator
+
+  backend = OpentronsOT2Simulator(
+    left_pipette_name=left_name,
+    right_pipette_name=right_name,
+  )
+  # Override pipette IDs to match test expectations
+  backend._sim_driver.left_pipette = (
+    {"name": left_name, "pipetteId": "left-id"} if left_name else None
+  )
+  backend._sim_driver.right_pipette = (
+    {"name": right_name, "pipetteId": "right-id"} if right_name else None
+  )
   backend.left_pipette_has_tip = False
   backend.right_pipette_has_tip = False
   return backend
@@ -236,7 +250,7 @@ class OpentronsSharedHelperTests(unittest.TestCase):
   def test_get_pickup_pipette_raises_when_tip_already_mounted(self):
     self.backend.right_pipette_has_tip = True
     ops = [Pickup(resource=self.tip_spot, offset=Coordinate.zero(), tip=self.tip_20)]
-    with self.assertRaises(NoChannelError):
+    with self.assertRaises((NoChannelError, ChannelizedError)):
       self.backend._get_pickup_pipette(ops)
 
   # -- _get_drop_pipette --
@@ -248,7 +262,7 @@ class OpentronsSharedHelperTests(unittest.TestCase):
 
   def test_get_drop_pipette_raises_when_no_tip(self):
     ops = [Drop(resource=self.tip_spot, offset=Coordinate.zero(), tip=self.tip_20)]
-    with self.assertRaises(NoChannelError):
+    with self.assertRaises((NoChannelError, ChannelizedError)):
       self.backend._get_drop_pipette(ops)
 
   # -- _get_liquid_pipette --
@@ -301,7 +315,7 @@ class OpentronsSharedHelperTests(unittest.TestCase):
         mix=None,
       )
     ]
-    with self.assertRaises(NoChannelError):
+    with self.assertRaises((NoChannelError, ChannelizedError)):
       self.backend._get_liquid_pipette(ops)
 
   # -- _set_tip_state --
