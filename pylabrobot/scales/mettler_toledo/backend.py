@@ -110,7 +110,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.serial_number = await self.cancel()
 
     # Discover supported commands via I0 (the definitive source per spec Section 2.2)
-    self._supported_commands: Set[str] = await self._query_supported_commands()
+    self._supported_commands: Set[str] = await self._request_supported_commands()
 
     # Device identity (Level 0 - always available)
     # Note: device_type and capacity both use I2 but are separate methods intentionally -
@@ -143,14 +143,14 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   # === Device discovery ===
 
-  async def _query_supported_commands(self) -> Set[str]:
-    """Query all implemented commands via I0 (Level 0 - always available).
+  async def _request_supported_commands(self) -> Set[str]:
+    """Query all implemented MT-SICS commands via I0 (Level 0 - always available).
 
     I0 is the definitive source of command support per spec Section 2.2.
     I1 only reports which standardized level sets are fully implemented,
     but individual commands may exist outside those levels.
 
-    Returns a set of command strings (e.g. {"@", "S", "SI", "Z", "M21", "M28"}).
+    Returns a set of MT-SICS command strings (e.g. {"@", "S", "SI", "Z", "M21", "M28"}).
     """
     responses = await self.send_command("I0")
     commands: Set[str] = set()
@@ -159,6 +159,31 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       if len(resp.data) >= 2:
         commands.add(resp.data[1])
     return commands
+
+  def request_supported_methods(self) -> List[str]:
+    """Return the names of all backend methods supported by the connected device.
+
+    Uses the I0 command list (populated during setup) to determine which
+    decorated methods can be called without raising MettlerToledoError.
+    Undecorated methods (Level 0/1) are always included.
+    """
+    supported: List[str] = []
+    for name in dir(self):
+      if name.startswith("_"):
+        continue
+      attr = getattr(type(self), name, None)
+      if not callable(attr):
+        continue
+      # Check if the method has a command gate
+      mt_cmd = getattr(attr, "_mt_sics_command", None)
+      if mt_cmd is not None:
+        if hasattr(self, "_supported_commands") and mt_cmd in self._supported_commands:
+          supported.append(name)
+        # If _supported_commands not yet populated (before setup), skip
+      else:
+        # Undecorated public methods are always available
+        supported.append(name)
+    return sorted(supported)
 
   # === Response parsing ===
 
