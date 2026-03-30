@@ -9,12 +9,14 @@ import pytest
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
+from pylabrobot.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
+)
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
-from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -70,6 +72,7 @@ def _create_mock_backend(num_channels: int = 8):
   type(mock).num_arms = PropertyMock(return_value=1)
   type(mock).head96_installed = PropertyMock(return_value=True)
   mock.can_pick_up_tip.return_value = True
+  mock.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
   return mock
 
 
@@ -1207,3 +1210,121 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     # Old state format without head96_state or arm_state
     old_state = {"head_state": {c: self.lh.head[c].serialize() for c in self.lh.head}}
     self.lh.load_state(old_state)  # should not raise
+
+
+class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
+  """Integration tests for no-go zone channel distribution through LiquidHandler."""
+
+  async def asyncSetUp(self):
+    self.backend = _create_mock_backend(num_channels=8)
+    self.backend.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+
+    # A trough-like container with a center divider
+    from pylabrobot.resources.trough import Trough
+
+    self.trough = Trough(
+      name="trough",
+      size_x=19.0,
+      size_y=90.0,
+      size_z=65.0,
+      max_volume=60_000,
+      no_go_zones=[(Coordinate(0, 44, 0), Coordinate(19, 46, 65))],
+    )
+    self.deck.assign_child_resource(self.trough, location=Coordinate(100, 100, 0))
+
+    self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    await self.lh.setup()
+
+  async def test_aspirate_2_channels_avoids_no_go_zone(self):
+    """2 channels on a trough with a center divider should be placed in separate compartments."""
+    t0 = self.tip_rack.get_item("A1").get_tip()
+    t1 = self.tip_rack.get_item("B1").get_tip()
+    self.lh.update_head_state({0: t0, 1: t1})
+    self.trough.tracker.set_volume(50_000)
+
+    await self.lh.aspirate([self.trough] * 2, vols=[100, 100], use_channels=[0, 1])
+
+    ops = self.backend.aspirate.call_args.kwargs["ops"]
+    y_offsets = [op.offset.y for op in ops]
+    # Both offsets should be non-zero (not centered) and in opposite compartments
+    self.assertEqual(len(y_offsets), 2)
+    # One positive (back compartment), one negative (front compartment)
+    self.assertTrue(y_offsets[0] > 0 and y_offsets[1] < 0, f"offsets: {y_offsets}")
+    # Neither should be near the divider (Y=44-46, container center=45, so offset ~0 is bad)
+    for y in y_offsets:
+      self.assertGreater(abs(y), 5, f"offset {y} too close to divider")
+
+  async def test_single_channel_respects_no_go_zone(self):
+    """Single channel on a container with no-go zones should be placed in a safe compartment."""
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    self.trough.tracker.set_volume(50_000)
+
+    await self.lh.aspirate([self.trough], vols=[100], use_channels=[0])
+
+    ops = self.backend.aspirate.call_args.kwargs["ops"]
+    # Single channel should be placed in a compartment, not at container center
+    # (container center Y=45 is inside the no-go zone at Y=44-46)
+    self.assertNotAlmostEqual(ops[0].offset.y, 0.0)
+    # Should be in the back compartment center: (48+88)/2 = 68, offset = 68-45 = 23
+    self.assertAlmostEqual(ops[0].offset.y, 23.0)
+
+  async def test_dispense_uses_no_go_zones(self):
+    """Dispense should also use no-go zone logic."""
+    t0 = self.tip_rack.get_item("A1").get_tip()
+    t1 = self.tip_rack.get_item("B1").get_tip()
+    self.lh.update_head_state({0: t0, 1: t1})
+    t0.tracker.add_liquid(volume=100)
+    t1.tracker.add_liquid(volume=100)
+
+    await self.lh.dispense([self.trough] * 2, vols=[100, 100], use_channels=[0, 1])
+
+    ops = self.backend.dispense.call_args.kwargs["ops"]
+    y_offsets = [op.offset.y for op in ops]
+    self.assertTrue(y_offsets[0] > 0 and y_offsets[1] < 0, f"offsets: {y_offsets}")
+
+  async def test_no_go_zones_skipped_for_custom_spread(self):
+    """spread='custom' should bypass no-go zone logic."""
+    t0 = self.tip_rack.get_item("A1").get_tip()
+    t1 = self.tip_rack.get_item("B1").get_tip()
+    self.lh.update_head_state({0: t0, 1: t1})
+    self.trough.tracker.set_volume(50_000)
+
+    await self.lh.aspirate([self.trough] * 2, vols=[100, 100], use_channels=[0, 1], spread="custom")
+
+    ops = self.backend.aspirate.call_args.kwargs["ops"]
+    # Custom spread: offsets should be zero (user controls positioning)
+    for op in ops:
+      self.assertAlmostEqual(op.offset.y, 0.0)
+
+  async def test_no_go_zones_tight_vs_wide(self):
+    """spread='tight' should pack channels closer than spread='wide' within compartments."""
+    tips = [self.tip_rack.get_item(f"{chr(65 + i)}1").get_tip() for i in range(4)]
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+    self.trough.tracker.set_volume(50_000)
+    self.backend.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
+
+    # wide (default): channels spread far apart within each compartment
+    await self.lh.aspirate(
+      [self.trough] * 4, vols=[100] * 4, use_channels=[0, 1, 2, 3], spread="wide"
+    )
+    wide_ops = self.backend.aspirate.call_args.kwargs["ops"]
+    wide_offsets = sorted([op.offset.y for op in wide_ops])
+
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+    self.trough.tracker.set_volume(50_000)
+
+    # tight: channels packed at minimum spacing within each compartment
+    await self.lh.aspirate(
+      [self.trough] * 4, vols=[100] * 4, use_channels=[0, 1, 2, 3], spread="tight"
+    )
+    tight_ops = self.backend.aspirate.call_args.kwargs["ops"]
+    tight_offsets = sorted([op.offset.y for op in tight_ops])
+
+    # within each compartment, wide channels should be further apart than tight
+    wide_gap_lower = abs(wide_offsets[1] - wide_offsets[0])
+    tight_gap_lower = abs(tight_offsets[1] - tight_offsets[0])
+    self.assertGreater(wide_gap_lower, tight_gap_lower)

@@ -17,6 +17,7 @@ class Trash(Container):
     compute_volume_from_height=None,
     compute_height_from_volume=None,
     height_volume_data=None,
+    no_go_zones=None,
   ):
     super().__init__(
       name=name,
@@ -30,4 +31,5 @@ class Trash(Container):
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
       height_volume_data=height_volume_data,
+      no_go_zones=no_go_zones,
     )
