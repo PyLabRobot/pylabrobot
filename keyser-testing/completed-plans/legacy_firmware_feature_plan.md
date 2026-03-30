@@ -1,5 +1,9 @@
 # Tecan EVO Legacy — Firmware Feature Development Plan
 
+**Status: MOSTLY COMPLETE** (Steps 1-4, 5c, 6b, 6c done; Steps 5a, 5b, 6a deferred — require LiquidHandlerBackend interface changes)
+**Implemented:** 2026-03-30
+**Branch:** `air-liha-backend` — commit `7b1c48a29`
+
 ## Context
 
 Parallel to the v1b1 plan, this covers the same firmware feature gaps for the legacy `air-liha-backend` branch. The legacy architecture differs: arm firmware classes (LiHa, RoMa, EVOArm) live inside `EVO_backend.py`, the abstract interface is `LiquidHandlerBackend`, and vendor-specific params use `**backend_kwargs` rather than `BackendParams` dataclasses.
@@ -19,7 +23,7 @@ Parallel to the v1b1 plan, this covers the same firmware feature gaps for the le
 
 ---
 
-## Step 1: Firmware Layer Cleanup — Wrap Raw Commands
+## Step 1: Firmware Layer Cleanup — Wrap Raw Commands ✅
 
 Same commands as v1b1, but added as methods on the inline arm classes.
 
@@ -53,7 +57,7 @@ Same commands as v1b1, but added as methods on the inline arm classes.
 
 ---
 
-## Step 2: New Firmware Commands (parallel with Step 1)
+## Step 2: New Firmware Commands ✅
 
 ### Add to `LiHa` class (in `EVO_backend.py`)
 
@@ -71,7 +75,7 @@ Same commands as v1b1, but added as methods on the inline arm classes.
 
 ---
 
-## Step 3: ZaapMotion Firmware Abstraction (depends on Step 1)
+## Step 3: ZaapMotion Firmware Abstraction ✅
 
 ### New class: `ZaapMotion` (in `air_evo_backend.py` or separate file)
 
@@ -103,7 +107,7 @@ Unlike v1b1 where we create `firmware/zaapmotion.py`, in the legacy branch this 
 
 ---
 
-## Step 4: Mixing & Blow-out (depends on Steps 1+3)
+## Step 4: Mixing & Blow-out ✅
 
 ### 4a. No `params.py` needed — use `**backend_kwargs`
 
@@ -165,44 +169,42 @@ Override in `AirEVOBackend` to wrap with force mode.
 
 ---
 
-## Step 5: Tip Touch, LLD Config, Tip Presence (depends on Steps 2+4)
+## Step 5: Tip Touch, LLD Config, Tip Presence — PARTIAL (5c done, 5a/5b deferred)
 
-### 5a. Tip touch in `EVOBackend.dispense()`
-- Check `**backend_kwargs` for `tip_touch=True`
-- After dispense: brief PAA Y-offset move, then PAA back
-- Optional `tip_touch_offset_y` kwarg (default 1.0 mm)
+### 5a. Tip touch in `EVOBackend.dispense()` — DEFERRED
+- Requires `**backend_kwargs` to be plumbed through `LiquidHandlerBackend.dispense()` abstract interface
+- The base class does not currently pass kwargs to backend methods
+- Deferred: would require changes to shared base classes in `pylabrobot/liquid_handling/backends/backend.py`
 
-### 5b. LLD config in `EVOBackend.aspirate()`
-- Check `**backend_kwargs` for `liquid_detection_proc` / `liquid_detection_sense`
-- Use those instead of liquid class defaults for `SDM` call
+### 5b. LLD config in `EVOBackend.aspirate()` — DEFERRED
+- Same issue: requires `**backend_kwargs` plumbing through `LiquidHandlerBackend.aspirate()`
 
-### 5c. `request_tip_presence()` in `EVOBackend`
-- Implement optional `LiquidHandlerBackend` method
-- Use `self.liha.read_tip_status()` (from Step 2)
+### 5c. `request_tip_presence()` in `EVOBackend` ✅
+- Implemented using `self.liha.read_tip_status()` (from Step 2)
 
 ### Files modified
 - `pylabrobot/liquid_handling/backends/tecan/EVO_backend.py`
 
 ---
 
-## Step 6: RoMa Enhancements (depends on Step 1)
+## Step 6: RoMa Enhancements — PARTIAL (6b/6c done, 6a deferred)
 
-### 6a. Configurable speed profiles
-- In `pick_up_resource()` and `drop_resource()`: check `**backend_kwargs` for speed overrides
-- Apply to SFX/SFY/SFZ/SFR calls, falling back to current hardcoded defaults
+### 6a. Configurable speed profiles — DEFERRED
+- Same `**backend_kwargs` plumbing issue as Step 5a/5b
+- `pick_up_resource()` / `drop_resource()` don't receive kwargs from `LiquidHandler`
 
-### 6b. Post-grip plate verification
+### 6b. Post-grip plate verification ✅
 - After `grip_plate()`: query `report_g_param(0)`, log warning if gripper didn't close
 
-### 6c. Configurable park position
-- Add `roma_park_position` to `EVOBackend.__init__()`, use in park method
+### 6c. Configurable park position ✅
+- Added `_roma_park_position` class attribute, used in `_park_roma()`
 
 ### Files modified
 - `pylabrobot/liquid_handling/backends/tecan/EVO_backend.py`
 
 ---
 
-## Step 7: System-Level (future, lower priority)
+## Step 7: System-Level — DEFERRED (see v1b1_migration_plan.md Phase 6d)
 
 - Error recovery via `read_error_register()` + re-init
 - Instrument status reporting

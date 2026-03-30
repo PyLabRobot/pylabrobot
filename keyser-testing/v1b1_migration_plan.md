@@ -220,6 +220,25 @@ Fields are nearly identical. The v1b1 types add `liquid_height`, `blow_out_air_v
 - [x] Ported `keyser-testing/labware_library.py` from air-liha-backend
 - [x] Added ZaapDiTi 50µL liquid class entries to legacy liquid classes
 
+### Phase 6c: Firmware Feature Enhancements ✅ COMPLETE
+- [x] Wrapped raw `send_command` calls (REE, PIA, PIB, BMX, BMA, PPA, SDT) in typed firmware methods
+- [x] Added new firmware commands: RPP, RVZ, RTS, PAZ
+- [x] Created `firmware/zaapmotion.py` — ZaapMotion class replacing ~50 raw T2{tip} string commands
+- [x] Created `params.py` — `TecanPIPParams` (tip touch, LLD config) and `TecanRoMaParams` (speed profiles)
+- [x] Implemented mixing (`_perform_mix`) and blow-out (`_perform_blow_out`) with Air LiHa force mode overrides
+- [x] Implemented `request_tip_presence()` via RTS firmware command
+- [x] Added tip touch (via `TecanPIPParams`) and LLD config override in aspirate
+- [x] Added configurable RoMa speed profiles, post-grip plate verification, configurable park position
+- [x] See `completed-plans/v1b1_firmware_feature_plan.md` for full plan
+
+### Phase 6d: System-Level Features — FUTURE
+These items are deferred until after hardware validation (Phase 7). They build on the firmware wrappers from Phase 6c:
+- [ ] **Error recovery**: Use `read_error_register()` to detect axis errors, attempt re-init (PIA + BMX) for recoverable states (G=not initialized), surface unrecoverable errors to the user
+- [ ] **Instrument status API**: Aggregate `read_error_register()` + `read_tip_status()` + `read_plunger_positions()` into a status dict on `TecanEVO`, useful for dashboard/monitoring
+- [ ] **Safety module monitoring**: Periodic `SPN`/`SPS` checks during long operations (currently only sent during Air LiHa setup)
+- [ ] **RoMa drop_at_carrier speed profiles**: Wire `TecanRoMaParams` through `drop_at_carrier()` (currently only `pick_up_from_carrier` uses configurable speeds)
+- [ ] **Legacy branch kwargs wiring**: On `air-liha-backend`, tip touch and LLD config require `**backend_kwargs` to be plumbed through the `LiquidHandlerBackend` abstract interface — deferred as it touches shared base classes
+
 ### Phase 7: Hardware Testing — TODO
 - [ ] Test init from cold boot (ZaapMotion config + PIA)
 - [ ] Test init-skip on warm reconnect

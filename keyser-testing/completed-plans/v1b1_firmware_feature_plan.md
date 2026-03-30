@@ -1,5 +1,9 @@
 # Tecan EVO v1b1 — Firmware Feature Development Plan
 
+**Status: COMPLETE** (Steps 1-6 implemented, Step 7 deferred as future work)
+**Implemented:** 2026-03-30
+**Branch:** `v1b1-tecan-evo` — commit `355c67361`
+
 ## Context
 
 The EVO firmware supports many commands that are either not wrapped in our firmware layer or not used by the backends at all. This plan closes those gaps systematically: first cleaning up raw `send_command` calls, then adding new firmware wrappers, abstracting ZaapMotion commands, and finally implementing higher-level features (mixing, blow-out, tip touch, LLD config, tip presence).
@@ -8,7 +12,7 @@ The EVO firmware supports many commands that are either not wrapped in our firmw
 
 ---
 
-## Step 1: Firmware Layer Cleanup — Wrap Raw Commands
+## Step 1: Firmware Layer Cleanup — Wrap Raw Commands ✅
 
 Replace raw `send_command` string calls with typed firmware wrapper methods.
 
@@ -46,7 +50,7 @@ Replace raw `send_command` string calls with typed firmware wrapper methods.
 
 ---
 
-## Step 2: New Firmware Commands (can be parallel with Step 1)
+## Step 2: New Firmware Commands ✅
 
 Add wrappers for commands we haven't used yet.
 
@@ -66,7 +70,7 @@ Add wrappers for commands we haven't used yet.
 
 ---
 
-## Step 3: ZaapMotion Firmware Abstraction (depends on Step 1)
+## Step 3: ZaapMotion Firmware Abstraction ✅
 
 Create `firmware/zaapmotion.py` to replace ~50 raw `T2{tip}` commands in `air_pip_backend.py`.
 
@@ -98,7 +102,7 @@ Create `firmware/zaapmotion.py` to replace ~50 raw `T2{tip}` commands in `air_pi
 
 ---
 
-## Step 4: Mixing & Blow-out (depends on Steps 1+3)
+## Step 4: Mixing & Blow-out ✅
 
 ### 4a. Create `params.py` with EVO-specific BackendParams
 
@@ -148,7 +152,7 @@ Override in `air_pip_backend.py` to wrap with force mode.
 
 ---
 
-## Step 5: Tip Touch, LLD Config, Tip Presence (depends on Steps 2+4)
+## Step 5: Tip Touch, LLD Config, Tip Presence ✅
 
 ### 5a. Tip touch in `pip_backend.py` `dispense()`
 - Check `backend_params` for `TecanPIPParams(tip_touch=True)`
@@ -165,7 +169,7 @@ Override in `air_pip_backend.py` to wrap with force mode.
 
 ---
 
-## Step 6: RoMa Enhancements (depends on Step 1)
+## Step 6: RoMa Enhancements ✅ (partial — drop_at_carrier speeds deferred)
 
 ### 6a. Configurable speed profiles
 - In `pick_up_from_carrier()` and `drop_at_carrier()`: check `backend_params` for `TecanRoMaParams`
@@ -182,7 +186,7 @@ Override in `air_pip_backend.py` to wrap with force mode.
 
 ---
 
-## Step 7: System-Level (future, lower priority)
+## Step 7: System-Level — DEFERRED (see v1b1_migration_plan.md Phase 6d)
 
 - Error recovery via `read_error_register()` + re-init
 - Instrument status aggregation (`RPP` + `RTS` + `REE` → status dict)
