@@ -133,6 +133,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     try:
       resp = await self._driver.send_command("C5", command="REE0")
       err = resp["data"][0] if resp and resp.get("data") else ""
+      err = str(err)  # may be int if all digits
       # A = init failed (1), G = not initialized (7)
       if err and not any(c in ("A", "G") for c in err):
         return True
