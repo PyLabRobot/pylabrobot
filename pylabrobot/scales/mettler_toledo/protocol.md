@@ -113,8 +113,8 @@ The @ command resets the device to its power-on state and responds with the seri
 ### Commands not supported on WXS205SDU (bridge mode)
 
 The following commands return `ES` (syntax error) on the WXS205SDU WXA-Bridge
-despite being listed in the MT-SICS spec. They may work on other MT-SICS devices
-or on the same model with a terminal attached.
+because they are not in the device's I0 command list. They may work on other
+MT-SICS devices or on the same model with a terminal attached.
 
 - `C` (cancel all), `SC` (timed read), `ZC` (timed zero), `TC` (timed tare)
 - `D`, `DW` (display commands - no terminal in bridge mode)
@@ -178,7 +178,14 @@ to memory and survive power cycles. They cannot be undone with @ reset - only
 via FSET (factory reset) or the terminal menu. Write methods are commented out
 in the backend to prevent accidental modification.
 
-Exceptions: `set_date()` and `set_time()` are active (not commented out) since
-they only set the internal clock, which is easily correctable.
+Exceptions: `set_date()`, `set_time()`, and `set_device_id()` are active (not
+commented out) since they do not change weighing behaviour.
+
+## Interrupt safety
+
+When a command is interrupted (KeyboardInterrupt or asyncio.CancelledError),
+`send_command` sends `C` (cancel all) if the device supports it, otherwise just
+flushes the serial buffer. Device state (zero, tare) is never cleared by an
+interrupt. See the interrupt-safe command layer pattern.
 
 See `mt_sics_commands.md` for the full command reference with implementation status.

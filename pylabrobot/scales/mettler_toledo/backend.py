@@ -632,7 +632,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   async def zero(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
-  ) -> List[MettlerToledoResponse]:
+  ) -> None:
     """Zero the scale.
 
     Args:
@@ -640,14 +640,15 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         float/int zeros after that many seconds.
     """
     if timeout == "stable":
-      return await self.zero_stable()
-    if not isinstance(timeout, (float, int)):
+      await self.zero_stable()
+    elif not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
-    if timeout < 0:
+    elif timeout < 0:
       raise ValueError("timeout must be greater than or equal to 0")
-    if timeout == 0:
-      return await self.zero_immediately()
-    return await self.zero_timeout(timeout)
+    elif timeout == 0:
+      await self.zero_immediately()
+    else:
+      await self.zero_timeout(timeout)
 
   # # Tare # #
 
@@ -667,7 +668,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   async def tare(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
-  ) -> List[MettlerToledoResponse]:
+  ) -> None:
     """Tare the scale.
 
     Args:
@@ -675,14 +676,15 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         float/int tares after that many seconds.
     """
     if timeout == "stable":
-      return await self.tare_stable()
-    if not isinstance(timeout, (float, int)):
+      await self.tare_stable()
+    elif not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
-    if timeout < 0:
+    elif timeout < 0:
       raise ValueError("timeout must be greater than or equal to 0")
-    if timeout == 0:
-      return await self.tare_immediately()
-    return await self.tare_timeout(timeout)
+    elif timeout == 0:
+      await self.tare_immediately()
+    else:
+      await self.tare_timeout(timeout)
 
   async def request_tare_weight(self) -> float:
     """Query tare weight value from scale's memory. (TA command)"""

@@ -36,7 +36,8 @@ Status key:
 | I5      | Software material number                 | 101       | DONE   | yes | request_software_material_number(). Returns "11671158C" on test device. |
 | S       | Stable weight value                      | 223       | DONE   | yes | read_stable_weight(). |
 | SI      | Weight value immediately                 | 225       | DONE   | yes | read_weight_value_immediately(). |
-| SIR     | Weight immediately + repeat              | 232       | MED    | yes | Continuous streaming. |
+| SIR     | Weight immediately + repeat              | 232       | MED    | yes | Continuous streaming. Needs async iterator architecture. |
+| SIRU    | Weight immediately + repeat (display unit) | -       | LOW    | - | Streaming variant in display unit. |
 | Z       | Zero (wait for stable)                   | 272       | DONE   | yes | zero_stable(). |
 | ZI      | Zero immediately                         | 274       | DONE   | yes | zero_immediately(). |
 
@@ -49,7 +50,7 @@ Status key:
 | DW      | Show weight on display                   | 61        | DONE   | **no** | set_weight_display(). Not supported in bridge mode. |
 | K       | Keys control                             | 153       | LOW    | - | Lock/unlock terminal keys. |
 | SC      | Stable or dynamic value after timeout    | 224       | DONE   | **no** | read_dynamic_weight(). Not supported on WXS205SDU. |
-| SR      | Stable weight + repeat on any change     | 245       | MED    | yes | Continuous streaming. |
+| SR      | Stable weight + repeat on any change     | 245       | MED    | yes | Continuous streaming. Needs async iterator architecture. |
 | SRU     | Stable weight + repeat (display unit)    | 247       | LOW    | - | |
 | T       | Tare (wait for stable)                   | 252       | DONE   | yes | tare_stable(). |
 | TA      | Tare weight value (query/set)            | 253       | DONE   | yes | request_tare_weight(). |
@@ -64,12 +65,14 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| I10     | Device identification                    | 102       | DONE   | yes | request_device_id() (read). set_device_id() commented out (EEPROM write). |
+| I10     | Device identification                    | 102       | DONE   | yes | request_device_id() and set_device_id(). Labels individual scales in multi-scale setups. |
 | I11     | Model designation                        | 103       | DONE   | yes | request_model_designation(). Returns "WXS205SDU" on test device. |
 | I14     | Device information (detailed)            | 104       | DONE   | yes | request_device_info(). Multi-response with config, descriptions, SW IDs, serial numbers. |
 | I15     | Uptime in minutes since start/restart     | 106       | DONE   | yes | request_uptime_minutes(). Returns minutes, accuracy +/- 5%. |
 | I16     | Date of next service                     | 107       | DONE   | yes | request_next_service_date(). |
 | I21     | Revision of assortment type tolerances   | 108       | DONE   | yes | request_assortment_type_revision(). |
+| I26     | Operating mode after restart             | -         | DONE   | yes | request_operating_mode_after_restart(). Not in spec but on WXS205SDU via I0. |
+| I27     | Undocumented                             | -         | LOW    | - | In spec TOC but no documentation found. |
 | I29     | Filter configuration                     | 111       | LOW    | - | |
 | I32     | Voltage monitoring                       | 112       | MED    | - | |
 | I43     | Selectable units for host unit           | 113       | LOW    | - | |
@@ -83,6 +86,7 @@ Status key:
 | I52     | Auto zero activation settings            | 122       | LOW    | - | |
 | I54     | Adjustment loads                         | 125       | LOW    | - | |
 | I55     | Menu version                             | 126       | LOW    | - | |
+| I56     | Undocumented                             | -         | LOW    | - | In spec TOC but no documentation found. |
 | I59     | Initial zero information                 | 129       | LOW    | - | |
 | I62     | Timeout setting                          | 131       | LOW    | - | |
 | I65     | Total operating time                     | 132       | MED    | - | |
@@ -114,6 +118,7 @@ Status key:
 | M21     | Unit (host/display)                      | 165       | DONE   | yes | set_host_unit_grams(). |
 | M23     | Readability (1d/xd)                      | 169       | LOW    | - | |
 | M28     | Temperature value                        | 172       | DONE   | yes | measure_temperature(). Returns 19.8-19.9 C on test device. |
+| M29     | Weighing value release                   | -         | DONE   | yes | request_weighing_value_release() (read). set commented out (persists to memory). |
 | M35     | Zeroing mode at startup                  | 178       | DONE   | yes | request_zeroing_mode() (read). set commented out (persists to memory). |
 | M49     | Permanent tare mode                      | 188       | LOW    | - | |
 | M67     | Timeout                                  | 191       | LOW    | - | |
@@ -138,6 +143,7 @@ Status key:
 | C8      | Sensitivity adjustment                   | 40        | LOW    | - | |
 | C9      | Scale placement sensitivity adjustment   | 43        | LOW    | - | |
 | M19     | Adjustment weight                        | 163       | DONE   | yes | request_adjustment_weight() (read). set commented out (persists to memory). |
+| M20     | Test weight                              | -         | DONE   | yes | request_test_weight() (read). set commented out (persists to memory). |
 | M27     | Adjustment history                       | 171       | DONE   | yes | request_adjustment_history(). Multi-response. |
 
 ### Testing
@@ -265,14 +271,14 @@ Status key:
 
 ## Implementation Summary
 
-The MT-SICS spec defines **157 commands** (counting F01-F16 as 16 individual commands).
+The MT-SICS spec defines **194 commands** (counting F01-F16 as 16 individual commands).
 
 | Category | Count | Description |
 |----------|-------|-------------|
 | Backend (active) | 54 | Implemented and callable |
-| Backend (commented out) | 28 | Set/write counterparts and physical interaction commands |
+| Backend (commented out) | 27 | Set/write counterparts and physical interaction commands |
 | Simulator | 55 | Handled in `_build_response` (all active commands except I0/I1 internal) |
-| Not implemented | 75 | Not available on WXS205SDU or not applicable |
+| Not implemented | 113 | Not available on WXS205SDU or not applicable |
 
 ### WXS205SDU coverage
 
@@ -287,7 +293,7 @@ The WXS205SDU reports **62 commands** via I0. Of these:
 
 ### Expanding to other devices
 
-The remaining ~75 unimplemented spec commands (HIGH/MED/LOW/N/A in the table above)
+The remaining ~113 unimplemented spec commands (HIGH/MED/LOW/N/A in the table above)
 are not available on the WXS205SDU and could not be validated. Integrating them
 requires a developer with physical access to a device that supports the command,
 to validate the response format and add a handler to both `backend.py` and
