@@ -137,10 +137,6 @@ class CytomatRack:
   num_slots: int  # number of plate locations in rack
   pitch: int  # distance between 2 plate locations
 
-  @classmethod
-  def deserialize(cls, data: dict):
-    return cls(num_slots=data["num_slots"], pitch=data["pitch"])
-
 
 class CytomatType(Enum):
   C6000 = "C6000"

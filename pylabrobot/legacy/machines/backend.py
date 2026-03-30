@@ -27,6 +27,7 @@ class MachineBackend(SerializableMixin, ABC):
 
   @classmethod
   def deserialize(cls, data: dict):
+    data = data.copy()
     class_name = data.pop("type")
     subclass = find_subclass(class_name, cls=cls)
     if subclass is None:

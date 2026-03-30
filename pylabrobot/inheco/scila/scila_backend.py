@@ -119,10 +119,6 @@ class SCILADriver(Driver):
       "client_ip": self._sila_interface.client_ip,
     }
 
-  @classmethod
-  def deserialize(cls, data: dict[str, Any]) -> "SCILADriver":
-    return cls(scila_ip=data["scila_ip"], client_ip=data.get("client_ip"))
-
 
 class SCILATemperatureBackend(TemperatureControllerBackend):
   """Translates TemperatureControllerBackend interface into SCILA SiLA commands."""

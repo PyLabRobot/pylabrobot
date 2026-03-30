@@ -22,6 +22,14 @@ class PumpingCapability(Capability):
       raise ValueError("Calibration may only have a single item for this pump")
     self.calibration = calibration
 
+  def serialize(self) -> dict:
+    if self.calibration is None:
+      return super().serialize()
+    return {
+      **super().serialize(),
+      "calibration": self.calibration.serialize(),
+    }
+
   @need_capability_ready
   async def run_revolutions(self, num_revolutions: float):
     """Run for a given number of revolutions.

@@ -40,7 +40,7 @@ class PetriDish(Container):
   def serialize(self):
     super_serialized = super().serialize()
     for key in ["size_x", "size_y", "size_z"]:
-      del super_serialized[key]
+      super_serialized.pop(key, None)
 
     return {
       **super_serialized,
