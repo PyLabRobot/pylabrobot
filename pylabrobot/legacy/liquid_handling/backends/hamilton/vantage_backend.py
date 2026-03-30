@@ -378,6 +378,23 @@ class VantageBackend(HamiltonLiquidHandler):
     self._num_channels: Optional[int] = None
     self._traversal_height: float = 245.0
 
+    # New-architecture backends, created during setup().
+    self._pip_backend = None
+    self._head96_backend = None
+    self._ipg_backend = None
+    self._led_backend = None
+    self._loading_cover = None
+    self._x_arm_subsystem = None
+
+  @property
+  def traversal_height(self) -> float:
+    """Traversal height in mm (used by new-architecture backends)."""
+    return self._traversal_height
+
+  async def request_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
+    """Alias for legacy get_or_assign_tip_type_index (new backends use this name)."""
+    return await self.get_or_assign_tip_type_index(tip)
+
   @property
   def module_id_length(self) -> int:
     return 4
@@ -417,41 +434,34 @@ class VantageBackend(HamiltonLiquidHandler):
     if not arm_initialized:
       await self.arm_pre_initialize()
 
-    # TODO: check which modules are actually installed.
+    # Create new-architecture backends, passing self as the driver (we ARE a
+    # HamiltonLiquidHandler with send_command, num_channels, etc.).
+    from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
+    from pylabrobot.hamilton.liquid_handlers.vantage.head96_backend import VantageHead96Backend
+    from pylabrobot.hamilton.liquid_handlers.vantage.ipg import VantageIPG
+    from pylabrobot.hamilton.liquid_handlers.vantage.led_backend import VantageLEDBackend
+    from pylabrobot.hamilton.liquid_handlers.vantage.loading_cover import VantageLoadingCover
+    from pylabrobot.hamilton.liquid_handlers.vantage.x_arm import VantageXArm
 
-    pip_channels_initialized = await self.pip_request_initialization_status()
-    if not pip_channels_initialized or any(tip_presences):
-      await self.pip_initialize(
-        x_position=[7095] * self.num_channels,
-        y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
-        begin_z_deposit_position=[int(self._traversal_height * 10)] * self.num_channels,
-        end_z_deposit_position=[1235] * self.num_channels,
-        minimal_height_at_command_end=[int(self._traversal_height * 10)] * self.num_channels,
-        tip_pattern=[True] * self.num_channels,
-        tip_type=[1] * self.num_channels,
-        TODO_DI_2=70,
-      )
+    self._pip_backend = VantagePIPBackend(self, tip_presences=tip_presences)
+    await self._pip_backend._on_setup()
 
-    loading_cover_initialized = await self.loading_cover_request_initialization_status()
-    if not loading_cover_initialized and not skip_loading_cover:
-      await self.loading_cover_initialize()
+    self._loading_cover = VantageLoadingCover(driver=self)
+    if not skip_loading_cover:
+      loading_cover_initialized = await self._loading_cover.request_initialization_status()
+      if not loading_cover_initialized:
+        await self._loading_cover.initialize()
 
-    core96_initialized = await self.core96_request_initialization_status()
-    if not core96_initialized and not skip_core96:
-      await self.core96_initialize(
-        x_position=7347,  # TODO: get trash location from deck.
-        y_position=2684,  # TODO: get trash location from deck.
-        minimal_traverse_height_at_begin_of_command=int(self._traversal_height * 10),
-        minimal_height_at_command_end=int(self._traversal_height * 10),
-        end_z_deposit_position=2420,
-      )
+    if not skip_core96:
+      self._head96_backend = VantageHead96Backend(self)
+      await self._head96_backend._on_setup()
 
     if not skip_ipg:
-      ipg_initialized = await self.ipg_request_initialization_status()
-      if not ipg_initialized:
-        await self.ipg_initialize()
-      if not await self.ipg_get_parking_status():
-        await self.ipg_park()
+      self._ipg_backend = VantageIPG(driver=self)
+      await self._ipg_backend._on_setup()
+
+    self._led_backend = VantageLEDBackend(self)
+    self._x_arm_subsystem = VantageXArm(driver=self)
 
   @property
   def num_channels(self) -> int:
@@ -482,43 +492,12 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
     minimal_height_at_command_end: Optional[List[float]] = None,
   ):
-    x_positions, y_positions, tip_pattern = self._ops_to_fw_positions(ops, use_channels)
-
-    tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
-    ttti = [await self.get_or_assign_tip_type_index(tip) for tip in tips]
-
-    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-
-    # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
-      max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      max_tip_length -= 2
-
-    try:
-      return await self.pip_tip_pick_up(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=tip_pattern,
-        tip_type=ttti,
-        begin_z_deposit_position=[round((max_z + max_total_tip_length) * 10)] * len(ops),
-        end_z_deposit_position=[round((max_z + max_tip_length) * 10)] * len(ops),
-        minimal_traverse_height_at_begin_of_command=[
-          round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-        ]
-        * len(ops),
-        minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-        ]
-        * len(ops),
-        tip_handling_method=[1 for _ in tips],  # always appears to be 1 # tip.pickup_method.value
-        blow_out_air_volume=[0] * len(ops),  # Why is this here? Who knows.
-      )
-    except Exception as e:
-      raise e
+    from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
+    backend_params = VantagePIPBackend.PickUpTipsParams(
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+    )
+    return await self._pip_backend.pick_up_tips(ops, use_channels, backend_params=backend_params)
 
   # @need_iswap_parked
   async def drop_tips(
@@ -529,34 +508,12 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_height_at_command_end: Optional[List[float]] = None,
   ):
     """Drop tips to a resource."""
-
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-
-    try:
-      return await self.pip_tip_discard(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=channels_involved,
-        begin_z_deposit_position=[round((max_z + 10) * 10)] * len(ops),  # +10
-        end_z_deposit_position=[round(max_z * 10)] * len(ops),
-        minimal_traverse_height_at_begin_of_command=[
-          round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-        ]
-        * len(ops),
-        minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-        ]
-        * len(ops),
-        tip_handling_method=[0 for _ in ops],  # Always appears to be 0, even in trash.
-        # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
-        #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
-        TODO_TR_2=0,
-      )
-    except Exception as e:
-      raise e
+    from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
+    backend_params = VantagePIPBackend.DropTipsParams(
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+    )
+    return await self._pip_backend.drop_tips(ops, use_channels, backend_params=backend_params)
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
@@ -606,159 +563,52 @@ class VantageBackend(HamiltonLiquidHandler):
     recording_mode: int = 0,
     disable_volume_correction: Optional[List[bool]] = None,
   ):
-    """Aspirate from (a) resource(s).
-
-    See :meth:`pip_aspirate` (the firmware command) for parameter documentation. This method serves
-    as a wrapper for that command, and will convert operations into the appropriate format. This
-    method additionally provides default values based on firmware instructions sent by Venus on
-    Vantage, rather than machine default values (which are often not what you want).
-
-    Args:
-      ops: The aspiration operations.
-      use_channels: The channels to use.
-      blow_out: Whether to search for a "blow out" liquid class. This is only used on dispense.
-        Note that in the VENUS liquid editor, the term "empty" is used for this, but in the firmware
-        documentation, "empty" is used for a different mode (dm4).
-      hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
-        determined automatically based on the tip and liquid used.
-      disable_volume_correction: Whether to disable volume correction for each operation.
-    """
-
-    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
-      raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
-        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
-      )
-
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    if jet is None:
-      jet = [False] * len(ops)
-    if blow_out is None:
-      blow_out = [False] * len(ops)
-
-    if hlcs is None:
-      hlcs = []
-      for j, bo, op in zip(jet, blow_out, ops):
-        hlcs.append(
-          get_vantage_liquid_class(
-            tip_volume=op.tip.maximal_volume,
-            is_core=False,
-            is_tip=True,
-            has_filter=op.tip.has_filter,
-            liquid=Liquid.WATER,  # default to WATER
-            jet=j,
-            blow_out=bo,
-          )
-        )
-
-    self._assert_valid_resources([op.resource for op in ops])
-
-    # correct volumes using the liquid class if not disabled
-    disable_volume_correction = disable_volume_correction or [False] * len(ops)
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
-
-    well_bottoms = [
-      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
-      for op in ops
-    ]
-    liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [
-      wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)
-    ]
-    # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [
-      wb
-      + op.resource.get_absolute_size_z()
-      + (2.7 - 1 if isinstance(op.resource, Well) else 5)  # ?
-      for wb, op in zip(well_bottoms, ops)
-    ]
-
-    flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
-      for op, hlc in zip(ops, hlcs)
-    ]
-    blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    return await self.pip_aspirate(
-      x_position=x_positions,
-      y_position=y_positions,
-      type_of_aspiration=type_of_aspiration or [0] * len(ops),
-      tip_pattern=channels_involved,
-      minimal_traverse_height_at_begin_of_command=[
-        round(th * 10)
-        for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-      ]
-      * len(ops),
-      minimal_height_at_command_end=[
-        round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-      ]
-      * len(ops),
-      lld_search_height=[round(ls * 10) for ls in lld_search_heights],
-      clot_detection_height=[round(cdh * 10) for cdh in clot_detection_height or [0] * len(ops)],
-      liquid_surface_at_function_without_lld=[round(lsn * 10) for lsn in liquid_surfaces_no_lld],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=[
-        round(pod * 10)
-        for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
-        or [10.9] * len(ops)
-      ],
-      tube_2nd_section_height_measured_from_zm=[
-        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
-      ],
-      tube_2nd_section_ratio=[
-        round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
-      ],
-      minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
-      immersion_depth=[round(id_ * 10) for id_ in immersion_depth or [0] * len(ops)],
-      surface_following_distance=[
-        round(sfd * 10) for sfd in surface_following_distance or [0] * len(ops)
-      ],
-      aspiration_volume=[round(vol * 100) for vol in volumes],
-      aspiration_speed=[round(fr * 10) for fr in flow_rates],
-      transport_air_volume=[
-        round(tav * 10)
-        for tav in transport_air_volume
-        or [hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
-      ],
-      blow_out_air_volume=[round(bav * 100) for bav in blow_out_air_volumes],
-      pre_wetting_volume=[round(pwv * 100) for pwv in pre_wetting_volume or [0] * len(ops)],
-      lld_mode=lld_mode or [0] * len(ops),
-      lld_sensitivity=lld_sensitivity or [4] * len(ops),
-      pressure_lld_sensitivity=pressure_lld_sensitivity or [4] * len(ops),
-      aspirate_position_above_z_touch_off=[
-        round(apz * 10) for apz in aspirate_position_above_z_touch_off or [0.5] * len(ops)
-      ],
-      swap_speed=[round(ss * 10) for ss in swap_speed or [2] * len(ops)],
-      settling_time=[round(st * 10) for st in settling_time or [1] * len(ops)],
-      mix_volume=[round(op.mix.volume * 100) if op.mix is not None else 0 for op in ops],
-      mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
-      mix_position_in_z_direction_from_liquid_surface=[
-        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
-      ],
-      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 2500 for op in ops],
-      surface_following_distance_during_mixing=[
-        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
-      ],
-      TODO_DA_5=TODO_DA_5 or [0] * len(ops),
-      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off or [0] * len(ops),
-      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off or [0] * len(ops),
-      tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
-      limit_curve_index=limit_curve_index or [0] * len(ops),
-      recording_mode=recording_mode or 0,
+    """Aspirate from (a) resource(s). Delegates to VantagePIPBackend."""
+    from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
+    backend_params = VantagePIPBackend.AspirateParams(
+      hamilton_liquid_classes=hlcs,
+      disable_volume_correction=disable_volume_correction,
+      type_of_aspiration=type_of_aspiration,
+      jet=jet or [False] * len(ops),
+      blow_out=blow_out or [False] * len(ops),
+      lld_search_height=lld_search_height,
+      clot_detection_height=clot_detection_height,
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=
+        pull_out_distance_to_take_transport_air_in_function_without_lld,
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      minimum_height=minimum_height,
+      immersion_depth=immersion_depth,
+      surface_following_distance=surface_following_distance,
+      transport_air_volume=transport_air_volume,
+      pre_wetting_volume=pre_wetting_volume,
+      lld_mode=lld_mode,
+      lld_sensitivity=lld_sensitivity,
+      pressure_lld_sensitivity=pressure_lld_sensitivity,
+      aspirate_position_above_z_touch_off=aspirate_position_above_z_touch_off,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      TODO_DA_5=TODO_DA_5,
+      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off,
+      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      limit_curve_index=limit_curve_index,
+      recording_mode=recording_mode,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
     )
+    return await self._pip_backend.aspirate(ops, use_channels, backend_params=backend_params)
 
   async def dispense(
     self,
     ops: List[SingleChannelDispense],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
-    blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
-    empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
+    blow_out: Optional[List[bool]] = None,
+    empty: Optional[List[bool]] = None,
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     type_of_dispensing_mode: Optional[List[int]] = None,
     minimum_height: Optional[List[float]] = None,
@@ -791,161 +641,43 @@ class VantageBackend(HamiltonLiquidHandler):
     recording_mode: int = 0,
     disable_volume_correction: Optional[List[bool]] = None,
   ):
-    """Dispense to (a) resource(s).
-
-    See :meth:`pip_dispense` (the firmware command) for parameter documentation. This method serves
-    as a wrapper for that command, and will convert operations into the appropriate format. This
-    method additionally provides default values based on firmware instructions sent by Venus on
-    Vantage, rather than machine default values (which are often not what you want).
-
-    Args:
-      ops: The aspiration operations.
-      use_channels: The channels to use.
-      hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
-        determined automatically based on the tip and liquid used.
-
-      jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
-        determining the dispense mode. True for dispense mode 0 or 1.
-      blow_out: Whether to use "blow out" dispense mode for each dispense. Defaults to `False` for
-        all. This is labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation. True for dispense mode 1 or 3.
-      empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
-        Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
-        documentation. Dispense mode 4.
-      disable_volume_correction: Whether to disable volume correction for each operation.
-    """
-
-    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
-      raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
-        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
-      )
-
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    if jet is None:
-      jet = [False] * len(ops)
-    if empty is None:
-      empty = [False] * len(ops)
-    if blow_out is None:
-      blow_out = [False] * len(ops)
-
-    if hlcs is None:
-      hlcs = []
-      for j, bo, op in zip(jet, blow_out, ops):
-        hlcs.append(
-          get_vantage_liquid_class(
-            tip_volume=op.tip.maximal_volume,
-            is_core=False,
-            is_tip=True,
-            has_filter=op.tip.has_filter,
-            liquid=Liquid.WATER,  # default to WATER
-            jet=j,
-            blow_out=bo,
-          )
-        )
-
-    self._assert_valid_resources([op.resource for op in ops])
-
-    # correct volumes using the liquid class
-    disable_volume_correction = disable_volume_correction or [False] * len(ops)
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
-
-    well_bottoms = [
-      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
-      for op in ops
-    ]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
-    # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [
-      wb
-      + op.resource.get_absolute_size_z()
-      + (2.7 - 1 if isinstance(op.resource, Well) else 5)  # ?
-      for wb, op in zip(well_bottoms, ops)
-    ]
-
-    flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    type_of_dispensing_mode = type_of_dispensing_mode or [
-      _get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i]) for i in range(len(ops))
-    ]
-
-    return await self.pip_dispense(
-      x_position=x_positions,
-      y_position=y_positions,
-      tip_pattern=channels_involved,
+    """Dispense to (a) resource(s). Delegates to VantagePIPBackend."""
+    from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
+    backend_params = VantagePIPBackend.DispenseParams(
+      hamilton_liquid_classes=hlcs,
+      disable_volume_correction=disable_volume_correction,
+      jet=jet or [False] * len(ops),
+      blow_out=blow_out or [False] * len(ops),
+      empty=empty or [False] * len(ops),
       type_of_dispensing_mode=type_of_dispensing_mode,
-      minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
-      lld_search_height=[round(sh * 10) for sh in lld_search_heights],
-      liquid_surface_at_function_without_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=[
-        round(pod * 10)
-        for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
-        or [5.0] * len(ops)
-      ],
-      immersion_depth=[round(id * 10) for id in immersion_depth or [0] * len(ops)],
-      surface_following_distance=[
-        round(sfd * 10) for sfd in surface_following_distance or [2.1] * len(ops)
-      ],
-      tube_2nd_section_height_measured_from_zm=[
-        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
-      ],
-      tube_2nd_section_ratio=[
-        round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
-      ],
-      minimal_traverse_height_at_begin_of_command=[
-        round(mth * 10)
-        for mth in minimal_traverse_height_at_begin_of_command
-        or [self._traversal_height] * len(ops)
-      ],
-      minimal_height_at_command_end=[
-        round(mh * 10)
-        for mh in minimal_height_at_command_end or [self._traversal_height] * len(ops)
-      ],
-      dispense_volume=[round(vol * 100) for vol in volumes],
-      dispense_speed=[round(fr * 10) for fr in flow_rates],
-      cut_off_speed=[round(cs * 10) for cs in cut_off_speed or [250] * len(ops)],
-      stop_back_volume=[round(sbv * 100) for sbv in stop_back_volume or [0] * len(ops)],
-      transport_air_volume=[
-        round(tav * 10)
-        for tav in transport_air_volume
-        or [hlc.dispense_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
-      ],
-      blow_out_air_volume=[round(boav * 100) for boav in blow_out_air_volumes],
-      lld_mode=lld_mode or [0] * len(ops),
-      side_touch_off_distance=round(side_touch_off_distance * 10),
-      dispense_position_above_z_touch_off=[
-        round(dpz * 10) for dpz in dispense_position_above_z_touch_off or [0.5] * len(ops)
-      ],
-      lld_sensitivity=lld_sensitivity or [1] * len(ops),
-      pressure_lld_sensitivity=pressure_lld_sensitivity or [1] * len(ops),
-      swap_speed=[round(ss * 10) for ss in swap_speed or [1] * len(ops)],
-      settling_time=[round(st * 10) for st in settling_time or [0] * len(ops)],
-      mix_volume=[round(op.mix.volume * 100) if op.mix is not None else 0 for op in ops],
-      mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
-      mix_position_in_z_direction_from_liquid_surface=[
-        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
-      ],
-      mix_speed=[round(op.mix.flow_rate * 100) if op.mix is not None else 10 for op in ops],
-      surface_following_distance_during_mixing=[
-        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
-      ],
-      TODO_DD_2=TODO_DD_2 or [0] * len(ops),
-      tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
-      limit_curve_index=limit_curve_index or [0] * len(ops),
-      recording_mode=recording_mode or 0,
+      minimum_height=minimum_height,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=
+        pull_out_distance_to_take_transport_air_in_function_without_lld,
+      immersion_depth=immersion_depth,
+      surface_following_distance=surface_following_distance,
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+      lld_search_height=lld_search_height,
+      cut_off_speed=cut_off_speed,
+      stop_back_volume=stop_back_volume,
+      transport_air_volume=transport_air_volume,
+      lld_mode=lld_mode,
+      side_touch_off_distance=side_touch_off_distance,
+      dispense_position_above_z_touch_off=dispense_position_above_z_touch_off,
+      lld_sensitivity=lld_sensitivity,
+      pressure_lld_sensitivity=pressure_lld_sensitivity,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      TODO_DD_2=TODO_DD_2,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      limit_curve_index=limit_curve_index,
+      recording_mode=recording_mode,
     )
+    return await self._pip_backend.dispense(ops, use_channels, backend_params=backend_params)
 
   async def pick_up_tips96(
     self,

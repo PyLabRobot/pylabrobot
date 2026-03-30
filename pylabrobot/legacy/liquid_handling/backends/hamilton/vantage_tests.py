@@ -220,6 +220,13 @@ class VantageCommandCatcher(VantageBackend):
     self._num_arms = 1
     self._head96_installed = True
 
+    # Create new-architecture backends so that forwarding works.
+    from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
+    from pylabrobot.hamilton.liquid_handlers.vantage.head96_backend import VantageHead96Backend
+
+    self._pip_backend = VantagePIPBackend(self, tip_presences=[False] * 8)
+    self._head96_backend = VantageHead96Backend(self)
+
   async def send_command(
     self,
     module: str,
