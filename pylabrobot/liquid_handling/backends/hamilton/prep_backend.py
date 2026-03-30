@@ -661,6 +661,31 @@ class PrepBackend(LiquidHandlerBackend):
       return ()
     return tuple(result.definitions)
 
+  async def get_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
+    """Return calibration site definitions from DeckConfiguration (GetCalibrationSiteDefinitions, cmd=3).
+
+    Each entry is geometry in mm (left-bottom-front corner, length/width/height) plus ``post`` flag.
+    Requires ``deck_config`` (``MLPrepRoot.MLPrepCalibration.DeckConfiguration``) to be resolved.
+    """
+    result = await self.client.send_command(
+      PrepCmd.PrepGetCalibrationSiteDefinitions(dest=await self._require("deck_config"))
+    )
+    if result is None or not getattr(result, "sites", None):
+      return ()
+    return tuple(
+      PrepCmd.CalibrationSiteInfo(
+        id=int(s.id),
+        left_bottom_front_x=float(s.left_bottom_front_x),
+        left_bottom_front_y=float(s.left_bottom_front_y),
+        left_bottom_front_z=float(s.left_bottom_front_z),
+        length=float(s.length),
+        width=float(s.width),
+        height=float(s.height),
+        post=bool(s.post),
+      )
+      for s in result.sites
+    )
+
   async def is_parked(self) -> bool:
     """Query whether MLPrep is parked (IsParked, cmd=34)."""
     result = await self.client.send_command(

@@ -118,6 +118,20 @@ class WasteSiteInfo:
 
 
 @dataclass(frozen=True)
+class CalibrationSiteInfo:
+  """A calibration site from DeckConfiguration.GetCalibrationSiteDefinitions."""
+
+  id: int
+  left_bottom_front_x: float
+  left_bottom_front_y: float
+  left_bottom_front_z: float
+  length: float
+  width: float
+  height: float
+  post: bool
+
+
+@dataclass(frozen=True)
 class InstrumentConfig:
   """Instrument hardware configuration probed at setup."""
 
@@ -1639,6 +1653,24 @@ class _DeckSiteDefinitionWire:
 
 
 @dataclass
+class _CalibrationSiteDefinitionWire:
+  """Wire shape for one CalibrationSiteDefinition (GetCalibrationSiteDefinitions element).
+
+  Same fields as DeckSiteDefinition plus trailing Post (BOOL).
+  """
+
+  default_values: PaddedBool
+  id: U32
+  left_bottom_front_x: F32
+  left_bottom_front_y: F32
+  left_bottom_front_z: F32
+  length: F32
+  width: F32
+  height: F32
+  post: PaddedBool
+
+
+@dataclass
 class _WasteSiteDefinitionWire:
   """Wire shape for one WasteSiteDefinition (GetWasteSiteDefinitions element)."""
 
@@ -1725,6 +1757,21 @@ class PrepGetDeckBounds(_PrepStatusQuery):
     max_y: F32
     min_z: F32
     max_z: F32
+
+
+@dataclass
+class PrepGetCalibrationSiteDefinitions(_PrepStatusQuery):
+  """GetCalibrationSiteDefinitions (cmd=3, dest=DeckConfiguration).
+
+  Response is a STRUCTURE_ARRAY of CalibrationSiteDefinition structs:
+    DefaultValues: BOOL, Id: U32, LeftBottomFrontX/Y/Z: F32, Length, Width, Height: F32, Post: BOOL
+  """
+
+  command_id = 3
+
+  @dataclass(frozen=True)
+  class Response:
+    sites: Annotated[list[_CalibrationSiteDefinitionWire], StructArray()]
 
 
 @dataclass
