@@ -264,7 +264,8 @@ class NimbusBackend(LiquidHandlerBackend):
     use_channels: List[int],
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
-    assert self._pip is not None
+    if self._pip is None:
+      raise RuntimeError("NimbusBackend not initialized. Call setup() first.")
     # Legacy Pickup and new Pickup are structurally identical
     new_ops = [NewPickup(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
     params = PickUpTipsParams(
@@ -281,7 +282,8 @@ class NimbusBackend(LiquidHandlerBackend):
     z_position_at_end_of_a_command: Optional[float] = None,
     roll_distance: Optional[float] = None,
   ):
-    assert self._pip is not None
+    if self._pip is None:
+      raise RuntimeError("NimbusBackend not initialized. Call setup() first.")
     new_ops = [TipDrop(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
     params = DropTipsParams(
       default_waste=default_waste,
@@ -311,7 +313,8 @@ class NimbusBackend(LiquidHandlerBackend):
     limit_curve_index: Optional[List[int]] = None,
     tadm_enabled: bool = False,
   ):
-    assert self._pip is not None
+    if self._pip is None:
+      raise RuntimeError("NimbusBackend not initialized. Call setup() first.")
     new_ops = [
       Aspiration(
         resource=op.resource,
@@ -366,7 +369,8 @@ class NimbusBackend(LiquidHandlerBackend):
     side_touch_off_distance: float = 0.0,
     dispense_offset: Optional[List[float]] = None,
   ):
-    assert self._pip is not None
+    if self._pip is None:
+      raise RuntimeError("NimbusBackend not initialized. Call setup() first.")
     new_ops = [
       NewDispense(
         resource=op.resource,
@@ -402,13 +406,14 @@ class NimbusBackend(LiquidHandlerBackend):
     await self._pip.dispense(new_ops, use_channels, backend_params=params)
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
-    assert self._pip is not None
+    if self._pip is None:
+      raise RuntimeError("NimbusBackend not initialized. Call setup() first.")
     return await self._pip.request_tip_presence()
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if self._pip is not None:
       return self._pip.can_pick_up_tip(channel_idx, tip)
-    return True
+    return False
 
   # ====================================================================
   # Stubs for unimplemented operations
