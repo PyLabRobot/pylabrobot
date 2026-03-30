@@ -489,6 +489,8 @@ class VantageDriver(HamiltonLiquidHandler):
   async def query_tip_presence(self) -> List[bool]:
     """Query tip presence on all channels."""
     resp = await self.send_command(module="A1PM", command="QA", fmt={"rt": "[int]"})
+    if resp is None:
+      return []
     presences_int = cast(List[int], resp["rt"])
     return [bool(p) for p in presences_int]
 
