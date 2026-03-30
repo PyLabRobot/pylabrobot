@@ -241,6 +241,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     assert x is not None and y is not None
 
     x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+    logger.info("pick_up_tips: X=%d Y=%d ys=%d (taught tip top: X=3893 Y=146)", x, y_adj, ys)
 
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
@@ -266,6 +267,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     assert isinstance(par, TecanTipRack), f"Expected TecanTipRack, got {type(par)}"
     agt_z_start = int(par.z_start)
     agt_z_search = abs(int(par.z_max - par.z_start))
+    logger.info("pick_up_tips AGT: z_start=%d z_search=%d", agt_z_start, agt_z_search)
     await self.liha.get_disposable_tip(
       self._bin_use_channels(use_channels), agt_z_start, agt_z_search
     )
@@ -289,6 +291,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     assert x is not None and y is not None
 
     x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+    logger.info("drop_tips: X=%d Y=%d ys=%d", x, y_adj, ys)
 
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
@@ -347,6 +350,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
       z_asp = z_positions.get("start", [self._z_range] * self.num_channels)
 
     x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+    z_asp_first = z_asp[next(i for i, v in enumerate(z_asp) if v is not None)]
+    logger.info("aspirate: X=%d Y=%d ys=%d Z=%d", x, y_adj, ys, z_asp_first)
 
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
@@ -431,6 +436,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
       z_disp = [z if z else self._z_range for z in z_positions["dispense"]]
 
     x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+    z_disp_first = z_disp[next(i for i, v in enumerate(z_disp) if v is not None)]
+    logger.info("dispense: X=%d Y=%d ys=%d Z=%d", x, y_adj, ys, z_disp_first)
 
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
