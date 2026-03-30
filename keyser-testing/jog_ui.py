@@ -273,7 +273,15 @@ function log(msg, cls) {
   el.scrollTop = el.scrollHeight;
 }
 
+let busy = false;
+
 async function sendJog(armName, axis, direction) {
+  if (busy) { log('Busy — wait for move to finish', 'err'); return; }
+  busy = true;
+  document.getElementById('status').textContent = 'Moving...';
+  document.getElementById('status').style.color = '#e9c46a';
+  const cmd = armName.toUpperCase() + ' ' + axis + (direction > 0 ? '+' : '-') + ' ' + STEPS[stepIdx] + 'mm';
+  log('> ' + cmd, '');
   try {
     const resp = await fetch('/jog', {
       method: 'POST',
@@ -281,12 +289,25 @@ async function sendJog(armName, axis, direction) {
       body: JSON.stringify({arm: armName, axis: axis, direction: direction, step: STEPS[stepIdx]})
     });
     const data = await resp.json();
-    if (data.error) { log(data.error, 'err'); }
-    else { updatePositions(data); }
-  } catch(e) { log('Jog failed: ' + e, 'err'); }
+    if (data.error) { log('  ERR: ' + data.error, 'err'); }
+    else {
+      updatePositions(data);
+      if (data.cmd) { log('  ' + data.cmd, 'ok'); }
+    }
+  } catch(e) { log('  Failed: ' + e, 'err'); }
+  finally {
+    busy = false;
+    document.getElementById('status').textContent = 'Connected';
+    document.getElementById('status').style.color = '#4ec9b0';
+  }
 }
 
 async function sendAction(action) {
+  if (busy) { log('Busy — wait for current operation', 'err'); return; }
+  busy = true;
+  document.getElementById('status').textContent = 'Busy...';
+  document.getElementById('status').style.color = '#e9c46a';
+  log('> ACTION: ' + action, '');
   try {
     const resp = await fetch('/action', {
       method: 'POST',
@@ -294,16 +315,22 @@ async function sendAction(action) {
       body: JSON.stringify({action: action})
     });
     const data = await resp.json();
-    if (data.message) log(data.message, 'ok');
-    if (data.error) log(data.error, 'err');
+    if (data.message) log('  ' + data.message, 'ok');
+    if (data.error) log('  ' + data.error, 'err');
     updatePositions(data);
     if (data.saved) loadSaved();
-  } catch(e) { log('Action failed: ' + e, 'err'); }
+  } catch(e) { log('  Action failed: ' + e, 'err'); }
+  finally {
+    busy = false;
+    document.getElementById('status').textContent = 'Connected';
+    document.getElementById('status').style.color = '#4ec9b0';
+  }
 }
 
 async function recordPosition() {
   const label = document.getElementById('teach-label').value.trim();
   if (!label) { log('Enter a label first', 'err'); return; }
+  log('> RECORD: ' + label, '');
   try {
     const resp = await fetch('/record', {
       method: 'POST',
@@ -319,6 +346,7 @@ async function recordPosition() {
 async function teachLabware() {
   const field = document.getElementById('teach-field').value;
   const labware = document.getElementById('teach-labware').value;
+  log('> TEACH: ' + labware + '.' + field + ' = current Z', '');
   try {
     const resp = await fetch('/teach', {
       method: 'POST',
@@ -326,8 +354,8 @@ async function teachLabware() {
       body: JSON.stringify({field: field, labware: labware})
     });
     const data = await resp.json();
-    log(data.message || data.error, data.error ? 'err' : 'ok');
-  } catch(e) { log('Teach failed: ' + e, 'err'); }
+    log('  ' + (data.message || data.error), data.error ? 'err' : 'ok');
+  } catch(e) { log('  Teach failed: ' + e, 'err'); }
 }
 
 function updatePositions(data) {
@@ -446,13 +474,17 @@ def jog():
   step_mm = data["step"]
   delta = int(step_mm * 10 * direction)
 
+  module = "C5" if arm_name == "liha" else "C1"
+  cmd_map = {"x": "PRX", "y": "PRY", "z": "PRZ", "r": "PRR"}
+  cmd_name = f"{module} {cmd_map.get(axis, '?')}{delta}"
+
   try:
     run_async(do_jog(arm_name, axis, delta))
     liha_pos = run_async(get_liha_position())
     roma_pos = run_async(get_roma_position())
-    return jsonify({"liha": liha_pos, "roma": roma_pos})
+    return jsonify({"liha": liha_pos, "roma": roma_pos, "cmd": cmd_name})
   except Exception as e:
-    return jsonify({"error": str(e)})
+    return jsonify({"error": str(e), "cmd": cmd_name})
 
 
 @app.route("/record", methods=["POST"])
