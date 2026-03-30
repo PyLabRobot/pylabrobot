@@ -190,7 +190,7 @@ HTML = """
       <b>LiHa (Numpad):</b>
       <span class="key">4</span>/<span class="key">6</span> X &nbsp;
       <span class="key">8</span>/<span class="key">2</span> Y &nbsp;
-      <span class="key">+</span>/<span class="key">-</span> Z &nbsp;
+      <span class="key">+</span>/<span class="key">-</span> Z up/down &nbsp;
       <span class="key">7</span>/<span class="key">9</span> Step
       <br>
       <b>RoMa (Arrows):</b>
@@ -443,9 +443,9 @@ document.addEventListener('keydown', function(e) {
   if (e.key === '8' || e.code === 'Numpad8') { sendJog('liha', 'y', 1); return; }
   if (e.key === '2' || e.code === 'Numpad2') { sendJog('liha', 'y', -1); return; }
   if (e.code === 'NumpadAdd' || (e.key === '+' && !e.target.tagName.match(/INPUT/i))) {
-    sendJog('liha', 'z', -1); return; }  // + = away from deck
+    sendJog('liha', 'z', 1); return; }   // + = up (away from deck, increase Z)
   if (e.code === 'NumpadSubtract' || (e.key === '-' && !e.target.tagName.match(/INPUT/i))) {
-    sendJog('liha', 'z', 1); return; }   // - = toward deck
+    sendJog('liha', 'z', -1); return; }  // - = down (toward deck, decrease Z)
   if (e.key === '7' || e.code === 'Numpad7') {
     stepIdx = Math.max(0, stepIdx - 1); updateStep(); return; }
   if (e.key === '9' || e.code === 'Numpad9') {
@@ -456,8 +456,8 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'ArrowRight') { sendJog('roma', 'x', 1); return; }
   if (e.key === 'ArrowUp') { sendJog('roma', 'y', 1); return; }
   if (e.key === 'ArrowDown') { sendJog('roma', 'y', -1); return; }
-  if (e.key === 'PageUp') { sendJog('roma', 'z', -1); return; }
-  if (e.key === 'PageDown') { sendJog('roma', 'z', 1); return; }
+  if (e.key === 'PageUp') { sendJog('roma', 'z', 1); return; }   // up
+  if (e.key === 'PageDown') { sendJog('roma', 'z', -1); return; } // down
   if (e.key === 'Home') { sendJog('roma', 'r', -1); return; }
   if (e.key === 'End') { sendJog('roma', 'r', 1); return; }
 });
