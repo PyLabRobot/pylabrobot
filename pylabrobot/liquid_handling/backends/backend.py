@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Union
 
+from pylabrobot.liquid_handling.channel_positioning import GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -18,7 +19,6 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.liquid_handling.channel_positioning import GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Tip
 from pylabrobot.resources.tip_tracker import TipTracker

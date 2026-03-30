@@ -1,21 +1,20 @@
 import unittest
 
+from pylabrobot.liquid_handling.channel_positioning import (
+  _centers_to_offsets,
+  _distribute_channels,
+  _get_compartments,
+  _position_channels_tight,
+  _position_channels_wide,
+  _resolve_channel_spacings,
+  _space_needed,
+  compute_channel_offsets,
+  required_spacing_between,
+)
 from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
-
-from pylabrobot.liquid_handling.channel_positioning import (
-  _get_compartments,
-  _resolve_channel_spacings,
-  required_spacing_between,
-  _position_channels_wide,
-  _position_channels_tight,
-  _centers_to_offsets,
-  _space_needed,
-  _distribute_channels,
-  compute_channel_offsets,
-)
 
 
 def _make_container(size_y, no_go_zones=None, name="test"):
