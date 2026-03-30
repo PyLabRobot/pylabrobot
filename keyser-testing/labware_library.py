@@ -53,8 +53,10 @@ def Eppendorf_96_wellplate_250ul_Vb_skirted(name: str) -> TecanPlate:
   Taught Z at plate top surface: ~260-295 (varies by position, use average).
 
   Eppendorf cat. no.: 0030133374
+
+  X/Y offsets calibrated from taught positions vs resource model.
   """
-  return TecanPlate(
+  plate = TecanPlate(
     name=name,
     size_x=123.0,
     size_y=81.0,
@@ -84,6 +86,10 @@ def Eppendorf_96_wellplate_250ul_Vb_skirted(name: str) -> TecanPlate:
       compute_height_from_volume=_compute_height_from_volume,
     ),
   )
+  # Calibration offsets (taught position - computed position, in 1/10mm)
+  plate.x_offset = 103  # +10.3mm X correction
+  plate.y_offset = -6   # -0.6mm Y correction
+  return plate
 
 
 # ============== Tips ==============
@@ -111,7 +117,7 @@ def DiTi_50ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
   Based on DiTi_50ul_SBS_LiHa with corrected tip definition
   (proper total_tip_length and AIRDITI tip type).
   """
-  return TecanTipRack(
+  rack = TecanTipRack(
     name=name,
     size_x=128.2,
     size_y=86.0,
@@ -135,3 +141,7 @@ def DiTi_50ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_SBS_LiHa_Air_tip,
     ),
   )
+  # Calibration offsets (taught position - computed position, in 1/10mm)
+  rack.x_offset = 62   # +6.2mm X correction
+  rack.y_offset = 18   # +1.8mm Y correction
+  return rack

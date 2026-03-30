@@ -89,6 +89,23 @@ class AirEVOPIPBackend(EVOPIPBackend):
   ):
     super().__init__(driver=driver, deck=deck, diti_count=diti_count)
 
+  def _apply_calibration_offsets(
+    self,
+    x: int,
+    y: int,
+    ops: list,
+  ) -> tuple:
+    """Apply per-labware X/Y calibration offsets if defined."""
+    par = ops[0].resource.parent
+    # Walk up to find the labware with offsets (plate or tip rack)
+    while par is not None:
+      if hasattr(par, "x_offset"):
+        x += getattr(par, "x_offset", 0)
+        y += getattr(par, "y_offset", 0)
+        break
+      par = getattr(par, "parent", None)
+    return x, y
+
   async def _on_setup(self) -> None:
     """Configure ZaapMotion controllers, then run standard LiHa init."""
 
@@ -222,9 +239,11 @@ class AirEVOPIPBackend(EVOPIPBackend):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
+    x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
-      x, y - yi * ys, ys, [self._z_range] * self.num_channels
+      x, y_adj, ys, [self._z_range] * self.num_channels
     )
 
     # Aspirate small air gap with force mode
@@ -268,9 +287,11 @@ class AirEVOPIPBackend(EVOPIPBackend):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
+    x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
-      x, y - yi * ys, ys, [self._z_range] * self.num_channels
+      x, y_adj, ys, [self._z_range] * self.num_channels
     )
 
     # Empty plunger before discard
@@ -324,10 +345,12 @@ class AirEVOPIPBackend(EVOPIPBackend):
     else:
       z_asp = z_positions.get("start", [self._z_range] * self.num_channels)
 
+    x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
       x,
-      y - yi * ys,
+      y_adj,
       ys,
       [self._z_range] * self.num_channels,
     )
@@ -406,10 +429,12 @@ class AirEVOPIPBackend(EVOPIPBackend):
     else:
       z_disp = [z if z else self._z_range for z in z_positions["dispense"]]
 
+    x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
+
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
       x,
-      y - yi * ys,
+      y_adj,
       ys,
       z_disp,
     )
