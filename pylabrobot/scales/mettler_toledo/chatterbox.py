@@ -48,7 +48,7 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     device_type: str = "WXS205SDU",
     serial_number: str = "SIM0000001",
     capacity: float = 220.0,
-    mt_sics_levels: Optional[Set[int]] = None,
+    supported_commands: Optional[Set[str]] = None,
   ) -> None:
     # Skip MettlerToledoWXS205SDUBackend.__init__ (which creates a Serial object)
     ScaleBackend.__init__(self)
@@ -63,7 +63,33 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     self._simulated_device_type = device_type
     self._simulated_serial_number = serial_number
     self._simulated_capacity = capacity
-    self._simulated_mt_sics_levels = mt_sics_levels or {0, 1, 2, 3}
+    # Default: all commands the chatterbox can mock
+    self._simulated_supported_commands = supported_commands or {
+      "@",
+      "I0",
+      "I1",
+      "I2",
+      "I4",
+      "S",
+      "SI",
+      "Z",
+      "ZI",
+      "ZC",
+      "T",
+      "TI",
+      "TC",
+      "TA",
+      "TAC",
+      "SC",
+      "C",
+      "D",
+      "DW",
+      "M21",
+      "M28",
+      "I50",
+      "SR",
+      "SIR",
+    }
 
   @property
   def _sensor_reading(self) -> float:
@@ -71,7 +97,7 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
 
   async def setup(self) -> None:
     self.serial_number = self._simulated_serial_number
-    self._mt_sics_levels = self._simulated_mt_sics_levels
+    self._supported_commands = self._simulated_supported_commands
     self.device_type = self._simulated_device_type
     self.capacity = self._simulated_capacity
     logger.info(
@@ -79,11 +105,11 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
       "Device type: %s\n"
       "Serial number: %s\n"
       "Capacity: %.1f g\n"
-      "MT-SICS levels: %s",
+      "Supported commands: %s",
       self.device_type,
       self.serial_number,
       self.capacity,
-      sorted(self._mt_sics_levels),
+      sorted(self._supported_commands),
     )
 
   async def stop(self) -> None:
@@ -116,9 +142,13 @@ class MettlerToledoChatterboxBackend(MettlerToledoWXS205SDUBackend):
     # Identification (shlex strips quotes, so mock responses should not include them)
     if cmd == "@":
       return [R("I4", "A", [self._simulated_serial_number])]
+    if cmd == "I0":
+      cmds = sorted(self._simulated_supported_commands)
+      responses = [R("I0", "B", ["0", c]) for c in cmds[:-1]]
+      responses.append(R("I0", "A", ["0", cmds[-1]]))
+      return responses
     if cmd == "I1":
-      levels = "".join(str(lvl) for lvl in sorted(self._simulated_mt_sics_levels))
-      return [R("I1", "A", [levels])]
+      return [R("I1", "A", ["01"])]
     if cmd == "I2":
       return [R("I2", "A", [f"{self._simulated_device_type} {self._simulated_capacity:.5f} g"])]
     if cmd == "I4":

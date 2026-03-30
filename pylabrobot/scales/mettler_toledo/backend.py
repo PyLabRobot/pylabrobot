@@ -35,25 +35,27 @@ class MettlerToledoResponse:
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def requires_mt_sics_level(level: int) -> Callable[[F], F]:
-  """Decorator that gates a method on the connected device supporting the required MT-SICS level.
+def requires_mt_sics_command(mt_sics_command: str) -> Callable[[F], F]:
+  """Decorator that gates a method on the connected device supporting a specific MT-SICS command.
 
-  During setup(), the backend queries I1 to discover which levels the connected device supports.
-  Methods decorated with a level higher than what the device reports will raise MettlerToledoError.
-  See the class docstring of MettlerToledoWXS205SDUBackend for level descriptions.
+  During setup(), the backend queries I0 to discover the full list of implemented commands.
+  Methods decorated with a command not in that list will raise MettlerToledoError.
+
+  I0 is the definitive source of command support - I1 only reports which standardized
+  level sets are fully implemented, but individual commands may exist outside those levels.
   """
 
   def decorator(func: F) -> F:
-    func._mt_sics_level = level  # type: ignore[attr-defined]
+    func._mt_sics_command = mt_sics_command  # type: ignore[attr-defined]
 
     @functools.wraps(func)
     async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-      if hasattr(self, "_mt_sics_levels") and self._mt_sics_levels is not None:
-        if level not in self._mt_sics_levels:
+      if hasattr(self, "_supported_commands") and self._supported_commands is not None:
+        if mt_sics_command not in self._supported_commands:
           raise MettlerToledoError(
             title="Command not supported",
-            message=f"'{func.__name__}' requires MT-SICS level {level}, "
-            f"but device supports levels: {sorted(self._mt_sics_levels)}",
+            message=f"'{func.__name__}' requires MT-SICS command '{mt_sics_command}', "
+            f"which is not implemented on this device.",
           )
       return await func(self, *args, **kwargs)
 
@@ -68,21 +70,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   MT-SICS (Mettler Toledo Standard Interface Command Set) is the serial communication
   protocol used by Mettler Toledo's Automated Precision Weigh Modules. This backend is
-  compatible with any MT-SICS device, including the WXS, WMS, and WX series. During
-  setup(), this backend queries the device to discover its identity, capacity, and
-  supported MT-SICS levels.
+  compatible with any MT-SICS device, including the WXS, WMS, and WX series.
 
-  MT-SICS levels:
-    - Level 0: Basic set - identification (I0-I4), basic weighing (S, SI), zero (Z, ZI),
-      tare (T, TI), cancel (@). Always available on every MT-SICS device.
-    - Level 1: Elementary commands - display (D, DW), tare memory (TA, TAC), timed
-      weighing (SC), timed zero/tare (ZC, TC). Always available.
-    - Level 2: Extended command list - configuration (M21, COM), device info (I50, I47,
-      I48). Model-dependent, not guaranteed on every device.
-    - Level 3: Application-specific command set. Model-dependent.
-
-  Methods requiring Level 2+ are decorated with ``@requires_mt_sics_level`` and will
-  raise ``MettlerToledoError`` if the connected device does not support the required level.
+  During setup(), the backend queries I0 to discover which commands the connected device
+  supports, then queries I1/I2/I4 for device identity. Methods decorated with
+  ``@requires_mt_sics_command`` will raise ``MettlerToledoError`` if the required command
+  is not in the device's I0 command list.
 
   Tested on the WXS205SDU (used by Hamilton in the Liquid Verification Kit).
 
@@ -116,10 +109,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     # cancel() clears the input buffer and sends @, which returns the serial number
     self.serial_number = await self.cancel()
 
-    # Device discovery (Level 0 - always available)
+    # Discover supported commands via I0 (the definitive source per spec Section 2.2)
+    self._supported_commands: Set[str] = await self._query_supported_commands()
+
+    # Device identity (Level 0 - always available)
     # Note: device_type and capacity both use I2 but are separate methods intentionally -
     # single-responsibility per method, the duplicate I2 round-trip during one-time setup is fine.
-    self._mt_sics_levels: Set[int] = await self._query_mt_sics_levels()
     self.device_type = await self.request_device_type()
     self.capacity = await self.request_capacity()
 
@@ -128,16 +123,16 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       "Device type: %s\n"
       "Serial number: %s\n"
       "Capacity: %.1f g\n"
-      "MT-SICS levels: %s",
+      "Supported commands: %s",
       self.io.port,
       self.device_type,
       self.serial_number,
       self.capacity,
-      sorted(self._mt_sics_levels),
+      sorted(self._supported_commands),
     )
 
     # Set output unit to grams
-    if 2 in self._mt_sics_levels:
+    if "M21" in self._supported_commands:
       await self.set_host_unit_grams()
 
   async def stop(self) -> None:
@@ -148,16 +143,22 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   # === Device discovery ===
 
-  async def _query_mt_sics_levels(self) -> Set[int]:
-    """Query supported MT-SICS levels via I1 command (Level 0 - always available).
+  async def _query_supported_commands(self) -> Set[str]:
+    """Query all implemented commands via I0 (Level 0 - always available).
 
-    Returns a set of integers representing the supported levels (e.g. {0, 1, 2, 3}).
+    I0 is the definitive source of command support per spec Section 2.2.
+    I1 only reports which standardized level sets are fully implemented,
+    but individual commands may exist outside those levels.
+
+    Returns a set of command strings (e.g. {"@", "S", "SI", "Z", "M21", "M28"}).
     """
-    responses = await self.send_command("I1")
-    # I1 A "0123" "2.00" "2.20" "1.00" "1.50"
-    self._validate_response(responses[0], 3, "I1")
-    level_string = responses[0].data[0]
-    return {int(c) for c in level_string}
+    responses = await self.send_command("I0")
+    commands: Set[str] = set()
+    for resp in responses:
+      # Format: I0 B/A <level> <command>
+      if len(resp.data) >= 2:
+        commands.add(resp.data[1])
+    return commands
 
   # === Response parsing ===
 
@@ -363,7 +364,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_unit(parts[-1], "I2")
     return float(parts[-2])
 
-  @requires_mt_sics_level(2)
+  @requires_mt_sics_command("I50")
   async def request_remaining_weighing_range(self) -> float:
     """Query remaining maximum weighing range in grams. (I50 command)
 
@@ -562,12 +563,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   # # Configuration commands # #
 
-  @requires_mt_sics_level(2)
+  @requires_mt_sics_command("M21")
   async def set_host_unit_grams(self) -> List[MettlerToledoResponse]:
     """Set the host output unit to grams. (M21 command)"""
     return await self.send_command("M21 0 0")
 
-  @requires_mt_sics_level(2)
+  @requires_mt_sics_command("M28")
   async def measure_temperature(self) -> float:
     """Query the current temperature from the scale's internal sensor in degrees C. (M28 command)
 

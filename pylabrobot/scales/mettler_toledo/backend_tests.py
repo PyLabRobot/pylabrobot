@@ -120,7 +120,8 @@ class MTSICSChatterboxTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.device_type, "WXS205SDU")
     self.assertEqual(self.backend.serial_number, "SIM0000001")
     self.assertEqual(self.backend.capacity, 220.0)
-    self.assertIn(0, self.backend._mt_sics_levels)
+    self.assertIn("S", self.backend._supported_commands)
+    self.assertIn("M28", self.backend._supported_commands)
 
   async def test_tare_workflow_through_protocol(self):
     """Full tare workflow through the MT-SICS protocol layer.
@@ -167,9 +168,22 @@ class MTSICSChatterboxTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_measure_temperature(self):
     """measure_temperature must return a float from the M28 response.
-    Requires Level 2 decorator to not block the call."""
+    Requires M28 in the device's I0 command list."""
     temp = await self.backend.measure_temperature()
     self.assertEqual(temp, 22.5)
+
+  async def test_measure_temperature_blocked_when_unsupported(self):
+    """measure_temperature must raise when M28 is not in the device's command list.
+    Validates that I0-based command gating works correctly."""
+    backend = MettlerToledoChatterboxBackend(
+      supported_commands={"@", "I0", "I2", "I4", "S", "SI", "Z", "ZI", "T", "TI", "TA", "TAC"},
+    )
+    scale = Scale(name="limited_scale", backend=backend, size_x=0, size_y=0, size_z=0)
+    await scale.setup()
+    with self.assertRaises(MettlerToledoError) as ctx:
+      await backend.measure_temperature()
+    self.assertIn("M28", str(ctx.exception))
+    self.assertIn("not implemented", str(ctx.exception))
 
 
 if __name__ == "__main__":
