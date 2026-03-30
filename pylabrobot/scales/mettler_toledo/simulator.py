@@ -58,15 +58,50 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     self.sample_weight: float = 0.0
     self.zero_offset: float = 0.0
     self.tare_weight: float = 0.0
+    self.temperature: float = 22.5
 
     # Simulated device identity
     self._human_readable_device_name = "Mettler Toledo Scale"
-    self._simulated_device_type = device_type
-    self._simulated_serial_number = serial_number
-    self._simulated_capacity = capacity
+    self.device_type = device_type
+    self.serial_number = serial_number
+    self.capacity = capacity
+    self.software_material_number: str = "12121306C"
+    self.device_id: str = "SimScale"
+    self.next_service_date: str = "16.03.2013"
+    self.assortment_type_revision: str = "5"
+    self.operating_mode_after_restart: str = "0"
+    self.date: str = "30.03.2026"
+    self.time: str = "12:00:00"
+
+    # Simulated device configuration
+    self.weighing_mode: str = "0"
+    self.environment_condition: str = "2"
+    self.auto_zero: str = "1"
+    self.update_rate: str = "18.3"
+    self.adjustment_setting: str = "0 0"
+    self.serial_parameters: str = "0 6 3 1"
+    self.filter_cutoff: str = "0.000"
+    self.readability: str = "5"
+    self.test_settings: str = "0"
+    self.weighing_value_release: str = "1"
+    self.operating_mode: str = "0"
+    self.profact_time_criteria: str = "00 00 00 0"
+    self.profact_temperature_criterion: str = "1"
+    self.adjustment_weight: str = "10.00000 g"
+    self.test_weight: str = "200.00000 g"
+    self.profact_day: str = "0"
+    self.zeroing_mode: str = "0"
+    self.uptime_minutes: int = 1440
     # Default: all commands the simulator can mock
-    self._simulated_supported_commands = supported_commands or {
+    self._supported_commands = supported_commands or {
       "@",
+      "C",
+      "C0",
+      "COM",
+      "D",
+      "DAT",
+      "DW",
+      "FCUT",
       "I0",
       "I1",
       "I2",
@@ -77,34 +112,44 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       "I11",
       "I14",
       "I15",
+      "I16",
+      "I21",
+      "I26",
       "I50",
-      "S",
-      "SI",
-      "Z",
-      "ZI",
-      "ZC",
-      "T",
-      "TI",
-      "TC",
-      "TA",
-      "TAC",
-      "SC",
-      "C",
-      "D",
-      "DW",
-      "DAT",
-      "TIM",
+      "LST",
       "M01",
       "M02",
       "M03",
+      "M17",
+      "M18",
+      "M19",
+      "M20",
       "M21",
       "M27",
       "M28",
+      "M29",
+      "M31",
+      "M32",
+      "M33",
+      "M35",
+      "RDB",
+      "S",
+      "SC",
+      "SI",
       "SIS",
       "SNR",
-      "SR",
-      "SIR",
+      "T",
+      "TA",
+      "TAC",
+      "TC",
+      "TI",
+      "TIM",
+      "TST0",
       "UPD",
+      "USTB",
+      "Z",
+      "ZC",
+      "ZI",
     }
 
   @property
@@ -112,10 +157,10 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     return self.platform_weight + self.sample_weight
 
   async def setup(self) -> None:
-    self.serial_number = self._simulated_serial_number
-    self._supported_commands = self._simulated_supported_commands
-    self.device_type = self._simulated_device_type
-    self.capacity = self._simulated_capacity
+    self.serial_number = self.serial_number
+    self._supported_commands = self._supported_commands
+    self.device_type = self.device_type
+    self.capacity = self.capacity
     self.firmware_version = "1.10 18.6.4.1361.772"
     self.configuration = "Bridge" if "Bridge" in self.device_type else "Balance"
     logger.info(
@@ -165,49 +210,74 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
 
     # Identification (shlex strips quotes, so mock responses should not include them)
     if cmd == "@":
-      return [R("I4", "A", [self._simulated_serial_number])]
+      return [R("I4", "A", [self.serial_number])]
     if cmd == "I0":
-      cmds = sorted(self._simulated_supported_commands)
+      cmds = sorted(self._supported_commands)
       responses = [R("I0", "B", ["0", c]) for c in cmds[:-1]]
       responses.append(R("I0", "A", ["0", cmds[-1]]))
       return responses
     if cmd == "I1":
       return [R("I1", "A", ["01"])]
     if cmd == "I2":
-      return [R("I2", "A", [f"{self._simulated_device_type} {self._simulated_capacity:.5f} g"])]
+      return [R("I2", "A", [f"{self.device_type} {self.capacity:.5f} g"])]
     if cmd == "I4":
-      return [R("I4", "A", [self._simulated_serial_number])]
+      return [R("I4", "A", [self.serial_number])]
     if cmd == "I3":
       return [R("I3", "A", [self.firmware_version])]
     if cmd == "I5":
-      return [R("I5", "A", ["12121306C"])]
+      return [R("I5", "A", [self.software_material_number])]
     if cmd == "I10":
-      # I10 can be query or set
       parts = command.split(maxsplit=1)
       if len(parts) > 1:
+        self.device_id = parts[1].strip('"')
         return [R("I10", "A")]
-      return [R("I10", "A", ["SimScale"])]
+      return [R("I10", "A", [self.device_id])]
     if cmd == "I11":
-      return [R("I11", "A", [self._simulated_device_type])]
+      return [R("I11", "A", [self.device_type])]
     if cmd == "I14":
       return [
         R("I14", "B", ["0", "1", "Bridge"]),
-        R("I14", "A", ["1", "1", self._simulated_device_type]),
+        R("I14", "A", ["1", "1", self.device_type]),
       ]
     if cmd == "I15":
-      return [R("I15", "A", ["1440"])]  # 1440 minutes = 24 hours
+      return [R("I15", "A", [str(self.uptime_minutes)])]
+    if cmd == "I16":
+      d, m, y = self.next_service_date.split(".")
+      return [R("I16", "A", [d, m, y])]
+    if cmd == "I21":
+      return [R("I21", "A", [self.assortment_type_revision])]
+    if cmd == "I26":
+      return [R("I26", "A", [self.operating_mode_after_restart])]
     if cmd == "DAT":
-      return [R("DAT", "A", ["30.03.2026"])]
+      parts = command.split()
+      if len(parts) > 1:
+        self.date = f"{parts[1]}.{parts[2]}.{parts[3]}"
+        return [R("DAT", "A")]
+      d, m, y = self.date.split(".")
+      return [R("DAT", "A", [d, m, y])]
     if cmd == "TIM":
-      return [R("TIM", "A", ["12:00:00"])]
+      parts = command.split()
+      if len(parts) > 1:
+        self.time = f"{parts[1]}:{parts[2]}:{parts[3]}"
+        return [R("TIM", "A")]
+      h, mi, s = self.time.split(":")
+      return [R("TIM", "A", [h, mi, s])]
 
     # Configuration queries
     if cmd == "M01":
-      return [R("M01", "A", ["0"])]  # Normal weighing mode
+      return [R("M01", "A", [self.weighing_mode])]
     if cmd == "M02":
-      return [R("M02", "A", ["2"])]  # Standard environment
+      return [R("M02", "A", [self.environment_condition])]
     if cmd == "M03":
-      return [R("M03", "A", ["1"])]  # Auto zero on
+      return [R("M03", "A", [self.auto_zero])]
+    if cmd == "M17":
+      return [R("M17", "A", self.profact_time_criteria.split())]
+    if cmd == "M18":
+      return [R("M18", "A", [self.profact_temperature_criterion])]
+    if cmd == "M19":
+      return [R("M19", "A", self.adjustment_weight.split())]
+    if cmd == "M20":
+      return [R("M20", "A", self.test_weight.split())]
     if cmd == "M27":
       return [
         R("M27", "B", ["1", "1", "1", "2026", "8", "0", "0", ""]),
@@ -220,8 +290,48 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       return [R("SIS", "A", [state, f"{net:.5f}", "0", "5", "1", "0", info])]
     if cmd == "SNR":
       return [R("SNR", "S", [f"{net:.5f}", "g"])]
+    if cmd == "M29":
+      return [R("M29", "A", [self.weighing_value_release])]
+    if cmd == "M31":
+      return [R("M31", "A", [self.operating_mode])]
+    if cmd == "M32":
+      return [
+        R("M32", "B", ["1", "00", "00", "0"]),
+        R("M32", "B", ["2", "00", "00", "0"]),
+        R("M32", "A", ["3", "00", "00", "0"]),
+      ]
+    if cmd == "M33":
+      return [R("M33", "A", [self.profact_day])]
+    if cmd == "M35":
+      return [R("M35", "A", [self.zeroing_mode])]
     if cmd == "UPD":
-      return [R("UPD", "A", ["18.3"])]
+      return [R("UPD", "A", [self.update_rate])]
+    if cmd == "C0":
+      return [R("C0", "A", self.adjustment_setting.split())]
+    if cmd == "COM":
+      return [R("COM", "A", self.serial_parameters.split())]
+    if cmd == "FCUT":
+      return [R("FCUT", "A", [self.filter_cutoff])]
+    if cmd == "RDB":
+      return [R("RDB", "A", [self.readability])]
+    if cmd == "USTB":
+      return [
+        R("USTB", "B", ["0", "3.600", "1.100"]),
+        R("USTB", "B", ["1", "0.000", "0.000"]),
+        R("USTB", "A", ["2", "0.000", "0.000"]),
+      ]
+    if cmd == "TST0":
+      return [R("TST0", "A", [self.test_settings])]
+    if cmd == "LST":
+      return [
+        R("LST", "B", ["C0"] + self.adjustment_setting.split()),
+        R("LST", "B", ["FCUT", self.filter_cutoff]),
+        R("LST", "B", ["M01", self.weighing_mode]),
+        R("LST", "B", ["M02", self.environment_condition]),
+        R("LST", "B", ["M03", self.auto_zero]),
+        R("LST", "B", ["M21", "0", "0"]),
+        R("LST", "A", ["UPD", self.update_rate]),
+      ]
 
     # Zero
     if cmd in ("Z", "ZI", "ZC"):
@@ -256,11 +366,11 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
 
     # Temperature
     if cmd == "M28":
-      return [R("M28", "A", ["1", "22.5"])]
+      return [R("M28", "A", ["1", str(self.temperature)])]
 
     # Remaining weighing range
     if cmd == "I50":
-      remaining = self._simulated_capacity - self._sensor_reading
+      remaining = self.capacity - self._sensor_reading
       return [
         R("I50", "B", ["0", f"{remaining:.3f}", "g"]),
         R("I50", "B", ["1", "0.000", "g"]),

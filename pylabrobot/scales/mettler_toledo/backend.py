@@ -181,7 +181,9 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     try:
       await self.reset()
     except Exception:
-      logger.warning("[%s] Could not reset device before disconnecting", self.io._human_readable_device_name)
+      logger.warning(
+        "[%s] Could not reset device before disconnecting", self.io._human_readable_device_name
+      )
     logger.info("[%s] Disconnected from %s", self.io._human_readable_device_name, self.io.port)
     await self.io.stop()
 
@@ -347,7 +349,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
           raise TimeoutError("Timeout while waiting for response from scale.")
         await asyncio.sleep(0.001)
 
-      logger.log(LOG_LEVEL_IO, "[%s] Received response: %s", self.io._human_readable_device_name, raw_response)
+      logger.log(
+        LOG_LEVEL_IO,
+        "[%s] Received response: %s",
+        self.io._human_readable_device_name,
+        raw_response,
+      )
       fields = shlex.split(raw_response.decode("utf-8").strip())
       if len(fields) >= 2:
         response = MettlerToledoResponse(command=fields[0], status=fields[1], data=fields[2:])
@@ -384,6 +391,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_response(responses[0], 3, "@")
     return responses[0].data[0]
 
+  @requires_mt_sics_command("C")
   async def cancel_all(self) -> None:
     """C - Cancel all active and pending interface commands.
 
@@ -461,23 +469,20 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """Query the user-assigned device identification string. (I10 command)
 
     This is a user-configurable name (max 20 chars) to identify
-    individual scales in multi-device setups. Retained after @ cancel.
+    individual scales in multi-scale setups. Retained after @ cancel.
     """
     responses = await self.send_command("I10")
     self._validate_response(responses[0], 3, "I10")
     return responses[0].data[0]
 
-  # WARNING: set_device_id writes to EEPROM and permanently changes the stored device name.
-  # Uncomment only if you need to relabel a scale in a multi-device setup.
-  #
-  # @requires_mt_sics_command("I10")
-  # async def set_device_id(self, device_id: str) -> None:
-  #   """Set the user-assigned device identification string. (I10 command)
-  #
-  #   Max 20 alphanumeric characters. Retained after @ cancel.
-  #   Useful for labeling individual scales in multi-device setups.
-  #   """
-  #   await self.send_command(f'I10 "{device_id}"')
+  @requires_mt_sics_command("I10")
+  async def set_device_id(self, device_id: str) -> None:
+    """Set the user-assigned device identification string. (I10 command)
+
+    Max 20 alphanumeric characters. Persists across power cycles.
+    Useful for labeling individual scales in multi-scale setups.
+    """
+    await self.send_command(f'I10 "{device_id}"')
 
   @requires_mt_sics_command("I11")
   async def request_model_designation(self) -> str:
@@ -522,28 +527,60 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def request_date(self) -> str:
     """Query the current date from the device. (DAT command)
 
-    Returns the date string as reported by the device.
+    Response format: DAT A <Day> <Month> <Year>.
+    Returns the date as "DD.MM.YYYY".
     """
     responses = await self.send_command("DAT")
-    self._validate_response(responses[0], 3, "DAT")
-    return responses[0].data[0]
+    self._validate_response(responses[0], 5, "DAT")
+    day, month, year = responses[0].data[0], responses[0].data[1], responses[0].data[2]
+    return f"{day}.{month}.{year}"
+
+  @requires_mt_sics_command("DAT")
+  async def set_date(self, day: int, month: int, year: int) -> None:
+    """Set the device date. (DAT command)
+
+    Args:
+      day: Day (1-31).
+      month: Month (1-12).
+      year: Year (2020-2099, platform-dependent).
+    """
+    await self.send_command(f"DAT {day:02d} {month:02d} {year}")
 
   @requires_mt_sics_command("TIM")
   async def request_time(self) -> str:
     """Query the current time from the device. (TIM command)
 
-    Returns the time string as reported by the device.
+    Response format: TIM A <Hour> <Minute> <Second>.
+    Returns the time as "HH:MM:SS".
     """
     responses = await self.send_command("TIM")
-    self._validate_response(responses[0], 3, "TIM")
-    return responses[0].data[0]
+    self._validate_response(responses[0], 5, "TIM")
+    hour, minute, second = responses[0].data[0], responses[0].data[1], responses[0].data[2]
+    return f"{hour}:{minute}:{second}"
+
+  @requires_mt_sics_command("TIM")
+  async def set_time(self, hour: int, minute: int, second: int) -> None:
+    """Set the device time. (TIM command)
+
+    Persists across power cycles. Only reset via FSET or terminal menu, not @.
+
+    Args:
+      hour: Hour (0-23).
+      minute: Minute (0-59).
+      second: Second (0-59).
+    """
+    await self.send_command(f"TIM {hour:02d} {minute:02d} {second:02d}")
 
   @requires_mt_sics_command("I16")
   async def request_next_service_date(self) -> str:
-    """Query the date when the balance is next due to be serviced. (I16 command)"""
+    """Query the date when the balance is next due to be serviced. (I16 command)
+
+    Returns the date as "DD.MM.YYYY".
+    """
     responses = await self.send_command("I16")
-    self._validate_response(responses[0], 3, "I16")
-    return " ".join(responses[0].data)
+    self._validate_response(responses[0], 5, "I16")
+    day, month, year = responses[0].data[0], responses[0].data[1], responses[0].data[2]
+    return f"{day}.{month}.{year}"
 
   @requires_mt_sics_command("I21")
   async def request_assortment_type_revision(self) -> str:
@@ -567,11 +604,9 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """Zero the scale when the weight is stable. (Z command)"""
     return await self.send_command("Z")
 
+  @requires_mt_sics_command("ZC")
   async def zero_timeout(self, timeout: float) -> List[MettlerToledoResponse]:
-    """Zero the scale after a given timeout. (ZC command)
-
-    Not supported on WXS205SDU (returns ES despite being in the spec).
-    """
+    """Zero the scale after a given timeout. (ZC command)"""
     timeout = int(timeout * 1000)
     return await self.send_command(f"ZC {timeout}")
 
@@ -604,11 +639,9 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """Tare the scale immediately. (TI command)"""
     return await self.send_command("TI")
 
+  @requires_mt_sics_command("TC")
   async def tare_timeout(self, timeout: float) -> List[MettlerToledoResponse]:
-    """Tare the scale after a given timeout. (TC command)
-
-    Not supported on WXS205SDU (returns ES despite being in the spec).
-    """
+    """Tare the scale after a given timeout. (TC command)"""
     timeout = int(timeout * 1000)  # convert to milliseconds
     return await self.send_command(f"TC {timeout}")
 
@@ -660,6 +693,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self._validate_unit(responses[0].data[1], "S")
     return float(responses[0].data[0])
 
+  @requires_mt_sics_command("SC")
   async def read_dynamic_weight(self, timeout: float) -> float:
     """Read a stable weight value from the machine within a given timeout, or
     return the current weight value if not possible. (MEASUREMENT command)
@@ -993,13 +1027,15 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   # # Display # #
 
+  @requires_mt_sics_command("D")
   async def set_display_text(self, text: str) -> List[MettlerToledoResponse]:
-    """Write text to the display. (D command) Not available in bridge mode.
+    """Write text to the display. (D command)
 
     Use set_weight_display() to restore the normal weight display.
     """
     return await self.send_command(f'D "{text}"')
 
+  @requires_mt_sics_command("DW")
   async def set_weight_display(self) -> List[MettlerToledoResponse]:
     """Restore the normal weight display. (DW command)"""
     return await self.send_command("DW")
@@ -1015,11 +1051,6 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     return await self.send_command("M21 0 0")
 
   # # Commented out - standalone write commands # #
-  #
-  # @requires_mt_sics_command("I10")
-  # async def set_device_id(self, device_id: str) -> None:
-  #   """Set device name. (I10) WRITES TO EEPROM. Max 20 chars."""
-  #   await self.send_command(f'I10 "{device_id}"')
   #
   # @requires_mt_sics_command("FSET")
   # async def factory_reset(self, exclusion: int = 0) -> None:

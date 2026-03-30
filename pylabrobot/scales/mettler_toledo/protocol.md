@@ -159,11 +159,26 @@ the authoritative list of implemented commands.
 | 2 | Extended: configuration, device info, diagnostics | Model-dependent |
 | 3 | Application-specific: filling, dosing, calibration | Model-dependent |
 
+## Date/time response format
+
+DAT and TIM return space-separated fields, not a single string:
+```
+DAT A <Day> <Month> <Year>      -- e.g. DAT A 01 10 2021 = 1 Oct 2021
+TIM A <Hour> <Minute> <Second>  -- e.g. TIM A 09 56 11 = 09:56:11
+```
+
+Both support set variants (`DAT DD MM YYYY`, `TIM HH MM SS`).
+DAT set persists only via MT-SICS or FSET, not @.
+TIM set also persists; only reset via MT-SICS, FSET, or terminal menu, not @.
+
 ## Write safety
 
 Commands that modify device settings (M01 set, M02 set, M03 set, etc.) persist
 to memory and survive power cycles. They cannot be undone with @ reset - only
 via FSET (factory reset) or the terminal menu. Write methods are commented out
 in the backend to prevent accidental modification.
+
+Exceptions: `set_date()` and `set_time()` are active (not commented out) since
+they only set the internal clock, which is easily correctable.
 
 See `mt_sics_commands.md` for the full command reference with implementation status.

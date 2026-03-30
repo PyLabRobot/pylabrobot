@@ -10,12 +10,13 @@ individual commands may exist outside those levels. I0 is the definitive source 
 command support. During setup(), the backend queries I0 to discover all available
 commands and gates methods via `@requires_mt_sics_command`.
 
-**Hardware-validated on WXS205SDU WXA-Bridge (S/N: B207696838):**
+**Hardware-validated on WXS205SDU WXA-Bridge (S/N: B207696838, firmware: 1.10):**
 I1 reports levels [0, 1] but I0 discovers 62 commands across levels 0-3.
 Commands not in I0 (C, D, DW, SC, ZC, TC, I50) return ES (syntax error).
 
 Status key:
-- DONE = implemented in backend.py
+- DONE = implemented in backend.py (read active; set active or commented out per write safety)
+- STUB = commented out entirely (requires physical interaction)
 - HIGH = high priority for implementation
 - MED  = medium priority
 - LOW  = low priority / niche use case
@@ -177,9 +178,9 @@ Status key:
 
 | Command | Description                              | Spec Page | Status | WXS205SDU | Notes |
 |---------|------------------------------------------|-----------|--------|-----------|-------|
-| DAT     | Date                                     | 53        | DONE   | yes | request_date(). |
-| DATI    | Date and time                            | 54        | MED    | - | |
-| TIM     | Time                                     | 258       | DONE   | yes | request_time(). |
+| DAT     | Date (query/set)                         | 53        | DONE   | yes | request_date() and set_date(). Format: DAT A Day Month Year. |
+| DATI    | Date and time (query/set)                | 54        | MED    | - | Combined date+time. Not on WXS205SDU. |
+| TIM     | Time (query/set)                         | 258       | DONE   | yes | request_time() and set_time(). Format: TIM A Hour Minute Second. Persists (not reset by @). |
 
 ### Digital I/O
 
@@ -262,17 +263,53 @@ Status key:
 | MONH    | Monitor on interface                     | 217       | N/A    | - | |
 | SNRU    | Stable weight (display unit) + repeat    | 243       | N/A    | - | |
 
-## Priority Summary
+## Implementation Summary
 
-### HIGH (not available on WXS205SDU)
+The MT-SICS spec defines **157 commands** (counting F01-F16 as 16 individual commands).
+
+| Category | Count | Description |
+|----------|-------|-------------|
+| Backend (active) | 54 | Implemented and callable |
+| Backend (commented out) | 28 | Set/write counterparts and physical interaction commands |
+| Simulator | 55 | Handled in `_build_response` (all active commands except I0/I1 internal) |
+| Not implemented | 75 | Not available on WXS205SDU or not applicable |
+
+### WXS205SDU coverage
+
+The WXS205SDU reports **62 commands** via I0. Of these:
+
+| State | Count |
+|-------|-------|
+| Active in backend | 49 |
+| Commented out (physical/write) | 7 |
+| Not implemented (streaming) | 2 (SIR, SR) |
+| Undocumented (not in spec) | 4 (I22-I25) |
+
+### Expanding to other devices
+
+The remaining ~75 unimplemented spec commands (HIGH/MED/LOW/N/A in the table above)
+are not available on the WXS205SDU and could not be validated. Integrating them
+requires a developer with physical access to a device that supports the command,
+to validate the response format and add a handler to both `backend.py` and
+`simulator.py`. The pattern is:
+
+1. Confirm the command appears in the device's I0 list
+2. Send the command and observe the raw response
+3. Add a method to `backend.py` with `@requires_mt_sics_command`
+4. Add a handler to `simulator.py` with an instance variable for the response value
+5. Add a test to `backend_tests.py`
+
+### Remaining priorities
+
+**HIGH (not available on WXS205SDU):**
 - E01/E02/E03 (error monitoring)
 - SIX1 (gross, net, tare in one call)
 
-### MED (useful but not urgent)
+**MED (useful but not urgent):**
 - SIR/SR (continuous streaming) - needs async iterator architecture
 - DATI (date + time combined) - not on WXS205SDU
 
-### STUB (commented out, require physical interaction)
+**STUB (commented out, require physical interaction):**
 - C1/C3 (internal weight adjustment)
 - C2 (external weight adjustment)
 - TST1-TST3 (test procedures)
