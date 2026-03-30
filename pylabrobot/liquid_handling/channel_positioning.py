@@ -57,7 +57,10 @@ def _get_compartments(
         "Compartment Y=[%.1f, %.1f] (width=%.1fmm) is smaller than "
         "2 * edge_clearance (%.1fmm). Automatic channel positioning will "
         "skip this compartment. Ensure the attached tip physically fits in the container.",
-        lo, hi, raw_width, 2 * edge_clearance,
+        lo,
+        hi,
+        raw_width,
+        2 * edge_clearance,
       )
   return usable
 
