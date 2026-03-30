@@ -79,8 +79,19 @@ async def main():
   try:
     # --- Test 1: Pick up 8 tips ---
     print("\n--- Test 1: Pick Up Tips ---")
-    print(f"  Tip rack z_start={tip_rack.z_start} z_max={tip_rack.z_max}")
-    print(f"  x_offset={getattr(tip_rack, 'x_offset', 0)} y_offset={getattr(tip_rack, 'y_offset', 0)}")
+    # Show the actual coordinates that will be sent
+    spot = tip_rack.get_item("A1")
+    loc = spot.get_location_wrt(evo.children[0]) + spot.center()
+    raw_x = int((loc.x - 100) * 10)
+    raw_y = int((346.5 - loc.y) * 10)
+    cal_x = raw_x + getattr(tip_rack, 'x_offset', 0)
+    cal_y = raw_y + getattr(tip_rack, 'y_offset', 0)
+    print(f"  Computed A1: raw X={raw_x} Y={raw_y}")
+    print(f"  + offsets:   X+{getattr(tip_rack, 'x_offset', 0)} Y+{getattr(tip_rack, 'y_offset', 0)}")
+    print(f"  = Final:     X={cal_x} Y={cal_y}")
+    print(f"  Taught:      X=3893 Y=146")
+    print(f"  Difference:  dX={3893-cal_x} dY={146-cal_y}")
+    print(f"  AGT: z_start={tip_rack.z_start} z_max={tip_rack.z_max} z_search={abs(tip_rack.z_max-tip_rack.z_start)}")
     input("Press Enter to pick up 8 tips from column 1...")
     await evo.pip.pick_up_tips(tip_rack.get_items(COLUMN_1))
     print("Tips picked up!")
