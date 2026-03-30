@@ -293,7 +293,7 @@ class FTDI(IOBase):
     )
     return stat.value
 
-  async def get_serial(self) -> str:
+  async def request_serial(self) -> str:
     return self.device_id
 
   async def stop(self):

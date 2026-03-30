@@ -19,9 +19,9 @@ hid = ["hid"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
 opentrons = ["opentrons-http-api-client==0.2.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
-microscopy = ["numpy>=1.26", "opencv-python"]
-pico = ["PyLabRobot[microscopy,sila]"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila]"]
+cytation-microscopy = ["numpy>=1.26", "opencv-python"]
+pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila,pico]"]
 test = [
   "pytest",
   "pytest-timeout",
