@@ -13,6 +13,7 @@ from pylabrobot.tecan.evo.air_pip_backend import AirEVOPIPBackend, ZAAPMOTION_CO
 from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
 from pylabrobot.tecan.evo.firmware import LiHa
+from pylabrobot.tecan.evo.firmware.zaapmotion import ZaapMotion
 
 
 class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
@@ -22,7 +23,7 @@ class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
     self.driver = TecanEVODriver()
     self.driver.send_command = AsyncMock()
 
-    async def mock_send(module, command, params=None, **kwargs):
+    async def mock_send(module="", command="", params=None, **kwargs):
       if command == "RPX":
         return {"data": [5000]}
       if command == "RPY":
@@ -31,7 +32,7 @@ class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
         return {"data": [2100, 2100, 2100, 2100, 2100, 2100, 2100, 2100]}
       if command == "RNT":
         return {"data": [8]}
-      if command.startswith("REE"):
+      if command == "REE":
         if params and params[0] == 1:
           return {"data": ["XYSZZZZZZZZ"]}
         return {"data": ["@@@@@@@@@@@"]}
@@ -51,6 +52,7 @@ class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
     self.backend._y_range = 2833
     self.backend._z_range = 2100
     self.backend.liha = LiHa(self.driver, "C5")
+    self.backend.zaap = ZaapMotion(self.driver)
 
     self.tip_carrier = DiTi_3Pos(name="tip_carrier")
     self.tip_carrier[0] = self.tip_rack = DiTi_50ul_SBS_LiHa(name="tips")
@@ -101,7 +103,7 @@ class AirInitSkipTests(AirPIPTestBase):
 
   async def test_not_initialized_with_A(self):
     async def send(module, command, params=None, **kwargs):
-      if command == "REE0":
+      if command == "REE":
         return {"data": ["GGGAAAAAAAA"]}
       return {"data": []}
 
@@ -111,7 +113,7 @@ class AirInitSkipTests(AirPIPTestBase):
 
   async def test_not_initialized_with_G(self):
     async def send(module, command, params=None, **kwargs):
-      if command == "REE0":
+      if command == "REE":
         return {"data": ["GGGGGGGGGGG"]}
       return {"data": []}
 
@@ -121,7 +123,7 @@ class AirInitSkipTests(AirPIPTestBase):
 
   async def test_initialized_with_Y_tip_not_fetched(self):
     async def send(module, command, params=None, **kwargs):
-      if command == "REE0":
+      if command == "REE":
         return {"data": ["@@@YYYYYYY@"]}
       return {"data": []}
 

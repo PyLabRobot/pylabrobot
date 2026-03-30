@@ -55,7 +55,7 @@ class RoMaParkTests(RoMaTestBase):
 class RoMaHaltTests(RoMaTestBase):
   async def test_halt_sends_bma(self):
     await self.backend.halt()
-    self.driver.send_command.assert_called_with("C1", command="BMA", params=[0, 0, 0])
+    self.driver.send_command.assert_called_with(module="C1", command="BMA", params=[0, 0, 0])
 
 
 class RoMaGripperTests(RoMaTestBase):

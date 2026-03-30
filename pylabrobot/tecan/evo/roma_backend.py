@@ -18,6 +18,8 @@ from pylabrobot.resources.rotation import Rotation
 from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
 from pylabrobot.tecan.evo.firmware import RoMa
+from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
+from pylabrobot.tecan.evo.params import TecanRoMaParams
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +34,41 @@ class EVORoMaBackend(GripperArmBackend):
   with target window classes for smooth acceleration profiles.
   """
 
-  def __init__(self, driver: TecanEVODriver, deck: Resource):
+  def __init__(
+    self,
+    driver: TecanEVODriver,
+    deck: Resource,
+    park_position: tuple = (9000, 2000, 2464, 1800),
+  ):
     self._driver = driver
     self._deck = deck
     self._z_roma_traversal_height = 68.7  # mm
+    self._park_position = park_position
     self.roma: Optional[RoMa] = None
+
+  def _get_speeds(self, backend_params: Optional[BackendParams]) -> Dict[str, int]:
+    """Get speed settings, applying overrides from backend_params."""
+    defaults = {
+      "x": 10000, "y": 5000, "z": 1300, "r": 5000, "accel_y": 1500, "accel_r": 1500,
+    }
+    if isinstance(backend_params, TecanRoMaParams):
+      for key, attr in [
+        ("x", "speed_x"), ("y", "speed_y"), ("z", "speed_z"), ("r", "speed_r"),
+        ("accel_y", "accel_y"), ("accel_r", "accel_r"),
+      ]:
+        val = getattr(backend_params, attr, None)
+        if val is not None:
+          defaults[key] = val
+    return defaults
 
   async def _on_setup(self) -> None:
     """Initialize RoMa arm. Skips PIA if already initialized."""
 
+    arm = EVOArm(self._driver, ROMA)
+
     # Check if RoMa is present and already initialized
     try:
-      resp = await self._driver.send_command(ROMA, command="REE")
-      roma_err = resp["data"][0] if resp and resp.get("data") else ""
+      roma_err = await arm.read_error_register()
     except TecanError as e:
       if e.error_code == 5:
         logger.info("RoMa not present (error 5).")
@@ -60,13 +84,13 @@ class EVORoMaBackend(GripperArmBackend):
     # Full init: PIA + park
     logger.info("RoMa needs initialization, running PIA...")
     try:
-      await self._driver.send_command(ROMA, command="PIA")
+      await arm.position_init_all()
     except TecanError as e:
       if e.error_code == 5:
         logger.info("RoMa not present (error 5).")
         return
       raise
-    await self._driver.send_command(ROMA, command="BMX", params=[2])
+    await arm.set_bus_mode(2)
 
     self.roma = RoMa(self._driver, ROMA)
     await self.roma.position_initialization_x()
@@ -154,11 +178,12 @@ class EVORoMaBackend(GripperArmBackend):
     h = int(resource.get_absolute_size_y() * 10)
 
     # Move to resource
+    speeds = self._get_speeds(backend_params)
     await self.roma.set_smooth_move_x(1)
-    await self.roma.set_fast_speed_x(10000)
-    await self.roma.set_fast_speed_y(5000, 1500)
-    await self.roma.set_fast_speed_z(1300)
-    await self.roma.set_fast_speed_r(5000, 1500)
+    await self.roma.set_fast_speed_x(speeds["x"])
+    await self.roma.set_fast_speed_y(speeds["y"], speeds["accel_y"])
+    await self.roma.set_fast_speed_z(speeds["z"])
+    await self.roma.set_fast_speed_r(speeds["r"], speeds["accel_r"])
     await self.roma.set_vector_coordinate_position(1, x, y, z["safe"], 900, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_smooth_move_x(0)
@@ -173,6 +198,11 @@ class EVORoMaBackend(GripperArmBackend):
     await self.roma.set_fast_speed_r(2000, 600)
     await self.roma.set_gripper_params(100, 75)
     await self.roma.grip_plate(h - 100)
+
+    # Verify plate was gripped
+    g_pos = await self.roma.report_g_param(0)
+    if g_pos >= 900:
+      logger.warning("Plate may not be gripped (G-axis position: %d)", g_pos)
 
   async def drop_at_carrier(
     self,
@@ -224,11 +254,13 @@ class EVORoMaBackend(GripperArmBackend):
     await self.roma.action_move_vector_coordinate_position()
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
-    await self._driver.send_command(ROMA, command="BMA", params=[0, 0, 0])
+    assert self.roma is not None
+    await self.roma.bus_module_action(0, 0, 0)
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     assert self.roma is not None
-    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+    px, py, pz, pr = self._park_position
+    await self.roma.set_vector_coordinate_position(1, px, py, pz, pr, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
 
   async def open_gripper(

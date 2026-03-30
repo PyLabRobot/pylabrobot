@@ -11,7 +11,13 @@ from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
-from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
+from pylabrobot.capabilities.liquid_handling.standard import (
+  Aspiration,
+  Dispense,
+  Mix,
+  Pickup,
+  TipDrop,
+)
 from pylabrobot.legacy.liquid_handling.liquid_classes.tecan import (
   TecanLiquidClass,
   get_liquid_class,
@@ -22,6 +28,8 @@ from pylabrobot.resources.tecan.tip_creators import TecanTip
 from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
 from pylabrobot.tecan.evo.firmware import LiHa
+from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
+from pylabrobot.tecan.evo.params import TecanPIPParams
 
 logger = logging.getLogger(__name__)
 
@@ -101,20 +109,30 @@ class EVOPIPBackend(PIPBackend):
 
   async def _setup_arm(self, module: str) -> bool:
     """Send PIA + BMX to initialize an arm module."""
+    arm = EVOArm(self._driver, module)
     try:
       if module == MCA:
-        await self._driver.send_command(module, command="PIB")
-      await self._driver.send_command(module, command="PIA")
+        await arm.position_init_bus()
+      await arm.position_init_all()
     except TecanError as e:
       if e.error_code == 5:
         return False
       raise
     if module != MCA:
-      await self._driver.send_command(module, command="BMX", params=[2])
+      await arm.set_bus_mode(2)
     return True
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return isinstance(tip, TecanTip)
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Query tip mounted status for each channel via RTS firmware command."""
+    assert self.liha is not None
+    statuses = await self.liha.read_tip_status()
+    result: List[Optional[bool]] = [None] * self.num_channels
+    for i in range(min(len(statuses), self.num_channels)):
+      result[i] = statuses[i]
+    return result
 
   # ============== Utility methods ==============
 
@@ -304,6 +322,67 @@ class EVOPIPBackend(PIPBackend):
       for op in ops
     ]
 
+  # ============== Mixing and blow-out ==============
+
+  async def _perform_mix(self, mix: Mix, use_channels: List[int]) -> None:
+    """Perform mix cycles at the current tip position.
+
+    Repeatedly aspirates and dispenses the mix volume.
+
+    Args:
+      mix: Mix parameters (volume, repetitions, flow_rate).
+      use_channels: Which channels to mix on.
+    """
+    assert self.liha is not None
+
+    pvl: List[Optional[int]] = [None] * self.num_channels
+    sep: List[Optional[int]] = [None] * self.num_channels
+    ppr_asp: List[Optional[int]] = [None] * self.num_channels
+    ppr_disp: List[Optional[int]] = [None] * self.num_channels
+
+    for channel in use_channels:
+      pvl[channel] = 0  # outlet
+      sep[channel] = int(mix.flow_rate * self.SPEED_FACTOR)
+      steps = int(mix.volume * self.STEPS_PER_UL)
+      ppr_asp[channel] = steps
+      ppr_disp[channel] = -steps
+
+    await self.liha.position_valve_logical(pvl)
+    await self.liha.set_end_speed_plunger(sep)
+
+    for _ in range(mix.repetitions):
+      await self.liha.move_plunger_relative(ppr_asp)
+      await self.liha.move_plunger_relative(ppr_disp)
+
+  async def _perform_blow_out(
+    self, ops: List[Dispense], use_channels: List[int]
+  ) -> None:
+    """Push extra air volume after dispense to expel remaining liquid.
+
+    Args:
+      ops: Dispense operations (checks blow_out_air_volume).
+      use_channels: Channels to blow out.
+    """
+    assert self.liha is not None
+
+    pvl: List[Optional[int]] = [None] * self.num_channels
+    sep: List[Optional[int]] = [None] * self.num_channels
+    ppr: List[Optional[int]] = [None] * self.num_channels
+    has_blowout = False
+
+    for i, channel in enumerate(use_channels):
+      bov = ops[i].blow_out_air_volume
+      if bov is not None and bov > 0:
+        has_blowout = True
+        pvl[channel] = 0  # outlet
+        sep[channel] = int(100 * self.SPEED_FACTOR)
+        ppr[channel] = -int(bov * self.STEPS_PER_UL)
+
+    if has_blowout:
+      await self.liha.position_valve_logical(pvl)
+      await self.liha.set_end_speed_plunger(sep)
+      await self.liha.move_plunger_relative(ppr)
+
   # ============== PIPBackend implementation ==============
 
   async def pick_up_tips(
@@ -415,7 +494,14 @@ class EVOPIPBackend(PIPBackend):
     if any(tlc.aspirate_lld if tlc is not None else None for tlc in tecan_liquid_classes):
       tlc, _ = self._first_valid(tecan_liquid_classes)
       assert tlc is not None
-      await self.liha.set_detection_mode(tlc.lld_mode, tlc.lld_conductivity)
+      lld_proc = tlc.lld_mode
+      lld_sense = tlc.lld_conductivity
+      if isinstance(backend_params, TecanPIPParams):
+        if backend_params.liquid_detection_proc is not None:
+          lld_proc = backend_params.liquid_detection_proc
+        if backend_params.liquid_detection_sense is not None:
+          lld_sense = backend_params.liquid_detection_sense
+      await self.liha.set_detection_mode(lld_proc, lld_sense)
       ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
       await self.liha.set_search_speed(ssl)
       await self.liha.set_search_retract_distance(sdl)
@@ -442,6 +528,13 @@ class EVOPIPBackend(PIPBackend):
     await self.liha.position_valve_logical(pvl)
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.move_plunger_relative(ppr)
+
+    # Post-aspirate mix
+    mix_channels = [ch for ch, op in zip(use_channels, ops) if op.mix is not None]
+    if mix_channels:
+      mix_op = next(op for op in ops if op.mix is not None)
+      assert mix_op.mix is not None
+      await self._perform_mix(mix_op.mix, mix_channels)
 
   async def dispense(
     self,
@@ -472,3 +565,25 @@ class EVOPIPBackend(PIPBackend):
     await self.liha.set_stop_speed_plunger(spp)
     await self.liha.set_tracking_distance_z(stz)
     await self.liha.move_tracking_relative(mtr)
+
+    # Blow-out
+    await self._perform_blow_out(ops, use_channels)
+
+    # Tip touch
+    if isinstance(backend_params, TecanPIPParams) and backend_params.tip_touch:
+      touch_offset = int(backend_params.tip_touch_offset_y * 10)
+      await self.liha.position_absolute_all_axis(
+        x, y - yi * ys + touch_offset, ys,
+        [z if z else self._z_range for z in z_positions["dispense"]],
+      )
+      await self.liha.position_absolute_all_axis(
+        x, y - yi * ys, ys,
+        [z if z else self._z_range for z in z_positions["dispense"]],
+      )
+
+    # Post-dispense mix
+    mix_channels = [ch for ch, op in zip(use_channels, ops) if op.mix is not None]
+    if mix_channels:
+      mix_op = next(op for op in ops if op.mix is not None)
+      assert mix_op.mix is not None
+      await self._perform_mix(mix_op.mix, mix_channels)

@@ -218,6 +218,29 @@ class LiHa(EVOArm):
       params=[tips, z_start, z_search, 0],
     )
 
+  async def position_plunger_absolute(self, positions: List[Optional[int]]) -> None:
+    """Move plunger to absolute position (PPA).
+
+    Args:
+      positions: absolute plunger position in full steps per channel (0-3150).
+                 0 = fully dispensed, 3150 = fully aspirated.
+    """
+    await self.interface.send_command(module=self.module, command="PPA", params=positions)
+
+  async def set_disposable_tip_params(
+    self, mode: int, z_discard: int, z_retract: int
+  ) -> None:
+    """Set disposable tip discard parameters (SDT).
+
+    Args:
+      mode: 1 = discard in rack
+      z_discard: Z discard distance in 1/10 mm
+      z_retract: Z retract distance in 1/10 mm
+    """
+    await self.interface.send_command(
+      module=self.module, command="SDT", params=[mode, z_discard, z_retract]
+    )
+
   async def discard_disposable_tip_high(self, tips: int) -> None:
     """Discard tips at Z-axis initialization height.
 
@@ -236,3 +259,52 @@ class LiHa(EVOArm):
     await self.interface.send_command(
       module=self.module, command="AST", params=[tips, discard_height]
     )
+
+  # ============== Query commands ==============
+
+  async def read_plunger_positions(self) -> List[int]:
+    """Read current plunger positions (RPP).
+
+    Returns:
+      List of plunger positions in full steps per channel.
+    """
+    resp: List[int] = (
+      await self.interface.send_command(module=self.module, command="RPP", params=[0])
+    )["data"]
+    return resp
+
+  async def read_z_after_liquid_detection(self) -> List[int]:
+    """Read Z values after liquid detection (RVZ).
+
+    Returns:
+      List of Z positions in 1/10 mm where liquid was detected, per channel.
+    """
+    resp: List[int] = (
+      await self.interface.send_command(module=self.module, command="RVZ", params=[0])
+    )["data"]
+    return resp
+
+  async def read_tip_status(self) -> List[bool]:
+    """Read tip mounted status for each channel (RTS).
+
+    Returns:
+      List of booleans: True if tip is mounted on that channel.
+
+    Note:
+      Response format needs hardware validation. This implementation assumes
+      the response is a per-channel list of int values (0=no tip, 1=tip).
+    """
+    resp: List[int] = (
+      await self.interface.send_command(module=self.module, command="RTS", params=[0])
+    )["data"]
+    return [bool(v) for v in resp]
+
+  async def position_absolute_z_bulk(self, z: List[Optional[int]]) -> None:
+    """Position absolute Z for all channels simultaneously (PAZ).
+
+    Unlike :meth:`move_absolute_z` which uses slow speed, PAZ uses fast speed.
+
+    Args:
+      z: absolute Z position in 1/10 mm per channel
+    """
+    await self.interface.send_command(module=self.module, command="PAZ", params=z)
