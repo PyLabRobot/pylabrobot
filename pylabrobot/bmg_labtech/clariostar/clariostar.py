@@ -33,7 +33,7 @@ class CLARIOstar(Resource, Device):
       model="BMG CLARIOstar",
     )
     Device.__init__(self, driver=driver)
-    self._driver: CLARIOstarDriver = driver
+    self.driver: CLARIOstarDriver = driver
     self.absorbance = Absorbance(backend=CLARIOstarAbsorbanceBackend(driver))
     self.luminescence = Luminescence(backend=CLARIOstarLuminescenceBackend(driver))
     self.fluorescence = Fluorescence(backend=CLARIOstarFluorescenceBackend(driver))
@@ -54,8 +54,8 @@ class CLARIOstar(Resource, Device):
 
   async def open(self) -> None:
     """Open the plate tray."""
-    await self._driver.open()
+    await self.driver.open()
 
   async def close(self) -> None:
     """Close the plate tray."""
-    await self._driver.close()
+    await self.driver.close()

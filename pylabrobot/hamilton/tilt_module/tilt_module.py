@@ -38,7 +38,7 @@ class HamiltonTiltModule(ResourceHolder, Device):
       model="HamiltonTiltModule",
     )
     Device.__init__(self, driver=driver)
-    self._driver: HamiltonTiltModuleDriver = driver
+    self.driver: HamiltonTiltModuleDriver = driver
     self.pedestal_size_z = pedestal_size_z
     self._hinge_coordinate = Coordinate(6.18, 0, 72.85)
 

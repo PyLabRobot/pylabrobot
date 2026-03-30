@@ -13,7 +13,7 @@ class SCILA(Device):
     raise NotImplementedError("SCILA is missing resource definition.")
     driver = SCILADriver(scila_ip=scila_ip, client_ip=client_ip)
     Device.__init__(self, driver=driver)
-    self._driver: SCILADriver = driver
+    self.driver: SCILADriver = driver
     self.tc = TemperatureController(backend=SCILATemperatureBackend(driver=driver))
     self._capabilities = [self.tc]
 

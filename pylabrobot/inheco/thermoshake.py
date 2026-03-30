@@ -98,7 +98,7 @@ class InhecoThermoShake(ResourceHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: InhecoThermoshakeBackend = driver
+    self.driver: InhecoThermoshakeBackend = driver
     self.tc = TemperatureController(backend=driver)
     self.shaker = Shaker(backend=driver)
     self._capabilities = [self.tc, self.shaker]

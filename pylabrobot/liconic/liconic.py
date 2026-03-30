@@ -56,7 +56,7 @@ class Liconic(Resource, Device):
       model=model,
     )
     Device.__init__(self, driver=backend)
-    self._driver: LiconicBackend = backend
+    self.driver: LiconicBackend = backend
 
     self.loading_tray = PlateHolder(
       name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
@@ -99,7 +99,7 @@ class Liconic(Resource, Device):
     if self.barcode_scanner is not None:
       await self.barcode_scanner.backend._on_setup()
     await super().setup()
-    await self._driver.set_racks(self._racks)
+    await self.driver.set_racks(self._racks)
 
   async def stop(self):
     await super().stop()

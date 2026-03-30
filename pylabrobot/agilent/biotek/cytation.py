@@ -880,7 +880,7 @@ class Cytation5(Resource, Device):
       model="Agilent BioTek Cytation 5",
     )
     Device.__init__(self, driver=backend)
-    self._driver: CytationBackend = backend
+    self.driver: CytationBackend = backend
     self.absorbance = Absorbance(backend=backend)
     self.luminescence = Luminescence(backend=backend)
     self.fluorescence = Fluorescence(backend=backend)
@@ -902,10 +902,10 @@ class Cytation5(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self._driver.open(slow=slow)
+    await self.driver.open(slow=slow)
 
   async def close(self, slow: bool = False) -> None:
-    await self._driver.close(slow=slow)
+    await self.driver.close(slow=slow)
 
 
 class Cytation1(Resource, Device):
@@ -929,7 +929,7 @@ class Cytation1(Resource, Device):
       model="Agilent BioTek Cytation 1",
     )
     Device.__init__(self, driver=backend)
-    self._driver: BioTekBackend = backend
+    self.driver: BioTekBackend = backend
     self.microscopy = Microscopy(backend=backend)
     self.temperature = TemperatureController(backend=backend)
     self._capabilities = [self.microscopy, self.temperature]
@@ -948,7 +948,7 @@ class Cytation1(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self._driver.open(slow=slow)
+    await self.driver.open(slow=slow)
 
   async def close(self, slow: bool = False) -> None:
-    await self._driver.close(slow=slow)
+    await self.driver.close(slow=slow)

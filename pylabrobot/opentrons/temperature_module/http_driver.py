@@ -43,7 +43,7 @@ class OpentronsTemperatureModuleTemperatureBackend(TemperatureControllerBackend)
   """Translates ``TemperatureControllerBackend`` into Opentrons HTTP-API calls."""
 
   def __init__(self, driver: OpentronsTemperatureModuleDriver):
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -51,15 +51,15 @@ class OpentronsTemperatureModuleTemperatureBackend(TemperatureControllerBackend)
 
   async def set_temperature(self, temperature: float):
     ot_api.modules.temperature_module_set_temperature(
-      celsius=temperature, module_id=self._driver.opentrons_id
+      celsius=temperature, module_id=self.driver.opentrons_id
     )
 
   async def deactivate(self):
-    ot_api.modules.temperature_module_deactivate(module_id=self._driver.opentrons_id)
+    ot_api.modules.temperature_module_deactivate(module_id=self.driver.opentrons_id)
 
   async def request_current_temperature(self) -> float:
     modules = ot_api.modules.list_connected_modules()
     for module in modules:
-      if module["id"] == self._driver.opentrons_id:
+      if module["id"] == self.driver.opentrons_id:
         return cast(float, module["data"]["currentTemperature"])
-    raise RuntimeError(f"Module with id '{self._driver.opentrons_id}' not found")
+    raise RuntimeError(f"Module with id '{self.driver.opentrons_id}' not found")

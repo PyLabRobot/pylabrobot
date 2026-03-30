@@ -23,8 +23,16 @@ class STARXArm:
   """
 
   def __init__(self, driver: "STARDriver", side: Literal["left", "right"]):
-    self._driver = driver
+    self.driver = driver
     self._side = side
+
+  # -- lifecycle -------------------------------------------------------------
+
+  async def _on_setup(self):
+    pass
+
+  async def _on_stop(self):
+    pass
 
   # -- positioning (collision risk) ------------------------------------------
 
@@ -40,7 +48,7 @@ class STARXArm:
     assert 0 <= x_position <= 3000.0, "x_position must be between 0 and 3000 mm"
 
     cmd = "JX" if self._side == "left" else "JS"
-    return await self._driver.send_command(
+    return await self.driver.send_command(
       module="C0",
       command=cmd,
       xs=f"{round(x_position * 10):05}",
@@ -59,7 +67,7 @@ class STARXArm:
     assert 0 <= x_position <= 3000.0, "x_position must be between 0 and 3000 mm"
 
     cmd = "KX" if self._side == "left" else "KR"
-    return await self._driver.send_command(
+    return await self.driver.send_command(
       module="C0",
       command=cmd,
       xs=round(x_position * 10),
@@ -75,7 +83,7 @@ class STARXArm:
     """
 
     cmd = "RX" if self._side == "left" else "QX"
-    resp = await self._driver.send_command(module="C0", command=cmd, fmt="rx#####")
+    resp = await self.driver.send_command(module="C0", command=cmd, fmt="rx#####")
     return float(resp["rx"]) / 10
 
   # -- collision type query --------------------------------------------------
@@ -89,5 +97,5 @@ class STARXArm:
     """
 
     cmd = "XX" if self._side == "left" else "XR"
-    resp = await self._driver.send_command(module="C0", command=cmd, fmt="xq#")
+    resp = await self.driver.send_command(module="C0", command=cmd, fmt="xq#")
     return resp["xq"] == 1

@@ -20,7 +20,7 @@ class SpectraMax384PlusAbsorbanceBackend(MolecularDevicesAbsorbanceBackend):
 
   async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
     cmd = f"!READTYPE {'CUV' if settings.cuvette else 'PLA'}"
-    await self._driver.send_command(cmd, num_res_fields=1)
+    await self.driver.send_command(cmd, num_res_fields=1)
 
   async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
     pass
@@ -57,7 +57,7 @@ class SpectraMax384Plus(Resource, Device):
       model="Molecular Devices SpectraMax 384 Plus",
     )
     Device.__init__(self, driver=driver)
-    self._driver: MolecularDevicesDriver = driver
+    self.driver: MolecularDevicesDriver = driver
     self.absorbance = Absorbance(backend=SpectraMax384PlusAbsorbanceBackend(driver))
     self.tc = TemperatureController(backend=MolecularDevicesTemperatureBackend(driver))
     self._capabilities = [self.absorbance, self.tc]

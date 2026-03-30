@@ -2,12 +2,19 @@
 
 from typing import List, Optional
 
+from .autoload import STARAutoload
+from .cover import STARCover
 from .driver import (
   DriveConfiguration,
   ExtendedConfiguration,
   MachineConfiguration,
   STARDriver,
 )
+from .head96_backend import STARHead96Backend
+from .iswap import iSWAPBackend
+from .pip_backend import STARPIPBackend
+from .wash_station import STARWashStation
+from .x_arm import STARXArm
 
 _DEFAULT_MACHINE_CONF = MachineConfiguration(
   pip_type_1000ul=True,
@@ -54,22 +61,16 @@ class STARChatterboxDriver(STARDriver):
     self.machine_conf = self._machine_configuration
     self.extended_conf = self._extended_configuration
 
-    from .pip_backend import STARPIPBackend
-
     self.pip = STARPIPBackend(self)
 
     self._channels_minimum_y_spacing = [9.0] * self._num_channels
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      from .head96_backend import STARHead96Backend
-
       self.head96 = STARHead96Backend(self)
     else:
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      from .iswap import iSWAPBackend
-
       self.iswap = iSWAPBackend(driver=self)
       self.iswap._version = "chatterbox"
       self.iswap._parked = True
@@ -77,8 +78,6 @@ class STARChatterboxDriver(STARDriver):
       self.iswap = None
 
     if self.machine_conf.auto_load_installed:
-      from .autoload import STARAutoload
-
       self.autoload = STARAutoload(
         driver=self,
         instrument_size_slots=self.extended_conf.instrument_size_slots,
@@ -86,27 +85,26 @@ class STARChatterboxDriver(STARDriver):
     else:
       self.autoload = None
 
-    from .x_arm import STARXArm
-
     self.left_x_arm = STARXArm(driver=self, side="left")
     if self.extended_conf.right_x_drive_large:
       self.right_x_arm = STARXArm(driver=self, side="right")
     else:
       self.right_x_arm = None
 
-    from .cover import STARCover
-
     self.cover = STARCover(driver=self)
 
     if (self.machine_conf.wash_station_1_installed or
         self.machine_conf.wash_station_2_installed):
-      from .wash_station import STARWashStation
-
       self.wash_station = STARWashStation(driver=self)
     else:
       self.wash_station = None
 
+    for sub in self._subsystems:
+      await sub._on_setup()
+
   async def stop(self):
+    for sub in reversed(self._subsystems):
+      await sub._on_stop()
     self.machine_conf = None
     self.extended_conf = None
     self._channels_minimum_y_spacing = []

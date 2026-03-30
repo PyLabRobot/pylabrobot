@@ -53,7 +53,7 @@ class Pico(Resource, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: PicoDriver = driver
+    self.driver: PicoDriver = driver
 
     self.microscopy = Microscopy(
       backend=PicoMicroscopyBackend(

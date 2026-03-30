@@ -21,7 +21,17 @@ class STARWashStation:
   """
 
   def __init__(self, driver: "STARDriver"):
-    self._driver = driver
+    self.driver = driver
+
+  # -- lifecycle -------------------------------------------------------------
+
+  async def _on_setup(self):
+    pass
+
+  async def _on_stop(self):
+    pass
+
+  # -- commands --------------------------------------------------------------
 
   class Type(enum.IntEnum):
     """Pump station type enumeration."""
@@ -50,7 +60,7 @@ class STARWashStation:
 
     assert 1 <= station <= 3, "station must be between 1 and 3"
 
-    resp = await self._driver.send_command(module="C0", command="ET", fmt="et#", ep=station)
+    resp = await self.driver.send_command(module="C0", command="ET", fmt="et#", ep=station)
     return STARWashStation.Type(resp["et"])
 
   async def initialize_valves(self, station: int = 1):
@@ -62,7 +72,7 @@ class STARWashStation:
 
     assert 1 <= station <= 3, "station must be between 1 and 3"
 
-    return await self._driver.send_command(module="C0", command="EJ", ep=station)
+    return await self.driver.send_command(module="C0", command="EJ", ep=station)
 
   async def fill_chamber(
     self,
@@ -96,7 +106,7 @@ class STARWashStation:
     # wash fluid <-> chamber connection
     connection = {(1, 2): 0, (1, 1): 1, (2, 1): 2, (2, 2): 3}[wash_fluid, chamber]
 
-    return await self._driver.send_command(
+    return await self.driver.send_command(
       module="C0",
       command="EH",
       ep=station,
@@ -115,4 +125,4 @@ class STARWashStation:
 
     assert 1 <= station <= 3, "station must be between 1 and 3"
 
-    return await self._driver.send_command(module="C0", command="EL", ep=station)
+    return await self.driver.send_command(module="C0", command="EL", ep=station)

@@ -75,14 +75,14 @@ class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
 
   def __init__(self, driver: KeyenceBarcodeScannerDriver):
     super().__init__()
-    self._driver = driver
+    self.driver = driver
 
   async def _on_setup(self):
     """Initialize the barcode scanner motor after the driver connects."""
 
     deadline = time.time() + self.init_timeout
     while time.time() < deadline:
-      response = await self._driver.send_command("RMOTOR")
+      response = await self.driver.send_command("RMOTOR")
       if response.strip() == "MOTORON":
         logger.info("Barcode scanner motor is ON.")
         break
@@ -95,7 +95,7 @@ class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
       )
 
   async def scan_barcode(self) -> Barcode:
-    data = await self._driver.send_command("LON")
+    data = await self.driver.send_command("LON")
     if data.startswith("NG"):
       raise BarcodeScannerError("Barcode reader is off: cannot read barcode")
     if data.startswith("ERR99"):

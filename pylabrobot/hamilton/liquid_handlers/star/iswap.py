@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 import enum
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Literal, Optional, cast
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection, GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
+
+if TYPE_CHECKING:
+  from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 
 
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
@@ -195,7 +199,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.driver.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return round(STARDriver.y_drive_increment_to_mm(iswap_y_pos), 1)
+    return round(self.driver.y_drive_increment_to_mm(iswap_y_pos), 1)
 
   async def move_x(self, x_position: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""

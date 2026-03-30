@@ -3929,7 +3929,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.position_max_free_y_for_n(pipetting_channel_index=channel)
 
   async def move_channel_x(self, channel: int, x: float):
-    """Deprecated: use ``star._driver.left_x_arm.move_to()``."""
+    """Deprecated: use ``star.driver.left_x_arm.move_to()``."""
     await self._new_left_x_arm.move_to(x)
 
   @need_iswap_parked
@@ -4146,7 +4146,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.2 System general commands --------------
 
   async def pre_initialize_instrument(self):
-    """Deprecated: use ``star._driver.pre_initialize_instrument()``."""
+    """Deprecated: use ``star.driver.pre_initialize_instrument()``."""
     return await self.send_command(module="C0", command="VI", read_timeout=300)
 
   async def define_tip_needle(
@@ -4191,17 +4191,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.2.1 System query --------------
 
   async def request_error_code(self):
-    """Deprecated: use ``star._driver.request_error_code()``."""
+    """Deprecated: use ``star.driver.request_error_code()``."""
 
     return await self.send_command(module="C0", command="RE")
 
   async def request_firmware_version(self):
-    """Deprecated: use ``star._driver.request_firmware_version()``."""
+    """Deprecated: use ``star.driver.request_firmware_version()``."""
 
     return await self.send_command(module="C0", command="RF")
 
   async def request_parameter_value(self):
-    """Deprecated: use ``star._driver.request_parameter_value()``."""
+    """Deprecated: use ``star.driver.request_parameter_value()``."""
 
     return await self.send_command(module="C0", command="RA")
 
@@ -4213,7 +4213,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     UNKNOWN = -1
 
   async def request_electronic_board_type(self):
-    """Deprecated: use ``star._driver.request_electronic_board_type()``."""
+    """Deprecated: use ``star.driver.request_electronic_board_type()``."""
 
     resp = await self.send_command(module="C0", command="QB")
     try:
@@ -4222,12 +4222,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       return STARBackend.BoardType.UNKNOWN
 
   async def request_supply_voltage(self):
-    """Deprecated: use ``star._driver.request_supply_voltage()``."""
+    """Deprecated: use ``star.driver.request_supply_voltage()``."""
 
     return await self.send_command(module="C0", command="MU")
 
   async def request_instrument_initialization_status(self) -> bool:
-    """Deprecated: use ``star._driver.request_instrument_initialization_status()``."""
+    """Deprecated: use ``star.driver.request_instrument_initialization_status()``."""
 
     resp = await self.send_command(module="C0", command="QW", fmt="qw#")
     return resp is not None and resp["qw"] == 1
@@ -4237,23 +4237,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self._new_autoload.request_initialization_status()
 
   async def request_name_of_last_faulty_parameter(self):
-    """Deprecated: use ``star._driver.request_name_of_last_faulty_parameter()``."""
+    """Deprecated: use ``star.driver.request_name_of_last_faulty_parameter()``."""
 
     return await self.send_command(module="C0", command="VP", fmt="vp&&")
 
   async def request_master_status(self):
-    """Deprecated: use ``star._driver.request_master_status()``."""
+    """Deprecated: use ``star.driver.request_master_status()``."""
 
     return await self.send_command(module="C0", command="RQ")
 
   async def request_number_of_presence_sensors_installed(self):
-    """Deprecated: use ``star._driver.request_number_of_presence_sensors_installed()``."""
+    """Deprecated: use ``star.driver.request_number_of_presence_sensors_installed()``."""
 
     resp = await self.send_command(module="C0", command="SR")
     return resp["sr"]
 
   async def request_eeprom_data_correctness(self):
-    """Deprecated: use ``star._driver.request_eeprom_data_correctness()``."""
+    """Deprecated: use ``star.driver.request_eeprom_data_correctness()``."""
 
     return await self.send_command(module="C0", command="QV")
 
@@ -4262,7 +4262,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.3.1 Volatile Settings --------------
 
   async def set_single_step_mode(self, single_step_mode: bool = False):
-    """Deprecated: use ``star._driver.set_single_step_mode()``."""
+    """Deprecated: use ``star.driver.set_single_step_mode()``."""
 
     return await self.send_command(
       module="C0",
@@ -4271,23 +4271,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def trigger_next_step(self):
-    """Deprecated: use ``star._driver.trigger_next_step()``."""
+    """Deprecated: use ``star.driver.trigger_next_step()``."""
 
     # TODO: this command has no reply!!!!
     return await self.send_command(module="C0", command="NS")
 
   async def halt(self):
-    """Deprecated: use ``star._driver.halt()``."""
+    """Deprecated: use ``star.driver.halt()``."""
 
     return await self.send_command(module="C0", command="HD")
 
   async def save_all_cycle_counters(self):
-    """Deprecated: use ``star._driver.save_all_cycle_counters()``."""
+    """Deprecated: use ``star.driver.save_all_cycle_counters()``."""
 
     return await self.send_command(module="C0", command="AZ")
 
   async def set_not_stop(self, non_stop):
-    """Deprecated: use ``star._driver.set_not_stop()``."""
+    """Deprecated: use ``star.driver.set_not_stop()``."""
 
     if non_stop:
       # TODO: this command has no reply!!!!
@@ -4302,7 +4302,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     date: datetime.datetime = datetime.datetime.now(),
     serial_number: str = "0000",
   ):
-    """Deprecated: use ``star._driver.store_installation_data()``."""
+    """Deprecated: use ``star.driver.store_installation_data()``."""
 
     assert len(serial_number) == 4, "serial number must be 4 chars long"
 
@@ -4314,7 +4314,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     date: datetime.datetime = datetime.datetime.now(),
     verification_status: bool = False,
   ):
-    """Deprecated: use ``star._driver.store_verification_data()``."""
+    """Deprecated: use ``star.driver.store_verification_data()``."""
 
     assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
 
@@ -4327,27 +4327,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def additional_time_stamp(self):
-    """Deprecated: use ``star._driver.additional_time_stamp()``."""
+    """Deprecated: use ``star.driver.additional_time_stamp()``."""
 
     return await self.send_command(module="C0", command="AT")
 
   async def set_x_offset_x_axis_iswap(self, x_offset: int):
-    """Deprecated: use ``star._driver.set_x_offset_x_axis_iswap()``."""
+    """Deprecated: use ``star.driver.set_x_offset_x_axis_iswap()``."""
 
     return await self.send_command(module="C0", command="AG", x_offset=x_offset)
 
   async def set_x_offset_x_axis_core_96_head(self, x_offset: int):
-    """Deprecated: use ``star._driver.set_x_offset_x_axis_core_96_head()``."""
+    """Deprecated: use ``star.driver.set_x_offset_x_axis_core_96_head()``."""
 
     return await self.send_command(module="C0", command="AF", x_offset=x_offset)
 
   async def set_x_offset_x_axis_core_nano_pipettor_head(self, x_offset: int):
-    """Deprecated: use ``star._driver.set_x_offset_x_axis_core_nano_pipettor_head()``."""
+    """Deprecated: use ``star.driver.set_x_offset_x_axis_core_nano_pipettor_head()``."""
 
     return await self.send_command(module="C0", command="AF", x_offset=x_offset)
 
   async def save_download_date(self, date: datetime.datetime = datetime.datetime.now()):
-    """Deprecated: use ``star._driver.save_download_date()``."""
+    """Deprecated: use ``star.driver.save_download_date()``."""
 
     return await self.send_command(
       module="C0",
@@ -4356,7 +4356,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def save_technical_status_of_assemblies(self, processor_board: str, power_supply: str):
-    """Deprecated: use ``star._driver.save_technical_status_of_assemblies()``."""
+    """Deprecated: use ``star.driver.save_technical_status_of_assemblies()``."""
 
     return await self.send_command(
       module="C0",
@@ -4388,7 +4388,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     left_arm_minimal_y_position: int = 60,
     right_arm_minimal_y_position: int = 60,
   ):
-    """Deprecated: use ``star._driver.set_instrument_configuration()``."""
+    """Deprecated: use ``star.driver.set_instrument_configuration()``."""
 
     assert 1 <= instrument_size_in_slots_x_range <= 9, (
       "instrument_size_in_slots_x_range must be between 1 and 99"
@@ -4456,7 +4456,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def save_pip_channel_validation_status(self, validation_status: bool = False):
-    """Deprecated: use ``star._driver.save_pip_channel_validation_status()``."""
+    """Deprecated: use ``star.driver.save_pip_channel_validation_status()``."""
 
     return await self.send_command(
       module="C0",
@@ -4465,7 +4465,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def save_xl_channel_validation_status(self, validation_status: bool = False):
-    """Deprecated: use ``star._driver.save_xl_channel_validation_status()``."""
+    """Deprecated: use ``star.driver.save_xl_channel_validation_status()``."""
 
     return await self.send_command(
       module="C0",
@@ -4475,12 +4475,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO: response
   async def configure_node_names(self):
-    """Deprecated: use ``star._driver.configure_node_names()``."""
+    """Deprecated: use ``star.driver.configure_node_names()``."""
 
     return await self.send_command(module="C0", command="AJ")
 
   async def set_deck_data(self, data_index: int = 0, data_stream: str = "0"):
-    """Deprecated: use ``star._driver.set_deck_data()``."""
+    """Deprecated: use ``star.driver.set_deck_data()``."""
 
     assert 0 <= data_index <= 9, "data_index must be between 0 and 9"
     assert len(data_stream) == 12, "data_stream must be 12 chars"
@@ -4495,29 +4495,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.3.3 Settings query (stored in EEPROM) --------------
 
   async def request_technical_status_of_assemblies(self):
-    """Deprecated: use ``star._driver.request_technical_status_of_assemblies()``."""
+    """Deprecated: use ``star.driver.request_technical_status_of_assemblies()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="QT")
 
   async def request_installation_data(self):
-    """Deprecated: use ``star._driver.request_installation_data()``."""
+    """Deprecated: use ``star.driver.request_installation_data()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="RI")
 
   async def request_device_serial_number(self) -> str:
-    """Deprecated: use ``star._driver.request_device_serial_number()``."""
+    """Deprecated: use ``star.driver.request_device_serial_number()``."""
     return (await self.send_command("C0", "RI", fmt="si####sn&&&&sn&&&&"))["sn"]  # type: ignore
 
   async def request_download_date(self):
-    """Deprecated: use ``star._driver.request_download_date()``."""
+    """Deprecated: use ``star.driver.request_download_date()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="RO")
 
   async def request_verification_data(self, verification_subject: int = 0):
-    """Deprecated: use ``star._driver.request_verification_data()``."""
+    """Deprecated: use ``star.driver.request_verification_data()``."""
 
     assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
 
@@ -4525,19 +4525,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="RO", vo=verification_subject)
 
   async def request_additional_timestamp_data(self):
-    """Deprecated: use ``star._driver.request_additional_timestamp_data()``."""
+    """Deprecated: use ``star.driver.request_additional_timestamp_data()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="RS")
 
   async def request_pip_channel_validation_status(self):
-    """Deprecated: use ``star._driver.request_pip_channel_validation_status()``."""
+    """Deprecated: use ``star.driver.request_pip_channel_validation_status()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="RJ")
 
   async def request_xl_channel_validation_status(self):
-    """Deprecated: use ``star._driver.request_xl_channel_validation_status()``."""
+    """Deprecated: use ``star.driver.request_xl_channel_validation_status()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="UJ")
@@ -4636,13 +4636,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def request_node_names(self):
-    """Deprecated: use ``star._driver.request_node_names()``."""
+    """Deprecated: use ``star.driver.request_node_names()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="RK")
 
   async def request_deck_data(self):
-    """Deprecated: use ``star._driver.request_deck_data()``."""
+    """Deprecated: use ``star.driver.request_deck_data()``."""
 
     # TODO: parse res
     return await self.send_command(module="C0", command="VD")
@@ -4681,7 +4681,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     taken_area_size: int = 0,
     arm_preposition_mode_related_to_taken_areas: int = 0,
   ):
-    """Deprecated: use ``star._driver.occupy_and_provide_area_for_external_access()``."""
+    """Deprecated: use ``star.driver.occupy_and_provide_area_for_external_access()``."""
 
     assert 0 <= taken_area_identification_number <= 9999, (
       "taken_area_identification_number must be between 0 and 9999"
@@ -4706,7 +4706,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def release_occupied_area(self, taken_area_identification_number: int = 0):
-    """Deprecated: use ``star._driver.release_occupied_area()``."""
+    """Deprecated: use ``star.driver.release_occupied_area()``."""
 
     assert 0 <= taken_area_identification_number <= 999, (
       "taken_area_identification_number must be between 0 and 9999"
@@ -4719,7 +4719,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def release_all_occupied_areas(self):
-    """Deprecated: use ``star._driver.release_all_occupied_areas()``."""
+    """Deprecated: use ``star.driver.release_all_occupied_areas()``."""
 
     return await self.send_command(module="C0", command="BC")
 
@@ -4734,12 +4734,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self._new_right_x_arm.request_position()
 
   async def request_maximal_ranges_of_x_drives(self):
-    """Deprecated: use ``star._driver.request_maximal_ranges_of_x_drives()``."""
+    """Deprecated: use ``star.driver.request_maximal_ranges_of_x_drives()``."""
 
     return await self.send_command(module="C0", command="RU")
 
   async def request_present_wrap_size_of_installed_arms(self):
-    """Deprecated: use ``star._driver.request_present_wrap_size_of_installed_arms()``."""
+    """Deprecated: use ``star.driver.request_present_wrap_size_of_installed_arms()``."""
 
     return await self.send_command(module="C0", command="UA")
 

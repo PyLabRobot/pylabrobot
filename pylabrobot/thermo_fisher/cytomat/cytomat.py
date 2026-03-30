@@ -26,7 +26,7 @@ class NoFreeSiteError(Exception):
 
 class Cytomat(Resource, Device):
   _racks: List[PlateCarrier]
-  _driver: CytomatBackend
+  driver: CytomatBackend
   loading_tray: PlateHolder
   retrieval: AutomatedRetrieval
   tc: TemperatureController
@@ -58,7 +58,7 @@ class Cytomat(Resource, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: CytomatBackend = driver
+    self.driver: CytomatBackend = driver
 
     self.loading_tray = PlateHolder(
       name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
@@ -87,7 +87,7 @@ class Cytomat(Resource, Device):
 
   async def setup(self, **backend_kwargs):
     await super().setup()
-    await self._driver.set_racks(self._racks)
+    await self.driver.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:
     return sum([len(rack.get_free_sites()) for rack in self._racks])

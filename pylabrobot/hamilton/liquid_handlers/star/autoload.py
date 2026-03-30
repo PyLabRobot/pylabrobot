@@ -49,26 +49,29 @@ class STARAutoload:
   }
 
   def __init__(self, driver: "STARDriver", instrument_size_slots: int = 54):
-    self._driver = driver
+    self.driver = driver
     self._instrument_size_slots = instrument_size_slots
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
-  # -- initialization --------------------------------------------------------
+  # -- lifecycle -------------------------------------------------------------
 
-  async def initialize(self):
+  async def _on_setup(self):
     """Initialize Auto load module (C0:II)."""
-    return await self._driver.send_command(module="C0", command="II")
+    await self.driver.send_command(module="C0", command="II")
+
+  async def _on_stop(self):
+    pass
 
   async def request_initialization_status(self) -> bool:
     """Request autoload initialization status (I0:QW)."""
-    resp = await self._driver.send_command(module="I0", command="QW", fmt="qw#")
+    resp = await self.driver.send_command(module="I0", command="QW", fmt="qw#")
     return resp is not None and resp["qw"] == 1
 
   # -- z-position safety -----------------------------------------------------
 
   async def move_to_safe_z_position(self):
     """Move autoload carrier handling wheel to safe Z position (C0:IV)."""
-    return await self._driver.send_command(module="C0", command="IV")
+    return await self.driver.send_command(module="C0", command="IV")
 
   # -- position queries ------------------------------------------------------
 
@@ -78,7 +81,7 @@ class STARAutoload:
     Returns:
       track (0..54)
     """
-    resp = await self._driver.send_command(module="C0", command="QA", fmt="qa##")
+    resp = await self.driver.send_command(module="C0", command="QA", fmt="qa##")
     return int(resp["qa"])
 
   async def request_type(self) -> str:
@@ -94,7 +97,7 @@ class STARAutoload:
       2: "ML-STAR with 2D Barcode Scanner",
     }
 
-    resp = await self._driver.send_command(module="C0", command="CQ", fmt="cq#")
+    resp = await self.driver.send_command(module="C0", command="CQ", fmt="cq#")
     resp = autoload_type_dict[resp["cq"]] if resp["cq"] in autoload_type_dict else resp["cq"]
 
     return str(resp)
@@ -130,7 +133,7 @@ class STARAutoload:
     Returns:
         Sorted list of deck rail positions where carriers are present.
     """
-    resp = await self._driver.send_command(module="C0", command="RC")
+    resp = await self.driver.send_command(module="C0", command="RC")
 
     ce_resp = resp.split("ce")[-1]
 
@@ -142,7 +145,7 @@ class STARAutoload:
     Returns:
         Sorted list of loading-tray positions where carriers are present.
     """
-    resp = await self._driver.send_command(module="C0", command="CS")
+    resp = await self.driver.send_command(module="C0", command="CS")
 
     if "cd" not in resp:
       raise ValueError(f"CD field missing: {resp!r}")
@@ -165,7 +168,7 @@ class STARAutoload:
 
     track_str = str(track).zfill(2)
 
-    resp = await self._driver.send_command(
+    resp = await self.driver.send_command(
       module="C0",
       command="CT",
       fmt="ct#",
@@ -185,7 +188,7 @@ class STARAutoload:
     await self.move_to_safe_z_position()
 
     track_no_as_safe_str = str(track).zfill(2)
-    return await self._driver.send_command(module="I0", command="XP", xp=track_no_as_safe_str)
+    return await self.driver.send_command(module="I0", command="XP", xp=track_no_as_safe_str)
 
   async def park(self):
     """Park autoload to max position (I0:XP)."""
@@ -194,7 +197,7 @@ class STARAutoload:
 
     await self.move_to_safe_z_position()
 
-    return await self._driver.send_command(module="I0", command="XP", xp=max_x_pos)
+    return await self.driver.send_command(module="I0", command="XP", xp=max_x_pos)
 
   # -- belt operations -------------------------------------------------------
 
@@ -211,7 +214,7 @@ class STARAutoload:
 
     if not carrier_on_loading_tray:
       try:
-        await self._driver.send_command(
+        await self.driver.send_command(
           module="C0",
           command="CN",
           cp=str(carrier_end_rail).zfill(2),
@@ -227,7 +230,7 @@ class STARAutoload:
   async def unload_carrier_after_barcode_scanning(self):
     """Unload carrier back to loading tray after barcode scanning (C0:CA)."""
     try:
-      resp = await self._driver.send_command(
+      resp = await self.driver.send_command(
         module="C0",
         command="CA",
       )
@@ -289,7 +292,7 @@ class STARAutoload:
       self._default_1d_symbology = barcode_symbology
 
     try:
-      resp = await self._driver.send_command(
+      resp = await self.driver.send_command(
         module="C0",
         command="CL",
         bd=barcode_reading_direction_dict[barcode_reading_direction],
@@ -340,7 +343,7 @@ class STARAutoload:
 
     assert barcode_symbology is not None
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="CB",
       bt=self.barcode_1d_symbology_dict[barcode_symbology],
@@ -376,7 +379,7 @@ class STARAutoload:
     assert 1.5 <= reading_speed <= 160.0
 
     try:
-      resp = await self._driver.send_command(
+      resp = await self.driver.send_command(
         module="C0",
         command="CI",
         cp=carrier_end_rail_str,
@@ -494,7 +497,7 @@ class STARAutoload:
 
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    resp = await self._driver.send_command(
+    resp = await self.driver.send_command(
       module="C0",
       command="CR",
       cp=carrier_end_rail_str,
@@ -525,7 +528,7 @@ class STARAutoload:
     bit_pattern_hex = pattern2hex(bit_pattern)
     blink_pattern_hex = pattern2hex(blink_pattern)
 
-    return await self._driver.send_command(
+    return await self.driver.send_command(
       module="C0",
       command="CP",
       cl=bit_pattern_hex,
@@ -539,7 +542,7 @@ class STARAutoload:
       should_monitor: whether carrier should be monitored.
     """
 
-    return await self._driver.send_command(module="C0", command="CU", cu=should_monitor)
+    return await self.driver.send_command(module="C0", command="CU", cu=should_monitor)
 
   async def verify_and_wait_for_carriers(
     self,

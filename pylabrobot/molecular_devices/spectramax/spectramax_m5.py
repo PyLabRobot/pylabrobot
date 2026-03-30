@@ -38,7 +38,7 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
   """Translates FluorescenceBackend interface into SpectraMax M5 commands."""
 
   def __init__(self, driver: MolecularDevicesDriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   @dataclass
   class FluorescenceParams(BackendParams):
@@ -117,7 +117,7 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._driver.wait_for_idle(timeout=backend_params.timeout)
+    await self.driver.wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       FluorescenceResult(
@@ -191,7 +191,7 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._driver.wait_for_idle(timeout=timeout)
+    await self.driver.wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
   async def read_time_resolved_fluorescence(
@@ -259,7 +259,7 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     await self._set_nvram(settings)
 
     await self._read_now()
-    await self._driver.wait_for_idle(timeout=timeout)
+    await self.driver.wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
 
@@ -267,7 +267,7 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
   """Translates LuminescenceBackend interface into SpectraMax M5 commands."""
 
   def __init__(self, driver: MolecularDevicesDriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   @dataclass
   class LuminescenceParams(BackendParams):
@@ -337,7 +337,7 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._driver.wait_for_idle(timeout=backend_params.timeout)
+    await self.driver.wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       LuminescenceResult(
@@ -380,7 +380,7 @@ class SpectraMaxM5(Resource, Device):
       model="Molecular Devices SpectraMax M5",
     )
     Device.__init__(self, driver=driver)
-    self._driver: MolecularDevicesDriver = driver
+    self.driver: MolecularDevicesDriver = driver
     self.absorbance = Absorbance(backend=MolecularDevicesAbsorbanceBackend(driver))
     self.luminescence = Luminescence(backend=SpectraMaxM5LuminescenceBackend(driver))
     self.fluorescence = Fluorescence(backend=SpectraMaxM5FluorescenceBackend(driver))

@@ -15,7 +15,7 @@ class CLARIOstarFluorescenceBackend(FluorescenceBackend):
   """Translates FluorescenceBackend interface into CLARIOstar driver commands."""
 
   def __init__(self, driver: CLARIOstarDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def read_fluorescence(
     self,

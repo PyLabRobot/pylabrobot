@@ -13,7 +13,7 @@ class KeyenceBarcodeScanner(Device):
   def __init__(self, port: str):
     driver = KeyenceBarcodeScannerDriver(port=port)
     super().__init__(driver=driver)
-    self._driver: KeyenceBarcodeScannerDriver = driver
+    self.driver: KeyenceBarcodeScannerDriver = driver
     self.barcode_scanning = BarcodeScanner(
       backend=KeyenceBarcodeScannerBarcodeScanningBackend(driver)
     )

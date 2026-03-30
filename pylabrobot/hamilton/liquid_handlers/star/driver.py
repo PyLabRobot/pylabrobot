@@ -6,7 +6,7 @@ import enum
 import math
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pylabrobot.capabilities.liquid_handling.head96_backend import Head96Backend
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
@@ -18,12 +18,13 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import (
 )
 from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
 
-if TYPE_CHECKING:
-  from .autoload import STARAutoload
-  from .cover import STARCover
-  from .iswap import iSWAPBackend
-  from .wash_station import STARWashStation
-  from .x_arm import STARXArm
+from .autoload import STARAutoload
+from .cover import STARCover
+from .head96_backend import STARHead96Backend
+from .iswap import iSWAPBackend
+from .pip_backend import STARPIPBackend
+from .wash_station import STARWashStation
+from .x_arm import STARXArm
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +194,11 @@ class STARDriver(HamiltonLiquidHandler):
     if len(errors_dict) > 0:
       raise star_firmware_string_to_error(error_code_dict=errors_dict, raw_response=resp)
 
+  async def _ensure_iswap_parked(self) -> None:
+    """Park the iSWAP if it is installed and not already parked."""
+    if self.iswap is not None and not self.iswap.parked:
+      await self.iswap.park()
+
   def _parse_response(self, resp: str, fmt: Any) -> dict:
     return parse_star_fw_string(resp, fmt)
 
@@ -229,29 +235,21 @@ class STARDriver(HamiltonLiquidHandler):
     self.extended_conf = await self._request_extended_configuration()
 
     # Create backends based on discovered config.
-    from .pip_backend import STARPIPBackend  # deferred to avoid circular imports
-
     self.pip = STARPIPBackend(self)
 
     self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      from .head96_backend import STARHead96Backend
-
       self.head96 = STARHead96Backend(self)
     else:
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      from .iswap import iSWAPBackend
-
       self.iswap = iSWAPBackend(driver=self)
     else:
       self.iswap = None
 
     if self.machine_conf.auto_load_installed:
-      from .autoload import STARAutoload
-
       self.autoload = STARAutoload(
         driver=self,
         instrument_size_slots=self.extended_conf.instrument_size_slots,
@@ -259,28 +257,41 @@ class STARDriver(HamiltonLiquidHandler):
     else:
       self.autoload = None
 
-    from .x_arm import STARXArm
-
     self.left_x_arm = STARXArm(driver=self, side="left")
     if self.extended_conf.right_x_drive_large:
       self.right_x_arm = STARXArm(driver=self, side="right")
     else:
       self.right_x_arm = None
 
-    # Cover is always present.
-    from .cover import STARCover
-
     self.cover = STARCover(driver=self)
 
     if (self.machine_conf.wash_station_1_installed or
         self.machine_conf.wash_station_2_installed):
-      from .wash_station import STARWashStation
-
       self.wash_station = STARWashStation(driver=self)
     else:
       self.wash_station = None
 
+    # Initialize subsystems.
+    for sub in self._subsystems:
+      await sub._on_setup()
+
+  @property
+  def _subsystems(self):
+    """All active subsystems, for lifecycle management."""
+    subs = [self.cover]
+    if self.autoload is not None:
+      subs.append(self.autoload)
+    if self.left_x_arm is not None:
+      subs.append(self.left_x_arm)
+    if self.right_x_arm is not None:
+      subs.append(self.right_x_arm)
+    if self.wash_station is not None:
+      subs.append(self.wash_station)
+    return subs
+
   async def stop(self):
+    for sub in reversed(self._subsystems):
+      await sub._on_stop()
     await super().stop()
     self.machine_conf = None
     self.extended_conf = None

@@ -241,7 +241,7 @@ class ByonoyLuminescence96(Resource, Device):
       preferred_pickup_location=preferred_pickup_location,
     )
     Device.__init__(self, driver=backend)
-    self._driver: ByonoyLuminescence96Backend = backend
+    self.driver: ByonoyLuminescence96Backend = backend
     self.luminescence = Luminescence(backend=backend)
     self._capabilities = [self.luminescence]
 

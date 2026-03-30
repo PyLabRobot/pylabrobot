@@ -69,16 +69,16 @@ class TestLegacyParity(unittest.IsolatedAsyncioTestCase):
 
     self.star = STAR(deck=self.new_deck, chatterbox=True)
     # Replace the driver with our capture driver
-    self.star._driver = self.new_driver
-    await self.star._driver.setup()
+    self.star.driver = self.new_driver
+    await self.star.driver.setup()
     from .pip_backend import STARPIPBackend
-    self.star._driver.pip = STARPIPBackend(self.new_driver)
+    self.star.driver.pip = STARPIPBackend(self.new_driver)
     from .head96_backend import STARHead96Backend
-    self.star._driver.head96 = STARHead96Backend(self.new_driver)
+    self.star.driver.head96 = STARHead96Backend(self.new_driver)
     from pylabrobot.capabilities.liquid_handling.pip import PIP
     from pylabrobot.capabilities.liquid_handling.head96 import Head96
-    self.star.pip = PIP(backend=self.star._driver.pip)
-    self.star.head96 = Head96(backend=self.star._driver.head96)
+    self.star.pip = PIP(backend=self.star.driver.pip)
+    self.star.head96 = Head96(backend=self.star.driver.head96)
     self.star._capabilities = [self.star.pip, self.star.head96]
     for cap in self.star._capabilities:
       await cap._on_setup()

@@ -8,22 +8,22 @@ class A4SBackend(SealerBackend):
   """Legacy. Use pylabrobot.azenta.A4SDriver / A4SSealerBackend / A4STemperatureBackend instead."""
 
   def __init__(self, port: str, timeout: int = 20):
-    self._driver = A4SDriver(port=port, timeout=timeout)
-    self._sealer = A4SSealerBackend(self._driver)
-    self._temperature = A4STemperatureBackend(self._driver)
+    self.driver = A4SDriver(port=port, timeout=timeout)
+    self._sealer = A4SSealerBackend(self.driver)
+    self._temperature = A4STemperatureBackend(self.driver)
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     await self._sealer._on_setup()
     await self._temperature._on_setup()
 
   async def stop(self):
     await self._temperature._on_stop()
     await self._sealer._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self) -> dict:
-    return self._driver.serialize()
+    return self.driver.serialize()
 
   async def seal(self, temperature: int, duration: float):
     await self._sealer.seal(temperature=temperature, duration=duration)
@@ -41,16 +41,16 @@ class A4SBackend(SealerBackend):
     return await self._temperature.request_current_temperature()
 
   async def set_heater(self, on: bool):
-    await self._driver.set_heater(on=on)
+    await self.driver.set_heater(on=on)
 
   async def system_reset(self):
-    await self._driver.system_reset()
+    await self.driver.system_reset()
 
   async def set_time(self, seconds: float):
-    await self._driver.set_time(seconds=seconds)
+    await self.driver.set_time(seconds=seconds)
 
   async def get_remaining_time(self) -> int:
-    return await self._driver.request_remaining_time()
+    return await self.driver.request_remaining_time()
 
   async def get_status(self):
-    return await self._driver.request_status()
+    return await self.driver.request_status()

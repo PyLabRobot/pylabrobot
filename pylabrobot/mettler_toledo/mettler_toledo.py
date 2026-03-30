@@ -286,19 +286,19 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
   """
 
   def __init__(self, driver: MettlerToledoWXS205SDUDriver):
-    self._driver = driver
+    self.driver = driver
     self.serial_number: Optional[str] = None
 
   async def _on_setup(self) -> None:
     """Initialize scale after driver connects: set output unit to grams and read serial."""
-    await self._driver.send_command("M21 0 0")
+    await self.driver.send_command("M21 0 0")
     self.serial_number = await self.request_serial_number()
 
   # === Public high-level API ===
 
   async def request_serial_number(self) -> str:
     """Get the serial number of the scale. (MEM-READ command)"""
-    response = await self._driver.send_command("I4")
+    response = await self.driver.send_command("I4")
     serial_number = response[2]
     serial_number = serial_number.replace('"', "")
     return serial_number
@@ -307,18 +307,18 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
 
   async def zero_immediately(self) -> MettlerToledoResponse:
     """Zero the scale immediately. (ACTION command)"""
-    return await self._driver.send_command("ZI")
+    return await self.driver.send_command("ZI")
 
   async def zero_stable(self) -> MettlerToledoResponse:
     """Zero the scale when the weight is stable. (ACTION command)"""
-    return await self._driver.send_command("Z")
+    return await self.driver.send_command("Z")
 
   async def zero_timeout(self, timeout: float) -> MettlerToledoResponse:
     """Zero the scale after a given timeout. (ACTION command)"""
     # For some reason, this will always return a syntax error (ES), even though it should be allowed
     # according to the docs.
     timeout = int(timeout * 1000)
-    return await self._driver.send_command(f"ZC {timeout}")
+    return await self.driver.send_command(f"ZC {timeout}")
 
   async def zero(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
@@ -349,18 +349,18 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
 
   async def tare_stable(self) -> MettlerToledoResponse:
     """Tare the scale when the weight is stable. (ACTION command)"""
-    return await self._driver.send_command("T")
+    return await self.driver.send_command("T")
 
   async def tare_immediately(self) -> MettlerToledoResponse:
     """Tare the scale immediately. (ACTION command)"""
-    return await self._driver.send_command("TI")
+    return await self.driver.send_command("TI")
 
   async def tare_timeout(self, timeout: float) -> MettlerToledoResponse:
     """Tare the scale after a given timeout. (ACTION command)"""
     # For some reason, this will always return a syntax error (ES), even though it should be allowed
     # according to the docs.
     timeout = int(timeout * 1000)  # convert to milliseconds
-    return await self._driver.send_command(f"TC {timeout}")
+    return await self.driver.send_command(f"TC {timeout}")
 
   async def tare(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
@@ -394,7 +394,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     "Use TA to query the current tare value or preset a known tare value."
     """
 
-    response = await self._driver.send_command("TA")
+    response = await self.driver.send_command("TA")
     tare = float(response[2])
     unit = response[3]
     assert unit == "g"  # this is the format we expect
@@ -402,7 +402,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
 
   async def clear_tare(self) -> MettlerToledoResponse:
     """TAC - Clear tare weight value (MEM-WRITE command)"""
-    return await self._driver.send_command("TAC")
+    return await self.driver.send_command("TAC")
 
   async def read_stable_weight(self) -> float:
     """Read a stable weight value from the scale. (MEASUREMENT command)
@@ -415,7 +415,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     doors to achieve a stable weight."
     """
 
-    response = await self._driver.send_command("S")
+    response = await self.driver.send_command("S")
     weight = float(response[2])
     unit = response[3]
     assert unit == "g"  # this is the format we expect
@@ -431,7 +431,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
 
     timeout = int(timeout * 1000)  # convert to milliseconds
 
-    response = await self._driver.send_command(f"SC {timeout}")
+    response = await self.driver.send_command(f"SC {timeout}")
     weight = float(response[2])
     unit = response[3]
     assert unit == "g"  # this is the format we expect
@@ -444,7 +444,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     balance to the connected communication partner via the interface."
     """
 
-    response = await self._driver.send_command("SI")
+    response = await self.driver.send_command("SI")
     weight = float(response[2])
     assert response[3] == "g"  # this is the format we expect
     return weight

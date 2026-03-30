@@ -12,9 +12,9 @@ class BioShake(HeaterShakerBackend):
   """Legacy. Use pylabrobot.qinstruments.BioShakeDriver instead."""
 
   def __init__(self, port: str, timeout: int = 60):
-    self._driver = BioShakeDriver(port=port, timeout=timeout)
-    self._shaker = BioShakeShakerBackend(self._driver)
-    self._temp = BioShakeTemperatureBackend(self._driver)
+    self.driver = BioShakeDriver(port=port, timeout=timeout)
+    self._shaker = BioShakeShakerBackend(self.driver)
+    self._temp = BioShakeTemperatureBackend(self.driver)
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -25,19 +25,19 @@ class BioShake(HeaterShakerBackend):
     return self._shaker.supports_locking
 
   async def setup(self, skip_home: bool = False):
-    await self._driver.setup(skip_home=skip_home)
+    await self.driver.setup(skip_home=skip_home)
 
   async def stop(self):
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self) -> dict:
-    return self._driver.serialize()
+    return self.driver.serialize()
 
   async def reset(self):
-    await self._driver.reset()
+    await self.driver.reset()
 
   async def home(self):
-    await self._driver.home()
+    await self.driver.home()
 
   async def start_shaking(self, speed: float, acceleration: int = 0):
     await self._shaker.start_shaking(speed=speed, acceleration=acceleration)

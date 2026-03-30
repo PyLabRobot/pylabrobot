@@ -19,20 +19,20 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
     return self._backend.supports_active_cooling
 
   def __init__(self, port: str):
-    self._driver = OpentronsTemperatureModuleUSBDriver(port=port)
-    self._backend = _NewBackend(driver=self._driver)
+    self.driver = OpentronsTemperatureModuleUSBDriver(port=port)
+    self._backend = _NewBackend(driver=self.driver)
     self.port = port
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     await self._backend._on_setup()
 
   async def stop(self):
     await self._backend._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self) -> dict:
-    return self._driver.serialize()
+    return self.driver.serialize()
 
   async def set_temperature(self, temperature: float):
     await self._backend.set_temperature(temperature)

@@ -14,8 +14,8 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
 
   # -- initialization --------------------------------------------------------
 
-  async def test_initialize(self):
-    await self.autoload.initialize()
+  async def test_on_setup(self):
+    await self.autoload._on_setup()
     self.mock_driver.send_command.assert_called_once_with(module="C0", command="II")
 
   async def test_request_initialization_status_true(self):

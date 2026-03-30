@@ -44,7 +44,7 @@ class HamiltonHeaterShaker(PlateHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: HamiltonHeaterShakerDriver = driver
+    self.driver: HamiltonHeaterShakerDriver = driver
     self.tc = TemperatureController(backend=HamiltonHeaterShakerTemperatureBackend(driver))
     self.shaker = Shaker(backend=HamiltonHeaterShakerShakerBackend(driver))
     self._capabilities = [self.tc, self.shaker]

@@ -14,51 +14,51 @@ class Access2Backend(LoaderBackend):
   """Legacy. Use pylabrobot.agilent.vspin.Access2Driver instead."""
 
   def __init__(self, device_id: str, timeout: int = 60):
-    self._driver = _new.Access2Driver(device_id=device_id, timeout=timeout)
+    self.driver = _new.Access2Driver(device_id=device_id, timeout=timeout)
 
   @property
   def io(self):
-    return self._driver.io
+    return self.driver.io
 
   @io.setter
   def io(self, value):
-    self._driver.io = value
+    self.driver.io = value
 
   @property
   def timeout(self):
-    return self._driver.timeout
+    return self.driver.timeout
 
   @timeout.setter
   def timeout(self, value):
-    self._driver.timeout = value
+    self.driver.timeout = value
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
 
   async def stop(self):
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self):
     return {"io": self.io.serialize(), "timeout": self.timeout}
 
   async def send_command(self, command: bytes) -> bytes:
-    return await self._driver.send_command(command)
+    return await self.driver.send_command(command)
 
   async def get_status(self) -> bytes:
-    return await self._driver.request_status()
+    return await self.driver.request_status()
 
   async def park(self):
-    await self._driver.park()
+    await self.driver.park()
 
   async def close(self):
-    await self._driver.close()
+    await self.driver.close()
 
   async def open(self):
-    await self._driver.open()
+    await self.driver.open()
 
   async def load(self):
     try:
-      await self._driver.load()
+      await self.driver.load()
     except RuntimeError as e:
       if "no plate found on stage" in str(e):
         raise LoaderNoPlateError("no plate found on stage") from e
@@ -66,7 +66,7 @@ class Access2Backend(LoaderBackend):
 
   async def unload(self):
     try:
-      await self._driver.unload()
+      await self.driver.unload()
     except RuntimeError as e:
       if "no plate found in centrifuge" in str(e):
         raise LoaderNoPlateError("no plate found in centrifuge") from e
@@ -77,16 +77,16 @@ class VSpinBackend(CentrifugeBackend):
   """Legacy. Use pylabrobot.agilent.vspin.VSpinDriver instead."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self._driver = _new.VSpinDriver(device_id=device_id)
-    self._centrifuge = _new.VSpinCentrifugeBackend(self._driver)
+    self.driver = _new.VSpinDriver(device_id=device_id)
+    self._centrifuge = _new.VSpinCentrifugeBackend(self.driver)
 
   @property
   def io(self):
-    return self._driver.io
+    return self.driver.io
 
   @io.setter
   def io(self, value):
-    self._driver.io = value
+    self.driver.io = value
 
   @property
   def _bucket_1_remainder(self):
@@ -101,12 +101,12 @@ class VSpinBackend(CentrifugeBackend):
     return self._centrifuge.bucket_1_remainder
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     await self._centrifuge._on_setup()
 
   async def stop(self):
     await self._centrifuge._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   async def set_bucket_1_position_to_current(self) -> None:
     await self._centrifuge.set_bucket_1_position_to_current()
@@ -115,22 +115,22 @@ class VSpinBackend(CentrifugeBackend):
     return await self._centrifuge.request_bucket_1_position()
 
   async def get_position(self) -> int:
-    return await self._driver.request_position()
+    return await self.driver.request_position()
 
   async def get_tachometer(self) -> int:
-    return await self._driver.request_tachometer()
+    return await self.driver.request_tachometer()
 
   async def get_home_position(self) -> int:
-    return await self._driver.request_home_position()
+    return await self.driver.request_home_position()
 
   async def get_bucket_locked(self) -> bool:
-    return await self._driver.request_bucket_locked()
+    return await self.driver.request_bucket_locked()
 
   async def get_door_open(self) -> bool:
-    return await self._driver.request_door_open()
+    return await self.driver.request_door_open()
 
   async def get_door_locked(self) -> bool:
-    return await self._driver.request_door_locked()
+    return await self.driver.request_door_locked()
 
   async def open_door(self):
     await self._centrifuge.open_door()
@@ -179,7 +179,7 @@ class VSpinBackend(CentrifugeBackend):
     )
 
   async def configure_and_initialize(self):
-    await self._driver.configure_and_initialize()
+    await self.driver.configure_and_initialize()
 
 
 # Deprecated alias

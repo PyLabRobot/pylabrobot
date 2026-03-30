@@ -53,7 +53,7 @@ class STARHead96Backend(Head96Backend):
   _traversal_height: float = 245.0
 
   def __init__(self, driver: STARDriver):
-    self._driver = driver
+    self.driver = driver
 
   # ---------------------------------------------------------------------------
   # Pick up tips
@@ -88,7 +88,7 @@ class STARHead96Backend(Head96Backend):
     if not isinstance(prototypical_tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
 
-    ttti = await self._driver.request_or_assign_tip_type_index(prototypical_tip)
+    ttti = await self.driver.request_or_assign_tip_type_index(prototypical_tip)
 
     tip_length = prototypical_tip.total_tip_length
     fitting_depth = prototypical_tip.fitting_depth
@@ -120,7 +120,7 @@ class STARHead96Backend(Head96Backend):
       # Pre-computed increment values (uL / 0.019340933):
       #   position=218.19uL -> 11281, speed=261.1uL/s -> 13500,
       #   stop_speed=0 -> 0, acceleration=17406.84uL/s^2 -> 900000
-      await self._driver.send_command(
+      await self.driver.send_command(
         module="H0",
         command="DQ",
         dq="11281",
@@ -130,7 +130,7 @@ class STARHead96Backend(Head96Backend):
         dw="15",
       )
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="EP",
       xs=f"{abs(round(pickup_position.x * 10)):05}",
@@ -179,7 +179,7 @@ class STARHead96Backend(Head96Backend):
 
     traversal = self._traversal_height
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ER",
       xs=f"{abs(round(position.x * 10)):05}",
@@ -277,7 +277,7 @@ class STARHead96Backend(Head96Backend):
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="EA",
       aa=backend_params.aspiration_type,
@@ -412,7 +412,7 @@ class STARHead96Backend(Head96Backend):
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ED",
       da=dispense_mode,

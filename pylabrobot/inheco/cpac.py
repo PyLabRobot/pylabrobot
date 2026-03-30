@@ -117,7 +117,7 @@ class InhecoCPAC(ResourceHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: InhecoCPACBackend = driver
+    self.driver: InhecoCPACBackend = driver
     self.tc = TemperatureController(backend=driver)
     self._capabilities = [self.tc]
 

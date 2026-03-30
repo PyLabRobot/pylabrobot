@@ -16,16 +16,16 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
 
   def __init__(self, port: str):
     super().__init__()
-    self._driver = KeyenceBarcodeScannerDriver(port=port)
-    self._barcode_scanning = KeyenceBarcodeScannerBarcodeScanningBackend(self._driver)
+    self.driver = KeyenceBarcodeScannerDriver(port=port)
+    self._barcode_scanning = KeyenceBarcodeScannerBarcodeScanningBackend(self.driver)
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     await self._barcode_scanning._on_setup()
 
   async def stop(self):
     await self._barcode_scanning._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   async def scan_barcode(self) -> Barcode:
     return await self._barcode_scanning.scan_barcode()

@@ -208,30 +208,30 @@ class A4SSealerBackend(SealerBackend):
   """Translates SealerBackend operations into A4S driver commands."""
 
   def __init__(self, driver: A4SDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def seal(self, temperature: int, duration: float):
-    await self._driver.send_command(f"*00DH={round(temperature):04d}zz!")
+    await self.driver.send_command(f"*00DH={round(temperature):04d}zz!")
     await self._wait_for_temperature(temperature, timeout=300)
-    await self._driver.set_time(duration)
-    await self._driver.send_command("*00GS=zz!")
-    await self._driver.wait_for_status({A4SStatus.SystemStatus.single_cycle})
-    return await self._driver.wait_for_status(
+    await self.driver.set_time(duration)
+    await self.driver.send_command("*00GS=zz!")
+    await self.driver.wait_for_status({A4SStatus.SystemStatus.single_cycle})
+    return await self.driver.wait_for_status(
       {A4SStatus.SystemStatus.idle, A4SStatus.SystemStatus.finish}
     )
 
   async def open(self):
-    await self._driver.send_command("*00MO=zz!")
-    return await self._driver.wait_for_shuttle_open_sensor(True)
+    await self.driver.send_command("*00MO=zz!")
+    return await self.driver.wait_for_shuttle_open_sensor(True)
 
   async def close(self):
-    await self._driver.send_command("*00MC=zz!")
-    return await self._driver.wait_for_shuttle_open_sensor(False)
+    await self.driver.send_command("*00MC=zz!")
+    return await self.driver.wait_for_shuttle_open_sensor(False)
 
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
     start = time.time()
     while True:
-      status = await self._driver.request_status()
+      status = await self.driver.request_status()
       if abs(status.current_temperature - degrees) < tolerance:
         break
       if time.time() - start > timeout:
@@ -243,7 +243,7 @@ class A4STemperatureBackend(TemperatureControllerBackend):
   """Translates TemperatureControllerBackend operations into A4S driver commands."""
 
   def __init__(self, driver: A4SDriver):
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -253,7 +253,7 @@ class A4STemperatureBackend(TemperatureControllerBackend):
     if not (50 <= temperature <= 200):
       raise ValueError("Temperature out of range. Please enter a value between 50 and 200.")
     command = f"*00DH={round(temperature):04d}zz!"
-    await self._driver.send_command(command)
+    await self.driver.send_command(command)
     await self._wait_for_temperature(temperature, timeout=300)
 
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
@@ -267,11 +267,11 @@ class A4STemperatureBackend(TemperatureControllerBackend):
       await asyncio.sleep(0.1)
 
   async def request_current_temperature(self) -> float:
-    status = await self._driver.request_status()
+    status = await self.driver.request_status()
     return status.current_temperature
 
   async def deactivate(self):
-    await self._driver.set_heater(on=False)
+    await self.driver.set_heater(on=False)
 
 
 class A4S(PlateHolder, Device):
@@ -307,7 +307,7 @@ class A4S(PlateHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: A4SDriver = driver
+    self.driver: A4SDriver = driver
     self.sealer = Sealer(backend=A4SSealerBackend(driver))
     self.tc = TemperatureController(backend=A4STemperatureBackend(driver))
     self._capabilities = [self.tc, self.sealer]

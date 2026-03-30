@@ -12,6 +12,6 @@ class HamiltonHepaFan(Device):
   def __init__(self, name: str, device_id: Optional[str] = None):
     driver = HamiltonHepaFanDriver(device_id=device_id)
     super().__init__(driver=driver)
-    self._driver: HamiltonHepaFanDriver = driver
+    self.driver: HamiltonHepaFanDriver = driver
     self.fan = Fan(backend=HamiltonHepaFanFanBackend(driver))
     self._capabilities = [self.fan]
