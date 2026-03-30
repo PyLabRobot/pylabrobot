@@ -1,15 +1,11 @@
-import math
 import unittest
 
 from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.trough import Trough, TroughBottomType
 
 from pylabrobot.liquid_handling.channel_positioning import (
-  GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
-  MIN_SPACING_EDGE,
   _get_compartments,
   _resolve_channel_spacings,
   required_spacing_between,
@@ -39,9 +35,12 @@ class TestGetCompartments(unittest.TestCase):
     self.assertEqual(result, [(2.0, 98.0)])
 
   def test_single_center_zone(self):
-    c = _make_container(100, [
-      (Coordinate(0, 48, 0), Coordinate(19, 52, 50)),
-    ])
+    c = _make_container(
+      100,
+      [
+        (Coordinate(0, 48, 0), Coordinate(19, 52, 50)),
+      ],
+    )
     result = _get_compartments(c)
     self.assertEqual(len(result), 2)
     self.assertAlmostEqual(result[0][0], 2.0)
@@ -50,18 +49,24 @@ class TestGetCompartments(unittest.TestCase):
     self.assertAlmostEqual(result[1][1], 98.0)
 
   def test_zone_at_front(self):
-    c = _make_container(50, [
-      (Coordinate(0, 0, 0), Coordinate(19, 10, 50)),
-    ])
+    c = _make_container(
+      50,
+      [
+        (Coordinate(0, 0, 0), Coordinate(19, 10, 50)),
+      ],
+    )
     result = _get_compartments(c)
     self.assertEqual(len(result), 1)
     self.assertAlmostEqual(result[0][0], 12.0)
     self.assertAlmostEqual(result[0][1], 48.0)
 
   def test_zone_at_back(self):
-    c = _make_container(50, [
-      (Coordinate(0, 40, 0), Coordinate(19, 50, 50)),
-    ])
+    c = _make_container(
+      50,
+      [
+        (Coordinate(0, 40, 0), Coordinate(19, 50, 50)),
+      ],
+    )
     result = _get_compartments(c)
     self.assertEqual(len(result), 1)
     self.assertAlmostEqual(result[0][0], 2.0)
@@ -69,9 +74,12 @@ class TestGetCompartments(unittest.TestCase):
 
   def test_compartment_too_narrow_is_skipped(self):
     # 3mm raw compartment < 2*2mm edge clearance -> skipped
-    c = _make_container(20, [
-      (Coordinate(0, 3, 0), Coordinate(19, 17, 50)),
-    ])
+    c = _make_container(
+      20,
+      [
+        (Coordinate(0, 3, 0), Coordinate(19, 17, 50)),
+      ],
+    )
     result = _get_compartments(c)
     # front compartment [0, 3] -> too narrow (3mm < 4mm)
     # back compartment [17, 20] -> too narrow (3mm < 4mm)
@@ -83,18 +91,24 @@ class TestGetCompartments(unittest.TestCase):
     self.assertEqual(result, [(1.0, 9.0)])
 
   def test_multiple_zones(self):
-    c = _make_container(100, [
-      (Coordinate(0, 30, 0), Coordinate(19, 35, 50)),
-      (Coordinate(0, 65, 0), Coordinate(19, 70, 50)),
-    ])
+    c = _make_container(
+      100,
+      [
+        (Coordinate(0, 30, 0), Coordinate(19, 35, 50)),
+        (Coordinate(0, 65, 0), Coordinate(19, 70, 50)),
+      ],
+    )
     result = _get_compartments(c)
     self.assertEqual(len(result), 3)
 
   def test_overlapping_zones(self):
-    c = _make_container(100, [
-      (Coordinate(0, 30, 0), Coordinate(19, 50, 50)),
-      (Coordinate(0, 40, 0), Coordinate(19, 60, 50)),
-    ])
+    c = _make_container(
+      100,
+      [
+        (Coordinate(0, 30, 0), Coordinate(19, 50, 50)),
+        (Coordinate(0, 40, 0), Coordinate(19, 60, 50)),
+      ],
+    )
     result = _get_compartments(c)
     # Should merge: gap is [0,30] and [60,100]
     self.assertEqual(len(result), 2)
@@ -249,32 +263,32 @@ class TestSpaceNeeded(unittest.TestCase):
 
 class TestDistributeChannels(unittest.TestCase):
   def test_equal_compartments(self):
-    compartments = [(0, 40), (50, 90)]
+    compartments = [(0.0, 40.0), (50.0, 90.0)]
     result = _distribute_channels(compartments, 4, [9.0] * 4)
     self.assertEqual(sum(result), 4)
     self.assertEqual(result, [2, 2])
 
   def test_unequal_compartments(self):
-    compartments = [(0, 60), (70, 90)]
+    compartments = [(0.0, 60.0), (70.0, 90.0)]
     result = _distribute_channels(compartments, 3, [9.0] * 3)
     self.assertEqual(sum(result), 3)
     # Wider compartment should get more
     self.assertGreaterEqual(result[0], result[1])
 
   def test_single_compartment(self):
-    compartments = [(0, 100)]
+    compartments = [(0.0, 100.0)]
     result = _distribute_channels(compartments, 3, [9.0] * 3)
     self.assertEqual(result, [3])
 
   def test_channels_dont_fit_raises(self):
     # Tiny compartments can't hold many channels
-    compartments = [(0, 5), (10, 15)]
+    compartments = [(0.0, 5.0), (10.0, 15.0)]
     with self.assertRaises(ChannelsDoNotFitError):
       _distribute_channels(compartments, 10, [9.0] * 10)
 
   def test_shifting_needed(self):
     # One narrow + one wide compartment, proportional would overload the narrow one
-    compartments = [(0, 10), (15, 100)]
+    compartments = [(0.0, 10.0), (15.0, 100.0)]
     result = _distribute_channels(compartments, 8, [9.0] * 8)
     self.assertEqual(sum(result), 8)
     # Narrow compartment can fit at most 1 channel (10mm width, 9mm spacing)
@@ -316,9 +330,12 @@ class TestComputeChannelOffsets(unittest.TestCase):
     self.assertAlmostEqual(result[0].y, 0.0)
 
   def test_with_no_go_zones(self):
-    c = _make_container(100, [
-      (Coordinate(0, 48, 0), Coordinate(19, 52, 50)),
-    ])
+    c = _make_container(
+      100,
+      [
+        (Coordinate(0, 48, 0), Coordinate(19, 52, 50)),
+      ],
+    )
     result = compute_channel_offsets(c, 2)
     self.assertEqual(len(result), 2)
     # Channels should be in different compartments (one positive, one negative offset)
@@ -330,9 +347,12 @@ class TestComputeChannelOffsets(unittest.TestCase):
 
   def test_no_go_zones_too_restrictive_raises(self):
     # Almost entire container is a no-go zone
-    c = _make_container(20, [
-      (Coordinate(0, 2, 0), Coordinate(19, 18, 50)),
-    ])
+    c = _make_container(
+      20,
+      [
+        (Coordinate(0, 2, 0), Coordinate(19, 18, 50)),
+      ],
+    )
     with self.assertRaises(ChannelsDoNotFitError):
       compute_channel_offsets(c, 2)
 
@@ -345,27 +365,34 @@ class TestComputeChannelOffsets(unittest.TestCase):
 
   def test_many_channels_no_go_zones(self):
     # 3 no-go zones creating 4 compartments
-    c = _make_container(142.5, [
-      (Coordinate(0, 39.7, 0), Coordinate(19, 42.2, 50)),
-      (Coordinate(0, 73.5, 0), Coordinate(19, 76.0, 50)),
-      (Coordinate(0, 107.3, 0), Coordinate(19, 109.8, 50)),
-    ])
+    c = _make_container(
+      142.5,
+      [
+        (Coordinate(0, 39.7, 0), Coordinate(19, 42.2, 50)),
+        (Coordinate(0, 73.5, 0), Coordinate(19, 76.0, 50)),
+        (Coordinate(0, 107.3, 0), Coordinate(19, 109.8, 50)),
+      ],
+    )
     for n in [1, 2, 3, 4, 5, 6, 7, 8, 9]:
       result = compute_channel_offsets(c, n)
       self.assertEqual(len(result), n)
 
   def test_offsets_respect_no_go_zones(self):
-    c = _make_container(90, [
-      (Coordinate(0, 43, 0), Coordinate(19, 47, 50)),
-    ])
+    c = _make_container(
+      90,
+      [
+        (Coordinate(0, 43, 0), Coordinate(19, 47, 50)),
+      ],
+    )
     center_y = 45.0
     for n in range(1, 9):
       result = compute_channel_offsets(c, n)
       positions = [center_y + o.y for o in result]
       for p in positions:
         # No channel center should be inside the no-go zone
-        self.assertFalse(43.0 <= p <= 47.0,
-          f"Channel at y={p} is inside no-go zone [43, 47] with {n} channels")
+        self.assertFalse(
+          43.0 <= p <= 47.0, f"Channel at y={p} is inside no-go zone [43, 47] with {n} channels"
+        )
 
   def test_wide_vs_tight_gap_difference(self):
     resource = Resource(name="r", size_x=10, size_y=100, size_z=10)
