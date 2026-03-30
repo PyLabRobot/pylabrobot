@@ -689,6 +689,8 @@ def labware_info():
     for child in resource.children:
       if hasattr(child, "sites"):  # carrier
         for site in child.sites:
+          if not hasattr(site, "children"):
+            continue
           for content in site.children:
             name = content.name
             loc = content.get_location_wrt(deck_ref)
