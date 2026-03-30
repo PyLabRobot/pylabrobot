@@ -31,6 +31,7 @@ from pylabrobot.liquid_handling.strictness import (
 )
 from pylabrobot.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
+  get_waste_positions_for_n_channels,
   get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.machines.machine import Machine, need_setup_finished
@@ -146,6 +147,7 @@ class LiquidHandler(Resource, Machine):
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
     self._resource_pickups: Dict[int, Optional[ResourcePickup]] = {}
+    self._channel_waste_positions: Optional[List[Trash]] = None  # set in setup()
 
   @property
   def _resource_pickup(self) -> Optional[ResourcePickup]:
@@ -182,6 +184,11 @@ class LiquidHandler(Resource, Machine):
       tracker.register_callback(self._state_updated)
 
     self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
+
+    positions = self.deck.get_waste_positions()
+    self._channel_waste_positions = get_waste_positions_for_n_channels(
+      positions, self.backend.num_channels
+    )
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
@@ -767,20 +774,30 @@ class LiquidHandler(Resource, Machine):
     if n == 0:
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
-    trash = self.deck.get_trash_area()
-    trash_offsets = get_tight_single_resource_liquid_op_offsets(
-      trash,
-      num_channels=n,
-    )
-    # add trash_offsets to offsets if defined, otherwise use trash_offsets
-    # too advanced for mypy
-    offsets = [
-      o + to if o is not None else to
-      for o, to in zip(offsets or [None] * n, trash_offsets)  # type: ignore
-    ]
+    if self._channel_waste_positions is None:
+      raise RuntimeError("Setup has not been run. Call LiquidHandler.setup() first.")
+
+    waste_spots = [self._channel_waste_positions[c] for c in use_channels]
+    if all(s is waste_spots[0] for s in waste_spots):
+      trash = waste_spots[0]
+      trash_offsets = get_tight_single_resource_liquid_op_offsets(
+        trash,
+        num_channels=n,
+      )
+      offsets = [
+        o + to if o is not None else to
+        for o, to in zip(offsets or [None] * n, trash_offsets)  # type: ignore
+      ]
+      return await self.drop_tips(
+        tip_spots=[trash] * n,
+        use_channels=use_channels,
+        offsets=offsets,
+        allow_nonzero_volume=allow_nonzero_volume,
+        **backend_kwargs,
+      )
 
     return await self.drop_tips(
-      tip_spots=[trash] * n,
+      tip_spots=waste_spots,
       use_channels=use_channels,
       offsets=offsets,
       allow_nonzero_volume=allow_nonzero_volume,
