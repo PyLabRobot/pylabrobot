@@ -39,6 +39,7 @@
       ~LiquidHandlerBackend.drop_tips
       ~LiquidHandlerBackend.drop_tips96
       ~LiquidHandlerBackend.get_all_instances
+      ~LiquidHandlerBackend.get_channel_spacings
       ~LiquidHandlerBackend.move_channel_x
       ~LiquidHandlerBackend.move_channel_y
       ~LiquidHandlerBackend.move_channel_z

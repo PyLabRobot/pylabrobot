@@ -39,6 +39,7 @@
       ~LiquidHandlerChatterboxBackend.drop_tips
       ~LiquidHandlerChatterboxBackend.drop_tips96
       ~LiquidHandlerChatterboxBackend.get_all_instances
+      ~LiquidHandlerChatterboxBackend.get_channel_spacings
       ~LiquidHandlerChatterboxBackend.move_channel_x
       ~LiquidHandlerChatterboxBackend.move_channel_y
       ~LiquidHandlerChatterboxBackend.move_channel_z

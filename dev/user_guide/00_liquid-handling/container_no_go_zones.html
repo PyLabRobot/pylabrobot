@@ -1,0 +1,1532 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Container No-Go Zones &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=bbd25712" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/00_liquid-handling/container_no_go_zones';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script src="../../_static/plr_cards.js?v=0d03ad13"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/00_liquid-handling/container_no_go_zones.html" />
+    <link rel="icon" href="../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Material Handling" href="../01_material-handling/_material-handling.html" />
+    <link rel="prev" title="Mixing" href="mixing.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.1" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../_getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../_getting-started/units.html">Default Units</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../definitions.html">Definitions</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="_liquid-handling.html">Liquid Handling</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="hamilton-star/_hamilton-star.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/96head.html">Using the 96 head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/autoload_and_1d_barcode_reader.html">Using the autoload &amp; 1D barcode reader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/y-probing.html">Y-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="hamilton-star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="hamilton-star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hamilton-star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hamilton-star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hamilton-star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/hamilton-liquid-classes.html">Using “Hamilton Liquid Classes” with Pylabrobot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/core-grippers.html">Co-Re Grippers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-star/surface-following.html">Surface following</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="opentrons/ot2/ot2.html">Opentrons OT-2</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="opentrons/ot2/hello-world.html">OT-2 Hello World</a></li>
+<li class="toctree-l3"><a class="reference internal" href="opentrons/ot2/ot2-simulator.html">OT-2 Simulator with Visualizer</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="plate-washing/plate-washing.html">Plate Washing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="plate-washing/biotek-el406.html">BioTek EL406</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mixing.html">Mixing</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../01_material-handling/_material-handling.html">Material Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../01_material-handling/arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html">PreciseFlex PF400 and PF3400 robots</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/centrifuge/_centrifuge.html">Centrifuges</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/heating_shaking/qinstruments.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/fans/fans.html">Fans (Air Filtration Systems)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/fans/hamilton_hepa_scap.html">Hamilton HEPA Fan</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/sealers/a4s.html">Azenta a4S</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/temperature-controllers/temperature-controllers.html">Temperature Controllers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/temperature-controllers/ot-temperature-controller.html">Opentrons Temperature Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/temperature-controllers/hamilton-heater-cooler.html">Hamilton Heater Cooler (HHC)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/temperature-controllers/inheco.html">Hello World, Inheco CPAC!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/storage/storage.html">Storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/storage/cytomat.html">TFS Cytomat Series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/storage/inheco/incubator_shaker.html">Inheco Incubator (Shaker)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/storage/inheco/scila.html">Inheco SCILA</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/storage/liconic.html">Liconic STX Series</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../01_material-handling/tilting.html">Tilting</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/thermocycling/thermocycling.html">Thermocycling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/thermocycling/inheco-odtc.html">Inheco ODTC</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../02_analytical/plate-reading/plate-reading.html">Plate reading</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/byonoy.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/cytation.html">Cytation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/pico.html">ImageXpress Pico</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/synergyh1.html">Synergy H1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/tecan-spark.html">Tecan Spark 20M</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/tecan-infinite.html">Tecan Infinite 200 PRO</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../02_analytical/scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/scales/mettler-toledo-WXS205SDU.html">Mettler Toledo Precision Scales</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="_liquid-handling.html" class="nav-link">Liquid Handling</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Container No-Go Zones</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="container-no-go-zones">
+<h1>Container No-Go Zones<a class="headerlink" href="#container-no-go-zones" title="Link to this heading">#</a></h1>
+<blockquote>
+<div><p><strong>Mode:</strong> Simulation (<code class="docutils literal notranslate"><span class="pre">STARChatterboxBackend</span></code>) - no hardware required.</p>
+<p><strong>Topic:</strong> Defining obstructed regions and automatic channel avoidance using <code class="docutils literal notranslate"><span class="pre">Container</span></code> no-go zones.</p>
+<p><strong>Extra dependencies</strong> (not included in pylabrobot):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> - used for cross-section visualizations in this tutorial only</p></li>
+</ul>
+</div></blockquote>
+<hr class="docutils" />
+<section id="what-are-no-go-zones">
+<h2>What are no-go zones?<a class="headerlink" href="#what-are-no-go-zones" title="Link to this heading">#</a></h2>
+<p>Some containers have internal obstructions - divider walls, support beams, baffles - where pipette tips physically cannot go. When multiple channels target the same container (e.g. aspirating from a trough with 4 channels), <code class="docutils literal notranslate"><span class="pre">LiquidHandler</span></code> needs to know where these obstructions are to position tips safely.</p>
+<p>A <strong>no-go zone</strong> is a cuboid region inside a container, defined as a <code class="docutils literal notranslate"><span class="pre">Tuple[Coordinate,</span> <span class="pre">Coordinate]</span></code> - the front-left-bottom and back-right-top corners, relative to the container’s origin.</p>
+</section>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading">#</a></h2>
+<p>When <code class="docutils literal notranslate"><span class="pre">LiquidHandler.aspirate</span></code> or <code class="docutils literal notranslate"><span class="pre">.dispense</span></code> targets a single container with multiple channels:</p>
+<ol class="arabic simple">
+<li><p>The container’s Y axis is split into <strong>compartments</strong> (free space between no-go zones)</p></li>
+<li><p>Each compartment is shrunk by <code class="docutils literal notranslate"><span class="pre">edge_clearance</span></code> (default 2mm) from each boundary</p></li>
+<li><p>Channels are distributed across compartments <strong>center-out, then back-first</strong></p></li>
+<li><p>Each channel group is centered within its compartment</p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Single-channel operations are unaffected - the tip goes to the container center as usual.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Imports and visualization helper (collapse this cell in Jupyter via View → Collapse)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.patches</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mpatches</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.lines</span><span class="w"> </span><span class="kn">import</span> <span class="n">Line2D</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.container</span><span class="w"> </span><span class="kn">import</span> <span class="n">Container</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.coordinate</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.channel_positioning</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_get_compartments</span><span class="p">,</span>
+    <span class="n">compute_channel_offsets</span><span class="p">,</span>
+    <span class="n">MIN_SPACING_EDGE</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">MIN_CHANNEL_SPACING</span> <span class="o">=</span> <span class="mf">9.0</span>  <span class="c1"># mm, minimum center-to-center distance between adjacent channels</span>
+<span class="n">CHANNEL_DIAMETER</span> <span class="o">=</span> <span class="mf">9.0</span>  <span class="c1"># mm, minimum center-to-center spacing between adjacent channels</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_draw_container_axis</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">container</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="s2">&quot;wide&quot;</span><span class="p">,</span> <span class="n">channel_spacings</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Draw a single container cross-section with channels on the given axis.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChannelsDoNotFitError</span>
+
+    <span class="n">size_y</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span>
+    <span class="n">size_x</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">get_absolute_size_x</span><span class="p">()</span>
+    <span class="n">center_y</span> <span class="o">=</span> <span class="n">size_y</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="n">compartments</span> <span class="o">=</span> <span class="n">_get_compartments</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+    <span class="n">label_bbox</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+    <span class="n">dist_bbox</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Container outline</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">plt</span><span class="o">.</span><span class="n">Rectangle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">size_x</span><span class="p">,</span> <span class="n">size_y</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+
+    <span class="c1"># No-go zones (red)</span>
+    <span class="k">for</span> <span class="n">flb</span><span class="p">,</span> <span class="n">brt</span> <span class="ow">in</span> <span class="n">container</span><span class="o">.</span><span class="n">no_go_zones</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">plt</span><span class="o">.</span><span class="n">Rectangle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="n">flb</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="n">size_x</span><span class="p">,</span> <span class="n">brt</span><span class="o">.</span><span class="n">y</span> <span class="o">-</span> <span class="n">flb</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
+                                    <span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="c1"># Free compartments (green)</span>
+    <span class="k">for</span> <span class="n">comp_lo</span><span class="p">,</span> <span class="n">comp_hi</span> <span class="ow">in</span> <span class="n">compartments</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">plt</span><span class="o">.</span><span class="n">Rectangle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="n">comp_lo</span><span class="p">),</span> <span class="n">size_x</span><span class="p">,</span> <span class="n">comp_hi</span> <span class="o">-</span> <span class="n">comp_lo</span><span class="p">,</span>
+                                    <span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;green&quot;</span><span class="p">,</span>
+                                    <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">))</span>
+
+    <span class="c1"># Channel positions</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">spread</span><span class="o">=</span><span class="n">spread</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">channel_spacings</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;channel_spacings&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">channel_spacings</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">tip_ys</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">o</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">offsets</span><span class="p">):</span>
+            <span class="n">tip_y</span> <span class="o">=</span> <span class="n">center_y</span> <span class="o">+</span> <span class="n">o</span><span class="o">.</span><span class="n">y</span>
+            <span class="n">tip_ys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tip_y</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">channel_spacings</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">d</span> <span class="o">=</span> <span class="n">channel_spacings</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">d</span> <span class="o">=</span> <span class="n">CHANNEL_DIAMETER</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">size_x</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">tip_y</span><span class="p">),</span> <span class="n">d</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;navy&quot;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;:&quot;</span><span class="p">))</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">size_x</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">tip_y</span><span class="p">,</span> <span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;navy&quot;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">size_x</span> <span class="o">*</span> <span class="mf">0.78</span><span class="p">,</span> <span class="n">tip_y</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;ch</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                    <span class="n">fontsize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;navy&quot;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="n">label_bbox</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+
+        <span class="n">tip_ys_sorted</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">tip_ys</span><span class="p">)</span>
+
+        <span class="c1"># Channel-to-channel distances (right side)</span>
+        <span class="n">brace_x</span> <span class="o">=</span> <span class="n">size_x</span> <span class="o">+</span> <span class="mi">2</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tip_ys_sorted</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">y_lo</span> <span class="o">=</span> <span class="n">tip_ys_sorted</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">y_hi</span> <span class="o">=</span> <span class="n">tip_ys_sorted</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">gap</span> <span class="o">=</span> <span class="n">y_hi</span> <span class="o">-</span> <span class="n">y_lo</span>
+            <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_lo</span> <span class="o">+</span> <span class="n">y_hi</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="n">brace_x</span><span class="p">,</span> <span class="n">y_hi</span><span class="p">),</span> <span class="n">xytext</span><span class="o">=</span><span class="p">(</span><span class="n">brace_x</span><span class="p">,</span> <span class="n">y_lo</span><span class="p">),</span>
+                         <span class="n">arrowprops</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">arrowstyle</span><span class="o">=</span><span class="s2">&quot;&lt;-&gt;&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#444&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">brace_x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">mid</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">gap</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                    <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#444&quot;</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="n">dist_bbox</span><span class="p">)</span>
+
+        <span class="c1"># Edge distances (left side)</span>
+        <span class="n">edge_x</span> <span class="o">=</span> <span class="o">-</span><span class="mi">2</span>
+        <span class="k">for</span> <span class="n">comp_lo</span><span class="p">,</span> <span class="n">comp_hi</span> <span class="ow">in</span> <span class="n">compartments</span><span class="p">:</span>
+            <span class="n">group</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">tip_ys_sorted</span> <span class="k">if</span> <span class="n">comp_lo</span> <span class="o">-</span> <span class="mf">0.1</span> <span class="o">&lt;=</span> <span class="n">y</span> <span class="o">&lt;=</span> <span class="n">comp_hi</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">group</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">edge_lo</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">comp_lo</span>
+            <span class="k">if</span> <span class="n">edge_lo</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">:</span>
+                <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">comp_lo</span> <span class="o">+</span> <span class="n">group</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="mi">2</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="n">edge_x</span><span class="p">,</span> <span class="n">group</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">xytext</span><span class="o">=</span><span class="p">(</span><span class="n">edge_x</span><span class="p">,</span> <span class="n">comp_lo</span><span class="p">),</span>
+                             <span class="n">arrowprops</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">arrowstyle</span><span class="o">=</span><span class="s2">&quot;&lt;-&gt;&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#888&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.8</span><span class="p">))</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">edge_x</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">mid</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">edge_lo</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                        <span class="n">fontsize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#888&quot;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="n">dist_bbox</span><span class="p">)</span>
+            <span class="n">edge_hi</span> <span class="o">=</span> <span class="n">comp_hi</span> <span class="o">-</span> <span class="n">group</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">edge_hi</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">:</span>
+                <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">comp_hi</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="n">edge_x</span><span class="p">,</span> <span class="n">comp_hi</span><span class="p">),</span> <span class="n">xytext</span><span class="o">=</span><span class="p">(</span><span class="n">edge_x</span><span class="p">,</span> <span class="n">group</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+                             <span class="n">arrowprops</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">arrowstyle</span><span class="o">=</span><span class="s2">&quot;&lt;-&gt;&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#888&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.8</span><span class="p">))</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">edge_x</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">mid</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">edge_hi</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                        <span class="n">fontsize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#888&quot;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="n">dist_bbox</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="n">ChannelsDoNotFitError</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">size_x</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">size_y</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;Cannot fit!&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">)</span>
+
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">,</span> <span class="n">size_x</span> <span class="o">+</span> <span class="mi">14</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="n">size_y</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;X (mm)&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s2">&quot;equal&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_container_cross_section</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">num_channels_list</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot container cross-sections for multiple channel counts.&quot;&quot;&quot;</span>
+    <span class="n">n_plots</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">num_channels_list</span><span class="p">)</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_plots</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">2.2</span> <span class="o">*</span> <span class="n">n_plots</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">squeeze</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">axes</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">n_ch</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="n">num_channels_list</span><span class="p">):</span>
+        <span class="n">_draw_container_axis</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">container</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n_ch</span><span class="si">}</span><span class="s2"> channel</span><span class="si">{</span><span class="s1">&#39;s&#39;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">n_ch</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ax</span> <span class="o">!=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">([])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Y (mm)&quot;</span><span class="p">)</span>
+
+    <span class="n">legend_handles</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">mpatches</span><span class="o">.</span><span class="n">Patch</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No-go zone&quot;</span><span class="p">),</span>
+        <span class="n">mpatches</span><span class="o">.</span><span class="n">Patch</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Free compartment&quot;</span><span class="p">),</span>
+        <span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">markerfacecolor</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">markeredgecolor</span><span class="o">=</span><span class="s2">&quot;navy&quot;</span><span class="p">,</span>
+               <span class="n">markersize</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;None&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Tip diameter&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="o">=</span><span class="n">legend_handles</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">&quot;lower center&quot;</span><span class="p">,</span> <span class="n">ncol</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+
+    <span class="n">size_y</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">name</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">model</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">model</span><span class="si">}</span><span class="s2">)</span><span class="se">\n</span><span class="s2">size_y=</span><span class="si">{</span><span class="n">size_y</span><span class="si">}</span><span class="s2">mm, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">container</span><span class="o">.</span><span class="n">no_go_zones</span><span class="p">)</span><span class="si">}</span><span class="s2"> no-go zone(s)&quot;</span><span class="p">,</span>
+                 <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.92</span><span class="p">])</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=-</span><span class="mf">0.15</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_spread_comparison</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_spacings</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot wide vs tight side-by-side for a single channel count.&quot;&quot;&quot;</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">squeeze</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">axes</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">mode</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;wide&quot;</span><span class="p">,</span> <span class="s2">&quot;tight&quot;</span><span class="p">]):</span>
+        <span class="n">_draw_container_axis</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">container</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span> <span class="n">channel_spacings</span><span class="o">=</span><span class="n">channel_spacings</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;spread=&quot;</span><span class="si">{</span><span class="n">mode</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ax</span> <span class="o">!=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">([])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Y (mm)&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">title</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n_ch</span><span class="si">}</span><span class="s2"> channels on </span><span class="si">{</span><span class="n">container</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: wide vs tight&quot;</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.93</span><span class="p">])</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=-</span><span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="real-world-examples-hamilton-troughs">
+<h2>Real-world examples: Hamilton troughs<a class="headerlink" href="#real-world-examples-hamilton-troughs" title="Link to this heading">#</a></h2>
+<p>The Hamilton trough family has internal support structures that create no-go zones. These were measured from physical troughs using calipers (top of beams) and visual inspection through the transparent walls (base of tapered beams).</p>
+<section id="ml-trough-1-center-divider">
+<h3>60 mL trough - 1 center divider<a class="headerlink" href="#ml-trough-1-center-divider" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">hamilton_1_trough_60mL_Vb</span></code> has a single center support wall (~1.2mm wide), creating 2 compartments.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton.troughs</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_1_trough_60mL_Vb</span>
+
+<span class="n">trough_60</span> <span class="o">=</span> <span class="n">hamilton_1_trough_60mL_Vb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;trough_60mL&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Container: </span><span class="si">{</span><span class="n">trough_60</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, size_y=</span><span class="si">{</span><span class="n">trough_60</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span><span class="si">}</span><span class="s2">mm&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No-go zones: </span><span class="si">{</span><span class="n">trough_60</span><span class="o">.</span><span class="n">no_go_zones</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">trough_60</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">plot_container_cross_section</span><span class="p">(</span><span class="n">trough_60</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Container: trough_60mL, size_y=90.0mm
+No-go zones: [(Coordinate(x=0, y=44.4, z=5.0), Coordinate(x=19.0, y=45.6, z=60.25))]
+Compartments: [(2.0, 42.4), (47.6, 88.0)]
+</pre></div>
+</div>
+<img alt="../../_images/f4e1600a2aa10ede32f359d07db191617dee82a0109b9e136de7073ffe69c9c7.png" src="../../_images/f4e1600a2aa10ede32f359d07db191617dee82a0109b9e136de7073ffe69c9c7.png" />
+</div>
+</div>
+</section>
+<section id="ml-trough-3-tapered-support-beams">
+<h3>120 mL trough - 3 tapered support beams<a class="headerlink" href="#ml-trough-3-tapered-support-beams" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">hamilton_1_trough_120mL_Vb</span></code> has 3 internal support beams (~2.5mm wide at the base, ~0.8mm at the top), creating 4 compartments. The no-go zones use the base width since that is the worst case for pipette tip clearance.</p>
+<p>Dimensional breakdown (from outer y=0):</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Element</p></th>
+<th class="head"><p>Y range (mm)</p></th>
+<th class="head"><p>Size (mm)</p></th>
+<th class="head"><p>Modelled as</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Back wall</p></td>
+<td><p>141.1 - 142.5</p></td>
+<td><p>1.4</p></td>
+<td><p>Not modelled (included in <code class="docutils literal notranslate"><span class="pre">size_y</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Compartment 3</p></td>
+<td><p>109.8 - 141.1</p></td>
+<td><p>31.3</p></td>
+<td><p>Free space</p></td>
+</tr>
+<tr class="row-even"><td><p>Beam 3</p></td>
+<td><p>107.3 - 109.8</p></td>
+<td><p>2.5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">no_go_zones[2]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Compartment 2</p></td>
+<td><p>76.0 - 107.3</p></td>
+<td><p>31.3</p></td>
+<td><p>Free space</p></td>
+</tr>
+<tr class="row-even"><td><p>Beam 2</p></td>
+<td><p>73.5 - 76.0</p></td>
+<td><p>2.5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">no_go_zones[1]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Compartment 1</p></td>
+<td><p>42.2 - 73.5</p></td>
+<td><p>31.3</p></td>
+<td><p>Free space</p></td>
+</tr>
+<tr class="row-even"><td><p>Beam 1</p></td>
+<td><p>39.7 - 42.2</p></td>
+<td><p>2.5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">no_go_zones[0]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Compartment 0</p></td>
+<td><p>1.2 - 39.7</p></td>
+<td><p>38.5</p></td>
+<td><p>Free space</p></td>
+</tr>
+<tr class="row-even"><td><p>Front wall</p></td>
+<td><p>0 - 1.2</p></td>
+<td><p>1.2</p></td>
+<td><p>Not modelled (included in <code class="docutils literal notranslate"><span class="pre">size_y</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>size_y=142.5<code class="docutils literal notranslate"><span class="pre">is</span> <span class="pre">the</span> <span class="pre">**outer**</span> <span class="pre">dimension</span> <span class="pre">of</span> <span class="pre">the</span> <span class="pre">trough.</span> <span class="pre">The</span> <span class="pre">front</span> <span class="pre">and</span> <span class="pre">back</span> <span class="pre">walls</span> <span class="pre">are</span> <span class="pre">not</span> <span class="pre">modelled</span> <span class="pre">as</span> <span class="pre">no-go</span> <span class="pre">zones</span> <span class="pre">-</span> <span class="pre">they</span> <span class="pre">are</span> <span class="pre">accounted</span> <span class="pre">for</span> <span class="pre">by</span> <span class="pre">the</span></code>edge_clearance` parameter during channel positioning.</p>
+<p>The internal beams <em>are</em> modelled as no-go zones because they obstruct pipette access within the container’s interior.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton.troughs</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_1_trough_120mL_Vb</span>
+
+<span class="n">trough_120</span> <span class="o">=</span> <span class="n">hamilton_1_trough_120mL_Vb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;trough_120mL&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Container: </span><span class="si">{</span><span class="n">trough_120</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, size_y=</span><span class="si">{</span><span class="n">trough_120</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span><span class="si">}</span><span class="s2">mm&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No-go zones: </span><span class="si">{</span><span class="n">trough_120</span><span class="o">.</span><span class="n">no_go_zones</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">trough_120</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">plot_container_cross_section</span><span class="p">(</span><span class="n">trough_120</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">13</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Container: trough_120mL, size_y=142.5mm
+No-go zones: [(Coordinate(x=0, y=39.7, z=12.0), Coordinate(x=19.0, y=42.2, z=70.0)), (Coordinate(x=0, y=73.5, z=12.0), Coordinate(x=19.0, y=76.0, z=70.0)), (Coordinate(x=0, y=107.3, z=12.0), Coordinate(x=19.0, y=109.8, z=70.0))]
+Compartments: [(2.0, 37.7), (44.2, 71.5), (78.0, 105.3), (111.8, 140.5)]
+</pre></div>
+</div>
+<img alt="../../_images/4b2ca7d42452c653dce09bf242d4ff912f2094065a3c4235fea817a1450a4909.png" src="../../_images/4b2ca7d42452c653dce09bf242d4ff912f2094065a3c4235fea817a1450a4909.png" />
+</div>
+</div>
+</section>
+</section>
+<section id="defining-no-go-zones-on-a-new-container">
+<h2>Defining no-go zones on a new container<a class="headerlink" href="#defining-no-go-zones-on-a-new-container" title="Link to this heading">#</a></h2>
+<p>Any <code class="docutils literal notranslate"><span class="pre">Container</span></code> (or subclass: <code class="docutils literal notranslate"><span class="pre">Trough</span></code>, <code class="docutils literal notranslate"><span class="pre">Well</span></code>, <code class="docutils literal notranslate"><span class="pre">Tube</span></code>, etc.) accepts a <code class="docutils literal notranslate"><span class="pre">no_go_zones</span></code> parameter. Each zone is a pair of <code class="docutils literal notranslate"><span class="pre">Coordinate</span></code>s - the front-left-bottom and back-right-top corners of the obstructed cuboid, relative to the container’s outer origin.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.trough</span><span class="w"> </span><span class="kn">import</span> <span class="n">Trough</span><span class="p">,</span> <span class="n">TroughBottomType</span>
+
+<span class="c1"># Define a custom trough with two dividers</span>
+<span class="n">custom_trough</span> <span class="o">=</span> <span class="n">Trough</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;custom_trough&quot;</span><span class="p">,</span>
+    <span class="n">size_x</span><span class="o">=</span><span class="mf">19.0</span><span class="p">,</span>
+    <span class="n">size_y</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+    <span class="n">size_z</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span>
+    <span class="n">max_volume</span><span class="o">=</span><span class="mi">80_000</span><span class="p">,</span>
+    <span class="n">bottom_type</span><span class="o">=</span><span class="n">TroughBottomType</span><span class="o">.</span><span class="n">V</span><span class="p">,</span>
+    <span class="n">no_go_zones</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">(</span><span class="n">Coordinate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">30.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Coordinate</span><span class="p">(</span><span class="mf">19.0</span><span class="p">,</span> <span class="mf">32.0</span><span class="p">,</span> <span class="mf">50.0</span><span class="p">)),</span>  <span class="c1"># divider 1</span>
+        <span class="p">(</span><span class="n">Coordinate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">65.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Coordinate</span><span class="p">(</span><span class="mf">19.0</span><span class="p">,</span> <span class="mf">67.0</span><span class="p">,</span> <span class="mf">50.0</span><span class="p">)),</span>  <span class="c1"># divider 2</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Container: </span><span class="si">{</span><span class="n">custom_trough</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, size_y=</span><span class="si">{</span><span class="n">custom_trough</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span><span class="si">}</span><span class="s2">mm&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">custom_trough</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">plot_container_cross_section</span><span class="p">(</span><span class="n">custom_trough</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Container: custom_trough, size_y=100.0mm
+Compartments: [(2.0, 28.0), (34.0, 63.0), (69.0, 98.0)]
+</pre></div>
+</div>
+<img alt="../../_images/ac4b25d0c92d4425636bbb9a372cee7c0391b6479550537acdb5203a77773e01.png" src="../../_images/ac4b25d0c92d4425636bbb9a372cee7c0391b6479550537acdb5203a77773e01.png" />
+</div>
+</div>
+</section>
+<section id="edge-clearance-and-tip-size">
+<h2>Edge clearance and tip size<a class="headerlink" href="#edge-clearance-and-tip-size" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">edge_clearance</span></code> (default: <code class="docutils literal notranslate"><span class="pre">MIN_SPACING_EDGE</span> <span class="pre">=</span> <span class="pre">2mm</span></code>) controls how close the automatic positioning places tip <strong>centers</strong> to compartment boundaries. It is a positioning safety margin, not a physical gate.</p>
+<p>It does <strong>not</strong> prevent a pipette from entering a container. Whether a tip physically fits is determined by tip diameter vs. container opening - e.g. a 1000 µL tip won’t fit into a 1536-wellplate well. This is the <strong>user’s responsibility</strong> to verify when choosing tips and containers.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># A narrow container where compartments are smaller than the default 9mm channel spacing.</span>
+<span class="c1"># 1 channel per compartment still works - the channel is simply centered.</span>
+<span class="c1"># 2 channels in one compartment would fail (needs 9mm, only 4mm available).</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChannelsDoNotFitError</span>
+
+<span class="n">tiny</span> <span class="o">=</span> <span class="n">Container</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;tiny_container&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">no_go_zones</span><span class="o">=</span><span class="p">[(</span><span class="n">Coordinate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Coordinate</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">))],</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Container size_y: </span><span class="si">{</span><span class="n">tiny</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span><span class="si">}</span><span class="s2">mm&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No-go zone: Y=</span><span class="si">{</span><span class="mi">8</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="mi">12</span><span class="si">}</span><span class="s2">mm -&gt; two 8mm raw compartments&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;After 2mm edge clearance: compartments = </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">tiny</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;1 channel: </span><span class="si">{</span><span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">tiny</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;2 channels (1 per compartment): </span><span class="si">{</span><span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">tiny</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;3 channels: </span><span class="si">{</span><span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">tiny</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">ChannelsDoNotFitError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;3 channels (needs 2 in one 4mm compartment): ChannelsDoNotFitError - </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">plot_container_cross_section</span><span class="p">(</span><span class="n">tiny</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Container size_y: 20.0mm
+No-go zone: Y=8-12mm -&gt; two 8mm raw compartments
+After 2mm edge clearance: compartments = [(2.0, 6.0), (14.0, 18.0)]
+1 channel: [Coordinate(x=0, y=6.0, z=0)]
+2 channels (1 per compartment): [Coordinate(x=0, y=6.0, z=0), Coordinate(x=0, y=-6.0, z=0)]
+3 channels (needs 2 in one 4mm compartment): ChannelsDoNotFitError - Cannot distribute channels across compartments while respecting spacing constraints.
+</pre></div>
+</div>
+<img alt="../../_images/50868f5d06af7891dc5c436fff6fac25061e2037417cdc76fcc4172551ed0217.png" src="../../_images/50868f5d06af7891dc5c436fff6fac25061e2037417cdc76fcc4172551ed0217.png" />
+</div>
+</div>
+</section>
+<section id="spread-modes-with-no-go-zones">
+<h2>Spread modes with no-go zones<a class="headerlink" href="#spread-modes-with-no-go-zones" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">spread</span></code> parameter on <code class="docutils literal notranslate"><span class="pre">aspirate</span></code> and <code class="docutils literal notranslate"><span class="pre">dispense</span></code> controls how channels are positioned within each compartment:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spread=&quot;wide&quot;</span></code> (default) - channels are spread as far apart as possible within each compartment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spread=&quot;tight&quot;</span></code> - channels are packed at minimum spacing (9mm), centered in each compartment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spread=&quot;custom&quot;</span></code> - no-go zones are ignored entirely; the user controls all positioning via offsets</p></li>
+</ul>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Compare wide vs tight spread on the 200mL trough (2 large compartments, 6 channels)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton.troughs</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_1_trough_200mL_Vb</span>
+
+<span class="n">trough_200</span> <span class="o">=</span> <span class="n">hamilton_1_trough_200mL_Vb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;trough_200mL&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">trough_200</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;wide&quot;</span><span class="p">,</span> <span class="s2">&quot;tight&quot;</span><span class="p">]:</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">trough_200</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">y</span><span class="si">:</span><span class="s2">+.1f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">offsets</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;spread=</span><span class="si">{</span><span class="n">mode</span><span class="si">!r:</span><span class="s2">8s</span><span class="si">}</span><span class="s2"> -&gt; offsets (from center): </span><span class="si">{</span><span class="n">positions</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Compartments: [(2.0, 58.0), (63.7, 116.0)]
+spread=&#39;wide&#39;   -&gt; offsets (from center): [&#39;+43.9&#39;, &#39;+30.9&#39;, &#39;+17.8&#39;, &#39;-15.0&#39;, &#39;-29.0&#39;, &#39;-43.0&#39;]
+spread=&#39;tight&#39;  -&gt; offsets (from center): [&#39;+39.9&#39;, &#39;+30.9&#39;, &#39;+21.9&#39;, &#39;-20.0&#39;, &#39;-29.0&#39;, &#39;-38.0&#39;]
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plot_spread_comparison</span><span class="p">(</span><span class="n">trough_200</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;6 channels on 200mL trough: wide vs tight&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../_images/a83373282e7bfe18ac1488efdefd356871132ea819f3d97d0ddf8b3634381e09.png" src="../../_images/a83373282e7bfe18ac1488efdefd356871132ea819f3d97d0ddf8b3634381e09.png" />
+</div>
+</div>
+<section id="container-without-no-go-zones">
+<h3>Container without no-go zones<a class="headerlink" href="#container-without-no-go-zones" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">compute_channel_offsets</span></code> also works on plain containers. Without no-go zones, it falls through to standard wide/tight spread across the full Y axis.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># A plain trough without no-go zones</span>
+<span class="n">plain_trough</span> <span class="o">=</span> <span class="n">Trough</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;plain_trough&quot;</span><span class="p">,</span>
+    <span class="n">size_x</span><span class="o">=</span><span class="mf">19.0</span><span class="p">,</span>
+    <span class="n">size_y</span><span class="o">=</span><span class="mf">90.0</span><span class="p">,</span>
+    <span class="n">size_z</span><span class="o">=</span><span class="mf">65.0</span><span class="p">,</span>
+    <span class="n">max_volume</span><span class="o">=</span><span class="mi">60_000</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;wide&quot;</span><span class="p">,</span> <span class="s2">&quot;tight&quot;</span><span class="p">]:</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">plain_trough</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">y</span><span class="si">:</span><span class="s2">+.1f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">offsets</span><span class="p">]</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">-channel </span><span class="si">{</span><span class="n">mode</span><span class="si">:</span><span class="s2">6s</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">positions</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Side-by-side: wide vs tight for 2, 4, 6 channels</span>
+<span class="n">channel_counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+<span class="n">n_pairs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">channel_counts</span><span class="p">)</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_pairs</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="n">n_pairs</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">squeeze</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">axes</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">pair_idx</span><span class="p">,</span> <span class="n">n_ch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">channel_counts</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">mode_idx</span><span class="p">,</span> <span class="n">mode</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">([</span><span class="s2">&quot;wide&quot;</span><span class="p">,</span> <span class="s2">&quot;tight&quot;</span><span class="p">]):</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="n">pair_idx</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">mode_idx</span><span class="p">]</span>
+        <span class="n">_draw_container_axis</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">plain_trough</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">n_ch</span><span class="si">}</span><span class="s1">-channel &quot;</span><span class="si">{</span><span class="n">mode</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pair_idx</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">mode_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Y (mm)&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">([])</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">&quot;Plain trough (no no-go zones): wide vs tight&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.93</span><span class="p">])</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=-</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>2-channel wide   -&gt; [&#39;+15.0&#39;, &#39;-15.0&#39;]
+2-channel tight  -&gt; [&#39;+4.5&#39;, &#39;-4.5&#39;]
+4-channel wide   -&gt; [&#39;+27.0&#39;, &#39;+9.0&#39;, &#39;-9.0&#39;, &#39;-27.0&#39;]
+4-channel tight  -&gt; [&#39;+13.5&#39;, &#39;+4.5&#39;, &#39;-4.5&#39;, &#39;-13.5&#39;]
+6-channel wide   -&gt; [&#39;+32.1&#39;, &#39;+19.3&#39;, &#39;+6.4&#39;, &#39;-6.4&#39;, &#39;-19.3&#39;, &#39;-32.1&#39;]
+6-channel tight  -&gt; [&#39;+22.5&#39;, &#39;+13.5&#39;, &#39;+4.5&#39;, &#39;-4.5&#39;, &#39;-13.5&#39;, &#39;-22.5&#39;]
+</pre></div>
+</div>
+<img alt="../../_images/8af16ce2f6b3b61f6e37f4fc04e824e173b6d822d632456a381baf1b6b87ee36.png" src="../../_images/8af16ce2f6b3b61f6e37f4fc04e824e173b6d822d632456a381baf1b6b87ee36.png" />
+</div>
+</div>
+</section>
+<section id="per-channel-occupancy-diameters">
+<h3>Per-channel occupancy diameters<a class="headerlink" href="#per-channel-occupancy-diameters" title="Link to this heading">#</a></h3>
+<p>Each channel has an occupancy diameter - the physical space it takes up. On a Hamilton STAR, 1mL channels have a 9mm occupancy diameter, while 5mL channels have 18mm. The required gap between two adjacent channels is the sum of their radii: <code class="docutils literal notranslate"><span class="pre">spacing[i]/2</span> <span class="pre">+</span> <span class="pre">spacing[j]/2</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">compute_channel_offsets</span></code> accepts <code class="docutils literal notranslate"><span class="pre">channel_spacings</span></code> - one occupancy diameter per channel - and computes all gaps accordingly.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># 6 channels with mixed occupancy diameters on a wide demo trough</span>
+<span class="c1"># 4 channels with 9mm occupancy (1mL), 2 with 18mm occupancy (5mL) - e.g. mixed Hamilton</span>
+<span class="n">mixed_spacings</span> <span class="o">=</span> <span class="p">[</span><span class="mf">9.0</span><span class="p">,</span> <span class="mf">18.0</span><span class="p">,</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">18.0</span><span class="p">,</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">9.0</span><span class="p">]</span>  <span class="c1"># 6 occupancy diameters for 6 channels</span>
+
+<span class="c1"># Create a wider trough to clearly show the difference between wide and tight</span>
+<span class="n">demo_trough</span> <span class="o">=</span> <span class="n">Trough</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;demo_trough&quot;</span><span class="p">,</span>
+    <span class="n">size_x</span><span class="o">=</span><span class="mf">37.0</span><span class="p">,</span>
+    <span class="n">size_y</span><span class="o">=</span><span class="mf">200.0</span><span class="p">,</span>
+    <span class="n">size_z</span><span class="o">=</span><span class="mf">95.0</span><span class="p">,</span>
+    <span class="n">max_volume</span><span class="o">=</span><span class="mi">200_000</span><span class="p">,</span>
+    <span class="n">bottom_type</span><span class="o">=</span><span class="n">TroughBottomType</span><span class="o">.</span><span class="n">V</span><span class="p">,</span>
+    <span class="n">no_go_zones</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">(</span><span class="n">Coordinate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">95</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Coordinate</span><span class="p">(</span><span class="mf">37.0</span><span class="p">,</span> <span class="mi">105</span><span class="p">,</span> <span class="mf">95.0</span><span class="p">)),</span>  <span class="c1"># center divider</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">demo_trough</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;wide&quot;</span><span class="p">,</span> <span class="s2">&quot;tight&quot;</span><span class="p">]:</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">demo_trough</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span> <span class="n">channel_spacings</span><span class="o">=</span><span class="n">mixed_spacings</span><span class="p">)</span>
+    <span class="n">centers</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">demo_trough</span><span class="o">.</span><span class="n">get_size_y</span><span class="p">()</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">o</span><span class="o">.</span><span class="n">y</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">offsets</span><span class="p">])</span>
+    <span class="n">gaps</span> <span class="o">=</span> <span class="p">[</span><span class="nb">round</span><span class="p">(</span><span class="n">centers</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">centers</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">centers</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;spread=</span><span class="si">{</span><span class="n">mode</span><span class="si">!r:</span><span class="s2">8s</span><span class="si">}</span><span class="s2">  centers=</span><span class="si">{</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">c</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">&#39;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">centers</span><span class="p">]</span><span class="si">}</span><span class="s2">  gaps=</span><span class="si">{</span><span class="n">gaps</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">plot_spread_comparison</span><span class="p">(</span>
+    <span class="n">demo_trough</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;6 channels, occupancy diameters [9, 18, 9, 18, 9, 9] mm</span><span class="se">\n</span><span class="s2">(demo trough, 200mm Y, center divider)&quot;</span><span class="p">,</span>
+    <span class="n">channel_spacings</span><span class="o">=</span><span class="n">mixed_spacings</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Compartments: [(2.0, 93.0), (107.0, 198.0)]
+spread=&#39;wide&#39;    centers=[&#39;24.8&#39;, &#39;47.5&#39;, &#39;70.2&#39;, &#39;129.8&#39;, &#39;152.5&#39;, &#39;175.2&#39;]  gaps=[22.8, 22.8, 59.5, 22.8, 22.8]
+spread=&#39;tight&#39;   centers=[&#39;34.0&#39;, &#39;43.0&#39;, &#39;56.5&#39;, &#39;139.0&#39;, &#39;152.5&#39;, &#39;166.0&#39;]  gaps=[9.0, 13.5, 82.5, 13.5, 13.5]
+</pre></div>
+</div>
+<img alt="../../_images/3ebeb1524e6860b46321075d5a0c9862da468fb1a08a85163e66155a1a079715.png" src="../../_images/3ebeb1524e6860b46321075d5a0c9862da468fb1a08a85163e66155a1a079715.png" />
+</div>
+</div>
+</section>
+</section>
+<section id="try-it-yourself">
+<h2>Try it yourself<a class="headerlink" href="#try-it-yourself" title="Link to this heading">#</a></h2>
+<p>Edit the parameters below to experiment with any container geometry:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- Edit these ---</span>
+<span class="n">CONTAINER_SIZE_X</span> <span class="o">=</span> <span class="mf">19.0</span>   <span class="c1"># mm</span>
+<span class="n">CONTAINER_SIZE_Y</span> <span class="o">=</span> <span class="mf">100.0</span>  <span class="c1"># mm</span>
+<span class="n">CONTAINER_SIZE_Z</span> <span class="o">=</span> <span class="mf">50.0</span>   <span class="c1"># mm</span>
+
+<span class="c1"># List of (y_start, y_end) pairs for no-go zones</span>
+<span class="n">NO_GO_Y_RANGES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>   <span class="c1"># divider 1</span>
+    <span class="p">(</span><span class="mi">65</span><span class="p">,</span> <span class="mi">67</span><span class="p">),</span>   <span class="c1"># divider 2</span>
+<span class="p">]</span>
+
+<span class="n">NUM_CHANNELS</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>  <span class="c1"># channel counts to plot</span>
+<span class="c1"># ------------------</span>
+
+<span class="n">no_go_zones</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="n">Coordinate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">y_lo</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">CONTAINER_SIZE_X</span><span class="p">,</span> <span class="n">y_hi</span><span class="p">,</span> <span class="n">CONTAINER_SIZE_Z</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">y_lo</span><span class="p">,</span> <span class="n">y_hi</span> <span class="ow">in</span> <span class="n">NO_GO_Y_RANGES</span>
+<span class="p">]</span>
+
+<span class="n">custom</span> <span class="o">=</span> <span class="n">Container</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;custom_container&quot;</span><span class="p">,</span>
+    <span class="n">size_x</span><span class="o">=</span><span class="n">CONTAINER_SIZE_X</span><span class="p">,</span>
+    <span class="n">size_y</span><span class="o">=</span><span class="n">CONTAINER_SIZE_Y</span><span class="p">,</span>
+    <span class="n">size_z</span><span class="o">=</span><span class="n">CONTAINER_SIZE_Z</span><span class="p">,</span>
+    <span class="n">no_go_zones</span><span class="o">=</span><span class="n">no_go_zones</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">custom</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">NUM_CHANNELS</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">custom</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;y=</span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">y</span><span class="si">:</span><span class="s2">+.1f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">result</span><span class="p">]</span>
+    <span class="k">except</span> <span class="n">ChannelsDoNotFitError</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;Cannot fit&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> ch: </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">plot_container_cross_section</span><span class="p">(</span><span class="n">custom</span><span class="p">,</span> <span class="n">NUM_CHANNELS</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Compartments: [(2.0, 28.0), (34.0, 63.0), (69.0, 98.0)]
+  1 ch: [&#39;y=+33.5&#39;]
+  2 ch: [&#39;y=+33.5&#39;, &#39;y=-1.5&#39;]
+  3 ch: [&#39;y=+33.5&#39;, &#39;y=-1.5&#39;, &#39;y=-35.0&#39;]
+  6 ch: [&#39;y=+38.3&#39;, &#39;y=+28.7&#39;, &#39;y=+3.3&#39;, &#39;y=-6.3&#39;, &#39;y=-30.5&#39;, &#39;y=-39.5&#39;]
+</pre></div>
+</div>
+<img alt="../../_images/18476ea41a621e18bbcd4381e6fd9abe860d47beb8c760786d39b984655763be.png" src="../../_images/18476ea41a621e18bbcd4381e6fd9abe860d47beb8c760786d39b984655763be.png" />
+</div>
+</div>
+</section>
+<section id="end-to-end-simulation">
+<h2>End-to-end simulation<a class="headerlink" href="#end-to-end-simulation" title="Link to this heading">#</a></h2>
+<p>Below we set up a full <code class="docutils literal notranslate"><span class="pre">LiquidHandler</span></code> with <code class="docutils literal notranslate"><span class="pre">STARChatterboxBackend</span></code> (simulation - no hardware needed) to verify that <code class="docutils literal notranslate"><span class="pre">aspirate</span></code> correctly distributes channels around no-go zones.</p>
+<p>The Hamilton-specific trough definitions (<code class="docutils literal notranslate"><span class="pre">hamilton_1_trough_60mL_Vb</span></code>, <code class="docutils literal notranslate"><span class="pre">hamilton_1_trough_120mL_Vb</span></code>) already have <code class="docutils literal notranslate"><span class="pre">no_go_zones</span></code> pre-configured - you don’t need to define them manually when using these resources.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiquidHandler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends.hamilton.STAR_chatterbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARChatterboxBackend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARLetDeck</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton.tip_racks</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton.trough_carriers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Trough_CAR_5R60_A00</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton.troughs</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_1_trough_60mL_Vb</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">TIP_CAR_480_A00</span><span class="p">,</span> <span class="n">set_tip_tracking</span><span class="p">,</span> <span class="n">set_volume_tracking</span>
+
+<span class="n">set_tip_tracking</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">set_volume_tracking</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">backend</span> <span class="o">=</span> <span class="n">STARChatterboxBackend</span><span class="p">(</span><span class="n">num_channels</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<span class="n">deck</span> <span class="o">=</span> <span class="n">STARLetDeck</span><span class="p">()</span>
+<span class="n">lh</span> <span class="o">=</span> <span class="n">LiquidHandler</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">deck</span><span class="o">=</span><span class="n">deck</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+
+<span class="n">tip_car</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip_carrier&quot;</span><span class="p">)</span>
+<span class="n">tip_car</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tips_1000&quot;</span><span class="p">)</span>
+<span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">tip_car</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">trough_car</span> <span class="o">=</span> <span class="n">Trough_CAR_5R60_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;trough_carrier&quot;</span><span class="p">)</span>
+<span class="n">trough_car</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">hamilton_1_trough_60mL_Vb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;trough_60&quot;</span><span class="p">)</span>
+<span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">trough_car</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="n">trough</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">&quot;trough_60&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Trough: </span><span class="si">{</span><span class="n">trough</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Pre-configured no-go zones: </span><span class="si">{</span><span class="n">trough</span><span class="o">.</span><span class="n">no_go_zones</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compartments: </span><span class="si">{</span><span class="n">_get_compartments</span><span class="p">(</span><span class="n">trough</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Trough: trough_60
+Pre-configured no-go zones: [(Coordinate(x=0, y=44.4, z=5.0), Coordinate(x=19.0, y=45.6, z=60.25))]
+Compartments: [(2.0, 42.4), (47.6, 88.0)]
+</pre></div>
+</div>
+</div>
+</div>
+<section id="aspirate-with-2-and-4-channels">
+<h3>Aspirate with 2 and 4 channels<a class="headerlink" href="#aspirate-with-2-and-4-channels" title="Link to this heading">#</a></h3>
+<p>Pick up tips, fill the trough, then aspirate. The chatterbox backend prints raw firmware commands - the <code class="docutils literal notranslate"><span class="pre">yp</span></code> values show absolute Y positions in 0.1mm units. Verify that channels land in separate compartments and avoid the divider at Y=44-46mm.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">&quot;tips_1000&quot;</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="s2">&quot;A1:D1&quot;</span><span class="p">])</span>
+<span class="n">trough</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_volume</span><span class="p">(</span><span class="mi">50_000</span><span class="p">)</span>
+
+<span class="c1"># Show expected offsets before aspirating</span>
+<span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">]:</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">compute_channel_offsets</span><span class="p">(</span><span class="n">trough</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> channels -&gt; offsets: </span><span class="si">{</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">y</span><span class="si">:</span><span class="s1">+.1f</span><span class="si">}</span><span class="s1">mm&#39;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">o</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">offsets</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">plot_container_cross_section</span><span class="p">(</span><span class="n">trough</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C0TTid0001tt01tf1tl0871tv10650tg3tu0
+C0TPid0002xp01179 01179 01179 01179 00000&amp;yp1458 1368 1278 1188 0000&amp;tm1 1 1 1 0&amp;tt01tp2266tz2166th2450td0
+2 channels -&gt; offsets: [&#39;+22.8mm&#39;, &#39;-22.8mm&#39;]
+4 channels -&gt; offsets: [&#39;+29.5mm&#39;, &#39;+16.1mm&#39;, &#39;-16.1mm&#39;, &#39;-29.5mm&#39;]
+</pre></div>
+</div>
+<img alt="../../_images/244dcf132fbbc9ab4daf362ed6c9e19db5edf9ca3e1022d1ee9720a0e4943ac0.png" src="../../_images/244dcf132fbbc9ab4daf362ed6c9e19db5edf9ca3e1022d1ee9720a0e4943ac0.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Simulation stopped.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Simulation stopped.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="mixing.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Mixing</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../01_material-handling/_material-handling.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Material Handling</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-are-no-go-zones">What are no-go zones?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-it-works">How it works</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#real-world-examples-hamilton-troughs">Real-world examples: Hamilton troughs</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ml-trough-1-center-divider">60 mL trough - 1 center divider</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ml-trough-3-tapered-support-beams">120 mL trough - 3 tapered support beams</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#defining-no-go-zones-on-a-new-container">Defining no-go zones on a new container</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#edge-clearance-and-tip-size">Edge clearance and tip size</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spread-modes-with-no-go-zones">Spread modes with no-go zones</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#container-without-no-go-zones">Container without no-go zones</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-channel-occupancy-diameters">Per-channel occupancy diameters</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#try-it-yourself">Try it yourself</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#end-to-end-simulation">End-to-end simulation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#aspirate-with-2-and-4-channels">Aspirate with 2 and 4 channels</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/00_liquid-handling/container_no_go_zones.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/user_guide/00_liquid-handling/container_no_go_zones.ipynb.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

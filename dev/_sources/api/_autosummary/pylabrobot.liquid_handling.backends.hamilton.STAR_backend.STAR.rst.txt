@@ -111,6 +111,7 @@
       ~STAR.execute_batched
       ~STAR.fill_selected_dual_chamber
       ~STAR.get_all_instances
+      ~STAR.get_channel_spacings
       ~STAR.get_channels_y_positions
       ~STAR.get_channels_z_positions
       ~STAR.get_core

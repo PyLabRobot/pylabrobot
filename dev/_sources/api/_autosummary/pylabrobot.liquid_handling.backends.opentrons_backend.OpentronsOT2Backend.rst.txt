@@ -40,6 +40,7 @@
       ~OpentronsOT2Backend.drop_tips
       ~OpentronsOT2Backend.drop_tips96
       ~OpentronsOT2Backend.get_all_instances
+      ~OpentronsOT2Backend.get_channel_spacings
       ~OpentronsOT2Backend.get_ot_name
       ~OpentronsOT2Backend.get_pipette_name
       ~OpentronsOT2Backend.home

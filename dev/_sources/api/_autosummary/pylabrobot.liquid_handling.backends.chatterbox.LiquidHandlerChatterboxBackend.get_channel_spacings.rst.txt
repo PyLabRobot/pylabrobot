@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend.get\_channel\_spacings
+=====================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
+
+.. automethod:: LiquidHandlerChatterboxBackend.get_channel_spacings

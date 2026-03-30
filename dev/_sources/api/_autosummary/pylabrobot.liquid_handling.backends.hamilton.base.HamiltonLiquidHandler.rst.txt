@@ -42,6 +42,7 @@
       ~HamiltonLiquidHandler.drop_tips
       ~HamiltonLiquidHandler.drop_tips96
       ~HamiltonLiquidHandler.get_all_instances
+      ~HamiltonLiquidHandler.get_channel_spacings
       ~HamiltonLiquidHandler.get_id_from_fw_response
       ~HamiltonLiquidHandler.get_or_assign_tip_type_index
       ~HamiltonLiquidHandler.move_channel_x

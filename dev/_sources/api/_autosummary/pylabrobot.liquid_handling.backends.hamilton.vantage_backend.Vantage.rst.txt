@@ -63,6 +63,7 @@
       ~Vantage.drop_tips96
       ~Vantage.expose_channel_n
       ~Vantage.get_all_instances
+      ~Vantage.get_channel_spacings
       ~Vantage.get_id_from_fw_response
       ~Vantage.get_or_assign_tip_type_index
       ~Vantage.grip_plate

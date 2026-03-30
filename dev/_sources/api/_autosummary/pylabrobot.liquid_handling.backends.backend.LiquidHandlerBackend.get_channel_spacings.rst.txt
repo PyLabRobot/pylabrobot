@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.backend.LiquidHandlerBackend.get\_channel\_spacings
+========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.backend
+
+.. automethod:: LiquidHandlerBackend.get_channel_spacings
