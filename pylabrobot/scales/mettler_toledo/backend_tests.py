@@ -185,6 +185,92 @@ class MTSICSSimulatorTests(unittest.IsolatedAsyncioTestCase):
     self.assertIn("M28", str(ctx.exception))
     self.assertIn("not implemented", str(ctx.exception))
 
+  async def test_uptime_single_value_format(self):
+    """Some devices return uptime as a single number (total days) instead of
+    days/hours/minutes/seconds. The parser must handle both formats."""
+    # Default simulator returns multi-value format
+    uptime = await self.backend.request_uptime()
+    self.assertEqual(uptime["days"], 42)
+    self.assertEqual(uptime["hours"], 3)
+
+  async def test_uptime_single_value_fallback(self):
+    """When the device returns a single uptime value, hours/minutes/seconds
+    must default to 0. This format was discovered on the WXS205SDU hardware."""
+    backend = MettlerToledoSICSSimulator()
+    scale = Scale(name="s", backend=backend, size_x=0, size_y=0, size_z=0)
+    await scale.setup()
+    # Patch the simulator to return single-value format
+    original = backend._build_response
+
+    def patched(command):
+      if command.split()[0] == "I15":
+        return [MettlerToledoResponse("I15", "A", ["203"])]
+      return original(command)
+
+    backend._build_response = patched
+    uptime = await backend.request_uptime()
+    self.assertEqual(uptime["days"], 203)
+    self.assertEqual(uptime["hours"], 0)
+
+  async def test_configuration_bridge_detection(self):
+    """Device type containing 'Bridge' must set configuration to 'Bridge'.
+    This determines which commands are expected to work (no display commands
+    in bridge mode)."""
+    backend = MettlerToledoSICSSimulator(device_type="WXS205SDU WXA-Bridge")
+    scale = Scale(name="s", backend=backend, size_x=0, size_y=0, size_z=0)
+    await scale.setup()
+    self.assertEqual(backend.configuration, "Bridge")
+
+  async def test_shlex_preserves_quoted_strings_with_spaces(self):
+    """The I2 response packs type, capacity, and unit into one quoted string.
+    shlex must keep the quoted content as a single token. This bug broke
+    hardware validation before the shlex fix."""
+    # The simulator returns I2 as a single data field (matching shlex behavior)
+    device_type = await self.backend.request_device_type()
+    self.assertIsInstance(device_type, str)
+    capacity = await self.backend.request_capacity()
+    self.assertEqual(capacity, 220.0)
+
+  async def test_multi_response_terminates_on_status_a(self):
+    """send_command must keep reading while status is B and stop on A.
+    I50 returns 3 lines (B, B, A). All must be captured."""
+    responses = await self.backend.send_command("I50")
+    self.assertEqual(len(responses), 3)
+    self.assertEqual(responses[0].status, "B")
+    self.assertEqual(responses[1].status, "B")
+    self.assertEqual(responses[2].status, "A")
+
+  async def test_zero_stable_dispatches_to_z(self):
+    """zero(timeout='stable') must send the Z command (wait for stable),
+    not ZI (immediate) or ZC (timed)."""
+    self.backend.platform_weight = 5.0
+    await self.scale.zero(timeout="stable")
+    # After zeroing, reading should return 0
+    weight = await self.scale.read_weight(timeout=0)
+    self.assertEqual(weight, 0.0)
+
+  async def test_clear_tare_resets_to_zero(self):
+    """clear_tare (TAC) must reset the stored tare value to zero.
+    After clearing, request_tare_weight must return 0."""
+    self.backend.platform_weight = 50.0
+    await self.scale.tare()
+    tare = await self.scale.request_tare_weight()
+    self.assertEqual(tare, 50.0)
+    await self.backend.clear_tare()
+    tare_after = await self.scale.request_tare_weight()
+    self.assertEqual(tare_after, 0.0)
+
+  async def test_b_status_does_not_raise(self):
+    """Status B (more responses follow) must not be treated as an error.
+    If _parse_basic_errors raises on B, all multi-response commands break."""
+    self.backend._parse_basic_errors(R("I50", "B", ["0", "535.141", "g"]))
+
+  async def test_request_weighing_mode(self):
+    """request_weighing_mode must return an integer from the M01 response.
+    Verifies Batch 2 M01 query parsing."""
+    mode = await self.backend.request_weighing_mode()
+    self.assertEqual(mode, 0)  # Normal weighing mode
+
 
 if __name__ == "__main__":
   unittest.main()

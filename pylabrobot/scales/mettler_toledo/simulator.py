@@ -93,10 +93,17 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       "DW",
       "DAT",
       "TIM",
+      "M01",
+      "M02",
+      "M03",
       "M21",
+      "M27",
       "M28",
+      "SIS",
+      "SNR",
       "SR",
       "SIR",
+      "UPD",
     }
 
   @property
@@ -108,14 +115,20 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
     self._supported_commands = self._simulated_supported_commands
     self.device_type = self._simulated_device_type
     self.capacity = self._simulated_capacity
+    self.firmware_version = "1.10 18.6.4.1361.772"
+    self.configuration = "Bridge" if "Bridge" in self.device_type else "Balance"
     logger.info(
       "[MT Scale] Connected to Mettler Toledo scale (simulation)\n"
       "Device type: %s\n"
+      "Configuration: %s\n"
       "Serial number: %s\n"
+      "Firmware: %s\n"
       "Capacity: %.1f g\n"
       "Supported commands: %s",
       self.device_type,
+      self.configuration,
       self.serial_number,
+      self.firmware_version,
       self.capacity,
       sorted(self._supported_commands),
     )
@@ -184,6 +197,25 @@ class MettlerToledoSICSSimulator(MettlerToledoWXS205SDUBackend):
       return [R("DAT", "A", ["30.03.2026"])]
     if cmd == "TIM":
       return [R("TIM", "A", ["12:00:00"])]
+
+    # Configuration queries
+    if cmd == "M01":
+      return [R("M01", "A", ["0"])]  # Normal weighing mode
+    if cmd == "M02":
+      return [R("M02", "A", ["2"])]  # Standard environment
+    if cmd == "M03":
+      return [R("M03", "A", ["1"])]  # Auto zero on
+    if cmd == "M27":
+      return [
+        R("M27", "B", ["1", "1", "1", "2026", "8", "0", "0", ""]),
+        R("M27", "A", ["2", "15", "3", "2026", "10", "30", "1", "200.1234 g"]),
+      ]
+    if cmd == "SIS":
+      return [R("SIS", "S", [f"{net:.5f}", "g", "S"])]
+    if cmd == "SNR":
+      return [R("SNR", "S", [f"{net:.5f}", "g"])]
+    if cmd == "UPD":
+      return [R("UPD", "A", ["18.3"])]
 
     # Zero
     if cmd in ("Z", "ZI", "ZC"):
