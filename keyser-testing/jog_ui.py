@@ -239,13 +239,16 @@ HTML = """
         <button class="btn" onclick="sendAction('tips_status')">Check Tips</button>
         <button class="btn" onclick="sendAction('ree')">Axis Status</button>
       </div>
-      <div class="controls" style="margin-top:4px">
-        <button class="btn" onclick="sendAction('lamp_green')" style="border-color:#4ec9b0">Lamp Green</button>
-        <button class="btn" onclick="sendAction('lamp_off')">Lamp Off</button>
-        <button class="btn" onclick="sendAction('lamp_test')">Lamp Test</button>
-        <button class="btn" onclick="sendAction('power_on')" style="border-color:#e9c46a">Motor Power</button>
-        <button class="btn" onclick="sendAction('power_off')">Power Off</button>
-      </div>
+      <details style="margin-top:4px">
+        <summary style="cursor:pointer;font-size:11px;color:#666">Lamp & Power Controls</summary>
+        <div class="controls" style="margin-top:4px">
+          <button class="btn small" onclick="sendAction('lamp_green')" style="border-color:#4ec9b0">Lamp Green</button>
+          <button class="btn small" onclick="sendAction('lamp_off')">Lamp Off</button>
+          <button class="btn small" onclick="sendAction('lamp_test')">Lamp Test</button>
+          <button class="btn small" onclick="sendAction('power_on')" style="border-color:#e9c46a">Motor Power</button>
+          <button class="btn small" onclick="sendAction('power_off')">Power Off</button>
+        </div>
+      </details>
     </div>
 
     <!-- Saved positions -->
@@ -690,61 +693,59 @@ def labware_info():
   edits = load_json_file(LABWARE_FILE)
   result = {}
 
-  # Find all labware on the deck (carriers and their contents)
-  def find_labware(resource, deck_ref):
+  def describe_resource(res, deck_ref, edits):
+    """Build info dict for a single labware resource."""
+    loc = res.get_location_wrt(deck_ref)
+    info = {
+      "type": type(res).__name__,
+      "model": getattr(res, "model", ""),
+      "size_x": round(res.get_size_x(), 1),
+      "size_y": round(res.get_size_y(), 1),
+      "size_z": round(res.get_size_z(), 1),
+      "loc_x": round(loc.x, 1),
+      "loc_y": round(loc.y, 1),
+      "loc_z": round(loc.z, 1),
+    }
+    for attr in ("z_start", "z_dispense", "z_max", "area"):
+      if hasattr(res, attr):
+        val = getattr(res, attr)
+        info[attr] = val
+        if res.name in edits and attr in edits[res.name]:
+          info[attr] = edits[res.name][attr]
+          info[f"edited_{attr}"] = True
+    if hasattr(res, "num_items"):
+      info["num_items"] = res.num_items
+    if hasattr(res, "num_items_x"):
+      info["num_items_x"] = res.num_items_x
+    if hasattr(res, "num_items_y"):
+      info["num_items_y"] = res.num_items_y
+    if hasattr(res, "item_dy"):
+      info["item_dy"] = round(res.item_dy, 2)
+    if hasattr(res, "get_tip"):
+      try:
+        tip = res.get_tip("A1")
+        info["tip_length"] = tip.total_tip_length
+        if hasattr(tip, "tip_type"):
+          info["tip_type"] = str(tip.tip_type.value)
+      except Exception:
+        pass
+    return info
+
+  def find_labware(resource, deck_ref, edits):
+    """Recursively find labware (TecanPlate, TecanTipRack) in resource tree."""
     items = {}
     for child in resource.children:
-      if hasattr(child, "sites"):  # carrier
-        for site in child.sites:
-          if not hasattr(site, "children"):
-            continue
-          for content in site.children:
-            name = content.name
-            loc = content.get_location_wrt(deck_ref)
-            info = {
-              "type": type(content).__name__,
-              "model": getattr(content, "model", ""),
-              "size_x": round(content.get_size_x(), 1),
-              "size_y": round(content.get_size_y(), 1),
-              "size_z": round(content.get_size_z(), 1),
-              "loc_x": round(loc.x, 1),
-              "loc_y": round(loc.y, 1),
-              "loc_z": round(loc.z, 1),
-            }
-            # TecanPlate / TecanTipRack Z params
-            for attr in ("z_start", "z_dispense", "z_max", "area"):
-              if hasattr(content, attr):
-                val = getattr(content, attr)
-                info[attr] = val
-                # Check if edited
-                if name in edits and attr in edits[name]:
-                  info[attr] = edits[name][attr]
-                  info[f"edited_{attr}"] = True
-            # Well/tip info
-            if hasattr(content, "num_items"):
-              info["num_items"] = content.num_items
-            if hasattr(content, "num_items_x"):
-              info["num_items_x"] = content.num_items_x
-            if hasattr(content, "num_items_y"):
-              info["num_items_y"] = content.num_items_y
-            if hasattr(content, "item_dy"):
-              info["item_dy"] = round(content.item_dy, 2)
-            # Tip info (from first tip)
-            if hasattr(content, "get_tip"):
-              try:
-                tip = content.get_tip("A1")
-                info["tip_length"] = tip.total_tip_length
-                if hasattr(tip, "tip_type"):
-                  info["tip_type"] = str(tip.tip_type.value)
-              except Exception:
-                pass
-            items[name] = info
-      find_labware(child, deck_ref)
+      ctype = type(child).__name__
+      # If it's a plate or tip rack, add it
+      if ctype in ("TecanPlate", "TecanTipRack"):
+        items[child.name] = describe_resource(child, deck_ref, edits)
+      # Recurse into children
+      items.update(find_labware(child, deck_ref, edits))
     return items
 
   if evo is not None:
     deck_ref = evo.children[0] if evo.children else evo
-    result = find_labware(deck_ref, deck_ref)
+    result = find_labware(deck_ref, deck_ref, edits)
 
   return jsonify(result)
 
