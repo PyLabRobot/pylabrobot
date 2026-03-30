@@ -303,10 +303,10 @@ class VantageHead96Backend(Head96Backend):
       mix_volume=round(aspiration.mix.volume * 100) if aspiration.mix is not None else 0,
       mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
       mix_position_in_z_direction_from_liquid_surface=round(
-        backend_params.mix_position_in_z_direction_from_liquid_surface * 100
+        backend_params.mix_position_in_z_direction_from_liquid_surface * 10
       ),
       surface_following_distance_during_mixing=round(
-        backend_params.surface_following_distance_during_mixing * 100
+        backend_params.surface_following_distance_during_mixing * 10
       ),
       mix_speed=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 20,
       limit_curve_index=backend_params.limit_curve_index,
@@ -696,9 +696,9 @@ class VantageHead96Backend(Head96Backend):
 
     if tadm_channel_pattern is None:
       tadm_channel_pattern = [True] * 96
-    elif not len(tadm_channel_pattern) < 24:
+    elif len(tadm_channel_pattern) != 96:
       raise ValueError(
-        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
+        f"tadm_channel_pattern must be of length 96, but is '{len(tadm_channel_pattern)}'"
       )
 
     if not 0 <= tadm_algorithm_on_off <= 1:
@@ -918,9 +918,9 @@ class VantageHead96Backend(Head96Backend):
 
     if tadm_channel_pattern is None:
       tadm_channel_pattern = [True] * 96
-    elif not len(tadm_channel_pattern) < 24:
+    elif len(tadm_channel_pattern) != 96:
       raise ValueError(
-        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
+        f"tadm_channel_pattern must be of length 96, but is '{len(tadm_channel_pattern)}'"
       )
 
     if not 0 <= tadm_algorithm_on_off <= 1:
@@ -1259,9 +1259,9 @@ class VantageHead96Backend(Head96Backend):
 
     if tadm_channel_pattern is None:
       tadm_channel_pattern = [True] * 96
-    elif not len(tadm_channel_pattern) < 24:
+    elif len(tadm_channel_pattern) != 96:
       raise ValueError(
-        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
+        f"tadm_channel_pattern must be of length 96, but is '{len(tadm_channel_pattern)}'"
       )
 
     return await self._driver.send_command(
