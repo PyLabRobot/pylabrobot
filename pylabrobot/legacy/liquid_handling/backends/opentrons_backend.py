@@ -1,4 +1,4 @@
-"""Legacy wrapper -- delegates to the new Driver + PIPBackend architecture.
+"""Legacy wrapper -- delegates to per-mount PIPBackends.
 
 Keeps ``LiquidHandler(backend=OpentronsOT2Backend(...), deck=OTDeck())`` working
 unchanged while the real implementation lives in :mod:`pylabrobot.opentrons.ot2`.
@@ -31,19 +31,23 @@ from pylabrobot.resources.opentrons import OTDeck
 class OpentronsOT2Backend(LiquidHandlerBackend):
   """Legacy backend for the Opentrons OT-2.
 
-  Internally delegates to :class:`~pylabrobot.opentrons.ot2.driver.OpentronsOT2Driver`
-  and :class:`~pylabrobot.opentrons.ot2.pip_backend.OpentronsOT2PIPBackend`.
+  Internally creates two per-mount PIPBackends (left + right) that share
+  a single :class:`OpentronsOT2Driver`.
   """
 
   def __init__(self, host: str, port: int = 31950):
     super().__init__()
-    # Lazy imports to avoid circular dependency: this module is imported by
-    # legacy backends __init__ at package init time.
     from pylabrobot.opentrons.ot2.driver import OpentronsOT2Driver
     from pylabrobot.opentrons.ot2.pip_backend import OpentronsOT2PIPBackend
 
     self._ot2_driver = OpentronsOT2Driver(host=host, port=port)
-    self._pip = OpentronsOT2PIPBackend(self._ot2_driver)
+    self._left_pip = OpentronsOT2PIPBackend(self._ot2_driver, mount="left")
+    self._right_pip = OpentronsOT2PIPBackend(self._ot2_driver, mount="right")
+
+  def _pip_for_channel(self, channel: int):
+    if channel == 0:
+      return self._left_pip
+    return self._right_pip
 
   @property
   def host(self) -> str:
@@ -54,26 +58,25 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return self._ot2_driver.port
 
   def serialize(self) -> dict:
-    return {
-      **LiquidHandlerBackend.serialize(self),
-      "host": self.host,
-      "port": self.port,
-    }
+    return {**LiquidHandlerBackend.serialize(self), "host": self.host, "port": self.port}
 
   def set_deck(self, deck: Deck):
     super().set_deck(deck)
     assert isinstance(deck, OTDeck)
-    self._pip.set_deck(deck)
+    self._left_pip.set_deck(deck)
+    self._right_pip.set_deck(deck)
 
   async def setup(self, skip_home: bool = False):
     await super().setup()
     await self._ot2_driver.setup()
-    await self._pip._on_setup()
+    await self._left_pip._on_setup()
+    await self._right_pip._on_setup()
     if not skip_home:
       await self.home()
 
   async def stop(self):
-    await self._pip._on_stop()
+    await self._left_pip._on_stop()
+    await self._right_pip._on_stop()
     await self._ot2_driver.stop()
 
   async def home(self):
@@ -81,60 +84,35 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   @property
   def num_channels(self) -> int:
-    return self._pip.num_channels
+    return self._left_pip.num_channels + self._right_pip.num_channels
 
-  # -- PIP delegation --
+  # -- PIP delegation (legacy uses channel 0=left, 1=right) --
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-    await self._pip.pick_up_tips(
-      [self._pickup_to_new(op) for op in ops], use_channels)
+    pip = self._select_pip_for_tip(ops[0].tip, with_tip=False)
+    await pip.pick_up_tips([self._pickup_to_new(op) for op in ops], [0])
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-    await self._pip.drop_tips(
-      [self._drop_to_new(op) for op in ops], use_channels)
+    pip = self._select_pip_for_tip(ops[0].tip, with_tip=True)
+    await pip.drop_tips([self._drop_to_new(op) for op in ops], [0])
 
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
-    await self._pip.aspirate(
-      [self._aspiration_to_new(op) for op in ops], use_channels)
+    pip = self._select_pip_for_volume(ops[0].volume)
+    await pip.aspirate([self._aspiration_to_new(op) for op in ops], [0])
 
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
-    await self._pip.dispense(
-      [self._dispense_to_new(op) for op in ops], use_channels)
+    pip = self._select_pip_for_volume(ops[0].volume)
+    await pip.dispense([self._dispense_to_new(op) for op in ops], [0])
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
-    return self._pip.can_pick_up_tip(channel_idx, tip)
+    return self._pip_for_channel(channel_idx).can_pick_up_tip(0, tip)
 
-  async def prepare_for_manual_channel_operation(self, channel: int):
-    self._pip._pipette_id_for_channel(channel)
+  async def move_pipette_head(self, location, speed=None, minimum_z_height=None,
+                               pipette_id=None, force_direct=False):
+    pip = self._left_pip if pipette_id in ("left", self._ot2_driver.left_pipette and self._ot2_driver.left_pipette.get("pipetteId")) else self._right_pip
+    pip._move_to(location)
 
-  async def move_channel_x(self, channel: int, x: float):
-    pipette_id, current = self._pip._current_channel_position(channel)
-    target = Coordinate(x=x, y=current.y, z=current.z)
-    await self._pip._move_pipette_head(
-      location=target, minimum_z_height=self._pip.traversal_height, pipette_id=pipette_id)
-
-  async def move_channel_y(self, channel: int, y: float):
-    pipette_id, current = self._pip._current_channel_position(channel)
-    target = Coordinate(x=current.x, y=y, z=current.z)
-    await self._pip._move_pipette_head(
-      location=target, minimum_z_height=self._pip.traversal_height, pipette_id=pipette_id)
-
-  async def move_channel_z(self, channel: int, z: float):
-    pipette_id, current = self._pip._current_channel_position(channel)
-    target = Coordinate(x=current.x, y=current.y, z=z)
-    await self._pip._move_pipette_head(
-      location=target, minimum_z_height=self._pip.traversal_height, pipette_id=pipette_id)
-
-  async def move_pipette_head(
-    self, location: Coordinate, speed: Optional[float] = None,
-    minimum_z_height: Optional[float] = None,
-    pipette_id: Optional[str] = None, force_direct: bool = False,
-  ):
-    await self._pip._move_pipette_head(
-      location=location, speed=speed, minimum_z_height=minimum_z_height,
-      pipette_id=pipette_id, force_direct=force_direct)
-
-  # -- unsupported operations --
+  # -- unsupported --
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
@@ -160,7 +138,27 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def list_connected_modules(self) -> List[dict]:
     return await self._ot2_driver.list_connected_modules()
 
-  # -- legacy → new type conversions --
+  # -- pipette selection (legacy channel logic) --
+
+  def _select_pip_for_tip(self, tip: Tip, with_tip: bool):
+    """Select the per-mount backend that matches the tip, preferring left."""
+    if self._left_pip.can_pick_up_tip(0, tip) and with_tip == self._left_pip._has_tip:
+      return self._left_pip
+    if self._right_pip.can_pick_up_tip(0, tip) and with_tip == self._right_pip._has_tip:
+      return self._right_pip
+    from pylabrobot.legacy.liquid_handling.errors import NoChannelError
+    raise NoChannelError("No pipette channel of right type available.")
+
+  def _select_pip_for_volume(self, volume: float):
+    """Select the per-mount backend that can handle the volume, preferring left."""
+    if self._left_pip._pipette is not None and self._left_pip._max_volume >= volume and self._left_pip._has_tip:
+      return self._left_pip
+    if self._right_pip._pipette is not None and self._right_pip._max_volume >= volume and self._right_pip._has_tip:
+      return self._right_pip
+    from pylabrobot.legacy.liquid_handling.errors import NoChannelError
+    raise NoChannelError("No pipette channel of right type with tip available.")
+
+  # -- type conversions --
 
   def _pickup_to_new(self, op: Pickup):
     from pylabrobot.capabilities.liquid_handling.standard import Pickup as NewPickup
@@ -172,37 +170,22 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   def _aspiration_to_new(self, op: SingleChannelAspiration):
     from pylabrobot.capabilities.liquid_handling.standard import Aspiration as NewAspiration, Mix
-    mix = None
-    if op.mix is not None:
-      mix = Mix(volume=op.mix.volume, repetitions=op.mix.repetitions, flow_rate=op.mix.flow_rate)
-    return NewAspiration(
-      resource=op.resource, offset=op.offset, tip=op.tip, volume=op.volume,
+    mix = Mix(volume=op.mix.volume, repetitions=op.mix.repetitions, flow_rate=op.mix.flow_rate) if op.mix else None
+    return NewAspiration(resource=op.resource, offset=op.offset, tip=op.tip, volume=op.volume,
       flow_rate=op.flow_rate, liquid_height=op.liquid_height,
       blow_out_air_volume=op.blow_out_air_volume, mix=mix)
 
   def _dispense_to_new(self, op: SingleChannelDispense):
     from pylabrobot.capabilities.liquid_handling.standard import Dispense as NewDispense, Mix
-    mix = None
-    if op.mix is not None:
-      mix = Mix(volume=op.mix.volume, repetitions=op.mix.repetitions, flow_rate=op.mix.flow_rate)
-    return NewDispense(
-      resource=op.resource, offset=op.offset, tip=op.tip, volume=op.volume,
+    mix = Mix(volume=op.mix.volume, repetitions=op.mix.repetitions, flow_rate=op.mix.flow_rate) if op.mix else None
+    return NewDispense(resource=op.resource, offset=op.offset, tip=op.tip, volume=op.volume,
       flow_rate=op.flow_rate, liquid_height=op.liquid_height,
       blow_out_air_volume=op.blow_out_air_volume, mix=mix)
 
   # -- expose internals for test/legacy compatibility --
 
   def get_ot_name(self, plr_resource_name: str) -> str:
-    return self._pip.get_ot_name(plr_resource_name)
-
-  def select_tip_pipette(self, tip: Tip, with_tip: bool) -> Optional[str]:
-    return self._pip.select_tip_pipette(tip, with_tip)
-
-  def select_liquid_pipette(self, volume: float) -> Optional[str]:
-    return self._pip.select_liquid_pipette(volume)
-
-  def get_pipette_name(self, pipette_id: str) -> str:
-    return self._pip.get_pipette_name(pipette_id)
+    return self._left_pip.get_ot_name(plr_resource_name)
 
   @property
   def left_pipette(self):
@@ -222,19 +205,19 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   @property
   def left_pipette_has_tip(self):
-    return self._pip.left_pipette_has_tip
+    return self._left_pip._has_tip
 
   @left_pipette_has_tip.setter
   def left_pipette_has_tip(self, value):
-    self._pip.left_pipette_has_tip = value
+    self._left_pip._has_tip = value
 
   @property
   def right_pipette_has_tip(self):
-    return self._pip.right_pipette_has_tip
+    return self._right_pip._has_tip
 
   @right_pipette_has_tip.setter
   def right_pipette_has_tip(self, value):
-    self._pip.right_pipette_has_tip = value
+    self._right_pip._has_tip = value
 
   @property
   def ot_api_version(self):
@@ -246,11 +229,12 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   @property
   def traversal_height(self):
-    return self._pip.traversal_height
+    return self._left_pip.traversal_height
 
   @traversal_height.setter
   def traversal_height(self, value):
-    self._pip.traversal_height = value
+    self._left_pip.traversal_height = value
+    self._right_pip.traversal_height = value
 
   pipette_name2volume = {
     "p10_single": 10, "p10_multi": 10, "p20_single_gen2": 20, "p20_multi_gen2": 20,
@@ -260,15 +244,22 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   }
 
   def _get_pickup_pipette(self, ops):
-    return self._pip._get_pickup_pipette(
-      [self._pickup_to_new(op) for op in ops])
+    pip = self._select_pip_for_tip(ops[0].tip, with_tip=False)
+    return pip._pipette_id
 
   def _get_drop_pipette(self, ops):
-    return self._pip._get_drop_pipette(
-      [self._drop_to_new(op) for op in ops])
+    pip = self._select_pip_for_tip(ops[0].tip, with_tip=True)
+    return pip._pipette_id
 
   def _get_liquid_pipette(self, ops):
-    return self._pip._get_liquid_pipette(ops)
+    pip = self._select_pip_for_volume(ops[0].volume)
+    return pip._pipette_id
 
   def _set_tip_state(self, pipette_id, has_tip):
-    return self._pip._set_tip_state(pipette_id, has_tip)
+    if self._ot2_driver.left_pipette and pipette_id == self._ot2_driver.left_pipette["pipetteId"]:
+      self._left_pip._has_tip = has_tip
+      return
+    if self._ot2_driver.right_pipette and pipette_id == self._ot2_driver.right_pipette["pipetteId"]:
+      self._right_pip._has_tip = has_tip
+      return
+    raise ValueError(f"Unknown pipette_id {pipette_id!r}")

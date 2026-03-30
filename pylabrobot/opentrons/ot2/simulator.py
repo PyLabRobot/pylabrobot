@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
 from pylabrobot.device import Driver
 from pylabrobot.resources import Coordinate
 
-from .pip_backend import OpentronsOT2PIPBackend
+from .pip_backend import Mount, OpentronsOT2PIPBackend
 
 if TYPE_CHECKING:
   from pylabrobot.capabilities.capability import BackendParams
@@ -45,13 +45,11 @@ class OpentronsOT2SimulatorDriver(Driver):
   def _init_pipettes(self):
     self.left_pipette = (
       {"name": self._left_pipette_name, "pipetteId": "sim-left"}
-      if self._left_pipette_name
-      else None
+      if self._left_pipette_name else None
     )
     self.right_pipette = (
       {"name": self._right_pipette_name, "pipetteId": "sim-right"}
-      if self._right_pipette_name
-      else None
+      if self._right_pipette_name else None
     )
     self._positions = {}
     if self.left_pipette is not None:
@@ -61,11 +59,8 @@ class OpentronsOT2SimulatorDriver(Driver):
 
   async def setup(self):
     self._init_pipettes()
-    logger.info(
-      "OpentronsOT2SimulatorDriver setup: left=%s, right=%s",
-      self._left_pipette_name,
-      self._right_pipette_name,
-    )
+    logger.info("OpentronsOT2SimulatorDriver setup: left=%s, right=%s",
+                self._left_pipette_name, self._right_pipette_name)
 
   async def stop(self):
     self.left_pipette = None
@@ -79,11 +74,9 @@ class OpentronsOT2SimulatorDriver(Driver):
     return []
 
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "left_pipette_name": self._left_pipette_name,
-      "right_pipette_name": self._right_pipette_name,
-    }
+    return {**super().serialize(),
+            "left_pipette_name": self._left_pipette_name,
+            "right_pipette_name": self._right_pipette_name}
 
   # -- wire methods (no-op / logging) --
 
@@ -124,40 +117,31 @@ class OpentronsOT2SimulatorDriver(Driver):
 
 
 class OpentronsOT2SimulatorPIPBackend(OpentronsOT2PIPBackend):
-  """PIP backend that works with :class:`OpentronsOT2SimulatorDriver`.
+  """Simulator PIP backend -- skips real labware registration."""
 
-  Overrides operations that would fail without real labware responses.
-  """
+  def __init__(self, driver: OpentronsOT2SimulatorDriver, mount: Mount):
+    super().__init__(driver, mount=mount)
 
-  def __init__(self, driver: OpentronsOT2SimulatorDriver):
-    super().__init__(driver)
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int],
+                         backend_params: Optional[BackendParams] = None):
+    assert len(ops) == 1
+    assert not self._has_tip, f"{self._mount} mount already has a tip"
+    self._has_tip = True
+    logger.info("Picked up tip from %s with %s mount", ops[0].resource.name, self._mount)
 
-  async def pick_up_tips(
-    self, ops: List[Pickup], use_channels: List[int],
-    backend_params: Optional[BackendParams] = None,
-  ):
-    pipette_id = self._get_pickup_pipette(ops)
-    self._set_tip_state(pipette_id, True)
-    logger.info("Picked up tip from %s with pipette %s", ops[0].resource.name, pipette_id)
+  async def drop_tips(self, ops: List[TipDrop], use_channels: List[int],
+                      backend_params: Optional[BackendParams] = None):
+    assert len(ops) == 1
+    assert self._has_tip, f"{self._mount} mount has no tip to drop"
+    self._has_tip = False
+    logger.info("Dropped tip from %s mount", self._mount)
 
-  async def drop_tips(
-    self, ops: List[TipDrop], use_channels: List[int],
-    backend_params: Optional[BackendParams] = None,
-  ):
-    pipette_id = self._get_drop_pipette(ops)
-    self._set_tip_state(pipette_id, False)
-    logger.info("Dropped tip to %s with pipette %s", ops[0].resource.name, pipette_id)
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int],
+                     backend_params: Optional[BackendParams] = None):
+    assert len(ops) == 1
+    logger.info("Aspirated %.2f µL from %s with %s mount", ops[0].volume, ops[0].resource.name, self._mount)
 
-  async def aspirate(
-    self, ops: List[Aspiration], use_channels: List[int],
-    backend_params: Optional[BackendParams] = None,
-  ):
-    self._get_liquid_pipette(ops)
-    logger.info("Aspirated %.2f µL from %s", ops[0].volume, ops[0].resource.name)
-
-  async def dispense(
-    self, ops: List[Dispense], use_channels: List[int],
-    backend_params: Optional[BackendParams] = None,
-  ):
-    self._get_liquid_pipette(ops)
-    logger.info("Dispensed %.2f µL to %s", ops[0].volume, ops[0].resource.name)
+  async def dispense(self, ops: List[Dispense], use_channels: List[int],
+                     backend_params: Optional[BackendParams] = None):
+    assert len(ops) == 1
+    logger.info("Dispensed %.2f µL to %s with %s mount", ops[0].volume, ops[0].resource.name, self._mount)
