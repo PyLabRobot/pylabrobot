@@ -312,12 +312,15 @@ class AirEVOPIPBackend(EVOPIPBackend):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
-    # Use plate z_start directly (absolute Tecan Z coordinate)
+    # Use plate z_start directly (absolute Tecan Z coordinate).
+    # Adjust for mounted tip: tip extends reach, so Z target moves UP
+    # by (tip_length - nesting_depth).
     first_par = ops[0].resource.parent
     if isinstance(first_par, TecanPlate):
       z_asp = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
-        z_asp[channel] = int(first_par.z_start)
+        tip_ext = int(ops[i].tip.total_tip_length * 10) - 50  # ~5mm nesting
+        z_asp[channel] = int(first_par.z_start) + tip_ext
     else:
       z_asp = z_positions.get("start", [self._z_range] * self.num_channels)
 
@@ -392,12 +395,14 @@ class AirEVOPIPBackend(EVOPIPBackend):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
-    # Use plate z_dispense directly (absolute Tecan Z coordinate)
+    # Use plate z_dispense directly (absolute Tecan Z coordinate).
+    # Adjust for mounted tip.
     first_par = ops[0].resource.parent
     if isinstance(first_par, TecanPlate):
       z_disp = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
-        z_disp[channel] = int(first_par.z_dispense)
+        tip_ext = int(ops[i].tip.total_tip_length * 10) - 50  # ~5mm nesting
+        z_disp[channel] = int(first_par.z_dispense) + tip_ext
     else:
       z_disp = [z if z else self._z_range for z in z_positions["dispense"]]
 
