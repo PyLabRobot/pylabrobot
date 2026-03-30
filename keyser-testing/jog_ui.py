@@ -380,9 +380,12 @@ function updatePositions(data) {
 }
 
 async function pollPositions() {
+  if (busy) return;  // skip poll while command is in flight
   try {
     const resp = await fetch('/positions');
+    if (busy) return;  // command started while we were fetching
     const data = await resp.json();
+    if (busy) return;
     updatePositions(data);
     document.getElementById('status').textContent = 'Connected';
     document.getElementById('status').style.color = '#4ec9b0';
@@ -450,6 +453,11 @@ loadSaved();
 """
 
 
+import threading
+
+_usb_lock = threading.Lock()
+
+
 @app.route("/")
 def index():
   return render_template_string(HTML)
@@ -457,12 +465,17 @@ def index():
 
 @app.route("/positions")
 def positions():
+  if not _usb_lock.acquire(blocking=False):
+    # Another command is using USB — return stale/empty rather than interleave
+    return jsonify({})
   try:
     liha_pos = run_async(get_liha_position())
     roma_pos = run_async(get_roma_position())
     return jsonify({"liha": liha_pos, "roma": roma_pos})
   except Exception as e:
     return jsonify({"error": str(e)})
+  finally:
+    _usb_lock.release()
 
 
 @app.route("/jog", methods=["POST"])
@@ -478,27 +491,29 @@ def jog():
   cmd_map = {"x": "PRX", "y": "PRY", "z": "PRZ", "r": "PRR"}
   cmd_name = f"{module} {cmd_map.get(axis, '?')}{delta}"
 
-  try:
-    run_async(do_jog(arm_name, axis, delta))
-    liha_pos = run_async(get_liha_position())
-    roma_pos = run_async(get_roma_position())
-    return jsonify({"liha": liha_pos, "roma": roma_pos, "cmd": cmd_name})
-  except Exception as e:
-    return jsonify({"error": str(e), "cmd": cmd_name})
+  with _usb_lock:
+    try:
+      run_async(do_jog(arm_name, axis, delta))
+      liha_pos = run_async(get_liha_position())
+      roma_pos = run_async(get_roma_position())
+      return jsonify({"liha": liha_pos, "roma": roma_pos, "cmd": cmd_name})
+    except Exception as e:
+      return jsonify({"error": str(e), "cmd": cmd_name})
 
 
 @app.route("/record", methods=["POST"])
 def record():
   data = request.json
   label = data["label"]
-  try:
-    pos = run_async(get_liha_position())
-    saved = load_json_file(POSITIONS_FILE)
-    saved[label] = {"x": pos["x"], "y": pos["y"], "z": pos["z_all"]}
-    save_json_file(POSITIONS_FILE, saved)
-    return jsonify({"message": f"Recorded '{label}': X={pos['x']} Y={pos['y']} Z1={pos['z']}"})
-  except Exception as e:
-    return jsonify({"error": str(e)})
+  with _usb_lock:
+    try:
+      pos = run_async(get_liha_position())
+      saved = load_json_file(POSITIONS_FILE)
+      saved[label] = {"x": pos["x"], "y": pos["y"], "z": pos["z_all"]}
+      save_json_file(POSITIONS_FILE, saved)
+      return jsonify({"message": f"Recorded '{label}': X={pos['x']} Y={pos['y']} Z1={pos['z']}"})
+    except Exception as e:
+      return jsonify({"error": str(e)})
 
 
 @app.route("/teach", methods=["POST"])
@@ -506,30 +521,32 @@ def teach():
   data = request.json
   field = data["field"]
   labware_name = data["labware"]
-  try:
-    pos = run_async(get_liha_position())
-    z_val = pos["z"]
-    edits = load_json_file(LABWARE_FILE)
-    if labware_name not in edits:
-      edits[labware_name] = {}
-    edits[labware_name][field] = z_val
-    save_json_file(LABWARE_FILE, edits)
-    return jsonify({"message": f"{labware_name}.{field} = {z_val} ({z_val / 10:.1f}mm)"})
-  except Exception as e:
-    return jsonify({"error": str(e)})
+  with _usb_lock:
+    try:
+      pos = run_async(get_liha_position())
+      z_val = pos["z"]
+      edits = load_json_file(LABWARE_FILE)
+      if labware_name not in edits:
+        edits[labware_name] = {}
+      edits[labware_name][field] = z_val
+      save_json_file(LABWARE_FILE, edits)
+      return jsonify({"message": f"{labware_name}.{field} = {z_val} ({z_val / 10:.1f}mm)"})
+    except Exception as e:
+      return jsonify({"error": str(e)})
 
 
 @app.route("/action", methods=["POST"])
 def action():
   data = request.json
   act = data["action"]
-  try:
-    result = run_async(do_action(act))
-    liha_pos = run_async(get_liha_position())
-    roma_pos = run_async(get_roma_position())
-    return jsonify({"message": result, "liha": liha_pos, "roma": roma_pos})
-  except Exception as e:
-    return jsonify({"error": str(e)})
+  with _usb_lock:
+    try:
+      result = run_async(do_action(act))
+      liha_pos = run_async(get_liha_position())
+      roma_pos = run_async(get_roma_position())
+      return jsonify({"message": result, "liha": liha_pos, "roma": roma_pos})
+    except Exception as e:
+      return jsonify({"error": str(e)})
 
 
 @app.route("/saved")
