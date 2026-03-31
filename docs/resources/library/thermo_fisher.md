@@ -41,3 +41,8 @@ Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 | 'thermo_nunc_1_troughplate_90000uL_Fb_omnitray'<br>Part no.: 165218, 140156, 242811, 264728 | ![](img/thermo_fisher/thermo_nunc_1_troughplate_90000uL_Fb_omnitray.jpg.avif) | `thermo_nunc_1_troughplate_90000uL_Fb_omnitray` |
 | 'ThermoFisherMatrixTrough8094'<br>Part no.: 8094<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/8094) | ![](img/thermo_fisher/ThermoFisherMatrixTrough8094.jpg.avif) | `ThermoFisherMatrixTrough8094` |
 | 'thermo_TS_nalgene_1_troughplate_300mL_Fb'<br>Part no.: 12001300 (non-sterile), 12001301 (sterile) <br> [manufacturer website](https://www.fishersci.com/shop/products/nalgene-disposable-polypropylene-robotic-reservoirs/12565571)| ![](img/thermo_fisher/thermo_TS_nalgene_1_troughplate_300mL_Fb.jpeg) | `thermo_TS_nalgene_1_troughplate_300mL_Fb` |
+## Plate Adapters
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'thermo_AB_96_plateadapter_MicroAmp'<br>Part no.: 4312063<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/4312063)| ![](img/thermo_fisher/thermo_AB_96_plateadapter_MicroAmp.jpg) | `thermo_AB_96_plateadapter_MicroAmp` |
