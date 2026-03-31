@@ -71,7 +71,7 @@ class OpentronsTemperatureModuleUSBTemperatureBackend(TemperatureControllerBacke
   """Translates ``TemperatureControllerBackend`` into USB serial driver commands."""
 
   def __init__(self, driver: OpentronsTemperatureModuleUSBDriver):
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -79,10 +79,10 @@ class OpentronsTemperatureModuleUSBTemperatureBackend(TemperatureControllerBacke
 
   async def set_temperature(self, temperature: float):
     tmp_message = f"M104 S{temperature}\r\n"
-    await self._driver.send_and_check(tmp_message.encode("utf-8"))
+    await self.driver.send_and_check(tmp_message.encode("utf-8"))
 
   async def deactivate(self):
-    await self._driver.send_and_check(b"M18\r\n")
+    await self.driver.send_and_check(b"M18\r\n")
 
   async def request_current_temperature(self) -> float:
-    return await self._driver.query_temperature()
+    return await self.driver.query_temperature()

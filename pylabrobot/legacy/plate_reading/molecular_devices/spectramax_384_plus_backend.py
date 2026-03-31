@@ -32,7 +32,7 @@ class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
   def __init__(self, port: str) -> None:
     super().__init__(port)
     # Override the absorbance backend with the 384-specific one
-    self._absorbance = SpectraMax384PlusAbsorbanceBackend(self._driver)
+    self._absorbance = SpectraMax384PlusAbsorbanceBackend(self.driver)
 
   async def read_fluorescence(  # type: ignore[override]
     self,

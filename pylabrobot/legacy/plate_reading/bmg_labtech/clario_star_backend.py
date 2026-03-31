@@ -24,13 +24,13 @@ class CLARIOstarBackend(PlateReaderBackend):
   """Legacy. Use pylabrobot.bmg_labtech.CLARIOstar instead."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self._driver = CLARIOstarDriver(device_id=device_id)
-    self._absorbance = CLARIOstarAbsorbanceBackend(self._driver)
-    self._luminescence = CLARIOstarLuminescenceBackend(self._driver)
-    self._fluorescence = CLARIOstarFluorescenceBackend(self._driver)
+    self.driver = CLARIOstarDriver(device_id=device_id)
+    self._absorbance = CLARIOstarAbsorbanceBackend(self.driver)
+    self._luminescence = CLARIOstarLuminescenceBackend(self.driver)
+    self._fluorescence = CLARIOstarFluorescenceBackend(self.driver)
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     await self._absorbance._on_setup()
     await self._luminescence._on_setup()
     await self._fluorescence._on_setup()
@@ -39,16 +39,16 @@ class CLARIOstarBackend(PlateReaderBackend):
     await self._fluorescence._on_stop()
     await self._luminescence._on_stop()
     await self._absorbance._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self) -> dict:
-    return self._driver.serialize()
+    return self.driver.serialize()
 
   async def open(self):
-    await self._driver.open()
+    await self.driver.open()
 
   async def close(self, plate: Optional[Plate] = None):
-    await self._driver.close()
+    await self.driver.close()
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float = 13

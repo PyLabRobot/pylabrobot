@@ -15,7 +15,7 @@ except ImportError as e:
 from pylabrobot.capabilities.capability import Capability
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
-from pylabrobot.capabilities.pumping.pumping import PumpingCapability
+from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.device import Device, Driver
 
 logger = logging.getLogger("pylabrobot")
@@ -135,7 +135,7 @@ class AgrowChannelBackend(PumpBackend):
   """Per-channel PumpBackend adapter that delegates to a shared AgrowDriver."""
 
   def __init__(self, connection: AgrowDriver, channel: int):
-    self._driver = connection
+    self.driver = connection
     self._channel = channel
 
   async def run_revolutions(self, num_revolutions: float):
@@ -144,15 +144,15 @@ class AgrowChannelBackend(PumpBackend):
     )
 
   async def run_continuously(self, speed: float):
-    await self._driver.write_speed(self._channel, int(speed))
+    await self.driver.write_speed(self._channel, int(speed))
 
   async def halt(self):
-    await self._driver.write_speed(self._channel, 0)
+    await self.driver.write_speed(self._channel, 0)
 
   def serialize(self):
     return {
-      "port": self._driver.port,
-      "address": self._driver.address,
+      "port": self.driver.port,
+      "address": self.driver.address,
       "channel": self._channel,
     }
 
@@ -160,7 +160,7 @@ class AgrowChannelBackend(PumpBackend):
 class AgrowDosePumpArray(Device):
   """Agrow dose pump array device.
 
-  Exposes each channel as an individual PumpingCapability via `self.pumps`.
+  Exposes each channel as an individual Pump via `self.pumps`.
   """
 
   def __init__(
@@ -170,22 +170,22 @@ class AgrowDosePumpArray(Device):
     calibrations: Optional[List[Optional[PumpCalibration]]] = None,
   ):
     self._channel_backends: List[AgrowChannelBackend] = []
-    self.pumps: List[PumpingCapability] = []
+    self.pumps: List[Pump] = []
     self._calibrations = calibrations
     super().__init__(driver=AgrowDriver(port=port, address=address))
-    self._driver: AgrowDriver
+    self.driver: AgrowDriver
 
   async def setup(self):
-    await self._driver.setup()
-    num_channels = self._driver.num_channels
+    await self.driver.setup()
+    num_channels = self.driver.num_channels
 
-    self._channel_backends = [AgrowChannelBackend(self._driver, ch) for ch in range(num_channels)]
+    self._channel_backends = [AgrowChannelBackend(self.driver, ch) for ch in range(num_channels)]
     self.pumps = []
     for i, backend in enumerate(self._channel_backends):
       cal = None
       if self._calibrations is not None and i < len(self._calibrations):
         cal = self._calibrations[i]
-      cap = PumpingCapability(backend=backend, calibration=cal)
+      cap = Pump(backend=backend, calibration=cal)
       self.pumps.append(cap)
 
     self._capabilities: List[Capability] = list(self.pumps)
@@ -196,11 +196,11 @@ class AgrowDosePumpArray(Device):
   async def stop(self):
     for cap in reversed(self._capabilities):
       await cap._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
     self._setup_finished = False
 
   def serialize(self):
     return {
-      "port": self._driver.port,
-      "address": self._driver.address,
+      "port": self.driver.port,
+      "address": self.driver.address,
     }

@@ -6,7 +6,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import ShakerBackend
 
 
-class ShakingCapability(Capability):
+class Shaker(Capability):
   """Shaking capability."""
 
   def __init__(self, backend: ShakerBackend):

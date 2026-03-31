@@ -1,4 +1,4 @@
-"""Tests for FluorescenceCapability."""
+"""Tests for Fluorescence."""
 
 import unittest
 from typing import List, Optional
@@ -7,7 +7,7 @@ from pylabrobot.capabilities.plate_reading.fluorescence.backend import Fluoresce
 from pylabrobot.capabilities.plate_reading.fluorescence.chatterbox import (
   FluorescenceChatterboxBackend,
 )
-from pylabrobot.capabilities.plate_reading.fluorescence.fluorescence import FluorescenceCapability
+from pylabrobot.capabilities.plate_reading.fluorescence.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -72,10 +72,10 @@ class RecordingFluorescenceBackend(FluorescenceBackend):
     ]
 
 
-class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
+class TestFluorescence(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingFluorescenceBackend()
-    self.cap = FluorescenceCapability(backend=self.backend)
+    self.cap = Fluorescence(backend=self.backend)
     await self.cap._on_setup()
     self.plate = _test_plate()
 
@@ -111,7 +111,7 @@ class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_requires_setup(self):
     backend = RecordingFluorescenceBackend()
-    cap = FluorescenceCapability(backend=backend)
+    cap = Fluorescence(backend=backend)
     with self.assertRaises(RuntimeError):
       await cap.read(
         plate=self.plate,
@@ -124,7 +124,7 @@ class TestFluorescenceCapability(unittest.IsolatedAsyncioTestCase):
 class TestFluorescenceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = FluorescenceChatterboxBackend()
-    cap = FluorescenceCapability(backend=backend)
+    cap = Fluorescence(backend=backend)
     await cap._on_setup()
     plate = _test_plate()
 

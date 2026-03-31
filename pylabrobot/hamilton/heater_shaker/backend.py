@@ -51,10 +51,10 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
   """Translates ShakerBackend interface into Hamilton Heater Shaker driver commands."""
 
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   async def _on_setup(self):
-    await self._driver.send_command("SI")
+    await self.driver.send_command("SI")
 
   async def start_shaking(
     self,
@@ -83,11 +83,11 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
     await self._wait_for_stop()
 
   async def request_is_shaking(self) -> bool:
-    response = await self._driver.send_command("RD")
+    response = await self.driver.send_command("RD")
     return response.endswith("1")
 
   async def _move_plate_lock(self, position: PlateLockPosition):
-    return await self._driver.send_command("LP", lp=position.value)
+    return await self.driver.send_command("LP", lp=position.value)
 
   @property
   def supports_locking(self) -> bool:
@@ -102,13 +102,13 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     speed_str = str(speed).zfill(4)
     acceleration_str = str(acceleration).zfill(5)
-    return await self._driver.send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
+    return await self.driver.send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
 
   async def _stop_shaking(self):
-    return await self._driver.send_command("SC")
+    return await self.driver.send_command("SC")
 
   async def _wait_for_stop(self):
-    return await self._driver.send_command("SW")
+    return await self.driver.send_command("SW")
 
 
 class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
@@ -116,10 +116,10 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   commands."""
 
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   async def _on_setup(self):
-    await self._driver.send_command("LI")
+    await self.driver.send_command("LI")
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -128,10 +128,10 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   async def set_temperature(self, temperature: float):
     assert 0 < temperature <= 105
     temp_str = f"{round(10 * temperature):04d}"
-    return await self._driver.send_command("TA", ta=temp_str)
+    return await self.driver.send_command("TA", ta=temp_str)
 
   async def _request_current_temperature(self) -> Dict[str, float]:
-    response = await self._driver.send_command("RT")
+    response = await self.driver.send_command("RT")
     response = response.split("rt")[1]
     middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
     edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
@@ -146,4 +146,4 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
     return response["edge"]
 
   async def deactivate(self):
-    return await self._driver.send_command("TO")
+    return await self.driver.send_command("TO")

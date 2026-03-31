@@ -6,7 +6,7 @@ from pylabrobot.serializer import SerializableMixin
 from .backend import PeelerBackend
 
 
-class PeelingCapability(Capability):
+class Peeler(Capability):
   """Peeling capability."""
 
   def __init__(self, backend: PeelerBackend):

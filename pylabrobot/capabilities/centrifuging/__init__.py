@@ -1,5 +1,5 @@
 from .backend import CentrifugeBackend
-from .centrifuging import CentrifugingCapability
+from .centrifuging import Centrifuge
 from .errors import (
   BucketHasPlateError,
   BucketNoPlateError,

@@ -41,6 +41,14 @@ machine-agnostic-features/sila-discovery
 
 ```{toctree}
 :maxdepth: 1
+:caption: Capabilities
+:hidden:
+
+capabilities/index
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Configuration
 :hidden:
 

@@ -1,8 +1,8 @@
 import warnings
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import ShakerBackend, ShakingCapability
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.shaking import ShakerBackend, Shaker
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -98,9 +98,9 @@ class InhecoThermoShake(ResourceHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: InhecoThermoshakeBackend = driver
-    self.tc = TemperatureControlCapability(backend=driver)
-    self.shaker = ShakingCapability(backend=driver)
+    self.driver: InhecoThermoshakeBackend = driver
+    self.tc = TemperatureController(backend=driver)
+    self.shaker = Shaker(backend=driver)
     self._capabilities = [self.tc, self.shaker]
 
   def serialize(self) -> dict:

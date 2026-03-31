@@ -58,7 +58,7 @@ async def _golden_ratio_search(func, a: float, b: float, tol: float, timeout: fl
   return (b + a) / 2
 
 
-class MicroscopyCapability(Capability):
+class Microscopy(Capability):
   """Microscopy imaging capability.
 
   Provides high-level image capture with support for auto-exposure and auto-focus.

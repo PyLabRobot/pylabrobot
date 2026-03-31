@@ -1,7 +1,7 @@
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import ShakingCapability
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.shaking import Shaker
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
@@ -44,9 +44,9 @@ class HamiltonHeaterShaker(PlateHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: HamiltonHeaterShakerDriver = driver
-    self.tc = TemperatureControlCapability(backend=HamiltonHeaterShakerTemperatureBackend(driver))
-    self.shaker = ShakingCapability(backend=HamiltonHeaterShakerShakerBackend(driver))
+    self.driver: HamiltonHeaterShakerDriver = driver
+    self.tc = TemperatureController(backend=HamiltonHeaterShakerTemperatureBackend(driver))
+    self.shaker = Shaker(backend=HamiltonHeaterShakerShakerBackend(driver))
     self._capabilities = [self.tc, self.shaker]
 
   def serialize(self) -> dict:

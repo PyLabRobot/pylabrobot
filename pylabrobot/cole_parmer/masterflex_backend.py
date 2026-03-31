@@ -10,7 +10,7 @@ from typing import Optional
 
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
-from pylabrobot.capabilities.pumping.pumping import PumpingCapability
+from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 
@@ -73,12 +73,12 @@ class MasterflexBackend(PumpBackend):
   """Pump capability backend for Masterflex L/S pumps."""
 
   def __init__(self, driver: MasterflexDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
     cmd = f"V{num_revolutions}G"
-    await self._driver.send_command(cmd)
+    await self.driver.send_command(cmd)
 
   async def run_continuously(self, speed: float):
     if speed == 0:
@@ -88,14 +88,14 @@ class MasterflexBackend(PumpBackend):
     direction = "+" if speed > 0 else "-"
     speed_int = int(abs(speed))
     cmd = f"S{direction}{speed_int}G0"
-    await self._driver.send_command(cmd)
+    await self.driver.send_command(cmd)
 
   async def halt(self):
-    await self._driver.send_command("H")
+    await self.driver.send_command("H")
 
   def serialize(self):
     return {
-      "com_port": self._driver.com_port,
+      "com_port": self.driver.com_port,
     }
 
 
@@ -109,6 +109,6 @@ class MasterflexPump(Device):
   ):
     driver = MasterflexDriver(com_port=com_port)
     super().__init__(driver=driver)
-    self._driver: MasterflexDriver
-    self.pumping = PumpingCapability(backend=MasterflexBackend(driver), calibration=calibration)
+    self.driver: MasterflexDriver
+    self.pumping = Pump(backend=MasterflexBackend(driver), calibration=calibration)
     self._capabilities = [self.pumping]

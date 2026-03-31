@@ -12,7 +12,7 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
+from pylabrobot.capabilities.peeling import PeelerBackend, Peeler
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.serializer import SerializableMixin
@@ -241,7 +241,7 @@ class XPeelPeelerBackend(PeelerBackend):
     adhere_time: float = 2.5
 
   def __init__(self, driver: XPeelDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def peel(
     self,
@@ -272,11 +272,11 @@ class XPeelPeelerBackend(PeelerBackend):
     }.get((begin_location, fast), 9)
 
     cmd = f"*xpeel:{parameter_set}{adhere_time}"
-    return await self._driver.send_command(cmd, expect_ack=True, wait_for_ready=True)
+    return await self.driver.send_command(cmd, expect_ack=True, wait_for_ready=True)
 
   async def restart(self, backend_params: Optional[SerializableMixin] = None):
     """Request restart with full homing sequence."""
-    return await self._driver.send_command("*restart", expect_ack=True, wait_for_ready=True)
+    return await self.driver.send_command("*restart", expect_ack=True, wait_for_ready=True)
 
 
 class XPeel(Device):
@@ -285,6 +285,6 @@ class XPeel(Device):
   def __init__(self, name: str, port: str, timeout: Optional[float] = None):
     driver = XPeelDriver(port=port, timeout=timeout)
     super().__init__(driver=driver)
-    self._driver: XPeelDriver = driver
-    self.peeler = PeelingCapability(backend=XPeelPeelerBackend(driver))
+    self.driver: XPeelDriver = driver
+    self.peeler = Peeler(backend=XPeelPeelerBackend(driver))
     self._capabilities = [self.peeler]

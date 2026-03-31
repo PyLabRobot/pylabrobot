@@ -510,7 +510,7 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     objectives: Optional[Dict[int, Objective]] = None,
     filter_cubes: Optional[Dict[int, ImagingMode]] = None,
   ):
-    self._driver = driver
+    self.driver = driver
 
     for pos, obj in (objectives or {}).items():
       if obj not in _OBJECTIVE_MAP:
@@ -548,24 +548,24 @@ class PicoMicroscopyBackend(MicroscopyBackend):
   # -- objectives & filter cubes --
 
   async def _request_installed_objectives(self) -> List[dict]:
-    raw = await self._driver._call(_OBJ_SVC, "Get_InstalledObjectives", b"")
+    raw = await self.driver._call(_OBJ_SVC, "Get_InstalledObjectives", b"")
     data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("objectivesData", []))
 
   async def _request_installed_filter_cubes(self) -> List[dict]:
-    raw = await self._driver._call(_FC_SVC, "Get_InstalledFilterCubes", b"")
+    raw = await self.driver._call(_FC_SVC, "Get_InstalledFilterCubes", b"")
     data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("filterCubesData", []))
 
   async def request_available_objectives(self, position: int) -> List[dict]:
     params = json.dumps({"Index": position})
     req = length_delimited(1, sila_string(params))
-    raw = await self._driver._call(_OBJ_SVC, "GetAvailableObjectivesForPosition", req, True)
+    raw = await self.driver._call(_OBJ_SVC, "GetAvailableObjectivesForPosition", req, True)
     data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("objectives", data.get("Objectives", [])))
 
   async def request_available_filter_cubes(self) -> List[dict]:
-    raw = await self._driver._call(_FC_SVC, "Get_CompatibleFilterCubes", b"")
+    raw = await self.driver._call(_FC_SVC, "Get_CompatibleFilterCubes", b"")
     data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("filterCubes", data.get("FilterCubes", [])))
 
@@ -579,7 +579,7 @@ class PicoMicroscopyBackend(MicroscopyBackend):
       )
     params = json.dumps({"Id": objective_id, "Index": position})
     req = length_delimited(1, sila_string(params))
-    await self._driver._call(_OBJ_SVC, "ChangeHardware", req, True)
+    await self.driver._call(_OBJ_SVC, "ChangeHardware", req, True)
 
   async def change_filter_cube(self, position: int, filter_cube_id: str) -> None:
     available = await self.request_available_filter_cubes()
@@ -591,18 +591,18 @@ class PicoMicroscopyBackend(MicroscopyBackend):
       )
     params = json.dumps({"Id": filter_cube_id, "Index": position})
     req = length_delimited(1, sila_string(params))
-    await self._driver._call(_FC_SVC, "ChangeHardware", req, True)
+    await self.driver._call(_FC_SVC, "ChangeHardware", req, True)
 
   async def enter_objective_maintenance(self, position: int) -> None:
-    if self._driver.door_open:
+    if self.driver.door_open:
       raise RuntimeError("Cannot enter objective maintenance while the plate drawer is open.")
     params = json.dumps({"Index": position})
     req = length_delimited(1, sila_string(params))
-    await self._driver._initialize()
-    await self._driver._call(_OBJ_SVC, "EnterObjectiveMaintenance", req, True)
+    await self.driver._initialize()
+    await self.driver._call(_OBJ_SVC, "EnterObjectiveMaintenance", req, True)
 
   async def exit_objective_maintenance(self) -> None:
-    await self._driver._call(_OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
+    await self.driver._call(_OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
 
   # -- imaging --
 
@@ -610,10 +610,10 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     labware_json = json.dumps(labware_params)
     snap_json = json.dumps(snap_params)
 
-    await self._driver._initialize()
+    await self.driver._initialize()
 
     request = _snap_images_params(labware_json, snap_json)
-    confirmation_raw = await self._driver._call(
+    confirmation_raw = await self.driver._call(
       _SNAP_SVC, "SnapImages", request, with_lock=True, timeout=60.0
     )
     exec_uuid = decode_command_confirmation(confirmation_raw)
@@ -623,7 +623,7 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     chunks: Dict[int, Dict[int, bytes]] = defaultdict(dict)
     checksums: Dict[int, int] = {}
 
-    for response_raw in await self._driver._stream(
+    for response_raw in await self.driver._stream(
       _SNAP_SVC,
       "SnapImages_Intermediate",
       uuid_request,
@@ -634,7 +634,7 @@ class PicoMicroscopyBackend(MicroscopyBackend):
       chunks[meta["blob_index"]][meta["packet_index"]] = chunk_data
       checksums[meta["blob_index"]] = meta["blob_checksum"]
 
-    await self._driver._call(
+    await self.driver._call(
       _SNAP_SVC, "SnapImages_Result", uuid_request, with_lock=True, timeout=60.0
     )
 

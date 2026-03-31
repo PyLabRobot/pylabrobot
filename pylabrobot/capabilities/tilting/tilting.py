@@ -3,7 +3,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import TilterBackend
 
 
-class TiltingCapability(Capability):
+class Tilter(Capability):
   """Tilting capability."""
 
   def __init__(self, backend: TilterBackend):

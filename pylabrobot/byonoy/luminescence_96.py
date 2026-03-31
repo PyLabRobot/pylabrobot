@@ -6,7 +6,7 @@ from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.luminescence import (
   LuminescenceBackend,
-  LuminescenceCapability,
+  Luminescence,
   LuminescenceResult,
 )
 from pylabrobot.device import Device
@@ -241,8 +241,8 @@ class ByonoyLuminescence96(Resource, Device):
       preferred_pickup_location=preferred_pickup_location,
     )
     Device.__init__(self, driver=backend)
-    self._driver: ByonoyLuminescence96Backend = backend
-    self.luminescence = LuminescenceCapability(backend=backend)
+    self.driver: ByonoyLuminescence96Backend = backend
+    self.luminescence = Luminescence(backend=backend)
     self._capabilities = [self.luminescence]
 
   def serialize(self) -> dict:

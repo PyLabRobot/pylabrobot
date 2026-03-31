@@ -41,7 +41,8 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
 
 def _channel_pattern_to_hex(pattern: List[bool]) -> str:
   """Convert a list of 96 booleans to the hex string expected by firmware."""
-  assert len(pattern) == 96, "channel_pattern must be a list of 96 boolean values"
+  if len(pattern) != 96:
+    raise ValueError("channel_pattern must be a list of 96 boolean values")
   channel_pattern_bin_str = reversed(["1" if x else "0" for x in pattern])
   return hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
@@ -53,7 +54,7 @@ class STARHead96Backend(Head96Backend):
   _traversal_height: float = 245.0
 
   def __init__(self, driver: STARDriver):
-    self._driver = driver
+    self.driver = driver
 
   # ---------------------------------------------------------------------------
   # Pick up tips
@@ -88,7 +89,7 @@ class STARHead96Backend(Head96Backend):
     if not isinstance(prototypical_tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
 
-    ttti = await self._driver.request_or_assign_tip_type_index(prototypical_tip)
+    ttti = await self.driver.request_or_assign_tip_type_index(prototypical_tip)
 
     tip_length = prototypical_tip.total_tip_length
     fitting_depth = prototypical_tip.fitting_depth
@@ -120,7 +121,7 @@ class STARHead96Backend(Head96Backend):
       # Pre-computed increment values (uL / 0.019340933):
       #   position=218.19uL -> 11281, speed=261.1uL/s -> 13500,
       #   stop_speed=0 -> 0, acceleration=17406.84uL/s^2 -> 900000
-      await self._driver.send_command(
+      await self.driver.send_command(
         module="H0",
         command="DQ",
         dq="11281",
@@ -130,7 +131,7 @@ class STARHead96Backend(Head96Backend):
         dw="15",
       )
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="EP",
       xs=f"{abs(round(pickup_position.x * 10)):05}",
@@ -171,7 +172,8 @@ class STARHead96Backend(Head96Backend):
       tip_spot_a1 = drop.resource.get_item(backend_params.alignment_tipspot_identifier)
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
       tip_rack = tip_spot_a1.parent
-      assert tip_rack is not None
+      if tip_rack is None:
+        raise ValueError("Tip spot parent (tip rack) must not be None")
       position.z = tip_rack.get_absolute_location().z + 1.45
     else:
       # Drop into trash or other resource: center the head in the resource.
@@ -179,7 +181,7 @@ class STARHead96Backend(Head96Backend):
 
     traversal = self._traversal_height
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ER",
       xs=f"{abs(round(position.x * 10)):05}",
@@ -235,7 +237,8 @@ class STARHead96Backend(Head96Backend):
     # Compute position
     if isinstance(aspiration, MultiHeadAspirationPlate):
       plate = aspiration.wells[0].parent
-      assert plate is not None, "MultiHeadAspirationPlate well parent must not be None"
+      if plate is None:
+        raise ValueError("MultiHeadAspirationPlate well parent must not be None")
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
@@ -277,7 +280,7 @@ class STARHead96Backend(Head96Backend):
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="EA",
       aa=backend_params.aspiration_type,
@@ -364,7 +367,8 @@ class STARHead96Backend(Head96Backend):
     # Compute position
     if isinstance(dispense, MultiHeadDispensePlate):
       plate = dispense.wells[0].parent
-      assert plate is not None, "MultiHeadDispensePlate well parent must not be None"
+      if plate is None:
+        raise ValueError("MultiHeadDispensePlate well parent must not be None")
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
@@ -412,7 +416,7 @@ class STARHead96Backend(Head96Backend):
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
 
-    await self._driver.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ED",
       da=dispense_mode,

@@ -4,7 +4,7 @@ from pylabrobot.resources import Plate, PlateHolder
 from .backend import AutomatedRetrievalBackend
 
 
-class AutomatedRetrievalCapability(Capability):
+class AutomatedRetrieval(Capability):
   """Automated plate retrieval/storage capability."""
 
   def __init__(self, backend: AutomatedRetrievalBackend):

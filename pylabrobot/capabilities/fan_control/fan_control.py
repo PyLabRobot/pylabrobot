@@ -5,7 +5,7 @@ from pylabrobot.capabilities.capability import Capability
 from .backend import FanBackend
 
 
-class FanControlCapability(Capability):
+class Fan(Capability):
   """Fan control capability."""
 
   def __init__(self, backend: FanBackend):

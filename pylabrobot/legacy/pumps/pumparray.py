@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Optional, Union
 
 from pylabrobot.capabilities.pumping.backend import PumpBackend as _NewPumpBackend
-from pylabrobot.capabilities.pumping.pumping import PumpingCapability
+from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.pumps.backend import PumpArrayBackend
 from pylabrobot.legacy.pumps.calibration import PumpCalibration
@@ -39,7 +39,7 @@ class PumpArray(Machine):
     super().__init__(backend=backend)
     self.backend: PumpArrayBackend = backend
     self.calibration = calibration
-    self._pumps: List[PumpingCapability] = []
+    self._pumps: List[Pump] = []
 
   @property
   def num_channels(self) -> int:
@@ -48,7 +48,7 @@ class PumpArray(Machine):
   async def setup(self, **backend_kwargs):
     await super().setup(**backend_kwargs)
     self._pumps = [
-      PumpingCapability(backend=_ChannelAdapter(self.backend, ch))
+      Pump(backend=_ChannelAdapter(self.backend, ch))
       for ch in range(self.num_channels)
     ]
     for p in self._pumps:

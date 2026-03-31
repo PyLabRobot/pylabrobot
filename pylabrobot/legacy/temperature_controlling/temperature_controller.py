@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControllerBackend as _NewTCBackend,
 )
@@ -60,7 +60,7 @@ class TemperatureController(ResourceHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self.backend: TemperatureControllerBackend = backend
-    self._tc_cap = TemperatureControlCapability(backend=_TemperatureControlAdapter(backend))
+    self._tc_cap = TemperatureController(backend=_TemperatureControlAdapter(backend))
 
   @property
   def target_temperature(self) -> Optional[float]:

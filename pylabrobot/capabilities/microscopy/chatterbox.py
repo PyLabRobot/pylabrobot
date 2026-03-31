@@ -37,6 +37,7 @@ class MicroscopyChatterboxBackend(MicroscopyBackend):
     backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
     if HAS_NUMPY:
+      assert np is not None
       image = np.zeros((512, 512), dtype=np.uint16)
     else:
       image = [[0] * 512 for _ in range(512)]  # type: ignore

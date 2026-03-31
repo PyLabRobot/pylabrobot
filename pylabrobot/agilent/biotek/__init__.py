@@ -2,7 +2,6 @@ from .biotek import BioTekBackend
 from .cytation import (
   Cytation1,
   Cytation5,
-  Cytation5ImagingConfig,
   CytationBackend,
   CytationImagingConfig,
 )

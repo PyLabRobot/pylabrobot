@@ -14,7 +14,7 @@ from .backend import AbsorbanceBackend
 logger = logging.getLogger(__name__)
 
 
-class AbsorbanceCapability(Capability):
+class Absorbance(Capability):
   """Absorbance plate reading capability."""
 
   def __init__(self, backend: AbsorbanceBackend):

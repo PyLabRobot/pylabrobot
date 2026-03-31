@@ -12,9 +12,10 @@ except ImportError:
   FtdiError = Exception  # type: ignore[misc,assignment]
 
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
-from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
-from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
-from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
+from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
+from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
+from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
@@ -124,11 +125,12 @@ class SynergyH1(Resource, Device):
       model="Agilent BioTek Synergy H1",
     )
     Device.__init__(self, driver=backend)
-    self._driver: SynergyH1Backend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
-    self.luminescence = LuminescenceCapability(backend=backend)
-    self.fluorescence = FluorescenceCapability(backend=backend)
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence]
+    self.driver: SynergyH1Backend = backend
+    self.absorbance = Absorbance(backend=backend)
+    self.luminescence = Luminescence(backend=backend)
+    self.fluorescence = Fluorescence(backend=backend)
+    self.temperature = TemperatureController(backend=backend)
+    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.temperature]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
@@ -144,7 +146,7 @@ class SynergyH1(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self._driver.open(slow=slow)
+    await self.driver.open(slow=slow)
 
   async def close(self, slow: bool = False) -> None:
-    await self._driver.close(slow=slow)
+    await self.driver.close(slow=slow)

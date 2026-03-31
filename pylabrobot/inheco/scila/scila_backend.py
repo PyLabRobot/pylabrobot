@@ -124,18 +124,18 @@ class SCILATemperatureBackend(TemperatureControllerBackend):
   """Translates TemperatureControllerBackend interface into SCILA SiLA commands."""
 
   def __init__(self, driver: SCILADriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
     return False
 
   async def request_temperature_information(self) -> dict[str, Any]:
-    root = await self._driver.send_command("GetTemperature")
+    root = await self.driver.send_command("GetTemperature")
     return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
 
   async def set_temperature(self, temperature: float) -> None:
-    await self._driver.send_command(
+    await self.driver.send_command(
       "SetTemperature", targetTemperature=temperature, temperatureControl=True
     )
 
@@ -143,7 +143,7 @@ class SCILATemperatureBackend(TemperatureControllerBackend):
     return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
 
   async def deactivate(self) -> None:
-    await self._driver.send_command("SetTemperature", temperatureControl=False)
+    await self.driver.send_command("SetTemperature", temperatureControl=False)
 
   async def request_target_temperature(self) -> float:
     return (await self.request_temperature_information())["TargetTemperature"]  # type: ignore

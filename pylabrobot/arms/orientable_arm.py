@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from pylabrobot.arms.arm import GripOrientation, _BaseArm, _PickedUpState
 from pylabrobot.arms.backend import OrientableGripperArmBackend
@@ -156,4 +156,33 @@ class OrientableArm(_BaseArm):
     )
     await self.backend.move_to_location(
       location=location, direction=dir_degrees, backend_params=backend_params
+    )
+
+  async def move_resource(
+    self,
+    resource: Resource,
+    to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
+    intermediate_locations: Optional[List[Coordinate]] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
+    destination_offset: Coordinate = Coordinate.zero(),
+    pickup_distance_from_top: float = 0,
+    pickup_direction: GripOrientation = GripDirection.FRONT,
+    drop_direction: GripOrientation = GripDirection.FRONT,
+    pickup_backend_params: Optional[BackendParams] = None,
+    drop_backend_params: Optional[BackendParams] = None,
+  ):
+    await self.pick_up_resource(
+      resource=resource,
+      offset=pickup_offset,
+      pickup_distance_from_top=pickup_distance_from_top,
+      direction=pickup_direction,
+      backend_params=pickup_backend_params,
+    )
+    for loc in intermediate_locations or []:
+      await self.move_picked_up_resource(to=loc, direction=drop_direction)
+    await self.drop_resource(
+      destination=to,
+      offset=destination_offset,
+      direction=drop_direction,
+      backend_params=drop_backend_params,
     )

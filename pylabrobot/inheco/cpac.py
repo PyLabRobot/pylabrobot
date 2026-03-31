@@ -3,7 +3,7 @@ import warnings
 from typing import Optional
 
 from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureControlCapability,
+  TemperatureController,
   TemperatureControllerBackend,
 )
 from pylabrobot.device import Device, Driver
@@ -117,8 +117,8 @@ class InhecoCPAC(ResourceHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: InhecoCPACBackend = driver
-    self.tc = TemperatureControlCapability(backend=driver)
+    self.driver: InhecoCPACBackend = driver
+    self.tc = TemperatureController(backend=driver)
     self._capabilities = [self.tc]
 
   def serialize(self) -> dict:

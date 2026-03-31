@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.arms.backend import GripperArmBackend
 from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 from pylabrobot.resources import Coordinate
+
+if TYPE_CHECKING:
+  from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 
 
 class CoreGripper(GripperArmBackend):

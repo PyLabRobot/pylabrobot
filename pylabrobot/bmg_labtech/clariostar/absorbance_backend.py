@@ -29,7 +29,7 @@ class CLARIOstarAbsorbanceBackend(AbsorbanceBackend):
   """Translates AbsorbanceBackend interface into CLARIOstar driver commands."""
 
   def __init__(self, driver: CLARIOstarDriver):
-    self._driver = driver
+    self.driver = driver
 
   # Keep the nested class for backward compat with the legacy wrapper that references
   # ``CLARIOstarBackend.AbsorbanceParams``.  The canonical name is now
@@ -49,20 +49,20 @@ class CLARIOstarAbsorbanceBackend(AbsorbanceBackend):
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
 
-    await self._driver.mp_and_focus_height_value()
+    await self.driver.mp_and_focus_height_value()
 
     wavelength_data = int(wavelength * 10).to_bytes(2, byteorder="big")
-    plate_bytes = self._driver.plate_bytes(plate)
+    plate_bytes = self.driver.plate_bytes(plate)
     payload = (
       b"\x04" + plate_bytes + b"\x82\x02\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1e\x27\x0f\x27"
       b"\x0f\x19\x01" + wavelength_data + b"\x00\x00\x00\x64\x00\x00\x00\x00\x00\x00\x00\x64\x00"
       b"\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x16\x00\x01\x00\x00"
     )
-    await self._driver.run_measurement(payload)
-    await self._driver.read_order_values()
-    await self._driver.status_hw()
+    await self.driver.run_measurement(payload)
+    await self.driver.read_order_values()
+    await self.driver.status_hw()
 
-    vals = await self._driver.request_measurement_values()
+    vals = await self.driver.request_measurement_values()
     num_wells = plate.num_items
     div = b"\x00" * 6
     start_idx = vals.index(div) + len(div)

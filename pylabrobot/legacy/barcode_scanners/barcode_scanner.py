@@ -8,7 +8,7 @@ from pylabrobot.resources.barcode import Barcode
 class BarcodeScanner(Machine):
   """Legacy standalone barcode scanner Machine.
 
-  In new code, use BarcodeScanningCapability instead.
+  In new code, use BarcodeScanner instead.
   """
 
   def __init__(self, backend: BarcodeScannerBackend):

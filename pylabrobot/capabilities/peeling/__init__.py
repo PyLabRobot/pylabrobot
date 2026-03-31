@@ -1,2 +1,2 @@
 from .backend import PeelerBackend
-from .peeling import PeelingCapability
+from .peeling import Peeler

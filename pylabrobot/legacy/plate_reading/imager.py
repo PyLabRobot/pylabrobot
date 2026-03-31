@@ -1,4 +1,4 @@
-"""Legacy. Use pylabrobot.capabilities.microscopy.MicroscopyCapability instead."""
+"""Legacy. Use pylabrobot.capabilities.microscopy.Microscopy instead."""
 
 from typing import Optional, Tuple, Union, cast
 
@@ -7,7 +7,7 @@ from pylabrobot.capabilities.microscopy import ImagingMode as NewImagingMode
 from pylabrobot.capabilities.microscopy import ImagingResult as NewImagingResult
 from pylabrobot.capabilities.microscopy import (
   MicroscopyBackend,
-  MicroscopyCapability,
+  Microscopy,
   evaluate_focus_nvmg_sobel,
   fraction_overexposed,
   max_pixel_at_fraction,
@@ -121,7 +121,7 @@ class Imager(Resource, Machine):
     )
     Machine.__init__(self, backend=backend)
     self._backend: ImagerBackend = backend
-    self._microscopy = MicroscopyCapability(backend=_ImagerBackendAdapter(backend))
+    self._microscopy = Microscopy(backend=_ImagerBackendAdapter(backend))
     self._microscopy._setup_finished = True  # legacy Machine.setup() handles lifecycle
 
     self.register_will_assign_resource_callback(self._will_assign_resource)

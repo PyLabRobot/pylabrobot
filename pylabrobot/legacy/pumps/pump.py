@@ -1,7 +1,7 @@
 from typing import Optional, Union
 
 from pylabrobot.capabilities.pumping.backend import PumpBackend as _NewPumpBackend
-from pylabrobot.capabilities.pumping.pumping import PumpingCapability
+from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.legacy.machines.machine import Machine
 
 from .backend import PumpBackend
@@ -37,7 +37,7 @@ class Pump(Machine):
     if calibration is not None and len(calibration) != 1:
       raise ValueError("Calibration may only have a single item for this pump")
     self.calibration = calibration
-    self._pumping = PumpingCapability(backend=_PumpAdapter(backend), calibration=calibration)
+    self._pumping = Pump(backend=_PumpAdapter(backend), calibration=calibration)
 
   async def setup(self, **backend_kwargs):
     await super().setup(**backend_kwargs)

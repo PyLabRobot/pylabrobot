@@ -19,23 +19,33 @@ class STARCover:
   """
 
   def __init__(self, driver: "STARDriver"):
-    self._driver = driver
+    self.driver = driver
+
+  # -- lifecycle -------------------------------------------------------------
+
+  async def _on_setup(self):
+    pass
+
+  async def _on_stop(self):
+    pass
+
+  # -- commands --------------------------------------------------------------
 
   async def lock(self):
     """Lock cover (C0:CO)."""
-    return await self._driver.send_command(module="C0", command="CO")
+    return await self.driver.send_command(module="C0", command="CO")
 
   async def unlock(self):
     """Unlock cover (C0:HO)."""
-    return await self._driver.send_command(module="C0", command="HO")
+    return await self.driver.send_command(module="C0", command="HO")
 
   async def disable(self):
     """Disable cover control (C0:CD)."""
-    return await self._driver.send_command(module="C0", command="CD")
+    return await self.driver.send_command(module="C0", command="CD")
 
   async def enable(self):
     """Enable cover control (C0:CE)."""
-    return await self._driver.send_command(module="C0", command="CE")
+    return await self.driver.send_command(module="C0", command="CE")
 
   async def set_output(self, output: int = 1):
     """Set cover output (C0:OS).
@@ -43,8 +53,9 @@ class STARCover:
     Args:
       output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
     """
-    assert 1 <= output <= 3, "output must be between 1 and 3"
-    return await self._driver.send_command(module="C0", command="OS", on=output)
+    if not 1 <= output <= 3:
+      raise ValueError("output must be between 1 and 3")
+    return await self.driver.send_command(module="C0", command="OS", on=output)
 
   async def reset_output(self, output: int = 1):
     """Reset output (C0:QS).
@@ -52,8 +63,9 @@ class STARCover:
     Args:
       output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
     """
-    assert 1 <= output <= 3, "output must be between 1 and 3"
-    return await self._driver.send_command(module="C0", command="QS", on=output, fmt="#")
+    if not 1 <= output <= 3:
+      raise ValueError("output must be between 1 and 3")
+    return await self.driver.send_command(module="C0", command="QS", on=output, fmt="#")
 
   async def is_open(self) -> bool:
     """Request whether the cover is open (C0:QC).
@@ -61,5 +73,5 @@ class STARCover:
     Returns:
       True if the cover is open.
     """
-    resp = await self._driver.send_command(module="C0", command="QC", fmt="qc#")
+    resp = await self.driver.send_command(module="C0", command="QC", fmt="qc#")
     return bool(resp["qc"])

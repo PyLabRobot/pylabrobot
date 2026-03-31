@@ -82,7 +82,7 @@ class Device(SerializableMixin, ABC):
   """Abstract base class for device frontends."""
 
   def __init__(self, driver: Driver):
-    self._driver = driver
+    self.driver = driver
     self._setup_finished = False
     self._capabilities: List[Capability] = []
 
@@ -91,7 +91,7 @@ class Device(SerializableMixin, ABC):
     return self._setup_finished
 
   def serialize(self) -> dict:
-    return {"driver": self._driver.serialize()}
+    return {"driver": self.driver.serialize()}
 
   @classmethod
   def deserialize(cls, data: dict):
@@ -102,7 +102,7 @@ class Device(SerializableMixin, ABC):
     return cls(**data_copy)
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     for cap in self._capabilities:
       await cap._on_setup()
     self._setup_finished = True
@@ -111,7 +111,7 @@ class Device(SerializableMixin, ABC):
   async def stop(self):
     for cap in reversed(self._capabilities):
       await cap._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
     self._setup_finished = False
 
   async def __aenter__(self):

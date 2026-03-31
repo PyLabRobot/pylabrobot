@@ -56,37 +56,37 @@ class ExperimentalPicoBackend(ImagerBackend):
     new_filter_cubes = {
       pos: _legacy_to_new_imaging_mode(mode) for pos, mode in (filter_cubes or {}).items()
     }
-    self._driver = PicoDriver(
+    self.driver = PicoDriver(
       host=host,
       port=port,
       lock_timeout=lock_timeout,
     )
     self._microscopy = PicoMicroscopyBackend(
-      self._driver,
+      self.driver,
       objectives=new_objectives,
       filter_cubes=new_filter_cubes,
     )
 
   @property
   def door_open(self) -> bool:
-    return self._driver.door_open
+    return self.driver.door_open
 
   async def setup(self) -> None:
-    await self._driver.setup()
+    await self.driver.setup()
     await self._microscopy._on_setup()
 
   async def stop(self) -> None:
     await self._microscopy._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   async def get_configuration(self) -> dict:
-    return await self._driver.request_configuration()
+    return await self.driver.request_configuration()
 
   async def open_door(self) -> None:
-    await self._driver.open_door()
+    await self.driver.open_door()
 
   async def close_door(self) -> None:
-    await self._driver.close_door()
+    await self.driver.close_door()
 
   async def enter_objective_maintenance(self, position: int) -> None:
     await self._microscopy.enter_objective_maintenance(position)

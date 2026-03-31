@@ -1,17 +1,17 @@
 import logging
 from typing import Dict, List, Optional, cast
 
-from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
+from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.absorbance.backend import (
   AbsorbanceBackend as _NewAbsorbanceBackend,
 )
 from pylabrobot.capabilities.plate_reading.absorbance.standard import AbsorbanceResult
-from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
+from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import (
   FluorescenceBackend as _NewFluorescenceBackend,
 )
 from pylabrobot.capabilities.plate_reading.fluorescence.standard import FluorescenceResult
-from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
 from pylabrobot.capabilities.plate_reading.luminescence.backend import (
   LuminescenceBackend as _NewLuminescenceBackend,
 )
@@ -161,9 +161,9 @@ class PlateReader(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type
 
-    self._absorbance_cap = AbsorbanceCapability(backend=_AbsorbanceAdapter(backend))
-    self._luminescence_cap = LuminescenceCapability(backend=_LuminescenceAdapter(backend))
-    self._fluorescence_cap = FluorescenceCapability(backend=_FluorescenceAdapter(backend))
+    self._absorbance_cap = Absorbance(backend=_AbsorbanceAdapter(backend))
+    self._luminescence_cap = Luminescence(backend=_LuminescenceAdapter(backend))
+    self._fluorescence_cap = Fluorescence(backend=_FluorescenceAdapter(backend))
 
   async def setup(self, **backend_kwargs):
     await super().setup(**backend_kwargs)

@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 import enum
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Literal, Optional, cast
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pylabrobot.arms.backend import OrientableGripperArmBackend
 from pylabrobot.arms.standard import GripDirection, GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
+
+if TYPE_CHECKING:
+  from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 
 
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
@@ -195,21 +199,21 @@ class iSWAPBackend(OrientableGripperArmBackend):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.driver.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return round(STARDriver.y_drive_increment_to_mm(iswap_y_pos), 1)
+    return round(self.driver.y_drive_increment_to_mm(iswap_y_pos), 1)
 
   async def move_x(self, x_position: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""
-    loc = (await self.get_gripper_location()).location
+    loc = (await self.request_gripper_location()).location
     await self.move_x_relative(step_size=x_position - loc.x, allow_splitting=True)
 
   async def move_y(self, y_position: float) -> None:
     """Move iSWAP Y to an absolute position [mm]."""
-    loc = (await self.get_gripper_location()).location
+    loc = (await self.request_gripper_location()).location
     await self.move_y_relative(step_size=y_position - loc.y, allow_splitting=True)
 
   async def move_z(self, z_position: float) -> None:
     """Move iSWAP Z to an absolute position [mm]."""
-    loc = (await self.get_gripper_location()).location
+    loc = (await self.request_gripper_location()).location
     await self.move_z_relative(step_size=z_position - loc.z, allow_splitting=True)
 
   # -- rotation / wrist drive ------------------------------------------------
@@ -288,10 +292,14 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     Velocity units are incr/sec. Acceleration units are 1000 incr/sec^2.
     """
-    assert 20 <= gripper_velocity <= 75_000
-    assert 5 <= gripper_acceleration <= 200
-    assert 20 <= wrist_velocity <= 65_000
-    assert 20 <= wrist_acceleration <= 200
+    if not 20 <= gripper_velocity <= 75_000:
+      raise ValueError("gripper_velocity must be between 20 and 75000")
+    if not 5 <= gripper_acceleration <= 200:
+      raise ValueError("gripper_acceleration must be between 5 and 200")
+    if not 20 <= wrist_velocity <= 65_000:
+      raise ValueError("wrist_velocity must be between 20 and 65000")
+    if not 20 <= wrist_acceleration <= 200:
+      raise ValueError("wrist_acceleration must be between 20 and 200")
 
     RDO = iSWAPBackend.RotationDriveOrientation
     position = 0
@@ -370,93 +378,115 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   async def prepare_teaching(
     self,
-    x_position: int = 0,
+    x_position: float = 0,
     x_direction: int = 0,
-    y_position: int = 0,
+    y_position: float = 0,
     y_direction: int = 0,
-    z_position: int = 0,
+    z_position: float = 0,
     z_direction: int = 0,
     location: int = 0,
-    hotel_depth: int = 1300,
+    hotel_depth: float = 130.0,
     grip_direction: int = 1,
-    minimum_traverse_height: int = 3600,
+    minimum_traverse_height: float = 360.0,
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
   ) -> None:
     """Prepare for teaching with iSWAP (C0 PT).
 
-    All position args are in 0.1mm firmware units.
+    All position args are in mm.
     """
-    assert 0 <= x_position <= 30000
-    assert 0 <= x_direction <= 1
-    assert 0 <= y_position <= 6500
-    assert 0 <= y_direction <= 1
-    assert 0 <= z_position <= 3600
-    assert 0 <= z_direction <= 1
-    assert 0 <= location <= 1
-    assert 0 <= hotel_depth <= 3000
-    assert 0 <= minimum_traverse_height <= 3600
-    assert 0 <= collision_control_level <= 1
-    assert 0 <= acceleration_index_high_acc <= 4
-    assert 0 <= acceleration_index_low_acc <= 4
+    if not 0 <= x_position <= 3000:
+      raise ValueError("x_position must be between 0 and 3000")
+    if not 0 <= x_direction <= 1:
+      raise ValueError("x_direction must be between 0 and 1")
+    if not 0 <= y_position <= 650:
+      raise ValueError("y_position must be between 0 and 650")
+    if not 0 <= y_direction <= 1:
+      raise ValueError("y_direction must be between 0 and 1")
+    if not 0 <= z_position <= 360:
+      raise ValueError("z_position must be between 0 and 360")
+    if not 0 <= z_direction <= 1:
+      raise ValueError("z_direction must be between 0 and 1")
+    if not 0 <= location <= 1:
+      raise ValueError("location must be between 0 and 1")
+    if not 0 <= hotel_depth <= 300:
+      raise ValueError("hotel_depth must be between 0 and 300")
+    if not 0 <= minimum_traverse_height <= 360:
+      raise ValueError("minimum_traverse_height must be between 0 and 360")
+    if not 0 <= collision_control_level <= 1:
+      raise ValueError("collision_control_level must be between 0 and 1")
+    if not 0 <= acceleration_index_high_acc <= 4:
+      raise ValueError("acceleration_index_high_acc must be between 0 and 4")
+    if not 0 <= acceleration_index_low_acc <= 4:
+      raise ValueError("acceleration_index_low_acc must be between 0 and 4")
 
     await self.driver.send_command(
       module="C0",
       command="PT",
-      xs=f"{x_position:05}",
+      xs=f"{round(x_position * 10):05}",
       xd=x_direction,
-      yj=f"{y_position:04}",
+      yj=f"{round(y_position * 10):04}",
       yd=y_direction,
-      zj=f"{z_position:04}",
+      zj=f"{round(z_position * 10):04}",
       zd=z_direction,
       hh=location,
-      hd=f"{hotel_depth:04}",
+      hd=f"{round(hotel_depth * 10):04}",
       gr=grip_direction,
-      th=f"{minimum_traverse_height:04}",
+      th=f"{round(minimum_traverse_height * 10):04}",
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
     )
 
   async def get_logic_position(
     self,
-    x_position: int = 0,
+    x_position: float = 0,
     x_direction: int = 0,
-    y_position: int = 0,
+    y_position: float = 0,
     y_direction: int = 0,
-    z_position: int = 0,
+    z_position: float = 0,
     z_direction: int = 0,
     location: int = 0,
-    hotel_depth: int = 1300,
+    hotel_depth: float = 130.0,
     grip_direction: int = 1,
     collision_control_level: int = 1,
   ) -> None:
     """Get logic iSWAP position (C0 PC).
 
-    All position args are in 0.1mm firmware units.
+    All position args are in mm.
     """
-    assert 0 <= x_position <= 30000
-    assert 0 <= x_direction <= 1
-    assert 0 <= y_position <= 6500
-    assert 0 <= y_direction <= 1
-    assert 0 <= z_position <= 3600
-    assert 0 <= z_direction <= 1
-    assert 0 <= location <= 1
-    assert 0 <= hotel_depth <= 3000
-    assert 1 <= grip_direction <= 4
-    assert 0 <= collision_control_level <= 1
+    if not 0 <= x_position <= 3000:
+      raise ValueError("x_position must be between 0 and 3000")
+    if not 0 <= x_direction <= 1:
+      raise ValueError("x_direction must be between 0 and 1")
+    if not 0 <= y_position <= 650:
+      raise ValueError("y_position must be between 0 and 650")
+    if not 0 <= y_direction <= 1:
+      raise ValueError("y_direction must be between 0 and 1")
+    if not 0 <= z_position <= 360:
+      raise ValueError("z_position must be between 0 and 360")
+    if not 0 <= z_direction <= 1:
+      raise ValueError("z_direction must be between 0 and 1")
+    if not 0 <= location <= 1:
+      raise ValueError("location must be between 0 and 1")
+    if not 0 <= hotel_depth <= 300:
+      raise ValueError("hotel_depth must be between 0 and 300")
+    if not 1 <= grip_direction <= 4:
+      raise ValueError("grip_direction must be between 1 and 4")
+    if not 0 <= collision_control_level <= 1:
+      raise ValueError("collision_control_level must be between 0 and 1")
 
     await self.driver.send_command(
       module="C0",
       command="PC",
-      xs=x_position,
+      xs=round(x_position * 10),
       xd=x_direction,
-      yj=y_position,
+      yj=round(y_position * 10),
       yd=y_direction,
-      zj=z_position,
+      zj=round(z_position * 10),
       zd=z_direction,
       hh=location,
-      hd=hotel_depth,
+      hd=round(hotel_depth * 10),
       gr=grip_direction,
       ga=collision_control_level,
     )
@@ -479,8 +509,10 @@ class iSWAPBackend(OrientableGripperArmBackend):
       wrist_velocity: Wrist velocity in incr/sec (20..65000).
       gripper_velocity: Gripper velocity in incr/sec (20..75000).
     """
-    assert 20 <= gripper_velocity <= 75_000
-    assert 20 <= wrist_velocity <= 65_000
+    if not 20 <= gripper_velocity <= 75_000:
+      raise ValueError("gripper_velocity must be between 20 and 75000")
+    if not 20 <= wrist_velocity <= 65_000:
+      raise ValueError("wrist_velocity must be between 20 and 65000")
 
     original_wv = await self._get_r0_parameter("wv", "wv#####")
     original_tv = await self._get_r0_parameter("tv", "tv#####")

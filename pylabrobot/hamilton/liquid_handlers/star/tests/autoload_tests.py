@@ -14,8 +14,8 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
 
   # -- initialization --------------------------------------------------------
 
-  async def test_initialize(self):
-    await self.autoload.initialize()
+  async def test_on_setup(self):
+    await self.autoload._on_setup()
     self.mock_driver.send_command.assert_called_once_with(module="C0", command="II")
 
   async def test_request_initialization_status_true(self):
@@ -116,9 +116,9 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_request_presence_of_single_carrier_invalid_track(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.request_presence_of_single_carrier_on_loading_tray(track=0)
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.request_presence_of_single_carrier_on_loading_tray(track=55)
 
   # -- movement commands -----------------------------------------------------
@@ -132,9 +132,9 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(calls[1].kwargs, {"module": "I0", "command": "XP", "xp": "12"})
 
   async def test_move_to_track_invalid(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.move_to_track(track=0)
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.move_to_track(track=55)
 
   async def test_park(self):
@@ -232,9 +232,9 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_unload_carrier_invalid_rail(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.unload_carrier(carrier_end_rail=0)
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.unload_carrier(carrier_end_rail=55)
 
   # -- LED / monitoring ------------------------------------------------------
@@ -251,7 +251,7 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_set_loading_indicators_invalid_length(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.autoload.set_loading_indicators([True] * 10, [False] * 10)
 
   async def test_set_carrier_monitoring(self):

@@ -1,3 +1,3 @@
 from .backend import LuminescenceBackend
-from .luminescence import LuminescenceCapability
+from .luminescence import Luminescence
 from .standard import LuminescenceResult

@@ -149,16 +149,16 @@ class HamiltonHepaFanFanBackend(FanBackend):
   """Translates FanBackend calls into FTDI commands."""
 
   def __init__(self, driver: HamiltonHepaFanDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def turn_on(self, intensity: int) -> None:
     if int(intensity) != intensity or not 0 <= intensity <= 100:
       raise ValueError("Intensity must be an integer between 0 and 100")
-    await self._driver.send(b"\x35\x41\x01\xff\x75")
-    await self._driver.send(bytes.fromhex(_SPEED_TABLE[intensity]))
+    await self.driver.send(b"\x35\x41\x01\xff\x75")
+    await self.driver.send(bytes.fromhex(_SPEED_TABLE[intensity]))
 
   async def turn_off(self) -> None:
-    await self._driver.send(b"\x55\xc1\x01\x11\x00\x7b")
+    await self.driver.send(b"\x55\xc1\x01\x11\x00\x7b")
 
 
 class HamiltonHepaFanChatterboxBackend(FanBackend):

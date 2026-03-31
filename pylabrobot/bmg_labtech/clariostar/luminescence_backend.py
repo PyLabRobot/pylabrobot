@@ -18,7 +18,7 @@ class CLARIOstarLuminescenceBackend(LuminescenceBackend):
   """Translates LuminescenceBackend interface into CLARIOstar driver commands."""
 
   def __init__(self, driver: CLARIOstarDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def read_luminescence(
     self,
@@ -30,22 +30,22 @@ class CLARIOstarLuminescenceBackend(LuminescenceBackend):
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
 
-    await self._driver.mp_and_focus_height_value()
+    await self.driver.mp_and_focus_height_value()
 
     assert 0 <= focal_height <= 25, "focal height must be between 0 and 25 mm"
     focal_height_data = int(focal_height * 100).to_bytes(2, byteorder="big")
-    plate_bytes = self._driver.plate_bytes(plate)
+    plate_bytes = self.driver.plate_bytes(plate)
     payload = (
       b"\x04" + plate_bytes + b"\x02\x01\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1e\x27"
       b"\x0f\x27\x0f\x01" + focal_height_data + b"\x00\x00\x01\x00\x00\x0e\x10\x00\x01\x00\x01"
       b"\x00\x01\x00\x01\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00"
       b"\x00\x01\x00\x00\x00\x01\x00\x64\x00\x20\x00\x00"
     )
-    await self._driver.run_measurement(payload)
-    await self._driver.read_order_values()
-    await self._driver.status_hw()
+    await self.driver.run_measurement(payload)
+    await self.driver.read_order_values()
+    await self.driver.status_hw()
 
-    vals = await self._driver.request_measurement_values()
+    vals = await self.driver.request_measurement_values()
     num_wells = plate.num_items
     start_idx = vals.index(b"\x00\x00\x00\x00\x00\x00") + len(b"\x00\x00\x00\x00\x00\x00")
     data = list(vals)[start_idx : start_idx + num_wells * 4]

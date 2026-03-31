@@ -15,9 +15,9 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """Legacy. Use pylabrobot.hamilton.heater_shaker instead."""
 
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
-    self._driver = hhs_backend.HamiltonHeaterShakerDriver(index=index, interface=interface)
-    self._shaker = hhs_backend.HamiltonHeaterShakerShakerBackend(self._driver)
-    self._temp = hhs_backend.HamiltonHeaterShakerTemperatureBackend(self._driver)
+    self.driver = hhs_backend.HamiltonHeaterShakerDriver(index=index, interface=interface)
+    self._shaker = hhs_backend.HamiltonHeaterShakerShakerBackend(self.driver)
+    self._temp = hhs_backend.HamiltonHeaterShakerTemperatureBackend(self.driver)
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -28,17 +28,17 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     return self._shaker.supports_locking
 
   async def setup(self):
-    await self._driver.setup()
+    await self.driver.setup()
     await self._shaker._on_setup()
     await self._temp._on_setup()
 
   async def stop(self):
     await self._temp._on_stop()
     await self._shaker._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self) -> dict:
-    return self._driver.serialize()
+    return self.driver.serialize()
 
   async def start_shaking(
     self,

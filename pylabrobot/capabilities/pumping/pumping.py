@@ -8,7 +8,7 @@ from .backend import PumpBackend
 from .calibration import PumpCalibration
 
 
-class PumpingCapability(Capability):
+class Pump(Capability):
   """Single-pump capability."""
 
   def __init__(

@@ -16,6 +16,7 @@ from pylabrobot.capabilities.plate_reading.luminescence import (
   LuminescenceBackend,
   LuminescenceResult,
 )
+from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Well
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class BioTekBackend(
-  AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend, Driver, metaclass=ABCMeta
+  AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend, TemperatureControllerBackend, Driver, metaclass=ABCMeta
 ):
   """Backend for Agilent BioTek plate readers."""
 
@@ -128,6 +129,10 @@ class BioTekBackend(
   @property
   def supports_cooling(self) -> bool:
     return False
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return self.supports_cooling
 
   @property
   def temperature_range(self) -> Tuple[Optional[float], Optional[float]]:
@@ -242,6 +247,9 @@ class BioTekBackend(
 
   async def stop_heating_or_cooling(self):
     return await self.send_command("g", "00000")
+
+  async def deactivate(self):
+    return await self.stop_heating_or_cooling()
 
   def _parse_body(self, body: bytes) -> List[List[Optional[float]]]:
     assert self._plate is not None, "Plate must be set before reading data"

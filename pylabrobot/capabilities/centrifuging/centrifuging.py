@@ -7,7 +7,7 @@ from pylabrobot.serializer import SerializableMixin
 from .backend import CentrifugeBackend
 
 
-class CentrifugingCapability(Capability):
+class Centrifuge(Capability):
   """Centrifuging capability."""
 
   def __init__(

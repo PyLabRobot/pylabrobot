@@ -1,7 +1,7 @@
 import math
 from typing import List, Optional
 
-from pylabrobot.capabilities.tilting import TiltingCapability
+from pylabrobot.capabilities.tilting import Tilter
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.resource_holder import ResourceHolder
@@ -38,11 +38,11 @@ class HamiltonTiltModule(ResourceHolder, Device):
       model="HamiltonTiltModule",
     )
     Device.__init__(self, driver=driver)
-    self._driver: HamiltonTiltModuleDriver = driver
+    self.driver: HamiltonTiltModuleDriver = driver
     self.pedestal_size_z = pedestal_size_z
     self._hinge_coordinate = Coordinate(6.18, 0, 72.85)
 
-    self.tilter = TiltingCapability(backend=HamiltonTiltModuleTilterBackend(driver=driver))
+    self.tilter = Tilter(backend=HamiltonTiltModuleTilterBackend(driver=driver))
     self._capabilities = [self.tilter]
 
   @property
