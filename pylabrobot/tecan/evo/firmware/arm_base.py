@@ -6,7 +6,7 @@ same worktable (e.g. LiHa and RoMa X-axes).
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Protocol, Union, runtime_checkable
+from typing import Dict, List, Protocol, Union, runtime_checkable
 
 
 @runtime_checkable
@@ -71,10 +71,11 @@ class EVOArm:
       Error string where each character represents one axis status.
       ``'@'`` = no error, ``'A'`` = init failed, ``'G'`` = not initialized.
     """
-    resp: Dict[str, Union[str, int, List[Union[int, str]]]] = (
-      await self.interface.send_command(module=self.module, command="REE", params=[param])
-    )
-    return str(resp["data"][0]) if resp and resp.get("data") else ""
+    resp = await self.interface.send_command(module=self.module, command="REE", params=[param])
+    data = resp.get("data")
+    if data and isinstance(data, list) and len(data) > 0:
+      return str(data[0])
+    return ""
 
   async def position_init_all(self) -> None:
     """Initialize all axes (PIA)."""
@@ -100,6 +101,4 @@ class EVOArm:
       p2: action parameter 2
       p3: action parameter 3
     """
-    await self.interface.send_command(
-      module=self.module, command="BMA", params=[p1, p2, p3]
-    )
+    await self.interface.send_command(module=self.module, command="BMA", params=[p1, p2, p3])

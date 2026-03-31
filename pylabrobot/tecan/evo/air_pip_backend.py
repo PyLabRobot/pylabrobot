@@ -238,9 +238,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     await super()._perform_mix(mix, use_channels)
     await self._zaapmotion_force_off()
 
-  async def _perform_blow_out(
-    self, ops: List[Dispense], use_channels: List[int]
-  ) -> None:
+  async def _perform_blow_out(self, ops: List[Dispense], use_channels: List[int]) -> None:
     await self._zaapmotion_force_on()
     await super()._perform_blow_out(ops, use_channels)
     await self._zaapmotion_force_off()
@@ -270,9 +268,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     logger.info("pick_up_tips: X=%d Y=%d ys=%d (taught tip top: X=3893 Y=146)", x, y_adj, ys)
 
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
-      x, y_adj, ys, [self._z_range] * self.num_channels
-    )
+    await self.liha.position_absolute_all_axis(x, y_adj, ys, [self._z_range] * self.num_channels)
 
     # Aspirate small air gap with force mode
     pvl: List[Optional[int]] = [None] * self.num_channels
@@ -320,9 +316,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     logger.info("drop_tips: X=%d Y=%d ys=%d", x, y_adj, ys)
 
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
-      x, y_adj, ys, [self._z_range] * self.num_channels
-    )
+    await self.liha.position_absolute_all_axis(x, y_adj, ys, [self._z_range] * self.num_channels)
 
     # Empty plunger before discard
     await self.liha.position_valve_logical([0] * self.num_channels)

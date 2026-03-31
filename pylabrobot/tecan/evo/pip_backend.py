@@ -354,9 +354,7 @@ class EVOPIPBackend(PIPBackend):
       await self.liha.move_plunger_relative(ppr_asp)
       await self.liha.move_plunger_relative(ppr_disp)
 
-  async def _perform_blow_out(
-    self, ops: List[Dispense], use_channels: List[int]
-  ) -> None:
+  async def _perform_blow_out(self, ops: List[Dispense], use_channels: List[int]) -> None:
     """Push extra air volume after dispense to expel remaining liquid.
 
     Args:
@@ -573,11 +571,15 @@ class EVOPIPBackend(PIPBackend):
     if isinstance(backend_params, TecanPIPParams) and backend_params.tip_touch:
       touch_offset = int(backend_params.tip_touch_offset_y * 10)
       await self.liha.position_absolute_all_axis(
-        x, y - yi * ys + touch_offset, ys,
+        x,
+        y - yi * ys + touch_offset,
+        ys,
         [z if z else self._z_range for z in z_positions["dispense"]],
       )
       await self.liha.position_absolute_all_axis(
-        x, y - yi * ys, ys,
+        x,
+        y - yi * ys,
+        ys,
         [z if z else self._z_range for z in z_positions["dispense"]],
       )
 

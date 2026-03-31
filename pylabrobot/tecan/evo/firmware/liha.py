@@ -227,9 +227,7 @@ class LiHa(EVOArm):
     """
     await self.interface.send_command(module=self.module, command="PPA", params=positions)
 
-  async def set_disposable_tip_params(
-    self, mode: int, z_discard: int, z_retract: int
-  ) -> None:
+  async def set_disposable_tip_params(self, mode: int, z_discard: int, z_retract: int) -> None:
     """Set disposable tip discard parameters (SDT).
 
     Args:

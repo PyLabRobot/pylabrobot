@@ -49,12 +49,21 @@ class EVORoMaBackend(GripperArmBackend):
   def _get_speeds(self, backend_params: Optional[BackendParams]) -> Dict[str, int]:
     """Get speed settings, applying overrides from backend_params."""
     defaults = {
-      "x": 10000, "y": 5000, "z": 1300, "r": 5000, "accel_y": 1500, "accel_r": 1500,
+      "x": 10000,
+      "y": 5000,
+      "z": 1300,
+      "r": 5000,
+      "accel_y": 1500,
+      "accel_r": 1500,
     }
     if isinstance(backend_params, TecanRoMaParams):
       for key, attr in [
-        ("x", "speed_x"), ("y", "speed_y"), ("z", "speed_z"), ("r", "speed_r"),
-        ("accel_y", "accel_y"), ("accel_r", "accel_r"),
+        ("x", "speed_x"),
+        ("y", "speed_y"),
+        ("z", "speed_z"),
+        ("r", "speed_r"),
+        ("accel_y", "accel_y"),
+        ("accel_r", "accel_r"),
       ]:
         val = getattr(backend_params, attr, None)
         if val is not None:
