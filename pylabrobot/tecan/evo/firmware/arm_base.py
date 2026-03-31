@@ -6,7 +6,7 @@ same worktable (e.g. LiHa and RoMa X-axes).
 
 from __future__ import annotations
 
-from typing import Dict, List, Protocol, Union, runtime_checkable
+from typing import Dict, List, Protocol, runtime_checkable
 
 
 @runtime_checkable
