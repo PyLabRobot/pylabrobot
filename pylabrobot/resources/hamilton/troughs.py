@@ -2,6 +2,7 @@
 
 import warnings
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.trough import Trough, TroughBottomType
 
 # --------------------------------------------------------------------------- #
@@ -43,11 +44,9 @@ def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
   Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
+  Has a center support wall (~1.2mm wide at Y=44-46mm) but is still open
+  at the bottom.
   """
-  warnings.warn(
-    "hamilton_1_trough_60mL_Vb has a center support that can interfere with pipetting.\
-     If using an odd number of channels, use spread='custom' and define offsets for each channel to avoid collision."
-  )
 
   return Trough(
     name=name,
@@ -60,6 +59,9 @@ def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
     model=hamilton_1_trough_60mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_60mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 44.4, 5.0), Coordinate(19.0, 45.6, 60.25)),  # center divider
+    ],
   )
 
 
@@ -92,12 +94,9 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
   Trough 120 mL, without lid, self standing (V-bottom).
   True maximal volume capacity ~120 mL.
   Compatible with Trough_CAR_?? (194058 <- not yet integrated into PLR!).
+  Has 3 in-container support beams (~2.5mm wide at base, ~0.8mm at top, tapered)
+  but is still open at the bottom.
   """
-  warnings.warn(
-    "hamilton_1_trough_120mL_Vb has 3 (!) in-container support beams that can interfere with "
-    "pipetting. If using an odd number of channels, use spread='custom' and define offsets "
-    "for each channel to avoid collision."
-  )
 
   return Trough(
     name=name,
@@ -110,6 +109,11 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
     model=hamilton_1_trough_120mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_120mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 39.7, 12.0), Coordinate(19.0, 42.2, 70.0)),  # beam 1
+      (Coordinate(0, 73.5, 12.0), Coordinate(19.0, 76.0, 70.0)),  # beam 2
+      (Coordinate(0, 107.3, 12.0), Coordinate(19.0, 109.8, 70.0)),  # beam 3
+    ],
   )
 
 
@@ -136,6 +140,7 @@ def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
   Trough 200 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~300 mL.
   Compatible with Trough_CAR_4R200_A00 (185436).
+  Has a center support wall (~1.2mm wide at Y=59-61mm) which is open at the bottom.
   """
   return Trough(
     name=name,
@@ -148,6 +153,9 @@ def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
     model=hamilton_1_trough_200mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_200mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 60, 8.0), Coordinate(37.0, 61.7, 60.0))  # center divider
+    ],
   )
 
 
