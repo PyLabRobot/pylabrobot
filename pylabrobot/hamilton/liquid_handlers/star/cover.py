@@ -53,7 +53,8 @@ class STARCover:
     Args:
       output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
     """
-    assert 1 <= output <= 3, "output must be between 1 and 3"
+    if not 1 <= output <= 3:
+      raise ValueError("output must be between 1 and 3")
     return await self.driver.send_command(module="C0", command="OS", on=output)
 
   async def reset_output(self, output: int = 1):
@@ -62,7 +63,8 @@ class STARCover:
     Args:
       output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
     """
-    assert 1 <= output <= 3, "output must be between 1 and 3"
+    if not 1 <= output <= 3:
+      raise ValueError("output must be between 1 and 3")
     return await self.driver.send_command(module="C0", command="QS", on=output, fmt="#")
 
   async def is_open(self) -> bool:

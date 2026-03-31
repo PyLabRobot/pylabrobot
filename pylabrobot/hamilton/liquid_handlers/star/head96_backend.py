@@ -41,7 +41,8 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
 
 def _channel_pattern_to_hex(pattern: List[bool]) -> str:
   """Convert a list of 96 booleans to the hex string expected by firmware."""
-  assert len(pattern) == 96, "channel_pattern must be a list of 96 boolean values"
+  if len(pattern) != 96:
+    raise ValueError("channel_pattern must be a list of 96 boolean values")
   channel_pattern_bin_str = reversed(["1" if x else "0" for x in pattern])
   return hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
@@ -171,7 +172,8 @@ class STARHead96Backend(Head96Backend):
       tip_spot_a1 = drop.resource.get_item(backend_params.alignment_tipspot_identifier)
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
       tip_rack = tip_spot_a1.parent
-      assert tip_rack is not None
+      if tip_rack is None:
+        raise ValueError("Tip spot parent (tip rack) must not be None")
       position.z = tip_rack.get_absolute_location().z + 1.45
     else:
       # Drop into trash or other resource: center the head in the resource.
@@ -235,7 +237,8 @@ class STARHead96Backend(Head96Backend):
     # Compute position
     if isinstance(aspiration, MultiHeadAspirationPlate):
       plate = aspiration.wells[0].parent
-      assert plate is not None, "MultiHeadAspirationPlate well parent must not be None"
+      if plate is None:
+        raise ValueError("MultiHeadAspirationPlate well parent must not be None")
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
@@ -364,7 +367,8 @@ class STARHead96Backend(Head96Backend):
     # Compute position
     if isinstance(dispense, MultiHeadDispensePlate):
       plate = dispense.wells[0].parent
-      assert plate is not None, "MultiHeadDispensePlate well parent must not be None"
+      if plate is None:
+        raise ValueError("MultiHeadDispensePlate well parent must not be None")
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")

@@ -45,7 +45,8 @@ class STARXArm:
       x_position: X-position in mm. Must be between 0 and 3000. Default 0.
     """
 
-    assert 0 <= x_position <= 3000.0, "x_position must be between 0 and 3000 mm"
+    if not 0 <= x_position <= 3000.0:
+      raise ValueError("x_position must be between 0 and 3000 mm")
 
     cmd = "JX" if self._side == "left" else "JS"
     return await self.driver.send_command(
@@ -64,7 +65,8 @@ class STARXArm:
       x_position: X-position in mm. Must be between 0 and 3000. Default 0.
     """
 
-    assert 0 <= x_position <= 3000.0, "x_position must be between 0 and 3000 mm"
+    if not 0 <= x_position <= 3000.0:
+      raise ValueError("x_position must be between 0 and 3000 mm")
 
     cmd = "KX" if self._side == "left" else "KR"
     return await self.driver.send_command(

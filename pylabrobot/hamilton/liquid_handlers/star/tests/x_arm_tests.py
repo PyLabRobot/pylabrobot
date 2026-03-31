@@ -139,15 +139,15 @@ class TestSTARXArmCommands(unittest.IsolatedAsyncioTestCase):
   # -- assertion checks ------------------------------------------------------
 
   async def test_move_to_rejects_out_of_range(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.left_arm.move_to(x_position=-1)
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.left_arm.move_to(x_position=3001)
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.right_arm.move_to(x_position=-1)
 
   async def test_move_to_safe_rejects_out_of_range(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.left_arm.move_to_safe(x_position=-1)
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.right_arm.move_to_safe(x_position=3001)

@@ -211,9 +211,12 @@ class STARDriver(HamiltonLiquidHandler):
     tip_size: TipSize,
     pickup_method: TipPickupMethod,
   ) -> None:
-    assert 0 <= tip_type_table_index <= 99
-    assert 1 <= tip_length <= 1999
-    assert 1 <= maximum_tip_volume <= 56000
+    if not 0 <= tip_type_table_index <= 99:
+      raise ValueError("tip_type_table_index must be between 0 and 99")
+    if not 1 <= tip_length <= 1999:
+      raise ValueError("tip_length must be between 1 and 1999")
+    if not 1 <= maximum_tip_volume <= 56000:
+      raise ValueError("maximum_tip_volume must be between 1 and 56000")
 
     await self.send_command(
       module="C0",
@@ -612,7 +615,8 @@ class STARDriver(HamiltonLiquidHandler):
       serial_number: 4-character serial number string.
     """
 
-    assert len(serial_number) == 4, "serial number must be 4 chars long"
+    if len(serial_number) != 4:
+      raise ValueError("serial number must be 4 chars long")
 
     return await self.send_command(module="C0", command="SI", si=date, sn=serial_number)
 
@@ -630,7 +634,8 @@ class STARDriver(HamiltonLiquidHandler):
       verification_status: verification status.
     """
 
-    assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
+    if not 0 <= verification_subject <= 24:
+      raise ValueError("verification_subject must be between 0 and 24")
 
     return await self.send_command(
       module="C0",
@@ -738,8 +743,10 @@ class STARDriver(HamiltonLiquidHandler):
       data_stream: data stream (12 characters). Default <class 'str'>.
     """
 
-    assert 0 <= data_index <= 9, "data_index must be between 0 and 9"
-    assert len(data_stream) == 12, "data_stream must be 12 chars"
+    if not 0 <= data_index <= 9:
+      raise ValueError("data_index must be between 0 and 9")
+    if len(data_stream) != 12:
+      raise ValueError("data_stream must be 12 chars")
 
     return await self.send_command(
       module="C0",
@@ -777,7 +784,8 @@ class STARDriver(HamiltonLiquidHandler):
       verification_subject: verification subject. Must be between 0 and 24. Default 0.
     """
 
-    assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
+    if not 0 <= verification_subject <= 24:
+      raise ValueError("verification_subject must be between 0 and 24")
 
     # TODO: parse results.
     return await self.send_command(module="C0", command="RO", vo=verification_subject)
@@ -835,17 +843,16 @@ class STARDriver(HamiltonLiquidHandler):
         1) all arms left.  2) all arms right.
     """
 
-    assert 0 <= taken_area_identification_number <= 9999, (
-      "taken_area_identification_number must be between 0 and 9999"
-    )
-    assert 0 <= taken_area_left_margin <= 99, "taken_area_left_margin must be between 0 and 99"
-    assert 0 <= taken_area_left_margin_direction <= 1, (
-      "taken_area_left_margin_direction must be between 0 and 1"
-    )
-    assert 0 <= taken_area_size <= 50000, "taken_area_size must be between 0 and 50000"
-    assert 0 <= arm_preposition_mode_related_to_taken_areas <= 2, (
-      "arm_preposition_mode_related_to_taken_areas must be between 0 and 2"
-    )
+    if not 0 <= taken_area_identification_number <= 9999:
+      raise ValueError("taken_area_identification_number must be between 0 and 9999")
+    if not 0 <= taken_area_left_margin <= 99:
+      raise ValueError("taken_area_left_margin must be between 0 and 99")
+    if not 0 <= taken_area_left_margin_direction <= 1:
+      raise ValueError("taken_area_left_margin_direction must be between 0 and 1")
+    if not 0 <= taken_area_size <= 50000:
+      raise ValueError("taken_area_size must be between 0 and 50000")
+    if not 0 <= arm_preposition_mode_related_to_taken_areas <= 2:
+      raise ValueError("arm_preposition_mode_related_to_taken_areas must be between 0 and 2")
 
     return await self.send_command(
       module="C0",
@@ -865,9 +872,8 @@ class STARDriver(HamiltonLiquidHandler):
                                         Must be between 0 and 99. Default 0.
     """
 
-    assert 0 <= taken_area_identification_number <= 99, (
-      "taken_area_identification_number must be between 0 and 99"
-    )
+    if not 0 <= taken_area_identification_number <= 99:
+      raise ValueError("taken_area_identification_number must be between 0 and 99")
 
     return await self.send_command(
       module="C0",
@@ -887,22 +893,22 @@ class STARDriver(HamiltonLiquidHandler):
     configuration_data_3: Optional[str] = None,  # TODO: configuration byte
     instrument_size_in_slots_x_range: int = 54,
     auto_load_size_in_slots: int = 54,
-    tip_waste_x_position: int = 13400,
+    tip_waste_x_position: float = 1340.0,
     right_x_drive_configuration_byte_1: int = 0,
     right_x_drive_configuration_byte_2: int = 0,
-    minimal_iswap_collision_free_position: int = 3500,
-    maximal_iswap_collision_free_position: int = 11400,
-    left_x_arm_width: int = 3700,
-    right_x_arm_width: int = 3700,
+    minimal_iswap_collision_free_position: float = 350.0,
+    maximal_iswap_collision_free_position: float = 1140.0,
+    left_x_arm_width: float = 370.0,
+    right_x_arm_width: float = 370.0,
     num_pip_channels: int = 0,
     num_xl_channels: int = 0,
     num_robotic_channels: int = 0,
-    minimal_raster_pitch_of_pip_channels: int = 90,
-    minimal_raster_pitch_of_xl_channels: int = 360,
-    minimal_raster_pitch_of_robotic_channels: int = 360,
-    pip_maximal_y_position: int = 6065,
-    left_arm_minimal_y_position: int = 60,
-    right_arm_minimal_y_position: int = 60,
+    minimal_raster_pitch_of_pip_channels: float = 9.0,
+    minimal_raster_pitch_of_xl_channels: float = 36.0,
+    minimal_raster_pitch_of_robotic_channels: float = 36.0,
+    pip_maximal_y_position: float = 606.5,
+    left_arm_minimal_y_position: float = 6.0,
+    right_arm_minimal_y_position: float = 6.0,
   ):
     """Set instrument configuration
 
@@ -912,77 +918,73 @@ class STARDriver(HamiltonLiquidHandler):
       configuration_data_3: configuration data 3.
       instrument_size_in_slots_x_range: instrument size in slots (X range).
                                           Must be between 10 and 99. Default 54.
-      auto_load_size_in_slots: auto load size in slots. Must be between 10
+      auto_load_size_in_slots: auto load size in slots. Must be between 1
                                 and 54. Default 54.
-      tip_waste_x_position: tip waste X-position. Must be between 1000 and
-                            25000. Default 13400.
+      tip_waste_x_position: tip waste X-position [mm]. Must be between 100 and
+                            2500. Default 1340.
       right_x_drive_configuration_byte_1: right X drive configuration byte 1 (see
-        xl parameter bits). Must be between 0 and 1.  Default 0. # TODO: this.
+        xl parameter bits). Must be between 0 and 1. Default 0.
       right_x_drive_configuration_byte_2: right X drive configuration byte 2 (see
-        xn parameter bits). Must be between 0 and 1.  Default 0. # TODO: this.
-      minimal_iswap_collision_free_position: minimal iSWAP collision free position for
-        direct X access. For explanation of calculation see Fig. 4. Must be between 0 and 30000.
-        Default 3500.
-      maximal_iswap_collision_free_position: maximal iSWAP collision free position for
-        direct X access. For explanation of calculation see Fig. 4. Must be between 0 and 30000.
-        Default 11400
-      left_x_arm_width: width of left X arm [0.1 mm]. Must be between 0 and 9999. Default 3700.
-      right_x_arm_width: width of right X arm [0.1 mm]. Must be between 0 and 9999. Default 3700.
+        xn parameter bits). Must be between 0 and 1. Default 0.
+      minimal_iswap_collision_free_position: minimal iSWAP collision free position [mm].
+        Must be between 0 and 3000. Default 350.
+      maximal_iswap_collision_free_position: maximal iSWAP collision free position [mm].
+        Must be between 0 and 3000. Default 1140.
+      left_x_arm_width: width of left X arm [mm]. Must be between 0 and 999.9. Default 370.
+      right_x_arm_width: width of right X arm [mm]. Must be between 0 and 999.9. Default 370.
       num_pip_channels: number of PIP channels. Must be between 0 and 16. Default 0.
       num_xl_channels: number of XL channels. Must be between 0 and 8. Default 0.
       num_robotic_channels: number of Robotic channels. Must be between 0 and 8. Default 0.
-      minimal_raster_pitch_of_pip_channels: minimal raster pitch of PIP channels [0.1 mm]. Must
-                                            be between 0 and 999. Default 90.
-      minimal_raster_pitch_of_xl_channels: minimal raster pitch of XL channels [0.1 mm]. Must be
-                                            between 0 and 999. Default 360.
-      minimal_raster_pitch_of_robotic_channels: minimal raster pitch of Robotic channels [0.1 mm].
-                                                Must be between 0 and 999. Default 360.
-      pip_maximal_y_position: PIP maximal Y position [0.1 mm]. Must be between 0 and 9999.
-                              Default 6065.
-      left_arm_minimal_y_position: left arm minimal Y position [0.1 mm]. Must be between 0 and 9999.
-                                    Default 60.
-      right_arm_minimal_y_position: right arm minimal Y position [0.1 mm]. Must be between 0
-                                    and 9999. Default 60.
+      minimal_raster_pitch_of_pip_channels: minimal raster pitch of PIP channels [mm].
+                                            Must be between 0 and 99.9. Default 9.
+      minimal_raster_pitch_of_xl_channels: minimal raster pitch of XL channels [mm].
+                                            Must be between 0 and 99.9. Default 36.
+      minimal_raster_pitch_of_robotic_channels: minimal raster pitch of Robotic channels [mm].
+                                                Must be between 0 and 99.9. Default 36.
+      pip_maximal_y_position: PIP maximal Y position [mm]. Must be between 0 and 999.9.
+                              Default 606.5.
+      left_arm_minimal_y_position: left arm minimal Y position [mm]. Must be between 0 and 999.9.
+                                    Default 6.
+      right_arm_minimal_y_position: right arm minimal Y position [mm]. Must be between 0
+                                    and 999.9. Default 6.
     """
 
-    assert 10 <= instrument_size_in_slots_x_range <= 99, (
-      "instrument_size_in_slots_x_range must be between 10 and 99"
-    )
-    assert 1 <= auto_load_size_in_slots <= 54, "auto_load_size_in_slots must be between 1 and 54"
-    assert 1000 <= tip_waste_x_position <= 25000, "tip_waste_x_position must be between 1 and 25000"
-    assert 0 <= right_x_drive_configuration_byte_1 <= 1, (
-      "right_x_drive_configuration_byte_1 must be between 0 and 1"
-    )
-    assert 0 <= right_x_drive_configuration_byte_2 <= 1, (
-      "right_x_drive_configuration_byte_2 must be between 0 and  must1"
-    )
-    assert 0 <= minimal_iswap_collision_free_position <= 30000, (
-      "minimal_iswap_collision_free_position must be between 0 and 30000"
-    )
-    assert 0 <= maximal_iswap_collision_free_position <= 30000, (
-      "maximal_iswap_collision_free_position must be between 0 and 30000"
-    )
-    assert 0 <= left_x_arm_width <= 9999, "left_x_arm_width must be between 0 and 9999"
-    assert 0 <= right_x_arm_width <= 9999, "right_x_arm_width must be between 0 and 9999"
-    assert 0 <= num_pip_channels <= 16, "num_pip_channels must be between 0 and 16"
-    assert 0 <= num_xl_channels <= 8, "num_xl_channels must be between 0 and 8"
-    assert 0 <= num_robotic_channels <= 8, "num_robotic_channels must be between 0 and 8"
-    assert 0 <= minimal_raster_pitch_of_pip_channels <= 999, (
-      "minimal_raster_pitch_of_pip_channels must be between 0 and 999"
-    )
-    assert 0 <= minimal_raster_pitch_of_xl_channels <= 999, (
-      "minimal_raster_pitch_of_xl_channels must be between 0 and 999"
-    )
-    assert 0 <= minimal_raster_pitch_of_robotic_channels <= 999, (
-      "minimal_raster_pitch_of_robotic_channels must be between 0 and 999"
-    )
-    assert 0 <= pip_maximal_y_position <= 9999, "pip_maximal_y_position must be between 0 and 9999"
-    assert 0 <= left_arm_minimal_y_position <= 9999, (
-      "left_arm_minimal_y_position must be between 0 and 9999"
-    )
-    assert 0 <= right_arm_minimal_y_position <= 9999, (
-      "right_arm_minimal_y_position must be between 0 and 9999"
-    )
+    if not 10 <= instrument_size_in_slots_x_range <= 99:
+      raise ValueError("instrument_size_in_slots_x_range must be between 10 and 99")
+    if not 1 <= auto_load_size_in_slots <= 54:
+      raise ValueError("auto_load_size_in_slots must be between 1 and 54")
+    if not 100 <= tip_waste_x_position <= 2500:
+      raise ValueError("tip_waste_x_position must be between 100 and 2500")
+    if not 0 <= right_x_drive_configuration_byte_1 <= 1:
+      raise ValueError("right_x_drive_configuration_byte_1 must be between 0 and 1")
+    if not 0 <= right_x_drive_configuration_byte_2 <= 1:
+      raise ValueError("right_x_drive_configuration_byte_2 must be between 0 and 1")
+    if not 0 <= minimal_iswap_collision_free_position <= 3000:
+      raise ValueError("minimal_iswap_collision_free_position must be between 0 and 3000")
+    if not 0 <= maximal_iswap_collision_free_position <= 3000:
+      raise ValueError("maximal_iswap_collision_free_position must be between 0 and 3000")
+    if not 0 <= left_x_arm_width <= 999.9:
+      raise ValueError("left_x_arm_width must be between 0 and 999.9")
+    if not 0 <= right_x_arm_width <= 999.9:
+      raise ValueError("right_x_arm_width must be between 0 and 999.9")
+    if not 0 <= num_pip_channels <= 16:
+      raise ValueError("num_pip_channels must be between 0 and 16")
+    if not 0 <= num_xl_channels <= 8:
+      raise ValueError("num_xl_channels must be between 0 and 8")
+    if not 0 <= num_robotic_channels <= 8:
+      raise ValueError("num_robotic_channels must be between 0 and 8")
+    if not 0 <= minimal_raster_pitch_of_pip_channels <= 99.9:
+      raise ValueError("minimal_raster_pitch_of_pip_channels must be between 0 and 99.9")
+    if not 0 <= minimal_raster_pitch_of_xl_channels <= 99.9:
+      raise ValueError("minimal_raster_pitch_of_xl_channels must be between 0 and 99.9")
+    if not 0 <= minimal_raster_pitch_of_robotic_channels <= 99.9:
+      raise ValueError("minimal_raster_pitch_of_robotic_channels must be between 0 and 99.9")
+    if not 0 <= pip_maximal_y_position <= 999.9:
+      raise ValueError("pip_maximal_y_position must be between 0 and 999.9")
+    if not 0 <= left_arm_minimal_y_position <= 999.9:
+      raise ValueError("left_arm_minimal_y_position must be between 0 and 999.9")
+    if not 0 <= right_arm_minimal_y_position <= 999.9:
+      raise ValueError("right_arm_minimal_y_position must be between 0 and 999.9")
 
     return await self.send_command(
       module="C0",
@@ -992,22 +994,22 @@ class STARDriver(HamiltonLiquidHandler):
       ke=configuration_data_3,
       xt=instrument_size_in_slots_x_range,
       xa=auto_load_size_in_slots,
-      xw=tip_waste_x_position,
+      xw=round(tip_waste_x_position * 10),
       xr=right_x_drive_configuration_byte_1,
       xo=right_x_drive_configuration_byte_2,
-      xm=minimal_iswap_collision_free_position,
-      xx=maximal_iswap_collision_free_position,
-      xu=left_x_arm_width,
-      xv=right_x_arm_width,
+      xm=round(minimal_iswap_collision_free_position * 10),
+      xx=round(maximal_iswap_collision_free_position * 10),
+      xu=round(left_x_arm_width * 10),
+      xv=round(right_x_arm_width * 10),
       kp=num_pip_channels,
       kc=num_xl_channels,
       kr=num_robotic_channels,
-      ys=minimal_raster_pitch_of_pip_channels,
-      kl=minimal_raster_pitch_of_xl_channels,
-      km=minimal_raster_pitch_of_robotic_channels,
-      ym=pip_maximal_y_position,
-      yu=left_arm_minimal_y_position,
-      yx=right_arm_minimal_y_position,
+      ys=round(minimal_raster_pitch_of_pip_channels * 10),
+      kl=round(minimal_raster_pitch_of_xl_channels * 10),
+      km=round(minimal_raster_pitch_of_robotic_channels * 10),
+      ym=round(pip_maximal_y_position * 10),
+      yu=round(left_arm_minimal_y_position * 10),
+      yx=round(right_arm_minimal_y_position * 10),
     )
 
   async def pre_initialize_instrument(self):

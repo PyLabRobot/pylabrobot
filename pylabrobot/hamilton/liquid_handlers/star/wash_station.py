@@ -58,7 +58,8 @@ class STARWashStation:
         5 = ReReRe (dual chamber)
     """
 
-    assert 1 <= station <= 3, "station must be between 1 and 3"
+    if not 1 <= station <= 3:
+      raise ValueError("station must be between 1 and 3")
 
     resp = await self.driver.send_command(module="C0", command="ET", fmt="et#", ep=station)
     return STARWashStation.Type(resp["et"])
@@ -70,7 +71,8 @@ class STARWashStation:
       station: pump station number (1..3).
     """
 
-    assert 1 <= station <= 3, "station must be between 1 and 3"
+    if not 1 <= station <= 3:
+      raise ValueError("station must be between 1 and 3")
 
     return await self.driver.send_command(module="C0", command="EJ", ep=station)
 
@@ -99,9 +101,12 @@ class STARWashStation:
         change (for error handling only).
     """
 
-    assert 1 <= station <= 3, "station must be between 1 and 3"
-    assert 1 <= wash_fluid <= 2, "wash_fluid must be between 1 and 2"
-    assert 1 <= chamber <= 2, "chamber must be between 1 and 2"
+    if not 1 <= station <= 3:
+      raise ValueError("station must be between 1 and 3")
+    if not 1 <= wash_fluid <= 2:
+      raise ValueError("wash_fluid must be between 1 and 2")
+    if not 1 <= chamber <= 2:
+      raise ValueError("chamber must be between 1 and 2")
 
     # wash fluid <-> chamber connection
     connection = {(1, 2): 0, (1, 1): 1, (2, 1): 2, (2, 2): 3}[wash_fluid, chamber]
@@ -123,6 +128,7 @@ class STARWashStation:
       station: pump station number (1..3).
     """
 
-    assert 1 <= station <= 3, "station must be between 1 and 3"
+    if not 1 <= station <= 3:
+      raise ValueError("station must be between 1 and 3")
 
     return await self.driver.send_command(module="C0", command="EL", ep=station)

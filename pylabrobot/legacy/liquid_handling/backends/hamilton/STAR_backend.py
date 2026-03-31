@@ -8506,16 +8506,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.iswap.prepare_teaching()``."""
     return await self._new_iswap.prepare_teaching(
-      x_position=x_position,
+      x_position=x_position / 10,
       x_direction=x_direction,
-      y_position=y_position,
+      y_position=y_position / 10,
       y_direction=y_direction,
-      z_position=z_position,
+      z_position=z_position / 10,
       z_direction=z_direction,
       location=location,
-      hotel_depth=hotel_depth,
+      hotel_depth=hotel_depth / 10,
       grip_direction=grip_direction,
-      minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command,
+      minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command / 10,
       collision_control_level=collision_control_level,
       acceleration_index_high_acc=acceleration_index_high_acc,
       acceleration_index_low_acc=acceleration_index_low_acc,
@@ -8536,14 +8536,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.iswap.get_logic_position()``."""
     return await self._new_iswap.get_logic_position(
-      x_position=x_position,
+      x_position=x_position / 10,
       x_direction=x_direction,
-      y_position=y_position,
+      y_position=y_position / 10,
       y_direction=y_direction,
-      z_position=z_position,
+      z_position=z_position / 10,
       z_direction=z_direction,
       location=location,
-      hotel_depth=hotel_depth,
+      hotel_depth=hotel_depth / 10,
       grip_direction=grip_direction,
       collision_control_level=collision_control_level,
     )

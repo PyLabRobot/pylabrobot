@@ -48,7 +48,8 @@ def _ops_to_fw_positions(
   need a ``deck`` reference.  This mirrors HamiltonLiquidHandler._ops_to_fw_positions
   but is self-contained.
   """
-  assert use_channels == sorted(use_channels), "Channels must be sorted."
+  if use_channels != sorted(use_channels):
+    raise ValueError("Channels must be sorted.")
 
   x_positions: List[int] = []
   y_positions: List[int] = []
@@ -257,7 +258,8 @@ class STARPIPBackend(PIPBackend):
     if len(tips) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     ham_tip = tips.pop()
-    assert isinstance(ham_tip, HamiltonTip)
+    if not isinstance(ham_tip, HamiltonTip):
+      raise TypeError(f"Expected HamiltonTip, got {type(ham_tip).__name__}")
     ttti = await self.driver.request_or_assign_tip_type_index(ham_tip)
 
     # Z computations (absolute coordinates).
@@ -293,9 +295,12 @@ class STARPIPBackend(PIPBackend):
     # Range validation (matches legacy pick_up_tip assertions).
     _assert_range(x_positions, 0, 25000, "x_positions")
     _assert_range(y_positions, 0, 6500, "y_positions")
-    assert 0 <= begin_tip_pick_up_process <= 3600, "begin_tip_pick_up_process must be 0-3600"
-    assert 0 <= end_tip_pick_up_process <= 3600, "end_tip_pick_up_process must be 0-3600"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    if not 0 <= begin_tip_pick_up_process <= 3600:
+      raise ValueError("begin_tip_pick_up_process must be 0-3600")
+    if not 0 <= end_tip_pick_up_process <= 3600:
+      raise ValueError("end_tip_pick_up_process must be 0-3600")
+    if not 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600:
+      raise ValueError("minimum_traverse_height_at_beginning_of_a_command must be 0-3600")
 
     try:
       await self.driver.send_command(
@@ -382,10 +387,14 @@ class STARPIPBackend(PIPBackend):
     # Range validation (matches legacy discard_tip assertions).
     _assert_range(x_positions, 0, 25000, "x_positions")
     _assert_range(y_positions, 0, 6500, "y_positions")
-    assert 0 <= begin_tip_deposit_process <= 3600, "begin_tip_deposit_process must be 0-3600"
-    assert 0 <= end_tip_deposit_process <= 3600, "end_tip_deposit_process must be 0-3600"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
-    assert 0 <= z_position_at_end_of_a_command <= 3600
+    if not 0 <= begin_tip_deposit_process <= 3600:
+      raise ValueError("begin_tip_deposit_process must be 0-3600")
+    if not 0 <= end_tip_deposit_process <= 3600:
+      raise ValueError("end_tip_deposit_process must be 0-3600")
+    if not 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600:
+      raise ValueError("minimum_traverse_height_at_beginning_of_a_command must be 0-3600")
+    if not 0 <= z_position_at_end_of_a_command <= 3600:
+      raise ValueError("z_position_at_end_of_a_command must be 0-3600")
 
     try:
       await self.driver.send_command(
@@ -629,8 +638,10 @@ class STARPIPBackend(PIPBackend):
     _assert_range(aspiration_types, 0, 2, "aspiration_type")
     _assert_range(x_positions, 0, 25000, "x_positions")
     _assert_range(y_positions, 0, 6500, "y_positions")
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
-    assert 0 <= min_z_endpos <= 3600
+    if not 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600:
+      raise ValueError("minimum_traverse_height_at_beginning_of_a_command must be 0-3600")
+    if not 0 <= min_z_endpos <= 3600:
+      raise ValueError("min_z_endpos must be 0-3600")
     _assert_range([round(v * 10) for v in lld_search_height], 0, 3600, "lld_search_height")
     _assert_range([round(v * 10) for v in clot_detection_height], 0, 500, "clot_detection_height")
     _assert_range([round(v * 10) for v in liquid_surfaces_no_lld], 0, 3600, "liquid_surface_no_lld")
@@ -659,7 +670,8 @@ class STARPIPBackend(PIPBackend):
     _assert_range([round(v * 10) for v in mix_speed], 4, 5000, "mix_speed")
     _assert_range([round(v * 10) for v in mix_surface_following_distance], 0, 3600, "mix_surface_following_distance")
     _assert_range(limit_curve_index, 0, 999, "limit_curve_index")
-    assert 0 <= backend_params.recording_mode <= 2, "recording_mode must be between 0 and 2"
+    if not 0 <= backend_params.recording_mode <= 2:
+      raise ValueError("recording_mode must be between 0 and 2")
     # 2nd section aspiration range checks
     _assert_range([round(v * 10) for v in _fill(
       backend_params.retract_height_over_2nd_section_to_empty_tip, [0.0] * n)], 0, 3600,
@@ -951,8 +963,10 @@ class STARPIPBackend(PIPBackend):
     _assert_range([round(v * 10) for v in surface_following_distance], 0, 3600, "surface_following_distance")
     _assert_range([round(v * 10) for v in second_section_height], 0, 3600, "second_section_height")
     _assert_range([round(v * 10) for v in second_section_ratio], 0, 10000, "second_section_ratio")
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
-    assert 0 <= min_z_endpos <= 3600
+    if not 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600:
+      raise ValueError("minimum_traverse_height_at_beginning_of_a_command must be 0-3600")
+    if not 0 <= min_z_endpos <= 3600:
+      raise ValueError("min_z_endpos must be 0-3600")
     _assert_range([round(v * 10) for v in volumes], 0, 12500, "dispense_volumes")
     _assert_range([round(v * 10) for v in flow_rates], 4, 5000, "dispense_speed")
     _assert_range([round(v * 10) for v in cut_off_speed], 4, 5000, "cut_off_speed")
@@ -960,7 +974,8 @@ class STARPIPBackend(PIPBackend):
     _assert_range([round(v * 10) for v in transport_air_volume], 0, 500, "transport_air_volume")
     _assert_range([round(v * 10) for v in blow_out_air_volumes], 0, 9999, "blow_out_air_volume")
     _assert_range([m.value for m in lld_mode], 0, 4, "lld_mode")
-    assert 0 <= side_touch_off_distance <= 45, "side_touch_off_distance must be between 0 and 45"
+    if not 0 <= side_touch_off_distance <= 45:
+      raise ValueError("side_touch_off_distance must be between 0 and 45")
     _assert_range([round(v * 10) for v in dispense_position_above_z_touch_off], 0, 100, "dispense_position_above_z_touch_off")
     _assert_range(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
     _assert_range(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
@@ -972,7 +987,8 @@ class STARPIPBackend(PIPBackend):
     _assert_range([round(v * 10) for v in mix_speed], 4, 5000, "mix_speed")
     _assert_range([round(v * 10) for v in mix_surface_following_distance], 0, 3600, "mix_surface_following_distance")
     _assert_range(limit_curve_index, 0, 999, "limit_curve_index")
-    assert 0 <= backend_params.recording_mode <= 2, "recording_mode must be between 0 and 2"
+    if not 0 <= backend_params.recording_mode <= 2:
+      raise ValueError("recording_mode must be between 0 and 2")
 
     try:
       await self.driver.send_command(
@@ -1050,9 +1066,8 @@ class STARPIPBackend(PIPBackend):
     if self.driver.iswap is not None and not self.driver.iswap.parked:
       await self.driver.iswap.park()
 
-    assert 0 <= pipetting_channel_index < self.num_channels, (
-      "pipetting_channel_index must be between 0 and num_channels - 1"
-    )
+    if not 0 <= pipetting_channel_index < self.num_channels:
+      raise ValueError("pipetting_channel_index must be between 0 and num_channels - 1")
     # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
     pipetting_channel_index_fw = pipetting_channel_index + 1
 
@@ -1086,12 +1101,14 @@ class STARPIPBackend(PIPBackend):
     if self.driver.iswap is not None and not self.driver.iswap.parked:
       await self.driver.iswap.park()
 
-    assert 0 <= x_positions <= 2500, "x_positions must be between 0 and 2500"
-    assert 0 <= y_positions <= 650, "y_positions must be between 0 and 650"
-    assert 0 <= minimum_traverse_height_at_beginning_of_command <= 360, (
-      "minimum_traverse_height_at_beginning_of_command must be between 0 and 360"
-    )
-    assert 0 <= z_endpos <= 360, "z_endpos must be between 0 and 360"
+    if not 0 <= x_positions <= 2500:
+      raise ValueError("x_positions must be between 0 and 2500")
+    if not 0 <= y_positions <= 650:
+      raise ValueError("y_positions must be between 0 and 650")
+    if not 0 <= minimum_traverse_height_at_beginning_of_command <= 360:
+      raise ValueError("minimum_traverse_height_at_beginning_of_command must be between 0 and 360")
+    if not 0 <= z_endpos <= 360:
+      raise ValueError("z_endpos must be between 0 and 360")
 
     return await self.driver.send_command(
       module="C0",
@@ -1306,17 +1323,20 @@ class STARPIPBackend(PIPBackend):
     end_fw = round(end_of_tip_deposit_process * 10)
     z_end_fw = round(z_position_at_end_of_a_command * 10)
 
-    assert all(0 <= xp <= 25000 for xp in x_positions_fw), (
-      "x_positions must be between 0 and 2500 mm"
-    )
-    assert all(0 <= yp <= 6500 for yp in y_positions_fw), (
-      "y_positions must be between 0 and 650 mm"
-    )
-    assert 0 <= begin_fw <= 3600, "begin_of_tip_deposit_process must be between 0 and 360 mm"
-    assert 0 <= end_fw <= 3600, "end_of_tip_deposit_process must be between 0 and 360 mm"
-    assert 0 <= z_end_fw <= 3600, "z_position_at_end_of_a_command must be between 0 and 360 mm"
-    assert 0 <= tip_type <= 99, "tip_type must be between 0 and 99"
-    assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
+    if not all(0 <= xp <= 25000 for xp in x_positions_fw):
+      raise ValueError("x_positions must be between 0 and 2500 mm")
+    if not all(0 <= yp <= 6500 for yp in y_positions_fw):
+      raise ValueError("y_positions must be between 0 and 650 mm")
+    if not 0 <= begin_fw <= 3600:
+      raise ValueError("begin_of_tip_deposit_process must be between 0 and 360 mm")
+    if not 0 <= end_fw <= 3600:
+      raise ValueError("end_of_tip_deposit_process must be between 0 and 360 mm")
+    if not 0 <= z_end_fw <= 3600:
+      raise ValueError("z_position_at_end_of_a_command must be between 0 and 360 mm")
+    if not 0 <= tip_type <= 99:
+      raise ValueError("tip_type must be between 0 and 99")
+    if not 0 <= discarding_method <= 1:
+      raise ValueError("discarding_method must be between 0 and 1")
 
     return await self.driver.send_command(
       module="C0",
@@ -1342,9 +1362,10 @@ class STARPIPBackend(PIPBackend):
       channel: 0-indexed channel index.
       z: Target Z position in mm.
     """
-    assert 0 <= channel < self.driver.num_channels, \
-      f"channel must be between 0 and {self.driver.num_channels - 1}"
-    assert 0 <= z <= 334.7, "z must be between 0 and 334.7 mm"
+    if not 0 <= channel < self.driver.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.driver.num_channels - 1}")
+    if not 0 <= z <= 334.7:
+      raise ValueError("z must be between 0 and 334.7 mm")
 
     return await self.driver.send_command(
       module="C0",
@@ -1417,9 +1438,8 @@ class STARPIPBackend(PIPBackend):
         )
       ys = [y + offset.y for offset in offsets]
     else:
-      assert len(set(w.get_location_wrt(deck).x for w in wells)) == 1, (
-        "Wells must be on the same column"
-      )
+      if len(set(w.get_location_wrt(deck).x for w in wells)) != 1:
+        raise ValueError("Wells must be on the same column")
       absolute_center = wells[0].get_location_wrt(deck, "c", "c", "cavity_bottom")
       x = absolute_center.x
       ys = [well.get_location_wrt(deck, x="c", y="c").y for well in wells]
@@ -1482,9 +1502,11 @@ class STARPIPBackend(PIPBackend):
       wells = [wells]
 
     plates = set(well.parent for well in wells)
-    assert len(plates) == 1, "All wells must be in the same plate"
+    if len(plates) != 1:
+      raise ValueError("All wells must be in the same plate")
     plate = plates.pop()
-    assert plate is not None
+    if plate is None:
+      raise ValueError("Wells must have a parent plate")
 
     z_location = plate.get_location_wrt(deck, z="top").z
 

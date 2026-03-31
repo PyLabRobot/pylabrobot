@@ -164,7 +164,8 @@ class STARAutoload:
         True if a carrier is detected at the given track; False otherwise.
     """
 
-    assert 1 <= track <= 54, "track must be between 1 and 54"
+    if not (1 <= track <= 54):
+      raise ValueError("track must be between 1 and 54")
 
     track_str = str(track).zfill(2)
 
@@ -174,7 +175,8 @@ class STARAutoload:
       fmt="ct#",
       cp=track_str,
     )
-    assert resp is not None
+    if resp is None:
+      raise RuntimeError("Expected a response from send_command for CT, got None")
 
     return int(resp["ct"]) == 1
 
@@ -183,7 +185,8 @@ class STARAutoload:
   async def move_to_track(self, track: int):
     """Move autoload to specific track position (I0:XP)."""
 
-    assert 1 <= track <= 54, "track must be between 1 and 54"
+    if not (1 <= track <= 54):
+      raise ValueError("track must be between 1 and 54")
 
     await self.move_to_safe_z_position()
 
@@ -257,12 +260,30 @@ class STARAutoload:
     Optionally reads container barcodes during the load.
     """
 
-    assert barcode_reading_direction in ["horizontal", "vertical"]
-    assert 0 <= reading_position_of_first_barcode <= 470
-    assert 0 <= no_container_per_carrier <= 32
-    assert 0 <= distance_between_containers <= 470
-    assert 0.1 <= width_of_reading_window <= 99.9
-    assert 1.5 <= reading_speed <= 160.0
+    if barcode_reading_direction not in ["horizontal", "vertical"]:
+      raise ValueError(
+        f"barcode_reading_direction must be 'horizontal' or 'vertical', "
+        f"got {barcode_reading_direction!r}"
+      )
+    if not (0 <= reading_position_of_first_barcode <= 470):
+      raise ValueError(
+        f"reading_position_of_first_barcode must be between 0 and 470, "
+        f"got {reading_position_of_first_barcode}"
+      )
+    if not (0 <= no_container_per_carrier <= 32):
+      raise ValueError(
+        f"no_container_per_carrier must be between 0 and 32, got {no_container_per_carrier}"
+      )
+    if not (0 <= distance_between_containers <= 470):
+      raise ValueError(
+        f"distance_between_containers must be between 0 and 470, got {distance_between_containers}"
+      )
+    if not (0.1 <= width_of_reading_window <= 99.9):
+      raise ValueError(
+        f"width_of_reading_window must be between 0.1 and 99.9, got {width_of_reading_window}"
+      )
+    if not (1.5 <= reading_speed <= 160.0):
+      raise ValueError(f"reading_speed must be between 1.5 and 160.0, got {reading_speed}")
 
     barcode_reading_direction_dict = {
       "vertical": "0",
@@ -271,7 +292,8 @@ class STARAutoload:
 
     if barcode_symbology is None:
       barcode_symbology = self._default_1d_symbology
-    assert barcode_symbology is not None
+    if barcode_symbology is None:
+      raise RuntimeError("barcode_symbology is None after fallback to default")
 
     no_container_per_carrier_str = str(no_container_per_carrier).zfill(2)
     reading_position_of_first_barcode_str = str(
@@ -309,17 +331,19 @@ class STARAutoload:
     if park_autoload_after:
       await self.park()
 
-    assert isinstance(resp, str), f"Response is not a string: {resp!r}"
+    if not isinstance(resp, str):
+      raise RuntimeError(f"Expected a string response from CL command, got {resp!r}")
 
     barcode_dict: Dict[int, Optional[Barcode]] = {}
 
     if barcode_reading:
       resp_list = resp.split("bb/")[-1].split("/")  # remove header
 
-      assert len(resp_list) == no_container_per_carrier, (
-        f"Number of barcodes read ({len(resp_list)}) does not match "
-        f"expected number ({no_container_per_carrier})"
-      )
+      if len(resp_list) != no_container_per_carrier:
+        raise ValueError(
+          f"Number of barcodes read ({len(resp_list)}) does not match "
+          f"expected number ({no_container_per_carrier})"
+        )
       for i in range(0, no_container_per_carrier):
         if resp_list[i] == "00":
           barcode_dict[i] = None
@@ -341,7 +365,8 @@ class STARAutoload:
     if barcode_symbology is None:
       barcode_symbology = self._default_1d_symbology
 
-    assert barcode_symbology is not None
+    if barcode_symbology is None:
+      raise RuntimeError("barcode_symbology is None after fallback to default")
 
     await self.driver.send_command(
       module="C0",
@@ -369,14 +394,22 @@ class STARAutoload:
     if barcode_symbology is None:
       barcode_symbology = self._default_1d_symbology
 
-    assert barcode_symbology is not None
+    if barcode_symbology is None:
+      raise RuntimeError("barcode_symbology is None after fallback to default")
 
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    assert 1 <= int(carrier_end_rail_str) <= 54
-    assert 0 <= barcode_position <= 470
-    assert 0.1 <= barcode_reading_window_width <= 99.9
-    assert 1.5 <= reading_speed <= 160.0
+    if not (1 <= int(carrier_end_rail_str) <= 54):
+      raise ValueError(f"carrier_end_rail must be between 1 and 54, got {carrier_end_rail}")
+    if not (0 <= barcode_position <= 470):
+      raise ValueError(f"barcode_position must be between 0 and 470, got {barcode_position}")
+    if not (0.1 <= barcode_reading_window_width <= 99.9):
+      raise ValueError(
+        f"barcode_reading_window_width must be between 0.1 and 99.9, "
+        f"got {barcode_reading_window_width}"
+      )
+    if not (1.5 <= reading_speed <= 160.0):
+      raise ValueError(f"reading_speed must be between 1.5 and 160.0, got {reading_speed}")
 
     try:
       resp = await self.driver.send_command(
@@ -435,7 +468,8 @@ class STARAutoload:
     if barcode_symbology is None:
       barcode_symbology = self._default_1d_symbology
 
-    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+    if not (1 <= carrier_end_rail <= 54):
+      raise ValueError("carrier loading rail must be between 1 and 54")
 
     # Determine presence of carrier at defined position
     presence_check = await self.request_presence_of_single_carrier_on_loading_tray(carrier_end_rail)
@@ -493,7 +527,8 @@ class STARAutoload:
       carrier_end_rail: End rail position of the carrier (1-54).
     """
 
-    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+    if not (1 <= carrier_end_rail <= 54):
+      raise ValueError("carrier loading rail must be between 1 and 54")
 
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
@@ -518,8 +553,10 @@ class STARAutoload:
       blink_pattern: Blinking if True, steady otherwise. Length 54.
     """
 
-    assert len(bit_pattern) == 54, "bit pattern must be length 54"
-    assert len(blink_pattern) == 54, "bit pattern must be length 54"
+    if len(bit_pattern) != 54:
+      raise ValueError(f"bit_pattern must be length 54, got {len(bit_pattern)}")
+    if len(blink_pattern) != 54:
+      raise ValueError(f"blink_pattern must be length 54, got {len(blink_pattern)}")
 
     def pattern2hex(pattern: List[bool]) -> str:
       bit_string = "".join(["1" if x else "0" for x in pattern])

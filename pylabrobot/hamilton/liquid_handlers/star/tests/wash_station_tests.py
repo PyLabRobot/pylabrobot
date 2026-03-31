@@ -39,11 +39,11 @@ class TestSTARWashStationCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_request_settings_invalid_station_0(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.request_settings(station=0)
 
   async def test_request_settings_invalid_station_4(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.request_settings(station=4)
 
   # -- initialize_valves ------------------------------------------------------
@@ -67,11 +67,11 @@ class TestSTARWashStationCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_initialize_valves_invalid_station_0(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.initialize_valves(station=0)
 
   async def test_initialize_valves_invalid_station_4(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.initialize_valves(station=4)
 
   # -- fill_chamber -----------------------------------------------------------
@@ -158,27 +158,27 @@ class TestSTARWashStationCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_fill_chamber_invalid_station_0(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.fill_chamber(station=0)
 
   async def test_fill_chamber_invalid_station_4(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.fill_chamber(station=4)
 
   async def test_fill_chamber_invalid_wash_fluid_0(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.fill_chamber(wash_fluid=0)
 
   async def test_fill_chamber_invalid_wash_fluid_3(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.fill_chamber(wash_fluid=3)
 
   async def test_fill_chamber_invalid_chamber_0(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.fill_chamber(chamber=0)
 
   async def test_fill_chamber_invalid_chamber_3(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.fill_chamber(chamber=3)
 
   # -- drain ------------------------------------------------------------------
@@ -202,9 +202,9 @@ class TestSTARWashStationCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_drain_invalid_station_0(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.drain(station=0)
 
   async def test_drain_invalid_station_4(self):
-    with self.assertRaises(AssertionError):
+    with self.assertRaises(ValueError):
       await self.ws.drain(station=4)

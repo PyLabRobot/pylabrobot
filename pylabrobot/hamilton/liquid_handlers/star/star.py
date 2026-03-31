@@ -85,7 +85,8 @@ class STAR(Device):
       await self.iswap.backend.park()
 
     core_grippers_resource = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers_resource, HamiltonCoreGrippers)
+    if not isinstance(core_grippers_resource, HamiltonCoreGrippers):
+      raise TypeError("core_grippers resource must be HamiltonCoreGrippers")
 
     back_channel = front_channel - 1
     loc = core_grippers_resource.get_absolute_location()
