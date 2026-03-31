@@ -9,9 +9,9 @@ import unittest.mock
 from unittest.mock import AsyncMock, call
 
 from pylabrobot.liquid_handling.backends.tecan.air_evo_backend import (
+  ZAAPMOTION_CONFIG,
   AirEVOBackend,
   ZaapMotion,
-  ZAAPMOTION_CONFIG,
 )
 from pylabrobot.liquid_handling.backends.tecan.EVO_backend import LiHa
 from pylabrobot.liquid_handling.standard import Pickup
@@ -32,7 +32,8 @@ class AirEVOTestBase(unittest.IsolatedAsyncioTestCase):
     super().setUp()
 
     self.evo = AirEVOBackend(diti_count=8)
-    self.evo.send_command = AsyncMock()
+    self.mock_send = AsyncMock()
+    self.evo.send_command = self.mock_send  # type: ignore[method-assign]
 
     async def send_command(module, command, params=None, **kwargs):
       if command == "RPX":
@@ -53,12 +54,12 @@ class AirEVOTestBase(unittest.IsolatedAsyncioTestCase):
         return {"data": []}
       return {"data": []}
 
-    self.evo.send_command.side_effect = send_command
+    self.mock_send.side_effect = send_command
 
     self.deck = EVO150Deck()
     self.evo.set_deck(self.deck)
 
-    self.evo.setup = AsyncMock()
+    self.evo.setup = AsyncMock()  # type: ignore[method-assign]
     self.evo._num_channels = 8
     self.evo._x_range = 9866
     self.evo._y_range = 2833
@@ -78,7 +79,7 @@ class AirEVOTestBase(unittest.IsolatedAsyncioTestCase):
     self.plate_carrier[0] = self.plate = Microplate_96_Well(name="plate")
     self.deck.assign_child_resource(self.plate_carrier, rails=25)
 
-    self.evo.send_command.reset_mock()
+    self.mock_send.reset_mock()
 
 
 class ConversionFactorTests(AirEVOTestBase):
@@ -169,16 +170,16 @@ class ForceModeSFRTests(AirEVOTestBase):
     await self.evo._zaapmotion_force_on()
 
     # Should send SFR to all 8 tips, then SFP1 to all 8 tips
-    sfr_calls = [c for c in self.evo.send_command.call_args_list if "SFR133120" in str(c)]
-    sfp_calls = [c for c in self.evo.send_command.call_args_list if "SFP1" in str(c)]
+    sfr_calls = [c for c in self.mock_send.call_args_list if "SFR133120" in str(c)]
+    sfp_calls = [c for c in self.mock_send.call_args_list if "SFP1" in str(c)]
     self.assertEqual(len(sfr_calls), 8)
     self.assertEqual(len(sfp_calls), 8)
 
   async def test_force_off_sends_sfr_and_sdp(self):
     await self.evo._zaapmotion_force_off()
 
-    sfr_calls = [c for c in self.evo.send_command.call_args_list if "SFR3752" in str(c)]
-    sdp_calls = [c for c in self.evo.send_command.call_args_list if "SDP1400" in str(c)]
+    sfr_calls = [c for c in self.mock_send.call_args_list if "SFR3752" in str(c)]
+    sdp_calls = [c for c in self.mock_send.call_args_list if "SDP1400" in str(c)]
     self.assertEqual(len(sfr_calls), 8)
     self.assertEqual(len(sdp_calls), 8)
 
@@ -199,7 +200,7 @@ class InitSkipTests(AirEVOTestBase):
         return {"data": ["GGGAAAAAAAA"]}
       return {"data": []}
 
-    self.evo.send_command.side_effect = send_cmd
+    self.mock_send.side_effect = send_cmd
     result = await self.evo._is_initialized()
     self.assertFalse(result)
 
@@ -211,7 +212,7 @@ class InitSkipTests(AirEVOTestBase):
         return {"data": ["GGGGGGGGGGG"]}
       return {"data": []}
 
-    self.evo.send_command.side_effect = send_cmd
+    self.mock_send.side_effect = send_cmd
     result = await self.evo._is_initialized()
     self.assertFalse(result)
 
@@ -223,7 +224,7 @@ class InitSkipTests(AirEVOTestBase):
         return {"data": ["@@@YYYYYYY@"]}
       return {"data": []}
 
-    self.evo.send_command.side_effect = send_cmd
+    self.mock_send.side_effect = send_cmd
     result = await self.evo._is_initialized()
     self.assertTrue(result)
 
@@ -248,7 +249,7 @@ class ZaapMotionConfigTests(AirEVOTestBase):
     # RCS returned OK for all tips, so no config commands should be sent
     config_calls = [
       c
-      for c in self.evo.send_command.call_args_list
+      for c in self.mock_send.call_args_list
       if any(cfg_cmd in str(c) for cfg_cmd in ["CFE", "CMTBLDC", "WRP"])
     ]
     self.assertEqual(len(config_calls), 0)
@@ -256,8 +257,8 @@ class ZaapMotionConfigTests(AirEVOTestBase):
   async def test_safety_module_sends_spn_sps3(self):
     await self.evo._setup_safety_module()
 
-    self.evo.send_command.assert_any_call("O1", command="SPN")
-    self.evo.send_command.assert_any_call("O1", command="SPS3")
+    self.mock_send.assert_any_call("O1", command="SPN")
+    self.mock_send.assert_any_call("O1", command="SPS3")
 
 
 class PickUpTipsAirTests(AirEVOTestBase):
@@ -274,7 +275,7 @@ class PickUpTipsAirTests(AirEVOTestBase):
     # Check that SEP used Air LiHa speed factor (70 * 213 = 14910)
     sep_calls = [
       c
-      for c in self.evo.send_command.call_args_list
+      for c in self.mock_send.call_args_list
       if c
       == call(module="C5", command="SEP", params=[14910, None, None, None, None, None, None, None])
     ]
@@ -283,7 +284,7 @@ class PickUpTipsAirTests(AirEVOTestBase):
     # Check that PPR used Air LiHa steps/uL (10 * 106.4 = 1064)
     ppr_calls = [
       c
-      for c in self.evo.send_command.call_args_list
+      for c in self.mock_send.call_args_list
       if c
       == call(module="C5", command="PPR", params=[1064, None, None, None, None, None, None, None])
     ]

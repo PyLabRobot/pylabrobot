@@ -454,8 +454,8 @@ class AirEVOBackend(EVOBackend):
 
     # Y-spacing: use the plate's well pitch (item_dy), not individual well size
     plate = ops[0].resource.parent
-    if hasattr(plate, "item_dy"):
-      ys = int(plate.item_dy * 10)
+    if plate is not None and hasattr(plate, "item_dy"):
+      ys = int(plate.item_dy * 10)  # type: ignore[union-attr]
     else:
       ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
@@ -465,7 +465,7 @@ class AirEVOBackend(EVOBackend):
         continue
       if not isinstance(par, TecanPlate):
         raise ValueError(f"Operation is not supported by resource {par}.")
-      zadd[channel] = round(ops[i].volume / par.area * 10)
+      zadd[channel] = round(ops[i].volume / par.area * 10)  # type: ignore[call-overload]
 
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
@@ -479,7 +479,7 @@ class AirEVOBackend(EVOBackend):
     first_par = ops[0].resource.parent
     if isinstance(first_par, _TP):
       z_travel = [self._z_range] * self.num_channels
-      z_aspirate = [None] * self.num_channels
+      z_aspirate: List[Optional[int]] = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
         z_aspirate[channel] = int(first_par.z_start)
     else:
@@ -548,8 +548,8 @@ class AirEVOBackend(EVOBackend):
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
     plate = ops[0].resource.parent
-    if hasattr(plate, "item_dy"):
-      ys = int(plate.item_dy * 10)
+    if plate is not None and hasattr(plate, "item_dy"):
+      ys = int(plate.item_dy * 10)  # type: ignore[union-attr]
     else:
       ys = int(ops[0].resource.get_absolute_size_y() * 10)
 
