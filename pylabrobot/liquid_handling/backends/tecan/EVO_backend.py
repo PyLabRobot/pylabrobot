@@ -184,6 +184,10 @@ class EVOBackend(TecanLiquidHandler):
   MCA = "W1"
   PNP = "W2"
 
+  # Syringe LiHa conversion factors (overridden by AirEVOBackend)
+  STEPS_PER_UL = 3.0
+  SPEED_FACTOR = 6.0
+
   def __init__(
     self,
     diti_count: int = 0,
@@ -1312,9 +1316,7 @@ class LiHa(EVOArm):
     """
     await self.backend.send_command(module=self.module, command="PPA", params=positions)
 
-  async def set_disposable_tip_params(
-    self, mode: int, z_discard: int, z_retract: int
-  ) -> None:
+  async def set_disposable_tip_params(self, mode: int, z_discard: int, z_retract: int) -> None:
     """Set disposable tip discard parameters (SDT).
 
     Args:
