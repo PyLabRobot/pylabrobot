@@ -397,12 +397,12 @@ class HamiltonTCPClient:
     self,
     host: str,
     port: int,
-    read_timeout: float = 30.0,
+    read_timeout: float = 300.0,
     write_timeout: float = 30.0,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
     detailed_errors: bool = True,
-    connection_timeout: int = 300,
+    connection_timeout: int = 600,
   ):
     """Initialize the Hamilton TCP client.
 

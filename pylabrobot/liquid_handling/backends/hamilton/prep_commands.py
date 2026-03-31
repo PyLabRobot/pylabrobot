@@ -32,6 +32,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   Struct,
   StructArray,
   U8Array,
+  U32Array,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   Enum as WEnum,
@@ -129,6 +130,39 @@ class CalibrationSiteInfo:
   width: float
   height: float
   post: bool
+
+
+@dataclass(frozen=True)
+class ChannelHardwareConfigInfo:
+  """Per-channel hardware config from MLPrepCalibration.GetChannelHardwareConfiguration."""
+
+  channel: int  # ChannelIndex enum value
+  hardware: int  # Hardware type enum value
+
+
+@dataclass(frozen=True)
+class ChannelCalibrationValuesInfo:
+  """Per-channel calibration values from MLPrepCalibration.GetCalibrationValues."""
+
+  index: int  # ChannelIndex enum value
+  y_offset: float
+  z_offset: float
+  squeeze_position: int
+  z_touchoff: int
+  pressure_shift: int
+  pressure_monitoring_shift: int
+  dispenser_return_distance: float
+  z_tip_height: float
+  core_ii: bool
+
+
+@dataclass(frozen=True)
+class CalibrationValues:
+  """Full calibration values from MLPrepCalibration.GetCalibrationValues."""
+
+  independent_offset_x: float
+  mph_offset_x: float
+  channel_values: Tuple["ChannelCalibrationValuesInfo", ...]
 
 
 @dataclass(frozen=True)
@@ -1671,6 +1705,30 @@ class _CalibrationSiteDefinitionWire:
 
 
 @dataclass
+class _ChannelHardwareConfigWire:
+  """Wire shape for ChannelHardwareConfig (GetChannelHardwareConfiguration element)."""
+
+  channel: WEnum  # ChannelIndex
+  hardware: WEnum  # Hardware type enum (interface 2, id 1)
+
+
+@dataclass
+class _ChannelCalibrationValuesWire:
+  """Wire shape for ChannelCalibrationValues (GetCalibrationValues element)."""
+
+  index: WEnum  # ChannelIndex
+  y_offset: F32
+  z_offset: F32
+  squeeze_position: U32
+  z_touchoff: U32
+  pressure_shift: U32
+  pressure_monitoring_shift: U32
+  dispenser_return_distance: F32
+  z_tip_height: F32
+  core_ii: PaddedBool
+
+
+@dataclass
 class _WasteSiteDefinitionWire:
   """Wire shape for one WasteSiteDefinition (GetWasteSiteDefinitions element)."""
 
@@ -1836,3 +1894,178 @@ class PrepGetPresentChannels(_PrepStatusQuery):
   @dataclass(frozen=True)
   class Response:
     channels: EnumArray  # list of ints: map to ChannelIndex for present channels
+
+
+# -----------------------------------------------------------------------------
+# MLPrepCalibration commands
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class PrepBeginCalibration(PrepCommand):
+  """BeginCalibration (cmd=1, dest=MLPrepCalibration). Enter calibration mode."""
+
+  command_id = 1
+
+
+@dataclass
+class PrepCancelCalibration(PrepCommand):
+  """CancelCalibration (cmd=2, dest=MLPrepCalibration). Cancel active calibration session."""
+
+  command_id = 2
+
+
+@dataclass
+class PrepCalibrationInitialize(PrepCommand):
+  """CalibrationInitialize (cmd=5, dest=MLPrepCalibration). Initialize calibration hardware."""
+
+  command_id = 5
+
+
+@dataclass
+class NeedleDefinition:
+  """Wire shape for NeedleDefinition (MLPrepCalibration local struct, id=2).
+
+  When default_values=True the firmware uses stored defaults for all fields.
+  TipDefinition is nested (global pool source_id=1, ref_id=8).
+  """
+
+  default_values: PaddedBool
+  x_position: F32
+  y_position: F32
+  z_start: F32
+  z_stop: F32
+  tip_definition: Annotated[TipDefinition, Struct()]
+  tip_mask: U32
+
+  @classmethod
+  def defaults(cls) -> "NeedleDefinition":
+    """Return an all-defaults instance (firmware fills in stored values)."""
+    return cls(
+      default_values=True,
+      x_position=0.0,
+      y_position=0.0,
+      z_start=0.0,
+      z_stop=0.0,
+      tip_definition=TipDefinition(
+        default_values=True, id=0, volume=0.0, length=0.0,
+        tip_type=0, has_filter=False, is_needle=False, is_tool=False, label="",
+      ),
+      tip_mask=0,
+    )
+
+
+@dataclass
+class PrepSelfCalibrate(PrepCommand):
+  """SelfCalibrate (cmd=6, dest=MLPrepCalibration).
+
+  Runs a full self-calibration sequence. Set individual booleans to select
+  which calibration phases to run. Pass NeedleDefinition.defaults() to use
+  firmware-stored needle parameters.
+  """
+
+  command_id = 6
+  site_index: U32
+  channels: WEnum  # ChannelIndex
+  axis: PaddedBool
+  pressure: PaddedBool
+  touchoff: PaddedBool
+  needle: Annotated[NeedleDefinition, Struct()]
+
+
+@dataclass
+class PrepCalibrateXAxis(PrepCommand):
+  """CalibrateXAxis (cmd=7, dest=MLPrepCalibration). Returns offset: F32."""
+
+  command_id = 7
+  site_index: U32
+  channel: WEnum  # ChannelIndex
+
+  @dataclass(frozen=True)
+  class Response:
+    offset: F32
+
+
+@dataclass
+class PrepCalibrateYAxis(PrepCommand):
+  """CalibrateYAxis (cmd=8, dest=MLPrepCalibration). Returns offset: F32."""
+
+  command_id = 8
+  site_index: U32
+  channel: WEnum  # ChannelIndex
+
+  @dataclass(frozen=True)
+  class Response:
+    offset: F32
+
+
+@dataclass
+class PrepCalibrateZAxis(PrepCommand):
+  """CalibrateZAxis (cmd=9, dest=MLPrepCalibration). Returns offset: F32."""
+
+  command_id = 9
+  site_index: U32
+  channel: WEnum  # ChannelIndex
+
+  @dataclass(frozen=True)
+  class Response:
+    offset: F32
+
+
+@dataclass
+class PrepCalibrateSqueeze(PrepCommand):
+  """CalibrateSqueeze (cmd=14, dest=MLPrepCalibration). Returns position: U32."""
+
+  command_id = 14
+  channel: WEnum  # ChannelIndex
+
+  @dataclass(frozen=True)
+  class Response:
+    position: U32
+
+
+@dataclass
+class PrepCalibrateSqueezeTips(PrepCommand):
+  """CalibrateSqueezeTips (cmd=15, dest=MLPrepCalibration).
+
+  Takes per-channel TipPositionParameters (same struct as pick_up_tips) and
+  returns per-channel squeeze positions as a list of u32.
+  """
+
+  command_id = 15
+  channels: Annotated[list[TipPositionParameters], StructArray()]
+
+  @dataclass(frozen=True)
+  class Response:
+    positions: U32Array
+
+
+@dataclass
+class PrepGetCalibrationValues(_PrepStatusQuery):
+  """GetCalibrationValues (cmd=16, dest=MLPrepCalibration).
+
+  Returns independentOffsetX (F32), mphOffsetX (F32), and per-channel
+  calibration values as a StructArray of ChannelCalibrationValues.
+  """
+
+  command_id = 16
+
+  @dataclass(frozen=True)
+  class Response:
+    independent_offset_x: F32
+    mph_offset_x: F32
+    channel_values: Annotated[list[_ChannelCalibrationValuesWire], StructArray()]
+
+
+@dataclass
+class PrepGetChannelHardwareConfiguration(_PrepStatusQuery):
+  """GetChannelHardwareConfiguration (cmd=24, dest=MLPrepCalibration).
+
+  Response is a StructArray of ChannelHardwareConfig: Channel (enum) + Hardware (enum).
+  """
+
+  command_id = 24
+
+  @dataclass(frozen=True)
+  class Response:
+    channels: Annotated[list[_ChannelHardwareConfigWire], StructArray()]

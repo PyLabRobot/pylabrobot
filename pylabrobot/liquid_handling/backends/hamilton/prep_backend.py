@@ -204,6 +204,7 @@ class PrepBackend(LiquidHandlerBackend):
     "mlprep": InterfaceSpec("MLPrepRoot.MLPrep", True, True),
     "pipettor": InterfaceSpec("MLPrepRoot.PipettorRoot.Pipettor", True, True),
     "coordinator": InterfaceSpec("MLPrepRoot.ChannelCoordinator", True, True),
+    "calibration": InterfaceSpec("MLPrepRoot.MLPrepCalibration", False, True),
     "deck_config": InterfaceSpec("MLPrepRoot.MLPrepCalibration.DeckConfiguration", True, True),
     "mph": InterfaceSpec("MLPrepRoot.MphRoot.MPH", False, True),
     "mlprep_service": InterfaceSpec("MLPrepRoot.MLPrepService", False, True),
@@ -703,6 +704,202 @@ class PrepBackend(LiquidHandlerBackend):
     if result is None:
       return False
     return bool(result.value)
+
+  # ---------------------------------------------------------------------------
+  # MLPrepCalibration commands
+  # ---------------------------------------------------------------------------
+
+  async def begin_calibration(self) -> None:
+    """Enter calibration mode (BeginCalibration, cmd=1). Must be called before axis calibration commands."""
+    await self.client.send_command(
+      PrepCmd.PrepBeginCalibration(dest=await self._require("calibration"))
+    )
+
+  async def cancel_calibration(self) -> None:
+    """Cancel an active calibration session (CancelCalibration, cmd=2)."""
+    await self.client.send_command(
+      PrepCmd.PrepCancelCalibration(dest=await self._require("calibration"))
+    )
+
+  async def calibration_initialize(self) -> None:
+    """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
+    await self.client.send_command(
+      PrepCmd.PrepCalibrationInitialize(dest=await self._require("calibration"))
+    )
+
+  async def self_calibrate(
+    self,
+    site_index: int = 0,
+    channel: PrepCmd.ChannelIndex = PrepCmd.ChannelIndex.RearChannel,
+    axis: bool = True,
+    pressure: bool = True,
+    touchoff: bool = True,
+    needle: Optional[PrepCmd.NeedleDefinition] = None,
+  ) -> None:
+    """Run self-calibration (SelfCalibrate, cmd=6).
+
+    Args:
+      site_index: Calibration site index.
+      channel: Which channel to calibrate.
+      axis: Run axis calibration phase.
+      pressure: Run pressure calibration phase.
+      touchoff: Run touchoff calibration phase.
+      needle: Needle definition; defaults to ``NeedleDefinition.defaults()``
+              (firmware uses stored parameters).
+    """
+    if needle is None:
+      needle = PrepCmd.NeedleDefinition.defaults()
+    await self.client.send_command(
+      PrepCmd.PrepSelfCalibrate(
+        dest=await self._require("calibration"),
+        site_index=site_index,
+        channels=int(channel),
+        axis=axis,
+        pressure=pressure,
+        touchoff=touchoff,
+        needle=needle,
+      )
+    )
+
+  async def get_channel_hardware_configuration(
+    self,
+  ) -> Tuple[PrepCmd.ChannelHardwareConfigInfo, ...]:
+    """Return per-channel hardware configuration (GetChannelHardwareConfiguration, cmd=24).
+
+    Each entry maps a channel to its hardware type. Requires ``calibration``
+    (``MLPrepRoot.MLPrepCalibration``) to be resolved.
+    """
+    result = await self.client.send_command(
+      PrepCmd.PrepGetChannelHardwareConfiguration(dest=await self._require("calibration"))
+    )
+    if result is None or not getattr(result, "channels", None):
+      return ()
+    return tuple(
+      PrepCmd.ChannelHardwareConfigInfo(
+        channel=int(s.channel),
+        hardware=int(s.hardware),
+      )
+      for s in result.channels
+    )
+
+  async def get_calibration_values(self) -> PrepCmd.CalibrationValues:
+    """Return calibration values (GetCalibrationValues, cmd=16).
+
+    Returns independent X offset, MPH X offset, and per-channel calibration values
+    (Y/Z offsets, squeeze position, touchoff, pressure shifts, etc.).
+    """
+    result = await self.client.send_command(
+      PrepCmd.PrepGetCalibrationValues(dest=await self._require("calibration"))
+    )
+    if result is None:
+      return PrepCmd.CalibrationValues(
+        independent_offset_x=0.0, mph_offset_x=0.0, channel_values=()
+      )
+    channel_values = tuple(
+      PrepCmd.ChannelCalibrationValuesInfo(
+        index=int(cv.index),
+        y_offset=float(cv.y_offset),
+        z_offset=float(cv.z_offset),
+        squeeze_position=int(cv.squeeze_position),
+        z_touchoff=int(cv.z_touchoff),
+        pressure_shift=int(cv.pressure_shift),
+        pressure_monitoring_shift=int(cv.pressure_monitoring_shift),
+        dispenser_return_distance=float(cv.dispenser_return_distance),
+        z_tip_height=float(cv.z_tip_height),
+        core_ii=bool(cv.core_ii),
+      )
+      for cv in (result.channel_values or [])
+    )
+    return PrepCmd.CalibrationValues(
+      independent_offset_x=float(result.independent_offset_x),
+      mph_offset_x=float(result.mph_offset_x),
+      channel_values=channel_values,
+    )
+
+  async def calibrate_x_axis(
+    self, site_index: int, channel: PrepCmd.ChannelIndex
+  ) -> float:
+    """Run X-axis calibration (CalibrateXAxis, cmd=7). Returns measured offset in mm."""
+    result = await self.client.send_command(
+      PrepCmd.PrepCalibrateXAxis(
+        dest=await self._require("calibration"),
+        site_index=site_index,
+        channel=int(channel),
+      )
+    )
+    return float(result.offset)
+
+  async def calibrate_y_axis(
+    self, site_index: int, channel: PrepCmd.ChannelIndex
+  ) -> float:
+    """Run Y-axis calibration (CalibrateYAxis, cmd=8). Returns measured offset in mm."""
+    result = await self.client.send_command(
+      PrepCmd.PrepCalibrateYAxis(
+        dest=await self._require("calibration"),
+        site_index=site_index,
+        channel=int(channel),
+      )
+    )
+    return float(result.offset)
+
+  async def calibrate_z_axis(
+    self, site_index: int, channel: PrepCmd.ChannelIndex
+  ) -> float:
+    """Run Z-axis calibration (CalibrateZAxis, cmd=9). Returns measured offset in mm."""
+    result = await self.client.send_command(
+      PrepCmd.PrepCalibrateZAxis(
+        dest=await self._require("calibration"),
+        site_index=site_index,
+        channel=int(channel),
+      )
+    )
+    return float(result.offset)
+
+  async def calibrate_squeeze_tips(
+    self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    z_seek_offset: Optional[float] = None,
+  ) -> Tuple[int, ...]:
+    """Run squeeze-tip calibration (CalibrateSqueezeTips, cmd=15).
+
+    Builds TipPositionParameters from tip spots (same geometry as pick_up_tips)
+    and sends to MLPrepCalibration. Returns per-channel squeeze positions.
+
+    Args:
+      tip_spots: Tip spots to calibrate (e.g. ``tip_rack["A1:B1"]``).
+      use_channels: Channel indices (0-based). Defaults to sequential assignment.
+      z_seek_offset: Additive mm on top of default z_seek. None = 0.
+      # TODO: Refine for 8MPH, currently works only for channels
+    """
+    if use_channels is None:
+      use_channels = list(range(len(tip_spots)))
+    assert len(tip_spots) == len(use_channels)
+
+    indexed_spots = {ch: spot for ch, spot in zip(use_channels, tip_spots)}
+    tip_positions: List[PrepCmd.TipPositionParameters] = []
+    for ch in range(self.num_channels):
+      if ch not in indexed_spots:
+        continue
+      spot = indexed_spots[ch]
+      loc = spot.get_absolute_location("c", "c", "t")
+      params = PrepCmd.TipPositionParameters.for_op(
+        _CHANNEL_INDEX[ch],
+        loc,
+        spot.get_tip(),
+        z_seek_offset=z_seek_offset,
+      )
+      tip_positions.append(params)
+
+    result = await self.client.send_command(
+      PrepCmd.PrepCalibrateSqueezeTips(
+        dest=await self._require("calibration"),
+        channels=tip_positions,
+      )
+    )
+    if result is None or not getattr(result, "positions", None):
+      return ()
+    return tuple(int(p) for p in result.positions)
 
   # ---------------------------------------------------------------------------
   # LiquidHandlerBackend abstract methods
