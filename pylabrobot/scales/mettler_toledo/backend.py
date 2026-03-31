@@ -772,14 +772,14 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     """Query net weight with unit and weighing status in one call. (SIS command)
 
     Response data fields:
-      data[0] = State: 0=stable, 1=dynamic, 2=stable inaccurate (MinWeigh),
-                3=dynamic inaccurate, 4=overload, 5=underload, 6=error
-      data[1] = Net weight value
-      data[2] = Unit code: 0=g, 1=kg, 3=mg, 4=ug, 5=ct, 7=lb, 8=oz, etc.
-      data[3] = Readability (number of decimal places, 0-6)
-      data[4] = Step: 1, 2, 5, 10, 20, 50, or 100
-      data[5] = Approval: 0=standard (not approved), 1=e=d, 10=e=10d, 100=e=100d, -1=unapproved
-      data[6] = Info: 0=without tare, 1=net with weighed tare, 2=net with stored tare
+
+    - data[0] = State: 0=stable, 1=dynamic, 2=stable inaccurate (MinWeigh), 3=dynamic inaccurate, 4=overload, 5=underload, 6=error
+    - data[1] = Net weight value
+    - data[2] = Unit code: 0=g, 1=kg, 3=mg, 4=ug, 5=ct, 7=lb, 8=oz, etc.
+    - data[3] = Readability (number of decimal places, 0-6)
+    - data[4] = Step: 1, 2, 5, 10, 20, 50, or 100
+    - data[5] = Approval: 0=standard (not approved), 1=e=d, 10=e=10d, 100=e=100d, -1=unapproved
+    - data[6] = Info: 0=without tare, 1=net with weighed tare, 2=net with stored tare
     """
     responses = await self.send_command("SIS")
     return responses[0]
