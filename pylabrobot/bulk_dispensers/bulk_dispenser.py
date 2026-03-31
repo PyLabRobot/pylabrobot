@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pylabrobot.bulk_dispensers.backend import BulkDispenserBackend
-from pylabrobot.machines.machine import Machine, need_setup_finished
+from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 
 
 class BulkDispenser(Machine):
