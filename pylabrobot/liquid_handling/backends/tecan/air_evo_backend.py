@@ -15,7 +15,7 @@ import asyncio
 import logging
 from typing import List, Optional, Sequence, Tuple, Union
 
-from pylabrobot.liquid_handling.backends.tecan.EVO_backend import EVOBackend, EVOArm, LiHa
+from pylabrobot.liquid_handling.backends.tecan.EVO_backend import EVOArm, EVOBackend, LiHa
 from pylabrobot.liquid_handling.backends.tecan.errors import TecanError
 from pylabrobot.liquid_handling.liquid_classes.tecan import (
   TecanLiquidClass,
