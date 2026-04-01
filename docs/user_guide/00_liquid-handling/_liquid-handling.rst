@@ -19,7 +19,6 @@ Examples:
    hamilton-prep/_hamilton-prep
    opentrons/ot2/ot2
    tecan-evo/_tecan-evo
-   plate-washing/plate-washing
    pumps/_pumps
    moving-channels-around
    tutorial_tip_inventory_consolidation

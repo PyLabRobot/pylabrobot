@@ -27,6 +27,15 @@ definitions
 
 ```{toctree}
 :maxdepth: 1
+:caption: Manufacturers
+:hidden:
+
+agilent/index
+qinstruments/index
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Machine-Agnostic Features
 :hidden:
 
