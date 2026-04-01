@@ -33,11 +33,14 @@ definitions
 agilent/index
 azenta/index
 bmg_labtech/index
+brooks/index
 byonoy/index
+hamilton/index
 inheco/index
 liconic/index
 mettler_toledo/index
 molecular_devices/index
+opentrons/index
 qinstruments/index
 thermo_fisher/index
 ```

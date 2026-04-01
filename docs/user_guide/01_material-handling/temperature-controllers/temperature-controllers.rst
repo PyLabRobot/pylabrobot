@@ -123,6 +123,3 @@ e.g.:
 .. toctree::
    :maxdepth: 1
    :hidden:
-
-   ot-temperature-controller
-   hamilton-heater-cooler

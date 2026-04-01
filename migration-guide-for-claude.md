@@ -124,3 +124,4 @@ Run `make clean-docs && make docs` for a full build including API docs. Fix any 
 | Inheco ODTC | `01_material-handling/thermocycling/inheco-odtc.ipynb` | `inheco/odtc/hello-world.ipynb` |
 | Thermo Fisher Multidrop Combi | _(new with codebase)_ | `thermo_fisher/multidrop_combi/hello-world.ipynb` |
 | BioTek Cytation | `02_analytical/plate-reading/cytation.ipynb` | `agilent/biotek/cytation/hello-world.ipynb` |
+| Thermo Fisher Cytomat | `01_material-handling/storage/cytomat.ipynb` | `thermo_fisher/cytomat/hello-world.ipynb` |
