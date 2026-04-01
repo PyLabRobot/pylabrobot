@@ -95,7 +95,7 @@ class TestAspirateCommandEncoding(unittest.TestCase):
 
   def test_aspirate_command_defaults(self):
     """Default aspirate: no vacuum, rate 3, delay 0, z=30."""
-    cmd = self.backend._build_aspirate_command(PT96)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96)
     self.assertEqual(len(cmd), 22)
     self.assertEqual(cmd[0], 0x04)
     self.assertEqual(cmd[1], 0)  # no vacuum
@@ -119,7 +119,7 @@ class TestAspirateCommandEncoding(unittest.TestCase):
 
   def test_aspirate_command_vacuum_filtration(self):
     """Vacuum filtration flag should be set when enabled."""
-    cmd = self.backend._build_aspirate_command(PT96, vacuum_filtration=True, time_value=30)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, vacuum_filtration=True, time_value=30)
     self.assertEqual(cmd[1], 1)
     # time_value=30 at bytes 2-3
     self.assertEqual(cmd[2], 30)
@@ -127,7 +127,7 @@ class TestAspirateCommandEncoding(unittest.TestCase):
 
   def test_aspirate_command_delay_encoding(self):
     """Delay value should be encoded correctly."""
-    cmd = self.backend._build_aspirate_command(PT96, time_value=5000)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, time_value=5000)
     # 5000 = 0x1388
     self.assertEqual(cmd[2], 0x88)
     self.assertEqual(cmd[3], 0x13)
@@ -135,37 +135,37 @@ class TestAspirateCommandEncoding(unittest.TestCase):
   def test_aspirate_command_travel_rate(self):
     """Travel rate should be encoded correctly."""
     # Normal rate "5" -> byte 5
-    cmd = self.backend._build_aspirate_command(PT96, travel_rate_byte=5)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, travel_rate_byte=5)
     self.assertEqual(cmd[4], 5)
     # CW rate "2 CW" -> byte 8
-    cmd = self.backend._build_aspirate_command(PT96, travel_rate_byte=8)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, travel_rate_byte=8)
     self.assertEqual(cmd[4], 8)
 
   def test_aspirate_command_negative_offset_x(self):
     """Negative X offset should be encoded as unsigned byte."""
-    cmd = self.backend._build_aspirate_command(PT96, offset_x=-30)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, offset_x=-30)
     # -30 as unsigned byte = 226 = 0xE2
     self.assertEqual(cmd[5], 226)
 
   def test_aspirate_command_positive_offset_y(self):
     """Positive Y offset should be encoded correctly."""
-    cmd = self.backend._build_aspirate_command(PT96, offset_y=5)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, offset_y=5)
     self.assertEqual(cmd[6], 5)
 
   def test_aspirate_command_z_offset(self):
     """Z offset should be encoded correctly."""
-    cmd = self.backend._build_aspirate_command(PT96, offset_z=121)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, offset_z=121)
     self.assertEqual(cmd[7], 121)
     self.assertEqual(cmd[8], 0)
 
   def test_aspirate_command_secondary_mode(self):
     """Secondary mode should be encoded correctly."""
-    cmd = self.backend._build_aspirate_command(PT96, secondary_mode=1)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96, secondary_mode=1)
     self.assertEqual(cmd[9], 1)
 
   def test_aspirate_command_secondary_offsets(self):
     """Secondary offsets should be encoded correctly."""
-    cmd = self.backend._build_aspirate_command(
+    cmd = self.backend._plate_washing._build_aspirate_command(
       PT96,
       secondary_x=-5,
       secondary_y=3,
@@ -179,13 +179,13 @@ class TestAspirateCommandEncoding(unittest.TestCase):
 
   def test_aspirate_command_column_mask_all(self):
     """Column mask should select all columns for manifold aspirate."""
-    cmd = self.backend._build_aspirate_command(PT96)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96)
     self.assertEqual(cmd[16], 0xFF)  # all 12 columns
     self.assertEqual(cmd[17], 0x0F)
 
   def test_aspirate_command_length(self):
     """Aspirate command should be exactly 22 bytes."""
-    cmd = self.backend._build_aspirate_command(PT96)
+    cmd = self.backend._plate_washing._build_aspirate_command(PT96)
     self.assertEqual(len(cmd), 22)
 
 

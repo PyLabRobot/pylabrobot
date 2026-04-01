@@ -191,7 +191,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_step_type(self):
     """Syringe prime command should have prefix 0x04."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -201,7 +201,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_syringe_a(self):
     """Syringe prime syringe A should encode as 0."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -211,7 +211,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_syringe_b(self):
     """Syringe prime syringe B should encode as 1."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="B",
@@ -221,7 +221,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_lowercase_syringe(self):
     """Syringe prime should accept lowercase syringe names."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="b",
@@ -231,7 +231,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_volume_encoding(self):
     """Syringe prime should encode volume as little-endian 2 bytes."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -242,7 +242,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_volume_1000ul(self):
     """Syringe prime with 1000 uL."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=1000.0,
       syringe="A",
@@ -254,7 +254,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
   def test_syringe_prime_flow_rate(self):
     """Syringe prime should encode flow rate as single byte."""
     for rate in [1, 3, 5]:
-      cmd = self.backend._build_syringe_prime_command(
+      cmd = self.backend._syringe._build_syringe_prime_command(
         PT96,
         volume=5000.0,
         syringe="A",
@@ -264,7 +264,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_refills(self):
     """Syringe prime should encode refills as single byte."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -275,7 +275,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_default_refills(self):
     """Syringe prime should default to 2 refills."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -285,7 +285,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_pump_delay(self):
     """Syringe prime should encode pump delay as LE uint16."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -298,7 +298,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_command_length(self):
     """Syringe prime command should have exactly 13 bytes."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=5000.0,
       syringe="A",
@@ -308,7 +308,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_full_command(self):
     """Test complete syringe prime command with all parameters."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=3000.0,
       syringe="B",
@@ -336,13 +336,13 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_bottle_encoding(self):
     """Test syringe prime encodes bottle from syringe selection."""
-    cmd_a = self.backend._build_syringe_prime_command(
+    cmd_a = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=1000.0,
       syringe="A",
       flow_rate=5,
     )
-    cmd_b = self.backend._build_syringe_prime_command(
+    cmd_b = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=1000.0,
       syringe="B",
@@ -353,7 +353,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_submerge_duration(self):
     """Test syringe prime encodes submerge duration at bytes 9-10."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=1000.0,
       syringe="A",
@@ -368,7 +368,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_submerge_disabled_zeroes_time(self):
     """When submerge_tips=False, time bytes should be zero."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=1000.0,
       syringe="A",
@@ -382,7 +382,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
 
   def test_syringe_prime_submerge_max_duration(self):
     """Test max submerge duration (1439 minutes = 23:59)."""
-    cmd = self.backend._build_syringe_prime_command(
+    cmd = self.backend._syringe._build_syringe_prime_command(
       PT96,
       volume=1000.0,
       syringe="A",
@@ -473,7 +473,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_step_type(self):
     """Manifold prime command should have step type prefix 0x04."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -484,7 +484,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_buffer_a(self):
     """Manifold prime buffer A should encode as 'A' (0x41)."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -495,7 +495,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_buffer_b(self):
     """Manifold prime buffer B should encode as 'B' (0x42)."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="B",
@@ -506,7 +506,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_lowercase_buffer(self):
     """Manifold prime should accept lowercase buffer and encode as uppercase."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="b",
@@ -517,7 +517,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_volume_encoding(self):
     """Manifold prime should encode volume as little-endian 2 bytes."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -530,7 +530,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_volume_500ml(self):
     """Manifold prime with 500 mL."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=500.0,
       buffer="A",
@@ -543,7 +543,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_volume_max(self):
     """Manifold prime with maximum volume (65535 mL)."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=65535.0,
       buffer="A",
@@ -555,7 +555,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_flow_rate(self):
     """Manifold prime should encode flow rate as single byte."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -566,7 +566,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_flow_rate_min(self):
     """Manifold prime should encode minimum flow rate 1."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -577,7 +577,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_flow_rate_max(self):
     """Manifold prime should encode maximum flow rate 9."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -588,7 +588,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_full_command(self):
     """Test complete manifold prime command with all parameters."""
-    cmd = self.backend._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_manifold_prime_command(
       PT96,
       volume_ml=2000.0,
       buffer="B",
@@ -663,31 +663,31 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
 
   def test_auto_clean_step_type(self):
     """Auto-clean command should have step type prefix 0x04."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="A")
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="A")
 
     self.assertEqual(cmd[0], 0x04)
 
   def test_auto_clean_buffer_a(self):
     """Auto-clean buffer A should encode as 'A' (0x41)."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="A")
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="A")
 
     self.assertEqual(cmd[1], ord("A"))
 
   def test_auto_clean_buffer_b(self):
     """Auto-clean buffer B should encode as 'B' (0x42)."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="B")
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="B")
 
     self.assertEqual(cmd[1], ord("B"))
 
   def test_auto_clean_lowercase_buffer(self):
     """Auto-clean should accept lowercase buffer and encode as uppercase."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="c")
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="c")
 
     self.assertEqual(cmd[1], ord("C"))
 
   def test_auto_clean_duration_encoding(self):
     """Auto-clean should encode duration as little-endian 2 bytes."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="A", duration_min=60.0)
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="A", duration_min=60.0)
 
     # 60 = 0x003C LE
     self.assertEqual(cmd[2], 0x3C)
@@ -695,7 +695,7 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
 
   def test_auto_clean_duration_30_minutes(self):
     """Auto-clean with 30 minute duration."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="A", duration_min=30.0)
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="A", duration_min=30.0)
 
     # 30 = 0x001E LE
     self.assertEqual(cmd[2], 0x1E)
@@ -703,14 +703,14 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
 
   def test_auto_clean_duration_zero(self):
     """Auto-clean with zero duration (no additional cleaning time)."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="A", duration_min=0.0)
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="A", duration_min=0.0)
 
     self.assertEqual(cmd[2], 0x00)
     self.assertEqual(cmd[3], 0x00)
 
   def test_auto_clean_full_command(self):
     """Test complete auto-clean command with all parameters."""
-    cmd = self.backend._build_auto_clean_command(
+    cmd = self.backend._plate_washing._build_auto_clean_command(
       PT96,
       buffer="B",
       duration_min=90.0,
@@ -723,7 +723,7 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
 
   def test_auto_clean_default_duration(self):
     """Auto-clean without duration should use default 1 minute."""
-    cmd = self.backend._build_auto_clean_command(PT96, buffer="A")
+    cmd = self.backend._plate_washing._build_auto_clean_command(PT96, buffer="A")
 
     self.assertEqual(cmd[2], 0x01)
     self.assertEqual(cmd[3], 0x00)

@@ -4,6 +4,10 @@ from .biotek import (
   Cytation5,
   CytationBackend,
   CytationImagingConfig,
+  EL406,
+  EL406Driver,
+  EL406PlateWashingBackend,
+  EL406ShakingBackend,
   SynergyH1,
   SynergyH1Backend,
 )
