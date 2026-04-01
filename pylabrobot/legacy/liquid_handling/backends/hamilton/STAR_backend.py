@@ -7013,17 +7013,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="FY")
 
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
-    """Deprecated: use ``star.iswap.move_x_relative()``."""
-    return await self.driver.iswap.move_x_relative(
+    """Deprecated: use ``star.iswap.backend.move_relative_x()``."""
+    return await self.driver.iswap.move_relative_x(
       step_size=step_size, allow_splitting=allow_splitting
     )
 
   async def move_iswap_y_relative(self, step_size: float, allow_splitting: bool = False):
-    """Deprecated: use ``star.iswap.move_y_relative()``.
+    """Deprecated: use ``star.iswap.backend.move_relative_y()``.
 
     Note: this legacy method includes a collision check against channel 0 that is not
     present in the new API. Callers relying on that safety check should perform it
-    explicitly before calling ``move_y_relative``.
+    explicitly before calling ``move_relative_y``.
     """
     # Legacy collision check — kept here because it uses legacy-only helpers.
     if step_size < 0:
@@ -7034,13 +7034,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
           f"first channel Y position: {y_pos_channel_0} mm, requested step size: {step_size} mm"
         )
-    return await self.driver.iswap.move_y_relative(
+    return await self.driver.iswap.move_relative_y(
       step_size=step_size, allow_splitting=allow_splitting
     )
 
   async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
-    """Deprecated: use ``star.iswap.move_z_relative()``."""
-    return await self.driver.iswap.move_z_relative(
+    """Deprecated: use ``star.iswap.backend.move_relative_z()``."""
+    return await self.driver.iswap.move_relative_z(
       step_size=step_size, allow_splitting=allow_splitting
     )
 

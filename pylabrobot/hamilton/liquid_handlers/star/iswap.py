@@ -114,7 +114,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   # -- relative / absolute movement ------------------------------------------
 
-  async def move_x_relative(self, step_size: float, allow_splitting: bool = False) -> None:
+  async def move_relative_x(self, step_size: float, allow_splitting: bool = False) -> None:
     """Move iSWAP X by a relative step (C0 GX).
 
     Args:
@@ -127,9 +127,9 @@ class iSWAPBackend(OrientableGripperArmBackend):
       if not allow_splitting:
         raise ValueError("step_size must be between -99.9 and 99.9")
       first = max_step if step_size > 0 else -max_step
-      await self.move_x_relative(step_size=first, allow_splitting=True)
+      await self.move_relative_x(step_size=first, allow_splitting=True)
       remaining = step_size - first
-      return await self.move_x_relative(remaining, allow_splitting=True)
+      return await self.move_relative_x(remaining, allow_splitting=True)
 
     await self.driver.send_command(
       module="C0",
@@ -138,7 +138,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       xd=direction,
     )
 
-  async def move_y_relative(self, step_size: float, allow_splitting: bool = False) -> None:
+  async def move_relative_y(self, step_size: float, allow_splitting: bool = False) -> None:
     """Move iSWAP Y by a relative step (C0 GY).
 
     Args:
@@ -151,9 +151,9 @@ class iSWAPBackend(OrientableGripperArmBackend):
       if not allow_splitting:
         raise ValueError("step_size must be between -99.9 and 99.9")
       first = max_step if step_size > 0 else -max_step
-      await self.move_y_relative(step_size=first, allow_splitting=True)
+      await self.move_relative_y(step_size=first, allow_splitting=True)
       remaining = step_size - first
-      return await self.move_y_relative(remaining, allow_splitting=True)
+      return await self.move_relative_y(remaining, allow_splitting=True)
 
     await self.driver.send_command(
       module="C0",
@@ -162,7 +162,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       yd=direction,
     )
 
-  async def move_z_relative(self, step_size: float, allow_splitting: bool = False) -> None:
+  async def move_relative_z(self, step_size: float, allow_splitting: bool = False) -> None:
     """Move iSWAP Z by a relative step (C0 GZ).
 
     Args:
@@ -175,9 +175,9 @@ class iSWAPBackend(OrientableGripperArmBackend):
       if not allow_splitting:
         raise ValueError("step_size must be between -99.9 and 99.9")
       first = max_step if step_size > 0 else -max_step
-      await self.move_z_relative(step_size=first, allow_splitting=True)
+      await self.move_relative_z(step_size=first, allow_splitting=True)
       remaining = step_size - first
-      return await self.move_z_relative(remaining, allow_splitting=True)
+      return await self.move_relative_z(remaining, allow_splitting=True)
 
     await self.driver.send_command(
       module="C0",
@@ -217,17 +217,17 @@ class iSWAPBackend(OrientableGripperArmBackend):
   async def move_x(self, x_position: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_x_relative(step_size=x_position - loc.x, allow_splitting=True)
+    await self.move_relative_x(step_size=x_position - loc.x, allow_splitting=True)
 
   async def move_y(self, y_position: float) -> None:
     """Move iSWAP Y to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_y_relative(step_size=y_position - loc.y, allow_splitting=True)
+    await self.move_relative_y(step_size=y_position - loc.y, allow_splitting=True)
 
   async def move_z(self, z_position: float) -> None:
     """Move iSWAP Z to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_z_relative(step_size=z_position - loc.z, allow_splitting=True)
+    await self.move_relative_z(step_size=z_position - loc.z, allow_splitting=True)
 
   # -- rotation / wrist drive ------------------------------------------------
 
