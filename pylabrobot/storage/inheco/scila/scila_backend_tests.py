@@ -2,7 +2,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAState
 from pylabrobot.storage.inheco.scila.scila_backend import SCILABackend
 
 
@@ -13,6 +13,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.mock_sila_interface = AsyncMock(spec=InhecoSiLAInterface)
     self.mock_sila_interface.bound_port = 80
     self.mock_sila_interface.client_ip = "127.0.0.1"
+    self.mock_sila_interface.event_receiver_uri = "http://127.0.0.1:80/"
     self.MockInhecoSiLAInterface.return_value = self.mock_sila_interface
     self.backend = SCILABackend(scila_ip="127.0.0.1")
 
@@ -35,10 +36,10 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.mock_sila_interface.close.assert_called_once()
 
   async def test_request_status(self):
-    self.mock_sila_interface.send_command.return_value = {"GetStatusResponse": {"state": "standBy"}}
+    self.mock_sila_interface.request_status = AsyncMock(return_value=SiLAState.STANDBY)
     status = await self.backend.request_status()
-    self.assertEqual(status, "standBy")
-    self.mock_sila_interface.send_command.assert_called_with("GetStatus")
+    self.assertEqual(status, SiLAState.STANDBY)
+    self.mock_sila_interface.request_status.assert_called_once()
 
   async def test_request_liquid_level(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
@@ -230,6 +231,34 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     data = {"scila_ip": "169.254.1.117"}
     SCILABackend.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
+
+
+class TestInhecoSiLAInterfaceLocking(unittest.IsolatedAsyncioTestCase):
+  """Tests for lock_device / unlock_device on InhecoSiLAInterface."""
+
+  def setUp(self):
+    self.interface = InhecoSiLAInterface(machine_ip="192.168.1.100", client_ip="127.0.0.1")
+
+  async def test_lock_device(self):
+    self.interface.send_command = AsyncMock()  # type: ignore[method-assign]
+    await self.interface.lock_device("my_lock_id")
+    self.interface.send_command.assert_called_once()
+    call_kwargs = self.interface.send_command.call_args[1]
+    self.assertEqual(call_kwargs["lockId"], "my_lock_id")
+    self.assertEqual(self.interface._lock_id, "my_lock_id")
+
+  async def test_unlock_device(self):
+    self.interface._lock_id = "my_lock_id"
+    self.interface.send_command = AsyncMock()  # type: ignore[method-assign]
+    await self.interface.unlock_device()
+    self.interface.send_command.assert_called_once_with("UnlockDevice")
+    self.assertIsNone(self.interface._lock_id)
+
+  async def test_unlock_device_not_locked(self):
+    self.interface._lock_id = None
+    with self.assertRaises(RuntimeError) as cm:
+      await self.interface.unlock_device()
+    self.assertIn("not locked", str(cm.exception))
 
 
 if __name__ == "__main__":
