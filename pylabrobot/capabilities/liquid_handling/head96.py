@@ -37,6 +37,8 @@ class Head96(Capability):
   Faithfully ports the 96-head logic from the legacy LiquidHandler, including
   tip tracking with commit/rollback, volume tracking, partial tip pickup,
   single-container (trough) support, and convenience methods.
+
+  See :doc:`/user_guide/capabilities/head96` for a walkthrough.
   """
 
   def __init__(self, backend: Head96Backend, default_offset: Coordinate = Coordinate.zero()):

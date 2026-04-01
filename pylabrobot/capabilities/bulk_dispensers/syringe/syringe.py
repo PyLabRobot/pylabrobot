@@ -7,7 +7,10 @@ from .backend import SyringeDispensingBackend
 
 
 class SyringeDispensing(Capability):
-  """Syringe dispensing capability."""
+  """Syringe dispensing capability.
+
+  See :doc:`/user_guide/capabilities/dispensing/syringe` for a walkthrough.
+  """
 
   def __init__(self, backend: SyringeDispensingBackend):
     super().__init__(backend=backend)

@@ -7,7 +7,10 @@ from .backend import PeristalticDispensingBackend
 
 
 class PeristalticDispensing(Capability):
-  """Peristaltic dispensing capability."""
+  """Peristaltic dispensing capability.
+
+  See :doc:`/user_guide/capabilities/dispensing/peristaltic` for a walkthrough.
+  """
 
   def __init__(self, backend: PeristalticDispensingBackend):
     super().__init__(backend=backend)

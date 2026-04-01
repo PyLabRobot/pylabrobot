@@ -1,2 +1,3 @@
 from .backend import PeristalticDispensingBackend
+from .chatterbox import PeristalticDispensingChatterboxBackend
 from .peristaltic import PeristalticDispensing

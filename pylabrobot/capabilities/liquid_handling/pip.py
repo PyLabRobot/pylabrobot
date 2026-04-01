@@ -35,6 +35,8 @@ class PIP(Capability):
 
   Faithfully ports the tip tracking, volume tracking, validation, spread modes, and
   error handling from the legacy LiquidHandler frontend.
+
+  See :doc:`/user_guide/capabilities/pip` for a walkthrough.
   """
 
   def __init__(self, backend: PIPBackend):

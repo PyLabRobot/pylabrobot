@@ -7,7 +7,10 @@ from .backend import ShakerBackend
 
 
 class Shaker(Capability):
-  """Shaking capability."""
+  """Shaking capability.
+
+  See :doc:`/user_guide/capabilities/shaking` for a walkthrough.
+  """
 
   def __init__(self, backend: ShakerBackend):
     super().__init__(backend=backend)

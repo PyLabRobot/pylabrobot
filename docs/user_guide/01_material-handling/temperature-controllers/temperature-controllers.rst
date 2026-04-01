@@ -126,4 +126,3 @@ e.g.:
 
    ot-temperature-controller
    hamilton-heater-cooler
-   inheco

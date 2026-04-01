@@ -6,7 +6,10 @@ from .backend import FanBackend
 
 
 class Fan(Capability):
-  """Fan control capability."""
+  """Fan control capability.
+
+  See :doc:`/user_guide/capabilities/fan-control` for a walkthrough.
+  """
 
   def __init__(self, backend: FanBackend):
     super().__init__(backend=backend)

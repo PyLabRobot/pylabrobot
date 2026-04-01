@@ -7,7 +7,10 @@ from .backend import PeelerBackend
 
 
 class Peeler(Capability):
-  """Peeling capability."""
+  """Peeling capability.
+
+  See :doc:`/user_guide/capabilities/peeling` for a walkthrough.
+  """
 
   def __init__(self, backend: PeelerBackend):
     super().__init__(backend=backend)

@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 class Absorbance(Capability):
-  """Absorbance plate reading capability."""
+  """Absorbance plate reading capability.
+
+  See :doc:`/user_guide/capabilities/absorbance` for a walkthrough.
+  """
 
   def __init__(self, backend: AbsorbanceBackend):
     super().__init__(backend=backend)

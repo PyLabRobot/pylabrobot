@@ -4,7 +4,10 @@ from .backend import HumidityControllerBackend
 
 
 class HumidityController(Capability):
-  """Humidity control capability."""
+  """Humidity control capability.
+
+  See :doc:`/user_guide/capabilities/humidity-control` for a walkthrough.
+  """
 
   def __init__(self, backend: HumidityControllerBackend):
     super().__init__(backend=backend)

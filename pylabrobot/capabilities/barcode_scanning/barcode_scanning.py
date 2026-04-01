@@ -5,7 +5,10 @@ from .backend import BarcodeScannerBackend
 
 
 class BarcodeScanner(Capability):
-  """Barcode scanning capability."""
+  """Barcode scanning capability.
+
+  See :doc:`/user_guide/capabilities/barcode-scanning` for a walkthrough.
+  """
 
   def __init__(self, backend: BarcodeScannerBackend):
     super().__init__(backend=backend)

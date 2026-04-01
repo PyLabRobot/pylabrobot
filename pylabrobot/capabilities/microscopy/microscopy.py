@@ -62,6 +62,8 @@ class Microscopy(Capability):
   """Microscopy imaging capability.
 
   Provides high-level image capture with support for auto-exposure and auto-focus.
+
+  See :doc:`/user_guide/capabilities/microscopy` for a walkthrough.
   """
 
   def __init__(self, backend: MicroscopyBackend):

@@ -5,7 +5,10 @@ from .backend import AutomatedRetrievalBackend
 
 
 class AutomatedRetrieval(Capability):
-  """Automated plate retrieval/storage capability."""
+  """Automated plate retrieval/storage capability.
+
+  See :doc:`/user_guide/capabilities/automated-retrieval` for a walkthrough.
+  """
 
   def __init__(self, backend: AutomatedRetrievalBackend):
     super().__init__(backend=backend)

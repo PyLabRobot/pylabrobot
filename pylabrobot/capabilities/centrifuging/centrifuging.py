@@ -8,7 +8,10 @@ from .backend import CentrifugeBackend
 
 
 class Centrifuge(Capability):
-  """Centrifuging capability."""
+  """Centrifuging capability.
+
+  See :doc:`/user_guide/capabilities/centrifuging` for a walkthrough.
+  """
 
   def __init__(
     self,

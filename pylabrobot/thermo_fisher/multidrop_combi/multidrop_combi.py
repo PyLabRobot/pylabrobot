@@ -28,7 +28,7 @@ class MultidropCombi(Device):
     if driver is None:
       driver = MultidropCombiDriver(port=port, timeout=timeout)
     super().__init__(driver=driver)
-    self._driver: MultidropCombiDriver = driver
+    self.driver: MultidropCombiDriver = driver
     self.peristaltic = PeristalticDispensing(
       backend=MultidropCombiPeristalticDispensingBackend(driver)
     )

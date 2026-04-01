@@ -240,6 +240,72 @@ Plate Reading - Luminescence
     LuminescenceBackend
 
 
+Devices
+-------
+
+.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.multidrop_combi
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    MultidropCombi
+
+.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.driver
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    MultidropCombiDriver
+
+
+Bulk Dispensing - Peristaltic
+-----------------------------
+
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PeristalticDispensing
+
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PeristalticDispensingBackend
+
+
+Bulk Dispensing - Syringe
+-------------------------
+
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.syringe
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    SyringeDispensing
+
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    SyringeDispensingBackend
+
+
 Liquid Handling - PIP (Independent Channels)
 --------------------------------------------
 

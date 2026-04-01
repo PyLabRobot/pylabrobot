@@ -8,7 +8,10 @@ from .backend import TemperatureControllerBackend
 
 
 class TemperatureController(Capability):
-  """Temperature control capability, for heating or cooling."""
+  """Temperature control capability, for heating or cooling.
+
+  See :doc:`/user_guide/capabilities/temperature-control` for a walkthrough.
+  """
 
   def __init__(self, backend: TemperatureControllerBackend):
     super().__init__(backend=backend)

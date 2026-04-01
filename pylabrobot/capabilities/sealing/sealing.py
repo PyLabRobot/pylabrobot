@@ -4,7 +4,10 @@ from .backend import SealerBackend
 
 
 class Sealer(Capability):
-  """Sealing capability."""
+  """Sealing capability.
+
+  See :doc:`/user_guide/capabilities/sealing` for a walkthrough.
+  """
 
   def __init__(self, backend: SealerBackend):
     super().__init__(backend=backend)

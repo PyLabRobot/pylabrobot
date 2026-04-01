@@ -59,6 +59,7 @@ automated-retrieval
 absorbance
 fluorescence
 luminescence
+dispensing/index
 pip
 head96
 arms

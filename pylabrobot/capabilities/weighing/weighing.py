@@ -4,7 +4,10 @@ from .backend import ScaleBackend
 
 
 class Scale(Capability):
-  """Weighing capability."""
+  """Weighing capability.
+
+  See :doc:`/user_guide/capabilities/weighing` for a walkthrough.
+  """
 
   def __init__(self, backend: ScaleBackend):
     super().__init__(backend=backend)

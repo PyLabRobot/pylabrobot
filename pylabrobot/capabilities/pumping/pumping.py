@@ -9,7 +9,10 @@ from .calibration import PumpCalibration
 
 
 class Pump(Capability):
-  """Single-pump capability."""
+  """Single-pump capability.
+
+  See :doc:`/user_guide/capabilities/pumping` for a walkthrough.
+  """
 
   def __init__(
     self,

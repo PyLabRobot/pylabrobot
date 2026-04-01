@@ -31,7 +31,12 @@ definitions
 :hidden:
 
 agilent/index
+azenta/index
+inheco/index
+liconic/index
+mettler_toledo/index
 qinstruments/index
+thermo_fisher/index
 ```
 
 ```{toctree}

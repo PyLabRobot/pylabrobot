@@ -4,7 +4,10 @@ from .backend import TilterBackend
 
 
 class Tilter(Capability):
-  """Tilting capability."""
+  """Tilting capability.
+
+  See :doc:`/user_guide/capabilities/tilting` for a walkthrough.
+  """
 
   def __init__(self, backend: TilterBackend):
     super().__init__(backend=backend)

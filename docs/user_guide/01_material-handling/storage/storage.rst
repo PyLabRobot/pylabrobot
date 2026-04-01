@@ -140,6 +140,3 @@ Combined Retrieval & Access Summary
    :hidden:
 
    cytomat
-   inheco/incubator_shaker
-   inheco/scila
-   liconic
