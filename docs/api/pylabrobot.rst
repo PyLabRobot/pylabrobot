@@ -34,8 +34,11 @@ Manufacturers
 
     pylabrobot.agilent
     pylabrobot.azenta
+    pylabrobot.bmg_labtech
+    pylabrobot.byonoy
     pylabrobot.inheco
     pylabrobot.liconic
     pylabrobot.mettler_toledo
+    pylabrobot.molecular_devices
     pylabrobot.qinstruments
     pylabrobot.thermo_fisher

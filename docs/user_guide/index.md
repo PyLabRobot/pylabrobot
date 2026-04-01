@@ -32,9 +32,12 @@ definitions
 
 agilent/index
 azenta/index
+bmg_labtech/index
+byonoy/index
 inheco/index
 liconic/index
 mettler_toledo/index
+molecular_devices/index
 qinstruments/index
 thermo_fisher/index
 ```

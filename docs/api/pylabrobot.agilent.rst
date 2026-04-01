@@ -103,6 +103,9 @@ BioTek Synergy H1
     SynergyH1
     SynergyH1Backend
 
+.. autoclass:: pylabrobot.agilent.biotek.biotek.BioTekBackend.LuminescenceParams
+   :members:
+
 
 VSpin
 -----
