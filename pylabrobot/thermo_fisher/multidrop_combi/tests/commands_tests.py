@@ -75,12 +75,13 @@ class DispenseTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_with_all_params(self):
     params = MultidropCombiPeristalticDispensingBackend.DispenseParams(
-      plate_type=3, dispensing_height=2500, pump_speed=75,
+      plate_type=3, cassette_type=0, pump_speed=75, dispensing_height=2500,
       dispensing_order=DispensingOrder.COLUMN_WISE,
     )
     await self.backend.dispense(plate=self.plate, volumes={1: 50.0}, backend_params=params)
     calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]
-    self.assertEqual(calls, ["SPL 3", "SCV 1 500", "SDH 2500", "SPS 75", "SDO 1", "DIS"])
+    # Order: plate_type → cassette_type → pump_speed → dispensing_height → dispensing_order → volumes → DIS
+    self.assertEqual(calls, ["SPL 3", "SCT 0", "SPS 75", "SDH 2500", "SDO 1", "SCV 1 500", "DIS"])
 
   async def test_dispense_order(self):
     params = MultidropCombiPeristalticDispensingBackend.DispenseParams(
@@ -88,7 +89,7 @@ class DispenseTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.backend.dispense(plate=self.plate, volumes={1: 10.0}, backend_params=params)
     calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]
-    self.assertEqual(calls, ["SCV 1 100", "SDO 0", "DIS"])
+    self.assertEqual(calls, ["SDO 0", "SCV 1 100", "DIS"])
 
 
 class PrimeTests(unittest.IsolatedAsyncioTestCase):

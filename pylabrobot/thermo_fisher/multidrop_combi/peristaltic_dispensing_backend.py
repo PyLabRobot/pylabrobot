@@ -28,39 +28,6 @@ def _ul_to_tenths(volume_ul: float) -> int:
 class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
   """Translates PeristalticDispensingBackend operations into Multidrop Combi commands."""
 
-  @dataclass
-  class DispenseParams(BackendParams):
-    """Parameters for the Multidrop Combi dispense command.
-
-    Args:
-      plate_type: Plate type index (0-29). If None, uses current setting.
-      dispensing_height: Height in 1/100 mm (500-5500). If None, uses current setting.
-      pump_speed: Speed percentage (1-100). If None, uses current setting.
-      dispensing_order: Row-wise or column-wise. If None, uses current setting.
-    """
-    plate_type: Optional[int] = None
-    dispensing_height: Optional[int] = None
-    pump_speed: Optional[int] = None
-    dispensing_order: Optional[DispensingOrder] = None
-
-  @dataclass
-  class PrimeParams(BackendParams):
-    """Parameters for the Multidrop Combi prime command.
-
-    Args:
-      mode: Prime mode (standard, continuous, stop continuous, calibration).
-    """
-    mode: PrimeMode = PrimeMode.STANDARD
-
-  @dataclass
-  class PurgeParams(BackendParams):
-    """Parameters for the Multidrop Combi purge (empty) command.
-
-    Args:
-      mode: Empty mode (standard or continuous).
-    """
-    mode: EmptyMode = EmptyMode.STANDARD
-
   def __init__(self, driver: MultidropCombiDriver):
     super().__init__()
     self._driver = driver
@@ -71,6 +38,29 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
       await self._driver.acknowledge_error()
     except Exception:
       pass
+
+  @dataclass
+  class DispenseParams(BackendParams):
+    """Parameters for the Multidrop Combi dispense command.
+
+    Parameters are sent in the order recommended by the instrument workflow:
+    plate_type → cassette_type → pump_speed → dispensing_height → volumes → dispense.
+
+    Args:
+      plate_type: Plate type index (0-29). If None, uses current setting.
+      cassette_type: Cassette type (0=Standard, 1=Small, 2-3=User-defined). If None, uses current.
+      pump_speed: Speed percentage (1-100). If None, uses current setting.
+      dispensing_height: Height in 1/100 mm (500-5500). If None, uses current setting.
+      dispensing_order: Well traversal order for 384+ well plates (no effect on 96-well).
+        ROW_WISE fills across columns within each row (A1→A2→A3→...→B1→B2→...),
+        COLUMN_WISE fills down rows within each column (A1→B1→...→H1→A2→B2→...).
+        Does not affect per-column volumes. If None, uses current.
+    """
+    plate_type: Optional[int] = None
+    cassette_type: Optional[int] = None
+    pump_speed: Optional[int] = None
+    dispensing_height: Optional[int] = None
+    dispensing_order: Optional[DispensingOrder] = None
 
   async def dispense(
     self,
@@ -88,18 +78,31 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     if not isinstance(backend_params, self.DispenseParams):
       backend_params = self.DispenseParams()
 
+    # Follow the instrument workflow order:
+    # set_plate_type → set_cassette_type → set_pump_speed → set_dispensing_height → set_volumes
     if backend_params.plate_type is not None:
       await self._set_plate_type(backend_params.plate_type)
-    for col, vol in volumes.items():
-      await self._set_column_volume(col, vol)
-    if backend_params.dispensing_height is not None:
-      await self._set_dispensing_height(backend_params.dispensing_height)
+    if backend_params.cassette_type is not None:
+      await self._set_cassette_type(backend_params.cassette_type)
     if backend_params.pump_speed is not None:
       await self._set_pump_speed(backend_params.pump_speed)
+    if backend_params.dispensing_height is not None:
+      await self._set_dispensing_height(backend_params.dispensing_height)
     if backend_params.dispensing_order is not None:
       await self._set_dispensing_order(backend_params.dispensing_order)
+    for col, vol in volumes.items():
+      await self._set_column_volume(col, vol)
 
     await self._driver.send_command("DIS", timeout=120.0)
+
+  @dataclass
+  class PrimeParams(BackendParams):
+    """Parameters for the Multidrop Combi prime command.
+
+    Args:
+      mode: Prime mode (standard, continuous, stop continuous, calibration).
+    """
+    mode: PrimeMode = PrimeMode.STANDARD
 
   async def prime(
     self,
@@ -133,6 +136,15 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     if backend_params.mode != PrimeMode.STANDARD:
       cmd += f" {backend_params.mode.value}"
     await self._driver.send_command(cmd, timeout=60.0 + volume / 100.0)
+
+  @dataclass
+  class PurgeParams(BackendParams):
+    """Parameters for the Multidrop Combi purge (empty) command.
+
+    Args:
+      mode: Empty mode (standard or continuous).
+    """
+    mode: EmptyMode = EmptyMode.STANDARD
 
   async def purge(
     self,
@@ -282,6 +294,11 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     if not 0 <= plate_type <= 29:
       raise ValueError(f"Plate type must be 0-29, got {plate_type}")
     await self._driver.send_command(f"SPL {plate_type}", timeout=5.0)
+
+  async def _set_cassette_type(self, cassette_type: int) -> None:
+    if not 0 <= cassette_type <= 3:
+      raise ValueError(f"Cassette type must be 0-3, got {cassette_type}")
+    await self._driver.send_command(f"SCT {cassette_type}", timeout=5.0)
 
   async def _set_column_volume(self, column: int, volume: float) -> None:
     if not 1 <= column <= 48:
