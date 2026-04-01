@@ -7,7 +7,6 @@ import math
 import re
 import sys
 import warnings
-from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from typing import (
@@ -21,7 +20,6 @@ from typing import (
   Optional,
   Sequence,
   Tuple,
-  Type,
   TypedDict,
   TypeVar,
   Union,
@@ -34,13 +32,14 @@ else:
   from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
+from pylabrobot.hamilton.liquid_handlers.star.pip_channel import (
+  PressureLLDMode as _NewPressureLLDMode,
+)
 from pylabrobot.legacy.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
-from pylabrobot.legacy.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.legacy.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
-from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
@@ -64,7 +63,6 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.legacy.liquid_handling.utils import (
   MIN_SPACING_EDGE,
-  get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
@@ -75,16 +73,9 @@ from pylabrobot.resources import (
   Resource,
   Tip,
   TipRack,
-  TipSpot,
   Well,
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
-from pylabrobot.resources.errors import (
-  HasTipError,
-  NoTipError,
-  TooLittleLiquidError,
-  TooLittleVolumeError,
-)
 from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipDropMethod,
@@ -99,8 +90,14 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 
-T = TypeVar("T")
+from pylabrobot.hamilton.liquid_handlers.star.errors import (
+  STARFirmwareError,
+  convert_star_firmware_error_to_plr_error,
+  star_firmware_string_to_error,
+)
+from pylabrobot.hamilton.liquid_handlers.star.fw_parsing import parse_star_fw_string
 
+T = TypeVar("T")
 
 logger = logging.getLogger("pylabrobot")
 
@@ -118,11 +115,7 @@ def need_iswap_parked(
 
   @functools.wraps(method)
   async def wrapper(self: "STARBackend", *args, **kwargs):
-    if self.extended_conf.left_x_drive.iswap_installed and not self.iswap_parked:
-      await self.park_iswap(
-        minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
-      )
-
+    await self.driver.ensure_iswap_parked()
     return await method(self, *args, **kwargs)
 
   return wrapper
@@ -143,988 +136,6 @@ def _requires_head96(
     return await method(self, *args, **kwargs)
 
   return wrapper
-
-
-def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
-  """Parse a machine command or response string according to a format string.
-
-  The format contains names of parameters (always length 2),
-  followed by an arbitrary number of the following, but always
-  the same:
-  - '&': char
-  - '#': decimal
-  - '*': hex
-
-  The order of parameters in the format and response string do not
-  have to (and often do not) match.
-
-  The identifier parameter (id####) is added automatically.
-
-  TODO: string parsing
-  The firmware docs mention strings in the following format: '...'
-  However, the length of these is always known (except when reading
-  barcodes), so it is easier to convert strings to the right number
-  of '&'. With barcode reading the length of the barcode is included
-  with the response string. We'll probably do a custom implementation
-  for that.
-
-  TODO: spaces
-  We should also parse responses where integers are separated by spaces,
-  like this: `ua#### #### ###### ###### ###### ######`
-
-  Args:
-    resp: The response string to parse.
-    fmt: The format string.
-
-  Raises:
-    ValueError: if the format string is incompatible with the response.
-
-  Returns:
-    A dictionary containing the parsed values.
-
-  Examples:
-    Parsing a string containing decimals (`1111`), hex (`0xB0B`) and chars (`'rw'`):
-
-    ```
-    >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
-    {'aa': 1111, 'bb': 'rw', 'cc': 2827}
-    ```
-  """
-
-  # Remove device and cmd identifier from response.
-  resp = resp[4:]
-
-  # Parse the parameters in the fmt string.
-  info = {}
-
-  def find_param(param):
-    name, data = param[0:2], param[2:]
-    type_ = {"#": "int", "*": "hex", "&": "str"}[data[0]]
-
-    # Build a regex to match this parameter.
-    exp = {
-      "int": r"[-+]?[\d ]",
-      "hex": r"[\da-fA-F ]",
-      "str": ".",
-    }[type_]
-    len_ = len(data.split(" ")[0])  # Get length of first block.
-    regex = f"{name}((?:{exp}{ {len_} }"
-
-    if param.endswith(" (n)"):
-      regex += " ?)+)"
-      is_list = True
-    else:
-      regex += "))"
-      is_list = False
-
-    # Match response against regex, save results in right datatype.
-    r = re.search(regex, resp)
-    if r is None:
-      raise ValueError(f"could not find matches for parameter {name}")
-
-    g = r.groups()
-    if len(g) == 0:
-      raise ValueError(f"could not find value for parameter {name}")
-    m = g[0]
-
-    if is_list:
-      m = m.split(" ")
-
-      if type_ == "str":
-        info[name] = m
-      elif type_ == "int":
-        info[name] = [int(m_) for m_ in m if m_ != ""]
-      elif type_ == "hex":
-        info[name] = [int(m_, base=16) for m_ in m if m_ != ""]
-    else:
-      if type_ == "str":
-        info[name] = m
-      elif type_ == "int":
-        info[name] = int(m)
-      elif type_ == "hex":
-        info[name] = int(m, base=16)
-
-  # Find params in string. All params are identified by 2 lowercase chars.
-  param = ""
-  prevchar = None
-  for char in fmt:
-    if char.islower() and prevchar != "(":
-      if len(param) > 2:
-        find_param(param)
-        param = ""
-    param += char
-    prevchar = char
-  if param != "":
-    find_param(param)  # last parameter is not closed by loop.
-
-  # If id not in fmt, add it.
-  if "id" not in info:
-    find_param("id####")
-
-  return info
-
-
-class STARModuleError(Exception, metaclass=ABCMeta):
-  """Base class for all Hamilton backend errors, raised by a single module."""
-
-  def __init__(
-    self,
-    message: str,
-    trace_information: int,
-    raw_response: str,
-    raw_module: str,
-  ):
-    self.message = message
-    self.trace_information = trace_information
-    self.raw_response = raw_response
-    self.raw_module = raw_module
-
-  def __repr__(self) -> str:
-    return f"{self.__class__.__name__}('{self.message}')"
-
-
-class CommandSyntaxError(STARModuleError):
-  """Command syntax error
-
-  Code: 01
-  """
-
-
-class HardwareError(STARModuleError):
-  """Hardware error
-
-  Possible cause(s):
-    drive blocked, low power etc.
-
-  Code: 02
-  """
-
-
-class CommandNotCompletedError(STARModuleError):
-  """Command not completed
-
-  Possible cause(s):
-    error in previous sequence (not executed)
-
-  Code: 03
-  """
-
-
-class ClotDetectedError(STARModuleError):
-  """Clot detected
-
-  Possible cause(s):
-    LLD not interrupted
-
-  Code: 04
-  """
-
-
-class BarcodeUnreadableError(STARModuleError):
-  """Barcode unreadable
-
-  Possible cause(s):
-    bad or missing barcode
-
-  Code: 05
-  """
-
-
-class TipTooLittleVolumeError(STARModuleError):
-  """Too little liquid
-
-  Possible cause(s):
-    1. liquid surface is not detected,
-    2. Aspirate / Dispense conditions could not be fulfilled.
-
-  Code: 06
-  """
-
-
-class TipAlreadyFittedError(STARModuleError):
-  """Tip already fitted
-
-  Possible cause(s):
-    Repeated attempts to fit a tip or iSwap movement with tips
-
-  Code: 07
-  """
-
-
-class HamiltonNoTipError(STARModuleError):
-  """No tips
-
-  Possible cause(s):
-    command was started without fitting tip (tip was not fitted or fell off again)
-
-  Code: 08
-  """
-
-
-class NoCarrierError(STARModuleError):
-  """No carrier
-
-  Possible cause(s):
-    load command without carrier
-
-  Code: 09
-  """
-
-
-class NotCompletedError(STARModuleError):
-  """Not completed
-
-  Possible cause(s):
-    Command in command buffer was aborted due to an error in a previous command, or command stack
-    was deleted.
-
-  Code: 10
-  """
-
-
-class DispenseWithPressureLLDError(STARModuleError):
-  """Dispense with  pressure LLD
-
-  Possible cause(s):
-    dispense with pressure LLD is not permitted
-
-  Code: 11
-  """
-
-
-class NoTeachInSignalError(STARModuleError):
-  """No Teach  In Signal
-
-  Possible cause(s):
-    X-Movement to LLD reached maximum allowable position with- out detecting Teach in signal
-
-  Code: 12
-  """
-
-
-class LoadingTrayError(STARModuleError):
-  """Loading  Tray error
-
-  Possible cause(s):
-    position already occupied
-
-  Code: 13
-  """
-
-
-class SequencedAspirationWithPressureLLDError(STARModuleError):
-  """Sequenced aspiration with  pressure LLD
-
-  Possible cause(s):
-    sequenced aspiration with pressure LLD is not permitted
-
-  Code: 14
-  """
-
-
-class NotAllowedParameterCombinationError(STARModuleError):
-  """Not allowed  parameter combination
-
-  Possible cause(s):
-    i.e. PLLD and dispense or wrong X-drive assignment
-
-  Code: 15
-  """
-
-
-class CoverCloseError(STARModuleError):
-  """Cover close error
-
-  Possible cause(s):
-    cover is not closed and couldn't be locked
-
-  Code: 16
-  """
-
-
-class AspirationError(STARModuleError):
-  """Aspiration error
-
-  Possible cause(s):
-    aspiration liquid stream error detected
-
-  Code: 17
-  """
-
-
-class WashFluidOrWasteError(STARModuleError):
-  """Wash fluid or trash error
-
-  Possible cause(s):
-    1. missing wash fluid
-    2. trash of particular washer is full
-
-  Code: 18
-  """
-
-
-class IncubationError(STARModuleError):
-  """Incubation error
-
-  Possible cause(s):
-    incubator temperature out of limit
-
-  Code: 19
-  """
-
-
-class TADMMeasurementError(STARModuleError):
-  """TADM measurement error
-
-  Possible cause(s):
-    overshoot of limits during aspiration or dispensation
-
-  Code: 20, 26
-  """
-
-
-class NoElementError(STARModuleError):
-  """No element
-
-  Possible cause(s):
-    expected element not detected
-
-  Code: 21
-  """
-
-
-class ElementStillHoldingError(STARModuleError):
-  """Element still holding
-
-  Possible cause(s):
-    "Get command" is sent twice or element is not dropped expected element is missing (lost)
-
-  Code: 22
-  """
-
-
-class ElementLostError(STARModuleError):
-  """Element lost
-
-  Possible cause(s):
-    expected element is missing (lost)
-
-  Code: 23
-  """
-
-
-class IllegalTargetPlatePositionError(STARModuleError):
-  """Illegal target plate position
-
-  Possible cause(s):
-    1. over or underflow of iSWAP positions
-    2. iSWAP is not in park position during pipetting activities
-
-  Code: 24
-  """
-
-
-class IllegalUserAccessError(STARModuleError):
-  """Illegal user access
-
-  Possible cause(s):
-    carrier was manually removed or cover is open (immediate stop is executed)
-
-  Code: 25
-  """
-
-
-class PositionNotReachableError(STARModuleError):
-  """Position not reachable
-
-  Possible cause(s):
-    position out of mechanical limits using iSWAP, CoRe gripper or PIP-channels
-
-  Code: 27
-  """
-
-
-class UnexpectedLLDError(STARModuleError):
-  """unexpected LLD
-
-  Possible cause(s):
-    liquid level is reached before LLD scanning is started (using PIP or XL channels)
-
-  Code: 28
-  """
-
-
-class AreaAlreadyOccupiedError(STARModuleError):
-  """area already occupied
-
-  Possible cause(s):
-    Its impossible to occupy area because this area is already in use
-
-  Code: 29
-  """
-
-
-class ImpossibleToOccupyAreaError(STARModuleError):
-  """impossible to occupy area
-
-  Possible cause(s):
-    Area cant be occupied because is no solution for arm prepositioning
-
-  Code: 30
-  """
-
-
-class AntiDropControlError(STARModuleError):
-  """
-  Anti drop controlling out of tolerance. (VENUS only)
-
-  Code: 31
-  """
-
-
-class DecapperError(STARModuleError):
-  """
-  Decapper lock error while screw / unscrew a cap by twister channels. (VENUS only)
-
-  Code: 32
-  """
-
-
-class DecapperHandlingError(STARModuleError):
-  """
-  Decapper station error while lock / unlock a cap. (VENUS only)
-
-  Code: 33
-  """
-
-
-class StopError(STARModuleError):
-  """
-  Hood is open (Not from documentation, but observed)
-
-  Code: 36
-  """
-
-
-class SlaveError(STARModuleError):
-  """Slave error
-
-  Possible cause(s):
-    This error code indicates an error in one of slaves. (for error handling purpose using service
-    software macro code)
-
-  Code: 99
-  """
-
-
-class WrongCarrierError(STARModuleError):
-  """
-  Wrong carrier barcode detected. (VENUS only)
-
-  Code: 100
-  """
-
-
-class NoCarrierBarcodeError(STARModuleError):
-  """
-  Carrier barcode could not be read or is missing. (VENUS only)
-
-  Code: 101
-  """
-
-
-class LiquidLevelError(STARModuleError):
-  """
-  Liquid surface not detected. (VENUS only)
-
-  This error is created from main / slave error 06/70, 06/73 and 06/87.
-
-  Code: 102
-  """
-
-
-class NotDetectedError(STARModuleError):
-  """
-  Carrier not detected at deck end position. (VENUS only)
-
-  Code: 103
-  """
-
-
-class NotAspiratedError(STARModuleError):
-  """
-  Dispense volume exceeds the aspirated volume. (VENUS only)
-
-  This error is created from main / slave error 02/54.
-
-  Code: 104
-  """
-
-
-class ImproperDispensationError(STARModuleError):
-  """
-  The dispensed volume is out of tolerance (may only occur for Nano Pipettor Dispense steps).
-  (VENUS only)
-
-  This error is created from main / slave error 02/52 and 02/54.
-
-  Code: 105
-  """
-
-
-class NoLabwareError(STARModuleError):
-  """
-  The labware to be loaded was not detected by autoload module. (VENUS only)
-
-  Note:
-
-  May only occur on a Reload Carrier step if the labware property 'MlStarCarPosAreRecognizable' is
-  set to 1.
-
-  Code: 106
-  """
-
-
-class UnexpectedLabwareError(STARModuleError):
-  """
-  The labware contains unexpected barcode ( may only occur on a Reload Carrier step ). (VENUS only)
-
-  Code: 107
-  """
-
-
-class WrongLabwareError(STARModuleError):
-  """
-  The labware to be reloaded contains wrong barcode ( may only occur on a Reload Carrier step ).
-  (VENUS only)
-
-  Code: 108
-  """
-
-
-class BarcodeMaskError(STARModuleError):
-  """
-  The barcode read doesn't match the barcode mask defined. (VENUS only)
-
-  Code: 109
-  """
-
-
-class BarcodeNotUniqueError(STARModuleError):
-  """
-  The barcode read is not unique. Previously loaded labware with same barcode was loaded without
-  unique barcode check. (VENUS only)
-
-  Code: 110
-  """
-
-
-class BarcodeAlreadyUsedError(STARModuleError):
-  """
-  The barcode read is already loaded as unique barcode ( it's not possible to load the same barcode
-  twice ). (VENUS only)
-
-  Code: 111
-  """
-
-
-class KitLotExpiredError(STARModuleError):
-  """
-  Kit Lot expired. (VENUS only)
-
-  Code: 112
-  """
-
-
-class DelimiterError(STARModuleError):
-  """
-  Barcode contains character which is used as delimiter in result string. (VENUS only)
-
-  Code: 113
-  """
-
-
-class UnknownHamiltonError(STARModuleError):
-  """Unknown error"""
-
-
-def _module_id_to_module_name(id_):
-  """Convert a module ID to a module name."""
-  return {
-    "C0": "Master",
-    "X0": "X-drives",
-    "I0": "Auto Load",
-    "W1": "Wash station 1-3",
-    "W2": "Wash station 4-6",
-    "T1": "Temperature carrier 1",
-    "T2": "Temperature carrier 2",
-    "R0": "ISWAP",
-    "P1": "Pipetting channel 1",
-    "P2": "Pipetting channel 2",
-    "P3": "Pipetting channel 3",
-    "P4": "Pipetting channel 4",
-    "P5": "Pipetting channel 5",
-    "P6": "Pipetting channel 6",
-    "P7": "Pipetting channel 7",
-    "P8": "Pipetting channel 8",
-    "P9": "Pipetting channel 9",
-    "PA": "Pipetting channel 10",
-    "PB": "Pipetting channel 11",
-    "PC": "Pipetting channel 12",
-    "PD": "Pipetting channel 13",
-    "PE": "Pipetting channel 14",
-    "PF": "Pipetting channel 15",
-    "PG": "Pipetting channel 16",
-    "H0": "CoRe 96 Head",
-    "HW": "Pump station 1 station",
-    "HU": "Pump station 2 station",
-    "HV": "Pump station 3 station",
-    "N0": "Nano dispenser",
-    "D0": "384 dispensing head",
-    "NP": "Nano disp. pressure controller",
-    "M1": "Reserved for module 1",
-  }.get(id_, "Unknown Module")
-
-
-def error_code_to_exception(code: int) -> Type[STARModuleError]:
-  """Convert an error code to an exception."""
-  codes = {
-    1: CommandSyntaxError,
-    2: HardwareError,
-    3: CommandNotCompletedError,
-    4: ClotDetectedError,
-    5: BarcodeUnreadableError,
-    6: TipTooLittleVolumeError,
-    7: TipAlreadyFittedError,
-    8: HamiltonNoTipError,
-    9: NoCarrierError,
-    10: NotCompletedError,
-    11: DispenseWithPressureLLDError,
-    12: NoTeachInSignalError,
-    13: LoadingTrayError,
-    14: SequencedAspirationWithPressureLLDError,
-    15: NotAllowedParameterCombinationError,
-    16: CoverCloseError,
-    17: AspirationError,
-    18: WashFluidOrWasteError,
-    19: IncubationError,
-    20: TADMMeasurementError,
-    21: NoElementError,
-    22: ElementStillHoldingError,
-    23: ElementLostError,
-    24: IllegalTargetPlatePositionError,
-    25: IllegalUserAccessError,
-    26: TADMMeasurementError,
-    27: PositionNotReachableError,
-    28: UnexpectedLLDError,
-    29: AreaAlreadyOccupiedError,
-    30: ImpossibleToOccupyAreaError,
-    31: AntiDropControlError,
-    32: DecapperError,
-    33: DecapperHandlingError,
-    99: SlaveError,
-    100: WrongCarrierError,
-    101: NoCarrierBarcodeError,
-    102: LiquidLevelError,
-    103: NotDetectedError,
-    104: NotAspiratedError,
-    105: ImproperDispensationError,
-    106: NoLabwareError,
-    107: UnexpectedLabwareError,
-    108: WrongLabwareError,
-    109: BarcodeMaskError,
-    110: BarcodeNotUniqueError,
-    111: BarcodeAlreadyUsedError,
-    112: KitLotExpiredError,
-    113: DelimiterError,
-  }
-  if code in codes:
-    return codes[code]
-  return UnknownHamiltonError
-
-
-def trace_information_to_string(module_identifier: str, trace_information: int) -> str:
-  """Convert a trace identifier to an error message."""
-  table = None
-
-  if module_identifier == "C0":  # master
-    table = {
-      10: "CAN error",
-      11: "Slave command time out",
-      20: "E2PROM error",
-      30: "Unknown command",
-      31: "Unknown parameter",
-      32: "Parameter out of range",
-      33: "Parameter does not belong to command, or not all parameters were sent",
-      34: "Node name unknown",
-      35: "id parameter error",
-      37: "node name defined twice",
-      38: "faulty XL channel settings",
-      39: "faulty robotic channel settings",
-      40: "PIP task busy",
-      41: "Auto load task busy",
-      42: "Miscellaneous task busy",
-      43: "Incubator task busy",
-      44: "Washer task busy",
-      45: "iSWAP task busy",
-      46: "CoRe 96 head task busy",
-      47: "Carrier sensor doesn't work properly",
-      48: "CoRe 384 head task busy",
-      49: "Nano pipettor task busy",
-      50: "XL channel task busy",
-      51: "Tube gripper task busy",
-      52: "Imaging channel task busy",
-      53: "Robotic channel task busy",
-    }
-  elif module_identifier == "I0":  # autoload
-    table = {36: "Hamilton will not run while the hood is open"}
-  elif module_identifier in [
-    "PX",
-    "P1",
-    "P2",
-    "P3",
-    "P4",
-    "P5",
-    "P6",
-    "P7",
-    "P8",
-    "P9",
-    "PA",
-    "PB",
-    "PC",
-    "PD",
-    "PE",
-    "PF",
-    "PG",
-  ]:
-    table = {
-      0: "No error",
-      20: "No communication to EEPROM",
-      30: "Unknown command",
-      31: "Unknown parameter",
-      32: "Parameter out of range",
-      35: "Voltages outside permitted range",
-      36: "Stop during execution of command",
-      37: "Stop during execution of command",
-      40: "No parallel processes permitted (Two or more commands sent for the same controlprocess)",
-      50: "Dispensing drive init. position not found",
-      51: "Dispensing drive not initialized",
-      52: "Dispensing drive movement error",
-      53: "Maximum volume in tip reached",
-      54: "Position outside of permitted area",
-      55: "Y-drive blocked",
-      56: "Y-drive not initialized",
-      57: "Y-drive movement error",
-      60: "Z-drive blocked",
-      61: "Z-drive not initialized",
-      62: "Z-drive movement error",
-      63: "Z-drive limit stop not found",
-      65: "Squeezer drive blocked. Can you manually unblock the squeezer drive by turning its screw?",
-      66: "Squeezer drive not initialized",
-      67: "Squeezer drive movement error: Step loss",
-      68: "Init position adjustment error",
-      70: "No liquid level found (possibly because no liquid was present, or too little liquid was present to trigger cLLD)",
-      71: "Not enough liquid present (Immersion depth or surface following position possibly"
-      "below minimal access range)",
-      72: "Auto calibration at pressure (Sensor not possible)",
-      73: "No liquid level found with dual LLD",
-      74: "Liquid at a not allowed position detected",
-      75: "No tip picked up, possibly because no was present at specified position",
-      76: "Tip already picked up",
-      77: "Tip not dropped",
-      78: "Wrong tip picked up",
-      80: "Liquid not correctly aspirated",
-      81: "Clot detected",
-      82: "TADM measurement out of lower limit curve",
-      83: "TADM measurement out of upper limit curve",
-      84: "Not enough memory for TADM measurement",
-      85: "No communication to digital potentiometer",
-      86: "ADC algorithm error",
-      87: "2nd phase of liquid nt found",
-      88: "Not enough liquid present (Immersion depth or surface following position possibly"
-      "below minimal access range)",
-      90: "Limit curve not resettable",
-      91: "Limit curve not programmable",
-      92: "Limit curve not found",
-      93: "Limit curve data incorrect",
-      94: "Not enough memory for limit curve",
-      95: "Invalid limit curve index",
-      96: "Limit curve already stored",
-    }
-  elif module_identifier == "H0":  # Core 96 head
-    table = {
-      20: "No communication to EEPROM",
-      30: "Unknown command",
-      31: "Unknown parameter",
-      32: "Parameter out of range",
-      35: "Voltage outside permitted range",
-      36: "Stop during execution of command",
-      37: "The adjustment sensor did not switch",
-      40: "No parallel processes permitted",
-      50: "Dispensing drive initialization failed",
-      51: "Dispensing drive not initialized",
-      52: "Dispensing drive movement error",
-      53: "Maximum volume in tip reached",
-      54: "Position out of permitted area",
-      55: "Y drive initialization failed",
-      56: "Y drive not initialized",
-      57: "Y drive movement error",
-      58: "Y drive position outside of permitted area",
-      60: "Z drive initialization failed",
-      61: "Z drive not initialized",
-      62: "Z drive movement error",
-      63: "Z drive position outside of permitted area",
-      65: "Squeezer drive initialization failed",
-      66: "Squeezer drive not initialized",
-      67: "Squeezer drive movement error: drive blocked or incremental sensor fault",
-      68: "Squeezer drive position outside of permitted area",
-      70: "No liquid level found",
-      71: "Not enough liquid present",
-      75: "No tip picked up",
-      76: "Tip already picked up",
-      81: "Clot detected",
-    }
-  elif module_identifier == "R0":  # iswap
-    table = {
-      20: "No communication to EEPROM",
-      30: "Unknown command",
-      31: "Unknown parameter",
-      32: "Parameter out of range",
-      33: "FW doesn't match to HW",
-      36: "Stop during execution of command",
-      37: "The adjustment sensor did not switch",
-      38: "The adjustment sensor cannot be searched",
-      40: "No parallel processes permitted",
-      41: "No parallel processes permitted",
-      42: "No parallel processes permitted",
-      50: "Y-drive Initialization failed",
-      51: "Y-drive not initialized",
-      52: "Y-drive movement error: drive locked or incremental sensor fault",
-      53: "Y-drive movement error: position counter over/underflow",
-      60: "Z-drive initialization failed",
-      61: "Z-drive not initialized",
-      62: "Z-drive movement error: drive locked or incremental sensor fault",
-      63: "Z-drive movement error: position counter over/underflow",
-      70: "Rotation-drive initialization failed",
-      71: "Rotation-drive not initialized",
-      72: "Rotation-drive movement error: drive locked or incremental sensor fault",
-      73: "Rotation-drive movement error: position counter over/underflow",
-      80: "Wrist twist drive initialization failed",
-      81: "Wrist twist drive not initialized",
-      82: "Wrist twist drive movement error: drive locked or incremental sensor fault",
-      83: "Wrist twist drive movement error: position counter over/underflow",
-      85: "Gripper drive: communication error to gripper DMS digital potentiometer",
-      86: "Gripper drive: Auto adjustment of DMS digital potentiometer not possible",
-      89: "Gripper drive movement error: drive locked or incremental sensor fault during gripping",
-      90: "Gripper drive initialized failed",
-      91: "iSWAP not initialized. Call STARBackend.initialize_iswap().",
-      92: "Gripper drive movement error: drive locked or incremental sensor fault during release",
-      93: "Gripper drive movement error: position counter over/underflow",
-      94: "Plate not found",
-      96: "Plate not available",
-      97: "Unexpected object found",
-    }
-
-  if table is not None and trace_information in table:
-    return table[trace_information]
-
-  return f"Unknown trace information code {trace_information:02}"
-
-
-class STARFirmwareError(Exception):
-  def __init__(self, errors: Dict[str, STARModuleError], raw_response: str):
-    self.errors = errors
-    self.raw_response = raw_response
-    super().__init__(f"{errors}, {raw_response}")
-
-
-def star_firmware_string_to_error(
-  error_code_dict: Dict[str, str],
-  raw_response: str,
-) -> STARFirmwareError:
-  """Convert a firmware string to a STARFirmwareError."""
-
-  errors = {}
-
-  for module_id, error in error_code_dict.items():
-    module_name = _module_id_to_module_name(module_id)
-    if "/" in error:
-      # C0 module: error code / trace information
-      error_code_str, trace_information_str = error.split("/")
-      error_code, trace_information = (
-        int(error_code_str),
-        int(trace_information_str),
-      )
-      if error_code == 0:  # No error
-        continue
-      error_class = error_code_to_exception(error_code)
-    elif module_id == "I0" and error == "36":
-      error_class = StopError
-      trace_information = int(error)
-    else:
-      # Slave modules: er## (just trace information)
-      error_class = UnknownHamiltonError
-      trace_information = int(error)
-    error_description = trace_information_to_string(
-      module_identifier=module_id, trace_information=trace_information
-    )
-    errors[module_name] = error_class(
-      message=error_description,
-      trace_information=trace_information,
-      raw_response=error,
-      raw_module=module_id,
-    )
-
-  # If the master error is a SlaveError, remove it from the errors dict.
-  if isinstance(errors.get("Master"), SlaveError):
-    errors.pop("Master")
-
-  return STARFirmwareError(errors=errors, raw_response=raw_response)
-
-
-def convert_star_module_error_to_plr_error(
-  error: STARModuleError,
-) -> Optional[Exception]:
-  """Convert an error returned by a specific STAR module to a Hamilton error."""
-  # TipAlreadyFittedError -> HasTipError
-  if isinstance(error, TipAlreadyFittedError):
-    return HasTipError()
-
-  # HamiltonNoTipError -> NoTipError
-  if isinstance(error, HamiltonNoTipError):
-    return NoTipError(error.message)
-
-  if error.trace_information == 75:
-    return NoTipError(error.message)
-
-  if error.trace_information in {70, 71}:
-    return TooLittleLiquidError(error.message)
-
-  if error.trace_information in {54}:
-    return TooLittleVolumeError(error.message)
-
-  return None
-
-
-def convert_star_firmware_error_to_plr_error(
-  error: STARFirmwareError,
-) -> Optional[Exception]:
-  """Check if a STARFirmwareError can be converted to a native PLR error. If so, return it, else
-  return `None`."""
-
-  # if all errors are channel errors, return a ChannelizedError
-  if all(e.startswith("Pipetting channel ") for e in error.errors):
-
-    def _channel_to_int(channel: str) -> int:
-      return int(channel.split(" ")[-1]) - 1  # star is 1-indexed, plr is 0-indexed
-
-    errors = {
-      _channel_to_int(module_name): convert_star_module_error_to_plr_error(error) or error
-      for module_name, error in error.errors.items()
-    }
-    return ChannelizedError(errors=errors, raw_response=error.raw_response)
-
-  return None
 
 
 def _convert_immersion_depth(
@@ -1351,15 +362,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
 
+    from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
+
+    self.driver = STARDriver(
+      device_address=device_address,
+      serial_number=serial_number,
+      packet_read_timeout=packet_read_timeout,
+      read_timeout=read_timeout,
+      write_timeout=write_timeout,
+    )
+
     self._machine_conf: Optional[MachineConfiguration] = None
 
-    self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._channels_minimum_y_spacing: List[float] = [9.0] * 8
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[ExtendedConfiguration] = None
-    self._channel_traversal_height: float = 245.0
-    self._iswap_traversal_height: float = 280.0
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1369,26 +387,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._setup_done = False
 
-    # New-architecture backends — legacy methods forward to these.
-    from pylabrobot.hamilton.liquid_handlers.star.pip_backend import STARPIPBackend
-    from pylabrobot.hamilton.liquid_handlers.star.head96_backend import STARHead96Backend
-    from pylabrobot.hamilton.liquid_handlers.star.autoload import STARAutoload
-    from pylabrobot.hamilton.liquid_handlers.star.cover import STARCover
-    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
-    from pylabrobot.hamilton.liquid_handlers.star.wash_station import STARWashStation
-    from pylabrobot.hamilton.liquid_handlers.star.x_arm import STARXArm
-    self._new_pip = STARPIPBackend(self)
-    self._new_head96 = STARHead96Backend(self)
-    self._new_autoload = STARAutoload(driver=self)  # type: ignore[arg-type]
-    self._new_cover = STARCover(driver=self)  # type: ignore[arg-type]
-    self._new_iswap = iSWAPBackend(driver=self)  # type: ignore[arg-type]
-    self._new_left_x_arm = STARXArm(driver=self, side="left")  # type: ignore[arg-type]
-    self._new_right_x_arm = STARXArm(driver=self, side="right")  # type: ignore[arg-type]
-    self._new_wash_station = STARWashStation(driver=self)  # type: ignore[arg-type]
+  @property
+  def left_x_arm(self):
+    return self.driver.left_x_arm
 
-    # Public aliases so STARPIPBackend (which sees self as its driver) can access these.
-    self.left_x_arm = self._new_left_x_arm
-    self.iswap = None  # populated in setup() if iSWAP is installed
+  @property
+  def iswap(self):
+    return self.driver.iswap
+
+  @property
+  def _write_and_read_command(self):
+    return self.driver._write_and_read_command
+
+  @_write_and_read_command.setter
+  def _write_and_read_command(self, value):
+    self.driver._write_and_read_command = value
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the conservative minimum Y spacing required between channels *i* and *j*.
@@ -1479,28 +492,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
-    self._channel_traversal_height = traversal_height
+    self.driver.pip.traversal_height = traversal_height
 
   def set_minimum_iswap_traversal_height(self, traversal_height: float):
     """Set the minimum traversal height for the iswap."""
 
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
-    self._iswap_traversal_height = traversal_height
+    self.driver.iswap.traversal_height = traversal_height
 
   @contextmanager
   def iswap_minimum_traversal_height(self, traversal_height: float):
-    orig = self._iswap_traversal_height
-    self._iswap_traversal_height = traversal_height
-    try:
+    """Deprecated: use ``self.driver.iswap.use_traversal_height()``."""
+    with self.driver.iswap.use_traversal_height(traversal_height):
       yield
-    except Exception as e:
-      self._iswap_traversal_height = orig
-      raise e
 
   @property
   def iswap_traversal_height(self) -> float:
-    return self._iswap_traversal_height
+    return self.driver.iswap.traversal_height
 
   @property
   def module_id_length(self):
@@ -1515,7 +524,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @property
   def iswap_parked(self) -> bool:
-    return self._iswap_parked is True
+    if self.driver.iswap is not None:
+      return self.driver.iswap.parked
+    return False
 
   @property
   def core_parked(self) -> bool:
@@ -1528,10 +539,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return self._iswap_version
 
   async def request_pip_channel_version(self, channel: int) -> str:
-    return cast(
-      str,
-      (await self.send_command(STARBackend.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"],
-    )
+    """Deprecated: use ``star.pip.backend.channels[n].request_firmware_version()``."""
+    return await self._pip_channels[channel].request_firmware_version()
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -1672,14 +681,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       skip_core96_head: if True, skip initializing the CoRe 96 head module, if applicable.
     """
 
-    await super().setup()
+    # Let the driver own the USB connection and query machine config.
+    await self.driver.setup()
 
+    # Sync legacy state from driver.
     self.id_ = 0
-
-    # Request machine information
-    self._machine_conf = await self.request_machine_configuration()
-    self._extended_conf = await self.request_extended_configuration()
-    self._new_autoload._instrument_size_slots = self._extended_conf.instrument_size_slots
+    self._machine_conf = self.driver.machine_conf
+    self._extended_conf = self.driver.extended_conf
     self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
@@ -1720,7 +728,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           await self.initialize_iswap()
 
         await self.park_iswap(
-          minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
+          minimum_traverse_height_at_beginning_of_a_command=int(
+            self.driver.iswap.traversal_height * 10
+          )
         )
 
     async def set_up_core96_head():
@@ -1730,7 +740,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         if not core96_head_initialized:
           await self.initialize_core_96_head(
             trash96=self.deck.get_trash_area96(),
-            z_position_at_the_command_end=self._channel_traversal_height,
+            z_position_at_the_command_end=self.driver.pip.traversal_height,
           )
 
         # Cache firmware version and configuration for version-specific behavior
@@ -1757,10 +767,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the core grippers.
     self._core_parked = True
 
+    self._pip_channels = self.driver.pip.channels
+
     self._setup_done = True
 
+  async def send_command(
+    self,
+    module,
+    command,
+    auto_id=True,
+    tip_pattern=None,
+    write_timeout=None,
+    read_timeout=None,
+    wait=True,
+    fmt=None,
+    **kwargs,
+  ):
+    return await self.driver.send_command(
+      module=module,
+      command=command,
+      auto_id=auto_id,
+      tip_pattern=tip_pattern,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      wait=wait,
+      fmt=fmt,
+      **kwargs,
+    )
+
   async def stop(self):
-    await super().stop()
+    await self.driver.stop()
     self._setup_done = False
 
   @property
@@ -1855,35 +891,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dispensing_cycles: int
 
   async def channel_request_cycle_counts(self, channel_idx: int) -> ChannelCycleCounts:
-    """Request cycle counters for a single channel.
-
-    Returns the number of tip pick-up, tip discard, aspiration, and dispensing cycles
-    performed by the channel.
-
-    Args:
-      channel_idx: The channel index to query (0-indexed).
-
-    Returns:
-      A dict with keys ``tip_pick_up_cycles``, ``tip_discard_cycles``,
-      ``aspiration_cycles``, and ``dispensing_cycles``.
-    """
-
-    if not (0 <= channel_idx < self.num_channels):
-      raise ValueError(
-        f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
-      )
-
-    resp = await self.send_command(
-      module=self.channel_id(channel_idx),
-      command="RV",
-      fmt="na##########nb##########nc##########nd##########",
-    )
-    return {
-      "tip_pick_up_cycles": resp["na"],
-      "tip_discard_cycles": resp["nb"],
-      "aspiration_cycles": resp["nc"],
-      "dispensing_cycles": resp["nd"],
-    }
+    """Deprecated: use ``star.pip.backend.channels[n].request_cycle_counts()``."""
+    return await self._pip_channels[channel_idx].request_cycle_counts()
 
   async def channels_request_cycle_counts(self) -> List[ChannelCycleCounts]:
     """Request cycle counters for all channels.
@@ -1913,16 +922,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.pip.backend.pick_up_tips()``."""
     from pylabrobot.capabilities.liquid_handling.standard import Pickup as NewPickup
-    PickUpTipsParams = self._new_pip.PickUpTipsParams
+
+    PickUpTipsParams = self.driver.pip.PickUpTipsParams
 
     new_ops = [NewPickup(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
     params = PickUpTipsParams(
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
+      or self.driver.pip.traversal_height,
       pickup_method=pickup_method,
       begin_tip_pick_up_process=begin_tip_pick_up_process,
       end_tip_pick_up_process=end_tip_pick_up_process,
     )
-    return await self._new_pip.pick_up_tips(new_ops, use_channels, backend_params=params)
+    return await self.driver.pip.pick_up_tips(new_ops, use_channels, backend_params=params)
 
   async def drop_tips(
     self,
@@ -1936,17 +947,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.pip.backend.drop_tips()``."""
     from pylabrobot.capabilities.liquid_handling.standard import TipDrop as NewTipDrop
-    DropTipsParams = self._new_pip.DropTipsParams
+
+    DropTipsParams = self.driver.pip.DropTipsParams
 
     new_ops = [NewTipDrop(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
     params = DropTipsParams(
       drop_method=drop_method,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height,
-      z_position_at_end_of_a_command=z_position_at_end_of_a_command or self._channel_traversal_height,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
+      or self.driver.pip.traversal_height,
+      z_position_at_end_of_a_command=z_position_at_end_of_a_command
+      or self.driver.pip.traversal_height,
       begin_tip_deposit_process=begin_tip_deposit_process,
       end_tip_deposit_process=end_tip_deposit_process,
     )
-    return await self._new_pip.drop_tips(new_ops, use_channels, backend_params=params)
+    return await self.driver.pip.drop_tips(new_ops, use_channels, backend_params=params)
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
@@ -2382,15 +1396,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   DISPENSING_DRIVE_VOL_LIMIT_TOP = 1_250  # vol
 
   async def channel_dispensing_drive_request_position(self, channel_idx: int) -> float:
-    """Request the current position of the channel's dispensing drive"""
-
-    if not (0 <= channel_idx < self.num_channels):
-      raise ValueError(f"channel_idx must be between 0 and {self.num_channels - 1}")
-
-    resp = await self.send_command(
-      module=STARBackend.channel_id(channel_idx), command="RD", fmt="rd##### #####"
-    )
-    return STARBackend.dispensing_drive_increment_to_volume(resp["rd"])
+    """Deprecated: use ``star.pip.backend.channels[n].request_dispensing_drive_position()``."""
+    return await self._pip_channels[channel_idx].request_dispensing_drive_position()
 
   async def channel_dispensing_drive_move_to_volume_position(
     self,
@@ -2400,51 +1407,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration: float = 3000.0,  # uL/sec**2,
     current_limit: int = 5,
   ):
-    """Move channel's dispensing drive to specified volume position
-
-    Args:
-      channel_idx: Index of the channel to move (0-indexed).
-      vol: Target volume position to move the dispensing drive piston to (uL).
-      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
-      acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
-      current_limit: Current limit for the drive (1-7). Default is 5.
-    """
-
-    if not (self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.DISPENSING_DRIVE_VOL_LIMIT_TOP):
-      raise ValueError(
-        f"Target dispensing Drive vol must be between {self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
-        f" and {self.DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
-      )
-    if not (0.9 <= flow_rate <= 632.8):
-      raise ValueError(
-        f"Dispensing drive speed must be between 0.9 and 632.8 uL/sec, is {flow_rate}"
-      )
-    if not (234.4 <= acceleration <= 28125.6):
-      raise ValueError(
-        f"Dispensing drive acceleration must be between 234.4 and 28125.6 uL/sec**2, is {acceleration}"
-      )
-    if not (1 <= current_limit <= 7):
-      raise ValueError(
-        f"Dispensing drive current limit must be between 1 and 7, is {current_limit}"
-      )
-
-    current_position = await self.channel_dispensing_drive_request_position(channel_idx=channel_idx)
-    relative_vol_movement = round(vol - current_position, 1)
-    relative_vol_movement_increment = STARBackend.dispensing_drive_vol_to_increment(
-      abs(relative_vol_movement)
-    )
-    speed_increment = STARBackend.dispensing_drive_vol_to_increment(flow_rate)
-    acceleration_increment = STARBackend.dispensing_drive_vol_to_increment(acceleration)
-    acceleration_increment_thousands = round(acceleration_increment * 0.001)
-
-    await self.send_command(
-      module=STARBackend.channel_id(channel_idx),
-      command="DS",
-      ds=f"{relative_vol_movement_increment:05}",
-      dt="0" if relative_vol_movement >= 0 else "1",
-      dv=f"{speed_increment:05}",
-      dr=f"{acceleration_increment_thousands:03}",
-      dw=f"{current_limit}",
+    """Deprecated: use ``star.pip.backend.channels[n].move_dispensing_drive_to_position()``."""
+    return await self._pip_channels[channel_idx].move_dispensing_drive_to_position(
+      vol=vol,
+      flow_rate=flow_rate,
+      acceleration=acceleration,
+      current_limit=current_limit,
     )
 
   async def empty_tip(
@@ -2456,38 +1424,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_limit: int = 5,
     reset_dispensing_drive_after: bool = True,
   ):
-    """Empty tip by moving to `vol` (default bottom limit), optionally returning plunger position to 0.
-
-    Args:
-      channel_idx: Index of the channel to empty (0-indexed).
-      vol: Target volume position to move the dispensing drive piston to (uL). If None, defaults to bottom limit.
-      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
-      acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
-      current_limit: Current limit for the drive (1-7). Default is 5.
-      reset_dispensing_drive_after: Whether to return the dispensing drive to 0 after emptying. Default is True
-    """
-
-    if vol is None:
-      vol = self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
-
-    # Empty tip
-    await self.channel_dispensing_drive_move_to_volume_position(
-      channel_idx=channel_idx,
+    """Deprecated: use ``star.pip.backend.channels[n].empty_tip()``."""
+    return await self._pip_channels[channel_idx].empty_tip(
       vol=vol,
       flow_rate=flow_rate,
       acceleration=acceleration,
       current_limit=current_limit,
+      reset_dispensing_drive_after=reset_dispensing_drive_after,
     )
-
-    if reset_dispensing_drive_after:
-      # Reset only channel used back to vol=0.0 position
-      await self.channel_dispensing_drive_move_to_volume_position(
-        channel_idx=channel_idx,
-        vol=0,
-        flow_rate=flow_rate,
-        acceleration=acceleration,
-        current_limit=current_limit,
-      )
 
   async def empty_tips(
     self,
@@ -2587,7 +1531,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Deprecated: use ``star.pip.backend.aspirate()``."""
 
     from pylabrobot.capabilities.liquid_handling.standard import Aspiration as NewAspiration
-    AspirateParams = self._new_pip.AspirateParams
+
+    AspirateParams = self.driver.pip.AspirateParams
     from pylabrobot.hamilton.liquid_handlers.star.pip_backend import LLDMode as NewLLDMode
 
     # # # TODO: delete > 2026-01 # # #
@@ -2611,7 +1556,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
       liquid_surface_no_lld = liquid_surface_no_lld or liquid_surfaces_no_lld
     if ratio_liquid_rise_to_tip_deep_in is not None:
-      warnings.warn("ratio_liquid_rise_to_tip_deep_in is deprecated.", DeprecationWarning, stacklevel=2)
+      warnings.warn(
+        "ratio_liquid_rise_to_tip_deep_in is deprecated.", DeprecationWarning, stacklevel=2
+      )
     if immersion_depth_2nd_section is not None:
       warnings.warn("immersion_depth_2nd_section is deprecated.", DeprecationWarning, stacklevel=2)
     # # # delete # # #
@@ -2623,8 +1570,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     new_ops = [
       NewAspiration(
-        resource=op.resource, offset=op.offset, tip=op.tip, volume=op.volume,
-        flow_rate=op.flow_rate, liquid_height=op.liquid_height,
+        resource=op.resource,
+        offset=op.offset,
+        tip=op.tip,
+        volume=op.volume,
+        flow_rate=op.flow_rate,
+        liquid_height=op.liquid_height,
         blow_out_air_volume=op.blow_out_air_volume,
         mix=op.mix,
       )
@@ -2656,8 +1607,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface=mix_position_from_liquid_surface,
       mix_surface_following_distance=mix_surface_following_distance,
       limit_curve_index=limit_curve_index,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height,
-      min_z_endpos=min_z_endpos or self._channel_traversal_height,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
+      or self.driver.pip.traversal_height,
+      min_z_endpos=min_z_endpos or self.driver.pip.traversal_height,
       liquid_surface_no_lld=liquid_surface_no_lld,
       use_2nd_section_aspiration=use_2nd_section_aspiration,
       retract_height_over_2nd_section_to_empty_tip=retract_height_over_2nd_section_to_empty_tip,
@@ -2669,7 +1621,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       auto_surface_following_distance=auto_surface_following_distance,
     )
 
-    return await self._new_pip.aspirate(new_ops, use_channels, backend_params=params)
+    return await self.driver.pip.aspirate(new_ops, use_channels, backend_params=params)
 
   async def dispense(
     self,
@@ -2716,10 +1668,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Deprecated: use ``star.pip.backend.dispense()``."""
 
     from pylabrobot.capabilities.liquid_handling.standard import Dispense as NewDispense
-    DispenseParams = self._new_pip.DispenseParams
-    from pylabrobot.hamilton.liquid_handlers.star.pip_backend import LLDMode as NewLLDMode
 
-    n = len(ops)
+    DispenseParams = self.driver.pip.DispenseParams
+    from pylabrobot.hamilton.liquid_handlers.star.pip_backend import LLDMode as NewLLDMode
 
     # # # TODO: delete > 2026-01 # # #
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
@@ -2748,8 +1699,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     new_ops = [
       NewDispense(
-        resource=op.resource, offset=op.offset, tip=op.tip, volume=op.volume,
-        flow_rate=op.flow_rate, liquid_height=op.liquid_height,
+        resource=op.resource,
+        offset=op.offset,
+        tip=op.tip,
+        volume=op.volume,
+        flow_rate=op.flow_rate,
+        liquid_height=op.liquid_height,
         blow_out_air_volume=op.blow_out_air_volume,
         mix=op.mix,
       )
@@ -2783,13 +1738,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface=mix_position_from_liquid_surface,
       mix_surface_following_distance=mix_surface_following_distance,
       limit_curve_index=limit_curve_index,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height,
-      min_z_endpos=min_z_endpos or self._channel_traversal_height,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
+      or self.driver.pip.traversal_height,
+      min_z_endpos=min_z_endpos or self.driver.pip.traversal_height,
       probe_liquid_height=probe_liquid_height,
       auto_surface_following_distance=auto_surface_following_distance,
     )
 
-    return await self._new_pip.dispense(new_ops, use_channels, backend_params=params)
+    return await self.driver.pip.dispense(new_ops, use_channels, backend_params=params)
 
   @_requires_head96
   async def pick_up_tips96(
@@ -2884,10 +1840,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         }[tip_pickup_method],
         z_deposit_position=round(pickup_position.z * 10),
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height)
+          * 10
         ),
         minimum_height_command_end=round(
-          (minimum_height_command_end or self._channel_traversal_height) * 10
+          (minimum_height_command_end or self.driver.pip.traversal_height) * 10
         ),
       )
     except STARFirmwareError as e:
@@ -2927,10 +1884,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y_position=round(position.y * 10),
       z_deposit_position=round(position.z * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height) * 10
       ),
       minimum_height_command_end=round(
-        (minimum_height_command_end or self._channel_traversal_height) * 10
+        (minimum_height_command_end or self.driver.pip.traversal_height) * 10
       ),
     )
 
@@ -3160,9 +2117,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height) * 10
       ),
-      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+      min_z_endpos=round((min_z_endpos or self.driver.pip.traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
@@ -3434,9 +2391,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_direction=0 if position.x >= 0 else 1,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height) * 10
       ),
-      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+      min_z_endpos=round((min_z_endpos or self.driver.pip.traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
@@ -3499,7 +2456,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         GripDirection.LEFT: 4,
       }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        * 10
       ),
       collision_control_level=collision_control_level,
       acceleration_index_high_acc=acceleration_index_high_acc,
@@ -3553,10 +2511,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        * 10
       ),
       minimum_z_position_at_the_command_end=round(
-        (minimum_z_position_at_the_command_end or self._iswap_traversal_height) * 10
+        (minimum_z_position_at_the_command_end or self.driver.iswap.traversal_height) * 10
       ),
     )
 
@@ -3589,7 +2548,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        * 10
       ),
     )
 
@@ -3630,10 +2590,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        * 10
       ),
       z_position_at_the_command_end=round(
-        (z_position_at_the_command_end or self._iswap_traversal_height) * 10
+        (z_position_at_the_command_end or self.driver.iswap.traversal_height) * 10
       ),
       return_tool=return_tool,
     )
@@ -3683,9 +2644,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z -= pickup.pickup_distance_from_top
 
       traverse_height_at_beginning = (
-        minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+        minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height
       )
-      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
+      z_position_at_the_command_end = (
+        z_position_at_the_command_end or self.driver.iswap.traversal_height
+      )
 
       if open_gripper_position is None:
         if use_unsafe_hotel:
@@ -3765,8 +2728,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
         offset=pickup.offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
-        minimum_z_position_at_the_command_end=self._iswap_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
+        minimum_z_position_at_the_command_end=self.driver.iswap.traversal_height,
         front_channel=core_front_channel,
         grip_strength=core_grip_strength,
       )
@@ -3787,7 +2750,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.iswap_move_picked_up_resource(
         center=center,
         grip_direction=move.gripped_direction,
-        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
         collision_control_level=1,
         acceleration_index_high_acc=4,
         acceleration_index_low_acc=1,
@@ -3795,7 +2758,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       await self.core_move_picked_up_resource(
         center=center,
-        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
         acceleration_index=4,
       )
 
@@ -3831,9 +2794,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if use_arm == "iswap":
       traversal_height_start = (
-        minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+        minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height
       )
-      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
+      z_position_at_the_command_end = (
+        z_position_at_the_command_end or self.driver.iswap.traversal_height
+      )
       assert (
         drop.resource.get_absolute_rotation().x == 0
         and drop.resource.get_absolute_rotation().y == 0
@@ -3915,8 +2880,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         location=Coordinate(x, y, z),
         resource=drop.resource,
         pickup_distance_from_top=drop.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
-        z_position_at_the_command_end=self._iswap_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
+        z_position_at_the_command_end=self.driver.iswap.traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
       )
@@ -3930,7 +2895,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_x(self, channel: int, x: float):
     """Deprecated: use ``star.driver.left_x_arm.move_to()``."""
-    await self._new_left_x_arm.move_to(x)
+    await self.driver.left_x_arm.move_to(x)
 
   @need_iswap_parked
   async def move_channel_y(self, channel: int, y: float):
@@ -3969,7 +2934,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_z(self, channel: int, z: float):
     """Deprecated: use ``star.pip.backend.move_channel_z()``."""
-    await self._new_pip.move_channel_z(channel, z)
+    await self.driver.pip.move_channel_z(channel, z)
 
   async def move_channel_x_relative(self, channel: int, distance: float):
     """Move a channel in the x direction by a relative amount."""
@@ -4234,7 +3199,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_autoload_initialization_status(self) -> bool:
     """Deprecated: use ``star.autoload.request_initialization_status()``."""
-    return await self._new_autoload.request_initialization_status()
+    return await self.driver.autoload.request_initialization_status()
 
   async def request_name_of_last_faulty_parameter(self):
     """Deprecated: use ``star.driver.request_name_of_last_faulty_parameter()``."""
@@ -4653,23 +3618,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def position_left_x_arm_(self, x_position: int = 0):
     """Deprecated: use ``star.left_x_arm.move_to()``."""
-    return await self._new_left_x_arm.move_to(x_position=x_position / 10)
+    return await self.driver.left_x_arm.move_to(x_position=x_position / 10)
 
   async def position_right_x_arm_(self, x_position: int = 0):
     """Deprecated: use ``star.right_x_arm.move_to()``."""
-    return await self._new_right_x_arm.move_to(x_position=x_position / 10)
+    return await self.driver.right_x_arm.move_to(x_position=x_position / 10)
 
   async def move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self, x_position: int = 0
   ):
     """Deprecated: use ``star.left_x_arm.move_to_safe()``."""
-    return await self._new_left_x_arm.move_to_safe(x_position=x_position / 10)
+    return await self.driver.left_x_arm.move_to_safe(x_position=x_position / 10)
 
   async def move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self, x_position: int = 0
   ):
     """Deprecated: use ``star.right_x_arm.move_to_safe()``."""
-    return await self._new_right_x_arm.move_to_safe(x_position=x_position / 10)
+    return await self.driver.right_x_arm.move_to_safe(x_position=x_position / 10)
 
   # -------------- 3.4.2 X-Area reservation for external access --------------
 
@@ -4727,11 +3692,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_left_x_arm_position(self) -> float:
     """Deprecated: use ``star.left_x_arm.request_position()``."""
-    return await self._new_left_x_arm.request_position()
+    return await self.driver.left_x_arm.request_position()
 
   async def request_right_x_arm_position(self) -> float:
     """Deprecated: use ``star.right_x_arm.request_position()``."""
-    return await self._new_right_x_arm.request_position()
+    return await self.driver.right_x_arm.request_position()
 
   async def request_maximal_ranges_of_x_drives(self):
     """Deprecated: use ``star.driver.request_maximal_ranges_of_x_drives()``."""
@@ -4745,11 +3710,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_left_x_arm_last_collision_type(self):
     """Deprecated: use ``star.left_x_arm.last_collision_type()``."""
-    return await self._new_left_x_arm.last_collision_type()
+    return await self.driver.left_x_arm.last_collision_type()
 
   async def request_right_x_arm_last_collision_type(self) -> bool:
     """Deprecated: use ``star.right_x_arm.last_collision_type()``."""
-    return await self._new_right_x_arm.last_collision_type()
+    return await self.driver.right_x_arm.last_collision_type()
 
   # -------------- 3.5 Pipetting channel commands --------------
 
@@ -4765,7 +3730,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         int(self.extended_conf.tip_waste_x_position * 10)
       ],  # Tip eject waste X position.
       y_positions=y_positions,
-      begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
+      begin_of_tip_deposit_process=int(self.driver.pip.traversal_height * 10),
       end_of_tip_deposit_process=1220,
       z_position_at_end_of_a_command=3600,
       tip_pattern=[True] * self.num_channels,
@@ -5540,7 +4505,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       front_channel=front_channel,
       begin_z=235.0 + self.core_adjustment.z + z_offset,
       end_z=225.0 + self.core_adjustment.z + z_offset,
-      traversal_height=self._iswap_traversal_height,
+      traversal_height=self.driver.iswap.traversal_height,
     )
     self._core_parked = False
     return command_output
@@ -5582,7 +4547,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       front_channel_y=front_channel_y_center,
       begin_z=215.0 + self.core_adjustment.z + z_offset,
       end_z=205.0 + self.core_adjustment.z + z_offset,
-      traversal_height=self._iswap_traversal_height,
+      traversal_height=self.driver.iswap.traversal_height,
     )
     self._core_parked = True
     return command_output
@@ -7652,7 +6617,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def initialize_autoload(self):
     """Deprecated: use ``star.autoload.initialize()``."""
-    return await self._new_autoload.initialize()
+    return await self.driver.autoload.initialize()
 
   async def move_auto_load_to_z_save_position(self):
     """Deprecated - use `move_autoload_to_safe_z_position` instead."""
@@ -7678,7 +6643,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_autoload_to_safe_z_position(self):
     """Deprecated: use ``star.autoload.move_to_safe_z_position()``."""
-    return await self._new_autoload.move_to_safe_z_position()
+    return await self.driver.autoload.move_to_safe_z_position()
 
   async def request_auto_load_slot_position(self):
     """Deprecated - use `request_autoload_track` instead."""
@@ -7692,30 +6657,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_autoload_track(self) -> int:
     """Deprecated: use ``star.autoload.request_track()``."""
-    return await self._new_autoload.request_track()
+    return await self.driver.autoload.request_track()
 
   async def request_autoload_type(self) -> str:
     """Deprecated: use ``star.autoload.request_type()``."""
-    return await self._new_autoload.request_type()
+    return await self.driver.autoload.request_type()
 
   # -------------- 3.13.2 Carrier sensing --------------
 
   def _decode_hex_bitmask_to_track_list(self, mask_hex: str) -> list[int]:
     """Deprecated: use ``STARAutoload._decode_hex_bitmask_to_track_list()``."""
     from pylabrobot.hamilton.liquid_handlers.star.autoload import STARAutoload
+
     return STARAutoload._decode_hex_bitmask_to_track_list(mask_hex)
 
   async def request_presence_of_carriers_on_deck(self) -> list[int]:
     """Deprecated: use ``star.autoload.request_presence_of_carriers_on_deck()``."""
-    return await self._new_autoload.request_presence_of_carriers_on_deck()
+    return await self.driver.autoload.request_presence_of_carriers_on_deck()
 
   async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
     """Deprecated: use ``star.autoload.request_presence_of_carriers_on_loading_tray()``."""
-    return await self._new_autoload.request_presence_of_carriers_on_loading_tray()
+    return await self.driver.autoload.request_presence_of_carriers_on_loading_tray()
 
   async def request_presence_of_single_carrier_on_loading_tray(self, track: int) -> bool:
     """Deprecated: use ``star.autoload.request_presence_of_single_carrier_on_loading_tray()``."""
-    return await self._new_autoload.request_presence_of_single_carrier_on_loading_tray(track)
+    return await self.driver.autoload.request_presence_of_single_carrier_on_loading_tray(track)
 
   async def request_single_carrier_presence(self, carrier_position: int):
     """Request single carrier presence on the loading tray (not on deck)"""
@@ -7753,16 +6719,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_autoload_to_track(self, track: int):
     """Deprecated: use ``star.autoload.move_to_track()``."""
-    return await self._new_autoload.move_to_track(track)
+    return await self.driver.autoload.move_to_track(track)
 
   async def park_autoload(self):
     """Deprecated: use ``star.autoload.park()``."""
-    return await self._new_autoload.park()
+    return await self.driver.autoload.park()
 
   async def take_carrier_out_to_autoload_belt(self, carrier: Carrier):
     """Deprecated: use ``star.autoload.take_carrier_out_to_belt()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self._new_autoload.take_carrier_out_to_belt(carrier_end_rail)
+    return await self.driver.autoload.take_carrier_out_to_belt(carrier_end_rail)
 
   # -------------- 3.13.4 Autoload barcode reading commands --------------
 
@@ -7795,7 +6761,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     barcode_symbology: Optional[Barcode1DSymbology],
   ) -> None:
     """Deprecated: use ``star.autoload.set_1d_barcode_type()``."""
-    return await self._new_autoload.set_1d_barcode_type(barcode_symbology)
+    return await self.driver.autoload.set_1d_barcode_type(barcode_symbology)
 
   async def set_barcode_type(
     self,
@@ -7846,7 +6812,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ) -> Optional[Barcode]:
     """Deprecated: use ``star.autoload.load_carrier_from_tray_and_scan_carrier_barcode()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self._new_autoload.load_carrier_from_tray_and_scan_carrier_barcode(
+    return await self.driver.autoload.load_carrier_from_tray_and_scan_carrier_barcode(
       carrier_end_rail=carrier_end_rail,
       carrier_barcode_reading=carrier_barcode_reading,
       barcode_symbology=barcode_symbology,
@@ -7857,11 +6823,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def unload_carrier_after_carrier_barcode_scanning(self):
     """Deprecated: use ``star.autoload.unload_carrier_after_barcode_scanning()``."""
-    return await self._new_autoload.unload_carrier_after_barcode_scanning()
+    return await self.driver.autoload.unload_carrier_after_barcode_scanning()
 
   async def set_carrier_monitoring(self, should_monitor: bool = False):
     """Deprecated: use ``star.autoload.set_carrier_monitoring()``."""
-    return await self._new_autoload.set_carrier_monitoring(should_monitor)
+    return await self.driver.autoload.set_carrier_monitoring(should_monitor)
 
   async def load_carrier_from_autoload_belt(
     self,
@@ -7876,7 +6842,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     park_autoload_after: bool = True,
   ) -> dict[int, Optional[Barcode]]:
     """Deprecated: use ``star.autoload.load_carrier_from_belt()``."""
-    return await self._new_autoload.load_carrier_from_belt(
+    return await self.driver.autoload.load_carrier_from_belt(
       barcode_reading=barcode_reading,
       barcode_reading_direction=barcode_reading_direction,
       barcode_symbology=barcode_symbology,
@@ -7906,7 +6872,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ) -> dict:
     """Deprecated: use ``star.autoload.load_carrier()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self._new_autoload.load_carrier(
+    return await self.driver.autoload.load_carrier(
       carrier_end_rail=carrier_end_rail,
       carrier_barcode_reading=carrier_barcode_reading,
       barcode_reading=barcode_reading,
@@ -7922,7 +6888,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def set_loading_indicators(self, bit_pattern: List[bool], blink_pattern: List[bool]):
     """Deprecated: use ``star.autoload.set_loading_indicators()``."""
-    return await self._new_autoload.set_loading_indicators(bit_pattern, blink_pattern)
+    return await self.driver.autoload.set_loading_indicators(bit_pattern, blink_pattern)
 
   async def verify_and_wait_for_carriers(
     self,
@@ -7941,7 +6907,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         if 1 <= carrier_end_rail <= 54:
           carrier_rails.append((carrier_start_rail, carrier_end_rail))
 
-    return await self._new_autoload.verify_and_wait_for_carriers(
+    return await self.driver.autoload.verify_and_wait_for_carriers(
       carrier_rails=carrier_rails,
       check_interval=check_interval,
     )
@@ -7953,7 +6919,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.autoload.unload_carrier()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self._new_autoload.unload_carrier(
+    return await self.driver.autoload.unload_carrier(
       carrier_end_rail=carrier_end_rail,
       park_autoload_after=park_autoload_after,
     )
@@ -7998,7 +6964,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def initialize_dual_pump_station_valves(self, pump_station: int = 1):
     """Deprecated: use ``star.wash_station.initialize_valves()``."""
-    return await self._new_wash_station.initialize_valves(station=pump_station)
+    return await self.driver.wash_station.initialize_valves(station=pump_station)
 
   async def fill_selected_dual_chamber(
     self,
@@ -8009,7 +6975,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     waste_chamber_suck_time_after_sensor_change: int = 0,
   ):
     """Deprecated: use ``star.wash_station.fill_chamber()``."""
-    return await self._new_wash_station.fill_chamber(
+    return await self.driver.wash_station.fill_chamber(
       station=pump_station,
       drain_before_refill=drain_before_refill,
       wash_fluid=wash_fluid,
@@ -8021,7 +6987,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def drain_dual_chamber_system(self, pump_station: int = 1):
     """Deprecated: use ``star.wash_station.drain()``."""
-    return await self._new_wash_station.drain(station=pump_station)
+    return await self.driver.wash_station.drain(station=pump_station)
 
   # TODO:(command:QD) Request dual chamber pump station prime status
 
@@ -8039,7 +7005,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def initialize_iswap(self):
     """Deprecated: use ``star.iswap.initialize()``."""
-    return await self._new_iswap.initialize()
+    return await self.driver.iswap.initialize()
 
   async def position_components_for_free_iswap_y_range(self):
     """Position all components so that there is maximum free Y range for iSWAP"""
@@ -8048,7 +7014,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.move_x_relative()``."""
-    return await self._new_iswap.move_x_relative(step_size=step_size, allow_splitting=allow_splitting)
+    return await self.driver.iswap.move_x_relative(
+      step_size=step_size, allow_splitting=allow_splitting
+    )
 
   async def move_iswap_y_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.move_y_relative()``.
@@ -8066,27 +7034,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
           f"first channel Y position: {y_pos_channel_0} mm, requested step size: {step_size} mm"
         )
-    return await self._new_iswap.move_y_relative(step_size=step_size, allow_splitting=allow_splitting)
+    return await self.driver.iswap.move_y_relative(
+      step_size=step_size, allow_splitting=allow_splitting
+    )
 
   async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.move_z_relative()``."""
-    return await self._new_iswap.move_z_relative(step_size=step_size, allow_splitting=allow_splitting)
+    return await self.driver.iswap.move_z_relative(
+      step_size=step_size, allow_splitting=allow_splitting
+    )
 
   async def move_iswap_x(self, x_position: float):
     """Deprecated: use ``star.iswap.move_x()``."""
-    return await self._new_iswap.move_x(x_position)
+    return await self.driver.iswap.move_x(x_position)
 
   async def move_iswap_y(self, y_position: float):
     """Deprecated: use ``star.iswap.move_y()``."""
-    return await self._new_iswap.move_y(y_position)
+    return await self.driver.iswap.move_y(y_position)
 
   async def move_iswap_z(self, z_position: float):
     """Deprecated: use ``star.iswap.move_z()``."""
-    return await self._new_iswap.move_z(z_position)
+    return await self.driver.iswap.move_z(z_position)
 
   async def open_not_initialized_gripper(self):
     """Deprecated: use ``star.iswap.open_not_initialized_gripper()``."""
-    return await self._new_iswap.open_not_initialized_gripper()
+    return await self.driver.iswap.open_not_initialized_gripper()
 
   async def iswap_open_gripper(self, open_position: Optional[float] = None):
     """Open gripper
@@ -8158,7 +7130,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Once the command has completed successfully, set _iswap_parked to True
-    self._iswap_parked = True
+    self.driver.iswap._parked = True
     return command_output
 
   async def iswap_get_plate(
@@ -8255,7 +7227,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Once the command has completed successfully, set _iswap_parked to false
-    self._iswap_parked = False
+    self.driver.iswap._parked = False
     return command_output
 
   async def iswap_put_plate(
@@ -8342,25 +7314,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Once the command has completed successfully, set _iswap_parked to false
-    self._iswap_parked = False
+    self.driver.iswap._parked = False
     return command_output
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Deprecated: use ``star.iswap.request_rotation_drive_position_increments()``."""
-    return await self._new_iswap.request_rotation_drive_position_increments()
+    return await self.driver.iswap.request_rotation_drive_position_increments()
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
     """Deprecated: use ``star.iswap.request_rotation_drive_orientation()``."""
-    new_orient = await self._new_iswap.request_rotation_drive_orientation()
+    new_orient = await self.driver.iswap.request_rotation_drive_orientation()
     return STARBackend.RotationDriveOrientation(new_orient.value)
 
   async def request_iswap_wrist_drive_position_increments(self) -> int:
     """Deprecated: use ``star.iswap.request_wrist_drive_position_increments()``."""
-    return await self._new_iswap.request_wrist_drive_position_increments()
+    return await self.driver.iswap.request_wrist_drive_position_increments()
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Deprecated: use ``star.iswap.request_wrist_drive_orientation()``."""
-    new_orient = await self._new_iswap.request_wrist_drive_orientation()
+    new_orient = await self.driver.iswap.request_wrist_drive_orientation()
     return STARBackend.WristDriveOrientation(new_orient.value)
 
   async def iswap_rotate(
@@ -8375,7 +7347,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     wrist_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
   ):
     """Deprecated: use ``star.iswap.rotate()``."""
-    return await self._new_iswap.rotate(
+    return await self.driver.iswap.rotate(
       rotation_drive=rotation_drive,
       grip_direction=grip_direction,
       gripper_velocity=gripper_velocity,
@@ -8388,15 +7360,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_dangerous_release_break(self):
     """Deprecated: use ``star.iswap.dangerous_release_brake()``."""
-    return await self._new_iswap.dangerous_release_brake()
+    return await self.driver.iswap.dangerous_release_brake()
 
   async def iswap_reengage_break(self):
     """Deprecated: use ``star.iswap.reengage_brake()``."""
-    return await self._new_iswap.reengage_brake()
+    return await self.driver.iswap.reengage_brake()
 
   async def iswap_initialize_z_axis(self):
     """Deprecated: use ``star.iswap.initialize_z_axis()``."""
-    return await self._new_iswap.initialize_z_axis()
+    return await self.driver.iswap.initialize_z_axis()
 
   async def move_plate_to_position(
     self,
@@ -8464,7 +7436,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
     )
     # Once the command has completed successfully, set _iswap_parked to false
-    self._iswap_parked = False
+    self.driver.iswap._parked = False
     return command_output
 
   async def collapse_gripper_arm(
@@ -8473,7 +7445,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """Deprecated: use ``star.iswap.collapse_gripper_arm()``."""
-    return await self._new_iswap.collapse_gripper_arm(
+    return await self.driver.iswap.collapse_gripper_arm(
       minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command / 10,
       fold_up_at_end=iswap_fold_up_sequence_at_the_end_of_process,
     )
@@ -8505,7 +7477,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_index_low_acc: int = 1,
   ):
     """Deprecated: use ``star.iswap.prepare_teaching()``."""
-    return await self._new_iswap.prepare_teaching(
+    return await self.driver.iswap.prepare_teaching(
       x_position=x_position / 10,
       x_direction=x_direction,
       y_position=y_position / 10,
@@ -8535,7 +7507,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     collision_control_level: int = 1,
   ):
     """Deprecated: use ``star.iswap.get_logic_position()``."""
-    return await self._new_iswap.get_logic_position(
+    return await self.driver.iswap.get_logic_position(
       x_position=x_position / 10,
       x_direction=x_direction,
       y_position=y_position / 10,
@@ -8552,57 +7524,57 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_iswap_in_parking_position(self):
     """Deprecated: use ``star.iswap.request_in_parking_position()``."""
-    return await self._new_iswap.request_in_parking_position()
+    return await self.driver.iswap.request_in_parking_position()
 
   async def request_plate_in_iswap(self) -> bool:
     """Deprecated: use ``star.iswap.is_gripper_closed()``."""
-    return await self._new_iswap.is_gripper_closed()
+    return await self.driver.iswap.is_gripper_closed()
 
   async def request_iswap_position(self) -> Coordinate:
     """Deprecated: use ``star.iswap.get_gripper_location()``."""
-    return (await self._new_iswap.get_gripper_location()).location
+    return (await self.driver.iswap.get_gripper_location()).location
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Deprecated: use ``star.iswap.rotation_drive_request_y()``."""
-    return await self._new_iswap.rotation_drive_request_y()
+    return await self.driver.iswap.rotation_drive_request_y()
 
   async def request_iswap_initialization_status(self) -> bool:
     """Deprecated: use ``star.iswap.request_initialization_status()``."""
-    return await self._new_iswap.request_initialization_status()
+    return await self.driver.iswap.request_initialization_status()
 
   async def request_iswap_version(self) -> str:
     """Deprecated: use ``star.iswap.version`` (property, available after setup)."""
-    return await self._new_iswap._request_version()
+    return await self.driver.iswap._request_version()
 
   # -------------- 3.18 Cover and port control --------------
 
   async def lock_cover(self):
     """Deprecated: use ``star.cover.lock()``."""
-    return await self._new_cover.lock()
+    return await self.driver.cover.lock()
 
   async def unlock_cover(self):
     """Deprecated: use ``star.cover.unlock()``."""
-    return await self._new_cover.unlock()
+    return await self.driver.cover.unlock()
 
   async def disable_cover_control(self):
     """Deprecated: use ``star.cover.disable()``."""
-    return await self._new_cover.disable()
+    return await self.driver.cover.disable()
 
   async def enable_cover_control(self):
     """Deprecated: use ``star.cover.enable()``."""
-    return await self._new_cover.enable()
+    return await self.driver.cover.enable()
 
   async def set_cover_output(self, output: int = 1):
     """Deprecated: use ``star.cover.set_output()``."""
-    return await self._new_cover.set_output(output=output)
+    return await self.driver.cover.set_output(output=output)
 
   async def reset_output(self, output: int = 1):
     """Deprecated: use ``star.cover.reset_output()``."""
-    return await self._new_cover.reset_output(output=output)
+    return await self.driver.cover.reset_output(output=output)
 
   async def request_cover_open(self) -> bool:
     """Deprecated: use ``star.cover.is_open()``."""
-    return await self._new_cover.is_open()
+    return await self.driver.cover.is_open()
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
@@ -8963,84 +7935,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
   ):
-    """Move the tip on a channel to the liquid surface using capacitive LLD (cLLD).
-
-    Runs a downward capacitive liquid-level detection (cLLD) search on the specified
-    0-indexed channel. The search will not go below lowest_immers_pos. After detection,
-    the channel performs the configured post-detection move (by default retracting 2.0 mm).
-
-    This is a low level method that takes parameters in "head space", not using the tip length.
-
-    Args:
-      channel_idx: Channel index (0-based).
-      lowest_immers_pos: Lowest allowed search position in mm (hard stop). Defaults to 99.98.
-      start_pos_search: Search start position in mm. If None, computed from tip length.
-      channel_speed: Search speed in mm/s. Defaults to 10.0.
-      channel_acceleration: Search acceleration in mm/s^2. Defaults to 800.0.
-      detection_edge: Edge steepness threshold for cLLD detection (0-1023). Defaults to 10.
-      detection_drop: Offset applied after cLLD edge detection (0-1023). Defaults to 2.
-      post_detection_trajectory: Instrument post-detection move mode (0 or 1). Defaults to 1.
-      post_detection_dist: Distance in mm to move after detection (interpreted per trajectory).
-        Defaults to 2.0.
-
-    Raises:
-      ValueError: If channel_idx is out of range.
-      RuntimeError: If no tip is mounted on channel_idx.
-      AssertionError: If any parameter is outside the instrument-supported range.
-    """
-
-    # Preconditions checks
-    # Ensure valid channel index
-    if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
-      raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
-
-    # Conversions & machine-compatibility check of parameters
-    lowest_immers_pos_increments = STARBackend.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STARBackend.mm_to_z_drive_increment(start_pos_search)
-    channel_speed_increments = STARBackend.mm_to_z_drive_increment(channel_speed)
-    channel_acceleration_thousand_increments = STARBackend.mm_to_z_drive_increment(
-      channel_acceleration / 1000
-    )
-    post_detection_dist_increments = STARBackend.mm_to_z_drive_increment(post_detection_dist)
-
-    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
-      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
-    )
-    assert 9_320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
-      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
-    )
-    assert 20 <= channel_speed_increments <= 15_000, (
-      f"LLD search speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
-      + f"and {STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
-    )
-    assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5 * 1_000)} "
-      + f" and {STARBackend.z_drive_increment_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
-    )
-    assert 0 <= detection_edge <= 1_023, (
-      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= detection_drop <= 1_023, (
-      "Offset after capacitive LLD edge detection must be between 0 and 1023"
-    )
-    assert 0 <= post_detection_dist_increments <= 9_999, (
-      "Post cLLD-detection movement distance must be between \n0"
-      + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
-    )
-
-    await self.send_command(
-      module=STARBackend.channel_id(channel_idx),
-      command="ZL",
-      zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
-      zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
-      zl=f"{channel_speed_increments:05}",  # Speed of channel movement
-      zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
-      gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
-      gl=f"{detection_drop:04}",  # Offset after capacitive LLD edge detection
-      zj=post_detection_trajectory,  # Movement of the channel after contacting surface
-      zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
+    """Deprecated: use ``star.pip.backend.channels[n].search_z_using_clld()``."""
+    return await self._pip_channels[channel_idx].search_z_using_clld(
+      lowest_immers_pos=lowest_immers_pos,
+      start_pos_search=start_pos_search,
+      channel_speed=channel_speed,
+      channel_acceleration=channel_acceleration,
+      detection_edge=detection_edge,
+      detection_drop=detection_drop,
+      post_detection_trajectory=post_detection_trajectory,
+      post_detection_dist=post_detection_dist,
     )
 
   async def clld_probe_z_height_using_channel(
@@ -9175,248 +8079,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
   ) -> Tuple[float, float]:
-    """Search a surface using pressured-based liquid level detection (pLLD)
-    (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
-    (b) without foam detection sub-mode.
-
-    Notes:
-    - This command is implemented  via the PX command module, i.e. it IS parallelisable
-    - lowest_immers_pos & start_pos_search refer to the head_probe z-coordinate (not the tip)
-    - The return values represent head_probe z-positions (not the tip) in mm
-
-    Args:
-      lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
-      start_pos_search: Z position where the search begins (mm). Default 334.7.
-      channel_speed_above_start_pos_search: Z speed above the start position (mm/s). Default 120.0.
-      channel_speed: Z search speed (mm/s). Default 10.0.
-      channel_acceleration: Z acceleration (mm/s**2). Default 800.0.
-      z_drive_current_limit: Z drive current limit (instrument units). Default 3.
-      tip_has_filter: Whether a filter tip is mounted. Default False.
-      dispense_drive_speed: Dispense drive speed (mm/s). Default 5.0.
-      dispense_drive_acceleration: Dispense drive acceleration (mm/s**2). Default 0.2.
-      dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
-      dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
-      plld_detection_edge: Pressure detection edge threshold. Default 30.
-      plld_detection_drop: Pressure detection drop threshold. Default 10.
-      clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
-        measurement itself cannot be retrieved. Instead it can be used for other applications, including
-        (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
-        (2) detection of foam (more easily triggers cLLD), if desired, causing an error.
-        This activates all cLLD-specific arguments. Default False.
-      max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
-      clld_detection_edge: Capacitive detection edge threshold. Default 10.
-      clld_detection_drop: Capacitive detection drop threshold. Default 2.
-      plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
-      plld_foam_detection_drop: Foam detection drop threshold. Default 30.
-      plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
-      plld_foam_ad_values: Foam AD values (instrument units). Default 30.
-      plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
-      dispense_back_plld_volume: Optional dispense-back volume after detection (uL). Default None.
-      post_detection_trajectory: Post-detection movement pattern selector. Default 1.
-      post_detection_dist: Post-detection movement distance (mm). Default 2.0.
-
-    Returns:
-      Two z-coordinates (mm), head_probe, meaning depends on the selected pressure sub-mode:
-      - Single-detection modes/PressureLLDMode.LIQUID: (liquid_level_pos, 0)
-      - Two-detection modes/PressureLLDMode.FOAM: (first_detection_pos, liquid_level_pos)
-    """
-
-    # Preconditions checks
-    # Ensure valid channel index
-    if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
-      raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
-
-    if plld_mode is None:
-      plld_mode = self.PressureLLDMode.LIQUID
-
-    if dispense_back_plld_volume is None:
-      dispense_back_plld_volume_mode = 0
-      dispense_back_plld_volume_increments = 0
-    else:
-      dispense_back_plld_volume_mode = 1
-      dispense_back_plld_volume_increments = STARBackend.dispensing_drive_vol_to_increment(
-        dispense_back_plld_volume
-      )
-
-    # Conversions to machine units
-    lowest_immers_pos_increments = STARBackend.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STARBackend.mm_to_z_drive_increment(start_pos_search)
-
-    channel_speed_above_start_pos_search_increments = STARBackend.mm_to_z_drive_increment(
-      channel_speed_above_start_pos_search
-    )
-    channel_speed_increments = STARBackend.mm_to_z_drive_increment(channel_speed)
-    channel_acceleration_thousand_increments = STARBackend.mm_to_z_drive_increment(
-      channel_acceleration / 1000
-    )
-
-    dispense_drive_speed_increments = STARBackend.dispensing_drive_mm_to_increment(
-      dispense_drive_speed
-    )
-    dispense_drive_acceleration_increments = STARBackend.dispensing_drive_mm_to_increment(
-      dispense_drive_acceleration
-    )
-    dispense_drive_max_speed_increments = STARBackend.dispensing_drive_mm_to_increment(
-      dispense_drive_max_speed
-    )
-
-    post_detection_dist_increments = STARBackend.mm_to_z_drive_increment(post_detection_dist)
-    max_delta_plld_clld_increments = STARBackend.mm_to_z_drive_increment(max_delta_plld_clld)
-
-    plld_foam_search_speed_increments = STARBackend.mm_to_z_drive_increment(plld_foam_search_speed)
-
-    # Machine-compatibility parameter checks
-    assert 9320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
-      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
-    )
-    assert 9320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
-      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
-    )
-
-    assert tip_has_filter in [True, False], "tip_has_filter must be a boolean"
-
-    assert isinstance(clld_verification, bool), (
-      f"clld_verification must be a boolean, is {clld_verification}"
-    )
-
-    assert plld_mode in [self.PressureLLDMode.LIQUID, self.PressureLLDMode.FOAM], (
-      f"plld_mode must be either PressureLLDMode.LIQUID ({self.PressureLLDMode.LIQUID}) or "
-      + f"PressureLLDMode.FOAM ({self.PressureLLDMode.FOAM}), is {plld_mode}"
-    )
-
-    assert 20 <= channel_speed_above_start_pos_search_increments <= 15_000, (
-      "Speed above start position of LLD search must be between \n"
-      + f"{STARBackend.z_drive_increment_to_mm(20)} and "
-      + f"{STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is "
-      + f"{channel_speed_above_start_pos_search} mm/sec"
-    )
-    assert 20 <= channel_speed_increments <= 15_000, (
-      f"LLD search speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
-      + f"and {STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
-    )
-    assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5 * 1_000)} "
-      + f" and {STARBackend.z_drive_increment_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
-    )
-    assert 0 <= z_drive_current_limit <= 7, (
-      f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}"
-    )
-
-    assert 20 <= dispense_drive_speed_increments <= 13_500, (
-      "Dispensing drive speed must be between \n"
-      + f"{STARBackend.dispensing_drive_increment_to_mm(20)} and "
-      + f"{STARBackend.dispensing_drive_increment_to_mm(13_500)} mm/sec, is {dispense_drive_speed} mm/sec"
-    )
-    assert 1 <= dispense_drive_acceleration_increments <= 100, (
-      "Dispensing drive acceleration must be between \n"
-      + f"{STARBackend.dispensing_drive_increment_to_mm(1)} and "
-      + f"{STARBackend.dispensing_drive_increment_to_mm(100)} mm/sec**2, is {dispense_drive_acceleration} mm/sec**2"
-    )
-    assert 20 <= dispense_drive_max_speed_increments <= 13_500, (
-      "Dispensing drive max speed must be between \n"
-      + f"{STARBackend.dispensing_drive_increment_to_mm(20)} and "
-      + f"{STARBackend.dispensing_drive_increment_to_mm(13_500)} mm/sec, is {dispense_drive_max_speed} mm/sec"
-    )
-    assert 0 <= dispense_drive_current_limit <= 7, (
-      f"Dispensing drive current limit must be between 0 and 7, is {dispense_drive_current_limit}"
-    )
-
-    assert 0 <= clld_detection_edge <= 1_023, (
-      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= clld_detection_drop <= 1_023, (
-      "Offset after capacitive LLD edge detection must be between 0 and 1023"
-    )
-    assert 0 <= plld_detection_edge <= 1_023, (
-      "Edge steepness at pressure LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= plld_detection_drop <= 1_023, (
-      "Offset after pressure LLD edge detection must be between 0 and 1023"
-    )
-
-    assert 0 <= max_delta_plld_clld_increments <= 9_999, (
-      "Maximum allowed difference between pressure LLD and capacitive LLD detection z-positions "
-      + f"must be between 0 and {STARBackend.z_drive_increment_to_mm(9_999)} mm,"
-      + f" is {max_delta_plld_clld} mm"
-    )
-
-    assert 0 <= plld_foam_detection_drop <= 1_023, (
-      f"Pressure LLD foam detection drop must be between 0 and 1023, is {plld_foam_detection_drop}"
-    )
-    assert 0 <= plld_foam_detection_edge_tolerance <= 1_023, (
-      "Pressure LLD foam detection edge tolerance must be between 0 and 1023, "
-      + f"is {plld_foam_detection_edge_tolerance}"
-    )
-    assert 0 <= plld_foam_ad_values <= 4_999, (
-      f"Pressure LLD foam AD values must be between 0 and 4999, is {plld_foam_ad_values}"
-    )
-    assert 20 <= plld_foam_search_speed_increments <= 13_500, (
-      "Pressure LLD foam search speed must be between \n"
-      + f"{STARBackend.z_drive_increment_to_mm(20)} and "
-      + f"{STARBackend.z_drive_increment_to_mm(13_500)} mm/sec, is {plld_foam_search_speed} mm/sec"
-    )
-
-    assert dispense_back_plld_volume_mode in [0, 1], (
-      "dispense_back_plld_volume_mode must be either 0 ('normal') or 1 "
-      + "('dispense back dispense_back_plld_volume'), "
-      + f"is {dispense_back_plld_volume_mode}"
-    )
-
-    assert 0 <= dispense_back_plld_volume_increments <= 26_666, (
-      "Dispense back pressure LLD volume must be between \n0"
-      + f" and {STARBackend.dispensing_drive_increment_to_volume(26_666)} uL, is {dispense_back_plld_volume} uL"
-    )
-
-    assert 0 <= post_detection_dist_increments <= 9_999, (
-      "Post cLLD-detection movement distance must be between \n0"
-      + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
-    )
-
-    resp_raw = await self.send_command(
-      module=STARBackend.channel_id(channel_idx),
-      command="ZE",
-      zh=f"{lowest_immers_pos_increments:05}",
-      zc=f"{start_pos_search_increments:05}",
-      zi=f"{post_detection_dist_increments:04}",
-      zj=f"{post_detection_trajectory:01}",
-      gf=str(int(tip_has_filter)),
-      gt=f"{clld_detection_edge:04}",
-      gl=f"{clld_detection_drop:04}",
-      gu=f"{plld_detection_edge:04}",
-      gn=f"{plld_detection_drop:04}",
-      gm=str(int(clld_verification)),
-      gz=f"{max_delta_plld_clld_increments:04}",
-      cj=str(plld_mode.value),
-      co=f"{plld_foam_detection_drop:04}",
-      cp=f"{plld_foam_detection_edge_tolerance:04}",
-      cq=f"{plld_foam_ad_values:04}",
-      cl=f"{plld_foam_search_speed_increments:05}",
-      cc=str(dispense_back_plld_volume_mode),
-      cd=f"{dispense_back_plld_volume_increments:05}",
-      zv=f"{channel_speed_above_start_pos_search_increments:05}",
-      zl=f"{channel_speed_increments:05}",
-      zr=f"{channel_acceleration_thousand_increments:03}",
-      zw=f"{z_drive_current_limit}",
-      dl=f"{dispense_drive_speed_increments:05}",
-      dr=f"{dispense_drive_acceleration_increments:03}",
-      dv=f"{dispense_drive_max_speed_increments:05}",
-      dw=f"{dispense_drive_current_limit}",
-      read_timeout=max(self.read_timeout, 120),  # it can take long (>30s)
-    )
-    assert resp_raw is not None
-
-    resp_probe_mm = [
-      STARBackend.z_drive_increment_to_mm(int(return_val))
-      for return_val in resp_raw.split("if")[-1].split()
-    ]
-
-    # return depending on mode
-    return (
-      (resp_probe_mm[0], 0)
-      if plld_mode == self.PressureLLDMode.LIQUID
-      else (resp_probe_mm[0], resp_probe_mm[1])
+    """Deprecated: use ``star.pip.backend.channels[n].search_z_using_plld()``."""
+    if plld_mode is not None:
+      plld_mode = _NewPressureLLDMode(plld_mode.value)
+    return await self._pip_channels[channel_idx].search_z_using_plld(
+      lowest_immers_pos=lowest_immers_pos,
+      start_pos_search=start_pos_search,
+      channel_speed_above_start_pos_search=channel_speed_above_start_pos_search,
+      channel_speed=channel_speed,
+      channel_acceleration=channel_acceleration,
+      z_drive_current_limit=z_drive_current_limit,
+      tip_has_filter=tip_has_filter,
+      dispense_drive_speed=dispense_drive_speed,
+      dispense_drive_acceleration=dispense_drive_acceleration,
+      dispense_drive_max_speed=dispense_drive_max_speed,
+      dispense_drive_current_limit=dispense_drive_current_limit,
+      plld_detection_edge=plld_detection_edge,
+      plld_detection_drop=plld_detection_drop,
+      clld_verification=clld_verification,
+      clld_detection_edge=clld_detection_edge,
+      clld_detection_drop=clld_detection_drop,
+      max_delta_plld_clld=max_delta_plld_clld,
+      plld_mode=plld_mode,
+      plld_foam_detection_drop=plld_foam_detection_drop,
+      plld_foam_detection_edge_tolerance=plld_foam_detection_edge_tolerance,
+      plld_foam_ad_values=plld_foam_ad_values,
+      plld_foam_search_speed=plld_foam_search_speed,
+      dispense_back_plld_volume=dispense_back_plld_volume,
+      post_detection_trajectory=post_detection_trajectory,
+      post_detection_dist=post_detection_dist,
     )
 
   async def plld_probe_z_height_using_channel(
@@ -9577,12 +8268,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return resp_tip_mm
 
   async def request_probe_z_position(self, channel_idx: int) -> float:
-    """Request the z-position of the channel probe (EXCLUDING the tip)"""
-    resp = await self.send_command(
-      module=self.channel_id(channel_idx), command="RZ", fmt="rz######"
-    )
-    increments = resp["rz"]
-    return self.z_drive_increment_to_mm(increments)
+    """Deprecated: use ``star.pip.backend.channels[n].request_probe_z_position()``."""
+    return await self._pip_channels[channel_idx].request_probe_z_position()
 
   async def request_tip_len_on_channel(self, channel_idx: int) -> float:
     """Measures the length of the tip attached to the specified pipetting channel.
@@ -9766,7 +8453,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
     """Deprecated: use ``star.iswap.rotate_rotation_drive()``."""
-    return await self._new_iswap.rotate_rotation_drive(orientation)
+    return await self.driver.iswap.rotate_rotation_drive(orientation)
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
@@ -9776,7 +8463,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
     """Deprecated: use ``star.iswap.rotate_wrist()``."""
-    return await self._new_iswap.rotate_wrist(orientation)
+    return await self.driver.iswap.rotate_wrist(orientation)
 
   @staticmethod
   def channel_id(channel_idx: int) -> str:
@@ -9914,7 +8601,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     distance_from_bottom: float = 20.0,
   ):
     """Deprecated: use ``star.pip.backend.pierce_foil()``."""
-    await self._new_pip.pierce_foil(
+    await self.driver.pip.pierce_foil(
       wells=wells,
       piercing_channels=piercing_channels,
       hold_down_channels=hold_down_channels,
@@ -9934,7 +8621,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     move_height: float = 15,
   ):
     """Deprecated: use ``star.pip.backend.step_off_foil()``."""
-    await self._new_pip.step_off_foil(
+    await self.driver.pip.step_off_foil(
       wells=wells,
       front_channel=front_channel,
       back_channel=back_channel,
@@ -9944,14 +8631,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def request_volume_in_tip(self, channel: int) -> float:
-    resp = await self.send_command(STARBackend.channel_id(channel), "QC", fmt="qc##### (n)")
-    _, current_volume = resp["qc"]  # first is max volume
-    return float(current_volume) / 10
+    """Deprecated: use ``star.pip.backend.channels[n].request_volume_in_tip()``."""
+    return await self._pip_channels[channel].request_volume_in_tip()
 
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
     """Deprecated: use ``star.iswap.slow()``."""
-    async with self._new_iswap.slow(
+    async with self.driver.iswap.slow(
       wrist_velocity=wrist_velocity, gripper_velocity=gripper_velocity
     ):
       yield
@@ -10229,17 +8915,8 @@ class UnSafe:
     )
 
   async def violently_shoot_down_tip(self, channel_idx: int):
-    """Shoot down the tip on the specified channel by releasing the drive that holds the spring. The
-    tips will shoot down in place at an acceleration bigger than g. This is done by initializing
-    the squeezer drive wihile a tip is mounted.
-
-    Safe to do when above a tip rack, for example directly after a tip pickup.
-
-    .. warning::
-
-      Consider this method an easter egg. Not for serious use.
-    """
-    await self.star.send_command(module=STARBackend.channel_id(channel_idx), command="SI")
+    """Deprecated: use ``star.pip.backend.channels[n].violently_shoot_down_tip()``."""
+    return await self._pip_channels[channel_idx].violently_shoot_down_tip()
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

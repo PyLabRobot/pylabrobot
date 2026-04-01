@@ -6,26 +6,24 @@ import enum
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from pylabrobot.capabilities.liquid_handling.head96_backend import Head96Backend
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
-from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import (
-  STARFirmwareError,
-  parse_star_fw_string,
-  star_firmware_string_to_error,
-)
 from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
 
 from .autoload import STARAutoload
 from .cover import STARCover
+from .errors import (
+  star_firmware_string_to_error,
+)
+from .fw_parsing import parse_star_fw_string
 from .head96_backend import STARHead96Backend
 from .iswap import iSWAPBackend
 from .pip_backend import STARPIPBackend
 from .wash_station import STARWashStation
 from .x_arm import STARXArm
-
 
 # ---------------------------------------------------------------------------
 # Configuration dataclasses
@@ -174,10 +172,37 @@ class STARDriver(HamiltonLiquidHandler):
     if module == "C0":
       exp = r"er(?P<C0>[0-9]{2}/[0-9]{2})"
       for mod in [
-        "X0", "I0", "W1", "W2", "T1", "T2", "R0",
-        "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8",
-        "P9", "PA", "PB", "PC", "PD", "PE", "PF", "PG",
-        "H0", "HW", "HU", "HV", "N0", "D0", "NP", "M1",
+        "X0",
+        "I0",
+        "W1",
+        "W2",
+        "T1",
+        "T2",
+        "R0",
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8",
+        "P9",
+        "PA",
+        "PB",
+        "PC",
+        "PD",
+        "PE",
+        "PF",
+        "PG",
+        "H0",
+        "HW",
+        "HU",
+        "HV",
+        "N0",
+        "D0",
+        "NP",
+        "M1",
       ]:
         exp += f" ?(?:{mod}(?P<{mod}>[0-9]{{2}}/[0-9]{{2}}))?"
       errors = re.search(exp, resp)
@@ -194,7 +219,7 @@ class STARDriver(HamiltonLiquidHandler):
     if len(errors_dict) > 0:
       raise star_firmware_string_to_error(error_code_dict=errors_dict, raw_response=resp)
 
-  async def _ensure_iswap_parked(self) -> None:
+  async def ensure_iswap_parked(self) -> None:
     """Park the iSWAP if it is installed and not already parked."""
     if self.iswap is not None and not self.iswap.parked:
       await self.iswap.park()
@@ -268,8 +293,7 @@ class STARDriver(HamiltonLiquidHandler):
 
     self.cover = STARCover(driver=self)
 
-    if (self.machine_conf.wash_station_1_installed or
-        self.machine_conf.wash_station_2_installed):
+    if self.machine_conf.wash_station_1_installed or self.machine_conf.wash_station_2_installed:
       self.wash_station = STARWashStation(driver=self)
     else:
       self.wash_station = None
@@ -309,8 +333,9 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- liquid level probing ---------------------------------------------------
 
-  async def probe_liquid_heights(self, containers, use_channels, resource_offsets=None,
-                                  move_to_z_safety_after=True, **kwargs):
+  async def probe_liquid_heights(
+    self, containers, use_channels, resource_offsets=None, move_to_z_safety_after=True, **kwargs
+  ):
     """Probe liquid heights using cLLD. Override in subclasses with real implementation."""
     raise NotImplementedError(
       "probe_liquid_heights is not implemented on STARDriver. "

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -20,11 +21,13 @@ from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
 )
 from pylabrobot.resources import Resource, Tip, TipSpot, Well
 from pylabrobot.resources.hamilton import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import (
+from pylabrobot.resources.liquid import Liquid
+
+from .errors import (
   STARFirmwareError,
   convert_star_firmware_error_to_plr_error,
 )
-from pylabrobot.resources.liquid import Liquid
+from .pip_channel import PIPChannel
 
 if TYPE_CHECKING:
   from .driver import STARDriver
@@ -113,8 +116,6 @@ class LLDMode(enum.Enum):
 # Utility
 # ---------------------------------------------------------------------------
 
-_DEFAULT_TRAVERSAL_HEIGHT = 245.0  # mm (matches legacy _channel_traversal_height)
-
 
 def _resolve_liquid_classes(
   explicit: Optional[List[Optional[HamiltonLiquidClass]]],
@@ -143,15 +144,17 @@ def _resolve_liquid_classes(
     if not isinstance(tip, HamiltonTip):
       result.append(None)
       continue
-    result.append(get_star_liquid_class(
-      tip_volume=tip.maximal_volume,
-      is_core=False,
-      is_tip=True,
-      has_filter=tip.has_filter,
-      liquid=Liquid.WATER,
-      jet=jet[i],
-      blow_out=blow_out[i],
-    ))
+    result.append(
+      get_star_liquid_class(
+        tip_volume=tip.maximal_volume,
+        is_core=False,
+        is_tip=True,
+        has_filter=tip.has_filter,
+        liquid=Liquid.WATER,
+        jet=jet[i],
+        blow_out=blow_out[i],
+      )
+    )
 
   return result
 
@@ -187,8 +190,23 @@ def _assert_range(values, lo, hi, name):
 class STARPIPBackend(PIPBackend):
   """Translates PIP operations into STAR firmware commands via the driver."""
 
-  def __init__(self, driver: STARDriver):
+  def __init__(self, driver: STARDriver, traversal_height: float = 245.0):
     self.driver = driver
+    self.traversal_height = traversal_height
+    self.channels: List[PIPChannel] = []
+
+  async def _on_setup(self):
+    self.channels = [PIPChannel(self.driver, i) for i in range(self.num_channels)]
+
+  @contextmanager
+  def use_traversal_height(self, height: float):
+    """Temporarily override the traversal height for all PIP operations."""
+    original = self.traversal_height
+    self.traversal_height = height
+    try:
+      yield
+    finally:
+      self.traversal_height = original
 
   @property
   def num_channels(self) -> int:
@@ -211,7 +229,7 @@ class STARPIPBackend(PIPBackend):
     cant_reach = []
     for channel_idx, op in zip(use_channels, ops):
       loc = op.resource.get_absolute_location(x="c", y="c", z="b") + op.offset
-      min_y = ext.left_arm_min_y_position + sum(spacings[channel_idx + 1:])
+      min_y = ext.left_arm_min_y_position + sum(spacings[channel_idx + 1 :])
       max_y = ext.pip_maximal_y_position - sum(spacings[:channel_idx])
       if loc.y < min_y or loc.y > max_y:
         cant_reach.append(channel_idx)
@@ -227,6 +245,7 @@ class STARPIPBackend(PIPBackend):
   @dataclass
   class PickUpTipsParams(BackendParams):
     """STAR-specific parameters for ``pick_up_tips``."""
+
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
     pickup_method: Optional[TipPickupMethod] = None
     begin_tip_pick_up_process: Optional[float] = None
@@ -241,7 +260,7 @@ class STARPIPBackend(PIPBackend):
     if not isinstance(backend_params, STARPIPBackend.PickUpTipsParams):
       backend_params = STARPIPBackend.PickUpTipsParams()
 
-    await self.driver._ensure_iswap_parked()
+    await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "pick_up_tips")
 
     x_positions, y_positions, channels_involved = _ops_to_fw_positions(
@@ -286,7 +305,7 @@ class STARPIPBackend(PIPBackend):
     )
 
     minimum_traverse_height_at_beginning_of_a_command = round(
-      (backend_params.minimum_traverse_height_at_beginning_of_a_command or _DEFAULT_TRAVERSAL_HEIGHT)
+      (backend_params.minimum_traverse_height_at_beginning_of_a_command or self.traversal_height)
       * 10
     )
 
@@ -327,6 +346,7 @@ class STARPIPBackend(PIPBackend):
   @dataclass
   class DropTipsParams(BackendParams):
     """STAR-specific parameters for ``drop_tips``."""
+
     drop_method: Optional[TipDropMethod] = None
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
     z_position_at_end_of_a_command: Optional[float] = None
@@ -342,7 +362,7 @@ class STARPIPBackend(PIPBackend):
     if not isinstance(backend_params, STARPIPBackend.DropTipsParams):
       backend_params = STARPIPBackend.DropTipsParams()
 
-    await self.driver._ensure_iswap_parked()
+    await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "drop_tips")
 
     drop_method = backend_params.drop_method
@@ -377,11 +397,11 @@ class STARPIPBackend(PIPBackend):
       end_tip_deposit_process = round((max_z + max_tip_length) * 10)
 
     minimum_traverse_height_at_beginning_of_a_command = round(
-      (backend_params.minimum_traverse_height_at_beginning_of_a_command or _DEFAULT_TRAVERSAL_HEIGHT)
+      (backend_params.minimum_traverse_height_at_beginning_of_a_command or self.traversal_height)
       * 10
     )
     z_position_at_end_of_a_command = round(
-      (backend_params.z_position_at_end_of_a_command or _DEFAULT_TRAVERSAL_HEIGHT) * 10
+      (backend_params.z_position_at_end_of_a_command or self.traversal_height) * 10
     )
 
     # Range validation (matches legacy discard_tip assertions).
@@ -421,6 +441,7 @@ class STARPIPBackend(PIPBackend):
   @dataclass
   class AspirateParams(BackendParams):
     """STAR-specific parameters for ``aspirate``."""
+
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
     disable_volume_correction: Optional[List[bool]] = None
     aspiration_type: Optional[List[int]] = None
@@ -470,7 +491,7 @@ class STARPIPBackend(PIPBackend):
     if not isinstance(backend_params, STARPIPBackend.AspirateParams):
       backend_params = STARPIPBackend.AspirateParams()
 
-    await self.driver._ensure_iswap_parked()
+    await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "aspirate")
 
     x_positions, y_positions, channels_involved = _ops_to_fw_positions(
@@ -480,10 +501,13 @@ class STARPIPBackend(PIPBackend):
     n = len(ops)
 
     # Resolve liquid classes (auto-detect from tip if not provided).
-    hlcs = _resolve_liquid_classes(backend_params.hamilton_liquid_classes, ops,
-                                   jet=backend_params.jet or False,
-                                   blow_out=backend_params.blow_out or False,
-                                   is_aspirate=True)
+    hlcs = _resolve_liquid_classes(
+      backend_params.hamilton_liquid_classes,
+      ops,
+      jet=backend_params.jet or False,
+      blow_out=backend_params.blow_out or False,
+      is_aspirate=True,
+    )
 
     # Well bottoms (absolute z + material thickness).
     well_bottoms = [
@@ -504,8 +528,10 @@ class STARPIPBackend(PIPBackend):
         wb + sh for wb, sh in zip(well_bottoms, backend_params.lld_search_height)
       ]
 
-    clot_detection_height = _fill(backend_params.clot_detection_height,
-      [hlc.aspiration_clot_retract_height if hlc is not None else 0.0 for hlc in hlcs])
+    clot_detection_height = _fill(
+      backend_params.clot_detection_height,
+      [hlc.aspiration_clot_retract_height if hlc is not None else 0.0 for hlc in hlcs],
+    )
     pull_out_distance_transport_air = _fill(
       backend_params.pull_out_distance_transport_air, [10.0] * n
     )
@@ -514,13 +540,8 @@ class STARPIPBackend(PIPBackend):
     minimum_height = _fill(backend_params.minimum_height, well_bottoms)
 
     immersion_depth_raw = backend_params.immersion_depth or [0.0] * n
-    immersion_depth_direction = backend_params.immersion_depth_direction or [
-      0 if id_ >= 0 else 1 for id_ in immersion_depth_raw
-    ]
-    immersion_depth = [
-      im * (-1 if immersion_depth_direction[i] else 1)
-      for i, im in enumerate(immersion_depth_raw)
-    ]
+    immersion_depth_direction = [0 if id_ >= 0 else 1 for id_ in immersion_depth_raw]
+    immersion_depth = [abs(im) for im in immersion_depth_raw]
 
     surface_following_distance = _fill(backend_params.surface_following_distance, [0.0] * n)
 
@@ -537,16 +558,16 @@ class STARPIPBackend(PIPBackend):
       for op, hlc in zip(ops, hlcs)
     ]
 
-    transport_air_volume = _fill(backend_params.transport_air_volume,
-      [hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs])
+    transport_air_volume = _fill(
+      backend_params.transport_air_volume,
+      [hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
     blow_out_air_volumes = [
       op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0)
       for op, hlc in zip(ops, hlcs)
     ]
     pre_wetting_volume = _fill(backend_params.pre_wetting_volume, [0.0] * n)
-    lld_mode = _fill(
-      backend_params.lld_mode, [LLDMode.OFF] * n
-    )
+    lld_mode = _fill(backend_params.lld_mode, [LLDMode.OFF] * n)
     gamma_lld_sensitivity = _fill(backend_params.gamma_lld_sensitivity, [1] * n)
     dp_lld_sensitivity = _fill(backend_params.dp_lld_sensitivity, [1] * n)
     aspirate_position_above_z_touch_off = _fill(
@@ -555,10 +576,14 @@ class STARPIPBackend(PIPBackend):
     detection_height_difference_for_dual_lld = _fill(
       backend_params.detection_height_difference_for_dual_lld, [0.0] * n
     )
-    swap_speed = _fill(backend_params.swap_speed,
-      [hlc.aspiration_swap_speed if hlc is not None else 100.0 for hlc in hlcs])
-    settling_time = _fill(backend_params.settling_time,
-      [hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hlcs])
+    swap_speed = _fill(
+      backend_params.swap_speed,
+      [hlc.aspiration_swap_speed if hlc is not None else 100.0 for hlc in hlcs],
+    )
+    settling_time = _fill(
+      backend_params.settling_time,
+      [hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hlcs],
+    )
 
     # Mix.
     mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
@@ -567,9 +592,7 @@ class STARPIPBackend(PIPBackend):
       backend_params.mix_position_from_liquid_surface, [0.0] * n
     )
     mix_speed = [op.mix.flow_rate if op.mix is not None else 100.0 for op in ops]
-    mix_surface_following_distance = _fill(
-      backend_params.mix_surface_following_distance, [0.0] * n
-    )
+    mix_surface_following_distance = _fill(backend_params.mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill(backend_params.limit_curve_index, [0] * n)
 
     # Probe liquid height if requested.
@@ -606,9 +629,7 @@ class STARPIPBackend(PIPBackend):
         op.resource.compute_height_from_volume(current_volumes[i] - op.volume)
         for i, op in enumerate(ops)
       ]
-      surface_following_distance = [
-        liquid_heights[i] - liquid_height_after[i] for i in range(n)
-      ]
+      surface_following_distance = [liquid_heights[i] - liquid_height_after[i] for i in range(n)]
 
     liquid_surfaces_no_lld = backend_params.liquid_surface_no_lld or [
       wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
@@ -616,7 +637,10 @@ class STARPIPBackend(PIPBackend):
 
     # Check surface following distance doesn't go below minimum height (when LLD is off).
     if any(
-      (well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i] < -1e-6)
+      (
+        well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i]
+        < -1e-6
+      )
       and lld_mode[i] == LLDMode.OFF
       for i in range(n)
     ):
@@ -627,11 +651,9 @@ class STARPIPBackend(PIPBackend):
       )
 
     minimum_traverse_height_at_beginning_of_a_command = round(
-      (traverse_height_override or _DEFAULT_TRAVERSAL_HEIGHT) * 10
+      (traverse_height_override or self.traversal_height) * 10
     )
-    min_z_endpos = round(
-      (backend_params.min_z_endpos or _DEFAULT_TRAVERSAL_HEIGHT) * 10
-    )
+    min_z_endpos = round((backend_params.min_z_endpos or self.traversal_height) * 10)
 
     # Range validation (matches legacy aspirate_pip assertions, firmware units = real * 10).
     aspiration_types = _fill(backend_params.aspiration_type, [0] * n)
@@ -645,13 +667,20 @@ class STARPIPBackend(PIPBackend):
     _assert_range([round(v * 10) for v in lld_search_height], 0, 3600, "lld_search_height")
     _assert_range([round(v * 10) for v in clot_detection_height], 0, 500, "clot_detection_height")
     _assert_range([round(v * 10) for v in liquid_surfaces_no_lld], 0, 3600, "liquid_surface_no_lld")
-    _assert_range([round(v * 10) for v in pull_out_distance_transport_air], 0, 3600, "pull_out_distance_transport_air")
+    _assert_range(
+      [round(v * 10) for v in pull_out_distance_transport_air],
+      0,
+      3600,
+      "pull_out_distance_transport_air",
+    )
     _assert_range([round(v * 10) for v in second_section_height], 0, 3600, "second_section_height")
     _assert_range([round(v * 10) for v in second_section_ratio], 0, 10000, "second_section_ratio")
     _assert_range([round(v * 10) for v in minimum_height], 0, 3600, "minimum_height")
     _assert_range([round(v * 10) for v in immersion_depth], 0, 3600, "immersion_depth")
     _assert_range(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    _assert_range([round(v * 10) for v in surface_following_distance], 0, 3600, "surface_following_distance")
+    _assert_range(
+      [round(v * 10) for v in surface_following_distance], 0, 3600, "surface_following_distance"
+    )
     _assert_range([round(v * 10) for v in volumes], 0, 12500, "aspiration_volumes")
     _assert_range([round(v * 10) for v in flow_rates], 4, 5000, "aspiration_speed")
     _assert_range([round(v * 10) for v in transport_air_volume], 0, 500, "transport_air_volume")
@@ -660,33 +689,81 @@ class STARPIPBackend(PIPBackend):
     _assert_range([m.value for m in lld_mode], 0, 4, "lld_mode")
     _assert_range(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
     _assert_range(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
-    _assert_range([round(v * 10) for v in aspirate_position_above_z_touch_off], 0, 100, "aspirate_position_above_z_touch_off")
-    _assert_range([round(v * 10) for v in detection_height_difference_for_dual_lld], 0, 99, "detection_height_difference_for_dual_lld")
+    _assert_range(
+      [round(v * 10) for v in aspirate_position_above_z_touch_off],
+      0,
+      100,
+      "aspirate_position_above_z_touch_off",
+    )
+    _assert_range(
+      [round(v * 10) for v in detection_height_difference_for_dual_lld],
+      0,
+      99,
+      "detection_height_difference_for_dual_lld",
+    )
     _assert_range([round(v * 10) for v in swap_speed], 3, 1600, "swap_speed")
     _assert_range([round(v * 10) for v in settling_time], 0, 99, "settling_time")
     _assert_range([round(v * 10) for v in mix_volume], 0, 12500, "mix_volume")
     _assert_range(mix_cycles, 0, 99, "mix_cycles")
-    _assert_range([round(v * 10) for v in mix_position_from_liquid_surface], 0, 900, "mix_position_from_liquid_surface")
+    _assert_range(
+      [round(v * 10) for v in mix_position_from_liquid_surface],
+      0,
+      900,
+      "mix_position_from_liquid_surface",
+    )
     _assert_range([round(v * 10) for v in mix_speed], 4, 5000, "mix_speed")
-    _assert_range([round(v * 10) for v in mix_surface_following_distance], 0, 3600, "mix_surface_following_distance")
+    _assert_range(
+      [round(v * 10) for v in mix_surface_following_distance],
+      0,
+      3600,
+      "mix_surface_following_distance",
+    )
     _assert_range(limit_curve_index, 0, 999, "limit_curve_index")
     if not 0 <= backend_params.recording_mode <= 2:
       raise ValueError("recording_mode must be between 0 and 2")
     # 2nd section aspiration range checks
-    _assert_range([round(v * 10) for v in _fill(
-      backend_params.retract_height_over_2nd_section_to_empty_tip, [0.0] * n)], 0, 3600,
-      "retract_height_over_2nd_section_to_empty_tip")
-    _assert_range([round(v * 10) for v in _fill(
-      backend_params.dispensation_speed_during_emptying_tip, [50.0] * n)], 4, 5000,
-      "dispensation_speed_during_emptying_tip")
-    _assert_range([round(v * 10) for v in _fill(
-      backend_params.dosing_drive_speed_during_2nd_section_search, [50.0] * n)], 4, 5000,
-      "dosing_drive_speed_during_2nd_section_search")
-    _assert_range([round(v * 10) for v in _fill(
-      backend_params.z_drive_speed_during_2nd_section_search, [30.0] * n)], 3, 1600,
-      "z_drive_speed_during_2nd_section_search")
-    _assert_range([round(v * 10) for v in _fill(
-      backend_params.cup_upper_edge, [0.0] * n)], 0, 3600, "cup_upper_edge")
+    _assert_range(
+      [
+        round(v * 10)
+        for v in _fill(backend_params.retract_height_over_2nd_section_to_empty_tip, [0.0] * n)
+      ],
+      0,
+      3600,
+      "retract_height_over_2nd_section_to_empty_tip",
+    )
+    _assert_range(
+      [
+        round(v * 10)
+        for v in _fill(backend_params.dispensation_speed_during_emptying_tip, [50.0] * n)
+      ],
+      4,
+      5000,
+      "dispensation_speed_during_emptying_tip",
+    )
+    _assert_range(
+      [
+        round(v * 10)
+        for v in _fill(backend_params.dosing_drive_speed_during_2nd_section_search, [50.0] * n)
+      ],
+      4,
+      5000,
+      "dosing_drive_speed_during_2nd_section_search",
+    )
+    _assert_range(
+      [
+        round(v * 10)
+        for v in _fill(backend_params.z_drive_speed_during_2nd_section_search, [30.0] * n)
+      ],
+      3,
+      1600,
+      "z_drive_speed_during_2nd_section_search",
+    )
+    _assert_range(
+      [round(v * 10) for v in _fill(backend_params.cup_upper_edge, [0.0] * n)],
+      0,
+      3600,
+      "cup_upper_edge",
+    )
 
     try:
       await self.driver.send_command(
@@ -731,14 +808,22 @@ class STARPIPBackend(PIPBackend):
         gj=backend_params.tadm_algorithm,
         gk=backend_params.recording_mode,
         lk=[1 if x else 0 for x in _fill(backend_params.use_2nd_section_aspiration, [False] * n)],
-        ik=[f"{round(x * 10):04}" for x in _fill(
-          backend_params.retract_height_over_2nd_section_to_empty_tip, [0.0] * n)],
-        sd=[f"{round(x * 10):04}" for x in _fill(
-          backend_params.dispensation_speed_during_emptying_tip, [50.0] * n)],
-        se=[f"{round(x * 10):04}" for x in _fill(
-          backend_params.dosing_drive_speed_during_2nd_section_search, [50.0] * n)],
-        sz=[f"{round(x * 10):04}" for x in _fill(
-          backend_params.z_drive_speed_during_2nd_section_search, [30.0] * n)],
+        ik=[
+          f"{round(x * 10):04}"
+          for x in _fill(backend_params.retract_height_over_2nd_section_to_empty_tip, [0.0] * n)
+        ],
+        sd=[
+          f"{round(x * 10):04}"
+          for x in _fill(backend_params.dispensation_speed_during_emptying_tip, [50.0] * n)
+        ],
+        se=[
+          f"{round(x * 10):04}"
+          for x in _fill(backend_params.dosing_drive_speed_during_2nd_section_search, [50.0] * n)
+        ],
+        sz=[
+          f"{round(x * 10):04}"
+          for x in _fill(backend_params.z_drive_speed_during_2nd_section_search, [30.0] * n)
+        ],
         io=[f"{round(x * 10):04}" for x in _fill(backend_params.cup_upper_edge, [0.0] * n)],
       )
     except STARFirmwareError as e:
@@ -751,6 +836,7 @@ class STARPIPBackend(PIPBackend):
   @dataclass
   class DispenseParams(BackendParams):
     """STAR-specific parameters for ``dispense``."""
+
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
     disable_volume_correction: Optional[List[bool]] = None
     jet: Optional[List[bool]] = None
@@ -794,7 +880,7 @@ class STARPIPBackend(PIPBackend):
     if not isinstance(backend_params, STARPIPBackend.DispenseParams):
       backend_params = STARPIPBackend.DispenseParams()
 
-    await self.driver._ensure_iswap_parked()
+    await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "dispense")
 
     x_positions, y_positions, channels_involved = _ops_to_fw_positions(
@@ -808,13 +894,13 @@ class STARPIPBackend(PIPBackend):
     blow_out = backend_params.blow_out or [False] * n
     empty = backend_params.empty or [False] * n
     dispensing_modes = [
-      _dispensing_mode_for_op(empty=empty[i], jet=jet[i], blow_out=blow_out[i])
-      for i in range(n)
+      _dispensing_mode_for_op(empty=empty[i], jet=jet[i], blow_out=blow_out[i]) for i in range(n)
     ]
 
     # Resolve liquid classes.
-    hlcs = _resolve_liquid_classes(backend_params.hamilton_liquid_classes, ops,
-                                   jet=jet, blow_out=blow_out, is_aspirate=False)
+    hlcs = _resolve_liquid_classes(
+      backend_params.hamilton_liquid_classes, ops, jet=jet, blow_out=blow_out, is_aspirate=False
+    )
 
     # Well bottoms.
     well_bottoms = [
@@ -847,8 +933,7 @@ class STARPIPBackend(PIPBackend):
       0 if id_ >= 0 else 1 for id_ in immersion_depth_raw
     ]
     immersion_depth = [
-      im * (-1 if immersion_depth_direction[i] else 1)
-      for i, im in enumerate(immersion_depth_raw)
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth_raw)
     ]
 
     surface_following_distance = _fill(backend_params.surface_following_distance, [0.0] * n)
@@ -867,10 +952,14 @@ class STARPIPBackend(PIPBackend):
     ]
 
     cut_off_speed = _fill(backend_params.cut_off_speed, [5.0] * n)
-    stop_back_volume = _fill(backend_params.stop_back_volume,
-      [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs])
-    transport_air_volume = _fill(backend_params.transport_air_volume,
-      [hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs])
+    stop_back_volume = _fill(
+      backend_params.stop_back_volume,
+      [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
+    transport_air_volume = _fill(
+      backend_params.transport_air_volume,
+      [hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
     blow_out_air_volumes = [
       op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0.0)
       for op, hlc in zip(ops, hlcs)
@@ -882,10 +971,14 @@ class STARPIPBackend(PIPBackend):
     )
     gamma_lld_sensitivity = _fill(backend_params.gamma_lld_sensitivity, [1] * n)
     dp_lld_sensitivity = _fill(backend_params.dp_lld_sensitivity, [1] * n)
-    swap_speed = _fill(backend_params.swap_speed,
-      [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs])
-    settling_time = _fill(backend_params.settling_time,
-      [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs])
+    swap_speed = _fill(
+      backend_params.swap_speed,
+      [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs],
+    )
+    settling_time = _fill(
+      backend_params.settling_time,
+      [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs],
+    )
 
     # Mix.
     mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
@@ -894,9 +987,7 @@ class STARPIPBackend(PIPBackend):
       backend_params.mix_position_from_liquid_surface, [0.0] * n
     )
     mix_speed = [op.mix.flow_rate if op.mix is not None else 1.0 for op in ops]
-    mix_surface_following_distance = _fill(
-      backend_params.mix_surface_following_distance, [0.0] * n
-    )
+    mix_surface_following_distance = _fill(backend_params.mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill(backend_params.limit_curve_index, [0] * n)
 
     side_touch_off_distance = round(backend_params.side_touch_off_distance * 10)
@@ -935,20 +1026,16 @@ class STARPIPBackend(PIPBackend):
         op.resource.compute_height_from_volume(current_volumes[i] + op.volume)
         for i, op in enumerate(ops)
       ]
-      surface_following_distance = [
-        liquid_height_after[i] - liquid_heights[i] for i in range(n)
-      ]
+      surface_following_distance = [liquid_height_after[i] - liquid_heights[i] for i in range(n)]
 
     liquid_surfaces_no_lld = backend_params.liquid_surface_no_lld or [
       wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
     ]
 
     minimum_traverse_height_at_beginning_of_a_command = round(
-      (traverse_height_override or _DEFAULT_TRAVERSAL_HEIGHT) * 10
+      (traverse_height_override or self.traversal_height) * 10
     )
-    min_z_endpos = round(
-      (backend_params.min_z_endpos or _DEFAULT_TRAVERSAL_HEIGHT) * 10
-    )
+    min_z_endpos = round((backend_params.min_z_endpos or self.traversal_height) * 10)
 
     # Range validation (matches legacy dispense_pip assertions, firmware units = real * 10).
     _assert_range(dispensing_modes, 0, 4, "dispensing_mode")
@@ -957,10 +1044,17 @@ class STARPIPBackend(PIPBackend):
     _assert_range([round(v * 10) for v in minimum_height], 0, 3600, "minimum_height")
     _assert_range([round(v * 10) for v in lld_search_height], 0, 3600, "lld_search_height")
     _assert_range([round(v * 10) for v in liquid_surfaces_no_lld], 0, 3600, "liquid_surface_no_lld")
-    _assert_range([round(v * 10) for v in pull_out_distance_transport_air], 0, 3600, "pull_out_distance_transport_air")
+    _assert_range(
+      [round(v * 10) for v in pull_out_distance_transport_air],
+      0,
+      3600,
+      "pull_out_distance_transport_air",
+    )
     _assert_range([round(v * 10) for v in immersion_depth], 0, 3600, "immersion_depth")
     _assert_range(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    _assert_range([round(v * 10) for v in surface_following_distance], 0, 3600, "surface_following_distance")
+    _assert_range(
+      [round(v * 10) for v in surface_following_distance], 0, 3600, "surface_following_distance"
+    )
     _assert_range([round(v * 10) for v in second_section_height], 0, 3600, "second_section_height")
     _assert_range([round(v * 10) for v in second_section_ratio], 0, 10000, "second_section_ratio")
     if not 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600:
@@ -976,16 +1070,31 @@ class STARPIPBackend(PIPBackend):
     _assert_range([m.value for m in lld_mode], 0, 4, "lld_mode")
     if not 0 <= side_touch_off_distance <= 45:
       raise ValueError("side_touch_off_distance must be between 0 and 45")
-    _assert_range([round(v * 10) for v in dispense_position_above_z_touch_off], 0, 100, "dispense_position_above_z_touch_off")
+    _assert_range(
+      [round(v * 10) for v in dispense_position_above_z_touch_off],
+      0,
+      100,
+      "dispense_position_above_z_touch_off",
+    )
     _assert_range(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
     _assert_range(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
     _assert_range([round(v * 10) for v in swap_speed], 3, 1600, "swap_speed")
     _assert_range([round(v * 10) for v in settling_time], 0, 99, "settling_time")
     _assert_range([round(v * 10) for v in mix_volume], 0, 12500, "mix_volume")
     _assert_range(mix_cycles, 0, 99, "mix_cycles")
-    _assert_range([round(v * 10) for v in mix_position_from_liquid_surface], 0, 900, "mix_position_from_liquid_surface")
+    _assert_range(
+      [round(v * 10) for v in mix_position_from_liquid_surface],
+      0,
+      900,
+      "mix_position_from_liquid_surface",
+    )
     _assert_range([round(v * 10) for v in mix_speed], 4, 5000, "mix_speed")
-    _assert_range([round(v * 10) for v in mix_surface_following_distance], 0, 3600, "mix_surface_following_distance")
+    _assert_range(
+      [round(v * 10) for v in mix_surface_following_distance],
+      0,
+      3600,
+      "mix_surface_following_distance",
+    )
     _assert_range(limit_curve_index, 0, 999, "limit_curve_index")
     if not 0 <= backend_params.recording_mode <= 2:
       raise ValueError("recording_mode must be between 0 and 2")
@@ -1156,9 +1265,7 @@ class STARPIPBackend(PIPBackend):
 
     return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
 
-  async def position_channels_in_y_direction(
-    self, ys: Dict[int, float], make_space: bool = True
-  ):
+  async def position_channels_in_y_direction(self, ys: Dict[int, float], make_space: bool = True):
     """Position all channels simultaneously in the Y direction (C0:JY).
 
     Args:
@@ -1272,7 +1379,7 @@ class STARPIPBackend(PIPBackend):
     await self.initialize_pipetting_channels(
       x_positions=[tip_waste_x],
       y_positions=y_positions,
-      begin_of_tip_deposit_process=_DEFAULT_TRAVERSAL_HEIGHT,
+      begin_of_tip_deposit_process=self.traversal_height,
       end_of_tip_deposit_process=122.0,
       z_position_at_end_of_a_command=360.0,
       tip_pattern=[True] * self.num_channels,
@@ -1353,7 +1460,6 @@ class STARPIPBackend(PIPBackend):
     )
 
   # -- single-channel movement ------------------------------------------------
-
 
   async def move_channel_z(self, channel: int, z: float):
     """Move a single channel in the Z direction (mm).

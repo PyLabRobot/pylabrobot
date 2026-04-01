@@ -4,6 +4,7 @@ import unittest
 import unittest.mock
 from typing import Literal, cast
 
+from pylabrobot.hamilton.liquid_handlers.star.chatterbox import STARChatterboxDriver
 from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.legacy.plate_reading import PlateReader
@@ -149,21 +150,21 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.star = STARBackend(read_timeout=1, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
-    self.star.io = unittest.mock.AsyncMock()
+    self.star.driver.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
 
   async def test_send_command_correct_response(self):
-    self.star.io.read.side_effect = [b"C0QMid0001"]
+    self.star.driver.io.read.side_effect = [b"C0QMid0001"]
     resp = await self.star.send_command("C0", command="QM", fmt="id####")
     self.assertEqual(resp, {"id": 1})
 
   async def test_send_command_wrong_id(self):
-    self.star.io.read.side_effect = lambda: b"C0QMid0002"
+    self.star.driver.io.read.side_effect = lambda: b"C0QMid0002"
     with self.assertRaises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
 
   async def test_send_command_plaintext_response(self):
-    self.star.io.read.side_effect = lambda: b"this is plaintext"
+    self.star.driver.io.read.side_effect = lambda: b"this is plaintext"
     with self.assertRaises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
 
@@ -174,12 +175,16 @@ class STARCommandCatcher(STARBackend):
 
   def __init__(self):
     super().__init__()
+    self.driver = STARChatterboxDriver()
     self.commands = []
 
   async def setup(self) -> None:  # type: ignore
-    self._num_channels = 8
-    self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
-    self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    await self.driver.setup()
+    self._machine_conf = self.driver.machine_conf  # type: ignore[assignment]
+    self._extended_conf = self.driver.extended_conf  # type: ignore[assignment]
+    self._num_channels = self.driver.num_channels
+    self._channels_minimum_y_spacing = self.driver._channels_minimum_y_spacing
+    self._pip_channels = self.driver.pip.channels
     self._core_parked = True
 
   async def send_command(  # type: ignore
@@ -207,11 +212,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.STAR = STARBackend(read_timeout=1)
-    self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.AsyncMock()
-    self.STAR.io.setup = unittest.mock.AsyncMock()
-    self.STAR.io.write = unittest.mock.MagicMock()
-    self.STAR.io.read = unittest.mock.MagicMock()
+    self.STAR.driver = STARChatterboxDriver()
 
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -260,13 +261,29 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     self.maxDiff = None
 
+    await self.STAR.driver.setup()
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.STAR._channels_minimum_y_spacing = self.STAR.driver._channels_minimum_y_spacing
+    self.STAR._pip_channels = self.STAR.driver.pip.channels
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
+
+    # After setup, restore the base send_command (instead of chatterbox's print-only override)
+    # so tests can mock _write_and_read_command and assert on calls.
+    import types
+
+    from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
+
+    self.STAR.driver.send_command = types.MethodType(
+      HamiltonLiquidHandler.send_command, self.STAR.driver
+    )
+    self.STAR._write_and_read_command = unittest.mock.AsyncMock(return_value=None)
+    self.STAR.driver.io = unittest.mock.AsyncMock()
+    self.STAR.driver.id_ = 0  # reset command counter so test IDs start at 1
 
     set_tip_tracking(enabled=False)
 
@@ -468,7 +485,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         ),
       ]
     )
-    self.STAR.io.write.reset_mock()
+    self.STAR.driver.io.write.reset_mock()
 
   async def test_tip_drop_56(self):
     await self.test_tip_pickup_56()  # pick up tips first
@@ -514,7 +531,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         )
       ]
     )
-    self.STAR.io.write.reset_mock()
+    self.STAR.driver.io.write.reset_mock()
 
   async def test_single_channel_aspiration(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
@@ -1080,7 +1097,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.STAR = STARBackend()
-    self.STAR._write_and_read_command = unittest.mock.AsyncMock()
+    self.STAR.driver = STARChatterboxDriver()
+    self.STAR.driver._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
 
@@ -1091,13 +1109,26 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
     self.deck.assign_child_resource(self.plt_car2, rails=3)
 
+    await self.STAR.driver.setup()
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.STAR._channels_minimum_y_spacing = self.STAR.driver._channels_minimum_y_spacing
+    self.STAR._pip_channels = self.STAR.driver.pip.channels
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
+
+    import types
+
+    from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
+
+    self.STAR.driver.send_command = types.MethodType(
+      HamiltonLiquidHandler.send_command, self.STAR.driver
+    )
+    self.STAR._write_and_read_command = unittest.mock.AsyncMock(return_value=None)
+    self.STAR.driver.id_ = 0
 
   async def test_simple_movement(self):
     await self.lh.move_plate(self.plate, self.plt_car[1])
@@ -1207,7 +1238,8 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
 class STARFoilTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.star = STARBackend()
-    self.star._write_and_read_command = unittest.mock.AsyncMock()
+    self.star.driver = STARChatterboxDriver()
+    self.star.driver._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.star, deck=self.deck)
 
@@ -1220,13 +1252,28 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.well = self.plate.get_well("A1")
     self.deck.assign_child_resource(plt_carrier, rails=10)
 
+    await self.star.driver.setup()
     self.star._num_channels = 8
     self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.star._channels_minimum_y_spacing = self.star.driver._channels_minimum_y_spacing
+    self.star._pip_channels = self.star.driver.pip.channels
     self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
     await self.lh.setup()
+
+    # Restore base send_command and mock _write_and_read_command for test assertions.
+    import types
+
+    from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
+
+    self.star.driver.send_command = types.MethodType(
+      HamiltonLiquidHandler.send_command, self.star.driver
+    )
+    self.star._write_and_read_command = unittest.mock.AsyncMock(return_value=None)
+    self.star.driver.io = unittest.mock.AsyncMock()
+    self.star.driver.id_ = 0
 
     await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
 
@@ -1414,11 +1461,13 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.backend = STARBackend()
-    self.backend._write_and_read_command = unittest.mock.AsyncMock()
-    self.backend.io = unittest.mock.AsyncMock()
+    self.backend.driver = STARChatterboxDriver()
+    await self.backend.driver.setup()
     self.backend._num_channels = 8
     self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.backend._channels_minimum_y_spacing = self.backend.driver._channels_minimum_y_spacing
+    self.backend._pip_channels = self.backend.driver.pip.channels
     self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
@@ -1430,6 +1479,18 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     await self.lh.setup()
+
+    import types
+
+    from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
+
+    self.backend.driver.send_command = types.MethodType(
+      HamiltonLiquidHandler.send_command, self.backend.driver
+    )
+    self.backend._write_and_read_command = unittest.mock.AsyncMock(return_value=None)
+    self.backend.driver.io = unittest.mock.AsyncMock()
+    self.backend.driver.id_ = 0
+
     set_tip_tracking(enabled=False)
 
   def _get_tp_tz_from_calls(self, cmd_prefix: str):
@@ -1579,11 +1640,19 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
   def _make_star_backend(self, num_channels, spacings):
     """Helper: create a STARBackend with given channel count and spacings, mocking I/O."""
     backend = STARBackend()
+    backend.driver = STARChatterboxDriver(num_channels=num_channels)
+    import types
+
+    from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
+
+    backend.driver.send_command = types.MethodType(
+      HamiltonLiquidHandler.send_command, backend.driver
+    )
+    backend._write_and_read_command = unittest.mock.AsyncMock(return_value=None)
     backend._num_channels = num_channels
     backend._channels_minimum_y_spacing = list(spacings)
     backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    backend.id_ = 0
-    backend._write_and_read_command = unittest.mock.AsyncMock()
+    backend.driver.id_ = 0
     backend.get_channels_y_positions = unittest.mock.AsyncMock()
     return backend
 
@@ -1637,11 +1706,11 @@ class STARTestBase(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.STAR = STARBackend(read_timeout=1)
-    self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.AsyncMock()
-    self.STAR.io.setup = unittest.mock.AsyncMock()
-    self.STAR.io.write = unittest.mock.MagicMock()
-    self.STAR.io.read = unittest.mock.MagicMock()
+    self.STAR.driver = STARChatterboxDriver()
+    self.STAR.driver.io = unittest.mock.AsyncMock()
+    self.STAR.driver.io.setup = unittest.mock.AsyncMock()
+    self.STAR.driver.io.write = unittest.mock.MagicMock()
+    self.STAR.driver.io.read = unittest.mock.MagicMock()
 
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -1654,9 +1723,12 @@ class STARTestBase(unittest.IsolatedAsyncioTestCase):
     self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
+    await self.STAR.driver.setup()
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.STAR._channels_minimum_y_spacing = self.STAR.driver._channels_minimum_y_spacing
+    self.STAR._pip_channels = self.STAR.driver.pip.channels
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True

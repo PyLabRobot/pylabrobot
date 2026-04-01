@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Literal, Optional, Union
 
@@ -50,11 +51,19 @@ def _channel_pattern_to_hex(pattern: List[bool]) -> str:
 class STARHead96Backend(Head96Backend):
   """Translates Head96 operations into STAR firmware commands via the driver."""
 
-  # Default traversal height [mm] matching the legacy STARBackend default.
-  _traversal_height: float = 245.0
-
-  def __init__(self, driver: STARDriver):
+  def __init__(self, driver: STARDriver, traversal_height: float = 245.0):
     self.driver = driver
+    self.traversal_height = traversal_height
+
+  @contextmanager
+  def use_traversal_height(self, height: float):
+    """Temporarily override the traversal height for all Head96 operations."""
+    original = self.traversal_height
+    self.traversal_height = height
+    try:
+      yield
+    finally:
+      self.traversal_height = original
 
   # ---------------------------------------------------------------------------
   # Pick up tips
@@ -111,7 +120,7 @@ class STARHead96Backend(Head96Backend):
     )
     pickup_position.z = round(z_pickup_position, 2)
 
-    traversal = self._traversal_height
+    traversal = self.traversal_height
 
     if tip_pickup_method == "from_rack":
       # Move the dispensing drive down before pickup.
@@ -156,9 +165,7 @@ class STARHead96Backend(Head96Backend):
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
     alignment_tipspot_identifier: str = "A1"
 
-  async def drop_tips96(
-    self, drop: DropTipRack, backend_params: Optional[BackendParams] = None
-  ):
+  async def drop_tips96(self, drop: DropTipRack, backend_params: Optional[BackendParams] = None):
     """Drop tips from the 96 head.
 
     Firmware command: C0 ER
@@ -179,7 +186,7 @@ class STARHead96Backend(Head96Backend):
       # Drop into trash or other resource: center the head in the resource.
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
-    traversal = self._traversal_height
+    traversal = self.traversal_height
 
     await self.driver.send_command(
       module="C0",
@@ -267,15 +274,13 @@ class STARHead96Backend(Head96Backend):
         + aspiration.offset
       )
 
-    tip = next(tip for tip in aspiration.tips if tip is not None)
-
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
     volume = aspiration.volume
     flow_rate = aspiration.flow_rate or 250
     blow_out_air_volume = aspiration.blow_out_air_volume or 0
 
-    traversal = self._traversal_height
+    traversal = self.traversal_height
 
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
@@ -397,8 +402,6 @@ class STARHead96Backend(Head96Backend):
         + dispense.offset
       )
 
-    tip = next(tip for tip in dispense.tips if tip is not None)
-
     liquid_height = position.z + (dispense.liquid_height or 0)
 
     volume = dispense.volume
@@ -411,7 +414,7 @@ class STARHead96Backend(Head96Backend):
       blow_out=backend_params.blow_out,
     )
 
-    traversal = self._traversal_height
+    traversal = self.traversal_height
 
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1

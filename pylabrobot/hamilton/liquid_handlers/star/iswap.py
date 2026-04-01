@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
@@ -29,7 +29,6 @@ def _direction_degrees_to_grip_direction(degrees: float) -> int:
 
 
 class iSWAPBackend(OrientableGripperArmBackend):
-
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
     FRONT = 2
@@ -42,8 +41,9 @@ class iSWAPBackend(OrientableGripperArmBackend):
     LEFT = 3
     REVERSE = 4
 
-  def __init__(self, driver: STARDriver):
+  def __init__(self, driver: STARDriver, traversal_height: float = 280.0):
     self.driver = driver
+    self.traversal_height = traversal_height
     self._version: Optional[str] = None
     self._parked: Optional[bool] = None
 
@@ -57,6 +57,16 @@ class iSWAPBackend(OrientableGripperArmBackend):
   @property
   def parked(self) -> bool:
     return self._parked is True
+
+  @contextmanager
+  def use_traversal_height(self, height: float):
+    """Temporarily override the traversal height for all iSWAP operations."""
+    original = self.traversal_height
+    self.traversal_height = height
+    try:
+      yield
+    finally:
+      self.traversal_height = original
 
   async def request_gripper_location(self, backend_params=None) -> GripperLocation:
     """Request iSWAP grip center position (C0 QG).
@@ -122,7 +132,8 @@ class iSWAPBackend(OrientableGripperArmBackend):
       return await self.move_x_relative(remaining, allow_splitting=True)
 
     await self.driver.send_command(
-      module="C0", command="GX",
+      module="C0",
+      command="GX",
       gx=f"{round(abs(step_size) * 10):03}",
       xd=direction,
     )
@@ -145,7 +156,8 @@ class iSWAPBackend(OrientableGripperArmBackend):
       return await self.move_y_relative(remaining, allow_splitting=True)
 
     await self.driver.send_command(
-      module="C0", command="GY",
+      module="C0",
+      command="GY",
       gy=f"{round(abs(step_size) * 10):03}",
       yd=direction,
     )
@@ -168,7 +180,8 @@ class iSWAPBackend(OrientableGripperArmBackend):
       return await self.move_z_relative(remaining, allow_splitting=True)
 
     await self.driver.send_command(
-      module="C0", command="GZ",
+      module="C0",
+      command="GZ",
       gz=f"{round(abs(step_size) * 10):03}",
       zd=direction,
     )
@@ -344,13 +357,19 @@ class iSWAPBackend(OrientableGripperArmBackend):
     if orientation.value not in {RDO.RIGHT.value, RDO.FRONT.value, RDO.LEFT.value}:
       raise ValueError(f"Invalid rotation drive orientation: {orientation}")
     await self.driver.send_command(
-      module="R0", command="WP", auto_id=False, wp=orientation.value,
+      module="R0",
+      command="WP",
+      auto_id=False,
+      wp=orientation.value,
     )
 
   async def rotate_wrist(self, orientation: "iSWAPBackend.WristDriveOrientation") -> None:
     """Rotate the wrist to the given orientation (R0 TP)."""
     await self.driver.send_command(
-      module="R0", command="TP", auto_id=False, tp=orientation.value,
+      module="R0",
+      command="TP",
+      auto_id=False,
+      tp=orientation.value,
     )
 
   # -- collapse, teaching, velocity control ----------------------------------
@@ -527,24 +546,29 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class ParkParams(BackendParams):
-    minimum_traverse_height: float = 280.0
+    minimum_traverse_height: Optional[float] = None
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     """Park the iSWAP.
 
     Args:
       backend_params: iSWAP.ParkParams with minimum_traverse_height.
+        If None or not provided, uses ``self.traversal_height``.
     """
     if not isinstance(backend_params, iSWAPBackend.ParkParams):
       backend_params = iSWAPBackend.ParkParams()
 
-    if not 0 <= backend_params.minimum_traverse_height <= 360.0:
+    height = backend_params.minimum_traverse_height
+    if height is None:
+      height = self.traversal_height
+
+    if not 0 <= height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
 
     await self.driver.send_command(
       module="C0",
       command="PG",
-      th=round(backend_params.minimum_traverse_height * 10),
+      th=round(height * 10),
     )
     self._parked = True
 
@@ -560,9 +584,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     if not 0 <= gripper_width <= 999.9:
       raise ValueError("gripper_width must be between 0 and 999.9")
 
-    await self.driver.send_command(
-      module="C0", command="GF", go=f"{round(gripper_width * 10):04}"
-    )
+    await self.driver.send_command(module="C0", command="GF", go=f"{round(gripper_width * 10):04}")
 
   @dataclass
   class CloseGripperParams(BackendParams):
