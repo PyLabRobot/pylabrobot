@@ -3,7 +3,6 @@ import datetime
 import enum
 import functools
 import logging
-import math
 import re
 import sys
 import warnings
@@ -40,6 +39,11 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.legacy.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
+from pylabrobot.legacy.liquid_handling.channel_positioning import (
+  MIN_SPACING_EDGE,
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
@@ -60,10 +64,6 @@ from pylabrobot.legacy.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
-)
-from pylabrobot.legacy.liquid_handling.utils import (
-  MIN_SPACING_EDGE,
-  get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -333,6 +333,9 @@ class Head96Information:
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STARBackend."""
 
+  PIP_X_MIN_WITH_LEFT_SIDE_PANEL: float = 320.0
+  HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL: float = 0.0
+
   def __init__(
     self,
     device_address: Optional[int] = None,
@@ -340,6 +343,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    left_side_panel_installed: bool = False,
   ):
     """Create a new STAR interface.
 
@@ -351,6 +355,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
+      left_side_panel_installed: if True, restrict PIP channels to x >= 320mm and
+        the 96-head to x >= 0mm to prevent collisions with the left side panel.
     """
 
     super().__init__(
@@ -370,8 +376,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
+      left_side_panel_installed=left_side_panel_installed,
     )
 
+    self.left_side_panel_installed = left_side_panel_installed
     self._machine_conf: Optional[MachineConfiguration] = None
 
     self._num_channels: Optional[int] = None
@@ -404,18 +412,33 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.driver._write_and_read_command = value
 
   def _min_spacing_between(self, i: int, j: int) -> float:
-    """Return the conservative minimum Y spacing required between channels *i* and *j*.
+    """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
 
-    For adjacent channels, the constraint is the larger of the two channels' individual minimum
-    spacings, ceiling'd to 1 decimal place for safe movement.
-
-    For non-adjacent channels, the spacing is the sum of all intermediate adjacent-pair spacings.
+    Uses max() of both channels' spacings for firmware safety (conservative).
+    For adjacent channels, ceiling-rounded to 0.1mm.
+    For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
     """
     lo, hi = min(i, j), max(i, j)
     if hi - lo == 1:
+      import math
+
       spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
       return math.ceil(spacing * 10) / 10
     return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
+
+  def _ops_to_fw_positions(
+    self, ops: Sequence[PipettingOp], use_channels: List[int]
+  ) -> Tuple[List[int], List[int], List[bool]]:
+    x_positions, y_positions, channels_involved = super()._ops_to_fw_positions(ops, use_channels)
+    if self.left_side_panel_installed:
+      min_x = round(self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL * 10)
+      for x, involved in zip(x_positions, channels_involved):
+        if involved and x < min_x:
+          raise ValueError(
+            f"PIP channel x={x / 10}mm is below the minimum "
+            f"{self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm (left side panel is installed)"
+          )
+    return x_positions, y_positions, channels_involved
 
   @property
   def machine_conf(self) -> MachineConfiguration:
@@ -1143,10 +1166,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
           min_ch = min(use_channels)
           offsets = [all_offsets[ch - min_ch] for ch in use_channels]
-
-          if num_channels_in_span % 2 != 0:
-            y_offset = 5.5
-            offsets = [offset + Coordinate(0, y_offset, 0) for offset in offsets]
         # else: container too small to fit all channels — fall back to center offsets.
         # Y sub-batching will serialize channels that can't coexist.
 
@@ -1257,8 +1276,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Notes:
       - All specified channels must have tips attached
       - Containers at different X positions are probed in sequential groups (single X carriage)
-      - For single containers with odd channel counts, Y-offsets are applied to avoid
-        center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
+      - For single containers with no-go zones, Y-offsets are computed to avoid
+        obstructed regions (e.g. center dividers in troughs)
     """
 
     if move_to_z_safety_after is not None:
@@ -2933,8 +2952,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def move_channel_z(self, channel: int, z: float):
-    """Deprecated: use ``star.pip.backend.move_channel_z()``."""
+    """Deprecated: use ``move_channel_stop_disk_z()`` or ``move_channel_tool_z()``."""
     await self.driver.pip.move_channel_z(channel, z)
+
+  async def move_channel_stop_disk_z(
+    self,
+    channel_idx: int,
+    z: float,
+    speed: float = 125.0,
+    acceleration: float = 800.0,
+    current_limit: int = 3,
+  ):
+    """Deprecated: use ``star.driver.pip.channels[n].move_z()``."""
+    return await self.driver.pip.channels[channel_idx].move_z(
+      z, speed, acceleration, current_limit
+    )
+
+  async def move_channel_tool_z(self, channel_idx: int, z: float):
+    """Deprecated: use ``star.driver.pip.move_channel_tool_z()``."""
+    return await self.driver.pip.move_channel_tool_z(channel_idx, z)
 
   async def move_channel_x_relative(self, channel: int, distance: float):
     """Move a channel in the x direction by a relative amount."""
@@ -2948,8 +2984,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_z_relative(self, channel: int, distance: float):
     """Move a channel in the z direction by a relative amount."""
+    # TODO: determine whether this refers to stop disk or tip bottom
     current_z = await self.request_z_pos_channel_n(channel)
     await self.move_channel_z(channel, current_z + distance)
+
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    return [self._channels_minimum_y_spacing[ch] for ch in sorted(use_channels)]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, HamiltonTip):
@@ -3091,8 +3131,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # TODO: these are values for a STARBackend. Find them for a STARlet.
 
+    x_min = self.HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL if self.left_side_panel_installed else -271.0
+
     errors = []
-    if not (-271.0 <= c.x <= 974.0):
+    if not (x_min <= c.x <= 974.0):
       errors.append(f"x={c.x}")
     if not (108.0 <= c.y <= 560.0):
       errors.append(f"y={c.y}")
@@ -3103,7 +3145,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(
         "Illegal 96 head position: "
         + ", ".join(errors)
-        + " (allowed ranges: x [-271, 974], y [108, 560], z [180.5, 342.5])"
+        + f" (allowed ranges: x [{x_min}, 974], y [108, 560], z [180.5, 342.5])"
       )
 
   # ============== Firmware Commands ==============
@@ -4910,6 +4952,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.pip.backend.move_all_pipetting_channels_to_defined_position()``."""
 
+    if self.left_side_panel_installed:
+      min_x = round(self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL * 10)
+      if x_positions < min_x:
+        raise ValueError(
+          f"PIP channel x={x_positions / 10}mm is below the minimum "
+          f"{self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm (left side panel is installed)"
+        )
     assert 0 <= x_positions <= 25000, "x_positions must be between 0 and 25000"
     assert 0 <= y_positions <= 6500, "y_positions must be between 0 and 6500"
     assert 0 <= minimum_traverse_height_at_beginning_of_command <= 3600, (
@@ -5447,10 +5496,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Raises:
       RuntimeError: If 96-head is not installed.
-      AssertionError: If parameter out of range.
     """
-    assert -271 <= x <= 974, "x must be between -271.0 and 974.0 mm"
-
     current_pos = await self.head96_request_position()
     return await self.head96_move_to_coordinate(
       Coordinate(x, current_pos.y, current_pos.z),

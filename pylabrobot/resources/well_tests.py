@@ -31,6 +31,7 @@ class TestWell(unittest.TestCase):
         "compute_volume_from_height": None,
         "compute_height_from_volume": None,
         "height_volume_data": None,
+        "no_go_zones": [],
         "bottom_type": "flat",
         "cross_section_type": "circle",
       },

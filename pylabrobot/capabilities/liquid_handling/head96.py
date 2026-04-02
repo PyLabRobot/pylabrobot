@@ -465,7 +465,7 @@ class Head96(Capability):
         continue
       if does_volume_tracking():
         tip.tracker.remove_liquid(volume=volume)
-      elif tip.tracker.get_used_volume() < volume:
+      elif tip.tracker.get_used_volume() <= volume:
         tip.tracker.remove_liquid(volume=min(tip.tracker.get_used_volume(), volume))
 
     dispense_op: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]

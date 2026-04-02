@@ -25,6 +25,7 @@ class TestPetriDish(unittest.TestCase):
         "compute_volume_from_height": None,
         "compute_height_from_volume": None,
         "height_volume_data": None,
+        "no_go_zones": [],
         "diameter": 90.0,
         "height": 15.0,
       },

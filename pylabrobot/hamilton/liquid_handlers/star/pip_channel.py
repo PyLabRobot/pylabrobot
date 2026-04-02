@@ -218,6 +218,52 @@ class PIPChannel:
         current_limit=current_limit,
       )
 
+  # -- Px:ZA  move Z-drive (stop disk reference) ------------------------------
+
+  async def move_z(
+    self,
+    z: float,
+    speed: float = 125.0,
+    acceleration: float = 800.0,
+    current_limit: int = 3,
+  ):
+    """Move this channel's Z-drive to an absolute stop disk position.
+
+    Communicates directly with the channel (Px:ZA) rather than through the
+    master module (C0:KZ). This bypasses the firmware's tip-picked-up flag,
+    enabling Z moves with configurable speed/acceleration.
+
+    Args:
+      z: Target Z position in mm (stop disk).
+      speed: Max Z-drive speed in mm/sec. Default 125.0 mm/s.
+      acceleration: Acceleration in mm/sec². Default 800.0. Valid range: ~53.6 to 1609.
+      current_limit: Current limit (0-7). Default 3.
+    """
+
+    z_inc = _mm_to_z_inc(z)
+    speed_inc = _mm_to_z_inc(speed)
+    accel_inc = _mm_to_z_inc(acceleration / 1000)
+
+    assert 9320 <= z_inc <= 31200, (
+      f"z must be between {_z_inc_to_mm(9320)} and {_z_inc_to_mm(31200)} mm, got {z} mm"
+    )
+    assert 20 <= speed_inc <= 15000, (
+      f"speed must be between {_z_inc_to_mm(20)} and {_z_inc_to_mm(15000)} mm/s, got {speed} mm/s"
+    )
+    assert 5 <= accel_inc <= 150, (
+      f"acceleration must be between ~53.6 and ~1609 mm/s², got {acceleration} mm/s²"
+    )
+    assert 0 <= current_limit <= 7, f"current_limit must be between 0 and 7, got {current_limit}"
+
+    return await self.driver.send_command(
+      module=self.module_id,
+      command="ZA",
+      za=f"{z_inc:05}",
+      zv=f"{speed_inc:05}",
+      zr=f"{accel_inc:03}",
+      zw=f"{current_limit:01}",
+    )
+
   # -- Px:RZ  probe Z position -----------------------------------------------
 
   async def request_probe_z_position(self) -> float:

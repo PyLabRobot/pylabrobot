@@ -48,6 +48,16 @@ class STARXArm:
     if not 0 <= x_position <= 3000.0:
       raise ValueError("x_position must be between 0 and 3000 mm")
 
+    if (
+      self._side == "left"
+      and self.driver.left_side_panel_installed
+      and x_position < self.driver.PIP_X_MIN_WITH_LEFT_SIDE_PANEL
+    ):
+      raise ValueError(
+        f"PIP channel x={x_position}mm is below the minimum "
+        f"{self.driver.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm (left side panel is installed)"
+      )
+
     cmd = "JX" if self._side == "left" else "JS"
     return await self.driver.send_command(
       module="C0",
@@ -67,6 +77,16 @@ class STARXArm:
 
     if not 0 <= x_position <= 3000.0:
       raise ValueError("x_position must be between 0 and 3000 mm")
+
+    if (
+      self._side == "left"
+      and self.driver.left_side_panel_installed
+      and x_position < self.driver.PIP_X_MIN_WITH_LEFT_SIDE_PANEL
+    ):
+      raise ValueError(
+        f"PIP channel x={x_position}mm is below the minimum "
+        f"{self.driver.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm (left side panel is installed)"
+      )
 
     cmd = "KX" if self._side == "left" else "KR"
     return await self.driver.send_command(

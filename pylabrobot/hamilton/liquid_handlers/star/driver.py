@@ -119,6 +119,9 @@ class STARDriver(HamiltonLiquidHandler):
   Adds STAR-specific firmware parsing, error handling, and machine configuration.
   """
 
+  PIP_X_MIN_WITH_LEFT_SIDE_PANEL: float = 320.0
+  HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL: float = 0.0
+
   def __init__(
     self,
     device_address: Optional[int] = None,
@@ -126,6 +129,7 @@ class STARDriver(HamiltonLiquidHandler):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    left_side_panel_installed: bool = False,
   ):
     super().__init__(
       id_product=0x8000,
@@ -135,6 +139,7 @@ class STARDriver(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
     )
+    self.left_side_panel_installed = left_side_panel_installed
 
     # Populated during setup().
     self.machine_conf: Optional[MachineConfiguration] = None

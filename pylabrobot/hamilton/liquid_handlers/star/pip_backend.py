@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import logging
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
@@ -27,7 +28,7 @@ from .errors import (
   STARFirmwareError,
   convert_star_firmware_error_to_plr_error,
 )
-from .pip_channel import PIPChannel
+from .pip_channel import PIPChannel, _mm_to_z_inc, _z_inc_to_mm
 
 if TYPE_CHECKING:
   from .driver import STARDriver
@@ -1461,13 +1462,27 @@ class STARPIPBackend(PIPBackend):
 
   # -- single-channel movement ------------------------------------------------
 
+  MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
+  MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)
+  DEFAULT_TIP_FITTING_DEPTH = 8  # mm, for 10, 50, 300, 1000 uL Hamilton tips
+
   async def move_channel_z(self, channel: int, z: float):
     """Move a single channel in the Z direction (mm).
 
-    Args:
-      channel: 0-indexed channel index.
-      z: Target Z position in mm.
+    .. deprecated::
+      Use :meth:`move_channel_stop_disk_z` for moves without a tip attached (stop disk)
+      or :meth:`move_channel_tool_z` when a tip or tool is attached (tip/tool end).
+
+    The Hamilton firmware interprets this Z position based on its internal
+    "tip mounted" state for the specified channel.
     """
+    warnings.warn(
+      "move_channel_z is deprecated. "
+      "Use move_channel_stop_disk_z() for moves without a tip attached "
+      "or move_channel_tool_z() when a tip/tool is attached.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if not 0 <= channel < self.driver.num_channels:
       raise ValueError(f"channel must be between 0 and {self.driver.num_channels - 1}")
     if not 0 <= z <= 334.7:
@@ -1479,6 +1494,88 @@ class STARPIPBackend(PIPBackend):
       pn=f"{channel + 1:02}",
       zj=f"{round(z * 10):04}",
     )
+
+  async def move_channel_tool_z(self, channel_idx: int, z: float):
+    """Move a channel in the Z direction (tip/tool end reference).
+
+    Requires a tip or tool to be attached. Use :meth:`move_channel_stop_disk_z`
+    for moves without a tip.
+
+    Args:
+      channel_idx: Channel index (0-based, backmost = 0).
+      z: Target Z position in mm (tip/tool end).
+    """
+
+    if not isinstance(channel_idx, int):
+      raise ValueError(f"channel_idx must be an int, got {type(channel_idx).__name__}")
+    if not (0 <= channel_idx < self.driver.num_channels):
+      raise ValueError(
+        f"channel index {channel_idx} out of range for instrument "
+        f"with {self.driver.num_channels} channels"
+      )
+
+    tip_presence = await self.request_tip_presence()
+    if not tip_presence[channel_idx]:
+      raise ValueError(
+        f"Channel {channel_idx} does not have a tip or tool attached. "
+        "Use move_channel_stop_disk_z() for Z moves without a tip attached."
+      )
+
+    tip_len = await self.request_tip_len_on_channel(channel_idx)
+
+    max_tip_z = (
+      self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    )
+    min_tip_z = (
+      self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    )
+
+    if not (min_tip_z <= z <= max_tip_z):
+      raise ValueError(
+        f"z={z} mm out of safe range [{min_tip_z}, {max_tip_z}] mm "
+        f"for tip length {tip_len} mm on channel {channel_idx}"
+      )
+
+    await self.driver.send_command(
+      module="C0",
+      command="KZ",
+      pn=f"{channel_idx + 1:02}",
+      zj=f"{round(z * 10):04}",
+    )
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Measure tip presence on all channels using their sleeve sensors."""
+    resp = await self.driver.send_command(module="C0", command="RT", fmt="rt# (n)")
+    return [bool(v) for v in resp.get("rt")]
+
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Measure the length of the tip on the specified channel.
+
+    Args:
+      channel_idx: 0-indexed channel index.
+
+    Returns:
+      Tip length in mm.
+
+    Raises:
+      RuntimeError: If no tip is present on the channel.
+    """
+    tip_presence = await self.request_tip_presence()
+    if not tip_presence[channel_idx]:
+      raise RuntimeError(f"No tip present on channel {channel_idx}")
+
+    probe_z = await self.channels[channel_idx].request_probe_z_position()
+
+    # request tip bottom z via C0:RD
+    resp = await self.driver.send_command(
+      module="C0",
+      command="RD",
+      fmt="rd####",
+      pn=f"{channel_idx + 1:02}",
+    )
+    tip_bottom_z = float(resp["rd"] / 10)
+
+    return round(probe_z - (tip_bottom_z - self.DEFAULT_TIP_FITTING_DEPTH), 1)
 
   # -- foil piercing ----------------------------------------------------------
 

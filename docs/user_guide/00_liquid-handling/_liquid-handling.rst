@@ -22,3 +22,4 @@ Examples:
    moving-channels-around
    tutorial_tip_inventory_consolidation
    mixing
+   container_no_go_zones

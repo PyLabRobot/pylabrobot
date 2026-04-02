@@ -586,6 +586,10 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       _, y_stage = self._map_well_to_stage(row_wells[0])
 
       await self._send_command(f"ABSOLUTE MTP,Y={y_stage}")
+      # Match the OEM one-row scan flow by explicitly pre-positioning the transport to the
+      # row start before issuing SCANX. Hardware testing showed the standalone XY move alone
+      # can reintroduce the first-row edge-read problem.
+      await self._send_command(f"ABSOLUTE MTP,X={start_x},Y={y_stage}")
       await self._send_command(f"SCAN DIRECTION={scan_direction}")
       await self._send_command(
         f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False

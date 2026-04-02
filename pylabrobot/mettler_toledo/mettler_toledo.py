@@ -192,11 +192,17 @@ class MettlerToledoWXS205SDUDriver(Driver):
         to a parity error or interface break
       - EL: logical error: The weigh module/balance can not execute the received command
 
-    These are in the second place of the response:
-      - I: Command not understood, not executable at present
-      - P: Command understood but not executable (incorrect parameter)
-      - O: Balance in overload range
-      - U: Balance in underload range
+    These are in the second place of the response (MT-SICS spec p.10, sec 2.1.3.1):
+      - A: Command executed successfully
+      - B: Command not yet terminated, additional responses following
+      - I: Internal error (e.g. balance not ready yet)
+      - L: Logical error (e.g. parameter not allowed)
+      - +: Balance in overload range
+      - -: Balance in underload range
+
+    TODO: handle 'B' status — multi-response commands (e.g. C1 adjustment) send 'B' first,
+    then additional responses, then 'A' on completion. Currently send_command returns after
+    the first response, so 'B' responses are not followed up.
     """
 
     if response[0] == "ES":
@@ -208,7 +214,7 @@ class MettlerToledoWXS205SDUDriver(Driver):
 
     if response[1] == "I":
       raise MettlerToledoError.executing_another_command()
-    if response[1] == "P":
+    if response[1] == "L":
       raise MettlerToledoError.incorrect_parameter()
     if response[1] == "+":
       raise MettlerToledoError.overload()
