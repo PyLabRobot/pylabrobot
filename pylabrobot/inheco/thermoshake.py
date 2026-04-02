@@ -27,7 +27,8 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     return await self.interface.send_command(f"{self.index}ASE0")
 
   async def set_shaker_speed(self, speed: float):
-    assert speed in range(60, 2001), "Speed must be in the range 60 to 2000 RPM"
+    if speed not in range(60, 2001):
+      raise ValueError("Speed must be in the range 60 to 2000 RPM")
     return await self.interface.send_command(f"1SSR{speed}")
 
   async def set_shaker_shape(self, shape: int):
@@ -37,7 +38,8 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
       shape: 0 = Circle anticlockwise, 1 = Circle clockwise, 2 = Up left down right,
         3 = Up right down left, 4 = Up-down, 5 = Left-right
     """
-    assert shape in range(6), "Shape must be in the range 0 to 5"
+    if shape not in range(6):
+      raise ValueError("Shape must be in the range 0 to 5")
     return await self.interface.send_command(f"1SSS{shape}")
 
   async def start_shaking(self, speed: float, shape: int = 0):

@@ -56,6 +56,7 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
         COLUMN_WISE fills down rows within each column (A1→B1→...→H1→A2→B2→...).
         Does not affect per-column volumes. If None, uses current.
     """
+
     plate_type: Optional[int] = None
     cassette_type: Optional[int] = None
     pump_speed: Optional[int] = None
@@ -102,6 +103,7 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     Args:
       mode: Prime mode (standard, continuous, stop continuous, calibration).
     """
+
     mode: PrimeMode = PrimeMode.STANDARD
 
   async def prime(
@@ -144,6 +146,7 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     Args:
       mode: Empty mode (standard or continuous).
     """
+
     mode: EmptyMode = EmptyMode.STANDARD
 
   async def purge(

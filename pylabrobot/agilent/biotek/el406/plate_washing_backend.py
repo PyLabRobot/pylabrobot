@@ -21,6 +21,7 @@ from .helpers import plate_defaults, plate_to_wire_byte
 from .protocol import build_framed_message
 from pylabrobot.capabilities.plate_washing.backend import PlateWashingBackend
 from .driver import EL406Driver
+
 Intensity = Literal["Variable", "Slow", "Medium", "Fast"]
 
 INTENSITY_TO_BYTE: dict[str, int] = {
@@ -37,6 +38,7 @@ def validate_intensity(intensity: Intensity) -> None:
       f"intensity must be one of {sorted({'Slow', 'Medium', 'Fast', 'Variable'})}, "
       f"got {intensity!r}"
     )
+
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +195,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
         "prime() requires PrimeParams with plate and volume. "
         "Use manifold_prime(plate, volume) directly."
       )
+    assert backend_params.plate is not None, "PrimeParams.plate must not be None"
     await self.manifold_prime(
       backend_params.plate,
       volume=backend_params.volume,

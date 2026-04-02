@@ -750,6 +750,24 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
 
   @dataclass
   class CaptureParams(BackendParams):
+    """Cytation-specific parameters for image capture.
+
+    Args:
+      led_intensity: LED intensity (0-100). Default 10.
+      coverage: Image tiling coverage. ``"full"`` for full-well montage, or a
+        ``(rows, cols)`` tuple for a specific tile grid. Default ``(1, 1)`` (single
+        image).
+      center_position: Center position of the capture area as ``(x_mm, y_mm)`` relative
+        to the well center. If None, centers on the well. Default None.
+      overlap: Fractional overlap between tiles (0.0-1.0) for montage stitching.
+        If None, no overlap. Only used when coverage produces multiple tiles.
+      color_processing_algorithm: Spinnaker SDK color processing algorithm constant.
+        Default ``SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR``.
+      pixel_format: Spinnaker SDK pixel format constant. Default ``PixelFormat_Mono8``.
+      auto_stop_acquisition: Whether to automatically stop image acquisition after
+        capture. Default True.
+    """
+
     led_intensity: int = 10
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1)
     center_position: Optional[Tuple[float, float]] = None
@@ -886,7 +904,13 @@ class Cytation5(Resource, Device):
     self.fluorescence = Fluorescence(backend=backend)
     self.microscopy = Microscopy(backend=backend)
     self.temperature = TemperatureController(backend=backend)
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.microscopy, self.temperature]
+    self._capabilities = [
+      self.absorbance,
+      self.luminescence,
+      self.fluorescence,
+      self.microscopy,
+      self.temperature,
+    ]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
@@ -930,7 +954,7 @@ class Cytation1(Resource, Device):
     )
     Device.__init__(self, driver=backend)
     self.driver: BioTekBackend = backend
-    self.microscopy = Microscopy(backend=backend)
+    self.microscopy = Microscopy(backend=backend)  # type: ignore[arg-type]
     self.temperature = TemperatureController(backend=backend)
     self._capabilities = [self.microscopy, self.temperature]
 

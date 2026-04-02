@@ -35,6 +35,7 @@ class STARWashStation:
 
   class Type(enum.IntEnum):
     """Pump station type enumeration."""
+
     CORE_96_SINGLE = 0
     DC_SINGLE_REV_02 = 1
     RERERE_SINGLE = 2

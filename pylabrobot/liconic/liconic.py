@@ -69,9 +69,7 @@ class Liconic(Resource, Device):
 
     self.retrieval = AutomatedRetrieval(backend=backend)
     self.tc = (
-      TemperatureController(backend=backend)
-      if liconic_model.has_temperature_control
-      else None
+      TemperatureController(backend=backend) if liconic_model.has_temperature_control else None
     )
     self.humidity_controller = (
       HumidityController(backend=backend) if liconic_model.has_humidity_control else None

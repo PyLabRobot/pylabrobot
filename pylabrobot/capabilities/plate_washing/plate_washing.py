@@ -55,7 +55,10 @@ class PlateWashingCapability(Capability):
       backend_params: Backend-specific parameters.
     """
     await self.backend.wash(
-      plate=plate, cycles=cycles, dispense_volume=dispense_volume, backend_params=backend_params,
+      plate=plate,
+      cycles=cycles,
+      dispense_volume=dispense_volume,
+      backend_params=backend_params,
     )
 
   @need_capability_ready

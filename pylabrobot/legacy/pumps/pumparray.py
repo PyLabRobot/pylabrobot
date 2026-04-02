@@ -48,8 +48,7 @@ class PumpArray(Machine):
   async def setup(self, **backend_kwargs):
     await super().setup(**backend_kwargs)
     self._pumps = [
-      Pump(backend=_ChannelAdapter(self.backend, ch))
-      for ch in range(self.num_channels)
+      Pump(backend=_ChannelAdapter(self.backend, ch)) for ch in range(self.num_channels)
     ]
     for p in self._pumps:
       await p._on_setup()
@@ -72,7 +71,7 @@ class PumpArray(Machine):
     data_copy = data.copy()
     calibration_data = data_copy.pop("calibration", None)
     if calibration_data is not None:
-      calibration = PumpCalibration.deserialize(calibration_data)
+      calibration = PumpCalibration.deserialize(calibration_data)  # type: ignore[attr-defined]
       data_copy["calibration"] = calibration
     return super().deserialize(data_copy)
 

@@ -11,6 +11,8 @@ class TestSTARXArmCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.mock_driver = MagicMock()
     self.mock_driver.send_command = AsyncMock()
+    self.mock_driver.left_side_panel_installed = False
+    self.mock_driver.PIP_X_MIN_WITH_LEFT_SIDE_PANEL = 320.0
     self.left_arm = STARXArm(driver=self.mock_driver, side="left")
     self.right_arm = STARXArm(driver=self.mock_driver, side="right")
 

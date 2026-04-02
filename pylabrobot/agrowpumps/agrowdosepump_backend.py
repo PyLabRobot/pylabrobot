@@ -68,7 +68,7 @@ class AgrowDriver(Driver):
         time.sleep(0.1)
         i += 1
         if i == 250:
-          await self.modbus.read_holding_registers(0, 1, unit=self.address)
+          await self.modbus.read_holding_registers(0, 1, unit=self.address)  # type: ignore[call-arg, misc]
           i = 0
 
     def manage_async_keep_alive():
@@ -86,7 +86,7 @@ class AgrowDriver(Driver):
 
   async def setup(self):
     await self._setup_modbus()
-    register_return = await self.modbus.read_holding_registers(19, 2, unit=self.address)
+    register_return = await self.modbus.read_holding_registers(19, 2, unit=self.address)  # type: ignore[call-arg, misc]
     self._num_channels = int(
       "".join(chr(r // 256) + chr(r % 256) for r in register_return.registers)[2]
     )
@@ -106,7 +106,7 @@ class AgrowDriver(Driver):
       stopbits=1,
       bytesize=8,
       parity="E",
-      retry_on_empty=True,
+      retry_on_empty=True,  # type: ignore[call-arg]
     )
     await self.modbus.connect()
     if not self.modbus.connected:
@@ -127,7 +127,7 @@ class AgrowDriver(Driver):
     await self.modbus.write_register(
       self.pump_index_to_address[channel],
       speed,
-      unit=self.address,
+      unit=self.address,  # type: ignore[call-arg]
     )
 
 

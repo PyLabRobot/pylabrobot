@@ -13,17 +13,20 @@ from typing import (
   Sequence,
   Tuple,
   TypeVar,
+  Union,
 )
 
 from pylabrobot.device import Driver
 from pylabrobot.io.usb import USB
-from pylabrobot.legacy.liquid_handling.standard import PipettingOp
+from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
 from pylabrobot.resources import TipSpot
 from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,
 )
+
+PipettingOp = Union[Pickup, TipDrop, Aspiration, Dispense]
 
 T = TypeVar("T")
 
@@ -98,7 +101,7 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
     super().__setattr__(name, value)
 
   async def setup(self):
-    await super().setup()
+    await super().setup()  # type: ignore[safe-super]
     await self.io.setup()
     self._reading_thread_stop.clear()
     self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
@@ -129,6 +132,13 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
   def module_id_length(self) -> int:
     """The length of the module identifier in firmware commands."""
 
+  @property
+  @abstractmethod
+  def num_channels(self) -> int:
+    """The number of pipette channels present on the robot."""
+
+  deck: Any  # Set by subclasses; used for coordinate calculations.
+
   def _generate_id(self) -> int:
     """continuously generate unique ids 0 <= x < 10000."""
     self.id_ += 1
@@ -151,8 +161,10 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
     """
 
     # use the default value if a channel is not involved, otherwise use the value in val
-    assert len(val) > 0
-    assert len(val) <= len(tip_pattern)
+    if len(val) == 0:
+      raise ValueError("val must not be empty")
+    if len(val) > len(tip_pattern):
+      raise ValueError(f"val has more entries ({len(val)}) than tip_pattern ({len(tip_pattern)})")
 
     result: List[T] = []
     arg_index = 0
@@ -218,7 +230,8 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
         v = " ".join([str(e) for e in v]) + ("&" if len(v) < self.num_channels else "")
       if k.endswith("_"):  # workaround for kwargs named in, as, ...
         k = k[:-1]
-      assert len(k) == 2, "Keyword arguments should be 2 characters long, but got: " + k
+      if len(k) != 2:
+        raise ValueError("Keyword arguments should be 2 characters long, but got: " + k)
       cmd += f"{k}{v}"
 
     return cmd, cmd_id
@@ -395,7 +408,8 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
   ) -> Tuple[List[int], List[int], List[bool]]:
     """use_channels is a list of channels to use. STAR expects this in one-hot encoding. This is
     method converts that, and creates a matching list of x and y positions."""
-    assert use_channels == sorted(use_channels), "Channels must be sorted."
+    if use_channels != sorted(use_channels):
+      raise ValueError("Channels must be sorted.")
 
     x_positions: List[int] = []
     y_positions: List[int] = []

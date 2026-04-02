@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pylabrobot.capabilities.shaking import ShakerBackend as _NewShakerBackend
-from pylabrobot.capabilities.shaking import Shaker
+from pylabrobot.capabilities.shaking import Shaker as _NewShaker
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -61,7 +61,7 @@ class Shaker(ResourceHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend
-    self._shaking_cap = Shaker(backend=_ShakingAdapter(backend))
+    self._shaking_cap = _NewShaker(backend=_ShakingAdapter(backend))
 
   async def setup(self, **backend_kwargs):
     await super().setup(**backend_kwargs)

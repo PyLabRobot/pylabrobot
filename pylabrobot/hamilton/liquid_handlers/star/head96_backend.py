@@ -16,28 +16,13 @@ from pylabrobot.capabilities.liquid_handling.standard import (
   MultiHeadDispensePlate,
   PickupTipRack,
 )
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
+
+from .pip_backend import _dispensing_mode_for_op  # noqa: F401
 
 if TYPE_CHECKING:
   from .driver import STARDriver
-
-
-def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
-  """Compute firmware dispensing mode from boolean flags.
-
-  Firmware modes:
-    0 = Partial volume in jet mode
-    1 = Blow out in jet mode (labelled "empty" in VENUS)
-    2 = Partial volume at surface
-    3 = Blow out at surface (labelled "empty" in VENUS)
-    4 = Empty tip at fix position
-  """
-  if empty:
-    return 4
-  if jet:
-    return 1 if blow_out else 0
-  return 3 if blow_out else 2
 
 
 def _channel_pattern_to_hex(pattern: List[bool]) -> str:
@@ -71,7 +56,24 @@ class STARHead96Backend(Head96Backend):
 
   @dataclass
   class PickUpTips96Params(BackendParams):
-    """STAR-specific parameters for 96-head tip pickup."""
+    """STAR-specific parameters for 96-head tip pickup.
+
+    Args:
+      tip_pickup_method: Tip pickup strategy.
+        - ``"from_rack"``: standard pickup from a tip rack; moves the plunger down
+          before mounting tips.
+        - ``"from_waste"``: moves plunger up, mounts tips, retracts ~10 mm, moves
+          plunger down, then moves to traversal height.
+        - ``"full_blowout"``: moves plunger up, mounts tips, then moves to traversal
+          height.
+      minimum_height_command_end: Minimal Z height in mm at command end. If None, uses
+        the backend's ``traversal_height``. Must be between 0 and 342.5.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm
+        before lateral movement begins. If None, uses the backend's
+        ``traversal_height``. Must be between 0 and 342.5.
+      alignment_tipspot_identifier: The tip spot identifier (e.g. ``"A1"``) used to
+        align the 96-head's A1 channel. Allowed range is ``"A1"`` to ``"H12"``.
+    """
 
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack"
     minimum_height_command_end: Optional[float] = None
@@ -85,6 +87,7 @@ class STARHead96Backend(Head96Backend):
 
     Firmware command: C0 EP
     """
+    await self.driver.ensure_iswap_parked()
     if not isinstance(backend_params, STARHead96Backend.PickUpTips96Params):
       backend_params = STARHead96Backend.PickUpTips96Params()
 
@@ -159,7 +162,17 @@ class STARHead96Backend(Head96Backend):
 
   @dataclass
   class DropTips96Params(BackendParams):
-    """STAR-specific parameters for 96-head tip drop."""
+    """STAR-specific parameters for 96-head tip drop.
+
+    Args:
+      minimum_height_command_end: Minimal Z height in mm at command end. If None, uses
+        the backend's ``traversal_height``. Must be between 0 and 342.5.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm
+        before lateral movement begins. If None, uses the backend's
+        ``traversal_height``. Must be between 0 and 342.5.
+      alignment_tipspot_identifier: The tip spot identifier (e.g. ``"A1"``) used to
+        align the 96-head's A1 channel. Allowed range is ``"A1"`` to ``"H12"``.
+    """
 
     minimum_height_command_end: Optional[float] = None
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
@@ -170,6 +183,7 @@ class STARHead96Backend(Head96Backend):
 
     Firmware command: C0 ER
     """
+    await self.driver.ensure_iswap_parked()
     if not isinstance(backend_params, STARHead96Backend.DropTips96Params):
       backend_params = STARHead96Backend.DropTips96Params()
 
@@ -205,7 +219,45 @@ class STARHead96Backend(Head96Backend):
 
   @dataclass
   class Aspirate96Params(BackendParams):
-    """STAR-specific parameters for 96-head aspiration."""
+    """STAR-specific parameters for 96-head aspiration.
+
+    Args:
+      use_lld: If True, use gamma liquid level detection. If False, use the
+        liquid height from the aspiration operation.
+      aspiration_type: Type of aspiration (0 = simple, 1 = sequence, 2 = cup emptied).
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm
+        before lateral movement. If None, uses the backend's ``traversal_height``.
+      min_z_endpos: Minimum Z position in mm at end of command. If None, uses the
+        backend's ``traversal_height``.
+      lld_search_height: LLD search height in mm. Default 199.9.
+      minimum_height: Minimum height (maximum immersion depth) in mm. If None, uses
+        the container bottom Z.
+      second_section_height: Tube 2nd section height measured from minimum_height in mm.
+        Default 3.2.
+      second_section_ratio: Tube 2nd section ratio: (bottom diameter * 10000) / top
+        diameter. Default 618.0.
+      immersion_depth: Immersion depth in mm. Positive = go deeper into liquid,
+        negative = go up out of liquid. Default 0.
+      surface_following_distance: Surface following distance during aspiration in mm.
+        Default 0.
+      transport_air_volume: Transport air volume in uL. Default 5.0.
+      pre_wetting_volume: Pre-wetting volume in uL. Default 5.0.
+      gamma_lld_sensitivity: Gamma LLD sensitivity (1 = high, 4 = low). Default 1.
+      swap_speed: Swap speed (on leaving liquid) in mm/s. Must be between 0.3 and
+        160.0. Default 2.0.
+      settling_time: Settling time in seconds. Default 1.0.
+      mix_position_from_liquid_surface: Mix position in Z direction from liquid surface
+        in mm. Default 0.
+      mix_surface_following_distance: Surface following distance during mix in mm.
+        Default 0.
+      limit_curve_index: Limit curve index for TADM. Must be between 0 and 999.
+        Default 0.
+      pull_out_distance_transport_air: Distance in mm to pull out for transport air.
+        Default 10.
+      tadm_algorithm: Whether to use the TADM algorithm. Default False.
+      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
+        2 = all TADM measurements). Default 0.
+    """
 
     use_lld: bool = False
     aspiration_type: int = 0
@@ -238,6 +290,7 @@ class STARHead96Backend(Head96Backend):
 
     Firmware command: C0 EA
     """
+    await self.driver.ensure_iswap_parked()
     if not isinstance(backend_params, STARHead96Backend.Aspirate96Params):
       backend_params = STARHead96Backend.Aspirate96Params()
 
@@ -329,7 +382,50 @@ class STARHead96Backend(Head96Backend):
 
   @dataclass
   class Dispense96Params(BackendParams):
-    """STAR-specific parameters for 96-head dispense."""
+    """STAR-specific parameters for 96-head dispense.
+
+    Args:
+      jet: Whether to use jet dispensing mode.
+      empty: Whether to use empty tip mode.
+      blow_out: Whether to blow out after dispensing.
+      use_lld: If True, use gamma liquid level detection. If False, use the
+        liquid height from the dispense operation.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm
+        before lateral movement. If None, uses the backend's ``traversal_height``.
+      min_z_endpos: Minimum Z position in mm at end of command. If None, uses the
+        backend's ``traversal_height``.
+      lld_search_height: LLD search height in mm. Default 199.9.
+      minimum_height: Minimum height (maximum immersion depth) in mm. If None, uses
+        the container bottom Z.
+      second_section_height: Tube 2nd section height measured from minimum_height in mm.
+        Default 3.2.
+      second_section_ratio: Tube 2nd section ratio: (bottom diameter * 10000) / top
+        diameter. Default 618.0.
+      immersion_depth: Immersion depth in mm. Positive = go deeper into liquid,
+        negative = go up out of liquid. Default 0.
+      surface_following_distance: Surface following distance during dispensing in mm.
+        Default 0.
+      transport_air_volume: Transport air volume in uL. Default 5.0.
+      gamma_lld_sensitivity: Gamma LLD sensitivity (1 = high, 4 = low). Default 1.
+      swap_speed: Swap speed (on leaving liquid) in mm/s. Must be between 0.3 and
+        160.0. Default 2.0.
+      settling_time: Settling time in seconds. Default 5.0.
+      mix_position_from_liquid_surface: Mix position in Z direction from liquid surface
+        in mm. Default 0.
+      mix_surface_following_distance: Surface following distance during mix in mm.
+        Default 0.
+      limit_curve_index: Limit curve index for TADM. Must be between 0 and 999.
+        Default 0.
+      cut_off_speed: Cut-off speed in uL/s. Default 5.0.
+      stop_back_volume: Stop back volume in uL. Default 0.
+      pull_out_distance_transport_air: Distance in mm to pull out for transport air.
+        Default 10.
+      side_touch_off_distance: Side touch off distance in 0.1 mm units (0 = OFF).
+        Default 0.
+      tadm_algorithm: Whether to use the TADM algorithm. Default False.
+      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
+        2 = all TADM measurements). Default 0.
+    """
 
     jet: bool = False
     empty: bool = False
@@ -366,6 +462,7 @@ class STARHead96Backend(Head96Backend):
 
     Firmware command: C0 ED
     """
+    await self.driver.ensure_iswap_parked()
     if not isinstance(backend_params, STARHead96Backend.Dispense96Params):
       backend_params = STARHead96Backend.Dispense96Params()
 
@@ -464,7 +561,7 @@ class STARHead96Backend(Head96Backend):
   # ---------------------------------------------------------------------------
 
   @staticmethod
-  def _position_96_head_in_resource(resource) -> Coordinate:
+  def _position_96_head_in_resource(resource: Resource) -> Coordinate:
     """Compute the A1 position for centering the 96-head in a resource."""
     head_size_x = 9 * 11  # 12 channels, 9mm spacing
     head_size_y = 9 * 7  # 8 channels, 9mm spacing

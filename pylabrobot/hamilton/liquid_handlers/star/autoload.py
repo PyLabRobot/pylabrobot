@@ -502,9 +502,7 @@ class STARAutoload:
         park_autoload_after=False,
       )
     else:
-      resp = await self.load_carrier_from_belt(
-        barcode_reading=False, park_autoload_after=False
-      )
+      resp = await self.load_carrier_from_belt(barcode_reading=False, park_autoload_after=False)
 
     if park_autoload_after:
       await self.park()

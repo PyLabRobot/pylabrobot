@@ -158,7 +158,9 @@ class TestWashCompositeCommandEncoding(unittest.TestCase):
 
   def test_composite_command_aspirate_sections(self):
     """Aspirate sections should encode travel rate and Z offsets."""
-    cmd = self.backend._plate_washing._build_wash_composite_command(PT96, aspirate_travel_rate=5, aspirate_z=40)
+    cmd = self.backend._plate_washing._build_wash_composite_command(
+      PT96, aspirate_travel_rate=5, aspirate_z=40
+    )
     # Aspirate section 1 (final aspirate, mirrors primary Z)
     self.assertEqual(cmd[29], 5)  # travel rate (propagated)
     self.assertEqual(cmd[32], 0x28)  # Z low (40)
@@ -214,7 +216,9 @@ class TestWashCompositeCommandEncoding(unittest.TestCase):
 
   def test_composite_command_aspirate_offsets(self):
     """Aspirate X/Y offsets should only appear in the primary aspirate section."""
-    cmd = self.backend._plate_washing._build_wash_composite_command(PT96, aspirate_x=15, aspirate_y=-10)
+    cmd = self.backend._plate_washing._build_wash_composite_command(
+      PT96, aspirate_x=15, aspirate_y=-10
+    )
     # Final aspirate: X/Y fixed at 0
     self.assertEqual(cmd[34], 0x00)
     self.assertEqual(cmd[35], 0x00)
@@ -247,7 +251,9 @@ class TestWashCompositeCommandEncoding(unittest.TestCase):
 
   def test_composite_command_shake_intensity_default_when_disabled(self):
     """Shake intensity should stay at default when shake_duration=0."""
-    cmd = self.backend._plate_washing._build_wash_composite_command(PT96, shake_duration=0, shake_intensity="Fast")
+    cmd = self.backend._plate_washing._build_wash_composite_command(
+      PT96, shake_duration=0, shake_intensity="Fast"
+    )
     self.assertEqual(cmd[90], 0x03)
 
   def test_composite_command_soak_duration(self):

@@ -5,7 +5,6 @@ import inspect
 import json
 import unittest.mock
 import warnings
-from dataclasses import dataclass, field
 from typing import (
   Any,
   Awaitable,
@@ -114,7 +113,6 @@ from .standard import (
 )
 
 
-
 TipPresenceProbingMethod = Callable[
   [List[TipSpot], Optional[List[int]]],
   Awaitable[Dict[str, bool]],
@@ -137,6 +135,7 @@ class BlowOutVolumeError(Exception):
 # ---------------------------------------------------------------------------
 
 
+from pylabrobot.capabilities.capability import BackendParams  # noqa: E402
 from pylabrobot.legacy._backend_params import _DictBackendParams  # noqa: E402
 
 
@@ -522,7 +521,7 @@ class LiquidHandler(Resource, Machine):
     return value
 
   def _log_command(self, name: str, **kwargs) -> None:
-    params = ", ".join(f"{k}={self._format_param(v)}" for k, v in kwargs.items())
+    _ = ", ".join(f"{k}={self._format_param(v)}" for k, v in kwargs.items())
 
   def get_picked_up_resource(self) -> Optional[Resource]:
     if self._resource_pickup is None:

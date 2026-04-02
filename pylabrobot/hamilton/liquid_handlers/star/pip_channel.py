@@ -86,7 +86,7 @@ class PIPChannel:
       command="RF",
       fmt="rf" + "&" * 17,
     )
-    return resp["rf"]
+    return str(resp["rf"])
 
   # -- Px:RV  cycle counts ----------------------------------------------------
 
@@ -244,16 +244,20 @@ class PIPChannel:
     speed_inc = _mm_to_z_inc(speed)
     accel_inc = _mm_to_z_inc(acceleration / 1000)
 
-    assert 9320 <= z_inc <= 31200, (
-      f"z must be between {_z_inc_to_mm(9320)} and {_z_inc_to_mm(31200)} mm, got {z} mm"
-    )
-    assert 20 <= speed_inc <= 15000, (
-      f"speed must be between {_z_inc_to_mm(20)} and {_z_inc_to_mm(15000)} mm/s, got {speed} mm/s"
-    )
-    assert 5 <= accel_inc <= 150, (
-      f"acceleration must be between ~53.6 and ~1609 mm/s², got {acceleration} mm/s²"
-    )
-    assert 0 <= current_limit <= 7, f"current_limit must be between 0 and 7, got {current_limit}"
+    if not (9320 <= z_inc <= 31200):
+      raise ValueError(
+        f"z must be between {_z_inc_to_mm(9320)} and {_z_inc_to_mm(31200)} mm, got {z} mm"
+      )
+    if not (20 <= speed_inc <= 15000):
+      raise ValueError(
+        f"speed must be between {_z_inc_to_mm(20)} and {_z_inc_to_mm(15000)} mm/s, got {speed} mm/s"
+      )
+    if not (5 <= accel_inc <= 150):
+      raise ValueError(
+        f"acceleration must be between ~53.6 and ~1609 mm/s², got {acceleration} mm/s²"
+      )
+    if not (0 <= current_limit <= 7):
+      raise ValueError(f"current_limit must be between 0 and 7, got {current_limit}")
 
     return await self.driver.send_command(
       module=self.module_id,
@@ -312,7 +316,7 @@ class PIPChannel:
         Defaults to 2.0.
 
     Raises:
-      AssertionError: If any parameter is outside the instrument-supported range.
+      ValueError: If any parameter is outside the instrument-supported range.
     """
 
     # Conversions & machine-compatibility check of parameters
@@ -322,32 +326,35 @@ class PIPChannel:
     channel_acceleration_thousand_increments = _mm_to_z_inc(channel_acceleration / 1000)
     post_detection_dist_increments = _mm_to_z_inc(post_detection_dist)
 
-    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{_z_inc_to_mm(9_320)}"
-      + f" and {_z_inc_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
-    )
-    assert 9_320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{_z_inc_to_mm(9_320)}"
-      + f" and {_z_inc_to_mm(31_200)} mm, is {start_pos_search} mm"
-    )
-    assert 20 <= channel_speed_increments <= 15_000, (
-      f"LLD search speed must be between \n{_z_inc_to_mm(20)}"
-      + f"and {_z_inc_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
-    )
-    assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      f"Channel acceleration must be between \n{_z_inc_to_mm(5 * 1_000)} "
-      + f" and {_z_inc_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
-    )
-    assert 0 <= detection_edge <= 1_023, (
-      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= detection_drop <= 1_023, (
-      "Offset after capacitive LLD edge detection must be between 0 and 1023"
-    )
-    assert 0 <= post_detection_dist_increments <= 9_999, (
-      "Post cLLD-detection movement distance must be between \n0"
-      + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
-    )
+    if not (9_320 <= lowest_immers_pos_increments <= 31_200):
+      raise ValueError(
+        f"Lowest immersion position must be between \n{_z_inc_to_mm(9_320)}"
+        + f" and {_z_inc_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+      )
+    if not (9_320 <= start_pos_search_increments <= 31_200):
+      raise ValueError(
+        f"Start position of LLD search must be between \n{_z_inc_to_mm(9_320)}"
+        + f" and {_z_inc_to_mm(31_200)} mm, is {start_pos_search} mm"
+      )
+    if not (20 <= channel_speed_increments <= 15_000):
+      raise ValueError(
+        f"LLD search speed must be between \n{_z_inc_to_mm(20)}"
+        + f"and {_z_inc_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
+      )
+    if not (5 <= channel_acceleration_thousand_increments <= 150):
+      raise ValueError(
+        f"Channel acceleration must be between \n{_z_inc_to_mm(5 * 1_000)} "
+        + f" and {_z_inc_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
+      )
+    if not (0 <= detection_edge <= 1_023):
+      raise ValueError("Edge steepness at capacitive LLD detection must be between 0 and 1023")
+    if not (0 <= detection_drop <= 1_023):
+      raise ValueError("Offset after capacitive LLD edge detection must be between 0 and 1023")
+    if not (0 <= post_detection_dist_increments <= 9_999):
+      raise ValueError(
+        "Post cLLD-detection movement distance must be between \n0"
+        + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
+      )
 
     await self.driver.send_command(
       module=self.module_id,
@@ -468,113 +475,128 @@ class PIPChannel:
     plld_foam_search_speed_increments = _mm_to_z_inc(plld_foam_search_speed)
 
     # Machine-compatibility parameter checks
-    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{_z_inc_to_mm(9_320)}"
-      + f" and {_z_inc_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
-    )
-    assert 9_320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{_z_inc_to_mm(9_320)}"
-      + f" and {_z_inc_to_mm(31_200)} mm, is {start_pos_search} mm"
-    )
+    if not (9_320 <= lowest_immers_pos_increments <= 31_200):
+      raise ValueError(
+        f"Lowest immersion position must be between \n{_z_inc_to_mm(9_320)}"
+        + f" and {_z_inc_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+      )
+    if not (9_320 <= start_pos_search_increments <= 31_200):
+      raise ValueError(
+        f"Start position of LLD search must be between \n{_z_inc_to_mm(9_320)}"
+        + f" and {_z_inc_to_mm(31_200)} mm, is {start_pos_search} mm"
+      )
 
-    assert tip_has_filter in [True, False], "tip_has_filter must be a boolean"
+    if tip_has_filter not in [True, False]:
+      raise TypeError("tip_has_filter must be a boolean")
 
-    assert isinstance(clld_verification, bool), (
-      f"clld_verification must be a boolean, is {clld_verification}"
-    )
+    if not isinstance(clld_verification, bool):
+      raise TypeError(f"clld_verification must be a boolean, is {clld_verification}")
 
-    assert plld_mode in [PressureLLDMode.LIQUID, PressureLLDMode.FOAM], (
-      f"plld_mode must be either PressureLLDMode.LIQUID ({PressureLLDMode.LIQUID}) or "
-      + f"PressureLLDMode.FOAM ({PressureLLDMode.FOAM}), is {plld_mode}"
-    )
+    if plld_mode not in [PressureLLDMode.LIQUID, PressureLLDMode.FOAM]:
+      raise ValueError(
+        f"plld_mode must be either PressureLLDMode.LIQUID ({PressureLLDMode.LIQUID}) or "
+        + f"PressureLLDMode.FOAM ({PressureLLDMode.FOAM}), is {plld_mode}"
+      )
 
-    assert 20 <= channel_speed_above_start_pos_search_increments <= 15_000, (
-      "Speed above start position of LLD search must be between \n"
-      + f"{_z_inc_to_mm(20)} and "
-      + f"{_z_inc_to_mm(15_000)} mm/sec, is "
-      + f"{channel_speed_above_start_pos_search} mm/sec"
-    )
-    assert 20 <= channel_speed_increments <= 15_000, (
-      f"LLD search speed must be between \n{_z_inc_to_mm(20)}"
-      + f"and {_z_inc_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
-    )
-    assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      f"Channel acceleration must be between \n{_z_inc_to_mm(5 * 1_000)} "
-      + f" and {_z_inc_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
-    )
-    assert 0 <= z_drive_current_limit <= 7, (
-      f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}"
-    )
+    if not (20 <= channel_speed_above_start_pos_search_increments <= 15_000):
+      raise ValueError(
+        "Speed above start position of LLD search must be between \n"
+        + f"{_z_inc_to_mm(20)} and "
+        + f"{_z_inc_to_mm(15_000)} mm/sec, is "
+        + f"{channel_speed_above_start_pos_search} mm/sec"
+      )
+    if not (20 <= channel_speed_increments <= 15_000):
+      raise ValueError(
+        f"LLD search speed must be between \n{_z_inc_to_mm(20)}"
+        + f"and {_z_inc_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
+      )
+    if not (5 <= channel_acceleration_thousand_increments <= 150):
+      raise ValueError(
+        f"Channel acceleration must be between \n{_z_inc_to_mm(5 * 1_000)} "
+        + f" and {_z_inc_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
+      )
+    if not (0 <= z_drive_current_limit <= 7):
+      raise ValueError(
+        f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}"
+      )
 
-    assert 20 <= dispense_drive_speed_increments <= 13_500, (
-      "Dispensing drive speed must be between \n"
-      + f"{_disp_inc_to_mm(20)} and "
-      + f"{_disp_inc_to_mm(13_500)} mm/sec, is {dispense_drive_speed} mm/sec"
-    )
-    assert 1 <= dispense_drive_acceleration_increments <= 100, (
-      "Dispensing drive acceleration must be between \n"
-      + f"{_disp_inc_to_mm(1)} and "
-      + f"{_disp_inc_to_mm(100)} mm/sec**2, is {dispense_drive_acceleration} mm/sec**2"
-    )
-    assert 20 <= dispense_drive_max_speed_increments <= 13_500, (
-      "Dispensing drive max speed must be between \n"
-      + f"{_disp_inc_to_mm(20)} and "
-      + f"{_disp_inc_to_mm(13_500)} mm/sec, is {dispense_drive_max_speed} mm/sec"
-    )
-    assert 0 <= dispense_drive_current_limit <= 7, (
-      f"Dispensing drive current limit must be between 0 and 7, is {dispense_drive_current_limit}"
-    )
+    if not (20 <= dispense_drive_speed_increments <= 13_500):
+      raise ValueError(
+        "Dispensing drive speed must be between \n"
+        + f"{_disp_inc_to_mm(20)} and "
+        + f"{_disp_inc_to_mm(13_500)} mm/sec, is {dispense_drive_speed} mm/sec"
+      )
+    if not (1 <= dispense_drive_acceleration_increments <= 100):
+      raise ValueError(
+        "Dispensing drive acceleration must be between \n"
+        + f"{_disp_inc_to_mm(1)} and "
+        + f"{_disp_inc_to_mm(100)} mm/sec**2, is {dispense_drive_acceleration} mm/sec**2"
+      )
+    if not (20 <= dispense_drive_max_speed_increments <= 13_500):
+      raise ValueError(
+        "Dispensing drive max speed must be between \n"
+        + f"{_disp_inc_to_mm(20)} and "
+        + f"{_disp_inc_to_mm(13_500)} mm/sec, is {dispense_drive_max_speed} mm/sec"
+      )
+    if not (0 <= dispense_drive_current_limit <= 7):
+      raise ValueError(
+        f"Dispensing drive current limit must be between 0 and 7, is {dispense_drive_current_limit}"
+      )
 
-    assert 0 <= clld_detection_edge <= 1_023, (
-      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= clld_detection_drop <= 1_023, (
-      "Offset after capacitive LLD edge detection must be between 0 and 1023"
-    )
-    assert 0 <= plld_detection_edge <= 1_023, (
-      "Edge steepness at pressure LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= plld_detection_drop <= 1_023, (
-      "Offset after pressure LLD edge detection must be between 0 and 1023"
-    )
+    if not (0 <= clld_detection_edge <= 1_023):
+      raise ValueError("Edge steepness at capacitive LLD detection must be between 0 and 1023")
+    if not (0 <= clld_detection_drop <= 1_023):
+      raise ValueError("Offset after capacitive LLD edge detection must be between 0 and 1023")
+    if not (0 <= plld_detection_edge <= 1_023):
+      raise ValueError("Edge steepness at pressure LLD detection must be between 0 and 1023")
+    if not (0 <= plld_detection_drop <= 1_023):
+      raise ValueError("Offset after pressure LLD edge detection must be between 0 and 1023")
 
-    assert 0 <= max_delta_plld_clld_increments <= 9_999, (
-      "Maximum allowed difference between pressure LLD and capacitive LLD detection z-positions "
-      + f"must be between 0 and {_z_inc_to_mm(9_999)} mm,"
-      + f" is {max_delta_plld_clld} mm"
-    )
+    if not (0 <= max_delta_plld_clld_increments <= 9_999):
+      raise ValueError(
+        "Maximum allowed difference between pressure LLD and capacitive LLD detection z-positions "
+        + f"must be between 0 and {_z_inc_to_mm(9_999)} mm,"
+        + f" is {max_delta_plld_clld} mm"
+      )
 
-    assert 0 <= plld_foam_detection_drop <= 1_023, (
-      f"Pressure LLD foam detection drop must be between 0 and 1023, is {plld_foam_detection_drop}"
-    )
-    assert 0 <= plld_foam_detection_edge_tolerance <= 1_023, (
-      "Pressure LLD foam detection edge tolerance must be between 0 and 1023, "
-      + f"is {plld_foam_detection_edge_tolerance}"
-    )
-    assert 0 <= plld_foam_ad_values <= 4_999, (
-      f"Pressure LLD foam AD values must be between 0 and 4999, is {plld_foam_ad_values}"
-    )
-    assert 20 <= plld_foam_search_speed_increments <= 13_500, (
-      "Pressure LLD foam search speed must be between \n"
-      + f"{_z_inc_to_mm(20)} and "
-      + f"{_z_inc_to_mm(13_500)} mm/sec, is {plld_foam_search_speed} mm/sec"
-    )
+    if not (0 <= plld_foam_detection_drop <= 1_023):
+      raise ValueError(
+        f"Pressure LLD foam detection drop must be between 0 and 1023, is {plld_foam_detection_drop}"
+      )
+    if not (0 <= plld_foam_detection_edge_tolerance <= 1_023):
+      raise ValueError(
+        "Pressure LLD foam detection edge tolerance must be between 0 and 1023, "
+        + f"is {plld_foam_detection_edge_tolerance}"
+      )
+    if not (0 <= plld_foam_ad_values <= 4_999):
+      raise ValueError(
+        f"Pressure LLD foam AD values must be between 0 and 4999, is {plld_foam_ad_values}"
+      )
+    if not (20 <= plld_foam_search_speed_increments <= 13_500):
+      raise ValueError(
+        "Pressure LLD foam search speed must be between \n"
+        + f"{_z_inc_to_mm(20)} and "
+        + f"{_z_inc_to_mm(13_500)} mm/sec, is {plld_foam_search_speed} mm/sec"
+      )
 
-    assert dispense_back_plld_volume_mode in [0, 1], (
-      "dispense_back_plld_volume_mode must be either 0 ('normal') or 1 "
-      + "('dispense back dispense_back_plld_volume'), "
-      + f"is {dispense_back_plld_volume_mode}"
-    )
+    if dispense_back_plld_volume_mode not in [0, 1]:
+      raise ValueError(
+        "dispense_back_plld_volume_mode must be either 0 ('normal') or 1 "
+        + "('dispense back dispense_back_plld_volume'), "
+        + f"is {dispense_back_plld_volume_mode}"
+      )
 
-    assert 0 <= dispense_back_plld_volume_increments <= 26_666, (
-      "Dispense back pressure LLD volume must be between \n0"
-      + f" and {_disp_inc_to_vol(26_666)} uL, is {dispense_back_plld_volume} uL"
-    )
+    if not (0 <= dispense_back_plld_volume_increments <= 26_666):
+      raise ValueError(
+        "Dispense back pressure LLD volume must be between \n0"
+        + f" and {_disp_inc_to_vol(26_666)} uL, is {dispense_back_plld_volume} uL"
+      )
 
-    assert 0 <= post_detection_dist_increments <= 9_999, (
-      "Post cLLD-detection movement distance must be between \n0"
-      + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
-    )
+    if not (0 <= post_detection_dist_increments <= 9_999):
+      raise ValueError(
+        "Post cLLD-detection movement distance must be between \n0"
+        + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
+      )
 
     resp_raw = await self.driver.send_command(
       module=self.module_id,
@@ -607,7 +629,8 @@ class PIPChannel:
       dw=f"{dispense_drive_current_limit}",
       read_timeout=max(self.driver.read_timeout, 120),  # it can take long (>30s)
     )
-    assert resp_raw is not None
+    if resp_raw is None:
+      raise RuntimeError("No response received from pLLD search command")
 
     resp_probe_mm = [
       _z_inc_to_mm(int(return_val)) for return_val in resp_raw.split("if")[-1].split()

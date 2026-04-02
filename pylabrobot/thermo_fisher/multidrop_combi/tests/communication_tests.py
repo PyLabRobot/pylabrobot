@@ -32,7 +32,7 @@ def _make_driver() -> MultidropCombiDriver:
   mock_io.get_read_timeout = get_read_timeout
   mock_io.set_read_timeout = set_read_timeout
   mock_io.temporary_timeout = lambda t: contextlib.contextmanager(
-    lambda: (mock_io.set_read_timeout(t), (yield), mock_io.set_read_timeout(_timeout))
+    lambda: (mock_io.set_read_timeout(t), (yield), mock_io.set_read_timeout(_timeout))  # type: ignore[arg-type, misc]
   )()
 
   # Use the real temporary_timeout from Serial for correct behavior
@@ -58,17 +58,17 @@ class SendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_simple_command(self) -> None:
     """Test a simple command with echo + END response."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"SPL\r\n",
       b"SPL END 0\r\n",
     ]
     result = await self.driver.send_command("SPL 1")
     self.assertEqual(result, [])
-    self.driver.io.write.assert_awaited_once_with(b"SPL 1\r")
+    self.driver.io.write.assert_awaited_once_with(b"SPL 1\r")  # type: ignore[attr-defined]
 
   async def test_command_with_data_lines(self) -> None:
     """Test a command that returns data lines between echo and END."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"VER\r\n",
       b"MultidropCombi 2.00.29 836-4191\r\n",
       b"VER END 0\r\n",
@@ -78,7 +78,7 @@ class SendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_command_with_error_status(self) -> None:
     """Test that non-zero status raises MultidropCombiInstrumentError."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"SPL\r\n",
       b"SPL END 18\r\n",
     ]
@@ -89,7 +89,7 @@ class SendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_timeout_raises_communication_error(self) -> None:
     """Test that timeout (empty readline) raises MultidropCombiCommunicationError."""
-    self.driver.io.readline.side_effect = [b""]
+    self.driver.io.readline.side_effect = [b""]  # type: ignore[attr-defined]
     with self.assertRaises(MultidropCombiCommunicationError):
       await self.driver.send_command("SPL 1")
 
@@ -101,7 +101,7 @@ class SendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_custom_timeout(self) -> None:
     """Test that custom timeout is set during command and restored after."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"POU\r\n",
       b"POU END 0\r\n",
     ]
@@ -111,7 +111,7 @@ class SendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_echo_skipping_case_insensitive(self) -> None:
     """Test that echo is skipped regardless of case."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"ver\r\n",
       b"MultidropCombi 2.00.29 836-4191\r\n",
       b"VER END 0\r\n",
@@ -126,7 +126,7 @@ class EnterRemoteModeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_enter_remote_mode_success(self) -> None:
     """Test successful VER command parses instrument info."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"VER\r\n",
       b"MultidropCombi 2.00.29 836-4191\r\n",
       b"VER END 0\r\n",
@@ -156,7 +156,7 @@ class EnterRemoteModeTests(unittest.IsolatedAsyncioTestCase):
         return responses[call_count - 1]
       return b""
 
-    self.driver.io.readline.side_effect = readline_side_effect
+    self.driver.io.readline.side_effect = readline_side_effect  # type: ignore[attr-defined]
     info = await self.driver._enter_remote_mode()
     self.assertEqual(info["instrument_name"], "MultidropCombi")
 
@@ -167,16 +167,16 @@ class DrainStaleDataTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_drain_with_stale_data(self) -> None:
     """Test draining stale data from buffer."""
-    self.driver.io.readline.side_effect = [
+    self.driver.io.readline.side_effect = [  # type: ignore[attr-defined]
       b"stale line 1\r\n",
       b"stale line 2\r\n",
       b"",
     ]
     await self.driver._drain_stale_data()
-    self.driver.io.reset_input_buffer.assert_awaited_once()
-    self.driver.io.reset_output_buffer.assert_awaited_once()
+    self.driver.io.reset_input_buffer.assert_awaited_once()  # type: ignore[attr-defined]
+    self.driver.io.reset_output_buffer.assert_awaited_once()  # type: ignore[attr-defined]
 
   async def test_drain_empty_buffer(self) -> None:
     """Test draining when buffer is already empty."""
-    self.driver.io.readline.side_effect = [b""]
+    self.driver.io.readline.side_effect = [b""]  # type: ignore[attr-defined]
     await self.driver._drain_stale_data()

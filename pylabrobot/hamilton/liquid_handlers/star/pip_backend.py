@@ -16,7 +16,7 @@ from pylabrobot.capabilities.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
-from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
+from pylabrobot.hamilton.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
 )
@@ -28,7 +28,7 @@ from .errors import (
   STARFirmwareError,
   convert_star_firmware_error_to_plr_error,
 )
-from .pip_channel import PIPChannel, _mm_to_z_inc, _z_inc_to_mm
+from .pip_channel import PIPChannel
 
 if TYPE_CHECKING:
   from .driver import STARDriver
@@ -170,6 +170,15 @@ def _fill(val: Optional[List], default: List) -> List:
 
 
 def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
+  """Compute firmware dispensing mode from boolean flags.
+
+  Firmware modes:
+    0 = Partial volume in jet mode
+    1 = Blow out in jet mode (labelled "empty" in VENUS)
+    2 = Partial volume at surface
+    3 = Blow out at surface (labelled "empty" in VENUS)
+    4 = Empty tip at fix position
+  """
   if empty:
     return 4
   if jet:
@@ -245,7 +254,21 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class PickUpTipsParams(BackendParams):
-    """STAR-specific parameters for ``pick_up_tips``."""
+    """STAR-specific parameters for ``pick_up_tips``.
+
+    Args:
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement begins. Applies to all channels regardless of tip pattern. If None,
+        uses the backend's ``traversal_height``. Must be between 0 and 360.0.
+      pickup_method: Tip pickup strategy. If None, uses the default from the HamiltonTip
+        definition.
+      begin_tip_pick_up_process: Z position in mm to begin the tip pickup process (start of
+        Z descent). If None, computed from tip fitting depth + tip spot position. Must be
+        between 0 and 360.0.
+      end_tip_pick_up_process: Z position in mm to end the tip pickup process (final engage
+        depth). If None, computed from tip length + tip spot position. Must be between 0
+        and 360.0.
+    """
 
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
     pickup_method: Optional[TipPickupMethod] = None
@@ -346,7 +369,24 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class DropTipsParams(BackendParams):
-    """STAR-specific parameters for ``drop_tips``."""
+    """STAR-specific parameters for ``drop_tips``.
+
+    When the drop method is ``PLACE_SHIFT``, the begin/end deposit positions refer to the
+    tip cone end height. Otherwise, they refer to the stop-disk height.
+
+    Args:
+      drop_method: Tip discard strategy. If None, auto-selected: ``PLACE_SHIFT`` when
+        discarding into a non-TipSpot resource, ``DROP`` when returning to a TipSpot.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement begins. Applies to all channels regardless of tip pattern. If None,
+        uses the backend's ``traversal_height``. Must be between 0 and 360.0.
+      z_position_at_end_of_a_command: Z position in mm at the end of the command. If None,
+        uses the backend's ``traversal_height``. Must be between 0 and 360.0.
+      begin_tip_deposit_process: Z position in mm to begin the tip deposit process.
+        If None, computed from tip geometry and drop method. Must be between 0 and 360.0.
+      end_tip_deposit_process: Z position in mm to end the tip deposit process.
+        If None, computed from tip geometry and drop method. Must be between 0 and 360.0.
+    """
 
     drop_method: Optional[TipDropMethod] = None
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
@@ -441,7 +481,90 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class AspirateParams(BackendParams):
-    """STAR-specific parameters for ``aspirate``."""
+    """STAR-specific parameters for ``aspirate``.
+
+    All per-channel list parameters accept ``None`` to use sensible defaults (typically
+    derived from liquid classes or container geometry). When provided, lists must have one
+    entry per channel involved in the operation.
+
+    LLD restrictions:
+      - "dP and Dual LLD" are used in aspiration only. During dispensation, pressure-based
+        LLD is set to OFF.
+      - "side touch off" turns LLD and "Z touch off" to OFF and is not available for
+        simultaneous aspirate/dispense commands.
+
+    Args:
+      hamilton_liquid_classes: Per-channel Hamilton liquid class overrides. If None,
+        auto-detected from tip type and liquid.
+      disable_volume_correction: Per-channel flag to disable liquid-class volume correction.
+      aspiration_type: Type of aspiration per channel (0 = simple, 1 = sequence,
+        2 = cup emptied). Must be between 0 and 2.
+      jet: Per-channel flag used for liquid class selection (jet vs surface mode).
+      blow_out: Per-channel flag used for liquid class selection.
+      lld_search_height: LLD search height in mm (relative to well bottom). If None,
+        computed from container geometry. Must be between 0 and 360.0.
+      clot_detection_height: Check height of clot detection above the current liquid
+        surface in mm. If None, uses liquid class default. Must be between 0 and 50.0.
+      pull_out_distance_transport_air: Distance in mm to pull out for transport air when
+        not using LLD. Must be between 0 and 360.0. Default 10.0.
+      second_section_height: Tube 2nd section height measured from minimum_height in mm.
+        Must be between 0 and 360.0. Default 3.2.
+      second_section_ratio: Tube 2nd section ratio: (bottom diameter * 10000) / top
+        diameter. Must be between 0 and 1000.0. Default 618.0.
+      minimum_height: Minimum height (maximum immersion depth) in mm. If None, uses well
+        bottom. Must be between 0 and 360.0.
+      immersion_depth: Immersion depth in mm. Positive = go deeper into liquid,
+        negative = go up out of liquid. Must be between -360.0 and 360.0.
+      surface_following_distance: Surface following distance during aspiration in mm.
+        Must be between 0 and 360.0.
+      transport_air_volume: Transport air volume in uL. If None, uses liquid class
+        default. Must be between 0 and 50.0.
+      pre_wetting_volume: Pre-wetting volume in uL. Must be between 0 and 99.9.
+      lld_mode: LLD mode per channel (OFF, GAMMA, DP, DUAL, Z_TOUCH_OFF). Default OFF.
+      gamma_lld_sensitivity: Gamma LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      dp_lld_sensitivity: Delta-P LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      aspirate_position_above_z_touch_off: Aspirate position above Z touch off in mm.
+        Must be between 0 and 10.0.
+      detection_height_difference_for_dual_lld: Height difference for dual LLD detection
+        in mm. Must be between 0 and 9.9.
+      swap_speed: Swap speed (on leaving liquid) in mm/s. If None, uses liquid class
+        default. Must be between 0.3 and 160.0.
+      settling_time: Settling time in seconds. If None, uses liquid class default.
+        Must be between 0 and 9.9.
+      mix_position_from_liquid_surface: Mix position in Z direction from liquid surface
+        (LLD or absolute terms) in mm. Must be between 0 and 90.0.
+      mix_surface_following_distance: Surface following distance during mix in mm.
+        Must be between 0 and 360.0.
+      limit_curve_index: Limit curve index for TADM. Must be between 0 and 999.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement. If None, uses backend's ``traversal_height``. Must be between
+        0 and 360.0.
+      min_z_endpos: Minimum Z position in mm at end of command. If None, uses backend's
+        ``traversal_height``. Must be between 0 and 360.0.
+      liquid_surface_no_lld: Absolute liquid surface position in mm when not using LLD.
+        If None, computed from well bottom + liquid height.
+      use_2nd_section_aspiration: Per-channel flag to enable 2nd section aspiration.
+      retract_height_over_2nd_section_to_empty_tip: Retract height over 2nd section to
+        empty tip in mm. Must be between 0 and 360.0.
+      dispensation_speed_during_emptying_tip: Dispensation speed during emptying tip in
+        uL/s. Must be between 0.4 and 500.0.
+      dosing_drive_speed_during_2nd_section_search: Dosing drive speed during 2nd section
+        search in uL/s. Must be between 0.4 and 500.0.
+      z_drive_speed_during_2nd_section_search: Z drive speed during 2nd section search in
+        mm/s. Must be between 0.3 and 160.0.
+      cup_upper_edge: Cup upper edge in mm. Must be between 0 and 360.0.
+      tadm_algorithm: Whether to use the TADM algorithm. Default False.
+      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
+        2 = all TADM measurements). Must be between 0 and 2.
+      probe_liquid_height: If True, use gamma LLD to probe the liquid height before
+        aspirating. Cannot be used when liquid heights are already set on operations.
+      auto_surface_following_distance: If True, automatically compute the surface
+        following distance from volume and container geometry. Requires liquid heights
+        to be set (or ``probe_liquid_height=True``) and containers with height/volume
+        conversion functions.
+    """
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
     disable_volume_correction: Optional[List[bool]] = None
@@ -455,7 +578,6 @@ class STARPIPBackend(PIPBackend):
     second_section_ratio: Optional[List[float]] = None
     minimum_height: Optional[List[float]] = None
     immersion_depth: Optional[List[float]] = None
-    """Positive = go deeper into liquid, negative = go up out of liquid."""
     surface_following_distance: Optional[List[float]] = None
     transport_air_volume: Optional[List[float]] = None
     pre_wetting_volume: Optional[List[float]] = None
@@ -836,7 +958,83 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class DispenseParams(BackendParams):
-    """STAR-specific parameters for ``dispense``."""
+    """STAR-specific parameters for ``dispense``.
+
+    All per-channel list parameters accept ``None`` to use sensible defaults (typically
+    derived from liquid classes or container geometry). When provided, lists must have one
+    entry per channel involved in the operation.
+
+    Dispensing modes are controlled by the combination of ``jet``, ``blow_out``, and
+    ``empty`` flags:
+      - jet=False, blow_out=False, empty=False: Partial volume at surface (mode 2)
+      - jet=True,  blow_out=False: Partial volume in jet mode (mode 0)
+      - jet=True,  blow_out=True:  Blow out in jet mode (mode 1)
+      - jet=False, blow_out=True:  Blow out at surface (mode 3)
+      - empty=True: Empty tip at fix position (mode 4)
+
+    LLD restrictions:
+      - During dispensation, all pressure-based LLD (dP, Dual) is set to OFF.
+      - "side touch off" turns LLD and "Z touch off" to OFF.
+
+    Args:
+      hamilton_liquid_classes: Per-channel Hamilton liquid class overrides. If None,
+        auto-detected from tip type and liquid.
+      disable_volume_correction: Per-channel flag to disable liquid-class volume correction.
+      jet: Per-channel flag for jet dispensing mode.
+      blow_out: Per-channel flag for blow out dispensing mode.
+      empty: Per-channel flag for empty tip mode.
+      lld_search_height: LLD search height in mm (relative to well bottom). If None,
+        computed from container geometry. Must be between 0 and 360.0.
+      liquid_surface_no_lld: Absolute liquid surface position in mm when not using LLD.
+        If None, computed from well bottom + liquid height.
+      pull_out_distance_transport_air: Distance in mm to pull out for transport air when
+        not using LLD. Must be between 0 and 360.0. Default 10.0.
+      second_section_height: Tube 2nd section height measured from minimum_height in mm.
+        Must be between 0 and 360.0. Default 3.2.
+      second_section_ratio: Tube 2nd section ratio: (bottom diameter * 10000) / top
+        diameter. Must be between 0 and 1000.0. Default 618.0.
+      minimum_height: Minimum height (maximum immersion depth) in mm. If None, uses well
+        bottom. Must be between 0 and 360.0.
+      immersion_depth: Immersion depth in mm. Must be between 0 and 360.0.
+      immersion_depth_direction: Direction of immersion depth per channel (0 = go deeper,
+        1 = go up out of liquid). If None, inferred from sign of immersion_depth.
+      surface_following_distance: Surface following distance during dispensing in mm.
+        Must be between 0 and 360.0.
+      cut_off_speed: Cut-off speed in uL/s. Must be between 0.4 and 500.0.
+      stop_back_volume: Stop back volume in uL. Must be between 0 and 18.0.
+      transport_air_volume: Transport air volume in uL. If None, uses liquid class
+        default. Must be between 0 and 50.0.
+      lld_mode: LLD mode per channel (OFF, GAMMA, DP, DUAL, Z_TOUCH_OFF). Default OFF.
+      side_touch_off_distance: Side touch off distance in mm (0 = OFF). Turns LLD and
+        Z touch off to OFF if enabled. Must be between 0 and 4.5. Default 0.0.
+      dispense_position_above_z_touch_off: Dispense position above Z touch off in mm.
+        Must be between 0 and 10.0.
+      gamma_lld_sensitivity: Gamma LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      dp_lld_sensitivity: Delta-P LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      swap_speed: Swap speed (on leaving liquid) in mm/s. If None, uses liquid class
+        default. Must be between 0.3 and 160.0.
+      settling_time: Settling time in seconds. If None, uses liquid class default.
+        Must be between 0 and 9.9.
+      mix_position_from_liquid_surface: Mix position in Z direction from liquid surface
+        in mm. Must be between 0 and 90.0.
+      mix_surface_following_distance: Surface following distance during mix in mm.
+        Must be between 0 and 360.0.
+      limit_curve_index: Limit curve index for TADM. Must be between 0 and 999.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement. If None, uses backend's ``traversal_height``. Must be between
+        0 and 360.0.
+      min_z_endpos: Minimum Z position in mm at end of command. If None, uses backend's
+        ``traversal_height``. Must be between 0 and 360.0.
+      tadm_algorithm: Whether to use the TADM algorithm. Default False.
+      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
+        2 = all TADM measurements). Must be between 0 and 2.
+      probe_liquid_height: If True, use gamma LLD to probe the liquid height before
+        dispensing. Cannot be used when liquid heights are already set on operations.
+      auto_surface_following_distance: If True, automatically compute the surface
+        following distance from volume and container geometry.
+    """
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
     disable_volume_correction: Optional[List[bool]] = None
@@ -1523,12 +1721,8 @@ class STARPIPBackend(PIPBackend):
 
     tip_len = await self.request_tip_len_on_channel(channel_idx)
 
-    max_tip_z = (
-      self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-    )
-    min_tip_z = (
-      self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-    )
+    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
 
     if not (min_tip_z <= z <= max_tip_z):
       raise ValueError(
@@ -1648,6 +1842,7 @@ class STARPIPBackend(PIPBackend):
       ys = [well.get_location_wrt(deck, x="c", y="c").y for well in wells]
       z = absolute_center.z
 
+    assert self.driver.left_x_arm is not None
     await self.driver.left_x_arm.move_to(x)
 
     await self.position_channels_in_y_direction(

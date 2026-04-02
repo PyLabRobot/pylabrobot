@@ -192,7 +192,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     Returns:
       Parsed response dict with key ``"rg"`` (0 = not parked, 1 = parked).
     """
-    return await self.driver.send_command(module="C0", command="RG", fmt="rg#")
+    return await self.driver.send_command(module="C0", command="RG", fmt="rg#")  # type: ignore[no-any-return]
 
   async def request_initialization_status(self) -> bool:
     """Request iSWAP initialization status (R0 QW).
@@ -208,7 +208,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     This is equivalent to the Y location of the iSWAP module.
     """
-    if not self.driver.extended_conf.left_x_drive.iswap_installed:
+    if not self.driver.extended_conf.left_x_drive.iswap_installed:  # type: ignore[union-attr]
       raise RuntimeError("iSWAP is not installed")
     resp = await self.driver.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
@@ -546,6 +546,14 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class ParkParams(BackendParams):
+    """Parameters for parking the iSWAP arm.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement to
+        the park position. If None, uses the backend's ``traversal_height``. Must be
+        between 0 and 360.0.
+    """
+
     minimum_traverse_height: Optional[float] = None
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -588,6 +596,18 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class CloseGripperParams(BackendParams):
+    """Parameters for closing the iSWAP gripper.
+
+    The gripper should be at position plate_width + plate_width_tolerance + 2.0 mm
+    before sending this command.
+
+    Args:
+      grip_strength: Grip strength (0 = low, 9 = high). Must be between 0 and 9.
+        Default 5.
+      plate_width_tolerance: Plate width tolerance in mm. Must be between 0 and 9.9.
+        Default 0.
+    """
+
     grip_strength: int = 5
     plate_width_tolerance: float = 0
 
@@ -620,6 +640,27 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class PickUpParams(BackendParams):
+    """iSWAP-specific parameters for plate pickup.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+      grip_strength: Grip strength (1 = low, 9 = high). Must be between 1 and 9.
+        Default 4.
+      plate_width_tolerance: Plate width tolerance in mm. Must be between 0 and 9.9.
+        Default 2.0.
+      collision_control_level: Collision control level (0 = low, 1 = high). Must be
+        0 or 1. Default 0.
+      acceleration_index_high_acc: Acceleration index for high acceleration phases.
+        Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: Acceleration index for low acceleration phases.
+        Must be between 0 and 4. Default 1.
+      fold_up_at_end: Whether to fold up the iSWAP at the end of the process.
+        Default False.
+    """
+
     minimum_traverse_height: float = 280.0
     z_position_at_end: float = 280.0
     grip_strength: int = 4
@@ -700,6 +741,23 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class DropParams(BackendParams):
+    """iSWAP-specific parameters for plate drop.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+      collision_control_level: Collision control level (0 = low, 1 = high). Must be
+        0 or 1. Default 0.
+      acceleration_index_high_acc: Acceleration index for high acceleration phases.
+        Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: Acceleration index for low acceleration phases.
+        Must be between 0 and 4. Default 1.
+      fold_up_at_end: Whether to fold up the iSWAP at the end of the process.
+        Default False.
+    """
+
     minimum_traverse_height: float = 280.0
     z_position_at_end: float = 280.0
     collision_control_level: int = 0
@@ -777,6 +835,19 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class MoveToLocationParams(BackendParams):
+    """iSWAP-specific parameters for moving a held plate to a new position.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 360.0.
+      collision_control_level: Collision control level (0 = low, 1 = high). Must be
+        0 or 1. Default 1.
+      acceleration_index_high_acc: Acceleration index for high acceleration phases.
+        Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: Acceleration index for low acceleration phases.
+        Must be between 0 and 4. Default 1.
+    """
+
     minimum_traverse_height: float = 360.0
     collision_control_level: int = 1
     acceleration_index_high_acc: int = 4

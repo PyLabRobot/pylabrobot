@@ -1,7 +1,5 @@
 """STARChatterboxDriver: prints commands instead of sending them over USB."""
 
-from typing import List, Optional
-
 from .autoload import STARAutoload
 from .cover import STARCover
 from .driver import (
@@ -93,8 +91,7 @@ class STARChatterboxDriver(STARDriver):
 
     self.cover = STARCover(driver=self)
 
-    if (self.machine_conf.wash_station_1_installed or
-        self.machine_conf.wash_station_2_installed):
+    if self.machine_conf.wash_station_1_installed or self.machine_conf.wash_station_2_installed:
       self.wash_station = STARWashStation(driver=self)
     else:
       self.wash_station = None
@@ -118,17 +115,28 @@ class STARChatterboxDriver(STARDriver):
 
   # -- I/O: print instead of USB --------------------------------------------
 
-  async def send_command(self, module, command, auto_id=True, tip_pattern=None,
-                         write_timeout=None, read_timeout=None, wait=True,
-                         fmt=None, **kwargs):
+  async def send_command(
+    self,
+    module,
+    command,
+    auto_id=True,
+    tip_pattern=None,
+    write_timeout=None,
+    read_timeout=None,
+    wait=True,
+    fmt=None,
+    **kwargs,
+  ):
     cmd, _ = self._assemble_command(
-      module=module, command=command, auto_id=auto_id,
-      tip_pattern=tip_pattern, **kwargs,
+      module=module,
+      command=command,
+      auto_id=auto_id,
+      tip_pattern=tip_pattern,
+      **kwargs,
     )
     print(cmd)
     return None
 
-  async def send_raw_command(self, command, write_timeout=None, read_timeout=None,
-                             wait=True):
+  async def send_raw_command(self, command, write_timeout=None, read_timeout=None, wait=True):
     print(command)
     return None

@@ -1,5 +1,3 @@
-# Legacy shim: re-exports from the new canonical location.
-from pylabrobot.hamilton.liquid_classes.hamilton import *  # noqa: F401, F403
 from pylabrobot.hamilton.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,

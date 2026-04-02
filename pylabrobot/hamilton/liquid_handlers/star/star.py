@@ -81,7 +81,7 @@ class STAR(Device):
     """
 
     # Park iSWAP first if it's out — the arms share the X drive.
-    if self.iswap is not None and not self.iswap.backend.parked:
+    if self.iswap is not None and not self.iswap.backend.parked:  # type: ignore[attr-defined]
       await self.iswap.backend.park()
 
     core_grippers_resource = self.deck.get_resource("core_grippers")

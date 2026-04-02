@@ -290,7 +290,9 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
 
     logger.info(
       "Peristaltic prime: %.1f uL, flow rate %s, cassette %s",
-      prime_volume, params.flow_rate, params.cassette,
+      prime_volume,
+      params.flow_rate,
+      params.cassette,
     )
 
     data = self._build_peristaltic_prime_command(

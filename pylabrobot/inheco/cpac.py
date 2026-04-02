@@ -22,7 +22,8 @@ class InhecoTemperatureControllerBackend(
     return True
 
   def __init__(self, index: int, control_box: InhecoTECControlBox):
-    assert 1 <= index <= 6, "Index must be between 1 and 6 (inclusive)"
+    if not (1 <= index <= 6):
+      raise ValueError("Index must be between 1 and 6 (inclusive)")
     self.index = index
     self.interface = control_box
 
@@ -75,7 +76,8 @@ class InhecoTemperatureControllerBackend(
     - 4 INHECO copyright
     """
 
-    assert info_type in range(5), "Info type must be in the range 0 to 4"
+    if info_type not in range(5):
+      raise ValueError("Info type must be in the range 0 to 4")
     return await self.interface.send_command(f"{self.index}RFV{info_type}")
 
 

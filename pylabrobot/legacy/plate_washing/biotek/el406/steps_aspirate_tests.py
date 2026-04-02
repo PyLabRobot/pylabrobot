@@ -119,7 +119,9 @@ class TestAspirateCommandEncoding(unittest.TestCase):
 
   def test_aspirate_command_vacuum_filtration(self):
     """Vacuum filtration flag should be set when enabled."""
-    cmd = self.backend._plate_washing._build_aspirate_command(PT96, vacuum_filtration=True, time_value=30)
+    cmd = self.backend._plate_washing._build_aspirate_command(
+      PT96, vacuum_filtration=True, time_value=30
+    )
     self.assertEqual(cmd[1], 1)
     # time_value=30 at bytes 2-3
     self.assertEqual(cmd[2], 30)

@@ -82,7 +82,7 @@ class Serial(IOBase):
   def get_read_timeout(self) -> float:
     """Get the current read timeout in seconds."""
     assert self._ser is not None, "Serial port not open. Did you call setup()?"
-    return self._ser.timeout
+    return float(self._ser.timeout)
 
   def set_read_timeout(self, timeout: float) -> None:
     """Set the read timeout in seconds."""

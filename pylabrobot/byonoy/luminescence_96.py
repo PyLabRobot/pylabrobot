@@ -32,6 +32,12 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
 
   @dataclass
   class LuminescenceParams(BackendParams):
+    """Byonoy Luminescence 96 parameters for luminescence reads.
+
+    Args:
+      integration_time: Integration time in seconds. Default 2.
+    """
+
     integration_time: float = 2
 
   async def read_luminescence(

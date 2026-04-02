@@ -42,6 +42,30 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
 
   @dataclass
   class FluorescenceParams(BackendParams):
+    """SpectraMax M5 parameters for fluorescence reads.
+
+    Args:
+      excitation_wavelengths: List of excitation wavelengths in nm. If None, uses the
+        wavelength from the ``read_fluorescence`` call.
+      emission_wavelengths: List of emission wavelengths in nm. If None, uses the
+        wavelength from the ``read_fluorescence`` call.
+      cutoff_filters: List of cutoff filter indices. If None, auto-selected from the
+        emission wavelength.
+      read_type: Read type (endpoint, kinetic, spectrum, or well scan). Default ENDPOINT.
+      read_order: Read order (column or row). Default COLUMN.
+      calibrate: Calibration mode (once, always, or never). Default ONCE.
+      shake_settings: Optional shake settings to apply before reading.
+      carriage_speed: Carriage speed (normal or low). Default NORMAL.
+      read_from_bottom: If True, read from the bottom of the plate. Default False.
+      pmt_gain: PMT gain setting (AUTO or a manual integer value). Default AUTO.
+      flashes_per_well: Number of flashes per well. Default 10.
+      kinetic_settings: Optional kinetic read settings (for kinetic read type).
+      spectrum_settings: Optional spectrum scan settings (for spectrum read type).
+      cuvette: If True, read a cuvette instead of a plate. Default False.
+      settling_time: Settling time in milliseconds before reading. Default 0.
+      timeout: Read timeout in seconds. Default 600.
+    """
+
     excitation_wavelengths: Optional[List[int]] = None
     emission_wavelengths: Optional[List[int]] = None
     cutoff_filters: Optional[List[int]] = None
@@ -271,6 +295,26 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
 
   @dataclass
   class LuminescenceParams(BackendParams):
+    """SpectraMax M5 parameters for luminescence reads.
+
+    Args:
+      emission_wavelengths: List of emission wavelengths in nm. Required for
+        SpectraMax M5 luminescence reads.
+      read_type: Read type (endpoint, kinetic, spectrum, or well scan). Default ENDPOINT.
+      read_order: Read order (column or row). Default COLUMN.
+      calibrate: Calibration mode (once, always, or never). Default ONCE.
+      shake_settings: Optional shake settings to apply before reading.
+      carriage_speed: Carriage speed (normal or low). Default NORMAL.
+      read_from_bottom: If True, read from the bottom of the plate. Default False.
+      pmt_gain: PMT gain setting (AUTO or a manual integer value). Default AUTO.
+      flashes_per_well: Number of flashes per well. Default 0 (instrument default).
+      kinetic_settings: Optional kinetic read settings (for kinetic read type).
+      spectrum_settings: Optional spectrum scan settings (for spectrum read type).
+      cuvette: If True, read a cuvette instead of a plate. Default False.
+      settling_time: Settling time in milliseconds before reading. Default 0.
+      timeout: Read timeout in seconds. Default 600.
+    """
+
     emission_wavelengths: Optional[List[int]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN

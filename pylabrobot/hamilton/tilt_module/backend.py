@@ -100,7 +100,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
   async def set_angle(self, angle: float):
     """Set the tilt module to rotate by a given angle."""
 
-    assert 0 <= angle <= 10, "Angle must be between 0 and 10 degrees."
+    if not (0 <= angle <= 10):
+      raise ValueError("Angle must be between 0 and 10 degrees.")
 
     await self.tilt_go_to_position(round(angle))
 
@@ -116,7 +117,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       position: absolute position (-10...120)
     """
 
-    assert -10 <= position <= 120, "Position must be between -10 and 120."
+    if not (-10 <= position <= 120):
+      raise ValueError("Position must be between -10 and 120.")
 
     return await self.driver.send_command(
       command="SA",
@@ -132,7 +134,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       steps: the number of steps (+-10000)
     """
 
-    assert -10000 <= steps <= 10000, "Steps must be between -10000 and 10000."
+    if not (-10000 <= steps <= 10000):
+      raise ValueError("Steps must be between -10000 and 10000.")
 
     return await self.driver.send_command(command="SR", parameter=str(steps))
 
@@ -143,7 +146,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       position: 0 = horizontal, 10 = degrees
     """
 
-    assert 0 <= position <= 10, "Position must be between 0 and 10."
+    if not (0 <= position <= 10):
+      raise ValueError("Position must be between 0 and 10.")
 
     return await self.driver.send_command(command="GP", parameter=str(position))
 
@@ -154,7 +158,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       speed: 1 is slow, 9 = fast. Default speed is 1.
     """
 
-    assert 1 <= speed <= 9, "Speed must be between 1 and 9."
+    if not (1 <= speed <= 9):
+      raise ValueError("Speed must be between 1 and 9.")
 
     return await self.driver.send_command(command="SV", parameter=str(speed))
 
@@ -213,7 +218,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       open_collector: 1...8
     """
 
-    assert 1 <= open_collector <= 8, "open_collector must be between 1 and 8"
+    if not (1 <= open_collector <= 8):
+      raise ValueError("open_collector must be between 1 and 8")
 
     return await self.driver.send_command(command="PS", parameter=str(open_collector))
 
@@ -224,7 +230,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       open_collector: 1...8
     """
 
-    assert 1 <= open_collector <= 8, "open_collector must be between 1 and 8"
+    if not (1 <= open_collector <= 8):
+      raise ValueError("open_collector must be between 1 and 8")
 
     return await self.driver.send_command(command="PC", parameter=str(open_collector))
 
@@ -235,7 +242,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       temperature: temperature in Celsius, between 10 and 50
     """
 
-    assert 10 <= temperature <= 50, "Temperature must be between 10 and 50."
+    if not (10 <= temperature <= 50):
+      raise ValueError("Temperature must be between 10 and 50.")
 
     return await self.driver.send_command(command="ST", parameter=str(int(temperature * 10)))
 
@@ -251,7 +259,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       drain_time: drain time in seconds, between 5 and 250
     """
 
-    assert 5 <= drain_time <= 250, "Drain time must be between 5 and 250."
+    if not (5 <= drain_time <= 250):
+      raise ValueError("Drain time must be between 5 and 250.")
 
     return await self.driver.send_command(command="DT", parameter=str(int(drain_time * 10)))
 
@@ -272,7 +281,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       name: the desired name, must be 2 characters long
     """
 
-    assert len(name) == 2, "name must be 2 characters long"
+    if len(name) != 2:
+      raise ValueError("name must be 2 characters long")
 
     return await self.driver.send_command(command="MN", parameter=name)
 
@@ -292,7 +302,8 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       offset: the initial offset steps, between -100 and 100
     """
 
-    assert -100 <= offset <= 100, "Offset must be between -100 and 100."
+    if not (-100 <= offset <= 100):
+      raise ValueError("Offset must be between -100 and 100.")
 
     return await self.driver.send_command(command="SO", parameter=str(offset))
 

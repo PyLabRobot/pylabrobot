@@ -1,7 +1,7 @@
 from abc import ABCMeta
 from typing import Dict, Optional, Type
 
-from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
+from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,

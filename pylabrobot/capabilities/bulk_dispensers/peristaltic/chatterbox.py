@@ -27,8 +27,12 @@ class PeristalticDispensingChatterboxBackend(PeristalticDispensingBackend):
     duration: Optional[int] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    logger.info("Priming peristaltic lines for plate '%s' (volume=%s, duration=%s).",
-                plate.name, volume, duration)
+    logger.info(
+      "Priming peristaltic lines for plate '%s' (volume=%s, duration=%s).",
+      plate.name,
+      volume,
+      duration,
+    )
 
   async def purge(
     self,
@@ -37,5 +41,9 @@ class PeristalticDispensingChatterboxBackend(PeristalticDispensingBackend):
     duration: Optional[int] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    logger.info("Purging peristaltic lines for plate '%s' (volume=%s, duration=%s).",
-                plate.name, volume, duration)
+    logger.info(
+      "Purging peristaltic lines for plate '%s' (volume=%s, duration=%s).",
+      plate.name,
+      volume,
+      duration,
+    )

@@ -30,7 +30,17 @@ if sys.version_info < (3, 10):
 else:
   from typing import Concatenate, ParamSpec
 
+from typing import TYPE_CHECKING
+
 from pylabrobot import audio
+from pylabrobot.hamilton.liquid_handlers.star.pip_backend import STARPIPBackend
+
+if TYPE_CHECKING:
+  from pylabrobot.hamilton.liquid_handlers.star.autoload import STARAutoload
+  from pylabrobot.hamilton.liquid_handlers.star.cover import STARCover
+  from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
+  from pylabrobot.hamilton.liquid_handlers.star.wash_station import STARWashStation
+  from pylabrobot.hamilton.liquid_handlers.star.x_arm import STARXArm
 from pylabrobot.hamilton.liquid_handlers.star.pip_channel import (
   PressureLLDMode as _NewPressureLLDMode,
 )
@@ -41,7 +51,6 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
 from pylabrobot.legacy.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
   MIN_SPACING_EDGE,
-  get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
@@ -91,7 +100,11 @@ from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 
 from pylabrobot.hamilton.liquid_handlers.star.errors import (
+  CommandSyntaxError,  # noqa: F401  (re-exported for STAR_tests)
+  HamiltonNoTipError,  # noqa: F401  (re-exported for STAR_tests)
+  HardwareError,  # noqa: F401  (re-exported for STAR_tests)
   STARFirmwareError,
+  UnknownHamiltonError,  # noqa: F401  (re-exported for STAR_tests)
   convert_star_firmware_error_to_plr_error,
   star_firmware_string_to_error,
 )
@@ -404,12 +417,47 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return self.driver.iswap
 
   @property
+  def _pip(self) -> STARPIPBackend:
+    """Typed access to the STAR PIP backend."""
+    return self.driver.pip  # type: ignore[return-value]
+
+  @property
+  def _iswap(self) -> "iSWAPBackend":
+    """Typed access to the iSWAP backend (asserts not None)."""
+    assert self.driver.iswap is not None, "iSWAP is not installed"
+    return self.driver.iswap
+
+  @property
+  def _left_x_arm(self) -> "STARXArm":
+    """Typed access to the left X arm (asserts not None)."""
+    assert self.driver.left_x_arm is not None, "Left X arm is not available"
+    return self.driver.left_x_arm
+
+  @property
+  def _autoload(self) -> "STARAutoload":
+    """Typed access to the autoload subsystem (asserts not None)."""
+    assert self.driver.autoload is not None, "Autoload is not installed"
+    return self.driver.autoload
+
+  @property
+  def _wash_station(self) -> "STARWashStation":
+    """Typed access to the wash station (asserts not None)."""
+    assert self.driver.wash_station is not None, "Wash station is not installed"
+    return self.driver.wash_station
+
+  @property
+  def _cover(self) -> "STARCover":
+    """Typed access to the cover (asserts not None)."""
+    assert self.driver.cover is not None, "Cover is not available"
+    return self.driver.cover
+
+  @property
   def _write_and_read_command(self):
     return self.driver._write_and_read_command
 
   @_write_and_read_command.setter
   def _write_and_read_command(self, value):
-    self.driver._write_and_read_command = value
+    self.driver._write_and_read_command = value  # type: ignore[method-assign]
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
@@ -515,24 +563,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
-    self.driver.pip.traversal_height = traversal_height
+    self._pip.traversal_height = traversal_height
 
   def set_minimum_iswap_traversal_height(self, traversal_height: float):
     """Set the minimum traversal height for the iswap."""
 
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
-    self.driver.iswap.traversal_height = traversal_height
+    self._iswap.traversal_height = traversal_height
 
   @contextmanager
   def iswap_minimum_traversal_height(self, traversal_height: float):
-    """Deprecated: use ``self.driver.iswap.use_traversal_height()``."""
-    with self.driver.iswap.use_traversal_height(traversal_height):
+    """Deprecated: use ``self._iswap.use_traversal_height()``."""
+    with self._iswap.use_traversal_height(traversal_height):
       yield
 
   @property
   def iswap_traversal_height(self) -> float:
-    return self.driver.iswap.traversal_height
+    return self._iswap.traversal_height
 
   @property
   def module_id_length(self):
@@ -548,7 +596,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @property
   def iswap_parked(self) -> bool:
     if self.driver.iswap is not None:
-      return self.driver.iswap.parked
+      return self._iswap.parked
     return False
 
   @property
@@ -709,8 +757,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Sync legacy state from driver.
     self.id_ = 0
-    self._machine_conf = self.driver.machine_conf
-    self._extended_conf = self.driver.extended_conf
+    self._machine_conf = self.driver.machine_conf  # type: ignore[assignment]
+    self._extended_conf = self.driver.extended_conf  # type: ignore[assignment]
     self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
@@ -752,7 +800,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
         await self.park_iswap(
           minimum_traverse_height_at_beginning_of_a_command=int(
-            self.driver.iswap.traversal_height * 10
+            self._iswap.traversal_height * 10
           )
         )
 
@@ -763,7 +811,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         if not core96_head_initialized:
           await self.initialize_core_96_head(
             trash96=self.deck.get_trash_area96(),
-            z_position_at_the_command_end=self.driver.pip.traversal_height,
+            z_position_at_the_command_end=self._pip.traversal_height,
           )
 
         # Cache firmware version and configuration for version-specific behavior
@@ -790,7 +838,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the core grippers.
     self._core_parked = True
 
-    self._pip_channels = self.driver.pip.channels
+    self._pip_channels = self._pip.channels
 
     self._setup_done = True
 
@@ -915,7 +963,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def channel_request_cycle_counts(self, channel_idx: int) -> ChannelCycleCounts:
     """Deprecated: use ``star.pip.backend.channels[n].request_cycle_counts()``."""
-    return await self._pip_channels[channel_idx].request_cycle_counts()
+    return await self._pip_channels[channel_idx].request_cycle_counts()  # type: ignore[return-value]
 
   async def channels_request_cycle_counts(self) -> List[ChannelCycleCounts]:
     """Request cycle counters for all channels.
@@ -946,17 +994,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Deprecated: use ``star.pip.backend.pick_up_tips()``."""
     from pylabrobot.capabilities.liquid_handling.standard import Pickup as NewPickup
 
-    PickUpTipsParams = self.driver.pip.PickUpTipsParams
+    PickUpTipsParams = self._pip.PickUpTipsParams
 
     new_ops = [NewPickup(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
     params = PickUpTipsParams(
       minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
-      or self.driver.pip.traversal_height,
+      or self._pip.traversal_height,
       pickup_method=pickup_method,
       begin_tip_pick_up_process=begin_tip_pick_up_process,
       end_tip_pick_up_process=end_tip_pick_up_process,
     )
-    return await self.driver.pip.pick_up_tips(new_ops, use_channels, backend_params=params)
+    return await self._pip.pick_up_tips(new_ops, use_channels, backend_params=params)
 
   async def drop_tips(
     self,
@@ -971,19 +1019,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Deprecated: use ``star.pip.backend.drop_tips()``."""
     from pylabrobot.capabilities.liquid_handling.standard import TipDrop as NewTipDrop
 
-    DropTipsParams = self.driver.pip.DropTipsParams
+    DropTipsParams = self._pip.DropTipsParams
 
-    new_ops = [NewTipDrop(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
+    new_ops = [NewTipDrop(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]  # type: ignore[arg-type]
     params = DropTipsParams(
       drop_method=drop_method,
       minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
-      or self.driver.pip.traversal_height,
+      or self._pip.traversal_height,
       z_position_at_end_of_a_command=z_position_at_end_of_a_command
-      or self.driver.pip.traversal_height,
+      or self._pip.traversal_height,
       begin_tip_deposit_process=begin_tip_deposit_process,
       end_tip_deposit_process=end_tip_deposit_process,
     )
-    return await self.driver.pip.drop_tips(new_ops, use_channels, backend_params=params)
+    return await self._pip.drop_tips(new_ops, use_channels, backend_params=params)
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
@@ -1551,7 +1599,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     from pylabrobot.capabilities.liquid_handling.standard import Aspiration as NewAspiration
 
-    AspirateParams = self.driver.pip.AspirateParams
+    AspirateParams = self._pip.AspirateParams
     from pylabrobot.hamilton.liquid_handlers.star.pip_backend import LLDMode as NewLLDMode
 
     # # # TODO: delete > 2026-01 # # #
@@ -1596,7 +1644,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         flow_rate=op.flow_rate,
         liquid_height=op.liquid_height,
         blow_out_air_volume=op.blow_out_air_volume,
-        mix=op.mix,
+        mix=op.mix,  # type: ignore[arg-type]
       )
       for op in ops
     ]
@@ -1627,8 +1675,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_surface_following_distance=mix_surface_following_distance,
       limit_curve_index=limit_curve_index,
       minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
-      or self.driver.pip.traversal_height,
-      min_z_endpos=min_z_endpos or self.driver.pip.traversal_height,
+      or self._pip.traversal_height,
+      min_z_endpos=min_z_endpos or self._pip.traversal_height,
       liquid_surface_no_lld=liquid_surface_no_lld,
       use_2nd_section_aspiration=use_2nd_section_aspiration,
       retract_height_over_2nd_section_to_empty_tip=retract_height_over_2nd_section_to_empty_tip,
@@ -1640,7 +1688,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       auto_surface_following_distance=auto_surface_following_distance,
     )
 
-    return await self.driver.pip.aspirate(new_ops, use_channels, backend_params=params)
+    return await self._pip.aspirate(new_ops, use_channels, backend_params=params)
 
   async def dispense(
     self,
@@ -1688,7 +1736,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     from pylabrobot.capabilities.liquid_handling.standard import Dispense as NewDispense
 
-    DispenseParams = self.driver.pip.DispenseParams
+    DispenseParams = self._pip.DispenseParams
     from pylabrobot.hamilton.liquid_handlers.star.pip_backend import LLDMode as NewLLDMode
 
     # # # TODO: delete > 2026-01 # # #
@@ -1725,7 +1773,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         flow_rate=op.flow_rate,
         liquid_height=op.liquid_height,
         blow_out_air_volume=op.blow_out_air_volume,
-        mix=op.mix,
+        mix=op.mix,  # type: ignore[arg-type]
       )
       for op in ops
     ]
@@ -1758,13 +1806,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_surface_following_distance=mix_surface_following_distance,
       limit_curve_index=limit_curve_index,
       minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
-      or self.driver.pip.traversal_height,
-      min_z_endpos=min_z_endpos or self.driver.pip.traversal_height,
+      or self._pip.traversal_height,
+      min_z_endpos=min_z_endpos or self._pip.traversal_height,
       probe_liquid_height=probe_liquid_height,
       auto_surface_following_distance=auto_surface_following_distance,
     )
 
-    return await self.driver.pip.dispense(new_ops, use_channels, backend_params=params)
+    return await self._pip.dispense(new_ops, use_channels, backend_params=params)
 
   @_requires_head96
   async def pick_up_tips96(
@@ -1859,11 +1907,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         }[tip_pickup_method],
         z_deposit_position=round(pickup_position.z * 10),
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height)
+          (minimum_traverse_height_at_beginning_of_a_command or self._pip.traversal_height)
           * 10
         ),
         minimum_height_command_end=round(
-          (minimum_height_command_end or self.driver.pip.traversal_height) * 10
+          (minimum_height_command_end or self._pip.traversal_height) * 10
         ),
       )
     except STARFirmwareError as e:
@@ -1903,10 +1951,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y_position=round(position.y * 10),
       z_deposit_position=round(position.z * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._pip.traversal_height) * 10
       ),
       minimum_height_command_end=round(
-        (minimum_height_command_end or self.driver.pip.traversal_height) * 10
+        (minimum_height_command_end or self._pip.traversal_height) * 10
       ),
     )
 
@@ -2136,9 +2184,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._pip.traversal_height) * 10
       ),
-      min_z_endpos=round((min_z_endpos or self.driver.pip.traversal_height) * 10),
+      min_z_endpos=round((min_z_endpos or self._pip.traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
@@ -2410,9 +2458,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_direction=0 if position.x >= 0 else 1,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.pip.traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._pip.traversal_height) * 10
       ),
-      min_z_endpos=round((min_z_endpos or self.driver.pip.traversal_height) * 10),
+      min_z_endpos=round((min_z_endpos or self._pip.traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
@@ -2475,7 +2523,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         GripDirection.LEFT: 4,
       }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
         * 10
       ),
       collision_control_level=collision_control_level,
@@ -2530,11 +2578,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
         * 10
       ),
       minimum_z_position_at_the_command_end=round(
-        (minimum_z_position_at_the_command_end or self.driver.iswap.traversal_height) * 10
+        (minimum_z_position_at_the_command_end or self._iswap.traversal_height) * 10
       ),
     )
 
@@ -2567,7 +2615,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
         * 10
       ),
     )
@@ -2609,11 +2657,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height)
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
         * 10
       ),
       z_position_at_the_command_end=round(
-        (z_position_at_the_command_end or self.driver.iswap.traversal_height) * 10
+        (z_position_at_the_command_end or self._iswap.traversal_height) * 10
       ),
       return_tool=return_tool,
     )
@@ -2663,10 +2711,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z -= pickup.pickup_distance_from_top
 
       traverse_height_at_beginning = (
-        minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height
+        minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height
       )
       z_position_at_the_command_end = (
-        z_position_at_the_command_end or self.driver.iswap.traversal_height
+        z_position_at_the_command_end or self._iswap.traversal_height
       )
 
       if open_gripper_position is None:
@@ -2747,8 +2795,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
         offset=pickup.offset,
-        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
-        minimum_z_position_at_the_command_end=self.driver.iswap.traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap.traversal_height,
+        minimum_z_position_at_the_command_end=self._iswap.traversal_height,
         front_channel=core_front_channel,
         grip_strength=core_grip_strength,
       )
@@ -2769,7 +2817,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.iswap_move_picked_up_resource(
         center=center,
         grip_direction=move.gripped_direction,
-        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap.traversal_height,
         collision_control_level=1,
         acceleration_index_high_acc=4,
         acceleration_index_low_acc=1,
@@ -2777,7 +2825,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       await self.core_move_picked_up_resource(
         center=center,
-        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap.traversal_height,
         acceleration_index=4,
       )
 
@@ -2813,10 +2861,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if use_arm == "iswap":
       traversal_height_start = (
-        minimum_traverse_height_at_beginning_of_a_command or self.driver.iswap.traversal_height
+        minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height
       )
       z_position_at_the_command_end = (
-        z_position_at_the_command_end or self.driver.iswap.traversal_height
+        z_position_at_the_command_end or self._iswap.traversal_height
       )
       assert (
         drop.resource.get_absolute_rotation().x == 0
@@ -2899,8 +2947,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         location=Coordinate(x, y, z),
         resource=drop.resource,
         pickup_distance_from_top=drop.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self.driver.iswap.traversal_height,
-        z_position_at_the_command_end=self.driver.iswap.traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap.traversal_height,
+        z_position_at_the_command_end=self._iswap.traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
       )
@@ -2914,7 +2962,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_x(self, channel: int, x: float):
     """Deprecated: use ``star.driver.left_x_arm.move_to()``."""
-    await self.driver.left_x_arm.move_to(x)
+    await self._left_x_arm.move_to(x)
 
   @need_iswap_parked
   async def move_channel_y(self, channel: int, y: float):
@@ -2953,7 +3001,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_channel_z(self, channel: int, z: float):
     """Deprecated: use ``move_channel_stop_disk_z()`` or ``move_channel_tool_z()``."""
-    await self.driver.pip.move_channel_z(channel, z)
+    await self._pip.move_channel_z(channel, z)
 
   async def move_channel_stop_disk_z(
     self,
@@ -2964,13 +3012,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_limit: int = 3,
   ):
     """Deprecated: use ``star.driver.pip.channels[n].move_z()``."""
-    return await self.driver.pip.channels[channel_idx].move_z(
-      z, speed, acceleration, current_limit
-    )
+    return await self._pip.channels[channel_idx].move_z(z, speed, acceleration, current_limit)
 
   async def move_channel_tool_z(self, channel_idx: int, z: float):
     """Deprecated: use ``star.driver.pip.move_channel_tool_z()``."""
-    return await self.driver.pip.move_channel_tool_z(channel_idx, z)
+    return await self._pip.move_channel_tool_z(channel_idx, z)
 
   async def move_channel_x_relative(self, channel: int, distance: float):
     """Move a channel in the x direction by a relative amount."""
@@ -3241,7 +3287,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_autoload_initialization_status(self) -> bool:
     """Deprecated: use ``star.autoload.request_initialization_status()``."""
-    return await self.driver.autoload.request_initialization_status()
+    return await self._autoload.request_initialization_status()
 
   async def request_name_of_last_faulty_parameter(self):
     """Deprecated: use ``star.driver.request_name_of_last_faulty_parameter()``."""
@@ -3660,22 +3706,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def position_left_x_arm_(self, x_position: int = 0):
     """Deprecated: use ``star.left_x_arm.move_to()``."""
-    return await self.driver.left_x_arm.move_to(x_position=x_position / 10)
+    return await self._left_x_arm.move_to(x_position=x_position / 10)
 
   async def position_right_x_arm_(self, x_position: int = 0):
     """Deprecated: use ``star.right_x_arm.move_to()``."""
+    assert self.driver.right_x_arm is not None, "Right X arm is not installed"
     return await self.driver.right_x_arm.move_to(x_position=x_position / 10)
 
   async def move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self, x_position: int = 0
   ):
     """Deprecated: use ``star.left_x_arm.move_to_safe()``."""
-    return await self.driver.left_x_arm.move_to_safe(x_position=x_position / 10)
+    return await self._left_x_arm.move_to_safe(x_position=x_position / 10)
 
   async def move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self, x_position: int = 0
   ):
     """Deprecated: use ``star.right_x_arm.move_to_safe()``."""
+    assert self.driver.right_x_arm is not None, "Right X arm is not installed"
     return await self.driver.right_x_arm.move_to_safe(x_position=x_position / 10)
 
   # -------------- 3.4.2 X-Area reservation for external access --------------
@@ -3734,10 +3782,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_left_x_arm_position(self) -> float:
     """Deprecated: use ``star.left_x_arm.request_position()``."""
-    return await self.driver.left_x_arm.request_position()
+    return await self._left_x_arm.request_position()
 
   async def request_right_x_arm_position(self) -> float:
     """Deprecated: use ``star.right_x_arm.request_position()``."""
+    assert self.driver.right_x_arm is not None, "Right X arm is not installed"
     return await self.driver.right_x_arm.request_position()
 
   async def request_maximal_ranges_of_x_drives(self):
@@ -3752,10 +3801,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_left_x_arm_last_collision_type(self):
     """Deprecated: use ``star.left_x_arm.last_collision_type()``."""
-    return await self.driver.left_x_arm.last_collision_type()
+    return await self._left_x_arm.last_collision_type()
 
   async def request_right_x_arm_last_collision_type(self) -> bool:
     """Deprecated: use ``star.right_x_arm.last_collision_type()``."""
+    assert self.driver.right_x_arm is not None, "Right X arm is not installed"
     return await self.driver.right_x_arm.last_collision_type()
 
   # -------------- 3.5 Pipetting channel commands --------------
@@ -3772,7 +3822,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         int(self.extended_conf.tip_waste_x_position * 10)
       ],  # Tip eject waste X position.
       y_positions=y_positions,
-      begin_of_tip_deposit_process=int(self.driver.pip.traversal_height * 10),
+      begin_of_tip_deposit_process=int(self._pip.traversal_height * 10),
       end_of_tip_deposit_process=1220,
       z_position_at_end_of_a_command=3600,
       tip_pattern=[True] * self.num_channels,
@@ -4536,10 +4586,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError("front_offset.z and back_offset.z must be the same")
     z_offset = 0 if front_offset is None else front_offset.z
 
-    from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
-
-    command_output = await STARDriver.pick_up_core_gripper_tools(
-      self,
+    command_output = await self.driver.pick_up_core_gripper_tools(
       x_position=xs,
       back_channel_y=back_channel_y_center,
       front_channel_y=front_channel_y_center,
@@ -4547,7 +4594,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       front_channel=front_channel,
       begin_z=235.0 + self.core_adjustment.z + z_offset,
       end_z=225.0 + self.core_adjustment.z + z_offset,
-      traversal_height=self.driver.iswap.traversal_height,
+      traversal_height=self._iswap.traversal_height,
     )
     self._core_parked = False
     return command_output
@@ -4580,16 +4627,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError("back_offset.z and front_offset.z must be the same")
     z_offset = 0 if front_offset is None else front_offset.z
 
-    from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
-
-    command_output = await STARDriver.return_core_gripper_tools(
-      self,
+    command_output = await self.driver.return_core_gripper_tools(
       x_position=xs,
       back_channel_y=back_channel_y_center,
       front_channel_y=front_channel_y_center,
       begin_z=215.0 + self.core_adjustment.z + z_offset,
       end_z=205.0 + self.core_adjustment.z + z_offset,
-      traversal_height=self.driver.iswap.traversal_height,
+      traversal_height=self._iswap.traversal_height,
     )
     self._core_parked = True
     return command_output
@@ -6662,8 +6706,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.initialize_autoload()
 
   async def initialize_autoload(self):
-    """Deprecated: use ``star.autoload.initialize()``."""
-    return await self.driver.autoload.initialize()
+    """Deprecated: use ``star.autoload._on_setup()``."""
+    return await self._autoload._on_setup()
 
   async def move_auto_load_to_z_save_position(self):
     """Deprecated - use `move_autoload_to_safe_z_position` instead."""
@@ -6689,7 +6733,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_autoload_to_safe_z_position(self):
     """Deprecated: use ``star.autoload.move_to_safe_z_position()``."""
-    return await self.driver.autoload.move_to_safe_z_position()
+    return await self._autoload.move_to_safe_z_position()
 
   async def request_auto_load_slot_position(self):
     """Deprecated - use `request_autoload_track` instead."""
@@ -6703,11 +6747,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_autoload_track(self) -> int:
     """Deprecated: use ``star.autoload.request_track()``."""
-    return await self.driver.autoload.request_track()
+    return await self._autoload.request_track()
 
   async def request_autoload_type(self) -> str:
     """Deprecated: use ``star.autoload.request_type()``."""
-    return await self.driver.autoload.request_type()
+    return await self._autoload.request_type()
 
   # -------------- 3.13.2 Carrier sensing --------------
 
@@ -6719,15 +6763,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_presence_of_carriers_on_deck(self) -> list[int]:
     """Deprecated: use ``star.autoload.request_presence_of_carriers_on_deck()``."""
-    return await self.driver.autoload.request_presence_of_carriers_on_deck()
+    return await self._autoload.request_presence_of_carriers_on_deck()
 
   async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
     """Deprecated: use ``star.autoload.request_presence_of_carriers_on_loading_tray()``."""
-    return await self.driver.autoload.request_presence_of_carriers_on_loading_tray()
+    return await self._autoload.request_presence_of_carriers_on_loading_tray()
 
   async def request_presence_of_single_carrier_on_loading_tray(self, track: int) -> bool:
     """Deprecated: use ``star.autoload.request_presence_of_single_carrier_on_loading_tray()``."""
-    return await self.driver.autoload.request_presence_of_single_carrier_on_loading_tray(track)
+    return await self._autoload.request_presence_of_single_carrier_on_loading_tray(track)
 
   async def request_single_carrier_presence(self, carrier_position: int):
     """Request single carrier presence on the loading tray (not on deck)"""
@@ -6765,16 +6809,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_autoload_to_track(self, track: int):
     """Deprecated: use ``star.autoload.move_to_track()``."""
-    return await self.driver.autoload.move_to_track(track)
+    return await self._autoload.move_to_track(track)
 
   async def park_autoload(self):
     """Deprecated: use ``star.autoload.park()``."""
-    return await self.driver.autoload.park()
+    return await self._autoload.park()
 
   async def take_carrier_out_to_autoload_belt(self, carrier: Carrier):
     """Deprecated: use ``star.autoload.take_carrier_out_to_belt()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self.driver.autoload.take_carrier_out_to_belt(carrier_end_rail)
+    return await self._autoload.take_carrier_out_to_belt(carrier_end_rail)
 
   # -------------- 3.13.4 Autoload barcode reading commands --------------
 
@@ -6807,7 +6851,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     barcode_symbology: Optional[Barcode1DSymbology],
   ) -> None:
     """Deprecated: use ``star.autoload.set_1d_barcode_type()``."""
-    return await self.driver.autoload.set_1d_barcode_type(barcode_symbology)
+    await self._autoload.set_1d_barcode_type(barcode_symbology)
 
   async def set_barcode_type(
     self,
@@ -6858,7 +6902,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ) -> Optional[Barcode]:
     """Deprecated: use ``star.autoload.load_carrier_from_tray_and_scan_carrier_barcode()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self.driver.autoload.load_carrier_from_tray_and_scan_carrier_barcode(
+    return await self._autoload.load_carrier_from_tray_and_scan_carrier_barcode(
       carrier_end_rail=carrier_end_rail,
       carrier_barcode_reading=carrier_barcode_reading,
       barcode_symbology=barcode_symbology,
@@ -6869,11 +6913,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def unload_carrier_after_carrier_barcode_scanning(self):
     """Deprecated: use ``star.autoload.unload_carrier_after_barcode_scanning()``."""
-    return await self.driver.autoload.unload_carrier_after_barcode_scanning()
+    return await self._autoload.unload_carrier_after_barcode_scanning()
 
   async def set_carrier_monitoring(self, should_monitor: bool = False):
     """Deprecated: use ``star.autoload.set_carrier_monitoring()``."""
-    return await self.driver.autoload.set_carrier_monitoring(should_monitor)
+    return await self._autoload.set_carrier_monitoring(should_monitor)
 
   async def load_carrier_from_autoload_belt(
     self,
@@ -6888,7 +6932,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     park_autoload_after: bool = True,
   ) -> dict[int, Optional[Barcode]]:
     """Deprecated: use ``star.autoload.load_carrier_from_belt()``."""
-    return await self.driver.autoload.load_carrier_from_belt(
+    return await self._autoload.load_carrier_from_belt(
       barcode_reading=barcode_reading,
       barcode_reading_direction=barcode_reading_direction,
       barcode_symbology=barcode_symbology,
@@ -6918,7 +6962,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ) -> dict:
     """Deprecated: use ``star.autoload.load_carrier()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self.driver.autoload.load_carrier(
+    return await self._autoload.load_carrier(
       carrier_end_rail=carrier_end_rail,
       carrier_barcode_reading=carrier_barcode_reading,
       barcode_reading=barcode_reading,
@@ -6934,7 +6978,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def set_loading_indicators(self, bit_pattern: List[bool], blink_pattern: List[bool]):
     """Deprecated: use ``star.autoload.set_loading_indicators()``."""
-    return await self.driver.autoload.set_loading_indicators(bit_pattern, blink_pattern)
+    return await self._autoload.set_loading_indicators(bit_pattern, blink_pattern)
 
   async def verify_and_wait_for_carriers(
     self,
@@ -6953,7 +6997,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         if 1 <= carrier_end_rail <= 54:
           carrier_rails.append((carrier_start_rail, carrier_end_rail))
 
-    return await self.driver.autoload.verify_and_wait_for_carriers(
+    return await self._autoload.verify_and_wait_for_carriers(
       carrier_rails=carrier_rails,
       check_interval=check_interval,
     )
@@ -6965,7 +7009,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Deprecated: use ``star.autoload.unload_carrier()``."""
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
-    return await self.driver.autoload.unload_carrier(
+    return await self._autoload.unload_carrier(
       carrier_end_rail=carrier_end_rail,
       park_autoload_after=park_autoload_after,
     )
@@ -7010,7 +7054,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def initialize_dual_pump_station_valves(self, pump_station: int = 1):
     """Deprecated: use ``star.wash_station.initialize_valves()``."""
-    return await self.driver.wash_station.initialize_valves(station=pump_station)
+    return await self._wash_station.initialize_valves(station=pump_station)
 
   async def fill_selected_dual_chamber(
     self,
@@ -7021,7 +7065,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     waste_chamber_suck_time_after_sensor_change: int = 0,
   ):
     """Deprecated: use ``star.wash_station.fill_chamber()``."""
-    return await self.driver.wash_station.fill_chamber(
+    return await self._wash_station.fill_chamber(
       station=pump_station,
       drain_before_refill=drain_before_refill,
       wash_fluid=wash_fluid,
@@ -7033,7 +7077,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def drain_dual_chamber_system(self, pump_station: int = 1):
     """Deprecated: use ``star.wash_station.drain()``."""
-    return await self.driver.wash_station.drain(station=pump_station)
+    return await self._wash_station.drain(station=pump_station)
 
   # TODO:(command:QD) Request dual chamber pump station prime status
 
@@ -7051,7 +7095,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def initialize_iswap(self):
     """Deprecated: use ``star.iswap.initialize()``."""
-    return await self.driver.iswap.initialize()
+    return await self._iswap.initialize()
 
   async def position_components_for_free_iswap_y_range(self):
     """Position all components so that there is maximum free Y range for iSWAP"""
@@ -7060,7 +7104,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.backend.move_relative_x()``."""
-    return await self.driver.iswap.move_relative_x(
+    return await self._iswap.move_relative_x(
       step_size=step_size, allow_splitting=allow_splitting
     )
 
@@ -7080,31 +7124,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
           f"first channel Y position: {y_pos_channel_0} mm, requested step size: {step_size} mm"
         )
-    return await self.driver.iswap.move_relative_y(
+    return await self._iswap.move_relative_y(
       step_size=step_size, allow_splitting=allow_splitting
     )
 
   async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.backend.move_relative_z()``."""
-    return await self.driver.iswap.move_relative_z(
+    return await self._iswap.move_relative_z(
       step_size=step_size, allow_splitting=allow_splitting
     )
 
   async def move_iswap_x(self, x_position: float):
     """Deprecated: use ``star.iswap.move_x()``."""
-    return await self.driver.iswap.move_x(x_position)
+    return await self._iswap.move_x(x_position)
 
   async def move_iswap_y(self, y_position: float):
     """Deprecated: use ``star.iswap.move_y()``."""
-    return await self.driver.iswap.move_y(y_position)
+    return await self._iswap.move_y(y_position)
 
   async def move_iswap_z(self, z_position: float):
     """Deprecated: use ``star.iswap.move_z()``."""
-    return await self.driver.iswap.move_z(z_position)
+    return await self._iswap.move_z(z_position)
 
   async def open_not_initialized_gripper(self):
     """Deprecated: use ``star.iswap.open_not_initialized_gripper()``."""
-    return await self.driver.iswap.open_not_initialized_gripper()
+    return await self._iswap.open_not_initialized_gripper()
 
   async def iswap_open_gripper(self, open_position: Optional[float] = None):
     """Open gripper
@@ -7176,7 +7220,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Once the command has completed successfully, set _iswap_parked to True
-    self.driver.iswap._parked = True
+    self._iswap._parked = True
     return command_output
 
   async def iswap_get_plate(
@@ -7273,7 +7317,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Once the command has completed successfully, set _iswap_parked to false
-    self.driver.iswap._parked = False
+    self._iswap._parked = False
     return command_output
 
   async def iswap_put_plate(
@@ -7360,25 +7404,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Once the command has completed successfully, set _iswap_parked to false
-    self.driver.iswap._parked = False
+    self._iswap._parked = False
     return command_output
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Deprecated: use ``star.iswap.request_rotation_drive_position_increments()``."""
-    return await self.driver.iswap.request_rotation_drive_position_increments()
+    return await self._iswap.request_rotation_drive_position_increments()
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
     """Deprecated: use ``star.iswap.request_rotation_drive_orientation()``."""
-    new_orient = await self.driver.iswap.request_rotation_drive_orientation()
+    new_orient = await self._iswap.request_rotation_drive_orientation()
     return STARBackend.RotationDriveOrientation(new_orient.value)
 
   async def request_iswap_wrist_drive_position_increments(self) -> int:
     """Deprecated: use ``star.iswap.request_wrist_drive_position_increments()``."""
-    return await self.driver.iswap.request_wrist_drive_position_increments()
+    return await self._iswap.request_wrist_drive_position_increments()
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Deprecated: use ``star.iswap.request_wrist_drive_orientation()``."""
-    new_orient = await self.driver.iswap.request_wrist_drive_orientation()
+    new_orient = await self._iswap.request_wrist_drive_orientation()
     return STARBackend.WristDriveOrientation(new_orient.value)
 
   async def iswap_rotate(
@@ -7393,9 +7437,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     wrist_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
   ):
     """Deprecated: use ``star.iswap.rotate()``."""
-    return await self.driver.iswap.rotate(
-      rotation_drive=rotation_drive,
-      grip_direction=grip_direction,
+    return await self._iswap.rotate(
+      rotation_drive=rotation_drive,  # type: ignore[arg-type]
+      grip_direction=grip_direction,  # type: ignore[arg-type]
       gripper_velocity=gripper_velocity,
       gripper_acceleration=gripper_acceleration,
       gripper_protection=gripper_protection,
@@ -7406,15 +7450,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_dangerous_release_break(self):
     """Deprecated: use ``star.iswap.dangerous_release_brake()``."""
-    return await self.driver.iswap.dangerous_release_brake()
+    return await self._iswap.dangerous_release_brake()
 
   async def iswap_reengage_break(self):
     """Deprecated: use ``star.iswap.reengage_brake()``."""
-    return await self.driver.iswap.reengage_brake()
+    return await self._iswap.reengage_brake()
 
   async def iswap_initialize_z_axis(self):
     """Deprecated: use ``star.iswap.initialize_z_axis()``."""
-    return await self.driver.iswap.initialize_z_axis()
+    return await self._iswap.initialize_z_axis()
 
   async def move_plate_to_position(
     self,
@@ -7482,7 +7526,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
     )
     # Once the command has completed successfully, set _iswap_parked to false
-    self.driver.iswap._parked = False
+    self._iswap._parked = False
     return command_output
 
   async def collapse_gripper_arm(
@@ -7491,7 +7535,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """Deprecated: use ``star.iswap.collapse_gripper_arm()``."""
-    return await self.driver.iswap.collapse_gripper_arm(
+    return await self._iswap.collapse_gripper_arm(
       minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command / 10,
       fold_up_at_end=iswap_fold_up_sequence_at_the_end_of_process,
     )
@@ -7523,7 +7567,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_index_low_acc: int = 1,
   ):
     """Deprecated: use ``star.iswap.prepare_teaching()``."""
-    return await self.driver.iswap.prepare_teaching(
+    return await self._iswap.prepare_teaching(
       x_position=x_position / 10,
       x_direction=x_direction,
       y_position=y_position / 10,
@@ -7553,7 +7597,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     collision_control_level: int = 1,
   ):
     """Deprecated: use ``star.iswap.get_logic_position()``."""
-    return await self.driver.iswap.get_logic_position(
+    return await self._iswap.get_logic_position(
       x_position=x_position / 10,
       x_direction=x_direction,
       y_position=y_position / 10,
@@ -7570,57 +7614,57 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_iswap_in_parking_position(self):
     """Deprecated: use ``star.iswap.request_in_parking_position()``."""
-    return await self.driver.iswap.request_in_parking_position()
+    return await self._iswap.request_in_parking_position()
 
   async def request_plate_in_iswap(self) -> bool:
     """Deprecated: use ``star.iswap.is_gripper_closed()``."""
-    return await self.driver.iswap.is_gripper_closed()
+    return await self._iswap.is_gripper_closed()
 
   async def request_iswap_position(self) -> Coordinate:
     """Deprecated: use ``star.iswap.get_gripper_location()``."""
-    return (await self.driver.iswap.get_gripper_location()).location
+    return (await self._iswap.request_gripper_location()).location
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Deprecated: use ``star.iswap.rotation_drive_request_y()``."""
-    return await self.driver.iswap.rotation_drive_request_y()
+    return await self._iswap.rotation_drive_request_y()
 
   async def request_iswap_initialization_status(self) -> bool:
     """Deprecated: use ``star.iswap.request_initialization_status()``."""
-    return await self.driver.iswap.request_initialization_status()
+    return await self._iswap.request_initialization_status()
 
   async def request_iswap_version(self) -> str:
     """Deprecated: use ``star.iswap.version`` (property, available after setup)."""
-    return await self.driver.iswap._request_version()
+    return await self._iswap._request_version()
 
   # -------------- 3.18 Cover and port control --------------
 
   async def lock_cover(self):
     """Deprecated: use ``star.cover.lock()``."""
-    return await self.driver.cover.lock()
+    return await self._cover.lock()
 
   async def unlock_cover(self):
     """Deprecated: use ``star.cover.unlock()``."""
-    return await self.driver.cover.unlock()
+    return await self._cover.unlock()
 
   async def disable_cover_control(self):
     """Deprecated: use ``star.cover.disable()``."""
-    return await self.driver.cover.disable()
+    return await self._cover.disable()
 
   async def enable_cover_control(self):
     """Deprecated: use ``star.cover.enable()``."""
-    return await self.driver.cover.enable()
+    return await self._cover.enable()
 
   async def set_cover_output(self, output: int = 1):
     """Deprecated: use ``star.cover.set_output()``."""
-    return await self.driver.cover.set_output(output=output)
+    return await self._cover.set_output(output=output)
 
   async def reset_output(self, output: int = 1):
     """Deprecated: use ``star.cover.reset_output()``."""
-    return await self.driver.cover.reset_output(output=output)
+    return await self._cover.reset_output(output=output)
 
   async def request_cover_open(self) -> bool:
     """Deprecated: use ``star.cover.is_open()``."""
-    return await self.driver.cover.is_open()
+    return await self._cover.is_open()
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
@@ -8126,8 +8170,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_dist: float = 2.0,  # mm
   ) -> Tuple[float, float]:
     """Deprecated: use ``star.pip.backend.channels[n].search_z_using_plld()``."""
+    new_plld_mode: Optional[_NewPressureLLDMode] = None
     if plld_mode is not None:
-      plld_mode = _NewPressureLLDMode(plld_mode.value)
+      new_plld_mode = _NewPressureLLDMode(plld_mode.value)
     return await self._pip_channels[channel_idx].search_z_using_plld(
       lowest_immers_pos=lowest_immers_pos,
       start_pos_search=start_pos_search,
@@ -8146,7 +8191,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       clld_detection_edge=clld_detection_edge,
       clld_detection_drop=clld_detection_drop,
       max_delta_plld_clld=max_delta_plld_clld,
-      plld_mode=plld_mode,
+      plld_mode=new_plld_mode,
       plld_foam_detection_drop=plld_foam_detection_drop,
       plld_foam_detection_edge_tolerance=plld_foam_detection_edge_tolerance,
       plld_foam_ad_values=plld_foam_ad_values,
@@ -8499,7 +8544,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
     """Deprecated: use ``star.iswap.rotate_rotation_drive()``."""
-    return await self.driver.iswap.rotate_rotation_drive(orientation)
+    return await self._iswap.rotate_rotation_drive(orientation)  # type: ignore[arg-type]
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
@@ -8509,7 +8554,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
     """Deprecated: use ``star.iswap.rotate_wrist()``."""
-    return await self.driver.iswap.rotate_wrist(orientation)
+    return await self._iswap.rotate_wrist(orientation)  # type: ignore[arg-type]
 
   @staticmethod
   def channel_id(channel_idx: int) -> str:
@@ -8647,7 +8692,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     distance_from_bottom: float = 20.0,
   ):
     """Deprecated: use ``star.pip.backend.pierce_foil()``."""
-    await self.driver.pip.pierce_foil(
+    await self._pip.pierce_foil(
       wells=wells,
       piercing_channels=piercing_channels,
       hold_down_channels=hold_down_channels,
@@ -8667,7 +8712,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     move_height: float = 15,
   ):
     """Deprecated: use ``star.pip.backend.step_off_foil()``."""
-    await self.driver.pip.step_off_foil(
+    await self._pip.step_off_foil(
       wells=wells,
       front_channel=front_channel,
       back_channel=back_channel,
@@ -8683,7 +8728,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
     """Deprecated: use ``star.iswap.slow()``."""
-    async with self.driver.iswap.slow(
+    async with self._iswap.slow(
       wrist_velocity=wrist_velocity, gripper_velocity=gripper_velocity
     ):
       yield
@@ -8962,7 +9007,7 @@ class UnSafe:
 
   async def violently_shoot_down_tip(self, channel_idx: int):
     """Deprecated: use ``star.pip.backend.channels[n].violently_shoot_down_tip()``."""
-    return await self._pip_channels[channel_idx].violently_shoot_down_tip()
+    return await self.star._pip_channels[channel_idx].violently_shoot_down_tip()
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

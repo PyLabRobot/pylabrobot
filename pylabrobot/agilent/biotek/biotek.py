@@ -26,7 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 class BioTekBackend(
-  AbsorbanceBackend, LuminescenceBackend, FluorescenceBackend, TemperatureControllerBackend, Driver, metaclass=ABCMeta
+  AbsorbanceBackend,
+  LuminescenceBackend,
+  FluorescenceBackend,
+  TemperatureControllerBackend,
+  Driver,
+  metaclass=ABCMeta,
 ):
   """Backend for Agilent BioTek plate readers."""
 
@@ -380,6 +385,12 @@ class BioTekBackend(
 
   @dataclass
   class LuminescenceParams(BackendParams):
+    """BioTek-specific parameters for luminescence reads.
+
+    Args:
+      integration_time: Integration time in seconds. Default 1.
+    """
+
     integration_time: float = 1
 
   async def read_luminescence(

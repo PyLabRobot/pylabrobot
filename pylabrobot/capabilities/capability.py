@@ -37,7 +37,8 @@ def need_capability_ready(func: Callable[_P, _R]) -> Callable[_P, _R]:
 
   @functools.wraps(func)
   async def wrapper(*args, **kwargs):
-    assert isinstance(args[0], Capability), "The first argument must be a Capability."
+    if not isinstance(args[0], Capability):
+      raise RuntimeError("The first argument must be a Capability.")
     self = args[0]
 
     if not self.setup_finished:

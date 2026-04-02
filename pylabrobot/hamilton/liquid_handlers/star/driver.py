@@ -308,9 +308,9 @@ class STARDriver(HamiltonLiquidHandler):
       await sub._on_setup()
 
   @property
-  def _subsystems(self):
+  def _subsystems(self) -> List[Any]:
     """All active subsystems, for lifecycle management."""
-    subs = [self.cover]
+    subs: List[Any] = [self.cover]
     if self.autoload is not None:
       subs.append(self.autoload)
     if self.left_x_arm is not None:

@@ -473,6 +473,20 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   @dataclass
   class PickUpParams(BackendParams):
+    """PreciseFlex arm parameters for plate pickup.
+
+    Args:
+      access: Access pattern describing how the arm approaches the location
+        (e.g. ``VerticalAccess`` for top-down, ``HorizontalAccess`` for side access).
+        If None, defaults to ``VerticalAccess()``.
+      finger_speed_percent: Finger closing speed as a percentage (0-100). Default 50.0.
+      grasp_force: Grasp force in Newtons. Default 10.0.
+      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+        picks the closest configuration. Only used for Cartesian moves.
+      rail_position: Linear rail position in mm. Required when the arm has a rail.
+        Only used for Cartesian moves.
+    """
+
     access: Optional[AccessPattern] = None
     finger_speed_percent: float = 50.0
     grasp_force: float = 10.0
@@ -498,6 +512,18 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   @dataclass
   class DropParams(BackendParams):
+    """PreciseFlex arm parameters for plate drop.
+
+    Args:
+      access: Access pattern describing how the arm approaches the location
+        (e.g. ``VerticalAccess`` for top-down, ``HorizontalAccess`` for side access).
+        If None, defaults to ``VerticalAccess()``.
+      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+        picks the closest configuration. Only used for Cartesian moves.
+      rail_position: Linear rail position in mm. Required when the arm has a rail.
+        Only used for Cartesian moves.
+    """
+
     access: Optional[AccessPattern] = None
     orientation: Optional[ElbowOrientation] = None
     rail_position: Optional[float] = None
@@ -516,6 +542,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   @dataclass
   class MoveToJointPositionParams(BackendParams):
+    """PreciseFlex arm parameters for joint-space moves.
+
+    Args:
+      speed: Movement speed override. If None, uses the current speed setting.
+    """
+
     speed: Optional[float] = None
 
   async def move_to_joint_position(
@@ -625,6 +657,15 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   @dataclass
   class MoveToLocationParams(BackendParams):
+    """PreciseFlex arm parameters for Cartesian-space moves.
+
+    Args:
+      speed: Movement speed override. If None, uses the current speed setting.
+      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+        picks the closest configuration.
+      rail_position: Linear rail position in mm. Required when the arm has a rail.
+    """
+
     speed: Optional[float] = None
     orientation: Optional[ElbowOrientation] = None
     rail_position: Optional[float] = None
@@ -1028,7 +1069,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     response = await self.driver.send_command("sysState")
     return int(response)
 
-  async def request_tool_transformation_values(self) -> tuple[float, float, float, float, float, float]:
+  async def request_tool_transformation_values(
+    self,
+  ) -> tuple[float, float, float, float, float, float]:
     """Get the current tool transformation values.
 
     Returns:

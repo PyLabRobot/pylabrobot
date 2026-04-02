@@ -27,9 +27,9 @@ class Pump(Capability):
 
   def serialize(self) -> dict:
     if self.calibration is None:
-      return super().serialize()
+      return super().serialize()  # type: ignore[misc, no-any-return]
     return {
-      **super().serialize(),
+      **super().serialize(),  # type: ignore[misc]
       "calibration": self.calibration.serialize(),
     }
 

@@ -28,6 +28,7 @@ class BioShakeDriver(Driver):
   """
 
   def __init__(self, port: str, timeout: int = 60):
+    super().__init__()
     if not HAS_SERIAL:
       raise RuntimeError(f"pyserial is required for BioShake. Import error: {_SERIAL_IMPORT_ERROR}")
 
@@ -134,9 +135,10 @@ class BioShakeShakerBackend(ShakerBackend):
     min_speed = int(float(await self.driver.send_command(cmd="getShakeMinRpm", delay=0.2)))
     max_speed = int(float(await self.driver.send_command(cmd="getShakeMaxRpm", delay=0.2)))
 
-    assert min_speed <= speed <= max_speed, (
-      f"Speed {speed} RPM is out of range. Allowed range is {min_speed}-{max_speed} RPM"
-    )
+    if not (min_speed <= speed <= max_speed):
+      raise ValueError(
+        f"Speed {speed} RPM is out of range. Allowed range is {min_speed}-{max_speed} RPM"
+      )
 
     await self.driver.send_command(cmd=f"setShakeTargetSpeed{speed}")
 
@@ -149,17 +151,14 @@ class BioShakeShakerBackend(ShakerBackend):
         f"Acceleration must be an integer or a whole number float, not {type(acceleration).__name__}"
       )
 
-    min_accel = int(
-      float(await self.driver.send_command(cmd="getShakeAccelerationMin", delay=0.2))
-    )
-    max_accel = int(
-      float(await self.driver.send_command(cmd="getShakeAccelerationMax", delay=0.2))
-    )
+    min_accel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMin", delay=0.2)))
+    max_accel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
-    assert min_accel <= acceleration <= max_accel, (
-      f"Acceleration {acceleration} seconds is out of range. "
-      f"Allowed range is {min_accel}-{max_accel} seconds"
-    )
+    if not (min_accel <= acceleration <= max_accel):
+      raise ValueError(
+        f"Acceleration {acceleration} seconds is out of range. "
+        f"Allowed range is {min_accel}-{max_accel} seconds"
+      )
 
     await self.driver.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
     await self.driver.send_command(cmd="shakeOn", delay=0.2)
@@ -175,17 +174,14 @@ class BioShakeShakerBackend(ShakerBackend):
         f"not {type(deceleration).__name__}"
       )
 
-    min_decel = int(
-      float(await self.driver.send_command(cmd="getShakeAccelerationMin", delay=0.2))
-    )
-    max_decel = int(
-      float(await self.driver.send_command(cmd="getShakeAccelerationMax", delay=0.2))
-    )
+    min_decel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMin", delay=0.2)))
+    max_decel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
-    assert min_decel <= deceleration <= max_decel, (
-      f"Deceleration {deceleration} seconds is out of range. "
-      f"Allowed range is {min_decel}-{max_decel} seconds"
-    )
+    if not (min_decel <= deceleration <= max_decel):
+      raise ValueError(
+        f"Deceleration {deceleration} seconds is out of range. "
+        f"Allowed range is {min_decel}-{max_decel} seconds"
+      )
 
     await self.driver.send_command(cmd=f"setShakeAcceleration{deceleration}", delay=0.2)
     await self.driver.send_command(cmd="shakeOff", delay=0.2)
@@ -219,9 +215,10 @@ class BioShakeTemperatureBackend(TemperatureControllerBackend):
     min_temp = int(float(await self.driver.send_command(cmd="getTempMin", delay=0.2)))
     max_temp = int(float(await self.driver.send_command(cmd="getTempMax", delay=0.2)))
 
-    assert min_temp <= temperature <= max_temp, (
-      f"Temperature {temperature} C is out of range. Allowed range is {min_temp}-{max_temp} C."
-    )
+    if not (min_temp <= temperature <= max_temp):
+      raise ValueError(
+        f"Temperature {temperature} C is out of range. Allowed range is {min_temp}-{max_temp} C."
+      )
 
     temperature_tenths = temperature * 10
 

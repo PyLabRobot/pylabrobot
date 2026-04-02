@@ -729,6 +729,29 @@ class MolecularDevicesAbsorbanceBackend(_MolecularDevicesProtocol, AbsorbanceBac
 
   @dataclass
   class AbsorbanceParams(BackendParams):
+    """Molecular Devices parameters for absorbance reads.
+
+    Args:
+      wavelengths: List of wavelengths to read. Each entry is either an int (wavelength
+        in nm) or a tuple of ``(wavelength, pathcheck_reference)`` where the bool
+        indicates if that wavelength is used as a PathCheck reference. If None, uses the
+        wavelength from the ``read_absorbance`` call.
+      read_type: Read type (endpoint, kinetic, spectrum, or well scan). Default ENDPOINT.
+      read_order: Read order (column or row). Default COLUMN.
+      calibrate: Calibration mode (once, always, or never). Default ONCE.
+      shake_settings: Optional shake settings to apply before reading.
+      carriage_speed: Carriage speed (normal or low). Default NORMAL.
+      speed_read: If True, enable speed read mode for faster measurements with reduced
+        accuracy. Default False.
+      path_check: If True, enable PathCheck pathlength correction for absorbance values.
+        Default False.
+      kinetic_settings: Optional kinetic read settings (for kinetic read type).
+      spectrum_settings: Optional spectrum scan settings (for spectrum read type).
+      cuvette: If True, read a cuvette instead of a plate. Default False.
+      settling_time: Settling time in milliseconds before reading. Default 0.
+      timeout: Read timeout in seconds. Default 600.
+    """
+
     wavelengths: Optional[List[Union[int, Tuple[int, bool]]]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN

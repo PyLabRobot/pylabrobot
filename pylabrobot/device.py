@@ -49,7 +49,8 @@ class Driver(SerializableMixin, ABC):
       raise ValueError(f'Could not find subclass with name "{class_name}"')
     if inspect.isabstract(subclass):
       raise ValueError(f'Subclass with name "{class_name}" is abstract')
-    assert issubclass(subclass, cls)
+    if not issubclass(subclass, cls):
+      raise RuntimeError(f'Subclass "{class_name}" is not a subclass of {cls.__name__}')
     return subclass(**data)
 
   @classmethod
@@ -68,7 +69,8 @@ def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
 
   @functools.wraps(func)
   async def wrapper(*args, **kwargs):
-    assert isinstance(args[0], Device), "The first argument must be a Device."
+    if not isinstance(args[0], Device):
+      raise RuntimeError("The first argument must be a Device.")
     self = args[0]
 
     if not self.setup_finished:

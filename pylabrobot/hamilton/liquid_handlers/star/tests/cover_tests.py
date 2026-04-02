@@ -44,9 +44,7 @@ class TestSTARCoverCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_reset_output(self):
     await self.cover.reset_output(output=1)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="QS", on=1, fmt="#"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="QS", on=1, fmt="#")
 
   async def test_reset_output_invalid(self):
     with self.assertRaises(ValueError):
@@ -58,9 +56,7 @@ class TestSTARCoverCommands(unittest.IsolatedAsyncioTestCase):
     self.mock_driver.send_command.return_value = {"qc": 1}
     result = await self.cover.is_open()
     self.assertTrue(result)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="QC", fmt="qc#"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="QC", fmt="qc#")
 
   async def test_is_open_false(self):
     self.mock_driver.send_command.return_value = {"qc": 0}

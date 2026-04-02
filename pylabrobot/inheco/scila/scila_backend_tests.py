@@ -162,14 +162,14 @@ class TestSCILADriver(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(data["client_ip"])
 
   def test_deserialize(self):
-    data = {"scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
+    data = {"type": "SCILADriver", "scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
     SCILADriver.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(
       client_ip="192.168.1.10", machine_ip="169.254.1.117"
     )
 
   def test_deserialize_no_client_ip(self):
-    data = {"scila_ip": "169.254.1.117"}
+    data = {"type": "SCILADriver", "scila_ip": "169.254.1.117"}
     SCILADriver.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 

@@ -22,6 +22,13 @@ else:
 
 @dataclass
 class CLARIOstarAbsorbanceParams(BackendParams):
+  """CLARIOstar-specific parameters for absorbance reads.
+
+  Args:
+    report: Report type. ``"OD"`` for optical density (absorbance) or
+      ``"transmittance"`` for transmittance values. Default ``"OD"``.
+  """
+
   report: Literal["OD", "transmittance"] = "OD"
 
 

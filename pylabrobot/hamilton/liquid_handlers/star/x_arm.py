@@ -120,4 +120,4 @@ class STARXArm:
 
     cmd = "XX" if self._side == "left" else "XR"
     resp = await self.driver.send_command(module="C0", command=cmd, fmt="xq#")
-    return resp["xq"] == 1
+    return bool(resp["xq"] == 1)

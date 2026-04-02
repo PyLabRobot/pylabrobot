@@ -24,7 +24,8 @@ class HamiltonHeaterShakerDriver(Driver):
 
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
     super().__init__()
-    assert index >= 0, "Shaker index must be non-negative"
+    if index < 0:
+      raise ValueError("Shaker index must be non-negative")
     self.index = index
     self.interface = interface
 
@@ -66,9 +67,12 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
     await self.lock_plate()
 
     int_speed = int(speed)
-    assert 20 <= int_speed <= 2_000, "Speed must be between 20 and 2_000"
-    assert direction in [0, 1], "Direction must be 0 or 1"
-    assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
+    if not (20 <= int_speed <= 2_000):
+      raise ValueError("Speed must be between 20 and 2_000")
+    if direction not in [0, 1]:
+      raise ValueError("Direction must be 0 or 1")
+    if not (500 <= acceleration <= 10_000):
+      raise ValueError("Acceleration must be between 500 and 10_000")
 
     now = time.time()
     while True:
@@ -126,7 +130,8 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
     return False
 
   async def set_temperature(self, temperature: float):
-    assert 0 < temperature <= 105
+    if not (0 < temperature <= 105):
+      raise ValueError(f"Temperature must be between 0 (exclusive) and 105, got {temperature}")
     temp_str = f"{round(10 * temperature):04d}"
     return await self.driver.send_command("TA", ta=temp_str)
 

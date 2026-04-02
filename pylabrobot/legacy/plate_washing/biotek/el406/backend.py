@@ -19,7 +19,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from pylabrobot.io.ftdi import FTDI
 from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.resources import Plate
 
@@ -36,7 +35,6 @@ from pylabrobot.agilent.biotek.el406.syringe_dispensing_backend import (
   Syringe,
 )
 
-from .errors import EL406CommunicationError
 from .helpers import plate_to_wire_byte
 
 logger = logging.getLogger(__name__)
@@ -307,7 +305,10 @@ class ExperimentalBioTekEL406Backend(
         cassette=cassette,
       )
       await self._peristaltic._peristaltic_prime(
-        plate, volume=volume, duration=duration, params=params,
+        plate,
+        volume=volume,
+        duration=duration,
+        params=params,
       )
 
   async def peristaltic_dispense(
@@ -352,7 +353,10 @@ class ExperimentalBioTekEL406Backend(
         cassette=cassette,
       )
       await self._peristaltic._peristaltic_purge(
-        plate, volume=volume, duration=duration, params=params,
+        plate,
+        volume=volume,
+        duration=duration,
+        params=params,
       )
 
   def serialize(self) -> dict:

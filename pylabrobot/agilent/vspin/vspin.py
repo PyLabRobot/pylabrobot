@@ -381,6 +381,15 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
 
   @dataclass
   class SpinParams(BackendParams):
+    """VSpin centrifuge parameters for spin operations.
+
+    Args:
+      acceleration: Acceleration rate as a fraction of maximum (0 to 1, exclusive of 0).
+        Default 0.8.
+      deceleration: Deceleration rate as a fraction of maximum (0 to 1, exclusive of 0).
+        Default 0.8.
+    """
+
     acceleration: float = 0.8
     deceleration: float = 0.8
 
