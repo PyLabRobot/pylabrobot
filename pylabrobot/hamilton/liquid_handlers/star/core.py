@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from pylabrobot.arms.backend import GripperArmBackend
-from pylabrobot.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.backend import GripperArmBackend
+from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 

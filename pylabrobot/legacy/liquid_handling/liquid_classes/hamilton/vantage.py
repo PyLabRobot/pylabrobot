@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Tuple
 
-from pylabrobot.hamilton.liquid_classes.hamilton.base import (
+from pylabrobot.hamilton.liquid_handlers.liquid_class import (
   HamiltonLiquidClass,
 )
 from pylabrobot.resources.liquid import Liquid

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 from pylabrobot.serializer import SerializableMixin
 
 from .backend import PeelerBackend
@@ -16,10 +16,12 @@ class Peeler(Capability):
     super().__init__(backend=backend)
     self.backend: PeelerBackend = backend
 
+  @need_capability_ready
   async def peel(self, backend_params: Optional[SerializableMixin] = None):
     """Run an automated de-seal cycle."""
     return await self.backend.peel(backend_params=backend_params)
 
+  @need_capability_ready
   async def restart(self, backend_params: Optional[SerializableMixin] = None):
     """Restart the peeler."""
     return await self.backend.restart(backend_params=backend_params)

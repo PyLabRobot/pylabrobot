@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional, Union
 
-from pylabrobot.capabilities.shaking import ShakerBackend, Shaker
+from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,

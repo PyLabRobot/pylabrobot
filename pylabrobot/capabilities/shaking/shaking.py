@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 
 from .backend import ShakerBackend
 
@@ -16,6 +16,7 @@ class Shaker(Capability):
     super().__init__(backend=backend)
     self.backend: ShakerBackend = backend
 
+  @need_capability_ready
   async def shake(self, speed: float, duration: Optional[float] = None):
     """Shake at the given speed.
 
@@ -35,12 +36,15 @@ class Shaker(Capability):
     if self.backend.supports_locking:
       await self.backend.unlock_plate()
 
+  @need_capability_ready
   async def stop_shaking(self):
     await self.backend.stop_shaking()
 
+  @need_capability_ready
   async def lock_plate(self):
     await self.backend.lock_plate()
 
+  @need_capability_ready
   async def unlock_plate(self):
     await self.backend.unlock_plate()
 

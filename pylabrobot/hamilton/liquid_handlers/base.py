@@ -16,9 +16,9 @@ from typing import (
   Union,
 )
 
+from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
 from pylabrobot.device import Driver
 from pylabrobot.io.usb import USB
-from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
 from pylabrobot.resources import TipSpot
 from pylabrobot.resources.hamilton import (
   HamiltonTip,

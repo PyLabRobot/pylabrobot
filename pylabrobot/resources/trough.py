@@ -52,3 +52,10 @@ class Trough(Container):
     )
     self.through_base_to_container_base = through_base_to_container_base
     self.bottom_type = bottom_type
+
+  def serialize(self) -> dict:
+    data = super().serialize()
+    data["bottom_type"] = self.bottom_type.value
+    if self.through_base_to_container_base != 0:
+      data["through_base_to_container_base"] = self.through_base_to_container_base
+    return data

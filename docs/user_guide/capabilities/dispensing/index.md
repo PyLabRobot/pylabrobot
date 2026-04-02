@@ -35,8 +35,8 @@ Peristaltic dispensers push fluid through flexible tubing using a rotating pump 
 
 | Device | Manufacturer | Peristaltic | Syringe |
 |--------|-------------|:-----------:|:-------:|
-| [Multidrop Combi](../thermo_fisher/multidrop_combi/hello-world) | Thermo Fisher | yes | -- |
-| [EL406](../agilent/biotek/el406/hello-world) | BioTek (Agilent) | yes | yes |
+| [Multidrop Combi](../../thermo_fisher/multidrop_combi/hello-world) | Thermo Fisher | yes | -- |
+| [EL406](../../agilent/biotek/el406/hello-world) | BioTek (Agilent) | yes | yes |
 
 ```{toctree}
 :maxdepth: 1

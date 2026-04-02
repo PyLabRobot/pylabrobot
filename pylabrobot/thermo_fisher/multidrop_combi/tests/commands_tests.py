@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
+from pylabrobot.resources import Plate, Well, create_ordered_items_2d
+from pylabrobot.resources.well import CrossSectionType, WellBottomType
+from pylabrobot.thermo_fisher.multidrop_combi.enums import DispensingOrder, EmptyMode, PrimeMode
 from pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend import (
   MultidropCombiPeristalticDispensingBackend,
   _ul_to_tenths,
 )
-from pylabrobot.thermo_fisher.multidrop_combi.enums import DispensingOrder, PrimeMode, EmptyMode
-from pylabrobot.resources import Plate, Well, create_ordered_items_2d
-from pylabrobot.resources.well import CrossSectionType, WellBottomType
 
 
 def _make_backend() -> MultidropCombiPeristalticDispensingBackend:

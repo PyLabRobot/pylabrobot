@@ -11,13 +11,13 @@ from typing import Dict, Optional
 
 from pylabrobot.capabilities.bulk_dispensers.peristaltic import PeristalticDispensingBackend
 from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.resources import Plate
 from pylabrobot.thermo_fisher.multidrop_combi.driver import MultidropCombiDriver
 from pylabrobot.thermo_fisher.multidrop_combi.enums import (
   DispensingOrder,
   EmptyMode,
   PrimeMode,
 )
-from pylabrobot.resources import Plate
 
 
 def _ul_to_tenths(volume_ul: float) -> int:

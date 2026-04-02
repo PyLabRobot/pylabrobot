@@ -5,8 +5,8 @@ from typing import List, Optional, Tuple
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.luminescence import (
-  LuminescenceBackend,
   Luminescence,
+  LuminescenceBackend,
   LuminescenceResult,
 )
 from pylabrobot.device import Device

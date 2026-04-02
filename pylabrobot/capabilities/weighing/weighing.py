@@ -1,4 +1,4 @@
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 
 from .backend import ScaleBackend
 
@@ -13,12 +13,15 @@ class Scale(Capability):
     super().__init__(backend=backend)
     self.backend: ScaleBackend = backend
 
+  @need_capability_ready
   async def zero(self):
     await self.backend.zero()
 
+  @need_capability_ready
   async def tare(self):
     await self.backend.tare()
 
+  @need_capability_ready
   async def read_weight(self) -> float:
     return await self.backend.read_weight()
 

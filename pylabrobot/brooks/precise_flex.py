@@ -6,10 +6,14 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, List, Literal, Optional, Union
 
-from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
-from pylabrobot.arms.orientable_arm import OrientableArm
-from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.brooks.error_codes import ERROR_CODES
+from pylabrobot.capabilities.arms.backend import (
+  CanFreedrive,
+  HasJoints,
+  OrientableGripperArmBackend,
+)
+from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.socket import Socket

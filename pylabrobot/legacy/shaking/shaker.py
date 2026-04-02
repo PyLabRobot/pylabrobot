@@ -1,7 +1,7 @@
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import ShakerBackend as _NewShakerBackend
 from pylabrobot.capabilities.shaking import Shaker as _NewShaker
+from pylabrobot.capabilities.shaking import ShakerBackend as _NewShakerBackend
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 

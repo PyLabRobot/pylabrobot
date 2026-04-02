@@ -19,9 +19,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from pylabrobot.legacy.machines.backend import MachineBackend
-from pylabrobot.resources import Plate
-
 from pylabrobot.agilent.biotek.el406.driver import EL406Driver
 from pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend import (
   Cassette,
@@ -34,6 +31,8 @@ from pylabrobot.agilent.biotek.el406.syringe_dispensing_backend import (
   EL406SyringeDispensingBackend,
   Syringe,
 )
+from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.resources import Plate
 
 from .helpers import plate_to_wire_byte
 

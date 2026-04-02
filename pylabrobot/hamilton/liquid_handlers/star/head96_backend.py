@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Literal, Optional, Union
@@ -23,6 +25,15 @@ from .pip_backend import _dispensing_mode_for_op  # noqa: F401
 
 if TYPE_CHECKING:
   from .driver import STARDriver
+
+logger = logging.getLogger(__name__)
+
+# Conversion factors for 96-Head (mm per increment / uL per increment)
+_Z_DRIVE_MM_PER_INCREMENT = 0.005
+_Y_DRIVE_MM_PER_INCREMENT = 0.015625
+_DISPENSING_DRIVE_MM_PER_INCREMENT = 0.001025641026
+_DISPENSING_DRIVE_UL_PER_INCREMENT = 0.019340933
+_SQUEEZER_DRIVE_MM_PER_INCREMENT = 0.0002086672009
 
 
 def _channel_pattern_to_hex(pattern: List[bool]) -> str:
@@ -49,6 +60,392 @@ class STARHead96Backend(Head96Backend):
       yield
     finally:
       self.traversal_height = original
+
+  # ---------------------------------------------------------------------------
+  # Lifecycle
+  # ---------------------------------------------------------------------------
+
+  async def _on_setup(self):
+    """Initialize the 96-head if not already initialized, and cache firmware info.
+
+    Mirrors the legacy initialization flow:
+      1. Check if already initialized (H0:QW).
+      2. If not, send the initialize command (C0:EI).
+      3. Cache firmware version and configuration for version-specific behavior.
+    """
+    already_initialized = await self.request_initialization_status()
+    if not already_initialized:
+      await self.initialize()
+
+    # Cache firmware version and configuration for version-specific behavior
+    self.fw_version = await self.request_firmware_version()
+
+  async def _on_stop(self):
+    """Move to Z safety and park the 96-head on shutdown."""
+    try:
+      await self.move_to_z_safety()
+    except Exception:
+      logger.warning("Failed to move 96-head to Z safety during stop", exc_info=True)
+    try:
+      await self.park()
+    except Exception:
+      logger.warning("Failed to park 96-head during stop", exc_info=True)
+
+  # ---------------------------------------------------------------------------
+  # Initialization & status
+  # ---------------------------------------------------------------------------
+
+  async def request_firmware_version(self) -> datetime.date:
+    """Request 96-head firmware version (H0:RF)."""
+    from pylabrobot.hamilton.liquid_handlers.star.fw_parsing import (
+      parse_star_firmware_version_date,
+    )
+
+    resp = await self.driver.send_command(module="H0", command="RF")
+    if resp is None:
+      # Chatterbox / simulation: return a sensible default
+      return datetime.date(2024, 1, 1)
+    return parse_star_firmware_version_date(str(resp))
+
+  async def request_initialization_status(self) -> bool:
+    """Request 96-head initialization status (H0:QW).
+
+    Returns:
+      True if the 96-head is initialized, False otherwise.
+    """
+    response = await self.driver.send_command(module="H0", command="QW", fmt="qw#")
+    if response is None:
+      return False
+    return bool(response.get("qw", 0) == 1)
+
+  async def initialize(
+    self,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    minimum_height_command_end: Optional[float] = None,
+  ):
+    """Initialize the CoRe 96 Head (C0:EI).
+
+    This sends tips to the specified position (typically the trash area) and
+    initializes all axes.
+
+    Args:
+      x: X position in mm for A1 channel of the 96-head during initialization.
+      y: Y position in mm for A1 channel of the 96-head during initialization.
+      z: Z position in mm. Default 0.
+      minimum_height_command_end: Minimum Z height in mm at command end.
+        If None, uses the backend's ``traversal_height``.
+    """
+    ze = (
+      minimum_height_command_end
+      if minimum_height_command_end is not None
+      else self.traversal_height
+    )
+
+    await self.driver.send_command(
+      module="C0",
+      command="EI",
+      read_timeout=60,
+      xs=f"{abs(round(x * 10)):05}",
+      xd=0 if x >= 0 else 1,
+      yh=f"{abs(round(y * 10)):04}",
+      za=f"{round(z * 10):04}",
+      ze=f"{round(ze * 10):04}",
+    )
+
+  async def initialize_dispensing_drive_and_squeezer(
+    self,
+    squeezer_speed: float = 15.0,
+    squeezer_acceleration: float = 62.0,
+    squeezer_current_limit: int = 15,
+    dispensing_drive_current_limit: int = 7,
+  ):
+    """Initialize 96-head's dispensing drive AND squeezer drive (H0:PI).
+
+    This command:
+      - Drops any tips that might be on the channels (in place, without moving to trash).
+      - Moves the dispense drive to volume position 215.92 uL
+        (after tip pickup it will be at 218.19 uL).
+
+    Args:
+      squeezer_speed: Speed of the movement in mm/sec. Must be between 0.01 and 16.69.
+      squeezer_acceleration: Acceleration of the movement in mm/sec**2. Must be between
+        1.04 and 62.6.
+      squeezer_current_limit: Current limit for the squeezer drive (1-15).
+      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15).
+    """
+    if not (0.01 <= squeezer_speed <= 16.69):
+      raise ValueError(
+        f"squeezer_speed must be between 0.01 and 16.69 mm/sec, got {squeezer_speed}"
+      )
+    if not (1.04 <= squeezer_acceleration <= 62.6):
+      raise ValueError(
+        f"squeezer_acceleration must be between 1.04 and 62.6 mm/sec**2, got {squeezer_acceleration}"
+      )
+    if not (1 <= squeezer_current_limit <= 15):
+      raise ValueError(
+        f"squeezer_current_limit must be between 1 and 15, got {squeezer_current_limit}"
+      )
+    if not (1 <= dispensing_drive_current_limit <= 15):
+      raise ValueError(
+        f"dispensing_drive_current_limit must be between 1 and 15, got {dispensing_drive_current_limit}"
+      )
+
+    squeezer_speed_inc = round(squeezer_speed / _SQUEEZER_DRIVE_MM_PER_INCREMENT)
+    squeezer_accel_inc = round(squeezer_acceleration / _SQUEEZER_DRIVE_MM_PER_INCREMENT)
+
+    await self.driver.send_command(
+      module="H0",
+      command="PI",
+      sv=f"{squeezer_speed_inc:05}",
+      sr=f"{squeezer_accel_inc:06}",
+      sw=f"{squeezer_current_limit:02}",
+      dw=f"{dispensing_drive_current_limit:02}",
+    )
+
+  # ---------------------------------------------------------------------------
+  # Movement commands
+  # ---------------------------------------------------------------------------
+
+  async def move_to_z_safety(self):
+    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm (C0:EV)."""
+    await self.driver.send_command(module="C0", command="EV")
+
+  async def park(self):
+    """Park the 96-head (H0:MO).
+
+    Uses firmware default speeds and accelerations.
+    """
+    await self.driver.send_command(module="H0", command="MO")
+
+  async def move_to_coordinate(
+    self,
+    coordinate: Coordinate,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Move 96-Head to a defined coordinate (C0:EM).
+
+    Args:
+      coordinate: Coordinate of A1 in mm. If tips are present, refers to tip bottom;
+        if not present, refers to channel bottom.
+      minimum_height_at_beginning_of_a_command: Minimum Z height in mm before lateral
+        movement begins. Must be between 0 and 342.5.
+    """
+    if not (0 <= minimum_height_at_beginning_of_a_command <= 342.5):
+      raise ValueError("minimum_height_at_beginning_of_a_command must be between 0 and 342.5")
+
+    await self.driver.send_command(
+      module="C0",
+      command="EM",
+      xs=f"{abs(round(coordinate.x * 10)):05}",
+      xd=0 if coordinate.x >= 0 else 1,
+      yh=f"{round(coordinate.y * 10):04}",
+      za=f"{round(coordinate.z * 10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+    )
+
+  async def move_y(
+    self,
+    y: float,
+    speed: float = 300.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head to a specified Y-axis coordinate (H0:YA).
+
+    Args:
+      y: Target Y coordinate in mm. Valid range: [93.75, 562.5].
+      speed: Movement speed in mm/sec. Valid range: [0.78125, 625.0].
+      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25].
+      current_protection_limiter: Motor current limit (0-15, hardware units).
+    """
+    if not (93.75 <= y <= 562.5):
+      raise ValueError("y must be between 93.75 and 562.5 mm")
+    if not (0.78125 <= speed <= 625.0):
+      raise ValueError("speed must be between 0.78125 and 625.0 mm/sec")
+    if not (78.125 <= acceleration <= 781.25):
+      raise ValueError("acceleration must be between 78.125 and 781.25 mm/sec**2")
+    if not (isinstance(current_protection_limiter, int) and 0 <= current_protection_limiter <= 15):
+      raise ValueError("current_protection_limiter must be an integer between 0 and 15")
+
+    y_inc = round(y / _Y_DRIVE_MM_PER_INCREMENT)
+    speed_inc = round(speed / _Y_DRIVE_MM_PER_INCREMENT)
+    accel_inc = round(acceleration / _Y_DRIVE_MM_PER_INCREMENT)
+
+    await self.driver.send_command(
+      module="H0",
+      command="YA",
+      ya=f"{y_inc:05}",
+      yv=f"{speed_inc:05}",
+      yr=f"{accel_inc:05}",
+      yw=f"{current_protection_limiter:02}",
+    )
+
+  async def move_z(
+    self,
+    z: float,
+    speed: float = 80.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head to a specified Z-axis coordinate (H0:ZA).
+
+    Args:
+      z: Target Z coordinate in mm. Valid range: [180.5, 342.5].
+      speed: Movement speed in mm/sec. Valid range: [0.25, 100.0].
+      acceleration: Movement acceleration in mm/sec**2. Valid range: [25.0, 500.0].
+      current_protection_limiter: Motor current limit (0-15, hardware units).
+    """
+    if not (180.5 <= z <= 342.5):
+      raise ValueError("z must be between 180.5 and 342.5 mm")
+    if not (0.25 <= speed <= 100.0):
+      raise ValueError("speed must be between 0.25 and 100.0 mm/sec")
+    if not (25.0 <= acceleration <= 500.0):
+      raise ValueError("acceleration must be between 25.0 and 500.0 mm/sec**2")
+    if not (isinstance(current_protection_limiter, int) and 0 <= current_protection_limiter <= 15):
+      raise ValueError("current_protection_limiter must be an integer between 0 and 15")
+
+    z_inc = round(z / _Z_DRIVE_MM_PER_INCREMENT)
+    speed_inc = round(speed / _Z_DRIVE_MM_PER_INCREMENT)
+    accel_inc = round(acceleration / _Z_DRIVE_MM_PER_INCREMENT)
+
+    await self.driver.send_command(
+      module="H0",
+      command="ZA",
+      za=f"{z_inc:05}",
+      zv=f"{speed_inc:05}",
+      zr=f"{accel_inc:06}",
+      zw=f"{current_protection_limiter:02}",
+    )
+
+  async def dispensing_drive_move_to_position(
+    self,
+    position: float,
+    speed: float = 261.1,
+    stop_speed: float = 0,
+    acceleration: float = 17406.84,
+    current_protection_limiter: int = 15,
+  ):
+    """Move dispensing drive to absolute position in uL (H0:DQ).
+
+    Args:
+      position: Position in uL. Must be between 0 and 1244.59.
+      speed: Speed in uL/s. Must be between 0.1 and 1063.75.
+      stop_speed: Stop speed in uL/s. Must be between 0 and 1063.75.
+      acceleration: Acceleration in uL/s**2. Must be between 96.7 and 17406.84.
+      current_protection_limiter: Current protection limiter (0-15).
+    """
+    if not (0 <= position <= 1244.59):
+      raise ValueError("position must be between 0 and 1244.59")
+    if not (0.1 <= speed <= 1063.75):
+      raise ValueError("speed must be between 0.1 and 1063.75")
+    if not (0 <= stop_speed <= 1063.75):
+      raise ValueError("stop_speed must be between 0 and 1063.75")
+    if not (96.7 <= acceleration <= 17406.84):
+      raise ValueError("acceleration must be between 96.7 and 17406.84")
+    if not (0 <= current_protection_limiter <= 15):
+      raise ValueError("current_protection_limiter must be between 0 and 15")
+
+    pos_inc = round(position / _DISPENSING_DRIVE_UL_PER_INCREMENT)
+    speed_inc = round(speed / _DISPENSING_DRIVE_UL_PER_INCREMENT)
+    stop_inc = round(stop_speed / _DISPENSING_DRIVE_UL_PER_INCREMENT)
+    accel_inc = round(acceleration / _DISPENSING_DRIVE_UL_PER_INCREMENT)
+
+    await self.driver.send_command(
+      module="H0",
+      command="DQ",
+      dq=f"{pos_inc:05}",
+      dv=f"{speed_inc:05}",
+      du=f"{stop_inc:05}",
+      dr=f"{accel_inc:06}",
+      dw=f"{current_protection_limiter:02}",
+    )
+
+  async def dispensing_drive_move_to_home_volume(self):
+    """Move the 96-head dispensing drive into its home position, vol=0.0 uL (H0:DL).
+
+    .. warning::
+      This firmware command is known to be broken: the 96-head dispensing drive
+      cannot reach vol=0.0 uL, which typically raises a position-out-of-permitted-area
+      error.
+    """
+    logger.warning(
+      "dispensing_drive_move_to_home_volume is a known broken firmware command: "
+      "the 96-head dispensing drive cannot reach vol=0.0 uL."
+    )
+    await self.driver.send_command(module="H0", command="DL")
+
+  # ---------------------------------------------------------------------------
+  # Query commands
+  # ---------------------------------------------------------------------------
+
+  async def request_position(self) -> Coordinate:
+    """Request position of the CoRe 96 Head (C0:QI).
+
+    Returns:
+      Coordinate: x, y, z in mm. The position of A1, considering tip length
+        if tips are mounted.
+    """
+    resp = await self.driver.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
+    if resp is None:
+      return Coordinate(x=0, y=0, z=0)
+
+    x = resp["xs"] / 10
+    y = resp["yh"] / 10
+    z = resp["za"] / 10
+    x = x if resp["xd"] == 0 else -x
+
+    return Coordinate(x=x, y=y, z=z)
+
+  async def request_tip_presence(self) -> int:
+    """Request tip presence on the 96-Head (C0:QH).
+
+    Note: This queries the firmware's internal memory. It does not directly
+    sense whether tips are physically present.
+
+    Returns:
+      0 = no tips, 1 = firmware believes tips are on the 96-head.
+    """
+    resp = await self.driver.send_command(module="C0", command="QH", fmt="qh#")
+    if resp is None:
+      return 0
+    return int(resp["qh"])
+
+  async def request_tadm_status(self) -> int:
+    """Request CoRe 96 Head channel TADM status (C0:VC).
+
+    Returns:
+      0 = off, 1 = on.
+    """
+    resp = await self.driver.send_command(module="C0", command="VC", fmt="qx#")
+    if resp is None:
+      return 0
+    return int(resp["qx"])
+
+  async def request_tadm_error_status(self) -> dict:
+    """Request CoRe 96 Head channel TADM error status (C0:VB).
+
+    Returns:
+      Dictionary with error pattern (0 = no error).
+    """
+    resp = await self.driver.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
+    if resp is None:
+      return {}
+    return dict(resp)
+
+  async def dispensing_drive_request_position_mm(self) -> float:
+    """Request 96-head dispensing drive position in mm (H0:RD)."""
+    resp = await self.driver.send_command(module="H0", command="RD", fmt="rd######")
+    if resp is None:
+      return 0.0
+    return float(round(resp["rd"] * _DISPENSING_DRIVE_MM_PER_INCREMENT, 2))
+
+  async def dispensing_drive_request_position_uL(self) -> float:
+    """Request 96-head dispensing drive position in uL."""
+    position_mm = await self.dispensing_drive_request_position_mm()
+    increment = round(position_mm / _DISPENSING_DRIVE_MM_PER_INCREMENT)
+    return round(increment * _DISPENSING_DRIVE_UL_PER_INCREMENT, 2)
 
   # ---------------------------------------------------------------------------
   # Pick up tips
@@ -118,9 +515,7 @@ class STARHead96Backend(Head96Backend):
     tip_spot_z = alignment_tipspot.get_absolute_location().z + pickup.offset.z
     z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
 
-    pickup_position = (
-      alignment_tipspot.get_absolute_location() + alignment_tipspot.center() + pickup.offset
-    )
+    pickup_position = alignment_tipspot.get_absolute_location(x="c", y="c") + pickup.offset
     pickup_position.z = round(z_pickup_position, 2)
 
     traversal = self.traversal_height
@@ -191,7 +586,7 @@ class STARHead96Backend(Head96Backend):
 
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item(backend_params.alignment_tipspot_identifier)
-      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      position = tip_spot_a1.get_absolute_location(x="c", y="c") + drop.offset
       tip_rack = tip_spot_a1.parent
       if tip_rack is None:
         raise ValueError("Tip spot parent (tip rack) must not be None")
@@ -310,8 +705,7 @@ class STARHead96Backend(Head96Backend):
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
       position = (
-        ref_well.get_absolute_location()
-        + ref_well.center()
+        ref_well.get_absolute_location(x="c", y="c")
         + Coordinate(z=ref_well.material_z_thickness)
         + aspiration.offset
       )
@@ -482,8 +876,7 @@ class STARHead96Backend(Head96Backend):
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
       position = (
-        ref_well.get_absolute_location()
-        + ref_well.center()
+        ref_well.get_absolute_location(x="c", y="c")
         + Coordinate(z=ref_well.material_z_thickness)
         + dispense.offset
       )

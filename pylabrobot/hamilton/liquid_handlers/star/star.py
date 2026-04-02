@@ -3,8 +3,8 @@
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from pylabrobot.arms.arm import GripperArm
-from pylabrobot.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.arm import GripperArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device

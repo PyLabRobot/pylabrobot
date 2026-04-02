@@ -7,20 +7,17 @@ and manifold_auto_clean operations plus their corresponding command builders.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from dataclasses import dataclass
+from typing import Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.plate_washing.backend import PlateWashingBackend
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
 
-from dataclasses import dataclass
-from typing import Optional
-
-from pylabrobot.capabilities.capability import BackendParams
-
+from .driver import EL406Driver
 from .helpers import plate_defaults, plate_to_wire_byte
 from .protocol import build_framed_message
-from pylabrobot.capabilities.plate_washing.backend import PlateWashingBackend
-from .driver import EL406Driver
 
 Intensity = Literal["Variable", "Slow", "Medium", "Fast"]
 

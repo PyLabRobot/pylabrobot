@@ -5,8 +5,8 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
-from pylabrobot.arms.backend import OrientableGripperArmBackend
-from pylabrobot.arms.standard import GripDirection, GripperLocation
+from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
+from pylabrobot.capabilities.arms.standard import GripDirection, GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation

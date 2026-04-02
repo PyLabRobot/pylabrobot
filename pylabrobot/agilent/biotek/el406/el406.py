@@ -3,9 +3,9 @@
 from typing import Optional
 
 from pylabrobot.capabilities.bulk_dispensers.peristaltic import PeristalticDispensing
+from pylabrobot.capabilities.bulk_dispensers.syringe import SyringeDispensing
 from pylabrobot.capabilities.plate_washing import PlateWashingCapability
 from pylabrobot.capabilities.shaking import Shaker
-from pylabrobot.capabilities.bulk_dispensers.syringe import SyringeDispensing
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 

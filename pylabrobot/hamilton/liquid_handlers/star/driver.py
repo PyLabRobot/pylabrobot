@@ -309,7 +309,13 @@ class STARDriver(HamiltonLiquidHandler):
 
   @property
   def _subsystems(self) -> List[Any]:
-    """All active subsystems, for lifecycle management."""
+    """All active subsystems, for lifecycle management.
+
+    Note: head96 is intentionally excluded. Its lifecycle (_on_setup / _on_stop)
+    is managed by higher-level callers (e.g. the legacy backend) because
+    initialization requires context like the trash position that the driver
+    does not own.
+    """
     subs: List[Any] = [self.cover]
     if self.autoload is not None:
       subs.append(self.autoload)

@@ -12,7 +12,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.sealing import SealerBackend, Sealer
+from pylabrobot.capabilities.sealing import Sealer, SealerBackend
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,

@@ -38,9 +38,20 @@ from pylabrobot.hamilton.liquid_handlers.star.pip_backend import STARPIPBackend
 if TYPE_CHECKING:
   from pylabrobot.hamilton.liquid_handlers.star.autoload import STARAutoload
   from pylabrobot.hamilton.liquid_handlers.star.cover import STARCover
+  from pylabrobot.hamilton.liquid_handlers.star.head96_backend import STARHead96Backend
   from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
   from pylabrobot.hamilton.liquid_handlers.star.wash_station import STARWashStation
   from pylabrobot.hamilton.liquid_handlers.star.x_arm import STARXArm
+from pylabrobot.hamilton.liquid_handlers.star.errors import (
+  CommandSyntaxError,  # noqa: F401  (re-exported for STAR_tests)
+  HamiltonNoTipError,  # noqa: F401  (re-exported for STAR_tests)
+  HardwareError,  # noqa: F401  (re-exported for STAR_tests)
+  STARFirmwareError,
+  UnknownHamiltonError,  # noqa: F401  (re-exported for STAR_tests)
+  convert_star_firmware_error_to_plr_error,
+  star_firmware_string_to_error,
+)
+from pylabrobot.hamilton.liquid_handlers.star.fw_parsing import parse_star_fw_string
 from pylabrobot.hamilton.liquid_handlers.star.pip_channel import (
   PressureLLDMode as _NewPressureLLDMode,
 )
@@ -98,17 +109,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
-
-from pylabrobot.hamilton.liquid_handlers.star.errors import (
-  CommandSyntaxError,  # noqa: F401  (re-exported for STAR_tests)
-  HamiltonNoTipError,  # noqa: F401  (re-exported for STAR_tests)
-  HardwareError,  # noqa: F401  (re-exported for STAR_tests)
-  STARFirmwareError,
-  UnknownHamiltonError,  # noqa: F401  (re-exported for STAR_tests)
-  convert_star_firmware_error_to_plr_error,
-  star_firmware_string_to_error,
-)
-from pylabrobot.hamilton.liquid_handlers.star.fw_parsing import parse_star_fw_string
 
 T = TypeVar("T")
 
@@ -444,6 +444,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Typed access to the wash station (asserts not None)."""
     assert self.driver.wash_station is not None, "Wash station is not installed"
     return self.driver.wash_station
+
+  @property
+  def _star_head96(self) -> "STARHead96Backend":
+    """Typed access to the Head96 backend (asserts not None)."""
+    assert self.driver.head96 is not None, "96-head is not installed"
+    return self.driver.head96  # type: ignore[return-value]
 
   @property
   def _cover(self) -> "STARCover":
@@ -799,9 +805,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           await self.initialize_iswap()
 
         await self.park_iswap(
-          minimum_traverse_height_at_beginning_of_a_command=int(
-            self._iswap.traversal_height * 10
-          )
+          minimum_traverse_height_at_beginning_of_a_command=int(self._iswap.traversal_height * 10)
         )
 
     async def set_up_core96_head():
@@ -1026,8 +1030,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       drop_method=drop_method,
       minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command
       or self._pip.traversal_height,
-      z_position_at_end_of_a_command=z_position_at_end_of_a_command
-      or self._pip.traversal_height,
+      z_position_at_end_of_a_command=z_position_at_end_of_a_command or self._pip.traversal_height,
       begin_tip_deposit_process=begin_tip_deposit_process,
       end_tip_deposit_process=end_tip_deposit_process,
     )
@@ -1907,8 +1910,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         }[tip_pickup_method],
         z_deposit_position=round(pickup_position.z * 10),
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._pip.traversal_height)
-          * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._pip.traversal_height) * 10
         ),
         minimum_height_command_end=round(
           (minimum_height_command_end or self._pip.traversal_height) * 10
@@ -2523,8 +2525,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         GripDirection.LEFT: 4,
       }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
-        * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height) * 10
       ),
       collision_control_level=collision_control_level,
       acceleration_index_high_acc=acceleration_index_high_acc,
@@ -2578,8 +2579,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
-        * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height) * 10
       ),
       minimum_z_position_at_the_command_end=round(
         (minimum_z_position_at_the_command_end or self._iswap.traversal_height) * 10
@@ -2615,8 +2615,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
-        * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height) * 10
       ),
     )
 
@@ -2657,8 +2656,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height)
-        * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height) * 10
       ),
       z_position_at_the_command_end=round(
         (z_position_at_the_command_end or self._iswap.traversal_height) * 10
@@ -2713,9 +2711,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       traverse_height_at_beginning = (
         minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height
       )
-      z_position_at_the_command_end = (
-        z_position_at_the_command_end or self._iswap.traversal_height
-      )
+      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap.traversal_height
 
       if open_gripper_position is None:
         if use_unsafe_hotel:
@@ -2863,9 +2859,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       traversal_height_start = (
         minimum_traverse_height_at_beginning_of_a_command or self._iswap.traversal_height
       )
-      z_position_at_the_command_end = (
-        z_position_at_the_command_end or self._iswap.traversal_height
-      )
+      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap.traversal_height
       assert (
         drop.resource.get_absolute_rotation().x == 0
         and drop.resource.get_absolute_rotation().y == 0
@@ -5305,8 +5299,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def head96_request_firmware_version(self) -> datetime.date:
     """Request 96 Head firmware version (MEM-READ command)."""
-    resp: str = await self.send_command(module="H0", command="RF")
-    return self._parse_firmware_version_datetime(resp)
+    return await self._star_head96.request_firmware_version()
 
   async def _head96_request_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
@@ -5349,26 +5342,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         center of the trash.
       z_position_at_the_command_end: Z position at the end of the command [mm].
     """
-
     # The firmware command expects location of tip A1 of the head.
     loc = self._position_96_head_in_resource(trash96)
     self._check_96_position_legal(loc, skip_z=True)
 
-    return await self.send_command(
-      module="C0",
-      command="EI",
-      read_timeout=60,
-      xs=f"{abs(round(loc.x * 10)):05}",
-      xd=0 if loc.x >= 0 else 1,
-      yh=f"{abs(round(loc.y * 10)):04}",
-      za=f"{round(loc.z * 10):04}",
-      ze=f"{round(z_position_at_the_command_end * 10):04}",
+    return await self._star_head96.initialize(
+      x=loc.x,
+      y=loc.y,
+      z=loc.z,
+      minimum_height_command_end=z_position_at_the_command_end,
     )
 
   async def request_core_96_head_initialization_status(self) -> bool:
-    # not available in the C0 docs, so get from module H0 itself instead
-    response = await self.send_command(module="H0", command="QW", fmt="qw#")
-    return bool(response.get("qw", 0) == 1)  # type?
+    return await self._star_head96.request_initialization_status()
 
   async def head96_dispensing_drive_and_squeezer_driver_initialize(
     self,
@@ -5390,42 +5376,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
       dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
     """
-
-    if not (0.01 <= squeezer_speed <= 16.69):
-      raise ValueError(
-        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
-      )
-    if not (1.04 <= squeezer_acceleration <= 62.6):
-      raise ValueError(
-        "96-head squeezer drive acceleration must be between 1.04 and "
-        f"62.6 mm/sec**2, is {squeezer_acceleration}"
-      )
-    if not (1 <= squeezer_current_limit <= 15):
-      raise ValueError(
-        "96-head squeezer drive current limit must be between 1 and 15, "
-        f"is {squeezer_current_limit}"
-      )
-    if not (1 <= dispensing_drive_current_limit <= 15):
-      raise ValueError(
-        "96-head dispensing drive current limit must be between 1 and 15, "
-        f"is {dispensing_drive_current_limit}"
-      )
-
-    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
-    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
-      squeezer_acceleration
+    return await self._star_head96.initialize_dispensing_drive_and_squeezer(
+      squeezer_speed=squeezer_speed,
+      squeezer_acceleration=squeezer_acceleration,
+      squeezer_current_limit=squeezer_current_limit,
+      dispensing_drive_current_limit=dispensing_drive_current_limit,
     )
-
-    resp = await self.send_command(
-      module="H0",
-      command="PI",
-      sv=f"{squeezer_speed_increment:05}",
-      sr=f"{squeezer_acceleration_increment:06}",
-      sw=f"{squeezer_current_limit:02}",
-      dw=f"{dispensing_drive_current_limit:02}",
-    )
-
-    return resp
 
   # -------------- 3.10.2 96-Head Movements --------------
 
@@ -5511,7 +5467,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @_requires_head96
   async def head96_move_to_z_safety(self):
     """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
-    return await self.send_command(module="C0", command="EV")
+    return await self._star_head96.move_to_z_safety()
 
   @_requires_head96
   async def head96_park(
@@ -5521,8 +5477,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Uses firmware default speeds and accelerations.
     """
-
-    return await self.send_command(module="H0", command="MO")
+    return await self._star_head96.park()
 
   @_requires_head96
   async def head96_move_x(self, x: float):
@@ -5802,18 +5757,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
       area')}``.
     """
-
-    logger.warning(
-      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
-      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
-      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
-      "area')}. Attempting to send the command anyway."
-    )
-
-    return await self.send_command(
-      module="H0",
-      command="DL",
-    )
+    return await self._star_head96.dispensing_drive_move_to_home_volume()
 
   # # # "Atomic" liquid handling commands # # #
 
@@ -6417,21 +6361,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         (refers to all channels independent of tip pattern parameter 'tm'). Must be between ? and
         342.5. Default 342.5.
     """
-
     self._check_96_position_legal(coordinate)
 
-    assert 0 <= minimum_height_at_beginning_of_a_command <= 342.5, (
-      "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
-    )
-
-    return await self.send_command(
-      module="C0",
-      command="EM",
-      xs=f"{abs(round(coordinate.x * 10)):05}",
-      xd="0" if coordinate.x >= 0 else "1",
-      yh=f"{round(coordinate.y * 10):04}",
-      za=f"{round(coordinate.z * 10):04}",
-      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+    return await self._star_head96.move_to_coordinate(
+      coordinate=coordinate,
+      minimum_height_at_beginning_of_a_command=minimum_height_at_beginning_of_a_command,
     )
 
   HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
@@ -6456,34 +6390,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_protection_limiter: Current protection limiter (0-15), default 15
     """
 
-    if not (
-      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
-      <= position
-      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
-    ):
-      raise ValueError("position must be between 0 and 1244.59")
-    if not (0.1 <= speed <= 1063.75):
-      raise ValueError("speed must be between 0.1 and 1063.75")
-    if not (0 <= stop_speed <= 1063.75):
-      raise ValueError("stop_speed must be between 0 and 1063.75")
-    if not (96.7 <= acceleration <= 17406.84):
-      raise ValueError("acceleration must be between 96.7 and 17406.84")
-    if not (0 <= current_protection_limiter <= 15):
-      raise ValueError("current_protection_limiter must be between 0 and 15")
-
-    position_increments = self._head96_dispensing_drive_uL_to_increment(position)
-    speed_increments = self._head96_dispensing_drive_uL_to_increment(speed)
-    stop_speed_increments = self._head96_dispensing_drive_uL_to_increment(stop_speed)
-    acceleration_increments = self._head96_dispensing_drive_uL_to_increment(acceleration)
-
-    await self.send_command(
-      module="H0",
-      command="DQ",
-      dq=f"{position_increments:05}",
-      dv=f"{speed_increments:05}",
-      du=f"{stop_speed_increments:05}",
-      dr=f"{acceleration_increments:06}",
-      dw=f"{current_protection_limiter:02}",
+    await self._star_head96.dispensing_drive_move_to_position(
+      position=position,
+      speed=speed,
+      stop_speed=stop_speed,
+      acceleration=acceleration,
+      current_protection_limiter=current_protection_limiter,
     )
 
   async def move_core_96_head_x(self, x_position: float):
@@ -6579,9 +6491,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       0 = no tips
       1 = firmware believes tips are on the 96-head
     """
-    resp = await self.send_command(module="C0", command="QH", fmt="qh#")
-
-    return int(resp["qh"])
+    return await self._star_head96.request_tip_presence()
 
   async def request_position_of_core_96_head(self):
     """Deprecated - use `head96_request_position` instead."""
@@ -6601,16 +6511,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       Coordinate: x, y, z in mm
     """
-
-    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
-
-    x_coordinate = resp["xs"] / 10
-    y_coordinate = resp["yh"] / 10
-    z_coordinate = resp["za"] / 10
-
-    x_coordinate = x_coordinate if resp["xd"] == 0 else -x_coordinate
-
-    return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
+    return await self._star_head96.request_position()
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
@@ -6618,8 +6519,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       qx: TADM channel status 0 = off 1 = on
     """
-
-    return await self.send_command(module="C0", command="VC", fmt="qx#")
+    return await self._star_head96.request_tadm_status()
 
   async def request_core_96_head_channel_tadm_error_status(self):
     """Request CoRe 96 Head channel TADM error status
@@ -6627,18 +6527,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       vb: error pattern 0 = no error
     """
-
-    return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
+    return await self._star_head96.request_tadm_error_status()
 
   async def head96_dispensing_drive_request_position_mm(self) -> float:
     """Request 96 Head dispensing drive position in mm"""
-    resp = await self.send_command(module="H0", command="RD", fmt="rd######")
-    return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
+    return await self._star_head96.dispensing_drive_request_position_mm()
 
   async def head96_dispensing_drive_request_position_uL(self) -> float:
     """Request 96 Head dispensing drive position in uL"""
-    position_mm = await self.head96_dispensing_drive_request_position_mm()
-    return self._head96_dispensing_drive_mm_to_uL(position_mm)
+    return await self._star_head96.dispensing_drive_request_position_uL()
 
   # -------------- 3.11 384 Head commands --------------
 
@@ -7104,9 +7001,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.backend.move_relative_x()``."""
-    return await self._iswap.move_relative_x(
-      step_size=step_size, allow_splitting=allow_splitting
-    )
+    return await self._iswap.move_relative_x(step_size=step_size, allow_splitting=allow_splitting)
 
   async def move_iswap_y_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.backend.move_relative_y()``.
@@ -7124,15 +7019,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
           f"first channel Y position: {y_pos_channel_0} mm, requested step size: {step_size} mm"
         )
-    return await self._iswap.move_relative_y(
-      step_size=step_size, allow_splitting=allow_splitting
-    )
+    return await self._iswap.move_relative_y(step_size=step_size, allow_splitting=allow_splitting)
 
   async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.backend.move_relative_z()``."""
-    return await self._iswap.move_relative_z(
-      step_size=step_size, allow_splitting=allow_splitting
-    )
+    return await self._iswap.move_relative_z(step_size=step_size, allow_splitting=allow_splitting)
 
   async def move_iswap_x(self, x_position: float):
     """Deprecated: use ``star.iswap.move_x()``."""
@@ -7151,12 +7042,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self._iswap.open_not_initialized_gripper()
 
   async def iswap_open_gripper(self, open_position: Optional[float] = None):
-    """Open gripper
+    """Open gripper.
+
+    Deprecated: use ``star.iswap.open_gripper()``.
 
     Args:
-      open_position: Open position [mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
-                     Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
-                     910 for iSWAP 3 (portrait).
+      open_position: Open position [mm]. Must be between 0 and 999.9.
+                     Default 132.0 for iSWAP 4.0 (landscape), 91.0 for iSWAP 3 (portrait).
     """
 
     if open_position is None:
@@ -7164,7 +7056,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self.send_command(module="C0", command="GF", go=f"{round(open_position * 10):04}")
+    return await self._iswap.open_gripper(gripper_width=open_position)
 
   async def iswap_close_gripper(
     self,
@@ -7172,13 +7064,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plate_width: float = 0,
     plate_width_tolerance: float = 0,
   ):
-    """Close gripper
+    """Close gripper.
 
-    The gripper should be at the position plate_width+plate_width_tolerance+2.0mm before sending this command.
+    Deprecated: use ``star.iswap.close_gripper()``.
+
+    The gripper should be at the position plate_width+plate_width_tolerance+2.0mm before sending
+    this command.
 
     Args:
       grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
+      plate_width: Plate width [mm]. Must be between 0 and 999.9.
       plate_width_tolerance: Plate width tolerance [mm]. Must be between 0 and 9.9. Default 2.0.
     """
 
@@ -7186,12 +7081,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= plate_width <= 999.9, "plate_width must be between 0 and 999.9"
     assert 0 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0 and 9.9"
 
-    return await self.send_command(
-      module="C0",
-      command="GC",
-      gw=grip_strength,
-      gb=f"{round(plate_width * 10):04}",
-      gt=f"{round(plate_width_tolerance * 10):02}",
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
+
+    return await self._iswap.close_gripper(
+      gripper_width=plate_width,
+      backend_params=iSWAPBackend.CloseGripperParams(
+        grip_strength=grip_strength,
+        plate_width_tolerance=plate_width_tolerance,
+      ),
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------
@@ -7200,28 +7097,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     minimum_traverse_height_at_beginning_of_a_command: int = 2840,
   ):
-    """Close gripper
+    """Park the iSWAP.
 
-    The gripper should be at the position gb+gt+20 before sending this command.
+    Deprecated: use ``star.iswap.park()``.
 
     Args:
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning
-                of a command [0.1mm]. Must be between 0 and 3600. Default 3600.
+                of a command [0.1mm]. Must be between 0 and 3600. Default 2840.
     """
 
     assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     )
 
-    command_output = await self.send_command(
-      module="C0",
-      command="PG",
-      th=minimum_traverse_height_at_beginning_of_a_command,
-    )
+    from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
 
-    # Once the command has completed successfully, set _iswap_parked to True
-    self._iswap._parked = True
-    return command_output
+    return await self._iswap.park(
+      backend_params=iSWAPBackend.ParkParams(
+        minimum_traverse_height=minimum_traverse_height_at_beginning_of_a_command / 10,
+      ),
+    )
 
   async def iswap_get_plate(
     self,
@@ -8728,9 +8623,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
     """Deprecated: use ``star.iswap.slow()``."""
-    async with self._iswap.slow(
-      wrist_velocity=wrist_velocity, gripper_velocity=gripper_velocity
-    ):
+    async with self._iswap.slow(wrist_velocity=wrist_velocity, gripper_velocity=gripper_velocity):
       yield
 
   # HamiltonHeaterShakerInterface

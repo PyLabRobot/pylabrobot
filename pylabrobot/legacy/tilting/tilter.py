@@ -3,8 +3,8 @@
 import math
 from typing import List, Optional
 
-from pylabrobot.capabilities.tilting import TilterBackend as _NewTilterBackend
 from pylabrobot.capabilities.tilting import Tilter as _NewTilter
+from pylabrobot.capabilities.tilting import TilterBackend as _NewTilterBackend
 from pylabrobot.legacy.machines import Machine
 from pylabrobot.legacy.tilting.tilter_backend import TilterBackend
 from pylabrobot.resources import Coordinate, Plate

@@ -3,8 +3,8 @@ from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
 from pylabrobot.capabilities.plate_reading.absorbance import (
-  AbsorbanceBackend,
   Absorbance,
+  AbsorbanceBackend,
   AbsorbanceResult,
 )
 from pylabrobot.device import Device

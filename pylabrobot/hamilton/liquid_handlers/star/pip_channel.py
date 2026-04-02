@@ -516,9 +516,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
       )
     if not (0 <= z_drive_current_limit <= 7):
-      raise ValueError(
-        f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}"
-      )
+      raise ValueError(f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}")
 
     if not (20 <= dispense_drive_speed_increments <= 13_500):
       raise ValueError(

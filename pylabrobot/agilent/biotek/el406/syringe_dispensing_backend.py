@@ -7,22 +7,20 @@ plus their corresponding command builders.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from dataclasses import dataclass
+from typing import Dict, Literal, Optional
 
+from pylabrobot.capabilities.bulk_dispensers.syringe.backend import SyringeDispensingBackend
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
 
+from .driver import EL406Driver
 from .helpers import (
   plate_to_wire_byte,
   plate_well_count,
 )
 from .protocol import build_framed_message, columns_to_column_mask, encode_column_mask
-from dataclasses import dataclass
-from typing import Dict, Optional
-
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.bulk_dispensers.syringe.backend import SyringeDispensingBackend
-from .driver import EL406Driver
 
 logger = logging.getLogger(__name__)
 

@@ -10,8 +10,8 @@ from typing import List, Literal, Optional, Tuple, Union
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy import (
-  MicroscopyBackend,
   Microscopy,
+  MicroscopyBackend,
 )
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,

@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
 from pylabrobot.capabilities.centrifuging import Centrifuge
+from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
 from pylabrobot.capabilities.centrifuging.errors import (
   BucketHasPlateError,
   BucketNoPlateError,

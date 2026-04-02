@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 from pylabrobot.resources import ResourceHolder
 from pylabrobot.serializer import SerializableMixin
 
@@ -24,10 +24,12 @@ class Centrifuge(Capability):
     self._at_bucket: Optional[ResourceHolder] = None
     self.bucket1, self.bucket2 = buckets
 
+  @need_capability_ready
   async def open_door(self) -> None:
     await self.backend.open_door()
     self._door_open = True
 
+  @need_capability_ready
   async def close_door(self) -> None:
     await self.backend.close_door()
     self._door_open = False
@@ -36,26 +38,33 @@ class Centrifuge(Capability):
   def door_open(self) -> bool:
     return self._door_open
 
+  @need_capability_ready
   async def lock_door(self) -> None:
     await self.backend.lock_door()
 
+  @need_capability_ready
   async def unlock_door(self) -> None:
     await self.backend.unlock_door()
 
+  @need_capability_ready
   async def lock_bucket(self) -> None:
     await self.backend.lock_bucket()
 
+  @need_capability_ready
   async def unlock_bucket(self) -> None:
     await self.backend.unlock_bucket()
 
+  @need_capability_ready
   async def go_to_bucket1(self) -> None:
     await self.backend.go_to_bucket1()
     self._at_bucket = self.bucket1
 
+  @need_capability_ready
   async def go_to_bucket2(self) -> None:
     await self.backend.go_to_bucket2()
     self._at_bucket = self.bucket2
 
+  @need_capability_ready
   async def spin(
     self,
     g: float,

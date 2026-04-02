@@ -16,7 +16,7 @@ from pylabrobot.capabilities.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
-from pylabrobot.hamilton.liquid_classes.hamilton import (
+from pylabrobot.hamilton.liquid_handlers.star.liquid_classes import (
   HamiltonLiquidClass,
   get_star_liquid_class,
 )
