@@ -233,18 +233,11 @@ class AravisCamera:
         self._acquiring = False
 
     async def trigger(self, timeout_ms: int = 5000) -> np.ndarray:
-        """Capture a single frame: start → software trigger → grab → stop.
+        """Capture a single frame: software trigger → grab.
 
-        This mirrors CytationBackend._acquire_image() but uses Aravis buffer
-        management instead of PySpin's GetNextImage().
-
-        The flow:
-          1. Start acquisition (if not already active)
-          2. Execute TriggerSoftware GenICam command
-          3. Pop a filled buffer from the stream (with timeout)
-          4. Copy buffer data to numpy array (Mono8 → uint8)
-          5. Push buffer back to pool for reuse
-          6. Stop acquisition
+        Acquisition must already be started via start_acquisition().
+        This mirrors PySpin's pattern: start/stop acquisition bracket
+        the capture loop, not each individual frame.
 
         Args:
             timeout_ms: Maximum time to wait for image buffer, in milliseconds.
@@ -254,41 +247,37 @@ class AravisCamera:
             numpy.ndarray: Image as 2D uint8 array (height × width), Mono8 format.
 
         Raises:
-            RuntimeError: If camera not initialized or capture times out.
+            RuntimeError: If camera not initialized, not acquiring, or times out.
         """
         if self._camera is None:
             raise RuntimeError("Camera is not initialized. Call setup() first.")
+        if not self._acquiring:
+            raise RuntimeError(
+                "Camera is not acquiring. Call start_acquisition() first."
+            )
 
-        self.start_acquisition()
+        # Send software trigger command.
+        self._device.execute_command("TriggerSoftware")
 
-        try:
-            # Send software trigger command.
-            # This is equivalent to PySpin's TriggerSoftware.Execute().
-            self._device.execute_command("TriggerSoftware")
+        # Pop the filled buffer from the stream.
+        # timeout_pop_buffer takes microseconds, so convert from ms.
+        buffer = self._stream.timeout_pop_buffer(timeout_ms * 1000)
+        if buffer is None:
+            raise RuntimeError(
+                f"Camera capture timed out after {timeout_ms}ms. "
+                "Is the camera connected and trigger mode configured?"
+            )
 
-            # Pop the filled buffer from the stream.
-            # timeout_pop_buffer takes microseconds, so convert from ms.
-            buffer = self._stream.timeout_pop_buffer(timeout_ms * 1000)
-            if buffer is None:
-                raise RuntimeError(
-                    f"Camera capture timed out after {timeout_ms}ms. "
-                    "Is the camera connected and trigger mode configured?"
-                )
+        # Extract image data and copy to numpy array.
+        data = buffer.get_data()
+        image = np.frombuffer(data, dtype=np.uint8).reshape(
+            self._height, self._width
+        ).copy()
 
-            # Extract image data and copy to numpy array.
-            # We must copy because the buffer memory is owned by Aravis and
-            # will be reused when we push the buffer back to the pool.
-            data = buffer.get_data()
-            image = np.frombuffer(data, dtype=np.uint8).reshape(
-                self._height, self._width
-            ).copy()
+        # Return buffer to pool for reuse.
+        self._stream.push_buffer(buffer)
 
-            # Return buffer to pool for reuse.
-            self._stream.push_buffer(buffer)
-
-            return image
-        finally:
-            self.stop_acquisition()
+        return image
 
     async def stop(self) -> None:
         """Release camera and free all Aravis resources.
