@@ -32,6 +32,7 @@ Manufacturers
     pylabrobot.kbioscience
     pylabrobot.kbiosystems
     pylabrobot.mettler_toledo
+    pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.qinstruments
     pylabrobot.sartorius
