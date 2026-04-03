@@ -192,6 +192,25 @@ Barcode Scanning
     BarcodeScannerBackend
 
 
+Rack Reading
+------------
+
+.. currentmodule:: pylabrobot.capabilities.rack_reading
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    RackReader
+    RackReaderBackend
+    RackReaderState
+    RackReaderTimeoutError
+    RackScanEntry
+    RackScanResult
+    LayoutInfo
+
+
 Microscopy
 ----------
 

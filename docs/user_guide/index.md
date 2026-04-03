@@ -40,6 +40,7 @@ inheco/index
 liconic/index
 mettler_toledo/index
 molecular_devices/index
+micronic/index
 opentrons/index
 qinstruments/index
 thermo_fisher/index

@@ -188,6 +188,12 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|-------------|--------|
 | Mettler Toledo | WXS205SDU | Full | [PLR](02_analytical/scales/mettler-toledo-WXS205SDU.ipynb) / [OEM](https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html) |
 
+### Rack Readers
+
+| Manufacturer | Machine | Features | PLR-Support | Links |
+|--------------|---------|----------|-------------|--------|
+| Micronic | Code Reader Software / IO Monitor HTTP server | <span class="badge badge-reading">rack reading</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/micronic/index.html) / [OEM](https://www.micronic.com/products/code-reader/) |
+
 ---
 
 ## Understanding the Tables

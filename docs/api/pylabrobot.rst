@@ -41,6 +41,7 @@ Manufacturers
     pylabrobot.inheco
     pylabrobot.liconic
     pylabrobot.mettler_toledo
+    pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.opentrons
     pylabrobot.qinstruments
