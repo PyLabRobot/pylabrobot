@@ -19,11 +19,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union
-
-import numpy as np
+from typing import List, Literal, Optional
 
 from pylabrobot.capabilities.microscopy.standard import (
     Exposure,

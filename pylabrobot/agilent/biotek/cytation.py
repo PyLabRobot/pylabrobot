@@ -10,7 +10,6 @@ from typing import List, Literal, Optional, Tuple, Union
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy import (
-  Microscopy,
   MicroscopyBackend,
 )
 from pylabrobot.capabilities.microscopy.standard import (
@@ -22,12 +21,7 @@ from pylabrobot.capabilities.microscopy.standard import (
   ImagingResult,
   Objective,
 )
-from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
-from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
-from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
-from pylabrobot.capabilities.temperature_controlling import TemperatureController
-from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
+from pylabrobot.resources import Plate
 from pylabrobot.serializer import SerializableMixin
 
 try:
@@ -888,5 +882,5 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
 # Backwards compatibility — device classes moved to cytation5.py / cytation1.py
 # ---------------------------------------------------------------------------
 
-from .cytation1 import Cytation1 as Cytation1  # noqa: F401
-from .cytation5 import Cytation5 as Cytation5  # noqa: F401
+from .cytation1 import Cytation1 as Cytation1  # noqa: E402, F401
+from .cytation5 import Cytation5 as Cytation5  # noqa: E402, F401

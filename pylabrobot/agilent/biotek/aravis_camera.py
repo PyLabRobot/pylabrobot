@@ -139,7 +139,7 @@ class AravisCamera:
             raise ImportError(
                 "Aravis is not installed. Install it with:\n"
                 "  macOS:   brew install aravis && pip install PyGObject\n"
-                "  Linux:   sudo apt-get install libaravis-dev gir1.2-aravis-0.8 "
+                "  Linux:   sudo apt-get install libaravis-dev gobject-introspection "
                 "&& pip install PyGObject\n"
                 "  Windows: pacman -S mingw-w64-x86_64-aravis (in MSYS2)"
             )
@@ -423,7 +423,7 @@ class AravisCamera:
             raise ImportError(
                 "Aravis is not installed. Install it with:\n"
                 "  macOS:   brew install aravis && pip install PyGObject\n"
-                "  Linux:   sudo apt-get install libaravis-dev gir1.2-aravis-0.8 "
+                "  Linux:   sudo apt-get install libaravis-dev gobject-introspection "
                 "&& pip install PyGObject\n"
                 "  Windows: pacman -S mingw-w64-x86_64-aravis (in MSYS2)"
             )
