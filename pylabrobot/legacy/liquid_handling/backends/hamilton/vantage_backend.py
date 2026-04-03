@@ -374,9 +374,61 @@ class VantageBackend(HamiltonLiquidHandler):
       serial_number=serial_number,
     )
 
+    from pylabrobot.hamilton.liquid_handlers.vantage.driver import VantageDriver
+
+    self.driver = VantageDriver(
+      device_address=device_address,
+      serial_number=serial_number,
+      packet_read_timeout=packet_read_timeout,
+      read_timeout=read_timeout,
+      write_timeout=write_timeout,
+    )
+
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._traversal_height: float = 245.0
+    self._setup_done = False
+
+  # -- property accessors for new-arch subsystems ----------------------------
+
+  @property
+  def _vantage_pip(self):
+    """Typed access to the Vantage PIP backend."""
+    return self.driver.pip
+
+  @property
+  def _vantage_head96(self):
+    """Typed access to the Head96 backend."""
+    assert self.driver.head96 is not None, "96-head is not installed"
+    return self.driver.head96
+
+  @property
+  def _vantage_ipg(self):
+    """Typed access to the IPG backend."""
+    assert self.driver.ipg is not None, "IPG is not installed"
+    return self.driver.ipg
+
+  @property
+  def _vantage_x_arm(self):
+    """Typed access to the X-arm."""
+    assert self.driver.x_arm is not None, "X-arm is not available"
+    return self.driver.x_arm
+
+  @property
+  def _vantage_loading_cover(self):
+    """Typed access to the loading cover."""
+    assert self.driver.loading_cover is not None, "Loading cover is not available"
+    return self.driver.loading_cover
+
+  @property
+  def _write_and_read_command(self):
+    return self.driver._write_and_read_command
+
+  @_write_and_read_command.setter
+  def _write_and_read_command(self, value):
+    self.driver._write_and_read_command = value  # type: ignore[method-assign]
+
+  # -- HamiltonLiquidHandler abstract methods (delegate to driver) -----------
 
   @property
   def module_id_length(self) -> int:
@@ -400,6 +452,34 @@ class VantageBackend(HamiltonLiquidHandler):
     """Parse a firmware response."""
     return parse_vantage_fw_string(resp, fmt)
 
+  # -- send_command delegation -----------------------------------------------
+
+  async def send_command(
+    self,
+    module,
+    command,
+    auto_id=True,
+    tip_pattern=None,
+    write_timeout=None,
+    read_timeout=None,
+    wait=True,
+    fmt=None,
+    **kwargs,
+  ):
+    return await self.driver.send_command(
+      module=module,
+      command=command,
+      auto_id=auto_id,
+      tip_pattern=tip_pattern,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      wait=wait,
+      fmt=fmt,
+      **kwargs,
+    )
+
+  # -- lifecycle (delegate to driver) ----------------------------------------
+
   async def setup(
     self,
     skip_loading_cover: bool = False,
@@ -408,50 +488,26 @@ class VantageBackend(HamiltonLiquidHandler):
   ):
     """Creates a USB connection and finds read/write interfaces."""
 
-    await super().setup()
+    # Let the driver own the USB connection and perform hardware discovery.
+    await self.driver.setup(
+      skip_loading_cover=skip_loading_cover,
+      skip_core96=skip_core96,
+      skip_ipg=skip_ipg,
+    )
 
-    tip_presences = await self.query_tip_presence()
-    self._num_channels = len(tip_presences)
+    # Sync legacy state from driver.
+    self.id_ = 0
+    self._num_channels = self.driver.num_channels
+    self._traversal_height = self.driver.traversal_height
+    self._setup_done = True
 
-    arm_initialized = await self.arm_request_instrument_initialization_status()
-    if not arm_initialized:
-      await self.arm_pre_initialize()
+  async def stop(self):
+    await self.driver.stop()
+    self._setup_done = False
 
-    # TODO: check which modules are actually installed.
-
-    pip_channels_initialized = await self.pip_request_initialization_status()
-    if not pip_channels_initialized or any(tip_presences):
-      await self.pip_initialize(
-        x_position=[7095] * self.num_channels,
-        y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
-        begin_z_deposit_position=[int(self._traversal_height * 10)] * self.num_channels,
-        end_z_deposit_position=[1235] * self.num_channels,
-        minimal_height_at_command_end=[int(self._traversal_height * 10)] * self.num_channels,
-        tip_pattern=[True] * self.num_channels,
-        tip_type=[1] * self.num_channels,
-        TODO_DI_2=70,
-      )
-
-    loading_cover_initialized = await self.loading_cover_request_initialization_status()
-    if not loading_cover_initialized and not skip_loading_cover:
-      await self.loading_cover_initialize()
-
-    core96_initialized = await self.core96_request_initialization_status()
-    if not core96_initialized and not skip_core96:
-      await self.core96_initialize(
-        x_position=7347,  # TODO: get trash location from deck.
-        y_position=2684,  # TODO: get trash location from deck.
-        minimal_traverse_height_at_begin_of_command=int(self._traversal_height * 10),
-        minimal_height_at_command_end=int(self._traversal_height * 10),
-        end_z_deposit_position=2420,
-      )
-
-    if not skip_ipg:
-      ipg_initialized = await self.ipg_request_initialization_status()
-      if not ipg_initialized:
-        await self.ipg_initialize()
-      if not await self.ipg_get_parking_status():
-        await self.ipg_park()
+  @property
+  def setup_done(self) -> bool:
+    return self._setup_done
 
   @property
   def num_channels(self) -> int:
