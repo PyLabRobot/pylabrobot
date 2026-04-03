@@ -54,6 +54,7 @@ tilting
 pumping
 weighing
 barcode-scanning
+plate-access
 microscopy
 automated-retrieval
 absorbance
