@@ -1054,7 +1054,7 @@ def star_firmware_string_to_error(
         int(error_code_str),
         int(trace_information_str),
       )
-      if error_code == 0:  # No error
+      if error_code == 0 and trace_information == 0:
         continue
       error_class = error_code_to_exception(error_code)
     elif module_id == "I0" and error == "36":
@@ -3508,9 +3508,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def _core96_wait_for_idle(self, timeout: float = 600, poll_interval: float = 5):
     """Poll the CoRe 96 head until it finishes its current operation.
 
-    Sends the "move to Z safety" command (C0 EV), which goes through the master's 96-head
-    task queue. If the head is busy, the master responds with trace 46. When the head finishes,
-    EV succeeds and harmlessly ensures the Z axis is at the safe position.
+    Sends the "move to Z safety" command (C0 EV). If the head is busy, the firmware rejects
+    with H0 CommandSyntaxError trace 40 ("No parallel processes permitted"). When the head
+    finishes, EV succeeds and harmlessly ensures the Z axis is at the safe position.
     """
     start = asyncio.get_event_loop().time()
     while asyncio.get_event_loop().time() - start < timeout:
@@ -3520,8 +3520,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         logger.info("CoRe 96 head finished (EV succeeded)")
         return
       except STARFirmwareError as e:
-        master_error = e.errors.get("Master")
-        if master_error is not None and master_error.trace_information == 46:
+        h0_error = e.errors.get("CoRe 96 Head")
+        if (
+          h0_error is not None
+          and isinstance(h0_error, CommandSyntaxError)
+          and h0_error.trace_information == 40
+        ):
           logger.debug("CoRe 96 head still busy, waiting...")
           continue
         raise
