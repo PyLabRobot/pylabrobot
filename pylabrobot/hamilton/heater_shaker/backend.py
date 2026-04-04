@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import warnings
@@ -6,6 +7,7 @@ from typing import Dict, Literal, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
@@ -52,7 +54,7 @@ class HamiltonHeaterShakerDriver(Driver):
     return await self.interface.send_hhs_command(index=self.index, command=command, **kwargs)
 
 
-class HamiltonHeaterShakerShakerBackend(ShakerBackend):
+class HamiltonHeaterShakerShakerBackend(ShakerBackend, HasContinuousShaking):
   """Translates ShakerBackend interface into Hamilton Heater Shaker driver commands."""
 
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
@@ -60,6 +62,11 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.driver.send_command("SI")
+
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    await asyncio.sleep(duration)
+    await self.stop_shaking()
 
   async def start_shaking(
     self,

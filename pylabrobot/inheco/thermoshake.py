@@ -1,8 +1,9 @@
+import asyncio
 import logging
-import warnings
 from typing import Optional
 
 from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder
@@ -13,7 +14,7 @@ from .cpac import InhecoTemperatureControllerBackend
 logger = logging.getLogger(__name__)
 
 
-class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend):
+class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend, HasContinuousShaking):
   """Backend for Inheco Thermoshake devices.
 
   https://www.inheco.com/thermoshake-ac.html
@@ -52,14 +53,10 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     await self.set_shaker_shape(shape=shape)
     await self._start_shaking_command()
 
-  async def shake(self, speed: float, shape: int = 0):
-    """Deprecated alias for start_shaking."""
-    warnings.warn(
-      "InhecoThermoshakeBackend.shake() is deprecated. Use start_shaking() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    await self.start_shaking(speed=speed, shape=shape)
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    await asyncio.sleep(duration)
+    await self.stop_shaking()
 
   @property
   def supports_locking(self) -> bool:

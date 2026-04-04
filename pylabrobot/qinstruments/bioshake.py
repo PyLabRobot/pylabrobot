@@ -5,6 +5,7 @@ from typing import Optional, Union
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,
@@ -137,11 +138,16 @@ class BioShakeDriver(Driver):
     await self.send_command(cmd="shakeGoHome", delay=5)
 
 
-class BioShakeShakerBackend(ShakerBackend):
+class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
   """Translates ShakerBackend calls into BioShake serial commands."""
 
   def __init__(self, driver: BioShakeDriver):
     self.driver = driver
+
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    await asyncio.sleep(duration)
+    await self.stop_shaking()
 
   async def start_shaking(self, speed: float, acceleration: Union[int, float] = 0):
     if isinstance(speed, float):
