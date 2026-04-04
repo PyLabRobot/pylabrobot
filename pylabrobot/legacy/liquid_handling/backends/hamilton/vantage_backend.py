@@ -2058,10 +2058,14 @@ class VantageBackend(HamiltonLiquidHandler):
     self,
     first_pip_channel_node_no: int = 1,
   ):
-    """Deprecated: delegates to VantageCoreGripper.open_gripper. Use that instead."""
+    """Deprecated: use ``VantageCoreGripper.open_gripper``."""
+    from pylabrobot.hamilton.liquid_handlers.vantage.core import VantageCoreGripper
 
     return await self._vantage_core_gripper.open_gripper(
-      0, first_pip_channel_node_no=first_pip_channel_node_no
+      0,
+      backend_params=VantageCoreGripper.OpenGripperParams(
+        first_pip_channel_node_no=first_pip_channel_node_no
+      ),
     )
 
   async def set_any_parameter_within_this_module(self):

@@ -200,20 +200,25 @@ class VantageCoreGripper(GripperArmBackend):
       ),
     )
 
-  async def open_gripper(
-    self,
-    gripper_width: float,
-    backend_params: Optional[BackendParams] = None,
-    first_pip_channel_node_no: int = 1,
-  ) -> None:
-    """Release the gripped object (A1PM:DO).
+  @dataclass
+  class OpenGripperParams(BackendParams):
+    """Vantage-specific parameters for CoRe gripper release.
 
     Args:
-      gripper_width: Ignored for CoRe gripper (width is not controllable on release).
-      backend_params: Optional backend params (unused).
       first_pip_channel_node_no: First (lower) pip channel node number (1-16). Default 1.
     """
-    await self.driver.send_command(module="A1PM", command="DO", pa=first_pip_channel_node_no)
+
+    first_pip_channel_node_no: int = 1
+
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Release the gripped object (A1PM:DO). The ``gripper_width`` parameter is ignored."""
+    if not isinstance(backend_params, VantageCoreGripper.OpenGripperParams):
+      backend_params = VantageCoreGripper.OpenGripperParams()
+    await self.driver.send_command(
+      module="A1PM", command="DO", pa=backend_params.first_pip_channel_node_no
+    )
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
