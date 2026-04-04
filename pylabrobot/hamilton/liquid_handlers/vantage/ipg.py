@@ -175,7 +175,8 @@ class IPGBackend(OrientableGripperArmBackend):
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
-    """Release object (A1RM:DO)."""
+    """Release object (A1RM:DO). The ``gripper_width`` parameter is ignored — the IPG
+    only supports fully opening the gripper."""
     await self.driver.send_command(module="A1RM", command="DO")
 
   async def close_gripper(

@@ -1069,13 +1069,14 @@ class VantagePIPBackend(PIPBackend):
     fw_ip = [round(v * 10) for v in immersion_depth]
     fw_fp = [round(v * 10) for v in surface_following_distance]
     fw_zo = [round(v * 10) for v in aspirate_position_above_z_touch_off]
-    # tube_2nd_section_ratio: ratio x10 for firmware
-    fw_zr = [round(v * 10) for v in tube_2nd_section_ratio]
-    # Volumes: uL -> 0.01uL (x100)
+    # tube_2nd_section_ratio: dimensionless, already in firmware units
+    fw_zr = [round(v) for v in tube_2nd_section_ratio]
+    # Volumes: uL -> 0.01uL (x100) for aspiration_volume and blow_out_air_volume
     fw_av = [round(v * 100) for v in aspiration_volume]
     fw_ba = [round(v * 100) for v in blow_out_air_volume]
-    fw_oa = [round(v * 100) for v in pre_wetting_volume]
-    fw_mv = [round(v * 100) for v in mix_volume]
+    # Volumes: uL -> 0.1uL (x10) for pre_wetting_volume and mix_volume
+    fw_oa = [round(v * 10) for v in pre_wetting_volume]
+    fw_mv = [round(v * 10) for v in mix_volume]
     # Transport air volume: uL -> 0.1uL (x10)
     fw_ta = [round(v * 10) for v in transport_air_volume]
     # Speeds: uL/s -> 0.1uL/s (x10)
@@ -1212,13 +1213,14 @@ class VantagePIPBackend(PIPBackend):
     fw_te = [round(v * 10) for v in minimal_height_at_command_end]
     fw_zo = [round(v * 10) for v in dispense_position_above_z_touch_off]
     fw_dj = round(side_touch_off_distance * 10)
-    # tube_2nd_section_ratio: ratio x10 for firmware
-    fw_zr = [round(v * 10) for v in tube_2nd_section_ratio]
-    # Volumes: uL -> 0.01uL (x100)
+    # tube_2nd_section_ratio: dimensionless, already in firmware units
+    fw_zr = [round(v) for v in tube_2nd_section_ratio]
+    # Volumes: uL -> 0.01uL (x100) for dispense_volume and blow_out_air_volume
     fw_dv = [round(v * 100) for v in dispense_volume]
-    fw_rv = [round(v * 100) for v in stop_back_volume]
     fw_ba = [round(v * 100) for v in blow_out_air_volume]
-    fw_mv = [round(v * 100) for v in mix_volume]
+    # Volumes: uL -> 0.1uL (x10) for stop_back_volume and mix_volume
+    fw_rv = [round(v * 10) for v in stop_back_volume]
+    fw_mv = [round(v * 10) for v in mix_volume]
     # Transport air volume: uL -> 0.1uL (x10)
     fw_ta = [round(v * 10) for v in transport_air_volume]
     # Speeds: uL/s -> 0.1uL/s (x10)
