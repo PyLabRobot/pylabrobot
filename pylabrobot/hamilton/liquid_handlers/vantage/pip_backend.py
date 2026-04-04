@@ -572,8 +572,8 @@ class VantagePIPBackend(PIPBackend):
         tip_type=ttti,
         begin_z_deposit_position=[max_z + max_total_tip_length] * len(ops),
         end_z_deposit_position=[max_z + max_tip_length] * len(ops),
-        minimal_traverse_height_at_begin_of_command=list(mth or [th]) * len(ops),
-        minimal_height_at_command_end=list(mhe or [th]) * len(ops),
+        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
+        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
         tip_handling_method=[1] * len(ops),
         blow_out_air_volume=[0] * len(ops),
       )
@@ -618,8 +618,8 @@ class VantagePIPBackend(PIPBackend):
         tip_pattern=channels_involved,
         begin_z_deposit_position=[max_z + 10] * len(ops),
         end_z_deposit_position=[max_z] * len(ops),
-        minimal_traverse_height_at_begin_of_command=list(mth or [th]) * len(ops),
-        minimal_height_at_command_end=list(mhe or [th]) * len(ops),
+        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
+        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
         tip_handling_method=[0] * len(ops),
       )
     except VantageFirmwareError as e:
@@ -708,8 +708,8 @@ class VantagePIPBackend(PIPBackend):
         y_position=y_positions,
         type_of_aspiration=backend_params.type_of_aspiration or [0] * len(ops),
         tip_pattern=channels_involved,
-        minimal_traverse_height_at_begin_of_command=list(mth or [th]) * len(ops),
-        minimal_height_at_command_end=list(mhe or [th]) * len(ops),
+        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
+        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
         lld_search_height=lld_search_heights,
         clot_detection_height=list(backend_params.clot_detection_height or [0] * len(ops)),
         liquid_surface_at_function_without_lld=liquid_surfaces_no_lld,
@@ -850,8 +850,8 @@ class VantagePIPBackend(PIPBackend):
           backend_params.tube_2nd_section_height_measured_from_zm or [0] * len(ops)
         ),
         tube_2nd_section_ratio=list(backend_params.tube_2nd_section_ratio or [0] * len(ops)),
-        minimal_traverse_height_at_begin_of_command=list(mth or [th]) * len(ops),
-        minimal_height_at_command_end=list(mhe or [th]) * len(ops),
+        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
+        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
         dispense_volume=volumes,
         dispense_speed=flow_rates,
         cut_off_speed=list(backend_params.cut_off_speed or [250] * len(ops)),

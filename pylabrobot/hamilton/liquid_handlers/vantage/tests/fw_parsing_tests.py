@@ -40,6 +40,11 @@ class TestParseVantageFWString(unittest.TestCase):
     with self.assertRaises(ValueError):
       parse_vantage_fw_string("id0", {"qw": "int"})
 
+  def test_fmt_not_mutated(self):
+    fmt = {"qw": "int"}
+    parse_vantage_fw_string("id0qw1", fmt)
+    self.assertEqual(fmt, {"qw": "int"})  # "id" should not have been added
+
 
 if __name__ == "__main__":
   unittest.main()
