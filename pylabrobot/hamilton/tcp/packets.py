@@ -12,10 +12,13 @@ Each packet knows how to pack/unpack itself using the Wire serialization layer.
 
 from __future__ import annotations
 
+import logging
 import struct
 from dataclasses import dataclass
 
 from pylabrobot.io.binary import Reader, Writer
+
+logger = logging.getLogger(__name__)
 
 # Hamilton protocol version
 HAMILTON_PROTOCOL_VERSION_MAJOR = 3
@@ -37,14 +40,14 @@ def encode_version_byte(major: int, minor: int) -> int:
   return version_byte
 
 
-def decode_version_byte(version_bite: int) -> tuple[int, int]:
+def decode_version_byte(version_byte: int) -> tuple[int, int]:
   """Decode Hamilton version byte and return (major, minor).
 
   Returns:
     Tuple of (major_version, minor_version), each 0-15
   """
-  minor = version_bite & 0xF
-  major = (version_bite >> 4) & 0xF
+  minor = version_byte & 0xF
+  major = (version_byte >> 4) & 0xF
   return (major, minor)
 
 
@@ -113,8 +116,13 @@ class IpPacket:
 
     # Validate version
     if major != HAMILTON_PROTOCOL_VERSION_MAJOR or minor != HAMILTON_PROTOCOL_VERSION_MINOR:
-      # Warning but not fatal
-      pass
+      logger.warning(
+        "Hamilton protocol version mismatch: expected %d.%d, got %d.%d",
+        HAMILTON_PROTOCOL_VERSION_MAJOR,
+        HAMILTON_PROTOCOL_VERSION_MINOR,
+        major,
+        minor,
+      )
 
     opts_len = r.u16()
     options = r.raw_bytes(opts_len) if opts_len > 0 else b""

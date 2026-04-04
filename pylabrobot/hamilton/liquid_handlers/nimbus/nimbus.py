@@ -38,12 +38,16 @@ class Nimbus(Device):
     runs InitializeSmartRoll, and wires the PIP capability frontend to the driver's
     PIP backend.
     """
-    await self.driver.setup(deck=self.deck)
+    try:
+      await self.driver.setup(deck=self.deck)
 
-    self.pip = PIP(backend=self.driver.pip)
-    self._capabilities = [self.pip]
-    await self.pip._on_setup()
-    self._setup_finished = True
+      self.pip = PIP(backend=self.driver.pip)
+      self._capabilities = [self.pip]
+      await self.pip._on_setup()
+      self._setup_finished = True
+    except Exception:
+      await self.driver.stop()
+      raise
 
   async def stop(self):
     """Tear down the Nimbus instrument.

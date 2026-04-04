@@ -89,7 +89,7 @@ class HamiltonTCPHandler(Driver):
 
     Args:
       host: Hamilton instrument IP address
-      port: Hamilton instrument port (usually 50007)
+      port: Hamilton instrument port
       read_timeout: Read timeout in seconds
       write_timeout: Write timeout in seconds
       auto_reconnect: Enable automatic reconnection

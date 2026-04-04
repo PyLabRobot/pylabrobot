@@ -222,6 +222,11 @@ class NimbusPIPBackend(PIPBackend):
       raise ValueError(
         f"values and channels must have same length (got {len(values)} vs {len(use_channels)})"
       )
+    for ch in use_channels:
+      if ch < 0 or ch >= self.num_channels:
+        raise ValueError(
+          f"Channel index {ch} out of range for {self.num_channels}-channel instrument"
+        )
     out = [default] * self.num_channels
     for ch, v in zip(use_channels, values):
       out[ch] = v
@@ -402,6 +407,8 @@ class NimbusPIPBackend(PIPBackend):
     Raises:
       RuntimeError: If channels already have tips mounted.
     """
+    if not ops:
+      return
     self._ensure_deck()
     params = (
       backend_params
@@ -487,6 +494,8 @@ class NimbusPIPBackend(PIPBackend):
     Raises:
       ValueError: If operations mix waste and regular resources.
     """
+    if not ops:
+      return
     self._ensure_deck()
     params = (
       backend_params
@@ -604,6 +613,8 @@ class NimbusPIPBackend(PIPBackend):
         - tadm_enabled: Enable TADM (Total Aspiration and Dispense Monitoring)
           (default: False).
     """
+    if not ops:
+      return
     params = (
       backend_params
       if isinstance(backend_params, NimbusPIPAspirateParams)
@@ -846,6 +857,8 @@ class NimbusPIPBackend(PIPBackend):
         - side_touch_off_distance: Side touch-off distance (mm, default: 0.0).
         - dispense_offset: Dispense Z offset (mm, default: [0.0]*n).
     """
+    if not ops:
+      return
     params = (
       backend_params
       if isinstance(backend_params, NimbusPIPDispenseParams)
