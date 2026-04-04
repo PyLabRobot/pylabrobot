@@ -10,10 +10,13 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from typing import Optional
+
 from pylabrobot.capabilities.barcode_scanning.backend import (
   BarcodeScannerBackend,
   BarcodeScannerError,
 )
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
@@ -52,7 +55,7 @@ class KeyenceBarcodeScannerDriver(Driver):
       rtscts=False,
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
     logger.info("[Keyence %s] connected", self.io.port)
 
@@ -80,7 +83,7 @@ class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
     super().__init__()
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the barcode scanner motor after the driver connects."""
 
     deadline = time.time() + self.init_timeout

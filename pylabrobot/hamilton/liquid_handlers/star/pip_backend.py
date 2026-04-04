@@ -254,7 +254,7 @@ class STARPIPBackend(PIPBackend):
     async with self._fw_lock.px():
       return await self.driver.send_command(module=module, command=command, **kwargs)
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     self.channels = [PIPChannel(self.driver, i, backend=self) for i in range(self.num_channels)]
 
     # Initialize PIP channels if the instrument was not yet initialized

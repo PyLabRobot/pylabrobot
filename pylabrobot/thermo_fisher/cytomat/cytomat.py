@@ -5,6 +5,7 @@ from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval
 from pylabrobot.capabilities.humidity_controlling import HumidityController
 from pylabrobot.capabilities.shaking import Shaker
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,
@@ -85,8 +86,8 @@ class Cytomat(Resource, Device):
   def racks(self) -> List[PlateCarrier]:
     return self._racks
 
-  async def setup(self, **backend_kwargs):
-    await super().setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None, **backend_kwargs):
+    await super().setup(backend_params=backend_params)
     await self.driver.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:

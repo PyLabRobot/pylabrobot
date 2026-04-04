@@ -1,3 +1,6 @@
+from typing import Optional
+
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
@@ -17,7 +20,7 @@ class HamiltonHeaterCoolerDriver(Driver):
     super().__init__()
     self.device_number = device_number
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     raise NotImplementedError("HamiltonHeaterCoolerDriver is not yet implemented.")
 
   async def stop(self):

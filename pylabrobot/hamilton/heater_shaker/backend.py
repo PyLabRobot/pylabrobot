@@ -4,6 +4,7 @@ import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
@@ -32,7 +33,7 @@ class HamiltonHeaterShakerDriver(Driver):
     self.index = index
     self.interface = interface
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   async def stop(self):
@@ -57,7 +58,7 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.driver.send_command("SI")
 
   async def start_shaking(
@@ -130,7 +131,7 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.driver.send_command("LI")
 
   @property

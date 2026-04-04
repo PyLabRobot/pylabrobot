@@ -12,6 +12,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
 from pylabrobot.capabilities.pumping.pumping import Pump
@@ -56,7 +57,7 @@ class MasterflexDriver(Driver):
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")

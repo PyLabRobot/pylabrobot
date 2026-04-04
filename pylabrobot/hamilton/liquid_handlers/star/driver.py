@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
 from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
 
@@ -262,8 +263,8 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- lifecycle ------------------------------------------------------------
 
-  async def setup(self, deck=None):
-    await super().setup()
+  async def setup(self, deck=None, backend_params: Optional[BackendParams] = None):
+    await super().setup(backend_params=backend_params)
     self.id_ = 0
     self.machine_conf = await self._request_machine_configuration()
     self.extended_conf = await self._request_extended_configuration()

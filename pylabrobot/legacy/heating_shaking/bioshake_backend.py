@@ -25,7 +25,7 @@ class BioShake(HeaterShakerBackend):
     return self._shaker.supports_locking
 
   async def setup(self, skip_home: bool = False):
-    await self.driver.setup(skip_home=skip_home)
+    await self.driver.setup(backend_params=BioShakeDriver.SetupParams(skip_home=skip_home))
 
   async def stop(self):
     await self.driver.stop()

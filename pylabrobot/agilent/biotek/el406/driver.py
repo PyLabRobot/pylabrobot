@@ -11,8 +11,10 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import NamedTuple, TypedDict, TypeVar
+from dataclasses import dataclass
+from typing import NamedTuple, Optional, TypedDict, TypeVar
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.ftdi import FTDI
@@ -69,7 +71,17 @@ class EL406Driver(Driver):
     self._command_lock: asyncio.Lock | None = None
     self._in_batch: bool = False
 
-  async def setup(self, skip_reset: bool = False) -> None:
+  @dataclass
+  class SetupParams(BackendParams):
+    """EL406-specific parameters for ``setup``.
+
+    Args:
+      skip_reset: If True, skip the instrument reset step during setup.
+    """
+
+    skip_reset: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Set up communication with the EL406.
 
     Configures the FTDI USB interface with the correct parameters:
@@ -80,12 +92,12 @@ class EL406Driver(Driver):
     If ``self.io`` is already set (e.g. injected mock for testing),
     it is used as-is and ``setup()`` is not called on it again.
 
-    Args:
-      skip_reset: If True, skip the instrument reset step.
-
     Raises:
       RuntimeError: If pylibftdi is not installed or communication fails.
     """
+    if not isinstance(backend_params, EL406Driver.SetupParams):
+      backend_params = EL406Driver.SetupParams()
+
     self._command_lock = asyncio.Lock()
 
     logger.info("EL406Driver setting up")
@@ -131,7 +143,7 @@ class EL406Driver(Driver):
       logger.error("  Communication test: FAILED - %s", e)
       raise
 
-    if not skip_reset:
+    if not backend_params.skip_reset:
       logger.info("Performing full instrument reset...")
       await self.reset()
       logger.info("  Instrument reset: DONE")

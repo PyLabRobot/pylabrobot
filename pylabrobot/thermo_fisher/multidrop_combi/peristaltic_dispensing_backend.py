@@ -36,7 +36,7 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     super().__init__()
     self._driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     """Clear any pending instrument errors after the driver connects."""
     try:
       await self._driver.acknowledge_error()

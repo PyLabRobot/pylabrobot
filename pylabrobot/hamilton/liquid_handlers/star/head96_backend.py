@@ -66,7 +66,7 @@ class STARHead96Backend(Head96Backend):
   # Lifecycle
   # ---------------------------------------------------------------------------
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the 96-head if not already initialized, and cache firmware info.
 
     Mirrors the legacy initialization flow:

@@ -5,10 +5,12 @@ import inspect
 import sys
 import weakref
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, List, TypeVar
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, List, Optional, TypeVar
 
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
+
+from pylabrobot.capabilities.capability import BackendParams
 
 if TYPE_CHECKING:
   from pylabrobot.capabilities.capability import Capability
@@ -31,7 +33,7 @@ class Driver(SerializableMixin, ABC):
     self._instances.add(self)
 
   @abstractmethod
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   @abstractmethod
@@ -103,8 +105,8 @@ class Device(SerializableMixin, ABC):
     data_copy["driver"] = driver
     return cls(**data_copy)
 
-  async def setup(self):
-    await self.driver.setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await self.driver.setup(backend_params=backend_params)
     for cap in self._capabilities:
       await cap._on_setup()
     self._setup_finished = True

@@ -12,6 +12,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
@@ -102,8 +103,8 @@ class CytomatBackend(
       timeout=1,
     )
 
-  async def setup(self):
-    await Driver.setup(self)
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await Driver.setup(self, backend_params=backend_params)
     await self.io.setup()
     logger.info("[Cytomat %s %s] connected", self.model.value, self.io.port)
     await self.initialize()

@@ -87,7 +87,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     )
     return GripperLocation(location=location, rotation=Rotation())
 
-  async def _on_setup(self) -> None:
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     already_initialized = await self.request_initialization_status()
     if not already_initialized:
       await self.initialize()

@@ -77,7 +77,9 @@ class BioTekBackend(
     rects.sort()
     return rects
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
+    logger.info(f"{self.__class__.__name__} setting up")
+
     await self.io.setup()
     await self.io.usb_reset()
     await self.io.set_latency_timer(16)

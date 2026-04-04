@@ -55,7 +55,7 @@ class STARAutoload:
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params=None):
     """Initialize autoload module if not already initialized, then park."""
     already_initialized = await self.request_initialization_status()
     if not already_initialized:

@@ -6,6 +6,7 @@ from typing import AsyncIterator, Optional
 
 from pylabrobot.capabilities.arms.arm import GripperArm
 from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
@@ -34,8 +35,8 @@ class STAR(Device):
     self.head96: Optional[Head96] = None  # set in setup() if installed
     self.iswap: Optional[OrientableArm] = None  # set in setup() if installed
 
-  async def setup(self):
-    await self.driver.setup(deck=self.deck)
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await self.driver.setup(deck=self.deck, backend_params=backend_params)
 
     # PIP is always present.
     self.pip = PIP(backend=self.driver.pip)

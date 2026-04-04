@@ -2,6 +2,7 @@ import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
@@ -50,7 +51,7 @@ class SCILADriver(Driver):
     super().__init__()
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self._sila_interface.setup()
     await self._reset_and_initialize()
     logger.info("[SCILA %s] connected", self._sila_interface.machine_ip)

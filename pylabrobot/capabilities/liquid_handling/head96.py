@@ -53,8 +53,8 @@ class Head96(Capability):
     self.default_offset: Coordinate = default_offset
     self.deck = deck
 
-  async def _on_setup(self):
-    await super()._on_setup()
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
+    await super()._on_setup(backend_params=backend_params)
     self.head = {c: TipTracker(thing=f"96Head Channel {c}") for c in range(96)}
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:

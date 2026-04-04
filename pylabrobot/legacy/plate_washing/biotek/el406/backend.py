@@ -108,7 +108,8 @@ class ExperimentalBioTekEL406Backend(
     # If io was injected (e.g. mock for testing), pass it to the driver
     if self.io is not None:
       self._new_driver.io = self.io
-    await self._new_driver.setup(skip_reset=skip_reset)
+    from pylabrobot.agilent.biotek.el406.driver import EL406Driver
+    await self._new_driver.setup(backend_params=EL406Driver.SetupParams(skip_reset=skip_reset))
     # Sync back so legacy code can access io/lock
     self.io = self._new_driver.io
     self._command_lock = self._new_driver._command_lock

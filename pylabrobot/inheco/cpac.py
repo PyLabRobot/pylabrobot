@@ -3,6 +3,7 @@ import logging
 import warnings
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,
@@ -30,7 +31,7 @@ class InhecoTemperatureControllerBackend(
     self.index = index
     self.interface = control_box
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   async def stop(self):

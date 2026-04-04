@@ -285,7 +285,7 @@ class MolecularDevicesDriver(Driver):
       timeout=0.2,
     )
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     await self.send_command("!")
     logger.info("[SpectraMax %s] connected", self.port)

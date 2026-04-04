@@ -46,8 +46,8 @@ class PIP(Capability):
     self._default_use_channels: Optional[List[int]] = None
     self._blow_out_air_volume: Optional[List[Optional[float]]] = None
 
-  async def _on_setup(self):
-    await super()._on_setup()
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
+    await super()._on_setup(backend_params=backend_params)
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
   @property

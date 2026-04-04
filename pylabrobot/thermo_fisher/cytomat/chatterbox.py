@@ -1,8 +1,11 @@
+from typing import Optional
+
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.thermo_fisher.cytomat.backend import CytomatBackend
 
 
 class CytomatChatterbox(CytomatBackend):
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.wait_for_task_completion()
 
   async def stop(self):

@@ -1,6 +1,7 @@
 import logging
-from typing import cast
+from typing import Optional, cast
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
@@ -32,7 +33,7 @@ class OpentronsTemperatureModuleDriver(Driver):
         f" Import error: {_OT_IMPORT_ERROR}."
       )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   async def stop(self):

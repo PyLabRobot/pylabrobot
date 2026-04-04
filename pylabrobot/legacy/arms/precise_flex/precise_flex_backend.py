@@ -125,7 +125,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return arr
 
   async def setup(self, skip_home: bool = False):
-    await self._new_driver.setup(skip_home=skip_home)
+    from pylabrobot.brooks.precise_flex import PreciseFlexDriver
+    await self._new_driver.setup(
+      backend_params=PreciseFlexDriver.SetupParams(skip_home=skip_home)
+    )
 
   async def stop(self):
     await self._new_driver.stop()

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.fan_control import FanBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
@@ -124,7 +125,7 @@ class HamiltonHepaFanDriver(Driver):
       pid=0xAC11,
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
     await self.io.set_baudrate(9600)
     await self.io.set_line_property(8, 0, 0)  # 8N1

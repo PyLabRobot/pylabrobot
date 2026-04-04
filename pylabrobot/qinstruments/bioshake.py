@@ -1,7 +1,9 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Optional, Union
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
@@ -81,9 +83,22 @@ class BioShakeDriver(Driver):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def setup(self, skip_home: bool = False):
+  @dataclass
+  class SetupParams(BackendParams):
+    """BioShake-specific parameters for ``setup``.
+
+    Args:
+      skip_home: If True, skip the reset and home steps during setup.
+    """
+
+    skip_home: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    if not isinstance(backend_params, BioShakeDriver.SetupParams):
+      backend_params = BioShakeDriver.SetupParams()
+
     await self.io.setup()
-    if not skip_home:
+    if not backend_params.skip_home:
       await self.reset()
       await asyncio.sleep(4)
       await self.home()

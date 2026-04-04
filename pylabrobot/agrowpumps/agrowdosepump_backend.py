@@ -12,7 +12,7 @@ except ImportError as e:
   AsyncModbusSerialClient = None  # type: ignore
   _MODBUS_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import BackendParams, Capability
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
 from pylabrobot.capabilities.pumping.pumping import Pump
@@ -84,7 +84,7 @@ class AgrowDriver(Driver):
     self._keep_alive_thread = threading.Thread(target=manage_async_keep_alive, daemon=True)
     self._keep_alive_thread.start()
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self._setup_modbus()
     register_return = await self.modbus.read_holding_registers(19, 2, unit=self.address)  # type: ignore[call-arg, misc]
     self._num_channels = int(
@@ -180,8 +180,8 @@ class AgrowDosePumpArray(Device):
     super().__init__(driver=AgrowDriver(port=port, address=address))
     self.driver: AgrowDriver
 
-  async def setup(self):
-    await self.driver.setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await self.driver.setup(backend_params=backend_params)
     num_channels = self.driver.num_channels
 
     self._channel_backends = [AgrowChannelBackend(self.driver, ch) for ch in range(num_channels)]

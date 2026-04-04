@@ -147,17 +147,30 @@ class PreciseFlexDriver(Driver):
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def setup(self, skip_home: bool = False):
+  @dataclass
+  class SetupParams(BackendParams):
+    """PreciseFlex-specific parameters for ``setup``.
+
+    Args:
+      skip_home: If True, skip the homing step during setup.
+    """
+
+    skip_home: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the PreciseFlex driver.
 
     Opens the socket connection, sets response mode to PC, powers on the
     robot, attaches it, and (optionally) homes it.
     """
+    if not isinstance(backend_params, PreciseFlexDriver.SetupParams):
+      backend_params = PreciseFlexDriver.SetupParams()
+
     await self.io.setup()
     await self.set_response_mode("pc")
     await self.power_on_robot()
     await self.attach(1)
-    if not skip_home:
+    if not backend_params.skip_home:
       await self.home()
     logger.info("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 

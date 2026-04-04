@@ -13,6 +13,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
@@ -97,8 +98,8 @@ class LiconicBackend(
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
 
-  async def setup(self):
-    await Driver.setup(self)
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await Driver.setup(self, backend_params=backend_params)
     try:
       await self.io.setup()
     except serial.SerialException as e:
