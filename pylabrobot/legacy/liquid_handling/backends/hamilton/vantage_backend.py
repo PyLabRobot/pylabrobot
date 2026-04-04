@@ -1945,6 +1945,12 @@ class VantageBackend(HamiltonLiquidHandler):
   ):
     """Deprecated: delegates to VantageCoreGripper.discard_tool. Use that instead."""
 
+    if tip_type is None:
+      tip_type = [4] * self.num_channels
+    if begin_z_deposit_position is None:
+      begin_z_deposit_position = [0] * self.num_channels
+    if end_z_deposit_position is None:
+      end_z_deposit_position = [0] * self.num_channels
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     if minimal_height_at_command_end is None:
@@ -1953,6 +1959,9 @@ class VantageBackend(HamiltonLiquidHandler):
     return await self._vantage_core_gripper.discard_tool(
       x_position=gripper_tool_x_position / 10,
       first_gripper_tool_y_pos=first_gripper_tool_y_pos / 10,
+      tip_type=tip_type,
+      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position],
+      end_z_deposit_position=[v / 10 for v in end_z_deposit_position],
       first_pip_channel_node_no=first_pip_channel_node_no,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command[0]
       / 10,
@@ -2051,7 +2060,9 @@ class VantageBackend(HamiltonLiquidHandler):
   ):
     """Deprecated: delegates to VantageCoreGripper.open_gripper. Use that instead."""
 
-    return await self._vantage_core_gripper.open_gripper(0)
+    return await self._vantage_core_gripper.open_gripper(
+      0, first_pip_channel_node_no=first_pip_channel_node_no
+    )
 
   async def set_any_parameter_within_this_module(self):
     """Deprecated: delegates to VantagePIPBackend.set_any_parameter_within_this_module."""

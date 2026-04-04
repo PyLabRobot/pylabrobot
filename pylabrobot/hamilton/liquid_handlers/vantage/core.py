@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from pylabrobot.capabilities.arms.backend import GripperArmBackend
 from pylabrobot.capabilities.arms.standard import GripperLocation
@@ -123,9 +123,15 @@ class VantageCoreGripper(GripperArmBackend):
       acceleration_index=backend_params.acceleration_index,
       grip_strength=backend_params.grip_strength,
       minimal_traverse_height_at_begin_of_command=(
-        backend_params.minimal_traverse_height_at_begin_of_command or th
+        backend_params.minimal_traverse_height_at_begin_of_command
+        if backend_params.minimal_traverse_height_at_begin_of_command is not None
+        else th
       ),
-      minimal_height_at_command_end=backend_params.minimal_height_at_command_end or th,
+      minimal_height_at_command_end=(
+        backend_params.minimal_height_at_command_end
+        if backend_params.minimal_height_at_command_end is not None
+        else th
+      ),
     )
 
   async def drop_at_location(
@@ -155,9 +161,15 @@ class VantageCoreGripper(GripperArmBackend):
       z_speed=backend_params.z_speed,
       open_gripper_position=open_pos,
       minimal_traverse_height_at_begin_of_command=(
-        backend_params.minimal_traverse_height_at_begin_of_command or th
+        backend_params.minimal_traverse_height_at_begin_of_command
+        if backend_params.minimal_traverse_height_at_begin_of_command is not None
+        else th
       ),
-      minimal_height_at_command_end=backend_params.minimal_height_at_command_end or th,
+      minimal_height_at_command_end=(
+        backend_params.minimal_height_at_command_end
+        if backend_params.minimal_height_at_command_end is not None
+        else th
+      ),
     )
 
   async def move_to_location(
@@ -182,15 +194,26 @@ class VantageCoreGripper(GripperArmBackend):
       z_position=location.z,
       z_speed=backend_params.z_speed,
       minimal_traverse_height_at_begin_of_command=(
-        backend_params.minimal_traverse_height_at_begin_of_command or th
+        backend_params.minimal_traverse_height_at_begin_of_command
+        if backend_params.minimal_traverse_height_at_begin_of_command is not None
+        else th
       ),
     )
 
   async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+    self,
+    gripper_width: float,
+    backend_params: Optional[BackendParams] = None,
+    first_pip_channel_node_no: int = 1,
   ) -> None:
-    """Release the gripped object (A1PM:DO)."""
-    await self.driver.send_command(module="A1PM", command="DO", pa=1)
+    """Release the gripped object (A1PM:DO).
+
+    Args:
+      gripper_width: Ignored for CoRe gripper (width is not controllable on release).
+      backend_params: Optional backend params (unused).
+      first_pip_channel_node_no: First (lower) pip channel node number (1-16). Default 1.
+    """
+    await self.driver.send_command(module="A1PM", command="DO", pa=first_pip_channel_node_no)
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -322,6 +345,9 @@ class VantageCoreGripper(GripperArmBackend):
     self,
     x_position: float = 0.0,
     first_gripper_tool_y_pos: float = 300.0,
+    tip_type: Optional[List[int]] = None,
+    begin_z_deposit_position: Optional[List[float]] = None,
+    end_z_deposit_position: Optional[List[float]] = None,
     first_pip_channel_node_no: int = 1,
     minimal_traverse_height_at_begin_of_command: float = 360.0,
     minimal_height_at_command_end: float = 360.0,
@@ -331,19 +357,32 @@ class VantageCoreGripper(GripperArmBackend):
     Args:
       x_position: Gripper tool X position [mm].
       first_gripper_tool_y_pos: First (lower channel) CoRe gripper tool Y position [mm].
+      tip_type: Tip type per channel. Default ``[4] * num_channels``.
+      begin_z_deposit_position: Begin Z deposit position per channel [mm].
+        Default ``[0.0] * num_channels``.
+      end_z_deposit_position: End Z deposit position per channel [mm].
+        Default ``[0.0] * num_channels``.
       first_pip_channel_node_no: First (lower) pip channel node number (1-16).
       minimal_traverse_height_at_begin_of_command: Minimal traverse height [mm].
       minimal_height_at_command_end: Minimal height at command end [mm].
     """
+    n = self.driver.num_channels
+    if tip_type is None:
+      tip_type = [4] * n
+    if begin_z_deposit_position is None:
+      begin_z_deposit_position = [0.0] * n
+    if end_z_deposit_position is None:
+      end_z_deposit_position = [0.0] * n
+
     await self.driver.send_command(
       module="A1PM",
       command="DJ",
       xa=round(x_position * 10),
       yj=round(first_gripper_tool_y_pos * 10),
-      tt=[4] * self.driver.num_channels,
-      tp=[0] * self.driver.num_channels,
-      tz=[0] * self.driver.num_channels,
-      th=[round(minimal_traverse_height_at_begin_of_command * 10)] * self.driver.num_channels,
+      tt=tip_type,
+      tp=[round(v * 10) for v in begin_z_deposit_position],
+      tz=[round(v * 10) for v in end_z_deposit_position],
+      th=[round(minimal_traverse_height_at_begin_of_command * 10)] * n,
       pa=first_pip_channel_node_no,
-      te=[round(minimal_height_at_command_end * 10)] * self.driver.num_channels,
+      te=[round(minimal_height_at_command_end * 10)] * n,
     )

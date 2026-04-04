@@ -336,9 +336,15 @@ class VantageHead96Backend(Head96Backend):
         tip_handling_method=backend_params.tip_handling_method,
         z_deposit_position=backend_params.z_deposit_position + pickup.offset.z,
         minimal_traverse_height_at_begin_of_command=(
-          backend_params.minimal_traverse_height_at_begin_of_command or th
+          backend_params.minimal_traverse_height_at_begin_of_command
+          if backend_params.minimal_traverse_height_at_begin_of_command is not None
+          else th
         ),
-        minimal_height_at_command_end=(backend_params.minimal_height_at_command_end or th),
+        minimal_height_at_command_end=(
+          backend_params.minimal_height_at_command_end
+          if backend_params.minimal_height_at_command_end is not None
+          else th
+        ),
       )
     except VantageFirmwareError as e:
       plr_error = convert_vantage_firmware_error_to_plr_error(e)
@@ -381,9 +387,15 @@ class VantageHead96Backend(Head96Backend):
         y_position=position.y,
         z_deposit_position=backend_params.z_deposit_position + drop.offset.z,
         minimal_traverse_height_at_begin_of_command=(
-          backend_params.minimal_traverse_height_at_begin_of_command or th
+          backend_params.minimal_traverse_height_at_begin_of_command
+          if backend_params.minimal_traverse_height_at_begin_of_command is not None
+          else th
         ),
-        minimal_height_at_command_end=(backend_params.minimal_height_at_command_end or th),
+        minimal_height_at_command_end=(
+          backend_params.minimal_height_at_command_end
+          if backend_params.minimal_height_at_command_end is not None
+          else th
+        ),
       )
     except VantageFirmwareError as e:
       plr_error = convert_vantage_firmware_error_to_plr_error(e)
@@ -444,7 +456,9 @@ class VantageHead96Backend(Head96Backend):
       well_bottoms = position.z
       lld_search_height = well_bottoms + aspiration.container.get_absolute_size_z() + 1.7
 
-    liquid_height = position.z + (aspiration.liquid_height or 0)
+    liquid_height = position.z + (
+      aspiration.liquid_height if aspiration.liquid_height is not None else 0
+    )
 
     tip = next(t for t in aspiration.tips if t is not None)
     hlc = backend_params.hlc
@@ -464,18 +478,30 @@ class VantageHead96Backend(Head96Backend):
     else:
       volume = hlc.compute_corrected_volume(aspiration.volume)
 
-    transport_air_volume = backend_params.transport_air_volume or (
-      hlc.aspiration_air_transport_volume if hlc is not None else 0
+    transport_air_volume = (
+      backend_params.transport_air_volume
+      if backend_params.transport_air_volume is not None
+      else (hlc.aspiration_air_transport_volume if hlc is not None else 0)
     )
-    blow_out_air_volume = backend_params.blow_out_air_volume or (
-      hlc.aspiration_blow_out_volume if hlc is not None else 0
+    blow_out_air_volume = (
+      backend_params.blow_out_air_volume
+      if backend_params.blow_out_air_volume is not None
+      else (hlc.aspiration_blow_out_volume if hlc is not None else 0)
     )
-    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
-    swap_speed = backend_params.swap_speed or (
-      hlc.aspiration_swap_speed if hlc is not None else 100
+    flow_rate = (
+      aspiration.flow_rate
+      if aspiration.flow_rate is not None
+      else (hlc.aspiration_flow_rate if hlc is not None else 250)
     )
-    settling_time = backend_params.settling_time or (
-      hlc.aspiration_settling_time if hlc is not None else 5
+    swap_speed = (
+      backend_params.swap_speed
+      if backend_params.swap_speed is not None
+      else (hlc.aspiration_swap_speed if hlc is not None else 100)
+    )
+    settling_time = (
+      backend_params.settling_time
+      if backend_params.settling_time is not None
+      else (hlc.aspiration_settling_time if hlc is not None else 5)
     )
 
     th = self.driver.traversal_height
@@ -486,9 +512,15 @@ class VantageHead96Backend(Head96Backend):
         x_position=position.x,
         y_position=position.y,
         minimal_traverse_height_at_begin_of_command=(
-          backend_params.minimal_traverse_height_at_begin_of_command or th
+          backend_params.minimal_traverse_height_at_begin_of_command
+          if backend_params.minimal_traverse_height_at_begin_of_command is not None
+          else th
         ),
-        minimal_height_at_command_end=(backend_params.minimal_height_at_command_end or th),
+        minimal_height_at_command_end=(
+          backend_params.minimal_height_at_command_end
+          if backend_params.minimal_height_at_command_end is not None
+          else th
+        ),
         lld_search_height=lld_search_height,
         liquid_surface_at_function_without_lld=liquid_height,
         pull_out_distance_to_take_transport_air_in_function_without_lld=(
@@ -579,7 +611,9 @@ class VantageHead96Backend(Head96Backend):
       lld_search_height = well_bottoms + dispense.container.get_absolute_size_z() + 1.7
 
     # +10mm offset on dispense liquid height. Ported from legacy. Not present on aspirate or STAR.
-    liquid_height = position.z + (dispense.liquid_height or 0) + 10
+    liquid_height = (
+      position.z + (dispense.liquid_height if dispense.liquid_height is not None else 0) + 10
+    )
 
     tip = next(t for t in dispense.tips if t is not None)
     hlc = backend_params.hlc
@@ -607,16 +641,30 @@ class VantageHead96Backend(Head96Backend):
         blow_out=backend_params.blow_out,
       )
 
-    transport_air_volume = backend_params.transport_air_volume or (
-      hlc.dispense_air_transport_volume if hlc is not None else 0
+    transport_air_volume = (
+      backend_params.transport_air_volume
+      if backend_params.transport_air_volume is not None
+      else (hlc.dispense_air_transport_volume if hlc is not None else 0)
     )
-    blow_out_air_volume = backend_params.blow_out_air_volume or (
-      hlc.dispense_blow_out_volume if hlc is not None else 0
+    blow_out_air_volume = (
+      backend_params.blow_out_air_volume
+      if backend_params.blow_out_air_volume is not None
+      else (hlc.dispense_blow_out_volume if hlc is not None else 0)
     )
-    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 250)
-    swap_speed = backend_params.swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
-    settling_time = backend_params.settling_time or (
-      hlc.dispense_settling_time if hlc is not None else 5
+    flow_rate = (
+      dispense.flow_rate
+      if dispense.flow_rate is not None
+      else (hlc.dispense_flow_rate if hlc is not None else 250)
+    )
+    swap_speed = (
+      backend_params.swap_speed
+      if backend_params.swap_speed is not None
+      else (hlc.dispense_swap_speed if hlc is not None else 100)
+    )
+    settling_time = (
+      backend_params.settling_time
+      if backend_params.settling_time is not None
+      else (hlc.dispense_settling_time if hlc is not None else 5)
     )
 
     th = self.driver.traversal_height
@@ -639,9 +687,15 @@ class VantageHead96Backend(Head96Backend):
         immersion_depth=backend_params.immersion_depth,
         surface_following_distance=backend_params.surface_following_distance,
         minimal_traverse_height_at_begin_of_command=(
-          backend_params.minimal_traverse_height_at_begin_of_command or th
+          backend_params.minimal_traverse_height_at_begin_of_command
+          if backend_params.minimal_traverse_height_at_begin_of_command is not None
+          else th
         ),
-        minimal_height_at_command_end=(backend_params.minimal_height_at_command_end or th),
+        minimal_height_at_command_end=(
+          backend_params.minimal_height_at_command_end
+          if backend_params.minimal_height_at_command_end is not None
+          else th
+        ),
         dispense_volume=volume,
         dispense_speed=flow_rate,
         cut_off_speed=backend_params.cut_off_speed,

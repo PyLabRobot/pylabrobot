@@ -423,7 +423,7 @@ class VantageDriver(HamiltonLiquidHandler):
       command="LI",
       li={"on": 1, "off": 0, "blink": 2}[mode],
       os=intensity,
-      ok=blink_interval or 750,
+      ok=blink_interval if blink_interval is not None else 750,
       ol=f"{white} {red} {green} {blue} {uv}",
     )
 

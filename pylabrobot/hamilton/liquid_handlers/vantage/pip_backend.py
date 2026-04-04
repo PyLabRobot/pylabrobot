@@ -682,7 +682,8 @@ class VantagePIPBackend(PIPBackend):
       for op in ops
     ]
     liquid_surfaces_no_lld = backend_params.liquid_surface_at_function_without_lld or [
-      wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)
+      wb + (op.liquid_height if op.liquid_height is not None else 0)
+      for wb, op in zip(well_bottoms, ops)
     ]
     lld_search_heights = backend_params.lld_search_height or [
       wb + op.resource.get_absolute_size_z() + (1.7 if isinstance(op.resource, Well) else 5)
@@ -690,11 +691,15 @@ class VantagePIPBackend(PIPBackend):
     ]
 
     flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
+      op.flow_rate
+      if op.flow_rate is not None
+      else (hlc.aspiration_flow_rate if hlc is not None else 100)
       for op, hlc in zip(ops, hlcs)
     ]
     blow_out_air_volumes = [
-      op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0)
+      op.blow_out_air_volume
+      if op.blow_out_air_volume is not None
+      else (hlc.dispense_blow_out_volume if hlc is not None else 0)
       for op, hlc in zip(ops, hlcs)
     ]
 
@@ -806,18 +811,25 @@ class VantagePIPBackend(PIPBackend):
       op.resource.get_absolute_location(z="b").z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
+    liquid_surfaces_no_lld = [
+      wb + (op.liquid_height if op.liquid_height is not None else 0)
+      for wb, op in zip(well_bottoms, ops)
+    ]
     lld_search_heights = backend_params.lld_search_height or [
       wb + op.resource.get_absolute_size_z() + (1.7 if isinstance(op.resource, Well) else 5)
       for wb, op in zip(well_bottoms, ops)
     ]
 
     flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
+      op.flow_rate
+      if op.flow_rate is not None
+      else (hlc.dispense_flow_rate if hlc is not None else 100)
       for op, hlc in zip(ops, hlcs)
     ]
     blow_out_air_volumes = [
-      op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0)
+      op.blow_out_air_volume
+      if op.blow_out_air_volume is not None
+      else (hlc.dispense_blow_out_volume if hlc is not None else 0)
       for op, hlc in zip(ops, hlcs)
     ]
 
