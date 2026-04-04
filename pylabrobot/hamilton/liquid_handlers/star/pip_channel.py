@@ -334,21 +334,55 @@ class PIPChannel:
       zj=f"{round(z * 10):04}",
     )
 
+  # -- C0:RA  request X position ------------------------------------------------
+
+  async def request_x_pos(self) -> float:
+    """Request current X-position of this channel (mm).
+
+    All PIP channels share the same X arm, so this returns the arm position.
+    """
+    resp = await self.driver.send_command(
+      module="C0",
+      command="RA",
+      fmt="ra#####",
+      pn=f"{self.index + 1:02}",
+    )
+    return float(resp["ra"] / 10)
+
+  # -- C0:RB  request Y position ------------------------------------------------
+
+  async def request_y_pos(self) -> float:
+    """Request current Y-position of this channel (mm)."""
+    resp = await self.driver.send_command(
+      module="C0",
+      command="RB",
+      fmt="rb####",
+      pn=f"{self.index + 1:02}",
+    )
+    return float(resp["rb"] / 10)
+
   # -- C0:KY  move channel Y ---------------------------------------------------
 
   async def move_y(self, y: float):
     """Move this channel safely in the Y direction (mm), with anti-crash checks.
+
+    Enforces minimum spacing between neighboring channels (queried from firmware
+    during setup) so that two channels can never be commanded closer than the
+    hardware allows.
 
     Args:
       y: Target Y position in mm.
     """
     assert self.driver.extended_conf is not None
     if self.index > 0:
-      max_y_pos = await self.backend.request_y_pos_channel_n(self.index - 1)
+      adj_y = await self.backend.channels[self.index - 1].request_y_pos()
+      spacing = self.driver._min_spacing_between(self.index, self.index - 1)
+      max_y_pos = adj_y - spacing
       if y > max_y_pos:
         raise ValueError(
-          f"channel {self.index} y-target must be <= {max_y_pos} mm "
-          f"(channel {self.index - 1} y-position is {round(max_y_pos, 2)} mm)"
+          f"channel {self.index} y-target {y} mm too close to channel {self.index - 1} "
+          f"at {round(adj_y, 2)} mm (minimum spacing {spacing} mm, "
+          f"max allowed {round(max_y_pos, 2)} mm)"
         )
     else:
       max_y_pos = self.driver.extended_conf.pip_maximal_y_position
@@ -356,11 +390,14 @@ class PIPChannel:
         raise ValueError(f"channel {self.index} y-target must be <= {max_y_pos} mm")
 
     if self.index < (self.backend.num_channels - 1):
-      min_y_pos = await self.backend.request_y_pos_channel_n(self.index + 1)
+      adj_y = await self.backend.channels[self.index + 1].request_y_pos()
+      spacing = self.driver._min_spacing_between(self.index, self.index + 1)
+      min_y_pos = adj_y + spacing
       if y < min_y_pos:
         raise ValueError(
-          f"channel {self.index} y-target must be >= {min_y_pos} mm "
-          f"(channel {self.index + 1} y-position is {round(min_y_pos, 2)} mm)"
+          f"channel {self.index} y-target {y} mm too close to channel {self.index + 1} "
+          f"at {round(adj_y, 2)} mm (minimum spacing {spacing} mm, "
+          f"min allowed {round(min_y_pos, 2)} mm)"
         )
     else:
       if y < self.driver.extended_conf.left_arm_min_y_position:
@@ -389,9 +426,14 @@ class PIPChannel:
 
   # -- C0:RD  tip bottom Z position -------------------------------------------
 
-  async def _request_tip_bottom_z_position(self) -> float:
-    """Request Z-position of the tip bottom on this channel (mm) (C0:RD)."""
-    resp = await self.send_command(
+  async def request_tip_bottom_z_position(self) -> float:
+    """Request Z-position of the tip bottom on this channel (mm) (C0:RD).
+
+    Raises RuntimeError if no tip is mounted.
+    """
+    if not (await self.backend.request_tip_presence())[self.index]:
+      raise RuntimeError(f"No tip mounted on channel {self.index}")
+    resp = await self.driver.send_command(
       module="C0",
       command="RD",
       fmt="rd####",
@@ -411,7 +453,7 @@ class PIPChannel:
       raise RuntimeError(f"No tip present on channel {self.index}")
 
     probe_z = await self.request_probe_z_position()
-    tip_bottom_z = await self._request_tip_bottom_z_position()
+    tip_bottom_z = await self.request_tip_bottom_z_position()
 
     fitting_depth = 8  # mm
     return round(probe_z - (tip_bottom_z - fitting_depth), 1)
@@ -422,6 +464,17 @@ class PIPChannel:
     resp = await self.send_command(self.module_id, "QC", fmt="qc##### (n)")
     _, current_volume = resp["qc"]  # first is max volume
     return float(current_volume) / 10
+
+  # -- C0:QS  TADM enabled -----------------------------------------------------
+
+  async def request_tadm_enabled(self) -> bool:
+    """Whether TADM (Total Aspiration and Dispensing Monitoring) is enabled on this channel."""
+    resp = await self.driver.send_command(
+      module="C0",
+      command="QS",
+      fmt="qs# (n)",
+    )
+    return bool(resp["qs"][self.index])
 
   # -- Px:ZL  cLLD Z search (low-level, head-space) --------------------------
 
@@ -1203,7 +1256,7 @@ class PIPChannel:
     # Anti-channel-crash: determine safe y bounds
     assert self.driver.extended_conf is not None
     if self.index > 0:
-      adj_upper_y = await self.backend.request_y_pos_channel_n(self.index - 1)
+      adj_upper_y = await self.backend.channels[self.index - 1].request_y_pos()
       max_safe_upper_y_pos = adj_upper_y - self.driver._min_spacing_between(
         self.index, self.index - 1
       )
@@ -1211,7 +1264,7 @@ class PIPChannel:
       max_safe_upper_y_pos = self.driver.extended_conf.pip_maximal_y_position
 
     if self.index < (self.backend.num_channels - 1):
-      adj_lower_y = await self.backend.request_y_pos_channel_n(self.index + 1)
+      adj_lower_y = await self.backend.channels[self.index + 1].request_y_pos()
       max_safe_lower_y_pos = adj_lower_y + self.driver._min_spacing_between(
         self.index, self.index + 1
       )
@@ -1237,7 +1290,7 @@ class PIPChannel:
         )
 
     # Set safe search end based on direction
-    current_channel_y_pos = await self.backend.request_y_pos_channel_n(self.index)
+    current_channel_y_pos = await self.request_y_pos()
     if probing_direction == "backward":
       max_y_search_pos = end_pos_search or max_safe_upper_y_pos
       if max_y_search_pos < current_channel_y_pos:
@@ -1291,14 +1344,14 @@ class PIPChannel:
       read_timeout=120,
     )
 
-    detected_material_y_pos = await self.backend.request_y_pos_channel_n(self.index)
+    detected_material_y_pos = await self.request_y_pos()
 
     # Post-detection retraction with anti-crash
     if probing_direction == "backward":
       if self.index < self.backend.num_channels - 1:
-        min_y = await self.backend.request_y_pos_channel_n(
+        min_y = await self.backend.channels[
           self.index + 1
-        ) + self.driver._min_spacing_between(self.index, self.index + 1)
+        ].request_y_pos() + self.driver._min_spacing_between(self.index, self.index + 1)
       else:
         min_y = self.driver.extended_conf.left_arm_min_y_position
 
@@ -1306,9 +1359,9 @@ class PIPChannel:
       move_target = detected_material_y_pos - min(post_detection_dist, max_safe_dist)
     else:  # forward
       if self.index > 0:
-        max_y = await self.backend.request_y_pos_channel_n(
+        max_y = await self.backend.channels[
           self.index - 1
-        ) - self.driver._min_spacing_between(self.index, self.index - 1)
+        ].request_y_pos() - self.driver._min_spacing_between(self.index, self.index - 1)
       else:
         max_y = self.driver.extended_conf.pip_maximal_y_position
 

@@ -1756,54 +1756,16 @@ class STARPIPBackend(PIPBackend):
       pn=f"{channel + 1:02}",
     )
 
-  # -- C0 channel queries -----------------------------------------------------
-
-  async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
-    """Request Z-position of the tip bottom on channel `channel_idx` (mm).
-
-    Raises RuntimeError if no tip is mounted.
-    """
-    if not (await self.request_tip_presence())[channel_idx]:
-      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RD",
-      fmt="rd####",
-      pn=f"{channel_idx + 1:02}",
-    )
-    return float(resp["rd"] / 10)
-
-  async def request_y_pos_channel_n(self, channel_idx: int) -> float:
-    """Request current Y-position of channel `channel_idx` (mm)."""
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RB",
-      fmt="rb####",
-      pn=f"{channel_idx + 1:02}",
-    )
-    return float(resp["rb"] / 10)
-
-  async def request_x_pos_channel_n(self, channel_idx: int) -> float:
-    """Request current X-position of channel `channel_idx` (mm).
-
-    All PIP channels share the same X arm, so this returns the arm position.
-    """
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RA",
-      fmt="ra#####",
-      pn=f"{channel_idx + 1:02}",
-    )
-    return float(resp["ra"] / 10)
+  # -- C0 multi-channel queries ------------------------------------------------
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """Return absolute liquid heights (mm) from the last LLD event for each channel."""
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
     return [float(v / 10) for v in resp.get("lh")]
 
-  async def move_channel_y(self, channel: int, y: float):
-    """Convenience wrapper: delegates to ``self.channels[channel].move_y(y)``."""
-    await self.channels[channel].move_y(y)
+  async def position_components_for_free_iswap_y_range(self):
+    """Position all components so that there is maximum free Y range for iSWAP."""
+    return await self.driver.send_command(module="C0", command="FY")
 
   # -- foil piercing ----------------------------------------------------------
 
