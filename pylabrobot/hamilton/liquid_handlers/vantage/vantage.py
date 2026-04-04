@@ -1,7 +1,9 @@
 """Vantage device: wires VantageDriver backends to PIP/Head96/IPG capability frontends."""
 
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 
+from pylabrobot.capabilities.arms.arm import GripperArm
 from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.pip import PIP
@@ -98,3 +100,35 @@ class Vantage(Device):
     self._setup_finished = False
     self.head96 = None
     self.ipg = None
+
+  # -- CoRe grippers ---------------------------------------------------------
+
+  @asynccontextmanager
+  async def core_grippers(
+    self,
+    front_channel: int = 7,
+    traversal_height: float = 245.0,
+  ) -> AsyncIterator[GripperArm]:
+    """Context manager that picks up CoRe gripper tools on enter and returns them on exit.
+
+    Usage::
+
+      async with vantage.core_grippers(front_channel=7) as arm:
+        await arm.move_resource(plate, destination)
+
+    Args:
+      front_channel: The front (higher-numbered) PIP channel to mount the gripper on.
+        The back channel is ``front_channel - 1``. Default 7 (channels 6+7).
+      traversal_height: Minimum Z clearance in mm for safe lateral movement. Default 245.0.
+    """
+    raise NotImplementedError(
+      "CoRe gripper tool pickup on Vantage has not been reverse-engineered yet. "
+      "On the STAR this is C0:ZT; the Vantage equivalent is unknown. "
+      "If you figure out the command, please contribute it."
+    )
+    # Once pickup is implemented, the pattern should be:
+    #   1. Park IPG if out (shared X drive)
+    #   2. Pick up gripper tools (unknown firmware command)
+    #   3. yield GripperArm(VantageCoreGripper(driver), deck, grip_axis="y")
+    #   4. In finally: return tools via discard_tool (A1PM:DJ)
+    yield  # unreachable, but needed for asynccontextmanager typing

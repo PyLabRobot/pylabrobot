@@ -223,16 +223,22 @@ class VantageCoreGripper(GripperArmBackend):
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
-    pass  # Grip happens in pick_up_at_location.
+    raise NotImplementedError(
+      "close_gripper is not supported for VantageCoreGripper. "
+      "Gripping happens inside pick_up_at_location."
+    )
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    raise NotImplementedError()
+    raise NotImplementedError("is_gripper_closed is not implemented for VantageCoreGripper.")
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
-    pass
+    raise NotImplementedError("halt is not implemented for VantageCoreGripper.")
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
-    pass  # Tool management (pick up / return) is handled by the Vantage device class.
+    raise NotImplementedError(
+      "park is not supported for VantageCoreGripper. "
+      "Tool return is handled by the Vantage.core_grippers() context manager."
+    )
 
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
