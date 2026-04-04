@@ -630,7 +630,8 @@ def _setup_backend_with_deck(deck: NimbusDeck) -> NimbusBackend:
   """Create a NimbusBackend with pre-configured state and deck for testing."""
   backend = _setup_backend()
   backend._deck = deck
-  backend._pip_backend.deck = deck  # type: ignore[union-attr]
+  assert backend._pip_backend is not None
+  backend._pip_backend.deck = deck
   return backend
 
 

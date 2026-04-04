@@ -554,8 +554,11 @@ class HamiltonTCPHandler(Driver):
     # Send command
     await self.write(message)
 
-    # Read response (timeout handled by TCP layer)
-    response_message = await self._read_one_message()
+    # Read response, honoring the per-call timeout when provided.
+    if timeout is None:
+      response_message = await self._read_one_message()
+    else:
+      response_message = await asyncio.wait_for(self._read_one_message(), timeout)
     assert isinstance(response_message, CommandResponse)
 
     # Check for error actions

@@ -1,5 +1,7 @@
 """Nimbus device: wires NimbusDriver backends to PIP capability frontend."""
 
+from typing import Optional
+
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
@@ -19,12 +21,15 @@ class Nimbus(Device):
     self,
     deck: NimbusDeck,
     chatterbox: bool = False,
-    host: str = "",
+    host: Optional[str] = None,
     port: int = 2000,
   ):
-    driver: NimbusDriver = (
-      NimbusChatterboxDriver() if chatterbox else NimbusDriver(host=host, port=port)
-    )
+    if chatterbox:
+      driver: NimbusDriver = NimbusChatterboxDriver()
+    else:
+      if not host:
+        raise ValueError("host must be provided when chatterbox is False.")
+      driver = NimbusDriver(host=host, port=port)
     super().__init__(driver=driver)
     self.driver: NimbusDriver = driver
     self.deck = deck

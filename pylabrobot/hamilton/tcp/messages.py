@@ -412,20 +412,14 @@ class HoiParamsParser:
           count = len(data) // element_size
           return [array_element_parsers[data_type]() for _ in range(count)]
         elif data_type == HamiltonDataType.STRING_ARRAY:
-          # String arrays: null-terminated strings concatenated, no count prefix
-          # Parse by splitting on null bytes
+          # String arrays: [count:4][str0\0][str1\0]...
+          count = Reader(data[:4]).u32()
           strings = []
-          current_string = bytearray()
-          for byte in data:
-            if byte == 0:
-              if current_string:
-                strings.append(current_string.decode("utf-8", errors="replace"))
-                current_string = bytearray()
-            else:
-              current_string.append(byte)
-          # Handle case where last string doesn't end with null (shouldn't happen, but be safe)
-          if current_string:
-            strings.append(current_string.decode("utf-8", errors="replace"))
+          offset = 4
+          for _ in range(count):
+            end = data.index(0, offset)
+            strings.append(data[offset:end].decode("utf-8", errors="replace"))
+            offset = end + 1
           return strings
     except ValueError:
       # Not a valid enum value, continue to other checks
