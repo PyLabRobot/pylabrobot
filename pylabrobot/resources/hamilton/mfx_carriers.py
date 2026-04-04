@@ -126,6 +126,83 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
   )
 
 
+def MFX_CAR_2DWP_2bioshake(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """DWP (2); bioshakeHeaterShaker(2)
+  Custom MFX carrier with 2 Deep Well Plate positions and 2 BioShake Heater Shaker positions.
+  """
+  locations = [
+    Coordinate(15.5, 15, 56),   # Site 1 (BioShake)
+    Coordinate(15.5, 135, 56),  # Site 2 (BioShake)
+    Coordinate(15.5, 255, 80),  # Site 3 (DWP)
+    Coordinate(15.5, 375, 80),  # Site 4 (DWP)
+  ]
+  sites: Dict[int, ResourceHolder] = {}
+  for i, module in modules.items():
+    module.location = locations[i] # Sites in template are 1-indexed
+    sites[i] = module
+
+  return MFXCarrier(
+    name=name,
+    size_x=157.5,
+    size_y=497.0,
+    size_z=94.0,
+    sites=sites,
+    model="MFX_CAR_2DWP_2bioshake",
+  )
+
+
+def MFX_CAR_3DWP_1bioshake(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """DWP (3); bioshakeHeaterShaker(1)
+  Custom MFX carrier with 3 Deep Well Plate positions and 1 BioShake Heater Shaker position.
+  """
+  locations = [
+    Coordinate(15.5, 15, 56),   # Site 1 (BioShake)
+    Coordinate(15.5, 135, 80),  # Site 2 (DWP)
+    Coordinate(15.5, 255, 80),  # Site 3 (DWP)
+    Coordinate(15.5, 375, 80),  # Site 4 (DWP)
+  ]
+  sites: Dict[int, ResourceHolder] = {}
+  for i, module in modules.items():
+    module.location = locations[i] # Sites in template are 1-indexed
+    sites[i] = module
+
+  return MFXCarrier(
+    name=name,
+    size_x=157.5,
+    size_y=497.0,
+    size_z=94.0,
+    sites=sites,
+    model="MFX_CAR_3DWP_1bioshake",
+  )
+
+
+def MFX_CAR_L5AC_4DWP_bioshake(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """4 DWP positions and 1 BioShake position.
+  Custom MFX carrier with 5 sites ordered front-to-back (ascending Y).
+  Based on t2.tml.
+  """
+  locations = [
+    Coordinate(4.0, 8.5, 75.5),   # Site 1 (Front, BioShake)
+    Coordinate(4.0, 104.5, 83.5), # Site 2 (DWP)
+    Coordinate(4.0, 200.5, 83.5), # Site 3 (DWP)
+    Coordinate(4.0, 296.5, 83.5), # Site 4 (DWP)
+    Coordinate(4.0, 392.5, 83.5), # Site 5 (Back, DWP)
+  ]
+  sites: Dict[int, ResourceHolder] = {}
+  for i, module in modules.items():
+    module.location = locations[i] # Sites in template are 1-indexed
+    sites[i] = module
+
+  return MFXCarrier(
+    name=name,
+    size_x=135.0,
+    size_y=497.0,
+    size_z=130.0,
+    sites=sites,
+    model="MFX_CAR_L5AC_4DWP_bioshake",
+  )
+
+
 # Deprecated names for backwards compatibility
 # TODO: Remove >2026-02
 
