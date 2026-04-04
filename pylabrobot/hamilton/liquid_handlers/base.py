@@ -30,7 +30,7 @@ PipettingOp = Union[Pickup, TipDrop, Aspiration, Dispense]
 
 T = TypeVar("T")
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 @dataclass

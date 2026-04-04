@@ -159,6 +159,7 @@ class PreciseFlexDriver(Driver):
     await self.attach(1)
     if not skip_home:
       await self.home()
+    logger.info("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
   async def stop(self):
     """Stop the PreciseFlex driver."""
@@ -166,6 +167,7 @@ class PreciseFlexDriver(Driver):
     await self.power_off_robot()
     await self.exit()
     await self.io.stop()
+    logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
   # -- device-level commands -------------------------------------------------
 
@@ -400,6 +402,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ):
     """Open the gripper to the specified width."""
+    logger.info("[PreciseFlex %s] open_gripper: width_mm=%s", self.driver.io._host, gripper_width)
     await self._set_grip_open_pos(gripper_width)
     await self.driver.send_command("gripper 1")
 
@@ -407,6 +410,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ):
     """Close the gripper to the specified width."""
+    logger.info("[PreciseFlex %s] close_gripper: width_mm=%s", self.driver.io._host, gripper_width)
     await self._set_grip_close_pos(gripper_width)
     await self.driver.send_command("gripper 2")
 
@@ -504,6 +508,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified joint position."""
+    logger.info(
+      "[PreciseFlex %s] pick_up: joints=%s, resource_width_mm=%s",
+      self.driver.io._host, position, resource_width,
+    )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
     access = backend_params.access or VerticalAccess()
@@ -539,6 +547,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified joint position."""
+    logger.info(
+      "[PreciseFlex %s] drop: joints=%s, resource_width_mm=%s",
+      self.driver.io._host, position, resource_width,
+    )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()
     access = backend_params.access or VerticalAccess()
@@ -618,6 +630,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified Cartesian location."""
+    logger.info(
+      "[PreciseFlex %s] pick_up: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
+      self.driver.io._host, location.x, location.y, location.z, direction, resource_width,
+    )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
     if backend_params.rail_position is not None:
@@ -645,6 +661,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified Cartesian location."""
+    logger.info(
+      "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
+      self.driver.io._host, location.x, location.y, location.z, direction, resource_width,
+    )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()
     if backend_params.rail_position is not None:

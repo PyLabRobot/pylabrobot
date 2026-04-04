@@ -89,6 +89,7 @@ class VSpinDriver(Driver):
     self.device_id = device_id
 
   async def setup(self):
+    logger.info("[vSpin %s] connected", self.device_id)
     await self.io.setup()
     for _ in range(3):
       await self.configure_and_initialize()
@@ -105,6 +106,7 @@ class VSpinDriver(Driver):
     await self.io.set_dtr(True)
 
   async def stop(self):
+    logger.info("[vSpin %s] disconnected", self.device_id)
     await self.configure_and_initialize()
     await self.io.stop()
 
@@ -315,12 +317,14 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
   async def open_door(self):
     if await self.driver.request_door_open():
       return
+    logger.info("[vSpin %s] open door", self.driver.device_id)
     await self.driver.send_command(bytes.fromhex("aa022600062e"))
     await asyncio.sleep(4)
 
   async def close_door(self):
     if not (await self.driver.request_door_open()):
       return
+    logger.info("[vSpin %s] close door", self.driver.device_id)
     await self.driver.send_command(bytes.fromhex("aa022600042c"))
     await asyncio.sleep(2)
 
@@ -329,6 +333,7 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
       raise RuntimeError("Cannot lock door while it is open.")
     if await self.driver.request_door_locked():
       return
+    logger.info("[vSpin %s] lock door", self.driver.device_id)
     await self.driver.send_command(bytes.fromhex("aa0226000028"))
 
   async def unlock_door(self):
@@ -353,6 +358,7 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
     await self.go_to_position(await self.request_bucket_1_position() + FULL_ROTATION // 2)
 
   async def go_to_position(self, position: int):
+    logger.info("[vSpin %s] go_to_position: position=%d", self.driver.device_id, position)
     await self.close_door()
     await self.lock_door()
 
@@ -429,6 +435,15 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
       await self.unlock_bucket()
 
     rpm = VSpinCentrifugeBackend.g_to_rpm(g)
+    logger.info(
+      "[vSpin %s] spin: g=%.1f rpm=%d duration=%.1fs acceleration=%.2f deceleration=%.2f",
+      self.driver.device_id,
+      g,
+      rpm,
+      duration,
+      acceleration,
+      deceleration,
+    )
 
     acceleration_ticks_per_second2 = 12903.2 * acceleration
     rounds_per_second = rpm / 60

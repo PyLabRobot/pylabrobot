@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Optional
 
@@ -12,6 +13,8 @@ except ImportError as e:
 from pylabrobot.capabilities.tilting.backend import TilterBackend, TiltModuleError
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
+
+logger = logging.getLogger(__name__)
 
 
 class HamiltonTiltModuleDriver(Driver):
@@ -47,9 +50,11 @@ class HamiltonTiltModuleDriver(Driver):
 
   async def setup(self):
     await self.io.setup()
+    logger.info("[Tilt %s] connected", self.com_port)
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[Tilt %s] disconnected", self.com_port)
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
     """Send a command to the tilt module."""
@@ -67,8 +72,7 @@ class HamiltonTiltModuleDriver(Driver):
     if error_matches is not None:
       err_code = int(error_matches.group(0)[2:])
       if 1 <= err_code <= 7:
-        raise TiltModuleError(
-          {
+        error_msg = {
             1: "Init Position not found",
             2: "**Step** loss",
             3: "Not initialized",
@@ -76,8 +80,10 @@ class HamiltonTiltModuleDriver(Driver):
             6: "Parameter out **of** Range",
             7: "Undefined Command",
           }[err_code]
-        )
+        logger.error("[Tilt %s] error %d: %s", self.com_port, err_code, error_msg)
+        raise TiltModuleError(error_msg)
       if err_code != 0:
+        logger.error("[Tilt %s] unexpected error code: %d", self.com_port, err_code)
         raise RuntimeError(f"Unexpected error code: {err_code}")
 
     return resp
@@ -103,6 +109,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
     if not (0 <= angle <= 10):
       raise ValueError("Angle must be between 0 and 10 degrees.")
 
+    logger.info("[Tilt %s] set angle: angle=%.1f deg", self.driver.com_port, angle)
     await self.tilt_go_to_position(round(angle))
 
   async def tilt_initialize(self):
@@ -245,6 +252,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
     if not (10 <= temperature <= 50):
       raise ValueError("Temperature must be between 10 and 50.")
 
+    logger.info("[Tilt %s] set temperature: target=%.1f C", self.driver.com_port, temperature)
     return await self.driver.send_command(command="ST", parameter=str(int(temperature * 10)))
 
   async def tilt_switch_off_temperature_controller(self):

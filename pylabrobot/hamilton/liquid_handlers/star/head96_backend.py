@@ -491,6 +491,7 @@ class STARHead96Backend(Head96Backend):
     Firmware command: C0 EP
     """
     await self.driver.ensure_iswap_parked()
+    logger.info("[STAR 96] pick_up_tips: resource=%s", pickup.resource.name)
     if not isinstance(backend_params, STARHead96Backend.PickUpTips96Params):
       backend_params = STARHead96Backend.PickUpTips96Params()
 
@@ -585,6 +586,7 @@ class STARHead96Backend(Head96Backend):
     Firmware command: C0 ER
     """
     await self.driver.ensure_iswap_parked()
+    logger.info("[STAR 96] drop_tips: resource=%s", drop.resource.name)
     if not isinstance(backend_params, STARHead96Backend.DropTips96Params):
       backend_params = STARHead96Backend.DropTips96Params()
 
@@ -732,6 +734,9 @@ class STARHead96Backend(Head96Backend):
     volume = aspiration.volume
     flow_rate = aspiration.flow_rate or 250
     blow_out_air_volume = aspiration.blow_out_air_volume or 0
+
+    resource_name = aspiration.wells[0].parent.name if isinstance(aspiration, MultiHeadAspirationPlate) else aspiration.container.name
+    logger.info("[STAR 96] aspirate: resource=%s volume=%.2f flow_rate=%.2f", resource_name, volume, flow_rate)
 
     traversal = self.traversal_height
 
@@ -903,6 +908,9 @@ class STARHead96Backend(Head96Backend):
     volume = dispense.volume
     flow_rate = dispense.flow_rate or 120
     blow_out_air_volume = dispense.blow_out_air_volume or 0
+
+    resource_name = dispense.wells[0].parent.name if isinstance(dispense, MultiHeadDispensePlate) else dispense.container.name
+    logger.info("[STAR 96] dispense: resource=%s volume=%.2f flow_rate=%.2f", resource_name, volume, flow_rate)
 
     dispense_mode = _dispensing_mode_for_op(
       empty=backend_params.empty,

@@ -1,3 +1,4 @@
+import logging
 import math
 import struct
 import sys
@@ -18,6 +19,8 @@ if sys.version_info >= (3, 8):
   from typing import Literal
 else:
   from typing_extensions import Literal
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,6 +59,14 @@ class CLARIOstarAbsorbanceBackend(AbsorbanceBackend):
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
 
+    logger.info(
+      "[CLARIOstar %s] read absorbance: plate=%s, wavelength=%d nm, report=%s, wells=%d",
+      self.driver.io.device_id or "default",
+      plate.name,
+      wavelength,
+      backend_params.report,
+      len(wells),
+    )
     await self.driver.mp_and_focus_height_value()
 
     wavelength_data = int(wavelength * 10).to_bytes(2, byteorder="big")

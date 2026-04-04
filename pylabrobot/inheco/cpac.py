@@ -1,4 +1,5 @@
 import abc
+import logging
 import warnings
 from typing import Optional
 
@@ -10,6 +11,8 @@ from pylabrobot.device import Device, Driver
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
+
+logger = logging.getLogger(__name__)
 
 
 class InhecoTemperatureControllerBackend(
@@ -40,14 +43,18 @@ class InhecoTemperatureControllerBackend(
   # -- temperature control
 
   async def set_temperature(self, temperature: float):
+    logger.info("[Inheco idx=%d] setting temperature to %.1f C", self.index, temperature)
     await self.set_target_temperature(temperature)
     await self.start_temperature_control()
 
   async def request_current_temperature(self) -> float:
     response = await self.interface.send_command(f"{self.index}RAT0")
-    return float(response) / 10
+    temp = float(response) / 10
+    logger.info("[Inheco idx=%d] read temperature: actual=%.1f C", self.index, temp)
+    return temp
 
   async def deactivate(self):
+    logger.info("[Inheco idx=%d] deactivating temperature control", self.index)
     await self.stop_temperature_control()
 
   # --- firmware temp

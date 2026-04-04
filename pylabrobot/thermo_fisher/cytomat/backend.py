@@ -105,11 +105,13 @@ class CytomatBackend(
   async def setup(self):
     await Driver.setup(self)
     await self.io.setup()
+    logger.info("[Cytomat %s %s] connected", self.model.value, self.io.port)
     await self.initialize()
     await self.wait_for_task_completion()
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[Cytomat %s %s] disconnected", self.model.value, self.io.port)
     await Driver.stop(self)
 
   async def set_racks(self, racks: List[PlateCarrier]):
@@ -119,11 +121,13 @@ class CytomatBackend(
   # -- AutomatedRetrievalBackend --
 
   async def fetch_plate_to_loading_tray(self, plate: Plate):
+    logger.info("[Cytomat %s %s] fetch plate to loading tray: plate='%s'", self.model.value, self.io.port, plate.name)
     site = plate.parent
     assert isinstance(site, PlateHolder)
     await self.action_storage_to_transfer(site)
 
   async def store_plate(self, plate: Plate, site: PlateHolder):
+    logger.info("[Cytomat %s %s] store plate: plate='%s', site='%s'", self.model.value, self.io.port, plate.name, site.name)
     await self.action_transfer_to_storage(site)
 
   # -- TemperatureControllerBackend --
@@ -136,7 +140,9 @@ class CytomatBackend(
     raise NotImplementedError("Temperature is configured via the Cytomat device UI")
 
   async def request_current_temperature(self) -> float:
-    return (await self.request_incubation_query("it")).actual_value
+    temperature = (await self.request_incubation_query("it")).actual_value
+    logger.info("[Cytomat %s %s] read temperature: actual=%.1f C", self.model.value, self.io.port, temperature)
+    return temperature
 
   async def deactivate(self):
     pass  # no-op: temperature is device-managed
@@ -151,7 +157,9 @@ class CytomatBackend(
     raise NotImplementedError("Humidity is configured via the Cytomat device UI")
 
   async def request_current_humidity(self) -> float:
-    return (await self.request_incubation_query("ih")).actual_value
+    humidity = (await self.request_incubation_query("ih")).actual_value
+    logger.info("[Cytomat %s %s] read humidity: actual=%.1f %%RH", self.model.value, self.io.port, humidity)
+    return humidity
 
   # -- ShakerBackend --
 
@@ -168,12 +176,14 @@ class CytomatBackend(
   async def start_shaking(self, speed: float, shakers: Optional[List[int]] = None):
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
+    logger.info("[Cytomat %s %s] start shaking: speed=%.0f", self.model.value, self.io.port, speed)
     await self.set_shaking_frequency(frequency=int(speed), shakers=shakers)
     return hex_to_binary(await self.send_command("ll", "va", ""))
 
   async def stop_shaking(self):
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
+    logger.info("[Cytomat %s %s] stop shaking", self.model.value, self.io.port)
     return hex_to_binary(await self.send_command("ll", "vd", ""))
 
   # -- Device-specific methods --
@@ -185,7 +195,6 @@ class CytomatBackend(
 
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
-      logger.debug(command_str.encode(self.serial_message_encoding))
       await self.io.write(command_str.encode(self.serial_message_encoding))
       resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
@@ -196,7 +205,7 @@ class CytomatBackend(
       if key == CytomatActionResponse.OK.value or key == command:
         return value
       if key == CytomatActionResponse.ERROR.value:
-        logger.error("Command %s failed with: '%s'", command_str, resp)
+        logger.error("[Cytomat %s %s] command %s failed with: '%s'", self.model.value, self.io.port, command_str, resp)
         if value == "03":
           error_register = await self.request_error_register()
           await self.reset_error_register()
@@ -207,7 +216,7 @@ class CytomatBackend(
         await self.reset_error_register()
         raise Exception(f"Unknown cytomat error code in response: {resp}")
 
-      logger.error("Command %s received an unknown response: '%s'", command_str, resp)
+      logger.error("[Cytomat %s %s] command %s received an unknown response: '%s'", self.model.value, self.io.port, command_str, resp)
       await self.reset_error_register()
       raise Exception(f"Unknown response from cytomat: {resp}")
 
@@ -402,6 +411,7 @@ class CytomatBackend(
         return overview_register
       await asyncio.sleep(1)
       if time.time() - start > timeout:
+        logger.error("[Cytomat %s %s] task timed out after %ds", self.model.value, self.io.port, timeout)
         raise TimeoutError("Cytomat did not complete task in time")
 
   async def init_shakers(self):

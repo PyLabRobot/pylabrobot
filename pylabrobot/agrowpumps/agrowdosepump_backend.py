@@ -18,7 +18,7 @@ from pylabrobot.capabilities.pumping.calibration import PumpCalibration
 from pylabrobot.capabilities.pumping.pumping import Pump
 from pylabrobot.device import Device, Driver
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class AgrowDriver(Driver):
@@ -78,7 +78,7 @@ class AgrowDriver(Driver):
         loop.run_until_complete(keep_alive())
         loop.close()
       except Exception as e:
-        logger.error("Error in keep alive thread: %s", e)
+        logger.error("[Agrow %s addr=%s] keep-alive thread error: %s", self.port, self.address, e)
 
     self._keep_alive_thread_active = True
     self._keep_alive_thread = threading.Thread(target=manage_async_keep_alive, daemon=True)
@@ -92,6 +92,7 @@ class AgrowDriver(Driver):
     )
     self._start_keep_alive_thread()
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
+    logger.info("[Agrow %s addr=%s] connected: channels=%d", self.port, self.address, self._num_channels)
 
   async def _setup_modbus(self):
     if AsyncModbusSerialClient is None:
@@ -110,9 +111,11 @@ class AgrowDriver(Driver):
     )
     await self.modbus.connect()
     if not self.modbus.connected:
+      logger.error("[Agrow %s] modbus connection failed", self.port)
       raise ConnectionError("Modbus connection failed during pump setup")
 
   async def stop(self):
+    logger.info("[Agrow %s addr=%s] stopping", self.port, self.address)
     for pump in self.pump_index_to_address:
       await self.write_speed(pump, 0)
     if self._keep_alive_thread is not None:
@@ -144,9 +147,11 @@ class AgrowChannelBackend(PumpBackend):
     )
 
   async def run_continuously(self, speed: float):
+    logger.info("[Agrow %s addr=%s] channel %d: run_continuously at speed %d", self.driver.port, self.driver.address, self._channel, int(speed))
     await self.driver.write_speed(self._channel, int(speed))
 
   async def halt(self):
+    logger.info("[Agrow %s addr=%s] channel %d: halt", self.driver.port, self.driver.address, self._channel)
     await self.driver.write_speed(self._channel, 0)
 
   def serialize(self):

@@ -6,6 +6,7 @@ Internally, volumes are converted to the instrument's native 1/10 uL units.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -18,6 +19,9 @@ from pylabrobot.thermo_fisher.multidrop_combi.enums import (
   EmptyMode,
   PrimeMode,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _ul_to_tenths(volume_ul: float) -> int:
@@ -94,6 +98,16 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     for col, vol in volumes.items():
       await self._set_column_volume(col, vol)
 
+    vol_min = min(volumes.values())
+    vol_max = max(volumes.values())
+    logger.info(
+      "[Multidrop %s] dispense: plate=%s, columns=%d, volume_range=%.1f-%.1f uL",
+      self._driver._port,
+      plate.name,
+      len(volumes),
+      vol_min,
+      vol_max,
+    )
     await self._driver.send_command("DIS", timeout=120.0)
 
   @dataclass
@@ -134,6 +148,12 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     vol_tenths = _ul_to_tenths(volume)
     if vol_tenths < 10 or vol_tenths > 100000:
       raise ValueError(f"Prime volume must be 1-10000 uL, got {volume} uL")
+    logger.info(
+      "[Multidrop %s] prime: volume=%.1f uL, mode=%s",
+      self._driver._port,
+      volume,
+      backend_params.mode.name,
+    )
     cmd = f"PRI {vol_tenths}"
     if backend_params.mode != PrimeMode.STANDARD:
       cmd += f" {backend_params.mode.value}"
@@ -177,6 +197,12 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     vol_tenths = _ul_to_tenths(volume)
     if vol_tenths < 10 or vol_tenths > 100000:
       raise ValueError(f"Purge volume must be 1-10000 uL, got {volume} uL")
+    logger.info(
+      "[Multidrop %s] purge: volume=%.1f uL, mode=%s",
+      self._driver._port,
+      volume,
+      backend_params.mode.name,
+    )
     cmd = f"EMP {vol_tenths}"
     if backend_params.mode != EmptyMode.STANDARD:
       cmd += f" {backend_params.mode.value}"
@@ -199,6 +225,13 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
     time_hundredths = round(time * 100)
     if time_hundredths < 1:
       raise ValueError(f"Shake time must be > 0, got {time}s")
+    logger.info(
+      "[Multidrop %s] shake: duration=%.1f s, distance=%d mm, speed=%d Hz",
+      self._driver._port,
+      time,
+      distance,
+      speed,
+    )
     await self._driver.send_command(
       f"SHA {time_hundredths} {distance} {speed}", timeout=120.0 + time
     )
@@ -219,6 +252,7 @@ class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
 
   async def abort(self) -> None:
     """Abort the current operation."""
+    logger.info("[Multidrop %s] abort", self._driver._port)
     await self._driver.send_abort_signal()
 
   async def set_dispense_offset(self, x_offset: int, y_offset: int) -> None:

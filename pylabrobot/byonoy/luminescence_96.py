@@ -1,3 +1,4 @@
+import logging
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -18,6 +19,8 @@ from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Backend
@@ -59,6 +62,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
       backend_params = ByonoyLuminescence96Backend.LuminescenceParams()
 
     integration_time = backend_params.integration_time
+    logger.info("[Byonoy L96 pid=0x%04X] reading luminescence: plate='%s', integration_time=%.1fs, wells=%d/%d", self.io.pid, plate.name, integration_time, len(wells), plate.num_items)
 
     await self.send_command(
       report_id=0x0010,
@@ -87,6 +91,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
 
     while True:
       if time.time() - t0 > 120:
+        logger.error("[Byonoy L96 pid=0x%04X] luminescence read timed out after 120s", self.io.pid)
         raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
 
       chunk = await self.io.read(64, timeout=30)

@@ -78,8 +78,6 @@ class BioTekBackend(
     return rects
 
   async def setup(self) -> None:
-    logger.info(f"{self.__class__.__name__} setting up")
-
     await self.io.setup()
     await self.io.usb_reset()
     await self.io.set_latency_timer(16)
@@ -98,8 +96,10 @@ class BioTekBackend(
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
 
+    logger.info("[BioTek %s] connected: firmware=%s", self.io.device_id, self._version)
+
   async def stop(self) -> None:
-    logger.info(f"{self.__class__.__name__} stopping")
+    logger.info("[BioTek %s] disconnected", self.io.device_id)
     await self.stop_shaking()
     await self.io.stop()
 
@@ -228,7 +228,9 @@ class BioTekBackend(
   async def request_current_temperature(self) -> float:
     resp = await self.send_command("h", timeout=1)
     assert resp is not None
-    return int(resp[1:-1]) / 100000
+    temperature = int(resp[1:-1]) / 100000
+    logger.info("[BioTek %s] temperature: value=%.3f°C", self.io.device_id, temperature)
+    return temperature
 
   async def set_temperature(self, temperature: float):
     if not self.supports_heating and not self.supports_cooling:
@@ -345,6 +347,10 @@ class BioTekBackend(
     if not (min_abs <= wavelength <= max_abs):
       raise ValueError(f"{self.__class__.__name__}: wavelength must be within {min_abs}-{max_abs}")
 
+    logger.info(
+      "[BioTek %s] read_absorbance: plate=%s, wavelength=%dnm, wells=%d",
+      self.io.device_id, plate.name, wavelength, len(wells),
+    )
     await self.set_plate(plate)
 
     wavelength_str = str(wavelength).zfill(4)
@@ -408,6 +414,10 @@ class BioTekBackend(
     if not (min_fh <= focal_height <= max_fh):
       raise ValueError(f"{self.__class__.__name__}: focal height must be within {min_fh}-{max_fh}")
 
+    logger.info(
+      "[BioTek %s] read_luminescence: plate=%s, wells=%d",
+      self.io.device_id, plate.name, len(wells),
+    )
     await self.set_plate(plate)
 
     cmd = f"3{14220 + int(1000 * focal_height)}\x03"
@@ -479,6 +489,10 @@ class BioTekBackend(
     if not (min_em <= emission_wavelength <= max_em):
       raise ValueError(f"{self.__class__.__name__}: emission wavelength must be {min_em}-{max_em}")
 
+    logger.info(
+      "[BioTek %s] read_fluorescence: plate=%s, excitation=%dnm, emission=%dnm, wells=%d",
+      self.io.device_id, plate.name, excitation_wavelength, emission_wavelength, len(wells),
+    )
     await self.set_plate(plate)
 
     cmd = f"{614220 + int(1000 * focal_height)}\x03"

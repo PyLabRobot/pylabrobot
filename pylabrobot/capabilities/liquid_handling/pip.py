@@ -27,7 +27,7 @@ from .utils import (
   get_wide_single_resource_liquid_op_offsets,
 )
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class PIP(Capability):

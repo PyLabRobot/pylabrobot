@@ -1,3 +1,4 @@
+import logging
 import warnings
 from typing import Optional
 
@@ -8,6 +9,8 @@ from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
 from .cpac import InhecoTemperatureControllerBackend
+
+logger = logging.getLogger(__name__)
 
 
 class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend):
@@ -24,6 +27,7 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     return await self.interface.send_command(f"{self.index}ASE1")
 
   async def stop_shaking(self):
+    logger.info("[Inheco ThermoShake idx=%d] stop shaking", self.index)
     return await self.interface.send_command(f"{self.index}ASE0")
 
   async def set_shaker_speed(self, speed: float):
@@ -43,6 +47,7 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     return await self.interface.send_command(f"1SSS{shape}")
 
   async def start_shaking(self, speed: float, shape: int = 0):
+    logger.info("[Inheco ThermoShake idx=%d] start shaking: speed=%.0f, shape=%d", self.index, speed, shape)
     await self.set_shaker_speed(speed=speed)
     await self.set_shaker_shape(shape=shape)
     await self._start_shaking_command()

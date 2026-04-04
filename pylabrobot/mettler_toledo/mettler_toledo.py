@@ -9,7 +9,7 @@ from pylabrobot.capabilities.weighing import ScaleBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class MettlerToledoError(Exception):
@@ -172,6 +172,7 @@ class MettlerToledoWXS205SDUDriver(Driver):
 
   async def setup(self) -> None:
     await self.io.setup()
+    logger.info("[MettlerToledo %s] connected", self.io.port)
 
   async def stop(self) -> None:
     await self.io.stop()
@@ -299,6 +300,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     """Initialize scale after driver connects: set output unit to grams and read serial."""
     await self.driver.send_command("M21 0 0")
     self.serial_number = await self.request_serial_number()
+    logger.info("[MettlerToledo %s] initialized: serial_number=%s", self.driver.io.port, self.serial_number)
 
   # === Public high-level API ===
 
@@ -338,18 +340,18 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     """
 
     if timeout == "stable":
-      return await self.zero_stable()
-
-    if not isinstance(timeout, (float, int)):
+      result = await self.zero_stable()
+    elif not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
-
-    if timeout < 0:
+    elif timeout < 0:
       raise ValueError("timeout must be greater than or equal to 0")
+    elif timeout == 0:
+      result = await self.zero_immediately()
+    else:
+      result = await self.zero_timeout(timeout)
 
-    if timeout == 0:
-      return await self.zero_immediately()
-
-    return await self.zero_timeout(timeout)
+    logger.info("[MettlerToledo %s] zeroed: timeout=%s", self.serial_number, timeout)
+    return result
 
   # # Tare commands # #
 
@@ -381,17 +383,18 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
 
     if timeout == "stable":
       # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
-      return await self.tare_stable()
-
-    if not isinstance(timeout, (float, int)):
+      result = await self.tare_stable()
+    elif not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
-
-    if timeout < 0:
+    elif timeout < 0:
       raise ValueError("timeout must be greater than or equal to 0")
+    elif timeout == 0:
+      result = await self.tare_immediately()
+    else:
+      result = await self.tare_timeout(timeout)
 
-    if timeout == 0:
-      return await self.tare_immediately()
-    return await self.tare_timeout(timeout)
+    logger.info("[MettlerToledo %s] tared: timeout=%s", self.serial_number, timeout)
+    return result
 
   # # Weight reading commands # #
 
@@ -425,6 +428,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     weight = float(response[2])
     unit = response[3]
     assert unit == "g"  # this is the format we expect
+    logger.info("[MettlerToledo %s] stable weight read: weight_g=%s", self.serial_number, weight)
     return weight
 
   async def read_dynamic_weight(self, timeout: float) -> float:
@@ -441,6 +445,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     weight = float(response[2])
     unit = response[3]
     assert unit == "g"  # this is the format we expect
+    logger.info("[MettlerToledo %s] dynamic weight read: weight_g=%s", self.serial_number, weight)
     return weight
 
   async def read_weight_value_immediately(self) -> float:
@@ -453,6 +458,7 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     response = await self.driver.send_command("SI")
     weight = float(response[2])
     assert response[3] == "g"  # this is the format we expect
+    logger.info("[MettlerToledo %s] immediate weight read: weight_g=%s", self.serial_number, weight)
     return weight
 
   async def read_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:

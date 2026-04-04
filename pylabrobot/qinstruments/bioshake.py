@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional, Union
 
 from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
@@ -18,6 +19,8 @@ try:
 except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
+
+logger = logging.getLogger(__name__)
 
 
 class BioShakeDriver(Driver):
@@ -64,6 +67,7 @@ class BioShakeDriver(Driver):
         raise RuntimeError(f"No response for '{cmd}'")
 
       if decoded.startswith("e"):
+        logger.error("[BioShake %s] error for '%s': '%s'", self.port, cmd, decoded)
         raise RuntimeError(f"Device returned error for '{cmd}': '{decoded}'")
 
       if decoded.startswith("u ->"):
@@ -83,9 +87,11 @@ class BioShakeDriver(Driver):
       await self.reset()
       await asyncio.sleep(4)
       await self.home()
+    logger.info("[BioShake %s] connected", self.port)
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[BioShake %s] disconnected", self.port)
 
   async def reset(self):
     await self.io.reset_input_buffer()
@@ -161,6 +167,7 @@ class BioShakeShakerBackend(ShakerBackend):
       )
 
     await self.driver.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
+    logger.info("[BioShake %s] start shaking: speed=%d, accel=%d", self.driver.port, speed, acceleration)
     await self.driver.send_command(cmd="shakeOn", delay=0.2)
 
   async def stop_shaking(self, deceleration: Union[int, float] = 0):
@@ -184,6 +191,7 @@ class BioShakeShakerBackend(ShakerBackend):
       )
 
     await self.driver.send_command(cmd=f"setShakeAcceleration{deceleration}", delay=0.2)
+    logger.info("[BioShake %s] stop shaking (decel=%d)", self.driver.port, deceleration)
     await self.driver.send_command(cmd="shakeOff", delay=0.2)
 
     # The firmware needs the motor to fully decelerate before ELM can operate.
@@ -194,9 +202,11 @@ class BioShakeShakerBackend(ShakerBackend):
     return True
 
   async def lock_plate(self):
+    logger.info("[BioShake %s] lock plate", self.driver.port)
     await self.driver.send_command(cmd="setElmLockPos", delay=0.3)
 
   async def unlock_plate(self):
+    logger.info("[BioShake %s] unlock plate", self.driver.port)
     await self.driver.send_command(cmd="setElmUnlockPos", delay=0.3)
 
 
@@ -227,14 +237,18 @@ class BioShakeTemperatureBackend(TemperatureControllerBackend):
         raise ValueError(f"Temperature must be a whole number in 1/10 C, not {temperature_tenths}")
       temperature_tenths = int(temperature_tenths)
 
+    logger.info("[BioShake %s] setting temperature to %.1f C", self.driver.port, temperature)
     await self.driver.send_command(cmd=f"setTempTarget{temperature_tenths}", delay=0.2)
     await self.driver.send_command(cmd="tempOn", delay=0.2)
 
   async def request_current_temperature(self) -> float:
     response = await self.driver.send_command(cmd="getTempActual", delay=0.2)
-    return float(response)
+    temp = float(response)
+    logger.info("[BioShake %s] read temperature: actual=%.1f C", self.driver.port, temp)
+    return temp
 
   async def deactivate(self):
+    logger.info("[BioShake %s] deactivating temperature", self.driver.port)
     await self.driver.send_command(cmd="tempOff", delay=0.2)
 
 

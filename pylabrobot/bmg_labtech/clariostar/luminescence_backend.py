@@ -1,3 +1,4 @@
+import logging
 import struct
 import time
 from typing import List, Optional
@@ -12,6 +13,8 @@ from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
 from .driver import CLARIOstarDriver
+
+logger = logging.getLogger(__name__)
 
 
 class CLARIOstarLuminescenceBackend(LuminescenceBackend):
@@ -30,6 +33,13 @@ class CLARIOstarLuminescenceBackend(LuminescenceBackend):
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
 
+    logger.info(
+      "[CLARIOstar %s] read luminescence: plate=%s, focal_height=%.1f mm, wells=%d",
+      self.driver.io.device_id or "default",
+      plate.name,
+      focal_height,
+      len(wells),
+    )
     await self.driver.mp_and_focus_height_value()
 
     assert 0 <= focal_height <= 25, "focal height must be between 0 and 25 mm"

@@ -1,9 +1,12 @@
 import asyncio
+import logging
 from typing import Optional
 
 from pylabrobot.capabilities.fan_control import FanBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
+
+logger = logging.getLogger(__name__)
 
 _SPEED_TABLE = [
   "55c10111007b",
@@ -135,9 +138,11 @@ class HamiltonHepaFanDriver(Driver):
     await self.send(b"\x55\xc1\x01\x09\x6a\x09")
     await self.send(b"\x55\xc1\x01\x0a\x2f\x4f")
     await self.send(b"\x15\x61\x01\x8a")
+    logger.info("[HEPA fan %s] initialized", self.io.device_id or "default")
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[HEPA fan %s] stopped", self.io.device_id or "default")
 
   async def send(self, command: bytes):
     await self.io.write(command)
@@ -154,10 +159,12 @@ class HamiltonHepaFanFanBackend(FanBackend):
   async def turn_on(self, intensity: int) -> None:
     if int(intensity) != intensity or not 0 <= intensity <= 100:
       raise ValueError("Intensity must be an integer between 0 and 100")
+    logger.info("[HEPA fan %s] turning on at intensity %d%%", self.driver.io.device_id or "default", intensity)
     await self.driver.send(b"\x35\x41\x01\xff\x75")
     await self.driver.send(bytes.fromhex(_SPEED_TABLE[intensity]))
 
   async def turn_off(self) -> None:
+    logger.info("[HEPA fan %s] turning off", self.driver.io.device_id or "default")
     await self.driver.send(b"\x55\xc1\x01\x11\x00\x7b")
 
 

@@ -33,7 +33,7 @@ from .pip_channel import PIPChannel
 if TYPE_CHECKING:
   from .driver import STARDriver
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +348,12 @@ class STARPIPBackend(PIPBackend):
     await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "pick_up_tips")
 
+    logger.info(
+      "[STAR PIP] pick_up_tips: resource=%s, channels=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+    )
+
     x_positions, y_positions, channels_involved = _ops_to_fw_positions(
       ops, use_channels, self.num_channels
     )
@@ -466,6 +472,12 @@ class STARPIPBackend(PIPBackend):
 
     await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "drop_tips")
+
+    logger.info(
+      "[STAR PIP] drop_tips: resource=%s, channels=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+    )
 
     drop_method = backend_params.drop_method
     if drop_method is None:
@@ -741,6 +753,14 @@ class STARPIPBackend(PIPBackend):
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hlcs)
     ]
+
+    logger.info(
+      "[STAR PIP] aspirate: resource=%s, channels=%s, volumes=%s, flow_rates=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+      [round(v, 3) for v in volumes],
+      [round(fr, 3) for fr in flow_rates],
+    )
 
     transport_air_volume = _fill(
       backend_params.transport_air_volume,
@@ -1210,6 +1230,14 @@ class STARPIPBackend(PIPBackend):
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
       for op, hlc in zip(ops, hlcs)
     ]
+
+    logger.info(
+      "[STAR PIP] dispense: resource=%s, channels=%s, volumes=%s, flow_rates=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+      [round(v, 3) for v in volumes],
+      [round(fr, 3) for fr in flow_rates],
+    )
 
     cut_off_speed = _fill(backend_params.cut_off_speed, [5.0] * n)
     stop_back_volume = _fill(

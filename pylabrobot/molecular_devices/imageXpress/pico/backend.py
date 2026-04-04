@@ -671,6 +671,14 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     plate: Plate,
     backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
+    logger.info(
+      "[Pico %s:%s] capture: row=%d, col=%d, mode=%s",
+      self.driver._host,
+      self.driver._port,
+      row,
+      column,
+      mode,
+    )
     if mode not in _IMAGING_MODE_MAP:
       raise ValueError(
         f"Unsupported imaging mode {mode} for Pico. Supported: {list(_IMAGING_MODE_MAP.keys())}"

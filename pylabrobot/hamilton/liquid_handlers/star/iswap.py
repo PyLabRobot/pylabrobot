@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import logging
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
@@ -13,6 +14,8 @@ from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
+
+logger = logging.getLogger(__name__)
 
 
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
@@ -723,6 +726,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
+    logger.info(
+      "[iSWAP] pick up plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
+      location.x, location.y, location.z, direction, resource_width,
+    )
+
     await self.driver.send_command(
       module="C0",
       command="PP",
@@ -811,6 +819,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
+    logger.info(
+      "[iSWAP] release plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
+      location.x, location.y, location.z, direction, resource_width,
+    )
+
     await self.driver.send_command(
       module="C0",
       command="PR",
@@ -890,6 +903,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
       raise ValueError("acceleration_index_low_acc must be between 0 and 4")
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
+
+    logger.info(
+      "[iSWAP] move held plate to: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg",
+      location.x, location.y, location.z, direction,
+    )
 
     await self.driver.send_command(
       module="C0",

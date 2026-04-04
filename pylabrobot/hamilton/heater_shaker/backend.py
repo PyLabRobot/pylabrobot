@@ -1,3 +1,4 @@
+import logging
 import time
 import warnings
 from enum import Enum
@@ -8,6 +9,8 @@ from pylabrobot.capabilities.temperature_controlling import TemperatureControlle
 from pylabrobot.device import Driver
 
 from .box import HamiltonHeaterShakerInterface
+
+logger = logging.getLogger(__name__)
 
 
 class PlateLockPosition(Enum):
@@ -74,21 +77,26 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
     if not (500 <= acceleration <= 10_000):
       raise ValueError("Acceleration must be between 500 and 10_000")
 
+    logger.info("[HHS %d] start shaking: speed=%d rpm, direction=%d, acceleration=%d", self.driver.index, int_speed, direction, acceleration)
     now = time.time()
     while True:
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
       if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
+        logger.error("[HHS %d] failed to start shaking within %ss timeout", self.driver.index, timeout)
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
+    logger.info("[HHS %d] stop shaking", self.driver.index)
     await self._stop_shaking()
     await self._wait_for_stop()
 
   async def request_is_shaking(self) -> bool:
     response = await self.driver.send_command("RD")
-    return response.endswith("1")
+    is_shaking = response.endswith("1")
+    logger.debug("[HHS %d] read shaking status: is_shaking=%s", self.driver.index, is_shaking)
+    return is_shaking
 
   async def _move_plate_lock(self, position: PlateLockPosition):
     return await self.driver.send_command("LP", lp=position.value)
@@ -132,6 +140,7 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   async def set_temperature(self, temperature: float):
     if not (0 < temperature <= 105):
       raise ValueError(f"Temperature must be between 0 (exclusive) and 105, got {temperature}")
+    logger.info("[HHS %d] set temperature: target=%.1f C", self.driver.index, temperature)
     temp_str = f"{round(10 * temperature):04d}"
     return await self.driver.send_command("TA", ta=temp_str)
 
@@ -144,11 +153,16 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
 
   async def request_current_temperature(self) -> float:
     response = await self._request_current_temperature()
-    return response["middle"]
+    temp = response["middle"]
+    logger.info("[HHS %d] read temperature: actual=%.1f C", self.driver.index, temp)
+    return temp
 
   async def request_edge_temperature(self) -> float:
     response = await self._request_current_temperature()
-    return response["edge"]
+    temp = response["edge"]
+    logger.info("[HHS %d] read edge temperature: actual=%.1f C", self.driver.index, temp)
+    return temp
 
   async def deactivate(self):
+    logger.info("[HHS %d] deactivate temperature control", self.driver.index)
     return await self.driver.send_command("TO")

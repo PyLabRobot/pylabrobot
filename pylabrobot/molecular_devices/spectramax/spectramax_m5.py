@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
@@ -32,6 +33,8 @@ from .backend import (
   SpectrumSettings,
   _MolecularDevicesProtocol,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBackend):
@@ -95,6 +98,14 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     if not isinstance(backend_params, self.FluorescenceParams):
       backend_params = SpectraMaxM5FluorescenceBackend.FluorescenceParams()
 
+    logger.info(
+      "[SpectraMax M5 %s] read fluorescence: plate=%s, ex=%d nm, em=%d nm, wells=%d",
+      self.driver.port,
+      plate.name,
+      excitation_wavelength,
+      emission_wavelength,
+      len(wells),
+    )
     excitation_wavelengths = backend_params.excitation_wavelengths or [excitation_wavelength]
     emission_wavelengths = backend_params.emission_wavelengths or [emission_wavelength]
     cutoff_filters = backend_params.cutoff_filters
@@ -175,6 +186,13 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     timeout: int = 600,
   ) -> List[Dict]:
     """Read fluorescence polarization."""
+    logger.info(
+      "[SpectraMax M5 %s] read fluorescence polarization: plate='%s', ex=%s nm, em=%s nm",
+      self.driver.port,
+      plate.name,
+      excitation_wavelengths,
+      emission_wavelengths,
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.POLAR,
@@ -241,6 +259,13 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     timeout: int = 600,
   ) -> List[Dict]:
     """Read time-resolved fluorescence."""
+    logger.info(
+      "[SpectraMax M5 %s] read time-resolved fluorescence: plate='%s', ex=%s nm, em=%s nm",
+      self.driver.port,
+      plate.name,
+      excitation_wavelengths,
+      emission_wavelengths,
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.TIME,
@@ -340,6 +365,12 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
     if not isinstance(backend_params, self.LuminescenceParams):
       backend_params = SpectraMaxM5LuminescenceBackend.LuminescenceParams()
 
+    logger.info(
+      "[SpectraMax M5 %s] read luminescence: plate=%s, wells=%d",
+      self.driver.port,
+      plate.name,
+      len(wells),
+    )
     if backend_params.emission_wavelengths is None:
       raise ValueError("emission_wavelengths is required for SpectraMax M5 luminescence reads")
 

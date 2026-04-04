@@ -16,7 +16,7 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 RES_TERM_CHAR = b">"
 COMMAND_TERMINATORS: Dict[str, int] = {
@@ -288,9 +288,11 @@ class MolecularDevicesDriver(Driver):
   async def setup(self) -> None:
     await self.io.setup()
     await self.send_command("!")
+    logger.info("[SpectraMax %s] connected", self.port)
 
   async def stop(self) -> None:
     await self.io.stop()
+    logger.info("[SpectraMax %s] disconnected", self.port)
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
@@ -314,10 +316,10 @@ class MolecularDevicesDriver(Driver):
       raw_response += await self.io.readline()
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
+        logger.error("[SpectraMax %s] timeout waiting for response to command: %s", self.port, command)
         raise TimeoutError(f"Timeout waiting for response to command: {command}")
       if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
         break
-    logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
     response = raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
     response = [r.strip() for r in response if r.strip() != ""]
     self._parse_basic_errors(response, command)
@@ -325,6 +327,7 @@ class MolecularDevicesDriver(Driver):
 
   def _parse_basic_errors(self, response: List[str], command: str) -> None:
     if not response:
+      logger.error("[SpectraMax %s] command '%s' returned empty response", self.port, command)
       raise MolecularDevicesError(f"Command '{command}' failed with empty response.")
 
     error_code_msg = response[0] if "FAIL" in response[0] else response[-1]
@@ -347,7 +350,7 @@ class MolecularDevicesDriver(Driver):
     if not any("OK" in r for r in response):
       raise MolecularDevicesError(f"Command '{command}' failed with response: {response}")
     if "warning" in response[0].lower():
-      logger.warning("Warning for command '%s': %s", command, response)
+      logger.warning("[SpectraMax %s] warning for command '%s': %s", self.port, command, response)
 
   # -- device-level operations --
 
@@ -395,6 +398,7 @@ class MolecularDevicesDriver(Driver):
     start_time = time.time()
     while True:
       if time.time() - start_time > timeout:
+        logger.error("[SpectraMax %s] timeout waiting for idle after %ds", self.port, timeout)
         raise TimeoutError("Timeout waiting for plate reader to become idle.")
       status = await self.request_status()
       if status and status[1] == "IDLE":
@@ -779,6 +783,12 @@ class MolecularDevicesAbsorbanceBackend(_MolecularDevicesProtocol, AbsorbanceBac
     wavelengths = (
       backend_params.wavelengths if backend_params.wavelengths is not None else [wavelength]
     )
+    logger.info(
+      "[SpectraMax %s] read absorbance: plate='%s', wavelengths=%s nm",
+      self.driver.port,
+      plate.name,
+      wavelengths,
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,
@@ -849,12 +859,15 @@ class MolecularDevicesTemperatureBackend(TemperatureControllerBackend):
 
   async def request_current_temperature(self) -> float:
     current, _ = await self.request_temperature()
+    logger.info("[SpectraMax %s] read temperature: actual=%.1f C", self.driver.port, current)
     return current
 
   async def set_temperature(self, temperature: float) -> None:
     if not (0 <= temperature <= 45):
       raise ValueError("Temperature must be between 0 and 45°C.")
+    logger.info("[SpectraMax %s] set temperature: target=%.1f C", self.driver.port, temperature)
     await self.driver.send_command(f"!TEMP {temperature}")
 
   async def deactivate(self) -> None:
+    logger.info("[SpectraMax %s] deactivate temperature control", self.driver.port)
     await self.driver.send_command("!TEMP 0")

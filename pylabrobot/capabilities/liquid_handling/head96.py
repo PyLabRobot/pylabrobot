@@ -28,7 +28,7 @@ from .standard import (
   PickupTipRack,
 )
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class Head96(Capability):
