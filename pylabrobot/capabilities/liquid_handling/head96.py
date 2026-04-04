@@ -41,11 +41,17 @@ class Head96(Capability):
   See :doc:`/user_guide/capabilities/head96` for a walkthrough.
   """
 
-  def __init__(self, backend: Head96Backend, default_offset: Coordinate = Coordinate.zero()):
+  def __init__(
+    self,
+    backend: Head96Backend,
+    default_offset: Coordinate = Coordinate.zero(),
+    deck=None,
+  ):
     super().__init__(backend=backend)
     self.backend: Head96Backend = backend
     self.head: Dict[int, TipTracker] = {}
     self.default_offset: Coordinate = default_offset
+    self.deck = deck
 
   async def _on_setup(self):
     await super()._on_setup()
@@ -265,17 +271,21 @@ class Head96(Capability):
   @need_capability_ready
   async def discard_tips(
     self,
-    trash: Trash,
+    trash: Optional[Trash] = None,
     allow_nonzero_volume: bool = True,
     drop_backend_params: Optional[BackendParams] = None,
   ):
     """Permanently discard tips from the 96-head into the trash.
 
     Args:
-      trash: The trash resource.
+      trash: The trash resource. If None, automatically finds the 96-head trash on the deck.
       allow_nonzero_volume: If True, discard even if tips have liquid.
       drop_backend_params: Vendor-specific parameters for the drop.
     """
+    if trash is None:
+      if self.deck is None:
+        raise ValueError("No trash provided and no deck set on Head96. Pass trash explicitly.")
+      trash = self.deck.get_trash_area96()
     await self.drop_tips(
       trash, allow_nonzero_volume=allow_nonzero_volume, backend_params=drop_backend_params
     )

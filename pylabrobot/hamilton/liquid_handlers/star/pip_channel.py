@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import enum
+import re
 from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple
+
+from .errors import STARFirmwareError
 
 if TYPE_CHECKING:
   from .driver import STARDriver
+  from .pip_backend import STARPIPBackend
 
 
 # ---------------------------------------------------------------------------
@@ -16,6 +20,11 @@ if TYPE_CHECKING:
 _Z_DRIVE_MM_PER_INCREMENT = 0.01072765
 _DISPENSING_DRIVE_VOL_PER_INCREMENT = 0.046876  # uL / increment
 _DISPENSING_DRIVE_MM_PER_INCREMENT = 0.002734375  # mm / increment
+_Y_DRIVE_MM_PER_INCREMENT = 0.046302082
+
+MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
+MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)
+DEFAULT_TIP_FITTING_DEPTH = 8  # mm, for 10, 50, 300, 1000 uL Hamilton tips
 
 
 def _mm_to_z_inc(mm: float) -> int:
@@ -40,6 +49,14 @@ def _mm_to_disp_inc(mm: float) -> int:
 
 def _disp_inc_to_mm(inc: int) -> float:
   return round(inc * _DISPENSING_DRIVE_MM_PER_INCREMENT, 3)
+
+
+def _mm_to_y_inc(mm: float) -> int:
+  return round(mm / _Y_DRIVE_MM_PER_INCREMENT)
+
+
+def _y_inc_to_mm(inc: int) -> float:
+  return round(inc * _Y_DRIVE_MM_PER_INCREMENT, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -68,9 +85,14 @@ class PIPChannel:
   Instances are created by :class:`STARPIPBackend` — one per physical channel.
   """
 
-  def __init__(self, driver: STARDriver, index: int):
+  def __init__(self, driver: STARDriver, index: int, backend: STARPIPBackend):
     self.driver = driver
     self.index = index
+    self.backend = backend
+
+  async def send_command(self, *args, **kwargs):
+    """Send a firmware command. C0 commands are serialized; Px commands go direct."""
+    return await self.backend.send_command(*args, **kwargs)
 
   @property
   def module_id(self) -> str:
@@ -81,7 +103,7 @@ class PIPChannel:
 
   async def request_firmware_version(self) -> str:
     """Query the firmware version of this channel (Px:RF)."""
-    resp = await self.driver.send_command(
+    resp = await self.send_command(
       module=self.module_id,
       command="RF",
       fmt="rf" + "&" * 17,
@@ -101,7 +123,7 @@ class PIPChannel:
       ``aspiration_cycles``, and ``dispensing_cycles``.
     """
 
-    resp = await self.driver.send_command(
+    resp = await self.send_command(
       module=self.module_id,
       command="RV",
       fmt="na##########nb##########nc##########nd##########",
@@ -118,7 +140,7 @@ class PIPChannel:
   async def request_dispensing_drive_position(self) -> float:
     """Request the current position of the channel's dispensing drive"""
 
-    resp = await self.driver.send_command(
+    resp = await self.send_command(
       module=self.module_id,
       command="RD",
       fmt="rd##### #####",
@@ -168,7 +190,7 @@ class PIPChannel:
     acceleration_increment = _vol_to_disp_inc(acceleration)
     acceleration_increment_thousands = round(acceleration_increment * 0.001)
 
-    await self.driver.send_command(
+    await self.send_command(
       module=self.module_id,
       command="DS",
       ds=f"{relative_vol_movement_increment:05}",
@@ -220,7 +242,7 @@ class PIPChannel:
 
   # -- Px:ZA  move Z-drive (stop disk reference) ------------------------------
 
-  async def move_z(
+  async def move_stop_disk_z(
     self,
     z: float,
     speed: float = 125.0,
@@ -259,7 +281,7 @@ class PIPChannel:
     if not (0 <= current_limit <= 7):
       raise ValueError(f"current_limit must be between 0 and 7, got {current_limit}")
 
-    return await self.driver.send_command(
+    return await self.send_command(
       module=self.module_id,
       command="ZA",
       za=f"{z_inc:05}",
@@ -268,18 +290,136 @@ class PIPChannel:
       zw=f"{current_limit:01}",
     )
 
+  async def move_to_z_safety(self):
+    """Move this channel to the maximum Z position (safe height) using Px:ZA."""
+    await self.move_stop_disk_z(self.MAXIMUM_CHANNEL_Z_POSITION)
+
+  # -- move tool Z (tip/tool end reference) ------------------------------------
+
+  MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm
+  MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm
+  DEFAULT_TIP_FITTING_DEPTH = 8  # mm
+
+  async def move_tool_z(self, z: float):
+    """Move this channel in the Z direction, referenced to the tip/tool end (mm).
+
+    Requires a tip or tool to be attached. Use :meth:`move_stop_disk_z` for moves
+    without a tip.
+
+    Args:
+      z: Target Z position in mm (tip/tool end).
+    """
+    tip_presence = await self.backend.request_tip_presence()
+    if not tip_presence[self.index]:
+      raise ValueError(
+        f"Channel {self.index} does not have a tip or tool attached. "
+        "Use move_stop_disk_z() for Z moves without a tip attached."
+      )
+
+    tip_len = await self.request_tip_length()
+
+    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+
+    if not (min_tip_z <= z <= max_tip_z):
+      raise ValueError(
+        f"z={z} mm out of safe range [{min_tip_z}, {max_tip_z}] mm "
+        f"for tip length {tip_len} mm on channel {self.index}"
+      )
+
+    await self.send_command(
+      module="C0",
+      command="KZ",
+      pn=f"{self.index + 1:02}",
+      zj=f"{round(z * 10):04}",
+    )
+
+  # -- C0:KY  move channel Y ---------------------------------------------------
+
+  async def move_y(self, y: float):
+    """Move this channel safely in the Y direction (mm), with anti-crash checks.
+
+    Args:
+      y: Target Y position in mm.
+    """
+    assert self.driver.extended_conf is not None
+    if self.index > 0:
+      max_y_pos = await self.backend.request_y_pos_channel_n(self.index - 1)
+      if y > max_y_pos:
+        raise ValueError(
+          f"channel {self.index} y-target must be <= {max_y_pos} mm "
+          f"(channel {self.index - 1} y-position is {round(max_y_pos, 2)} mm)"
+        )
+    else:
+      max_y_pos = self.driver.extended_conf.pip_maximal_y_position
+      if y > max_y_pos:
+        raise ValueError(f"channel {self.index} y-target must be <= {max_y_pos} mm")
+
+    if self.index < (self.backend.num_channels - 1):
+      min_y_pos = await self.backend.request_y_pos_channel_n(self.index + 1)
+      if y < min_y_pos:
+        raise ValueError(
+          f"channel {self.index} y-target must be >= {min_y_pos} mm "
+          f"(channel {self.index + 1} y-position is {round(min_y_pos, 2)} mm)"
+        )
+    else:
+      if y < self.driver.extended_conf.left_arm_min_y_position:
+        raise ValueError(
+          f"channel {self.index} y-target must be >= "
+          f"{self.driver.extended_conf.left_arm_min_y_position} mm"
+        )
+
+    y_position = round(y * 10)
+    if not 0 <= y_position <= 6500:
+      raise ValueError("y_position must be between 0 and 650 mm")
+    await self.send_command(
+      module="C0",
+      command="KY",
+      pn=f"{self.index + 1:02}",
+      yj=f"{y_position:04}",
+    )
+
   # -- Px:RZ  probe Z position -----------------------------------------------
 
   async def request_probe_z_position(self) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
-    resp = await self.driver.send_command(module=self.module_id, command="RZ", fmt="rz######")
+    resp = await self.send_command(module=self.module_id, command="RZ", fmt="rz######")
     increments = resp["rz"]
     return _z_inc_to_mm(increments)
+
+  # -- C0:RD  tip bottom Z position -------------------------------------------
+
+  async def _request_tip_bottom_z_position(self) -> float:
+    """Request Z-position of the tip bottom on this channel (mm) (C0:RD)."""
+    resp = await self.send_command(
+      module="C0",
+      command="RD",
+      fmt="rd####",
+      pn=f"{self.index + 1:02}",
+    )
+    return float(resp["rd"] / 10)
+
+  # -- tip length measurement --------------------------------------------------
+
+  async def request_tip_length(self) -> float:
+    """Measure the length of the tip on this channel (mm).
+
+    Raises RuntimeError if no tip is present.
+    """
+    tip_presence = await self.backend.request_tip_presence()
+    if not tip_presence[self.index]:
+      raise RuntimeError(f"No tip present on channel {self.index}")
+
+    probe_z = await self.request_probe_z_position()
+    tip_bottom_z = await self._request_tip_bottom_z_position()
+
+    fitting_depth = 8  # mm
+    return round(probe_z - (tip_bottom_z - fitting_depth), 1)
 
   # -- Px:QC  volume in tip ---------------------------------------------------
 
   async def request_volume_in_tip(self) -> float:
-    resp = await self.driver.send_command(self.module_id, "QC", fmt="qc##### (n)")
+    resp = await self.send_command(self.module_id, "QC", fmt="qc##### (n)")
     _, current_volume = resp["qc"]  # first is max volume
     return float(current_volume) / 10
 
@@ -356,7 +496,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
       )
 
-    await self.driver.send_command(
+    await self.send_command(
       module=self.module_id,
       command="ZL",
       zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
@@ -596,7 +736,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
       )
 
-    resp_raw = await self.driver.send_command(
+    resp_raw = await self.send_command(
       module=self.module_id,
       command="ZE",
       zh=f"{lowest_immers_pos_increments:05}",
@@ -654,36 +794,533 @@ class PIPChannel:
 
       Consider this method an easter egg. Not for serious use.
     """
-    await self.driver.send_command(module=self.module_id, command="SI")
+    await self.send_command(module=self.module_id, command="SI")
 
   # ---------------------------------------------------------------------------
-  # Stubs — these use C0 commands internally and live in legacy for now.
+  # Probe / query methods — delegate to backend C0 helpers as needed.
   # ---------------------------------------------------------------------------
 
-  # TODO: port from legacy STARBackend.clld_probe_y_position_using_channel
-  #   Px:YL but also calls C0 helpers (request_y_pos_channel_n, move_channel_y).
-  # async def clld_probe_y_position(self, ...) -> float: ...
+  async def clld_probe_z_height(
+    self,
+    lowest_immers_pos: float = 99.98,
+    start_pos_search: Optional[float] = None,
+    channel_speed: float = 10.0,
+    channel_acceleration: float = 800.0,
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+  ) -> float:
+    print("rick2")
+    """Probe the liquid surface Z-height using this channel's capacitive LLD (cLLD).
 
-  # TODO: port from legacy STARBackend.clld_probe_z_height_using_channel
-  #   Wraps search_z_using_clld (Px:ZL) but calls C0 helpers
-  #   (request_tip_presence, request_tip_len_on_channel, request_pip_height_last_lld,
-  #    move_all_channels_in_z_safety).
-  # async def clld_probe_z_height(self, ...) -> float: ...
+    Ensures a tip is mounted, reads the tip length, converts tip-referenced positions
+    to head-space coordinates, then delegates to :meth:`search_z_using_clld`.
 
-  # TODO: port from legacy STARBackend.plld_probe_z_height_using_channel
-  #   Wraps search_z_using_plld (Px:ZE) but calls C0 helpers
-  #   (request_tip_presence, request_tip_len_on_channel, move_all_channels_in_z_safety).
-  # async def plld_probe_z_height(self, ...) -> Tuple[float, float]: ...
+    Args:
+      lowest_immers_pos: Lowest allowed search position in mm (tip-referenced).
+      start_pos_search: Start position for the cLLD search in mm (tip-referenced).
+        If None, the highest safe position is used based on tip length.
+      channel_speed: Search speed in mm/s.
+      channel_acceleration: Search acceleration in mm/s^2.
+      detection_edge: Edge steepness threshold for cLLD detection (0-1023).
+      detection_drop: Offset applied after cLLD edge detection (0-1023).
+      post_detection_trajectory: Firmware post-detection move mode (0 or 1).
+      post_detection_dist: Distance in mm to move after detection.
+      move_channels_to_safe_pos_after: If True, moves all channels to Z-safe after.
 
-  # TODO: port from legacy STARBackend.ztouch_probe_z_height_using_channel
-  #   Px:ZH but calls C0 helpers (request_tip_len_on_channel, move_channel_z,
-  #   move_all_channels_in_z_safety).
-  # async def ztouch_probe_z_height(self, ...) -> float: ...
+    Returns:
+      The detected liquid surface Z-height in mm.
 
-  # TODO: port from legacy STARBackend.request_tip_len_on_channel
-  #   Composes Px:RZ with C0 helpers (request_tip_presence, request_tip_bottom_z_position).
-  # async def request_tip_length(self) -> float: ...
+    Raises:
+      RuntimeError: If no tip is mounted on this channel.
+    """
+    assert self.backend is not None, "backend reference required for clld_probe_z_height"
 
-  # TODO: port from legacy STARBackend.clld_probe_x_position_using_channel
-  #   C0:XL command — not a Px command at all, lives entirely in legacy.
-  # async def clld_probe_x_position(self, ...) -> float: ...
+    tip_presence = await self.backend.request_tip_presence()
+    if not tip_presence[self.index]:
+      raise RuntimeError(f"No tip mounted on channel {self.index}")
+
+    tip_len = await self.request_tip_length()
+    safe_tip_top_z_pos = MAXIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
+
+    if start_pos_search is None:
+      start_pos_search = safe_tip_top_z_pos
+
+    if lowest_immers_pos < MINIMUM_CHANNEL_Z_POSITION:
+      raise ValueError(
+        f"lowest_immers_pos must be at least {MINIMUM_CHANNEL_Z_POSITION} mm "
+        f"but is {lowest_immers_pos} mm"
+      )
+
+    # Convert tip-space to head-space
+    lowest_immers_pos_head_space = lowest_immers_pos + tip_len - DEFAULT_TIP_FITTING_DEPTH
+    channel_head_start_pos = round(start_pos_search + tip_len - DEFAULT_TIP_FITTING_DEPTH, 2)
+
+    if not (lowest_immers_pos <= start_pos_search <= safe_tip_top_z_pos):
+      raise ValueError(
+        f"Start position of LLD search must be between "
+        f"{lowest_immers_pos} and {safe_tip_top_z_pos} mm, is {start_pos_search} mm"
+      )
+
+    try:
+      await self.search_z_using_clld(
+        lowest_immers_pos=lowest_immers_pos_head_space,
+        start_pos_search=channel_head_start_pos,
+        channel_speed=channel_speed,
+        channel_acceleration=channel_acceleration,
+        detection_edge=detection_edge,
+        detection_drop=detection_drop,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_dist=post_detection_dist,
+      )
+    except STARFirmwareError:
+      await self.move_to_z_safety()
+      raise
+
+    if move_channels_to_safe_pos_after:
+      await self.move_to_z_safety()
+
+    heights = await self.backend.request_pip_height_last_lld()
+    return heights[self.index]
+
+  async def plld_probe_z_height(
+    self,
+    lowest_immers_pos: float = 99.98,
+    start_pos_search: Optional[float] = None,
+    channel_speed_above_start_pos_search: float = 120.0,
+    channel_speed: float = 10.0,
+    channel_acceleration: float = 800.0,
+    z_drive_current_limit: int = 3,
+    tip_has_filter: bool = False,
+    dispense_drive_speed: float = 5.0,
+    dispense_drive_acceleration: float = 0.2,
+    dispense_drive_max_speed: float = 14.5,
+    dispense_drive_current_limit: int = 3,
+    plld_detection_edge: int = 30,
+    plld_detection_drop: int = 10,
+    clld_verification: bool = False,
+    clld_detection_edge: int = 10,
+    clld_detection_drop: int = 2,
+    max_delta_plld_clld: float = 5.0,
+    plld_mode: Optional[PressureLLDMode] = None,
+    plld_foam_detection_drop: int = 30,
+    plld_foam_detection_edge_tolerance: int = 30,
+    plld_foam_ad_values: int = 30,
+    plld_foam_search_speed: float = 10.0,
+    dispense_back_plld_volume: Optional[float] = None,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+  ) -> Tuple[float, float]:
+    """Probe the liquid surface Z-height using pressure-based LLD (pLLD).
+
+    Ensures a tip is mounted, reads the tip length, converts tip-referenced positions
+    to head-space coordinates, then delegates to :meth:`search_z_using_plld`.
+
+    All positions in args are in the *tip-referenced* coordinate system. Returned
+    positions are also in tip-space.
+
+    Args:
+      lowest_immers_pos: Lowest allowed search position in mm (tip-referenced).
+      start_pos_search: Start position in mm (tip-referenced). If None, highest safe.
+      channel_speed_above_start_pos_search: Z speed above the start position (mm/s).
+      channel_speed: Z search speed (mm/s).
+      channel_acceleration: Z acceleration (mm/s^2).
+      z_drive_current_limit: Z drive current limit.
+      tip_has_filter: Whether a filter tip is mounted.
+      dispense_drive_speed: Dispense drive speed (mm/s).
+      dispense_drive_acceleration: Dispense drive acceleration (mm/s^2).
+      dispense_drive_max_speed: Dispense drive max speed (mm/s).
+      dispense_drive_current_limit: Dispense drive current limit.
+      plld_detection_edge: Pressure detection edge threshold.
+      plld_detection_drop: Pressure detection drop threshold.
+      clld_verification: Activate cLLD sensing concurrently.
+      clld_detection_edge: Capacitive detection edge threshold.
+      clld_detection_drop: Capacitive detection drop threshold.
+      max_delta_plld_clld: Max delta between pLLD and cLLD detections (mm).
+      plld_mode: Pressure-detection sub-mode.
+      plld_foam_detection_drop: Foam detection drop threshold.
+      plld_foam_detection_edge_tolerance: Foam detection edge tolerance.
+      plld_foam_ad_values: Foam AD values.
+      plld_foam_search_speed: Foam search speed (mm/s).
+      dispense_back_plld_volume: Dispense-back volume after detection (uL).
+      post_detection_trajectory: Post-detection movement pattern selector.
+      post_detection_dist: Post-detection movement distance (mm).
+      move_channels_to_safe_pos_after: Move all channels to Z-safe after probing.
+
+    Returns:
+      Two z-coordinates (mm) in tip-space:
+      - PressureLLDMode.LIQUID: ``(liquid_level_pos, 0.0)``
+      - PressureLLDMode.FOAM: ``(first_detection_pos, liquid_level_pos)``
+    """
+    assert self.backend is not None, "backend reference required for plld_probe_z_height"
+
+    if plld_mode is None:
+      plld_mode = PressureLLDMode.LIQUID
+
+    tip_presence = await self.backend.request_tip_presence()
+    if not tip_presence[self.index]:
+      raise RuntimeError(f"No tip mounted on channel {self.index}")
+
+    tip_len = await self.request_tip_length()
+    safe_tip_top_z_pos = MAXIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
+
+    if start_pos_search is None:
+      start_pos_search = safe_tip_top_z_pos
+
+    if lowest_immers_pos < MINIMUM_CHANNEL_Z_POSITION:
+      raise ValueError(
+        f"lowest_immers_pos must be at least {MINIMUM_CHANNEL_Z_POSITION} mm "
+        f"but is {lowest_immers_pos} mm"
+      )
+
+    # Convert tip-space to head-space
+    lowest_immers_pos_head_space = lowest_immers_pos + tip_len - DEFAULT_TIP_FITTING_DEPTH
+    channel_head_start_pos = round(start_pos_search + tip_len - DEFAULT_TIP_FITTING_DEPTH, 2)
+
+    if not (lowest_immers_pos <= start_pos_search <= safe_tip_top_z_pos):
+      raise ValueError(
+        f"Start position of LLD search must be between "
+        f"{lowest_immers_pos} and {safe_tip_top_z_pos} mm, is {start_pos_search} mm"
+      )
+
+    try:
+      resp_probe_mm = await self.search_z_using_plld(
+        lowest_immers_pos=lowest_immers_pos_head_space,
+        start_pos_search=channel_head_start_pos,
+        channel_speed_above_start_pos_search=channel_speed_above_start_pos_search,
+        channel_speed=channel_speed,
+        channel_acceleration=channel_acceleration,
+        z_drive_current_limit=z_drive_current_limit,
+        tip_has_filter=tip_has_filter,
+        dispense_drive_speed=dispense_drive_speed,
+        dispense_drive_acceleration=dispense_drive_acceleration,
+        dispense_drive_max_speed=dispense_drive_max_speed,
+        dispense_drive_current_limit=dispense_drive_current_limit,
+        plld_detection_edge=plld_detection_edge,
+        plld_detection_drop=plld_detection_drop,
+        clld_verification=clld_verification,
+        clld_detection_edge=clld_detection_edge,
+        clld_detection_drop=clld_detection_drop,
+        max_delta_plld_clld=max_delta_plld_clld,
+        plld_mode=plld_mode,
+        plld_foam_detection_drop=plld_foam_detection_drop,
+        plld_foam_detection_edge_tolerance=plld_foam_detection_edge_tolerance,
+        plld_foam_ad_values=plld_foam_ad_values,
+        plld_foam_search_speed=plld_foam_search_speed,
+        dispense_back_plld_volume=dispense_back_plld_volume,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_dist=post_detection_dist,
+      )
+    except STARFirmwareError:
+      await self.move_to_z_safety()
+      raise
+
+    # Convert head-space response to tip-space
+    if plld_mode == PressureLLDMode.FOAM:
+      resp_tip_mm = (
+        round(resp_probe_mm[0] - tip_len + DEFAULT_TIP_FITTING_DEPTH, 2),
+        round(resp_probe_mm[1] - tip_len + DEFAULT_TIP_FITTING_DEPTH, 2),
+      )
+    else:
+      resp_tip_mm = (
+        round(resp_probe_mm[0] - tip_len + DEFAULT_TIP_FITTING_DEPTH, 2),
+        0.0,
+      )
+
+    if move_channels_to_safe_pos_after:
+      await self.move_to_z_safety()
+
+    return resp_tip_mm
+
+  async def ztouch_probe_z_height(
+    self,
+    tip_len: Optional[float] = None,
+    lowest_immers_pos: float = 99.98,
+    start_pos_search: Optional[float] = None,
+    channel_speed: float = 10.0,
+    channel_acceleration: float = 800.0,
+    channel_speed_upwards: float = 125.0,
+    detection_limiter_in_PWM: int = 1,
+    push_down_force_in_PWM: int = 0,
+    post_detection_dist: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+  ) -> float:
+    """Probe the Z-height using z-touch-off (controlled z-drive crash detection).
+
+    Args:
+      tip_len: Override the tip length (mm). If None, measured automatically.
+      lowest_immers_pos: Lowest allowed search position in mm (tip-referenced).
+      start_pos_search: Start position in mm (tip-referenced). If None, highest safe.
+      channel_speed: Search speed downward in mm/s.
+      channel_acceleration: Acceleration in mm/s^2.
+      channel_speed_upwards: Retraction speed in mm/s.
+      detection_limiter_in_PWM: Offset PWM limiter value for searching (0-125).
+      push_down_force_in_PWM: Offset PWM value for push down force (0-125).
+      post_detection_dist: Distance to retract after detection in mm.
+      move_channels_to_safe_pos_after: Move all channels to Z-safe after probing.
+
+    Returns:
+      The detected Z-height in mm (tip-referenced).
+
+    Raises:
+      ValueError: If the channel firmware predates 2022 (z-touch not supported).
+    """
+    assert self.backend is not None, "backend reference required for ztouch_probe_z_height"
+
+    version = await self.request_firmware_version()
+    year_matches = re.search(r"\b\d{4}\b", version)
+    if year_matches is not None:
+      year = int(year_matches.group())
+      if year < 2022:
+        raise ValueError(
+          "Z-touch probing is not supported for PIP versions predating 2022, "
+          f"found version '{version}'"
+        )
+
+    if tip_len is None:
+      tip_len = await self.request_tip_length()
+
+    if start_pos_search is None:
+      start_pos_search = MAXIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
+
+    tip_len_used_in_increments = _mm_to_z_inc(tip_len - DEFAULT_TIP_FITTING_DEPTH)
+    channel_head_start_pos = start_pos_search + tip_len - DEFAULT_TIP_FITTING_DEPTH
+    lowest_immers_pos_head_space = lowest_immers_pos + tip_len - DEFAULT_TIP_FITTING_DEPTH
+    safe_head_bottom_z_pos = MINIMUM_CHANNEL_Z_POSITION + tip_len - DEFAULT_TIP_FITTING_DEPTH
+    safe_head_top_z_pos = MAXIMUM_CHANNEL_Z_POSITION
+
+    lowest_immers_pos_increments = _mm_to_z_inc(lowest_immers_pos_head_space)
+    start_pos_search_increments = _mm_to_z_inc(channel_head_start_pos)
+    channel_speed_increments = _mm_to_z_inc(channel_speed)
+    channel_acceleration_thousand_increments = _mm_to_z_inc(channel_acceleration / 1000)
+    channel_speed_upwards_increments = _mm_to_z_inc(channel_speed_upwards)
+
+    if not (0 <= self.index <= 15):
+      raise ValueError(f"channel index must be between 0 and 15, is {self.index}")
+    if not (20 <= tip_len <= 120):
+      raise ValueError(f"Total tip length must be between 20 and 120, is {tip_len}")
+    if not (9320 <= lowest_immers_pos_increments <= 31200):
+      raise ValueError(
+        f"Lowest immersion position must be between 99.98 and 334.7 mm, is {lowest_immers_pos} mm"
+      )
+    if not (safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos):
+      raise ValueError(
+        f"Start position of search must be between "
+        f"{safe_head_bottom_z_pos} and {safe_head_top_z_pos} mm, "
+        f"is {channel_head_start_pos} mm"
+      )
+    if not (20 <= channel_speed_increments <= 15000):
+      raise ValueError(
+        f"Z-touch search speed must be between "
+        f"{_z_inc_to_mm(20)} and {_z_inc_to_mm(15000)} mm/s, is {channel_speed} mm/s"
+      )
+    if not (5 <= channel_acceleration_thousand_increments <= 150):
+      raise ValueError(
+        f"Channel acceleration must be between "
+        f"{_z_inc_to_mm(5000)} and {_z_inc_to_mm(150000)} mm/s^2, "
+        f"is {channel_acceleration} mm/s^2"
+      )
+    if not (20 <= channel_speed_upwards_increments <= 15000):
+      raise ValueError(
+        f"Channel retraction speed must be between "
+        f"{_z_inc_to_mm(20)} and {_z_inc_to_mm(15000)} mm/s, "
+        f"is {channel_speed_upwards} mm/s"
+      )
+    if not (0 <= detection_limiter_in_PWM <= 125):
+      raise ValueError("Detection limiter value must be between 0 and 125 PWM.")
+    if not (0 <= push_down_force_in_PWM <= 125):
+      raise ValueError("Push down force must be between 0 and 125 PWM values")
+    if not (0 <= post_detection_dist <= 245):
+      raise ValueError(
+        f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
+      )
+
+    ztouch_probed_z_height = await self.send_command(
+      module=self.module_id,
+      command="ZH",
+      zb=f"{start_pos_search_increments:05}",
+      za=f"{lowest_immers_pos_increments:05}",
+      zv=f"{channel_speed_upwards_increments:05}",
+      zr=f"{channel_acceleration_thousand_increments:03}",
+      zu=f"{channel_speed_increments:05}",
+      cg=f"{detection_limiter_in_PWM:03}",
+      cf=f"{push_down_force_in_PWM:03}",
+      fmt="rz#####",
+    )
+
+    result_in_mm = _z_inc_to_mm(ztouch_probed_z_height["rz"] - tip_len_used_in_increments)
+
+    if post_detection_dist != 0:
+      await self.move_tool_z(result_in_mm + post_detection_dist)
+
+    if move_channels_to_safe_pos_after:
+      await self.move_to_z_safety()
+
+    return float(result_in_mm)
+
+  async def clld_probe_y_position(
+    self,
+    probing_direction: Literal["forward", "backward"],
+    start_pos_search: Optional[float] = None,
+    end_pos_search: Optional[float] = None,
+    channel_speed: float = 10.0,
+    channel_acceleration_int: Literal[1, 2, 3, 4] = 4,
+    detection_edge: int = 10,
+    current_limit_int: Literal[1, 2, 3, 4, 5, 6, 7] = 7,
+    post_detection_dist: float = 2.0,
+    tip_bottom_diameter: float = 1.2,
+  ) -> float:
+    """Probe the y-position of a conductive material using cLLD.
+
+    Moves this channel along the y-axis to detect a conductive surface. Safety checks
+    prevent collisions with adjacent channels. After detection, the channel is retracted
+    by ``post_detection_dist``.
+
+    Args:
+      probing_direction: ``"forward"`` (decreasing y) or ``"backward"`` (increasing y).
+      start_pos_search: Initial y-position for the search (mm). If None, uses current.
+      end_pos_search: Final y-position for the search (mm). If None, uses safe limit.
+      channel_speed: Movement speed during probing (mm/s).
+      channel_acceleration_int: Acceleration ramp [1-4] (* 5000 steps/s^2).
+      detection_edge: Edge steepness for capacitive detection (0-1023).
+      current_limit_int: Current limit [1-7].
+      post_detection_dist: Retraction distance after detection (mm).
+      tip_bottom_diameter: Effective tip bottom diameter (mm).
+
+    Returns:
+      Corrected y-position of the detected material boundary in mm.
+    """
+    assert self.backend is not None, "backend reference required for clld_probe_y_position"
+
+    if probing_direction not in ("forward", "backward"):
+      raise ValueError(
+        f"Probing direction must be either 'forward' or 'backward', is {probing_direction}."
+      )
+
+    # Anti-channel-crash: determine safe y bounds
+    assert self.driver.extended_conf is not None
+    if self.index > 0:
+      adj_upper_y = await self.backend.request_y_pos_channel_n(self.index - 1)
+      max_safe_upper_y_pos = adj_upper_y - self.driver._min_spacing_between(
+        self.index, self.index - 1
+      )
+    else:
+      max_safe_upper_y_pos = self.driver.extended_conf.pip_maximal_y_position
+
+    if self.index < (self.backend.num_channels - 1):
+      adj_lower_y = await self.backend.request_y_pos_channel_n(self.index + 1)
+      max_safe_lower_y_pos = adj_lower_y + self.driver._min_spacing_between(
+        self.index, self.index + 1
+      )
+    else:
+      max_safe_lower_y_pos = self.driver.extended_conf.left_arm_min_y_position
+
+    # Validate and optionally move to start position
+    if start_pos_search is not None:
+      if not (max_safe_lower_y_pos <= start_pos_search <= max_safe_upper_y_pos):
+        raise ValueError(
+          f"Start position for y search must be between "
+          f"{max_safe_lower_y_pos} and {max_safe_upper_y_pos} mm, "
+          f"is {start_pos_search} mm. Otherwise channel will crash."
+        )
+      await self.move_y(start_pos_search)
+
+    if end_pos_search is not None:
+      if not (max_safe_lower_y_pos <= end_pos_search <= max_safe_upper_y_pos):
+        raise ValueError(
+          f"End position for y search must be between "
+          f"{max_safe_lower_y_pos} and {max_safe_upper_y_pos} mm, "
+          f"is {end_pos_search} mm. Otherwise channel will crash."
+        )
+
+    # Set safe search end based on direction
+    current_channel_y_pos = await self.backend.request_y_pos_channel_n(self.index)
+    if probing_direction == "backward":
+      max_y_search_pos = end_pos_search or max_safe_upper_y_pos
+      if max_y_search_pos < current_channel_y_pos:
+        raise ValueError(
+          f"Channel {self.index} cannot move backward: "
+          f"End position = {max_y_search_pos} < current position = {current_channel_y_pos}"
+          f"\nDid you mean to move forward?"
+        )
+    else:  # forward
+      max_y_search_pos = end_pos_search or max_safe_lower_y_pos
+      if max_y_search_pos > current_channel_y_pos:
+        raise ValueError(
+          f"Channel {self.index} cannot move forward: "
+          f"End position = {max_y_search_pos} > current position = {current_channel_y_pos}"
+          f"\nDid you mean to move backward?"
+        )
+
+    # Convert to increments
+    max_y_search_pos_increments = _mm_to_y_inc(max_y_search_pos)
+    channel_speed_increments = _mm_to_y_inc(channel_speed)
+
+    if not (0 <= max_y_search_pos_increments <= 13714):
+      raise ValueError(
+        f"Maximum y search position must be between 0 and "
+        f"{_y_inc_to_mm(13714)} mm, is {max_y_search_pos} mm"
+      )
+    if not (20 <= channel_speed_increments <= 8000):
+      raise ValueError(
+        f"LLD search speed must be between {_y_inc_to_mm(20)} and "
+        f"{_y_inc_to_mm(8000)} mm/s, is {channel_speed} mm/s"
+      )
+    if channel_acceleration_int not in (1, 2, 3, 4):
+      raise ValueError(
+        f"Channel acceleration must be in [1, 2, 3, 4], is {channel_acceleration_int}"
+      )
+    if not (0 <= detection_edge <= 1023):
+      raise ValueError("Edge steepness must be between 0 and 1023")
+    if not (0 <= current_limit_int <= 7):
+      raise ValueError(f"Current limit must be between 0 and 7, is {current_limit_int}")
+
+    # Send Px:YL command
+    await self.send_command(
+      module=self.module_id,
+      command="YL",
+      ya=f"{max_y_search_pos_increments:05}",
+      gt=f"{detection_edge:04}",
+      gl=f"{0:04}",  # always 0 to measure y-pos
+      yv=f"{channel_speed_increments:04}",
+      yr=f"{channel_acceleration_int}",
+      yw=f"{current_limit_int}",
+      read_timeout=120,
+    )
+
+    detected_material_y_pos = await self.backend.request_y_pos_channel_n(self.index)
+
+    # Post-detection retraction with anti-crash
+    if probing_direction == "backward":
+      if self.index < self.backend.num_channels - 1:
+        min_y = await self.backend.request_y_pos_channel_n(
+          self.index + 1
+        ) + self.driver._min_spacing_between(self.index, self.index + 1)
+      else:
+        min_y = self.driver.extended_conf.left_arm_min_y_position
+
+      max_safe_dist = detected_material_y_pos - min_y
+      move_target = detected_material_y_pos - min(post_detection_dist, max_safe_dist)
+    else:  # forward
+      if self.index > 0:
+        max_y = await self.backend.request_y_pos_channel_n(
+          self.index - 1
+        ) - self.driver._min_spacing_between(self.index, self.index - 1)
+      else:
+        max_y = self.driver.extended_conf.pip_maximal_y_position
+
+      max_safe_dist = max_y - detected_material_y_pos
+      move_target = detected_material_y_pos + min(post_detection_dist, max_safe_dist)
+
+    await self.move_y(move_target)
+
+    # Correct for tip geometry
+    if probing_direction == "backward":
+      material_y_pos = detected_material_y_pos + tip_bottom_diameter / 2
+    else:
+      material_y_pos = detected_material_y_pos - tip_bottom_diameter / 2
+
+    return round(material_y_pos, 1)

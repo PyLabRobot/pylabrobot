@@ -53,13 +53,13 @@ class STARChatterboxDriver(STARDriver):
 
   # -- lifecycle: skip USB, use canned config --------------------------------
 
-  async def setup(self):
+  async def setup(self, deck=None):
     # No USB — just set config and create backends.
     self.id_ = 0
     self.machine_conf = self._machine_configuration
     self.extended_conf = self._extended_configuration
 
-    self.pip = STARPIPBackend(self)
+    self.pip = STARPIPBackend(self, deck=deck)
 
     self._channels_minimum_y_spacing = [9.0] * self._num_channels
 

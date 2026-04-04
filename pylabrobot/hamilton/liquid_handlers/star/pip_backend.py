@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import logging
-import warnings
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -34,6 +34,45 @@ if TYPE_CHECKING:
   from .driver import STARDriver
 
 logger = logging.getLogger("pylabrobot")
+
+
+# ---------------------------------------------------------------------------
+# Firmware command lock
+# ---------------------------------------------------------------------------
+
+
+class _FirmwareLock:
+  """Coordinates Px and C0 firmware commands.
+
+  Px commands (per-channel) can run in parallel with each other.
+  C0 commands (master module) need exclusive access: no Px or C0 may be in flight.
+  """
+
+  def __init__(self):
+    self._px_count = 0
+    self._px_count_lock = asyncio.Lock()
+    self._exclusive_lock = asyncio.Lock()
+
+  @asynccontextmanager
+  async def px(self):
+    """Run a Px command. Multiple Px can be in flight simultaneously."""
+    async with self._px_count_lock:
+      self._px_count += 1
+      if self._px_count == 1:
+        await self._exclusive_lock.acquire()
+    try:
+      yield
+    finally:
+      async with self._px_count_lock:
+        self._px_count -= 1
+        if self._px_count == 0:
+          self._exclusive_lock.release()
+
+  @asynccontextmanager
+  async def c0(self):
+    """Run a C0 command. Waits for all Px to finish, then runs exclusively."""
+    async with self._exclusive_lock:
+      yield
 
 
 # ---------------------------------------------------------------------------
@@ -200,13 +239,35 @@ def _assert_range(values, lo, hi, name):
 class STARPIPBackend(PIPBackend):
   """Translates PIP operations into STAR firmware commands via the driver."""
 
-  def __init__(self, driver: STARDriver, traversal_height: float = 245.0):
+  def __init__(self, driver: STARDriver, deck=None, traversal_height: float = 245.0):
     self.driver = driver
+    self.deck = deck
     self.traversal_height = traversal_height
     self.channels: List[PIPChannel] = []
+    self._fw_lock = _FirmwareLock()
+
+  async def send_command(self, module: str, command: str, **kwargs):
+    """Send a firmware command. C0 gets exclusive access; Px commands run in parallel."""
+    if module == "C0":
+      async with self._fw_lock.c0():
+        return await self.driver.send_command(module=module, command=command, **kwargs)
+    async with self._fw_lock.px():
+      return await self.driver.send_command(module=module, command=command, **kwargs)
 
   async def _on_setup(self):
-    self.channels = [PIPChannel(self.driver, i) for i in range(self.num_channels)]
+    self.channels = [PIPChannel(self.driver, i, backend=self) for i in range(self.num_channels)]
+
+    # Initialize PIP channels if the instrument was not yet initialized
+    # or if any channel still has a tip mounted (need to discard).
+    initialized = await self.driver.request_instrument_initialization_status()
+    if not initialized:
+      # pre_initialize_instrument already ran in driver.setup() and moved channels to Z safety
+      await self.initialize_pip()
+    else:
+      await self.move_all_channels_in_z_safety()
+      tip_presences = await self.request_tip_presence()
+      if any(tip_presences):
+        await self.initialize_pip()
 
   @contextmanager
   def use_traversal_height(self, height: float):
@@ -1359,31 +1420,11 @@ class STARPIPBackend(PIPBackend):
 
   async def spread_pip_channels(self):
     """Spread PIP channels (C0:JE)."""
-    return await self.driver.send_command(module="C0", command="JE")
+    return await self.send_command(module="C0", command="JE")
 
   async def move_all_channels_in_z_safety(self):
     """Move all pipetting channels to Z-safety position (C0:ZA)."""
-    return await self.driver.send_command(module="C0", command="ZA")
-
-  async def position_max_free_y_for_n(self, pipetting_channel_index: int):
-    """Position all pipetting channels so that there is maximum free Y range for channel n (C0:JP).
-
-    Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 0 and num_channels - 1.
-    """
-    if self.driver.iswap is not None and not self.driver.iswap.parked:
-      await self.driver.iswap.park()
-
-    if not 0 <= pipetting_channel_index < self.num_channels:
-      raise ValueError("pipetting_channel_index must be between 0 and num_channels - 1")
-    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
-    pipetting_channel_index_fw = pipetting_channel_index + 1
-
-    return await self.driver.send_command(
-      module="C0",
-      command="JP",
-      pn=f"{pipetting_channel_index_fw:02}",
-    )
+    return await self.send_command(module="C0", command="ZA")
 
   async def move_all_pipetting_channels_to_defined_position(
     self,
@@ -1664,112 +1705,77 @@ class STARPIPBackend(PIPBackend):
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)
   DEFAULT_TIP_FITTING_DEPTH = 8  # mm, for 10, 50, 300, 1000 uL Hamilton tips
 
-  async def move_channel_z(self, channel: int, z: float):
-    """Move a single channel in the Z direction (mm).
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Measure tip presence on all channels using their sleeve sensors."""
+    resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
+    return [bool(v) for v in resp.get("rt")]
 
-    .. deprecated::
-      Use :meth:`move_channel_stop_disk_z` for moves without a tip attached (stop disk)
-      or :meth:`move_channel_tool_z` when a tip or tool is attached (tip/tool end).
-
-    The Hamilton firmware interprets this Z position based on its internal
-    "tip mounted" state for the specified channel.
-    """
-    warnings.warn(
-      "move_channel_z is deprecated. "
-      "Use move_channel_stop_disk_z() for moves without a tip attached "
-      "or move_channel_tool_z() when a tip/tool is attached.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    if not 0 <= channel < self.driver.num_channels:
-      raise ValueError(f"channel must be between 0 and {self.driver.num_channels - 1}")
-    if not 0 <= z <= 334.7:
-      raise ValueError("z must be between 0 and 334.7 mm")
-
-    return await self.driver.send_command(
-      module="C0",
-      command="KZ",
-      pn=f"{channel + 1:02}",
-      zj=f"{round(z * 10):04}",
-    )
-
-  async def move_channel_tool_z(self, channel_idx: int, z: float):
-    """Move a channel in the Z direction (tip/tool end reference).
-
-    Requires a tip or tool to be attached. Use :meth:`move_channel_stop_disk_z`
-    for moves without a tip.
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    """Prepare for manual channel operation by moving all other channels out of the way (C0:JP).
 
     Args:
-      channel_idx: Channel index (0-based, backmost = 0).
-      z: Target Z position in mm (tip/tool end).
+      channel: 0-indexed channel index.
     """
+    if self.driver.iswap is not None and not self.driver.iswap.parked:
+      await self.driver.iswap.park()
 
-    if not isinstance(channel_idx, int):
-      raise ValueError(f"channel_idx must be an int, got {type(channel_idx).__name__}")
-    if not (0 <= channel_idx < self.driver.num_channels):
-      raise ValueError(
-        f"channel index {channel_idx} out of range for instrument "
-        f"with {self.driver.num_channels} channels"
-      )
-
-    tip_presence = await self.request_tip_presence()
-    if not tip_presence[channel_idx]:
-      raise ValueError(
-        f"Channel {channel_idx} does not have a tip or tool attached. "
-        "Use move_channel_stop_disk_z() for Z moves without a tip attached."
-      )
-
-    tip_len = await self.request_tip_len_on_channel(channel_idx)
-
-    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-
-    if not (min_tip_z <= z <= max_tip_z):
-      raise ValueError(
-        f"z={z} mm out of safe range [{min_tip_z}, {max_tip_z}] mm "
-        f"for tip length {tip_len} mm on channel {channel_idx}"
-      )
+    if not 0 <= channel < self.num_channels:
+      raise ValueError("channel must be between 0 and num_channels - 1")
 
     await self.driver.send_command(
       module="C0",
-      command="KZ",
-      pn=f"{channel_idx + 1:02}",
-      zj=f"{round(z * 10):04}",
+      command="JP",
+      pn=f"{channel + 1:02}",
     )
 
-  async def request_tip_presence(self) -> List[Optional[bool]]:
-    """Measure tip presence on all channels using their sleeve sensors."""
-    resp = await self.driver.send_command(module="C0", command="RT", fmt="rt# (n)")
-    return [bool(v) for v in resp.get("rt")]
+  # -- C0 channel queries -----------------------------------------------------
 
-  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
-    """Measure the length of the tip on the specified channel.
+  async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
+    """Request Z-position of the tip bottom on channel `channel_idx` (mm).
 
-    Args:
-      channel_idx: 0-indexed channel index.
-
-    Returns:
-      Tip length in mm.
-
-    Raises:
-      RuntimeError: If no tip is present on the channel.
+    Raises RuntimeError if no tip is mounted.
     """
-    tip_presence = await self.request_tip_presence()
-    if not tip_presence[channel_idx]:
-      raise RuntimeError(f"No tip present on channel {channel_idx}")
-
-    probe_z = await self.channels[channel_idx].request_probe_z_position()
-
-    # request tip bottom z via C0:RD
+    if not (await self.request_tip_presence())[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
     resp = await self.driver.send_command(
       module="C0",
       command="RD",
       fmt="rd####",
       pn=f"{channel_idx + 1:02}",
     )
-    tip_bottom_z = float(resp["rd"] / 10)
+    return float(resp["rd"] / 10)
 
-    return round(probe_z - (tip_bottom_z - self.DEFAULT_TIP_FITTING_DEPTH), 1)
+  async def request_y_pos_channel_n(self, channel_idx: int) -> float:
+    """Request current Y-position of channel `channel_idx` (mm)."""
+    resp = await self.driver.send_command(
+      module="C0",
+      command="RB",
+      fmt="rb####",
+      pn=f"{channel_idx + 1:02}",
+    )
+    return float(resp["rb"] / 10)
+
+  async def request_x_pos_channel_n(self, channel_idx: int) -> float:
+    """Request current X-position of channel `channel_idx` (mm).
+
+    All PIP channels share the same X arm, so this returns the arm position.
+    """
+    resp = await self.driver.send_command(
+      module="C0",
+      command="RA",
+      fmt="ra#####",
+      pn=f"{channel_idx + 1:02}",
+    )
+    return float(resp["ra"] / 10)
+
+  async def request_pip_height_last_lld(self) -> List[float]:
+    """Return absolute liquid heights (mm) from the last LLD event for each channel."""
+    resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
+    return [float(v / 10) for v in resp.get("lh")]
+
+  async def move_channel_y(self, channel: int, y: float):
+    """Convenience wrapper: delegates to ``self.channels[channel].move_y(y)``."""
+    await self.channels[channel].move_y(y)
 
   # -- foil piercing ----------------------------------------------------------
 
@@ -1852,7 +1858,7 @@ class STARPIPBackend(PIPBackend):
     zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
     if one_by_one:
       for channel in piercing_channels:
-        await self.move_channel_z(channel, z + distance_from_bottom)
+        await self.channels[channel].move_tool_z(z + distance_from_bottom)
     else:
       await self.position_channels_in_z_direction(
         {channel: z for channel, z in zip(piercing_channels, zs)}
@@ -1932,8 +1938,8 @@ class STARPIPBackend(PIPBackend):
         }
       )
 
-      await self.move_channel_z(front_channel, z_location)
-      await self.move_channel_z(back_channel, z_location)
+      await self.channels[front_channel].move_tool_z(z_location)
+      await self.channels[back_channel].move_tool_z(z_location)
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
       # the just above the foil, in case the foil pops up.

@@ -3,13 +3,12 @@
 import asyncio
 import datetime
 import enum
+import logging
 import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from pylabrobot.capabilities.liquid_handling.head96_backend import Head96Backend
-from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
 from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
 
@@ -24,6 +23,8 @@ from .iswap import iSWAPBackend
 from .pip_backend import STARPIPBackend
 from .wash_station import STARWashStation
 from .x_arm import STARXArm
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration dataclasses
@@ -145,8 +146,8 @@ class STARDriver(HamiltonLiquidHandler):
     self.machine_conf: Optional[MachineConfiguration] = None
     self.extended_conf: Optional[ExtendedConfiguration] = None
     self._channels_minimum_y_spacing: List[float] = []
-    self.pip: PIPBackend  # set in setup()
-    self.head96: Optional[Head96Backend] = None  # set in setup() if installed
+    self.pip: STARPIPBackend  # set in setup()
+    self.head96: Optional[STARHead96Backend] = None  # set in setup() if installed
     self.iswap: Optional["iSWAPBackend"] = None  # set in setup() if installed
     self.autoload: Optional["STARAutoload"] = None  # set in setup() if installed
     self.left_x_arm: Optional["STARXArm"] = None  # set in setup()
@@ -261,19 +262,25 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- lifecycle ------------------------------------------------------------
 
-  async def setup(self):
+  async def setup(self, deck=None):
     await super().setup()
     self.id_ = 0
     self.machine_conf = await self._request_machine_configuration()
     self.extended_conf = await self._request_extended_configuration()
 
+    # Instrument-level initialization.
+    initialized = await self.request_instrument_initialization_status()
+    if not initialized:
+      logger.info("Running instrument pre-initialization (C0:VI).")
+      await self.pre_initialize_instrument()
+
     # Create backends based on discovered config.
-    self.pip = STARPIPBackend(self)
+    self.pip = STARPIPBackend(self, deck=deck)
 
     self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      self.head96 = STARHead96Backend(self)
+      self.head96 = STARHead96Backend(self, deck=deck)
     else:
       self.head96 = None
 
@@ -309,16 +316,13 @@ class STARDriver(HamiltonLiquidHandler):
 
   @property
   def _subsystems(self) -> List[Any]:
-    """All active subsystems, for lifecycle management.
+    """Subsystems whose lifecycle is managed by the driver directly.
 
-    Note: head96 is intentionally excluded. Its lifecycle (_on_setup / _on_stop)
-    is managed by higher-level callers (e.g. the legacy backend) because
-    initialization requires context like the trash position that the driver
-    does not own.
+    Note: PIP, head96, iSWAP, and autoload are excluded — their lifecycle
+    is managed by the higher-level STAR device, which controls parallelization
+    and passes context (deck) they need.
     """
     subs: List[Any] = [self.cover]
-    if self.autoload is not None:
-      subs.append(self.autoload)
     if self.left_x_arm is not None:
       subs.append(self.left_x_arm)
     if self.right_x_arm is not None:

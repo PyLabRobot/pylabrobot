@@ -1,5 +1,6 @@
 """STAR device: wires STARDriver backends to PIP/Head96/iSWAP capability frontends."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
@@ -34,7 +35,7 @@ class STAR(Device):
     self.iswap: Optional[OrientableArm] = None  # set in setup() if installed
 
   async def setup(self):
-    await self.driver.setup()
+    await self.driver.setup(deck=self.deck)
 
     # PIP is always present.
     self.pip = PIP(backend=self.driver.pip)
@@ -42,7 +43,7 @@ class STAR(Device):
 
     # Head96 only if the hardware has a 96-head installed.
     if self.driver.head96 is not None:
-      self.head96 = Head96(backend=self.driver.head96)
+      self.head96 = Head96(backend=self.driver.head96, deck=self.deck)
       self._capabilities.append(self.head96)
 
     # iSWAP only if installed.
@@ -50,8 +51,20 @@ class STAR(Device):
       self.iswap = OrientableArm(backend=self.driver.iswap, reference_resource=self.deck)
       self._capabilities.append(self.iswap)
 
-    for cap in self._capabilities:
-      await cap._on_setup()
+    # Matches legacy: autoload runs in parallel with arm modules.
+    # Arm modules run sequentially (pip → iswap → head96) because they share the left x-arm.
+    async def setup_arm_modules():
+      await self.pip._on_setup()
+      if self.iswap is not None:
+        await self.iswap._on_setup()
+      if self.head96 is not None:
+        await self.head96._on_setup()
+
+    async def setup_autoload():
+      if self.driver.autoload is not None:
+        await self.driver.autoload._on_setup()
+
+    await asyncio.gather(setup_autoload(), setup_arm_modules())
     self._setup_finished = True
 
   async def stop(self):

@@ -14,9 +14,20 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
 
   # -- initialization --------------------------------------------------------
 
-  async def test_on_setup(self):
+  async def test_on_setup_not_initialized(self):
+    self.mock_driver.send_command.return_value = {"qw": 0}
     await self.autoload._on_setup()
-    self.mock_driver.send_command.assert_called_once_with(module="C0", command="II")
+    calls = self.mock_driver.send_command.call_args_list
+    # Should check init status, initialize, then park (safe z + park)
+    self.assertEqual(calls[0].kwargs, {"module": "I0", "command": "QW", "fmt": "qw#"})
+    self.assertEqual(calls[1].kwargs, {"module": "C0", "command": "II"})
+
+  async def test_on_setup_already_initialized(self):
+    self.mock_driver.send_command.return_value = {"qw": 1}
+    await self.autoload._on_setup()
+    calls = self.mock_driver.send_command.call_args_list
+    # Should check init status, skip init, then park
+    self.assertEqual(calls[0].kwargs, {"module": "I0", "command": "QW", "fmt": "qw#"})
 
   async def test_request_initialization_status_true(self):
     self.mock_driver.send_command.return_value = {"qw": 1}
