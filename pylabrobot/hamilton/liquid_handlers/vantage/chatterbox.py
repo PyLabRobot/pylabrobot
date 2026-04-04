@@ -11,9 +11,26 @@ logger = logging.getLogger("pylabrobot")
 
 
 class VantageChatterboxDriver(VantageDriver):
-  """A VantageDriver that prints firmware commands instead of communicating with hardware.
+  """A VantageDriver that logs firmware commands instead of communicating with hardware.
 
-  Useful for testing, debugging, and development without a physical Vantage.
+  This mock driver is used for testing, debugging, and development without a physical
+  Hamilton Vantage instrument. All firmware commands are logged at INFO level via the
+  ``pylabrobot`` logger instead of being sent over USB.
+
+  The chatterbox driver:
+
+  - Skips USB connection and hardware discovery entirely.
+  - Assumes 8 PIP channels.
+  - Creates all subsystem backends (PIP, Head96, IPG, X-arm, loading cover) with no
+    firmware initialization.
+  - Returns None from all :meth:`send_command` and :meth:`send_raw_command` calls.
+
+  Usage::
+
+    from pylabrobot.hamilton.liquid_handlers.vantage import Vantage
+
+    vantage = Vantage(deck=deck, chatterbox=True)
+    await vantage.setup()  # no hardware needed
   """
 
   def __init__(self):
@@ -25,6 +42,11 @@ class VantageChatterboxDriver(VantageDriver):
     skip_core96: bool = False,
     skip_ipg: bool = False,
   ):
+    """Set up the chatterbox driver without any hardware communication.
+
+    Creates all subsystem backends in mock mode. See :meth:`VantageDriver.setup`
+    for the ``skip_*`` parameters.
+    """
     # Skip USB and hardware discovery entirely.
     # Import backends here to avoid circular imports.
     from .head96_backend import VantageHead96Backend
@@ -42,19 +64,25 @@ class VantageChatterboxDriver(VantageDriver):
     if self.ipg is not None:
       self.ipg._parked = True
     self.x_arm = VantageXArm(driver=self)
-    self.loading_cover = VantageLoadingCover(driver=self)
+    self.loading_cover = VantageLoadingCover(driver=self) if not skip_loading_cover else None
 
-    # Initialize subsystems.
-    for sub in self._subsystems:
-      await sub._on_setup()
+    # Skip _on_setup() on subsystems: send_command returns None in chatterbox mode,
+    # which would cause status-query methods (e.g. query_tip_presence) to crash.
+    # Subsystems are already in a usable state since all firmware commands are no-ops.
 
   async def stop(self):
+    """Stop the chatterbox driver and clear subsystem state.
+
+    Calls ``_on_stop()`` on all subsystems (no-ops in chatterbox mode) and clears
+    internal state. Does not call ``super().stop()`` since there is no USB connection.
+    """
     # Stop subsystems (no-ops for chatterbox, but follows the pattern).
     for sub in reversed(self._subsystems):
       await sub._on_stop()
     # Clear state (skip super().stop() since there is no USB to close).
     self._num_channels = None
     self._tth2tti.clear()
+    self.pip = None
     self.head96 = None
     self.ipg = None
     self.x_arm = None
@@ -72,6 +100,10 @@ class VantageChatterboxDriver(VantageDriver):
     fmt: Optional[Any] = None,
     **kwargs,
   ):
+    """Assemble a firmware command string and log it instead of sending over USB.
+
+    Returns None (no firmware response in chatterbox mode).
+    """
     cmd, _ = self._assemble_command(
       module=module,
       command=command,
@@ -89,5 +121,9 @@ class VantageChatterboxDriver(VantageDriver):
     read_timeout: Optional[int] = None,
     wait: bool = True,
   ) -> Optional[str]:
+    """Log a raw firmware command string instead of sending over USB.
+
+    Returns None (no firmware response in chatterbox mode).
+    """
     logger.info("Chatterbox raw: %s", command)
     return None

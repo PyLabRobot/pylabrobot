@@ -10,6 +10,10 @@ from .fw_parsing import parse_vantage_fw_string
 
 # ---------------------------------------------------------------------------
 # Error dictionaries (per-module error code -> human-readable message)
+#
+# These dictionaries map firmware integer error codes to human-readable messages
+# for each Vantage subsystem module. They are used by
+# ``vantage_response_string_to_error`` to produce meaningful error descriptions.
 # ---------------------------------------------------------------------------
 
 core96_errors: Dict[int, str] = {
@@ -186,6 +190,11 @@ VANTAGE_MODULE_NAMES: Dict[str, str] = {
   "A1AM": "Arm",
   "A1XM": "X-arm",
 }
+"""Mapping from Vantage 4-character firmware module IDs to human-readable names.
+
+Used for error reporting and diagnostics. Each key is the module prefix that appears
+at the start of firmware response strings (e.g. ``A1PM`` for the pipetting module).
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +203,13 @@ VANTAGE_MODULE_NAMES: Dict[str, str] = {
 
 
 class VantageFirmwareError(Exception):
-  """Error raised when the Vantage firmware returns an error response."""
+  """Error raised when the Vantage firmware returns an error response.
+
+  Attributes:
+    errors: Dictionary mapping subsystem names (e.g. ``"Pipetting channel 1"``,
+      ``"Core 96"``, ``"IPG"``) to human-readable error messages.
+    raw_response: The original firmware response string that triggered the error.
+  """
 
   def __init__(self, errors: Dict[str, str], raw_response: str):
     self.errors = errors
@@ -217,12 +232,29 @@ class VantageFirmwareError(Exception):
 
 
 def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
-  """Convert a Vantage firmware response string to a VantageFirmwareError.
+  """Parse a Vantage firmware error response string into a VantageFirmwareError.
 
-  Assumes that the response is an error response.
+  Extracts per-module error codes from the ``es`` (error string) field of the firmware
+  response, maps them to human-readable messages using the module-specific error
+  dictionaries (``pip_errors``, ``core96_errors``, ``ipg_errors``), and returns a
+  structured :class:`VantageFirmwareError`.
+
+  The firmware error string contains pairs of module ID + error code (e.g. ``"P170"``
+  means pipetting channel 1, error code 70 = "No liquid level found"). Multiple errors
+  may be present in a single response.
+
+  If the ``es`` field cannot be parsed, falls back to the ``et`` (error text) field.
+
+  Args:
+    string: Raw firmware response string containing an error.
+
+  Returns:
+    A :class:`VantageFirmwareError` with parsed error details.
   """
 
   try:
+    # FIXME: regex [A-Z0-9]{2}[0-9]{2} only captures 2-char module IDs, so channels
+    # 10-16 (P10, P11, ...) can never match. Pre-existing bug from legacy.
     error_format = r"[A-Z0-9]{2}[0-9]{2}"
     error_string = parse_vantage_fw_string(string, {"es": "str"})["es"]
     error_codes = re.findall(error_format, error_string)
@@ -257,9 +289,25 @@ def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
 def convert_vantage_firmware_error_to_plr_error(
   error: VantageFirmwareError,
 ) -> Optional[Exception]:
-  """Convert a VantageFirmwareError to a standard PLR error if possible.
+  """Convert a VantageFirmwareError to a standard PyLabRobot error if possible.
 
-  Returns the converted error, or None if no conversion is applicable.
+  Checks whether all errors in the :class:`VantageFirmwareError` are pipetting channel
+  errors, and if so, maps each to the appropriate PLR exception type:
+
+  - Error 76 ("Tip already picked up") -> :class:`HasTipError`
+  - Error 75 ("No tip picked up") -> :class:`NoTipError`
+  - Error 70/71 ("No liquid level found" / "Not enough liquid present") ->
+    :class:`TooLittleLiquidError`
+  - All other errors -> generic :class:`Exception`
+
+  The result is wrapped in a :class:`ChannelizedError` with per-channel error details.
+
+  Args:
+    error: The Vantage firmware error to convert.
+
+  Returns:
+    A :class:`ChannelizedError` if all errors are pipetting channel errors, or None
+    if the error involves non-pipetting modules (Core 96, IPG, etc.).
   """
 
   # If all errors are pipetting channel errors, return a ChannelizedError.

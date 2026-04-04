@@ -19,7 +19,10 @@ class VantageLoadingCover:
     self.driver = driver
 
   async def _on_setup(self):
-    pass
+    """Check loading cover initialization status and initialize if needed."""
+    loading_cover_initialized = await self.request_initialization_status()
+    if not loading_cover_initialized:
+      await self.initialize()
 
   async def _on_stop(self):
     pass
@@ -27,23 +30,23 @@ class VantageLoadingCover:
   # -- commands (I1AM) -------------------------------------------------------
 
   async def request_initialization_status(self) -> bool:
-    """Check if the loading cover module is initialized (I1AM:QW).
+    """Request the loading cover initialization status.
 
     Returns:
-      True if initialized, False otherwise.
+      True if the cover module is initialized, False otherwise.
     """
     resp = await self.driver.send_command(module="I1AM", command="QW", fmt={"qw": "int"})
     return resp is not None and resp["qw"] == 1
 
   async def initialize(self) -> None:
-    """Initialize the loading cover module (I1AM:MI)."""
+    """Initialize the loading cover."""
     await self.driver.send_command(module="I1AM", command="MI")
 
   async def set_cover(self, cover_open: bool) -> None:
-    """Open or close the loading cover (I1AM:LP).
+    """Set the loading cover.
 
     Args:
-      cover_open: True to open, False to close.
+      cover_open: Whether the cover should be open or closed.
     """
     await self.driver.send_command(module="I1AM", command="LP", lp=not cover_open)
 
