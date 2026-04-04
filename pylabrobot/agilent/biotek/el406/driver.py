@@ -18,6 +18,7 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources import Plate, Resource
 from pylabrobot.resources import Plate
 
 from .enums import (
@@ -70,6 +71,31 @@ class EL406Driver(Driver):
     self.io: FTDI | None = None
     self._command_lock: asyncio.Lock | None = None
     self._in_batch: bool = False
+    self._cached_plate: Plate | None = None
+
+  @property
+  def plate(self) -> Plate:
+    """The plate currently assigned to the EL406.
+
+    Set automatically when a plate is assigned to the device's plate_holder.
+
+    Raises:
+      RuntimeError: If no plate is assigned.
+    """
+    if self._cached_plate is None:
+      raise RuntimeError(
+        "No plate is assigned to the EL406. "
+        "Assign a plate to el406.plate_holder before running commands."
+      )
+    return self._cached_plate
+
+  def _on_plate_assigned(self, resource: Resource) -> None:
+    if isinstance(resource, Plate):
+      self._cached_plate = resource
+
+  def _on_plate_unassigned(self, resource: Resource) -> None:
+    if isinstance(resource, Plate):
+      self._cached_plate = None
 
   @dataclass
   class SetupParams(BackendParams):
@@ -642,7 +668,7 @@ class EL406Driver(Driver):
   # ---------------------------------------------------------------------------
 
   @asynccontextmanager
-  async def batch(self, plate: Plate) -> AsyncIterator[None]:
+  async def batch(self) -> AsyncIterator[None]:
     """Context manager for batching step commands.
 
     Each step command (manifold_wash, syringe_prime, etc.) automatically wraps
@@ -651,11 +677,10 @@ class EL406Driver(Driver):
 
     If already inside a batch, this is a no-op passthrough.
 
-    Args:
-      plate: PLR Plate to configure for this batch.
+    The plate must be assigned to the device's plate_holder before calling this.
 
     Example:
-      >>> async with driver.batch(plate_96):
+      >>> async with driver.batch():
       ...     await driver._send_step_command(framed_cmd)
     """
     if self._in_batch:
@@ -664,7 +689,7 @@ class EL406Driver(Driver):
 
     self._in_batch = True
     try:
-      await self.start_batch(plate_to_wire_byte(plate))
+      await self.start_batch(plate_to_wire_byte(self.plate))
       yield
     finally:
       try:

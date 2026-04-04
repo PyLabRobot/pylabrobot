@@ -658,7 +658,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
       secondary_z=secondary_z,
     )
     framed_command = build_framed_message(command=0xA5, data=data)
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command)
 
   async def manifold_dispense(
@@ -730,7 +730,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
       vacuum_delay_volume=vacuum_delay_volume,
     )
     framed_command = build_framed_message(command=0xA6, data=data)
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command)
 
   async def manifold_wash(
@@ -1003,7 +1003,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
     # Each cycle takes ~10-30s depending on volume/flow/plate type.
     # Use 60s per cycle as generous safety margin to avoid false timeouts.
     wash_timeout = (cycles * 60) + shake_duration + soak_duration + 120
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=wash_timeout)
 
   async def manifold_prime(
@@ -1088,7 +1088,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
     framed_command = build_framed_message(command=0xA7, data=data)
     # Timeout: base time for priming + submerge duration + buffer
     prime_timeout = self._driver.timeout + submerge_duration + 30
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=prime_timeout)
 
   async def manifold_auto_clean(
@@ -1129,7 +1129,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
     )
     framed_command = build_framed_message(command=0xA8, data=data)
     auto_clean_timeout = max(120.0, duration + 30.0)
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=auto_clean_timeout)
 
   # =========================================================================

@@ -7,8 +7,10 @@ This is a direct port of the legacy EL406ShakeStepsMixin.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from dataclasses import dataclass
+from typing import Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
@@ -41,23 +43,28 @@ class EL406ShakingBackend(ShakerBackend):
   """Shaking backend for the BioTek EL406.
 
   The EL406 shake is a single fire-and-forget command with duration baked in.
-  It does not support start/stop or plate locking.
+  It does not support continuous start/stop shaking or plate locking.
   """
+
+  @dataclass
+  class ShakeParams(BackendParams):
+    """EL406-specific shake parameters.
+
+    Attributes:
+      intensity: Shake intensity - "Variable", "Slow" (3.5 Hz),
+                 "Medium" (5 Hz), or "Fast" (8 Hz).
+      soak_duration: Soak duration in seconds after shaking (0-3599). 0 to disable.
+      move_home_first: Move carrier to home position before shaking (default True).
+    """
+
+    intensity: Intensity = "Medium"
+    soak_duration: int = 0
+    move_home_first: bool = True
 
   def __init__(self, driver: EL406Driver) -> None:
     self._driver = driver
 
   # -- ShakerBackend interface --
-
-  async def start_shaking(self, speed: float):
-    raise NotImplementedError(
-      "EL406 does not support start/stop shaking. Use shake(plate, duration, ...) directly."
-    )
-
-  async def stop_shaking(self):
-    raise NotImplementedError(
-      "EL406 does not support start/stop shaking. Use shake(plate, duration, ...) directly."
-    )
 
   @property
   def supports_locking(self) -> bool:
@@ -69,20 +76,22 @@ class EL406ShakingBackend(ShakerBackend):
   async def unlock_plate(self):
     raise NotImplementedError("EL406 does not support plate locking.")
 
-  # -- EL406-specific shake API (moved from legacy EL406ShakeStepsMixin) --
+  # -- Shake --
 
   MAX_SHAKE_DURATION = 3599  # 59:59 max (mm:ss format, mm max=59)
   MAX_SOAK_DURATION = 3599  # 59:59 max (mm:ss format, mm max=59)
 
   async def shake(
     self,
-    plate: Plate,
-    duration: int = 0,
-    intensity: Intensity = "Medium",
-    soak_duration: int = 0,
-    move_home_first: bool = True,
+    speed: float,
+    duration: float,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Shake the plate with optional soak period.
+
+    The ``speed`` parameter is accepted to satisfy the generic shaker interface
+    but is ignored — the EL406 uses discrete intensity levels, not RPM. Use
+    :class:`ShakeParams` for EL406-specific control.
 
     Durations are in whole seconds (GUI uses mm:ss picker, max 59:59 each).
     A duration of 0 disables shake. A soak_duration of 0 disables soak.
@@ -90,32 +99,40 @@ class EL406ShakingBackend(ShakerBackend):
     Note: The GUI forces move_home_first=True when total time exceeds 60s
     to prevent manifold drip contamination. Our default of True matches this.
 
+    The plate is read from the driver (set by assigning to the device's plate_holder).
+
     Args:
-      plate: PLR Plate resource.
+      speed: Ignored (EL406 uses intensity levels, not RPM).
       duration: Shake duration in seconds (0-3599). 0 to disable shake.
-      intensity: Shake intensity - "Variable", "Slow" (3.5 Hz),
-                 "Medium" (5 Hz), or "Fast" (8 Hz).
-      soak_duration: Soak duration in seconds after shaking (0-3599). 0 to disable.
-      move_home_first: Move carrier to home position before shaking (default True).
+      backend_params: EL406-specific parameters (:class:`ShakeParams`).
 
     Raises:
       ValueError: If parameters are invalid.
     """
-    if duration < 0 or duration > self.MAX_SHAKE_DURATION:
-      raise ValueError(f"Invalid duration {duration}. Must be 0-{self.MAX_SHAKE_DURATION}.")
+    if not isinstance(backend_params, self.ShakeParams):
+      backend_params = self.ShakeParams()
+
+    dur = int(duration)
+    plate = self._driver.plate
+    intensity = backend_params.intensity
+    soak_duration = backend_params.soak_duration
+    move_home_first = backend_params.move_home_first
+
+    if dur < 0 or dur > self.MAX_SHAKE_DURATION:
+      raise ValueError(f"Invalid duration {dur}. Must be 0-{self.MAX_SHAKE_DURATION}.")
     if soak_duration < 0 or soak_duration > self.MAX_SOAK_DURATION:
       raise ValueError(
         f"Invalid soak_duration {soak_duration}. Must be 0-{self.MAX_SOAK_DURATION}."
       )
-    if duration == 0 and soak_duration == 0:
+    if dur == 0 and soak_duration == 0:
       raise ValueError("At least one of duration or soak_duration must be > 0.")
     validate_intensity(intensity)
 
-    shake_enabled = duration > 0
+    shake_enabled = dur > 0
 
     logger.info(
       "Shake: %ds, %s intensity, move_home=%s, soak=%ds",
-      duration,
+      dur,
       intensity,
       move_home_first,
       soak_duration,
@@ -123,15 +140,15 @@ class EL406ShakingBackend(ShakerBackend):
 
     data = self._build_shake_command(
       plate=plate,
-      shake_duration=duration,
+      shake_duration=dur,
       soak_duration=soak_duration,
       intensity=intensity,
       shake_enabled=shake_enabled,
       move_home_first=move_home_first,
     )
     framed_command = build_framed_message(command=0xA3, data=data)
-    total_timeout = duration + soak_duration + self._driver.timeout
-    async with self._driver.batch(plate):
+    total_timeout = dur + soak_duration + self._driver.timeout
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=total_timeout)
 
   # =========================================================================

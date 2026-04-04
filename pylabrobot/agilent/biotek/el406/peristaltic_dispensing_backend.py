@@ -305,7 +305,7 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
     framed_command = build_framed_message(command=0x90, data=data)
     # Timeout: duration (if specified) + buffer for volume-based priming
     prime_timeout = self._driver.timeout + prime_duration + 30
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=prime_timeout)
 
   async def _peristaltic_dispense(
@@ -363,7 +363,7 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
       pump=1,
     )
     framed_command = build_framed_message(command=0x8F, data=data)
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command)
 
   async def _peristaltic_purge(
@@ -426,7 +426,7 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
     )
     framed_command = build_framed_message(command=0x91, data=data)
     purge_timeout = self._driver.timeout + purge_duration + 30
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=purge_timeout)
 
   # =========================================================================

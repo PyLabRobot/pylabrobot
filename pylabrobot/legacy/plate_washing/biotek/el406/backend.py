@@ -128,6 +128,7 @@ class ExperimentalBioTekEL406Backend(
       yield
       return
 
+    self._new_driver._cached_plate = plate
     self._in_batch = True
     self._new_driver._in_batch = True
     try:
@@ -230,7 +231,16 @@ class ExperimentalBioTekEL406Backend(
 
   async def shake(self, plate, **kwargs):
     async with self.batch(plate):
-      await self._shaking.shake(plate, **kwargs)
+      params = EL406ShakingBackend.ShakeParams(
+        intensity=kwargs.pop("intensity", "Medium"),
+        soak_duration=kwargs.pop("soak_duration", 0),
+        move_home_first=kwargs.pop("move_home_first", True),
+      )
+      await self._shaking.shake(
+        speed=0,
+        duration=kwargs.pop("duration", 0),
+        backend_params=params,
+      )
 
   # ---------------------------------------------------------------------------
   # Syringe — delegate to new EL406SyringeDispensingBackend
