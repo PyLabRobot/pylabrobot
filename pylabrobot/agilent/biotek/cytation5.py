@@ -1,15 +1,11 @@
 """Cytation 5 device — plate reader + imager.
 
-Follows the STAR pattern: device creates driver internally based on
-the ``camera`` parameter, setup() wires capabilities.
+Follows the STAR pattern: device creates driver internally,
+setup() wires capabilities.
 
 Example::
 
-    # Aravis (default)
     cytation = Cytation5(name="cytation5", camera_serial="22580842")
-
-    # PySpin
-    cytation = Cytation5(name="cytation5", camera="pyspin")
 
     await cytation.setup()
     result = await cytation.microscopy.capture(...)
@@ -19,7 +15,7 @@ Example::
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional
+from typing import Optional
 
 from pylabrobot.capabilities.microscopy import Microscopy
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
@@ -35,9 +31,7 @@ logger = logging.getLogger(__name__)
 class Cytation5(Resource, Device):
   """Agilent BioTek Cytation 5 — plate reader + imager.
 
-  Creates the appropriate driver based on the ``camera`` parameter:
-    - ``"aravis"`` (default): CytationAravisDriver (Aravis/GenICam)
-    - ``"pyspin"``: CytationBackend (PySpin/Spinnaker SDK)
+  Uses CytationAravisDriver (Aravis/GenICam) for camera access.
 
   Capabilities:
     - absorbance, fluorescence, luminescence (plate reading)
@@ -48,28 +42,18 @@ class Cytation5(Resource, Device):
   def __init__(
     self,
     name: str,
-    camera: Literal["aravis", "pyspin"] = "aravis",
     camera_serial: Optional[str] = None,
     device_id: Optional[str] = None,
     size_x: float = 0.0,
     size_y: float = 0.0,
     size_z: float = 0.0,
   ):
-    if camera == "aravis":
-      from .cytation_aravis_driver import CytationAravisDriver
-      driver = CytationAravisDriver(
-        camera_serial=camera_serial,
-        device_id=device_id,
-      )
-    elif camera == "pyspin":
-      from .cytation import CytationBackend, CytationImagingConfig
-      config = CytationImagingConfig(camera_serial_number=camera_serial)
-      driver = CytationBackend(
-        device_id=device_id,
-        imaging_config=config,
-      )
-    else:
-      raise ValueError(f"Unknown camera backend: {camera!r}. Use 'aravis' or 'pyspin'.")
+    from .cytation_aravis_driver import CytationAravisDriver
+
+    driver = CytationAravisDriver(
+      camera_serial=camera_serial,
+      device_id=device_id,
+    )
 
     Resource.__init__(
       self,
@@ -81,7 +65,6 @@ class Cytation5(Resource, Device):
     )
     Device.__init__(self, driver=driver)
     self.driver = driver
-    self._camera = camera
 
     self.absorbance: Absorbance  # set in setup()
     self.luminescence: Luminescence  # set in setup()
@@ -100,12 +83,8 @@ class Cytation5(Resource, Device):
     self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
 
   async def setup(self) -> None:
-    if self._camera == "aravis":
-      await self.driver.setup()
-      self.microscopy = Microscopy(backend=self.driver.microscopy_backend)
-    else:
-      await self.driver.setup(use_cam=True)
-      self.microscopy = Microscopy(backend=self.driver)
+    await self.driver.setup()
+    self.microscopy = Microscopy(backend=self.driver.microscopy_backend)
 
     # Plate reading + temperature use the driver directly
     # (BioTekBackend implements these backend ABCs)
@@ -125,7 +104,7 @@ class Cytation5(Resource, Device):
     for cap in self._capabilities:
       await cap._on_setup()
     self._setup_finished = True
-    logger.info("Cytation5 setup complete (camera=%s)", self._camera)
+    logger.info("Cytation5 setup complete")
 
   async def stop(self) -> None:
     for cap in reversed(self._capabilities):
