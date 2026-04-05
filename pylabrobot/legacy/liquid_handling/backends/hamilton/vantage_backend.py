@@ -1,20 +1,50 @@
-import asyncio
-import random
-import re
 import sys
 import warnings
-from typing import Dict, List, Optional, Sequence, Union, cast
+from typing import Dict, List, Optional, Sequence, Union
 
+from pylabrobot.capabilities.liquid_handling.standard import (
+  Aspiration as NewAspiration,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  Dispense as NewDispense,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  DropTipRack as NewDropTipRack,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  MultiHeadAspirationContainer as NewMultiHeadAspirationContainer,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  MultiHeadAspirationPlate as NewMultiHeadAspirationPlate,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  MultiHeadDispenseContainer as NewMultiHeadDispenseContainer,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  MultiHeadDispensePlate as NewMultiHeadDispensePlate,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  Pickup as NewPickup,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  PickupTipRack as NewPickupTipRack,
+)
+from pylabrobot.capabilities.liquid_handling.standard import (
+  TipDrop as NewTipDrop,
+)
+from pylabrobot.hamilton.liquid_handlers.vantage.head96_backend import VantageHead96Backend
+from pylabrobot.hamilton.liquid_handlers.vantage.ipg import IPGBackend
+from pylabrobot.hamilton.liquid_handlers.vantage.pip_backend import VantagePIPBackend
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
-  get_vantage_liquid_class,
 )
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
   DropTipRack,
+  GripDirection,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -29,15 +59,10 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.resources import (
   Coordinate,
-  Liquid,
-  Plate,
   Resource,
   Tip,
-  TipRack,
-  Well,
 )
 from pylabrobot.resources.hamilton import (
-  HamiltonTip,
   TipPickupMethod,
   TipSize,
 )
@@ -48,281 +73,17 @@ else:
   from typing_extensions import Literal
 
 
-def parse_vantage_fw_string(s: str, fmt: Optional[Dict[str, str]] = None) -> dict:
-  """Parse a Vantage firmware string into a dict.
-
-  The identifier parameter (id<int>) is added automatically.
-
-  `fmt` is a dict that specifies the format of the string. The keys are the parameter names and the
-  values are the types. The following types are supported:
-
-    - `"int"`: a single integer
-    - `"str"`: a string
-    - `"[int]"`: a list of integers
-    - `"hex"`: a hexadecimal number
-
-  Example:
-    >>> parse_fw_string("id0xs30 -100 +1 1000", {"id": "int", "x": "[int]"})
-    {"id": 0, "x": [30, -100, 1, 1000]}
-
-    >>> parse_fw_string("es\"error string\"", {"es": "str"})
-    {"es": "error string"}
-  """
-
-  parsed: dict = {}
-
-  if fmt is None:
-    fmt = {}
-
-  if not isinstance(fmt, dict):
-    raise TypeError(f"invalid fmt for fmt: expected dict, got {type(fmt)}")
-
-  if "id" not in fmt:
-    fmt["id"] = "int"
-
-  for key, data_type in fmt.items():
-    if data_type == "int":
-      matches = re.findall(rf"{key}([-+]?\d+)", s)
-      if len(matches) != 1:
-        raise ValueError(f"Expected exactly one match for {key} in {s}")
-      parsed[key] = int(matches[0])
-    elif data_type == "str":
-      matches = re.findall(rf"{key}\"(.*)\"", s)
-      if len(matches) != 1:
-        raise ValueError(f"Expected exactly one match for {key} in {s}")
-      parsed[key] = matches[0]
-    elif data_type == "[int]":
-      matches = re.findall(rf"{key}((?:[-+]?[\d ]+)+)", s)
-      if len(matches) != 1:
-        raise ValueError(f"Expected exactly one match for {key} in {s}")
-      parsed[key] = [int(x) for x in matches[0].split()]
-    elif data_type == "hex":
-      matches = re.findall(rf"{key}([0-9a-fA-F]+)", s)
-      if len(matches) != 1:
-        raise ValueError(f"Expected exactly one match for {key} in {s}")
-      parsed[key] = int(matches[0], 16)
-    else:
-      raise ValueError(f"Unknown data type {data_type}")
-
-  return parsed
-
-
-core96_errors = {
-  0: "No error",
-  21: "No communication to digital potentiometer",
-  25: "Wrong Flash EPROM data",
-  26: "Flash EPROM not programmable",
-  27: "Flash EPROM not erasable",
-  28: "Flash EPROM checksum error",
-  29: "Wrong FW loaded",
-  30: "Undefined command",
-  31: "Undefined parameter",
-  32: "Parameter out of range",
-  35: "Voltages out of range",
-  36: "Stop during command execution",
-  37: "Adjustment sensor didn't switch (no teach in signal)",
-  40: "No parallel processes on level 1 permitted",
-  41: "No parallel processes on level 2 permitted",
-  42: "No parallel processes on level 3 permitted",
-  50: "Dispensing drive initialization failed",
-  51: "Dispensing drive not initialized",
-  52: "Dispensing drive movement error",
-  53: "Maximum volume in tip reached",
-  54: "Dispensing drive position out of permitted area",
-  55: "Y drive initialization failed",
-  56: "Y drive not initialized",
-  57: "Y drive movement error",
-  58: "Y drive position out of permitted area",
-  60: "Z drive initialization failed",
-  61: "Z drive not initialized",
-  62: "Z drive movement error",
-  63: "Z drive position out of permitted area",
-  65: "Squeezer drive initialization failed",
-  66: "Squeezer drive not initialized",
-  67: "Squeezer drive movement error",
-  68: "Squeezer drive position out of permitted area",
-  70: "No liquid level found",
-  71: "Not enough liquid present",
-  75: "No tip picked up",
-  76: "Tip already picked up",
-  81: "Clot detected with LLD sensor",
-  82: "TADM measurement out of lower limit curve",
-  83: "TADM measurement out of upper limit curve",
-  84: "Not enough memory for TADM measurement",
-  90: "Limit curve not resettable",
-  91: "Limit curve not programmable",
-  92: "Limit curve name not found",
-  93: "Limit curve data incorrect",
-  94: "Not enough memory for limit curve",
-  95: "Not allowed limit curve index",
-  96: "Limit curve already stored",
-}
-
-pip_errors = {
-  22: "Drive controller message error",
-  23: "EC drive controller setup not executed",
-  25: "wrong Flash EPROM data",
-  26: "Flash EPROM not programmable",
-  27: "Flash EPROM not erasable",
-  28: "Flash EPROM checksum error",
-  29: "wrong FW loaded",
-  30: "Undefined command",
-  31: "Undefined parameter",
-  32: "Parameter out of range",
-  35: "Voltages out of range",
-  36: "Stop during command execution",
-  37: "Adjustment sensor didn't switch (no teach in signal)",
-  38: "Movement interrupted by partner channel",
-  39: "Angle alignment offset error",
-  40: "No parallel processes on level 1 permitted",
-  41: "No parallel processes on level 2 permitted",
-  42: "No parallel processes on level 3 permitted",
-  50: "D drive initialization failed",
-  51: "D drive not initialized",
-  52: "D drive movement error",
-  53: "Maximum volume in tip reached",
-  54: "D drive position out of permitted area",
-  55: "Y drive initialization failed",
-  56: "Y drive not initialized",
-  57: "Y drive movement error",
-  58: "Y drive position out of permitted area",
-  59: "Divergance Y motion controller to linear encoder to height",
-  60: "Z drive initialization failed",
-  61: "Z drive not initialized",
-  62: "Z drive movement error",
-  63: "Z drive position out of permitted area",
-  64: "Limit stop not found",
-  65: "S drive initialization failed",
-  66: "S drive not initialized",
-  67: "S drive movement error",
-  68: "S drive position out of permitted area",
-  69: "Init. position adjustment error",
-  70: "No liquid level found",
-  71: "Not enough liquid present",
-  74: "Liquid at a not allowed position detected",
-  75: "No tip picked up",
-  76: "Tip already picked up",
-  77: "Tip not discarded",
-  78: "Wrong tip detected",
-  79: "Tip not correct squeezed",
-  80: "Liquid not correctly aspirated",
-  81: "Clot detected",
-  82: "TADM measurement out of lower limit curve",
-  83: "TADM measurement out of upper limit curve",
-  84: "Not enough memory for TADM measurement",
-  85: "Jet dispense pressure not reached",
-  86: "ADC algorithm error",
-  90: "Limit curve not resettable",
-  91: "Limit curve not programmable",
-  92: "Limit curve name not found",
-  93: "Limit curve data incorrect",
-  94: "Not enough memory for limit curve",
-  95: "Not allowed limit curve index",
-  96: "Limit curve already stored",
-}
-
-ipg_errors = {
-  0: "No error",
-  22: "Drive controller message error",
-  23: "EC drive controller setup not executed",
-  25: "Wrong Flash EPROM data",
-  26: "Flash EPROM not programmable",
-  27: "Flash EPROM not erasable",
-  28: "Flash EPROM checksum error",
-  29: "Wrong FW loaded",
-  30: "Undefined command",
-  31: "Undefined parameter",
-  32: "Parameter out of range",
-  35: "Voltages out of range",
-  36: "Stop during command execution",
-  37: "Adjustment sensor didn't switch (no teach in signal)",
-  39: "Angle alignment offset error",
-  40: "No parallel processes on level 1 permitted",
-  41: "No parallel processes on level 2 permitted",
-  42: "No parallel processes on level 3 permitted",
-  50: "Y Drive initialization failed",
-  51: "Y Drive not initialized",
-  52: "Y Drive movement error",
-  53: "Y Drive position out of permitted area",
-  54: "Diff. motion controller and lin. encoder counter too high",
-  55: "Z Drive initialization failed",
-  56: "Z Drive not initialized",
-  57: "Z Drive movement error",
-  58: "Z Drive position out of permitted area",
-  59: "Z Drive limit stop not found",
-  60: "Rotation Drive initialization failed",
-  61: "Rotation Drive not initialized",
-  62: "Rotation Drive movement error",
-  63: "Rotation Drive position out of permitted area",
-  65: "Wrist Twist Drive initialization failed",
-  66: "Wrist Twist Drive not initialized",
-  67: "Wrist Twist Drive movement error",
-  68: "Wrist Twist Drive position out of permitted area",
-  70: "Gripper Drive initialization failed",
-  71: "Gripper Drive not initialized",
-  72: "Gripper Drive movement error",
-  73: "Gripper Drive position out of permitted area",
-  80: "Plate not found",
-  81: "Plate is still held",
-  82: "No plate is held",
-}
-
-
-class VantageFirmwareError(Exception):
-  def __init__(self, errors, raw_response):
-    self.errors = errors
-    self.raw_response = raw_response
-
-  def __str__(self):
-    return f"VantageFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
-
-  def __eq__(self, __value: object) -> bool:
-    return (
-      isinstance(__value, VantageFirmwareError)
-      and self.errors == __value.errors
-      and self.raw_response == __value.raw_response
-    )
-
-
-def vantage_response_string_to_error(
-  string: str,
-) -> VantageFirmwareError:
-  """Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
-  response is an error response."""
-
-  try:
-    error_format = r"[A-Z0-9]{2}[0-9]{2}"
-    error_string = parse_vantage_fw_string(string, {"es": "str"})["es"]
-    error_codes = re.findall(error_format, error_string)
-    errors = {}
-    num_channels = 16
-    for error in error_codes:
-      module, error_code = error[:2], error[2:]
-      error_code = int(error_code)
-      for channel in range(1, num_channels + 1):
-        if module == f"P{channel}":
-          errors[f"Pipetting channel {channel}"] = pip_errors.get(error_code, "Unknown error")
-        elif module in ("H0", "HM"):
-          errors["Core 96"] = core96_errors.get(error_code, "Unknown error")
-        elif module == "RM":
-          errors["IPG"] = ipg_errors.get(error_code, "Unknown error")
-        elif module == "AM":
-          errors["Cover"] = "Unknown error"
-  except ValueError:
-    module_id = string[:4]
-    module = modules = {
-      "I1AM": "Cover",
-      "C0AM": "Master",
-      "A1PM": "Pip",
-      "A1HM": "Core 96",
-      "A1RM": "IPG",
-      "A1AM": "Arm",
-      "A1XM": "X-arm",
-    }.get(module_id, "Unknown module")
-    error_string = parse_vantage_fw_string(string, {"et": "str"})["et"]
-    errors = {modules: error_string}
-
-  return VantageFirmwareError(errors, string)
+# Re-export from the new implementation. These used to be defined inline here.
+from pylabrobot.hamilton.liquid_handlers.vantage.errors import (  # noqa: F401
+  VantageFirmwareError,
+  core96_errors,
+  ipg_errors,
+  pip_errors,
+  vantage_response_string_to_error,
+)
+from pylabrobot.hamilton.liquid_handlers.vantage.fw_parsing import (  # noqa: F401
+  parse_vantage_fw_string,
+)
 
 
 def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 2, 3, 4]:
@@ -374,9 +135,69 @@ class VantageBackend(HamiltonLiquidHandler):
       serial_number=serial_number,
     )
 
+    from pylabrobot.hamilton.liquid_handlers.vantage.driver import VantageDriver
+
+    self.driver = VantageDriver(
+      device_address=device_address,
+      serial_number=serial_number,
+      packet_read_timeout=packet_read_timeout,
+      read_timeout=read_timeout,
+      write_timeout=write_timeout,
+    )
+
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
-    self._traversal_height: float = 245.0
+    self._setup_done = False
+
+  # -- property accessors for new-arch subsystems ----------------------------
+
+  @property
+  def _vantage_pip(self):
+    """Typed access to the Vantage PIP backend."""
+    return self.driver.pip
+
+  @property
+  def _vantage_head96(self):
+    """Typed access to the Head96 backend."""
+    assert self.driver.head96 is not None, "96-head is not installed"
+    return self.driver.head96
+
+  @property
+  def _vantage_ipg(self):
+    """Typed access to the IPG backend."""
+    assert self.driver.ipg is not None, "IPG is not installed"
+    return self.driver.ipg
+
+  @property
+  def _vantage_x_arm(self):
+    """Typed access to the X-arm."""
+    assert self.driver.x_arm is not None, "X-arm is not available"
+    return self.driver.x_arm
+
+  @property
+  def _vantage_loading_cover(self):
+    """Typed access to the loading cover."""
+    assert self.driver.loading_cover is not None, "Loading cover is not available"
+    return self.driver.loading_cover
+
+  @property
+  def _vantage_core_gripper(self):
+    """Typed access to the VantageCoreGripper backend."""
+    from pylabrobot.hamilton.liquid_handlers.vantage.core import VantageCoreGripper
+
+    if not hasattr(self, "_core_gripper_instance"):
+      self._core_gripper_instance = VantageCoreGripper(driver=self.driver)
+    return self._core_gripper_instance
+
+  @property
+  def _write_and_read_command(self):
+    return self.driver._write_and_read_command
+
+  @_write_and_read_command.setter
+  def _write_and_read_command(self, value):
+    self.driver._write_and_read_command = value  # type: ignore[method-assign]
+
+  # -- HamiltonLiquidHandler abstract methods (delegate to driver) -----------
 
   @property
   def module_id_length(self) -> int:
@@ -400,6 +221,34 @@ class VantageBackend(HamiltonLiquidHandler):
     """Parse a firmware response."""
     return parse_vantage_fw_string(resp, fmt)
 
+  # -- send_command delegation -----------------------------------------------
+
+  async def send_command(
+    self,
+    module,
+    command,
+    auto_id=True,
+    tip_pattern=None,
+    write_timeout=None,
+    read_timeout=None,
+    wait=True,
+    fmt=None,
+    **kwargs,
+  ):
+    return await self.driver.send_command(
+      module=module,
+      command=command,
+      auto_id=auto_id,
+      tip_pattern=tip_pattern,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      wait=wait,
+      fmt=fmt,
+      **kwargs,
+    )
+
+  # -- lifecycle (delegate to driver) ----------------------------------------
+
   async def setup(
     self,
     skip_loading_cover: bool = False,
@@ -408,50 +257,25 @@ class VantageBackend(HamiltonLiquidHandler):
   ):
     """Creates a USB connection and finds read/write interfaces."""
 
-    await super().setup()
+    # Let the driver own the USB connection and perform hardware discovery.
+    await self.driver.setup(
+      skip_loading_cover=skip_loading_cover,
+      skip_core96=skip_core96,
+      skip_ipg=skip_ipg,
+    )
 
-    tip_presences = await self.query_tip_presence()
-    self._num_channels = len(tip_presences)
+    # Sync legacy state from driver.
+    self.id_ = 0
+    self._num_channels = self.driver.num_channels
+    self._setup_done = True
 
-    arm_initialized = await self.arm_request_instrument_initialization_status()
-    if not arm_initialized:
-      await self.arm_pre_initialize()
+  async def stop(self):
+    await self.driver.stop()
+    self._setup_done = False
 
-    # TODO: check which modules are actually installed.
-
-    pip_channels_initialized = await self.pip_request_initialization_status()
-    if not pip_channels_initialized or any(tip_presences):
-      await self.pip_initialize(
-        x_position=[7095] * self.num_channels,
-        y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
-        begin_z_deposit_position=[int(self._traversal_height * 10)] * self.num_channels,
-        end_z_deposit_position=[1235] * self.num_channels,
-        minimal_height_at_command_end=[int(self._traversal_height * 10)] * self.num_channels,
-        tip_pattern=[True] * self.num_channels,
-        tip_type=[1] * self.num_channels,
-        TODO_DI_2=70,
-      )
-
-    loading_cover_initialized = await self.loading_cover_request_initialization_status()
-    if not loading_cover_initialized and not skip_loading_cover:
-      await self.loading_cover_initialize()
-
-    core96_initialized = await self.core96_request_initialization_status()
-    if not core96_initialized and not skip_core96:
-      await self.core96_initialize(
-        x_position=7347,  # TODO: get trash location from deck.
-        y_position=2684,  # TODO: get trash location from deck.
-        minimal_traverse_height_at_begin_of_command=int(self._traversal_height * 10),
-        minimal_height_at_command_end=int(self._traversal_height * 10),
-        end_z_deposit_position=2420,
-      )
-
-    if not skip_ipg:
-      ipg_initialized = await self.ipg_request_initialization_status()
-      if not ipg_initialized:
-        await self.ipg_initialize()
-      if not await self.ipg_get_parking_status():
-        await self.ipg_park()
+  @property
+  def setup_done(self) -> bool:
+    return self._setup_done
 
   @property
   def num_channels(self) -> int:
@@ -460,18 +284,13 @@ class VantageBackend(HamiltonLiquidHandler):
       raise RuntimeError("num_channels is not set.")
     return self._num_channels
 
+  @property
+  def _traversal_height(self) -> float:
+    return self.driver.traversal_height
+
   def set_minimum_traversal_height(self, traversal_height: float):
-    """Set the minimum traversal height for the robot.
-
-    This refers to the bottom of the pipetting channel when no tip is present, or the bottom of the
-    tip when a tip is present. This value will be used as the default value for the
-    `minimal_traverse_height_at_begin_of_command` and `minimal_height_at_command_end` parameters
-    unless they are explicitly set.
-    """
-
-    assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
-
-    self._traversal_height = traversal_height
+    """Deprecated: use ``VantageDriver.set_minimum_traversal_height``."""
+    self.driver.set_minimum_traversal_height(traversal_height)
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -482,43 +301,16 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
     minimal_height_at_command_end: Optional[List[float]] = None,
   ):
-    x_positions, y_positions, tip_pattern = self._ops_to_fw_positions(ops, use_channels)
-
-    tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
-    ttti = [await self.get_or_assign_tip_type_index(tip) for tip in tips]
-
-    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-
-    # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
-      max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      max_tip_length -= 2
-
-    try:
-      return await self.pip_tip_pick_up(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=tip_pattern,
-        tip_type=ttti,
-        begin_z_deposit_position=[round((max_z + max_total_tip_length) * 10)] * len(ops),
-        end_z_deposit_position=[round((max_z + max_tip_length) * 10)] * len(ops),
-        minimal_traverse_height_at_begin_of_command=[
-          round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-        ]
-        * len(ops),
-        minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-        ]
-        * len(ops),
-        tip_handling_method=[1 for _ in tips],  # always appears to be 1 # tip.pickup_method.value
-        blow_out_air_volume=[0] * len(ops),  # Why is this here? Who knows.
-      )
-    except Exception as e:
-      raise e
+    """Deprecated: use ``VantagePIPBackend.pick_up_tips``."""
+    new_ops = [NewPickup(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
+    await self._vantage_pip.pick_up_tips(
+      new_ops,
+      use_channels,
+      backend_params=VantagePIPBackend.PickUpTipsParams(
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
+      ),
+    )
 
   # @need_iswap_parked
   async def drop_tips(
@@ -528,35 +320,16 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
     minimal_height_at_command_end: Optional[List[float]] = None,
   ):
-    """Drop tips to a resource."""
-
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-
-    try:
-      return await self.pip_tip_discard(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=channels_involved,
-        begin_z_deposit_position=[round((max_z + 10) * 10)] * len(ops),  # +10
-        end_z_deposit_position=[round(max_z * 10)] * len(ops),
-        minimal_traverse_height_at_begin_of_command=[
-          round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-        ]
-        * len(ops),
-        minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-        ]
-        * len(ops),
-        tip_handling_method=[0 for _ in ops],  # Always appears to be 0, even in trash.
-        # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
-        #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
-        TODO_TR_2=0,
-      )
-    except Exception as e:
-      raise e
+    """Deprecated: use ``VantagePIPBackend.drop_tips``."""
+    new_ops = [NewTipDrop(resource=op.resource, offset=op.offset, tip=op.tip) for op in ops]
+    await self._vantage_pip.drop_tips(
+      new_ops,
+      use_channels,
+      backend_params=VantagePIPBackend.DropTipsParams(
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
+      ),
+    )
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
@@ -606,150 +379,66 @@ class VantageBackend(HamiltonLiquidHandler):
     recording_mode: int = 0,
     disable_volume_correction: Optional[List[bool]] = None,
   ):
-    """Aspirate from (a) resource(s).
-
-    See :meth:`pip_aspirate` (the firmware command) for parameter documentation. This method serves
-    as a wrapper for that command, and will convert operations into the appropriate format. This
-    method additionally provides default values based on firmware instructions sent by Venus on
-    Vantage, rather than machine default values (which are often not what you want).
-
-    Args:
-      ops: The aspiration operations.
-      use_channels: The channels to use.
-      blow_out: Whether to search for a "blow out" liquid class. This is only used on dispense.
-        Note that in the VENUS liquid editor, the term "empty" is used for this, but in the firmware
-        documentation, "empty" is used for a different mode (dm4).
-      hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
-        determined automatically based on the tip and liquid used.
-      disable_volume_correction: Whether to disable volume correction for each operation.
-    """
-
+    """Deprecated: use ``VantagePIPBackend.aspirate``."""
+    # Legacy mix kwargs are not supported; raise early.
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of "
+        "LiquidHandler.dispense instead. "
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    if jet is None:
-      jet = [False] * len(ops)
-    if blow_out is None:
-      blow_out = [False] * len(ops)
-
-    if hlcs is None:
-      hlcs = []
-      for j, bo, op in zip(jet, blow_out, ops):
-        hlcs.append(
-          get_vantage_liquid_class(
-            tip_volume=op.tip.maximal_volume,
-            is_core=False,
-            is_tip=True,
-            has_filter=op.tip.has_filter,
-            liquid=Liquid.WATER,  # default to WATER
-            jet=j,
-            blow_out=bo,
-          )
-        )
-
-    self._assert_valid_resources([op.resource for op in ops])
-
-    # correct volumes using the liquid class if not disabled
-    disable_volume_correction = disable_volume_correction or [False] * len(ops)
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
-
-    well_bottoms = [
-      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
+    new_ops = [
+      NewAspiration(
+        resource=op.resource,
+        offset=op.offset,
+        tip=op.tip,
+        volume=op.volume,
+        flow_rate=op.flow_rate,
+        liquid_height=op.liquid_height,
+        blow_out_air_volume=op.blow_out_air_volume,
+        mix=op.mix,
+      )
       for op in ops
     ]
-    liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [
-      wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)
-    ]
-    # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [
-      wb
-      + op.resource.get_absolute_size_z()
-      + (2.7 - 1 if isinstance(op.resource, Well) else 5)  # ?
-      for wb, op in zip(well_bottoms, ops)
-    ]
-
-    flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
-      for op, hlc in zip(ops, hlcs)
-    ]
-    blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    return await self.pip_aspirate(
-      x_position=x_positions,
-      y_position=y_positions,
-      type_of_aspiration=type_of_aspiration or [0] * len(ops),
-      tip_pattern=channels_involved,
-      minimal_traverse_height_at_begin_of_command=[
-        round(th * 10)
-        for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-      ]
-      * len(ops),
-      minimal_height_at_command_end=[
-        round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-      ]
-      * len(ops),
-      lld_search_height=[round(ls * 10) for ls in lld_search_heights],
-      clot_detection_height=[round(cdh * 10) for cdh in clot_detection_height or [0] * len(ops)],
-      liquid_surface_at_function_without_lld=[round(lsn * 10) for lsn in liquid_surfaces_no_lld],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=[
-        round(pod * 10)
-        for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
-        or [10.9] * len(ops)
-      ],
-      tube_2nd_section_height_measured_from_zm=[
-        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
-      ],
-      tube_2nd_section_ratio=[
-        round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
-      ],
-      minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
-      immersion_depth=[round(id_ * 10) for id_ in immersion_depth or [0] * len(ops)],
-      surface_following_distance=[
-        round(sfd * 10) for sfd in surface_following_distance or [0] * len(ops)
-      ],
-      aspiration_volume=[round(vol * 100) for vol in volumes],
-      aspiration_speed=[round(fr * 10) for fr in flow_rates],
-      transport_air_volume=[
-        round(tav * 10)
-        for tav in transport_air_volume
-        or [hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
-      ],
-      blow_out_air_volume=[round(bav * 100) for bav in blow_out_air_volumes],
-      pre_wetting_volume=[round(pwv * 100) for pwv in pre_wetting_volume or [0] * len(ops)],
-      lld_mode=lld_mode or [0] * len(ops),
-      lld_sensitivity=lld_sensitivity or [4] * len(ops),
-      pressure_lld_sensitivity=pressure_lld_sensitivity or [4] * len(ops),
-      aspirate_position_above_z_touch_off=[
-        round(apz * 10) for apz in aspirate_position_above_z_touch_off or [0.5] * len(ops)
-      ],
-      swap_speed=[round(ss * 10) for ss in swap_speed or [2] * len(ops)],
-      settling_time=[round(st * 10) for st in settling_time or [1] * len(ops)],
-      mix_volume=[round(op.mix.volume * 100) if op.mix is not None else 0 for op in ops],
-      mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
-      mix_position_in_z_direction_from_liquid_surface=[
-        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
-      ],
-      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 2500 for op in ops],
-      surface_following_distance_during_mixing=[
-        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
-      ],
-      TODO_DA_5=TODO_DA_5 or [0] * len(ops),
-      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off or [0] * len(ops),
-      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off or [0] * len(ops),
-      tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
-      limit_curve_index=limit_curve_index or [0] * len(ops),
-      recording_mode=recording_mode or 0,
+    # TODO_DA_5, mix_position_in_z_direction_from_liquid_surface,
+    # surface_following_distance_during_mixing have no BackendParams equivalent; dropped.
+    await self._vantage_pip.aspirate(
+      new_ops,
+      use_channels,
+      backend_params=VantagePIPBackend.AspirateParams(
+        jet=jet,
+        blow_out=blow_out,
+        hlcs=hlcs,
+        type_of_aspiration=type_of_aspiration,
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
+        lld_search_height=lld_search_height,
+        clot_detection_height=clot_detection_height,
+        liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld,
+        pull_out_distance_to_take_transport_air_in_function_without_lld=(
+          pull_out_distance_to_take_transport_air_in_function_without_lld
+        ),
+        tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+        tube_2nd_section_ratio=tube_2nd_section_ratio,
+        minimum_height=minimum_height,
+        immersion_depth=immersion_depth,
+        surface_following_distance=surface_following_distance,
+        transport_air_volume=transport_air_volume,
+        pre_wetting_volume=pre_wetting_volume,
+        lld_mode=lld_mode,
+        lld_sensitivity=lld_sensitivity,
+        pressure_lld_sensitivity=pressure_lld_sensitivity,
+        aspirate_position_above_z_touch_off=aspirate_position_above_z_touch_off,
+        swap_speed=swap_speed,
+        settling_time=settling_time,
+        capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off,
+        pressure_mad_supervision_on_off=pressure_mad_supervision_on_off,
+        tadm_algorithm_on_off=tadm_algorithm_on_off,
+        limit_curve_index=limit_curve_index,
+        recording_mode=recording_mode,
+        disable_volume_correction=disable_volume_correction,
+      ),
     )
 
   async def dispense(
@@ -791,160 +480,65 @@ class VantageBackend(HamiltonLiquidHandler):
     recording_mode: int = 0,
     disable_volume_correction: Optional[List[bool]] = None,
   ):
-    """Dispense to (a) resource(s).
-
-    See :meth:`pip_dispense` (the firmware command) for parameter documentation. This method serves
-    as a wrapper for that command, and will convert operations into the appropriate format. This
-    method additionally provides default values based on firmware instructions sent by Venus on
-    Vantage, rather than machine default values (which are often not what you want).
-
-    Args:
-      ops: The aspiration operations.
-      use_channels: The channels to use.
-      hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
-        determined automatically based on the tip and liquid used.
-
-      jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
-        determining the dispense mode. True for dispense mode 0 or 1.
-      blow_out: Whether to use "blow out" dispense mode for each dispense. Defaults to `False` for
-        all. This is labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation. True for dispense mode 1 or 3.
-      empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
-        Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
-        documentation. Dispense mode 4.
-      disable_volume_correction: Whether to disable volume correction for each operation.
-    """
-
+    """Deprecated: use ``VantagePIPBackend.dispense``."""
+    # Legacy mix kwargs are not supported; raise early.
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of "
+        "LiquidHandler.dispense instead. "
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    if jet is None:
-      jet = [False] * len(ops)
-    if empty is None:
-      empty = [False] * len(ops)
-    if blow_out is None:
-      blow_out = [False] * len(ops)
-
-    if hlcs is None:
-      hlcs = []
-      for j, bo, op in zip(jet, blow_out, ops):
-        hlcs.append(
-          get_vantage_liquid_class(
-            tip_volume=op.tip.maximal_volume,
-            is_core=False,
-            is_tip=True,
-            has_filter=op.tip.has_filter,
-            liquid=Liquid.WATER,  # default to WATER
-            jet=j,
-            blow_out=bo,
-          )
-        )
-
-    self._assert_valid_resources([op.resource for op in ops])
-
-    # correct volumes using the liquid class
-    disable_volume_correction = disable_volume_correction or [False] * len(ops)
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
-
-    well_bottoms = [
-      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
+    new_ops = [
+      NewDispense(
+        resource=op.resource,
+        offset=op.offset,
+        tip=op.tip,
+        volume=op.volume,
+        flow_rate=op.flow_rate,
+        liquid_height=op.liquid_height,
+        blow_out_air_volume=op.blow_out_air_volume,
+        mix=op.mix,
+      )
       for op in ops
     ]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
-    # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [
-      wb
-      + op.resource.get_absolute_size_z()
-      + (2.7 - 1 if isinstance(op.resource, Well) else 5)  # ?
-      for wb, op in zip(well_bottoms, ops)
-    ]
-
-    flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    type_of_dispensing_mode = type_of_dispensing_mode or [
-      _get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i]) for i in range(len(ops))
-    ]
-
-    return await self.pip_dispense(
-      x_position=x_positions,
-      y_position=y_positions,
-      tip_pattern=channels_involved,
-      type_of_dispensing_mode=type_of_dispensing_mode,
-      minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
-      lld_search_height=[round(sh * 10) for sh in lld_search_heights],
-      liquid_surface_at_function_without_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=[
-        round(pod * 10)
-        for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
-        or [5.0] * len(ops)
-      ],
-      immersion_depth=[round(id * 10) for id in immersion_depth or [0] * len(ops)],
-      surface_following_distance=[
-        round(sfd * 10) for sfd in surface_following_distance or [2.1] * len(ops)
-      ],
-      tube_2nd_section_height_measured_from_zm=[
-        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
-      ],
-      tube_2nd_section_ratio=[
-        round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
-      ],
-      minimal_traverse_height_at_begin_of_command=[
-        round(mth * 10)
-        for mth in minimal_traverse_height_at_begin_of_command
-        or [self._traversal_height] * len(ops)
-      ],
-      minimal_height_at_command_end=[
-        round(mh * 10)
-        for mh in minimal_height_at_command_end or [self._traversal_height] * len(ops)
-      ],
-      dispense_volume=[round(vol * 100) for vol in volumes],
-      dispense_speed=[round(fr * 10) for fr in flow_rates],
-      cut_off_speed=[round(cs * 10) for cs in cut_off_speed or [250] * len(ops)],
-      stop_back_volume=[round(sbv * 100) for sbv in stop_back_volume or [0] * len(ops)],
-      transport_air_volume=[
-        round(tav * 10)
-        for tav in transport_air_volume
-        or [hlc.dispense_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
-      ],
-      blow_out_air_volume=[round(boav * 100) for boav in blow_out_air_volumes],
-      lld_mode=lld_mode or [0] * len(ops),
-      side_touch_off_distance=round(side_touch_off_distance * 10),
-      dispense_position_above_z_touch_off=[
-        round(dpz * 10) for dpz in dispense_position_above_z_touch_off or [0.5] * len(ops)
-      ],
-      lld_sensitivity=lld_sensitivity or [1] * len(ops),
-      pressure_lld_sensitivity=pressure_lld_sensitivity or [1] * len(ops),
-      swap_speed=[round(ss * 10) for ss in swap_speed or [1] * len(ops)],
-      settling_time=[round(st * 10) for st in settling_time or [0] * len(ops)],
-      mix_volume=[round(op.mix.volume * 100) if op.mix is not None else 0 for op in ops],
-      mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
-      mix_position_in_z_direction_from_liquid_surface=[
-        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
-      ],
-      mix_speed=[round(op.mix.flow_rate * 100) if op.mix is not None else 10 for op in ops],
-      surface_following_distance_during_mixing=[
-        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
-      ],
-      TODO_DD_2=TODO_DD_2 or [0] * len(ops),
-      tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
-      limit_curve_index=limit_curve_index or [0] * len(ops),
-      recording_mode=recording_mode or 0,
+    # TODO_DD_2, mix_position_in_z_direction_from_liquid_surface,
+    # surface_following_distance_during_mixing have no BackendParams equivalent; dropped.
+    await self._vantage_pip.dispense(
+      new_ops,
+      use_channels,
+      backend_params=VantagePIPBackend.DispenseParams(
+        jet=jet,
+        blow_out=blow_out,
+        empty=empty,
+        hlcs=hlcs,
+        type_of_dispensing_mode=type_of_dispensing_mode,
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
+        lld_search_height=lld_search_height,
+        minimum_height=minimum_height,
+        pull_out_distance_to_take_transport_air_in_function_without_lld=(
+          pull_out_distance_to_take_transport_air_in_function_without_lld
+        ),
+        immersion_depth=immersion_depth,
+        surface_following_distance=surface_following_distance,
+        tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+        tube_2nd_section_ratio=tube_2nd_section_ratio,
+        cut_off_speed=cut_off_speed,
+        stop_back_volume=stop_back_volume,
+        transport_air_volume=transport_air_volume,
+        lld_mode=lld_mode,
+        side_touch_off_distance=side_touch_off_distance,
+        dispense_position_above_z_touch_off=dispense_position_above_z_touch_off,
+        lld_sensitivity=lld_sensitivity,
+        pressure_lld_sensitivity=pressure_lld_sensitivity,
+        swap_speed=swap_speed,
+        settling_time=settling_time,
+        tadm_algorithm_on_off=tadm_algorithm_on_off,
+        limit_curve_index=limit_curve_index,
+        recording_mode=recording_mode,
+        disable_volume_correction=disable_volume_correction,
+      ),
     )
 
   async def pick_up_tips96(
@@ -955,31 +549,15 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[float] = None,
     minimal_height_at_command_end: Optional[float] = None,
   ):
-    # assert self.core96_head_installed, "96 head must be installed"
-    tip_spot_a1 = pickup.resource.get_item("A1")
-    prototypical_tip = None
-    for tip_spot in pickup.resource.get_all_items():
-      if tip_spot.has_tip():
-        prototypical_tip = tip_spot.get_tip()
-        break
-    if prototypical_tip is None:
-      raise ValueError("No tips found in the tip rack.")
-    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
-    position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
-    offset_z = pickup.offset.z
-
-    return await self.core96_tip_pick_up(
-      x_position=round(position.x * 10),
-      y_position=round(position.y * 10),
-      tip_type=ttti,
-      tip_handling_method=tip_handling_method,
-      z_deposit_position=round((z_deposit_position + offset_z) * 10),
-      minimal_traverse_height_at_begin_of_command=round(
-        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
-      ),
-      minimal_height_at_command_end=round(
-        (minimal_height_at_command_end or self._traversal_height) * 10
+    """Deprecated: use ``VantageHead96Backend.pick_up_tips96``."""
+    new_pickup = NewPickupTipRack(resource=pickup.resource, offset=pickup.offset, tips=pickup.tips)
+    await self._vantage_head96.pick_up_tips96(
+      new_pickup,
+      backend_params=VantageHead96Backend.PickUpTipsParams(
+        tip_handling_method=tip_handling_method,
+        z_deposit_position=z_deposit_position,
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
       ),
     )
 
@@ -990,26 +568,14 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[float] = None,
     minimal_height_at_command_end: Optional[float] = None,
   ):
-    # assert self.core96_head_installed, "96 head must be installed"
-    if isinstance(drop.resource, TipRack):
-      tip_spot_a1 = drop.resource.get_item("A1")
-      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
-    else:
-      raise NotImplementedError(
-        "Only TipRacks are supported for dropping tips on Vantage",
-        f"got {drop.resource}",
-      )
-    offset_z = drop.offset.z
-
-    return await self.core96_tip_discard(
-      x_position=round(position.x * 10),
-      y_position=round(position.y * 10),
-      z_deposit_position=round((z_deposit_position + offset_z) * 10),
-      minimal_traverse_height_at_begin_of_command=round(
-        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
-      ),
-      minimal_height_at_command_end=round(
-        (minimal_height_at_command_end or self._traversal_height) * 10
+    """Deprecated: use ``VantageHead96Backend.drop_tips96``."""
+    new_drop = NewDropTipRack(resource=drop.resource, offset=drop.offset)
+    await self._vantage_head96.drop_tips96(
+      new_drop,
+      backend_params=VantageHead96Backend.DropTipsParams(
+        z_deposit_position=z_deposit_position,
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
       ),
     )
 
@@ -1045,130 +611,68 @@ class VantageBackend(HamiltonLiquidHandler):
     recording_mode: int = 0,
     disable_volume_correction: bool = False,
   ):
-    """Aspirate from a plate.
-
-    Args:
-      jet: Whether to find a liquid class with "jet" mode. Only used on dispense.
-      blow_out: Whether to find a liquid class with "blow out" mode. Only used on dispense. Note
-        that this is called "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation.
-      hlc: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
-        determined automatically based on the tip and liquid used in the first well.
-      disable_volume_correction: Whether to disable volume correction.
-    """
-    # assert self.core96_head_installed, "96 head must be installed"
-
+    """Deprecated: use ``VantageHead96Backend.aspirate96``."""
+    # Legacy mix kwargs are not supported; raise early.
     if mix_volume != 0 or mix_cycles != 0 or mix_speed != 0:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead. "
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of "
+        "LiquidHandler.dispense96 instead. "
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
+    # Convert legacy type to capability type.
     if isinstance(aspiration, MultiHeadAspirationPlate):
-      plate = aspiration.wells[0].parent
-      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
-      rot = plate.get_absolute_rotation()
-      if rot.x % 360 != 0 or rot.y % 360 != 0:
-        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
-      if rot.z % 360 == 180:
-        ref_well = plate.get_well("H12")
-      elif rot.z % 360 == 0:
-        ref_well = plate.get_well("A1")
-      else:
-        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
-      position = (
-        ref_well.get_location_wrt(self.deck)
-        + ref_well.center()
-        + aspiration.offset
-        + Coordinate(z=ref_well.material_z_thickness)
+      new_asp = NewMultiHeadAspirationPlate(
+        wells=aspiration.wells,
+        offset=aspiration.offset,
+        tips=aspiration.tips,
+        volume=aspiration.volume,
+        flow_rate=aspiration.flow_rate,
+        liquid_height=aspiration.liquid_height,
+        blow_out_air_volume=aspiration.blow_out_air_volume,
+        mix=aspiration.mix,
       )
-      # -1 compared to STAR?
-      well_bottoms = position.z
-      lld_search_height = well_bottoms + ref_well.get_absolute_size_z() + 2.7 - 1
     else:
-      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
-      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
-      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
-      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
-      position = (
-        aspiration.container.get_location_wrt(self.deck, z="cavity_bottom")
-        + Coordinate(x=x_position, y=y_position)
-        + aspiration.offset
+      new_asp = NewMultiHeadAspirationContainer(
+        container=aspiration.container,
+        offset=aspiration.offset,
+        tips=aspiration.tips,
+        volume=aspiration.volume,
+        flow_rate=aspiration.flow_rate,
+        liquid_height=aspiration.liquid_height,
+        blow_out_air_volume=aspiration.blow_out_air_volume,
+        mix=aspiration.mix,
       )
-      bottom = position.z
-      lld_search_height = bottom + aspiration.container.get_absolute_size_z() + 2.7 - 1
 
-    liquid_height = position.z + (aspiration.liquid_height or 0)
-
-    tip = next(tip for tip in aspiration.tips if tip is not None)
-    if hlc is None:
-      hlc = get_vantage_liquid_class(
-        tip_volume=tip.maximal_volume,
-        is_core=True,
-        is_tip=True,
-        has_filter=tip.has_filter,
-        liquid=Liquid.WATER,  # default to WATER
+    await self._vantage_head96.aspirate96(
+      new_asp,
+      backend_params=VantageHead96Backend.AspirateParams(
         jet=jet,
         blow_out=blow_out,
-      )
-
-    if disable_volume_correction or hlc is None:
-      volume = aspiration.volume
-    else:  # hlc is not None and not disable_volume_correction
-      volume = hlc.compute_corrected_volume(aspiration.volume)
-
-    transport_air_volume = transport_air_volume or (
-      hlc.aspiration_air_transport_volume if hlc is not None else 0
-    )
-    blow_out_air_volume = blow_out_air_volume or (
-      hlc.aspiration_blow_out_volume if hlc is not None else 0
-    )
-    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
-    swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 5)
-
-    return await self.core96_aspiration_of_liquid(
-      x_position=round(position.x * 10),
-      y_position=round(position.y * 10),
-      type_of_aspiration=type_of_aspiration,
-      minimal_traverse_height_at_begin_of_command=round(
-        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
+        hlc=hlc,
+        type_of_aspiration=type_of_aspiration,
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
+        pull_out_distance_to_take_transport_air_in_function_without_lld=(
+          pull_out_distance_to_take_transport_air_in_function_without_lld
+        ),
+        tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+        tube_2nd_section_ratio=tube_2nd_section_ratio,
+        immersion_depth=immersion_depth,
+        surface_following_distance=surface_following_distance,
+        transport_air_volume=transport_air_volume,
+        blow_out_air_volume=blow_out_air_volume,
+        pre_wetting_volume=pre_wetting_volume,
+        lld_mode=lld_mode,
+        lld_sensitivity=lld_sensitivity,
+        swap_speed=swap_speed,
+        settling_time=settling_time,
+        limit_curve_index=limit_curve_index,
+        tadm_channel_pattern=tadm_channel_pattern,
+        tadm_algorithm_on_off=tadm_algorithm_on_off,
+        recording_mode=recording_mode,
+        disable_volume_correction=disable_volume_correction,
       ),
-      minimal_height_at_command_end=round(
-        minimal_height_at_command_end or self._traversal_height * 10
-      ),
-      lld_search_height=round(lld_search_height * 10),
-      liquid_surface_at_function_without_lld=round(liquid_height * 10),
-      pull_out_distance_to_take_transport_air_in_function_without_lld=round(
-        pull_out_distance_to_take_transport_air_in_function_without_lld * 10
-      ),
-      minimum_height=round(well_bottoms * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
-      tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
-      immersion_depth=round(immersion_depth * 10),
-      surface_following_distance=round(surface_following_distance * 10),
-      aspiration_volume=round(volume * 100),
-      aspiration_speed=round(flow_rate * 10),
-      transport_air_volume=round(transport_air_volume * 10),
-      blow_out_air_volume=round(blow_out_air_volume * 100),
-      pre_wetting_volume=round(pre_wetting_volume * 100),
-      lld_mode=lld_mode,
-      lld_sensitivity=lld_sensitivity,
-      swap_speed=round(swap_speed * 10),
-      settling_time=round(settling_time * 10),
-      mix_volume=round(aspiration.mix.volume * 100) if aspiration.mix is not None else 0,
-      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
-      mix_position_in_z_direction_from_liquid_surface=round(
-        mix_position_in_z_direction_from_liquid_surface * 100
-      ),
-      surface_following_distance_during_mixing=round(
-        surface_following_distance_during_mixing * 100
-      ),
-      mix_speed=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 20,
-      limit_curve_index=limit_curve_index,
-      tadm_channel_pattern=tadm_channel_pattern,
-      tadm_algorithm_on_off=tadm_algorithm_on_off,
-      recording_mode=recording_mode,
     )
 
   async def dispense96(
@@ -1206,136 +710,71 @@ class VantageBackend(HamiltonLiquidHandler):
     recording_mode: int = 0,
     disable_volume_correction: bool = False,
   ):
-    """Dispense to a plate using the 96 head.
-
-    Args:
-      jet: whether to dispense in jet mode.
-      blow_out: whether to dispense in jet mode. In the VENUS liquid editor, this is called "empty".
-        Dispensing mode 1 or 3.
-      empty: whether to truly empty the tip. This does not exist in the liquid editor, but is in the
-        firmware documentation. Dispense mode 4.
-      liquid_class: the liquid class to use. If not provided, it will be determined based on the
-        liquid in the first well.
-
-      type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
-        determined based on the jet, blow_out, and empty parameters.
-      disable_volume_correction: Whether to disable volume correction.
-    """
-
+    """Deprecated: use ``VantageHead96Backend.dispense96``."""
+    # Legacy mix kwargs are not supported; raise early.
     if mix_volume != 0 or mix_cycles != 0 or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead. "
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of "
+        "LiquidHandler.dispense96 instead. "
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
+    # Convert legacy type to capability type.
     if isinstance(dispense, MultiHeadDispensePlate):
-      plate = dispense.wells[0].parent
-      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
-      rot = plate.get_absolute_rotation()
-      if rot.x % 360 != 0 or rot.y % 360 != 0:
-        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
-      if rot.z % 360 == 180:
-        ref_well = plate.get_well("H12")
-      elif rot.z % 360 == 0:
-        ref_well = plate.get_well("A1")
-      else:
-        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
-      position = (
-        ref_well.get_location_wrt(self.deck)
-        + ref_well.center()
-        + dispense.offset
-        + Coordinate(z=ref_well.material_z_thickness)
+      new_disp = NewMultiHeadDispensePlate(
+        wells=dispense.wells,
+        offset=dispense.offset,
+        tips=dispense.tips,
+        volume=dispense.volume,
+        flow_rate=dispense.flow_rate,
+        liquid_height=dispense.liquid_height,
+        blow_out_air_volume=dispense.blow_out_air_volume,
+        mix=dispense.mix,
       )
-      # -1 compared to STAR?
-      well_bottoms = position.z
-      lld_search_height = well_bottoms + ref_well.get_absolute_size_z() + 2.7 - 1
     else:
-      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
-      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
-      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
-      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
-      position = (
-        dispense.container.get_location_wrt(self.deck, z="cavity_bottom")
-        + Coordinate(x=x_position, y=y_position)
-        + dispense.offset
+      new_disp = NewMultiHeadDispenseContainer(
+        container=dispense.container,
+        offset=dispense.offset,
+        tips=dispense.tips,
+        volume=dispense.volume,
+        flow_rate=dispense.flow_rate,
+        liquid_height=dispense.liquid_height,
+        blow_out_air_volume=dispense.blow_out_air_volume,
+        mix=dispense.mix,
       )
-      bottom = position.z
-      lld_search_height = bottom + dispense.container.get_absolute_size_z() + 2.7 - 1
 
-    liquid_height = position.z + (dispense.liquid_height or 0) + 10
-
-    tip = next(tip for tip in dispense.tips if tip is not None)
-    if hlc is None:
-      hlc = get_vantage_liquid_class(
-        tip_volume=tip.maximal_volume,
-        is_core=True,
-        is_tip=True,
-        has_filter=tip.has_filter,
-        liquid=Liquid.WATER,  # default to WATER
+    await self._vantage_head96.dispense96(
+      new_disp,
+      backend_params=VantageHead96Backend.DispenseParams(
         jet=jet,
-        blow_out=blow_out,  # see method docstring
-      )
-
-    if disable_volume_correction or hlc is None:
-      volume = dispense.volume
-    else:  # hlc is not None and not disable_volume_correction
-      volume = hlc.compute_corrected_volume(dispense.volume)
-
-    transport_air_volume = transport_air_volume or (
-      hlc.dispense_air_transport_volume if hlc is not None else 0
-    )
-    blow_out_air_volume = blow_out_air_volume or (
-      hlc.dispense_blow_out_volume if hlc is not None else 0
-    )
-    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 250)
-    swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-    type_of_dispensing_mode = type_of_dispensing_mode or _get_dispense_mode(
-      jet=jet, empty=empty, blow_out=blow_out
-    )
-
-    return await self.core96_dispensing_of_liquid(
-      x_position=round(position.x * 10),
-      y_position=round(position.y * 10),
-      type_of_dispensing_mode=type_of_dispensing_mode,
-      minimum_height=round(well_bottoms * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
-      tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
-      lld_search_height=round(lld_search_height * 10),
-      liquid_surface_at_function_without_lld=round(liquid_height * 10),
-      pull_out_distance_to_take_transport_air_in_function_without_lld=round(
-        pull_out_distance_to_take_transport_air_in_function_without_lld * 10
+        blow_out=blow_out,
+        empty=empty,
+        hlc=hlc,
+        type_of_dispensing_mode=type_of_dispensing_mode,
+        tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+        tube_2nd_section_ratio=tube_2nd_section_ratio,
+        pull_out_distance_to_take_transport_air_in_function_without_lld=(
+          pull_out_distance_to_take_transport_air_in_function_without_lld
+        ),
+        immersion_depth=immersion_depth,
+        surface_following_distance=surface_following_distance,
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+        minimal_height_at_command_end=minimal_height_at_command_end,
+        cut_off_speed=cut_off_speed,
+        stop_back_volume=stop_back_volume,
+        transport_air_volume=transport_air_volume,
+        blow_out_air_volume=blow_out_air_volume,
+        lld_mode=lld_mode,
+        lld_sensitivity=lld_sensitivity,
+        side_touch_off_distance=side_touch_off_distance,
+        swap_speed=swap_speed,
+        settling_time=settling_time,
+        limit_curve_index=limit_curve_index,
+        tadm_channel_pattern=tadm_channel_pattern,
+        tadm_algorithm_on_off=tadm_algorithm_on_off,
+        recording_mode=recording_mode,
+        disable_volume_correction=disable_volume_correction,
       ),
-      immersion_depth=round(immersion_depth * 10),
-      surface_following_distance=round(surface_following_distance * 10),
-      minimal_traverse_height_at_begin_of_command=round(
-        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
-      ),
-      minimal_height_at_command_end=round(
-        (minimal_height_at_command_end or self._traversal_height) * 10
-      ),
-      dispense_volume=round(volume * 100),
-      dispense_speed=round(flow_rate * 10),
-      cut_off_speed=round(cut_off_speed * 10),
-      stop_back_volume=round(stop_back_volume * 100),
-      transport_air_volume=round(transport_air_volume * 10),
-      blow_out_air_volume=round(blow_out_air_volume * 100),
-      lld_mode=lld_mode,
-      lld_sensitivity=lld_sensitivity,
-      side_touch_off_distance=round(side_touch_off_distance * 10),
-      swap_speed=round(swap_speed * 10),
-      settling_time=round(settling_time * 10),
-      mix_volume=round(dispense.mix.volume * 100) if dispense.mix is not None else 0,
-      mix_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
-      mix_position_in_z_direction_from_liquid_surface=round(
-        mix_position_in_z_direction_from_liquid_surface * 10
-      ),
-      surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      mix_speed=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 10,
-      limit_curve_index=limit_curve_index,
-      tadm_channel_pattern=tadm_channel_pattern,
-      tadm_algorithm_on_off=tadm_algorithm_on_off,
-      recording_mode=recording_mode,
     )
 
   async def pick_up_resource(
@@ -1348,37 +787,53 @@ class VantageBackend(HamiltonLiquidHandler):
     hotel_depth: float = 0,
     minimal_height_at_command_end: float = 284.0,
   ):
-    """Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
-    allows you to pick up and move a resource with a single command."""
-
-    center = pickup.resource.get_location_wrt(self.deck, x="c", y="c", z="b") + pickup.offset
+    """Deprecated: use ``IPGBackend.pick_up_at_location``."""
+    center = pickup.resource.get_absolute_location(x="c", y="c", z="b") + pickup.offset
     grip_height = center.z + pickup.resource.get_absolute_size_z() - pickup.pickup_distance_from_top
-    plate_width = pickup.resource.get_absolute_size_x()
+    resource_width = pickup.resource.get_absolute_size_x()
 
-    await self.ipg_grip_plate(
-      x_position=round(center.x * 10),
-      y_position=round(center.y * 10),
-      z_position=round(grip_height * 10),
-      grip_strength=grip_strength,
-      open_gripper_position=round(plate_width * 10) + 32,
-      plate_width=round(plate_width * 10) - 33,
-      plate_width_tolerance=round(plate_width_tolerance * 10),
-      acceleration_index=acceleration_index,
-      z_clearance_height=round(z_clearance_height * 10),
-      hotel_depth=round(hotel_depth * 10),
-      minimal_height_at_command_end=round(
-        (minimal_height_at_command_end or self._traversal_height) * 10
+    direction_map = {
+      GripDirection.FRONT: 0,
+      GripDirection.RIGHT: 90,
+      GripDirection.BACK: 180,
+      GripDirection.LEFT: 270,
+    }
+    direction = direction_map[pickup.direction]
+
+    await self._vantage_ipg.pick_up_at_location(
+      location=Coordinate(x=center.x, y=center.y, z=grip_height),
+      direction=direction,
+      resource_width=resource_width,
+      backend_params=IPGBackend.PickUpParams(
+        grip_strength=grip_strength,
+        plate_width_tolerance=plate_width_tolerance,
+        acceleration_index=acceleration_index,
+        z_clearance_height=z_clearance_height,
+        hotel_depth=hotel_depth,
+        minimal_height_at_command_end=minimal_height_at_command_end,
       ),
     )
 
   async def move_picked_up_resource(self, move: ResourceMove):
-    """Move a resource picked up with the IPG. See :meth:`pick_up_resource`.
+    """Deprecated: use ``IPGBackend.move_to_location``.
 
     You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
     with a single command.
     """
-
-    raise NotImplementedError()
+    grip_height = (
+      move.location.z
+      + move.resource.get_absolute_size_z()
+      - move.pickup_distance_from_top
+      + move.offset.z
+    )
+    await self._vantage_ipg.move_to_location(
+      location=Coordinate(
+        x=move.location.x + move.offset.x,
+        y=move.location.y + move.offset.y,
+        z=grip_height,
+      ),
+      direction=0,  # direction not used for movement
+    )
 
   async def drop_resource(
     self,
@@ -1388,55 +843,50 @@ class VantageBackend(HamiltonLiquidHandler):
     hotel_depth: float = 0,
     minimal_height_at_command_end: float = 284.0,
   ):
-    """Release a resource picked up with the IPG. See :meth:`pick_up_resource`.
-
-    You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
-    with a single command.
-    """
-
+    """Deprecated: use ``IPGBackend.drop_at_location``."""
     center = drop.destination + drop.resource.center() + drop.offset
     grip_height = center.z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
-    plate_width = drop.resource.get_absolute_size_x()
+    resource_width = drop.resource.get_absolute_size_x()
 
-    await self.ipg_put_plate(
-      x_position=round(center.x * 10),
-      y_position=round(center.y * 10),
-      z_position=round(grip_height * 10),
-      z_clearance_height=round(z_clearance_height * 10),
-      open_gripper_position=round(plate_width * 10) + 32,
-      press_on_distance=press_on_distance,
-      hotel_depth=round(hotel_depth * 10),
-      minimal_height_at_command_end=round(
-        (minimal_height_at_command_end or self._traversal_height) * 10
+    direction_map = {
+      GripDirection.FRONT: 0,
+      GripDirection.RIGHT: 90,
+      GripDirection.BACK: 180,
+      GripDirection.LEFT: 270,
+    }
+    direction = direction_map[drop.direction]
+
+    await self._vantage_ipg.drop_at_location(
+      location=Coordinate(x=center.x, y=center.y, z=grip_height),
+      direction=direction,
+      resource_width=resource_width,
+      backend_params=IPGBackend.DropParams(
+        z_clearance_height=z_clearance_height,
+        press_on_distance=press_on_distance / 10,
+        hotel_depth=hotel_depth,
+        minimal_height_at_command_end=minimal_height_at_command_end,
       ),
     )
 
   async def prepare_for_manual_channel_operation(self, channel: int):
-    """Prepare the robot for manual operation."""
-
-    return await self.expose_channel_n(channel_index=channel + 1)  # ?
+    """Deprecated: use ``vantage.driver.pip.expose_channel_n()``."""
+    return await self.expose_channel_n(channel_index=channel + 1)
 
   async def move_channel_x(self, channel: int, x: float):
-    """Move the specified channel to the specified x coordinate."""
-
-    return await self.x_arm_move_to_x_position(round(x * 10))
+    """Deprecated: use ``vantage.driver.x_arm.move_to()``."""
+    return await self._vantage_x_arm.move_to(x)
 
   async def move_channel_y(self, channel: int, y: float):
-    """Move the specified channel to the specified y coordinate."""
-
-    return await self.position_single_channel_in_y_direction(channel + 1, round(y * 10))
+    """Deprecated: use ``vantage.driver.pip.position_single_channel_in_y_direction()``."""
+    return await self._vantage_pip.position_single_channel_in_y_direction(channel + 1, y)
 
   async def move_channel_z(self, channel: int, z: float):
-    """Move the specified channel to the specified z coordinate."""
-
-    return await self.position_single_channel_in_z_direction(channel + 1, round(z * 10))
+    """Deprecated: use ``vantage.driver.pip.position_single_channel_in_z_direction()``."""
+    return await self._vantage_pip.position_single_channel_in_z_direction(channel + 1, z)
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
-    if not isinstance(tip, HamiltonTip):
-      return False
-    if tip.tip_size in {TipSize.XL}:
-      return False
-    return True
+    """Deprecated: use ``VantagePIPBackend.can_pick_up_tip``."""
+    return self._vantage_pip.can_pick_up_tip(channel_idx, tip)
 
   # ============== Firmware Commands ==============
 
@@ -1451,97 +901,36 @@ class VantageBackend(HamiltonLiquidHandler):
     uv: int,
     blink_interval: Optional[int] = None,
   ):
-    """Set the LED color.
-
-    Args:
-      mode: The mode of the LED. One of "on", "off", or "blink".
-      intensity: The intensity of the LED. 0-100.
-      white: The white color of the LED. 0-100.
-      red: The red color of the LED. 0-100.
-      green: The green color of the LED. 0-100.
-      blue: The blue color of the LED. 0-100.
-      uv: The UV color of the LED. 0-100.
-      blink_interval: The blink interval in ms. Only used if mode is "blink".
-    """
-
-    if blink_interval is not None:
-      if mode != "blink":
-        raise ValueError("blink_interval is only used when mode is 'blink'.")
-
-    return await self.send_command(
-      module="C0AM",
-      command="LI",
-      li={
-        "on": 1,
-        "off": 0,
-        "blink": 2,
-      }[mode],
-      os=intensity,
-      ok=blink_interval or 750,  # default non zero value
-      ol=f"{white} {red} {green} {blue} {uv}",
+    """Deprecated: use ``VantageDriver.set_led_color``."""
+    return await self.driver.set_led_color(
+      mode, intensity, white, red, green, blue, uv, blink_interval
     )
 
   async def set_loading_cover(self, cover_open: bool):
-    """Set the loading cover.
-
-    Args:
-      cover_open: Whether the cover should be open or closed.
-    """
-
-    return await self.send_command(module="I1AM", command="LP", lp=not cover_open)
+    """Deprecated: use ``VantageLoadingCover.set_cover``."""
+    return await self._vantage_loading_cover.set_cover(cover_open)
 
   async def loading_cover_request_initialization_status(self) -> bool:
-    """Request the loading cover initialization status.
-
-    This command was based on the STAR command (QW) and the VStarTranslator log.
-
-    Returns:
-      True if the cover module is initialized, False otherwise.
-    """
-
-    resp = await self.send_command(module="I1AM", command="QW", fmt={"qw": "int"})
-    return resp is not None and resp["qw"] == 1
+    """Deprecated: use ``VantageLoadingCover.request_initialization_status``."""
+    return await self._vantage_loading_cover.request_initialization_status()
 
   async def loading_cover_initialize(self):
-    """Initialize the loading cover."""
-
-    return await self.send_command(
-      module="I1AM",
-      command="MI",
-    )
+    """Deprecated: use ``VantageLoadingCover.initialize``."""
+    return await self._vantage_loading_cover.initialize()
 
   async def arm_request_instrument_initialization_status(
     self,
   ) -> bool:
-    """Request the instrument initialization status.
-
-    This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
-    to "arm".
-
-    Returns:
-      True if the arm module is initialized, False otherwise.
-    """
-
-    resp = await self.send_command(module="A1AM", command="QW", fmt={"qw": "int"})
-    return resp is not None and resp["qw"] == 1
+    """Deprecated: use ``VantageDriver.arm_request_instrument_initialization_status``."""
+    return await self.driver.arm_request_instrument_initialization_status()
 
   async def arm_pre_initialize(self):
-    """Initialize the arm module."""
-
-    return await self.send_command(module="A1AM", command="MI")
+    """Deprecated: use ``VantageDriver.arm_pre_initialize``."""
+    return await self.driver.arm_pre_initialize()
 
   async def pip_request_initialization_status(self) -> bool:
-    """Request the pip initialization status.
-
-    This command was based on the STAR command (QW) and the VStarTranslator log. A1PM corresponds
-    to all pip channels together.
-
-    Returns:
-      True if the pip channels module is initialized, False otherwise.
-    """
-
-    resp = await self.send_command(module="A1PM", command="QW", fmt={"qw": "int"})
-    return resp is not None and resp["qw"] == 1
+    """Deprecated: use ``VantageDriver.pip_request_initialization_status``."""
+    return await self.driver.pip_request_initialization_status()
 
   async def pip_initialize(
     self,
@@ -1554,65 +943,24 @@ class VantageBackend(HamiltonLiquidHandler):
     tip_type: Optional[List[int]] = None,
     TODO_DI_2: int = 0,
   ):
-    """Initialize
+    """Deprecated: use ``VantageDriver.pip_initialize``.
 
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      begin_z_deposit_position: Begin of tip deposit process (Z- discard range) [0.1mm] ??
-      end_z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      tip_type: Tip type (see command TT).
-      TODO_DI_2: Unknown.
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
     """
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
-    if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
-    if begin_z_deposit_position is None:
-      begin_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in begin_z_deposit_position):
-      raise ValueError("begin_z_deposit_position must be in range 0 to 3600")
-
-    if end_z_deposit_position is None:
-      end_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in end_z_deposit_position):
-      raise ValueError("end_z_deposit_position must be in range 0 to 3600")
-
-    if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
-    if tip_pattern is None:
-      tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if tip_type is None:
-      tip_type = [4] * self.num_channels
-    elif not all(0 <= x <= 199 for x in tip_type):
-      raise ValueError("tip_type must be in range 0 to 199")
-
-    if not -1000 <= TODO_DI_2 <= 1000:
-      raise ValueError("TODO_DI_2 must be in range -1000 to 1000")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DI",
-      xp=x_position,
-      yp=y_position,
-      tp=begin_z_deposit_position,
-      tz=end_z_deposit_position,
-      te=minimal_height_at_command_end,
-      tm=tip_pattern,
-      tt=tip_type,
+    return await self.driver.pip_initialize(
+      x_position=[v / 10 for v in x_position],
+      y_position=[v / 10 for v in y_position],
+      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position]
+      if begin_z_deposit_position is not None
+      else None,
+      end_z_deposit_position=[v / 10 for v in end_z_deposit_position]
+      if end_z_deposit_position is not None
+      else None,
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end]
+      if minimal_height_at_command_end is not None
+      else None,
+      tip_pattern=tip_pattern,
+      tip_type=tip_type,
       ts=TODO_DI_2,
     )
 
@@ -1625,43 +973,9 @@ class VantageBackend(HamiltonLiquidHandler):
     tip_size: TipSize,
     pickup_method: TipPickupMethod,
   ):
-    """Tip/needle definition.
-
-    Args:
-      tip_type_table_index: tip_table_index
-      filter: with(out) filter
-      tip_length: Tip length [0.1mm]
-      maximum_tip_volume: Maximum volume of tip [0.1ul] Note! it's automatically limited to max.
-        channel capacity
-      tip_type: Type of tip collar (Tip type identification)
-      pickup_method: pick up method.  Attention! The values set here are temporary and apply only
-        until power OFF or RESET. After power ON the default values apply. (see Table 3)
-    """
-
-    if not 0 <= tip_type_table_index <= 99:
-      raise ValueError(
-        f"tip_type_table_index must be between 0 and 99, but is {tip_type_table_index}"
-      )
-    if not 0 <= tip_type_table_index <= 99:
-      raise ValueError(
-        f"tip_type_table_index must be between 0 and 99, but is {tip_type_table_index}"
-      )
-    if not 1 <= tip_length <= 1999:
-      raise ValueError(f"tip_length must be between 1 and 1999, but is {tip_length}")
-    if not 1 <= maximum_tip_volume <= 56000:
-      raise ValueError(
-        f"maximum_tip_volume must be between 1 and 56000, but is {maximum_tip_volume}"
-      )
-
-    return await self.send_command(
-      module="A1AM",
-      command="TT",
-      ti=f"{tip_type_table_index:02}",
-      tf=has_filter,
-      tl=f"{tip_length:04}",
-      tv=f"{maximum_tip_volume:05}",
-      tg=tip_size.value,
-      tu=pickup_method.value,
+    """Deprecated: use ``VantageDriver.define_tip_needle``."""
+    return await self.driver.define_tip_needle(
+      tip_type_table_index, has_filter, tip_length, maximum_tip_volume, tip_size, pickup_method
     )
 
   async def pip_aspirate(
@@ -1706,288 +1020,121 @@ class VantageBackend(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """Aspiration of liquid
-
-    Args:
-      type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      lld_search_height: LLD search height [0.1mm].
-      clot_detection_height: (0).
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      pull_out_distance_to_take_transport_air_in_function_without_lld:
-          Pull out distance to take transp. air in function without LLD [0.1mm].
-      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
-      tube_2nd_section_ratio: Tube 2nd section ratio.
-      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
-      immersion_depth: Immersion depth [0.1mm].
-      surface_following_distance: Surface following distance [0.1mm].
-      aspiration_volume: Aspiration volume [0.01ul].
-      TODO_DA_2: (0).
-      aspiration_speed: Aspiration speed [0.1ul]/s.
-      transport_air_volume: Transport air volume [0.1ul].
-      blow_out_air_volume: Blow out air volume [0.01ul].
-      pre_wetting_volume: Pre wetting volume [0.1ul].
-      lld_mode: LLD Mode (0 = off).
-      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
-      pressure_lld_sensitivity: Pressure LLD sensitivity (1= high, 4=low).
-      aspirate_position_above_z_touch_off: (0).
-      TODO_DA_4: (0).
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
-      settling_time: Settling time [0.1s].
-      mix_volume: Mix volume [0.1ul].
-      mix_cycles: Mix cycles.
-      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
-        surface[0.1mm].
-      mix_speed: Mix speed [0.1ul/s].
-      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
-      TODO_DA_5: (0).
-      capacitive_mad_supervision_on_off: Capacitive MAD supervision on/off (0 = OFF).
-      pressure_mad_supervision_on_off: Pressure MAD supervision on/off (0 = OFF).
-      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
-      limit_curve_index: Limit curve index.
-      recording_mode: Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements).
-    """
+    """Deprecated: use ``VantagePIPBackend._pip_aspirate``."""
 
     if type_of_aspiration is None:
       type_of_aspiration = [0] * self.num_channels
-    elif not all(0 <= x <= 2 for x in type_of_aspiration):
-      raise ValueError("type_of_aspiration must be in range 0 to 2")
-
     if tip_pattern is None:
       tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
-    if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
     if lld_search_height is None:
       lld_search_height = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in lld_search_height):
-      raise ValueError("lld_search_height must be in range 0 to 3600")
-
     if clot_detection_height is None:
       clot_detection_height = [60] * self.num_channels
-    elif not all(0 <= x <= 500 for x in clot_detection_height):
-      raise ValueError("clot_detection_height must be in range 0 to 500")
-
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
-
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
       pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
-    elif not all(
-      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
-    ):
-      raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3600"
-      )
-
     if tube_2nd_section_height_measured_from_zm is None:
       tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm):
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3600")
-
     if tube_2nd_section_ratio is None:
       tube_2nd_section_ratio = [0] * self.num_channels
-    elif not all(0 <= x <= 10000 for x in tube_2nd_section_ratio):
-      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
-
     if minimum_height is None:
       minimum_height = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimum_height):
-      raise ValueError("minimum_height must be in range 0 to 3600")
-
     if immersion_depth is None:
       immersion_depth = [0] * self.num_channels
-    elif not all(-3600 <= x <= 3600 for x in immersion_depth):
-      raise ValueError("immersion_depth must be in range -3600 to 3600")
-
     if surface_following_distance is None:
       surface_following_distance = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in surface_following_distance):
-      raise ValueError("surface_following_distance must be in range 0 to 3600")
-
     if aspiration_volume is None:
       aspiration_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in aspiration_volume):
-      raise ValueError("aspiration_volume must be in range 0 to 125000")
-
-    if TODO_DA_2 is None:
-      TODO_DA_2 = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in TODO_DA_2):
-      raise ValueError("TODO_DA_2 must be in range 0 to 125000")
-
     if aspiration_speed is None:
       aspiration_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in aspiration_speed):
-      raise ValueError("aspiration_speed must be in range 10 to 10000")
-
     if transport_air_volume is None:
       transport_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 500 for x in transport_air_volume):
-      raise ValueError("transport_air_volume must be in range 0 to 500")
-
     if blow_out_air_volume is None:
       blow_out_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in blow_out_air_volume):
-      raise ValueError("blow_out_air_volume must be in range 0 to 125000")
-
     if pre_wetting_volume is None:
       pre_wetting_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 999 for x in pre_wetting_volume):
-      raise ValueError("pre_wetting_volume must be in range 0 to 999")
-
     if lld_mode is None:
       lld_mode = [1] * self.num_channels
-    elif not all(0 <= x <= 4 for x in lld_mode):
-      raise ValueError("lld_mode must be in range 0 to 4")
-
     if lld_sensitivity is None:
       lld_sensitivity = [1] * self.num_channels
-    elif not all(1 <= x <= 4 for x in lld_sensitivity):
-      raise ValueError("lld_sensitivity must be in range 1 to 4")
-
     if pressure_lld_sensitivity is None:
       pressure_lld_sensitivity = [1] * self.num_channels
-    elif not all(1 <= x <= 4 for x in pressure_lld_sensitivity):
-      raise ValueError("pressure_lld_sensitivity must be in range 1 to 4")
-
     if aspirate_position_above_z_touch_off is None:
       aspirate_position_above_z_touch_off = [5] * self.num_channels
-    elif not all(0 <= x <= 100 for x in aspirate_position_above_z_touch_off):
-      raise ValueError("aspirate_position_above_z_touch_off must be in range 0 to 100")
-
-    if TODO_DA_4 is None:
-      TODO_DA_4 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DA_4):
-      raise ValueError("TODO_DA_4 must be in range 0 to 1")
-
     if swap_speed is None:
       swap_speed = [100] * self.num_channels
-    elif not all(3 <= x <= 1600 for x in swap_speed):
-      raise ValueError("swap_speed must be in range 3 to 1600")
-
     if settling_time is None:
       settling_time = [5] * self.num_channels
-    elif not all(0 <= x <= 99 for x in settling_time):
-      raise ValueError("settling_time must be in range 0 to 99")
-
     if mix_volume is None:
       mix_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 12500 for x in mix_volume):
-      raise ValueError("mix_volume must be in range 0 to 12500")
-
     if mix_cycles is None:
       mix_cycles = [0] * self.num_channels
-    elif not all(0 <= x <= 99 for x in mix_cycles):
-      raise ValueError("mix_cycles must be in range 0 to 99")
-
     if mix_position_in_z_direction_from_liquid_surface is None:
       mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
-    elif not all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface):
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900")
-
     if mix_speed is None:
       mix_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in mix_speed):
-      raise ValueError("mix_speed must be in range 10 to 10000")
-
     if surface_following_distance_during_mixing is None:
       surface_following_distance_during_mixing = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in surface_following_distance_during_mixing):
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 3600")
-
     if TODO_DA_5 is None:
       TODO_DA_5 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DA_5):
-      raise ValueError("TODO_DA_5 must be in range 0 to 1")
-
     if capacitive_mad_supervision_on_off is None:
       capacitive_mad_supervision_on_off = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in capacitive_mad_supervision_on_off):
-      raise ValueError("capacitive_mad_supervision_on_off must be in range 0 to 1")
-
     if pressure_mad_supervision_on_off is None:
       pressure_mad_supervision_on_off = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in pressure_mad_supervision_on_off):
-      raise ValueError("pressure_mad_supervision_on_off must be in range 0 to 1")
-
-    if not 0 <= tadm_algorithm_on_off <= 1:
-      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
-
     if limit_curve_index is None:
       limit_curve_index = [0] * self.num_channels
-    elif not all(0 <= x <= 999 for x in limit_curve_index):
-      raise ValueError("limit_curve_index must be in range 0 to 999")
 
-    if not 0 <= recording_mode <= 2:
-      raise ValueError("recording_mode must be in range 0 to 2")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DA",
-      at=type_of_aspiration,
-      tm=tip_pattern,
-      xp=x_position,
-      yp=y_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      lp=lld_search_height,
-      ch=clot_detection_height,
-      zl=liquid_surface_at_function_without_lld,
-      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      zu=tube_2nd_section_height_measured_from_zm,
-      zr=tube_2nd_section_ratio,
-      zx=minimum_height,
-      ip=immersion_depth,
-      fp=surface_following_distance,
-      av=aspiration_volume,
-      # ar=TODO_DA_2, # this parameters is not used by VoV
-      as_=aspiration_speed,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      oa=pre_wetting_volume,
-      lm=lld_mode,
-      ll=lld_sensitivity,
-      lv=pressure_lld_sensitivity,
-      zo=aspirate_position_above_z_touch_off,
-      # lg=TODO_DA_4,
-      de=swap_speed,
-      wt=settling_time,
-      mv=mix_volume,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      ms=mix_speed,
-      mh=surface_following_distance_during_mixing,
-      la=TODO_DA_5,
-      lb=capacitive_mad_supervision_on_off,
-      lc=pressure_mad_supervision_on_off,
-      gj=tadm_algorithm_on_off,
-      gi=limit_curve_index,
-      gk=recording_mode,
+    return await self._vantage_pip._pip_aspirate(
+      x_position=x_position,
+      y_position=y_position,
+      type_of_aspiration=type_of_aspiration,
+      tip_pattern=tip_pattern,
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      lld_search_height=[v / 10 for v in lld_search_height],
+      clot_detection_height=[v / 10 for v in clot_detection_height],
+      liquid_surface_at_function_without_lld=[
+        v / 10 for v in liquid_surface_at_function_without_lld
+      ],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=[
+        v / 10 for v in pull_out_distance_to_take_transport_air_in_function_without_lld
+      ],
+      tube_2nd_section_height_measured_from_zm=[
+        v / 10 for v in tube_2nd_section_height_measured_from_zm
+      ],
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      minimum_height=[v / 10 for v in minimum_height],
+      immersion_depth=[v / 10 for v in immersion_depth],
+      surface_following_distance=[v / 10 for v in surface_following_distance],
+      aspiration_volume=[v / 100 for v in aspiration_volume],
+      aspiration_speed=[v / 10 for v in aspiration_speed],
+      transport_air_volume=[v / 10 for v in transport_air_volume],
+      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
+      pre_wetting_volume=[v / 10 for v in pre_wetting_volume],
+      lld_mode=lld_mode,
+      lld_sensitivity=lld_sensitivity,
+      pressure_lld_sensitivity=pressure_lld_sensitivity,
+      aspirate_position_above_z_touch_off=[v / 10 for v in aspirate_position_above_z_touch_off],
+      swap_speed=[v / 10 for v in swap_speed],
+      settling_time=[v / 10 for v in settling_time],
+      mix_volume=[v / 10 for v in mix_volume],
+      mix_cycles=mix_cycles,
+      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
+      mix_speed=[v / 10 for v in mix_speed],
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off,
+      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      limit_curve_index=limit_curve_index,
+      recording_mode=recording_mode,
+      TODO_DA_5=TODO_DA_5,
     )
 
   async def pip_dispense(
@@ -2029,269 +1176,116 @@ class VantageBackend(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """Dispensing of liquid
-
-    Args:
-      type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
-          surface 3 = Blow at surface 4 = Empty.
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
-      lld_search_height: LLD search height [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      pull_out_distance_to_take_transport_air_in_function_without_lld:
-          Pull out distance to take transp. air in function without LLD [0.1mm]
-        .
-      immersion_depth: Immersion depth [0.1mm].
-      surface_following_distance: Surface following distance [0.1mm].
-      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
-      tube_2nd_section_ratio: Tube 2nd section ratio.
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      dispense_volume: Dispense volume [0.01ul].
-      dispense_speed: Dispense speed [0.1ul/s].
-      cut_off_speed: Cut off speed [0.1ul/s].
-      stop_back_volume: Stop back volume [0.1ul].
-      transport_air_volume: Transport air volume [0.1ul].
-      blow_out_air_volume: Blow out air volume [0.01ul].
-      lld_mode: LLD Mode (0 = off).
-      side_touch_off_distance: Side touch off distance [0.1mm].
-      dispense_position_above_z_touch_off: (0).
-      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
-      pressure_lld_sensitivity: Pressure LLD sensitivity (1= high, 4=low).
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
-      settling_time: Settling time [0.1s].
-      mix_volume: Mix volume [0.1ul].
-      mix_cycles: Mix cycles.
-      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
-        surface[0.1mm].
-      mix_speed: Mix speed [0.1ul/s].
-      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
-      TODO_DD_2: (0).
-      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
-      limit_curve_index: Limit curve index.
-      recording_mode:
-          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
-        .
-    """
+    """Deprecated: use ``VantagePIPBackend._pip_dispense``."""
 
     if type_of_dispensing_mode is None:
       type_of_dispensing_mode = [0] * self.num_channels
-    elif not all(0 <= x <= 4 for x in type_of_dispensing_mode):
-      raise ValueError("type_of_dispensing_mode must be in range 0 to 4")
-
     if tip_pattern is None:
       tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
-    if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
     if minimum_height is None:
       minimum_height = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimum_height):
-      raise ValueError("minimum_height must be in range 0 to 3600")
-
     if lld_search_height is None:
       lld_search_height = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in lld_search_height):
-      raise ValueError("lld_search_height must be in range 0 to 3600")
-
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
-
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
       pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
-    elif not all(
-      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
-    ):
-      raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3600"
-      )
-
     if immersion_depth is None:
       immersion_depth = [0] * self.num_channels
-    elif not all(-3600 <= x <= 3600 for x in immersion_depth):
-      raise ValueError("immersion_depth must be in range -3600 to 3600")
-
     if surface_following_distance is None:
       surface_following_distance = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in surface_following_distance):
-      raise ValueError("surface_following_distance must be in range 0 to 3600")
-
     if tube_2nd_section_height_measured_from_zm is None:
       tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm):
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3600")
-
     if tube_2nd_section_ratio is None:
       tube_2nd_section_ratio = [0] * self.num_channels
-    elif not all(0 <= x <= 10000 for x in tube_2nd_section_ratio):
-      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
     if dispense_volume is None:
       dispense_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in dispense_volume):
-      raise ValueError("dispense_volume must be in range 0 to 125000")
-
     if dispense_speed is None:
       dispense_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in dispense_speed):
-      raise ValueError("dispense_speed must be in range 10 to 10000")
-
     if cut_off_speed is None:
       cut_off_speed = [250] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in cut_off_speed):
-      raise ValueError("cut_off_speed must be in range 10 to 10000")
-
     if stop_back_volume is None:
       stop_back_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 180 for x in stop_back_volume):
-      raise ValueError("stop_back_volume must be in range 0 to 180")
-
     if transport_air_volume is None:
       transport_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 500 for x in transport_air_volume):
-      raise ValueError("transport_air_volume must be in range 0 to 500")
-
     if blow_out_air_volume is None:
       blow_out_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in blow_out_air_volume):
-      raise ValueError("blow_out_air_volume must be in range 0 to 125000")
-
     if lld_mode is None:
       lld_mode = [1] * self.num_channels
-    elif not all(0 <= x <= 4 for x in lld_mode):
-      raise ValueError("lld_mode must be in range 0 to 4")
-
-    if not 0 <= side_touch_off_distance <= 45:
-      raise ValueError("side_touch_off_distance must be in range 0 to 45")
-
     if dispense_position_above_z_touch_off is None:
       dispense_position_above_z_touch_off = [5] * self.num_channels
-    elif not all(0 <= x <= 100 for x in dispense_position_above_z_touch_off):
-      raise ValueError("dispense_position_above_z_touch_off must be in range 0 to 100")
-
     if lld_sensitivity is None:
       lld_sensitivity = [1] * self.num_channels
-    elif not all(1 <= x <= 4 for x in lld_sensitivity):
-      raise ValueError("lld_sensitivity must be in range 1 to 4")
-
     if pressure_lld_sensitivity is None:
       pressure_lld_sensitivity = [1] * self.num_channels
-    elif not all(1 <= x <= 4 for x in pressure_lld_sensitivity):
-      raise ValueError("pressure_lld_sensitivity must be in range 1 to 4")
-
     if swap_speed is None:
       swap_speed = [100] * self.num_channels
-    elif not all(3 <= x <= 1600 for x in swap_speed):
-      raise ValueError("swap_speed must be in range 3 to 1600")
-
     if settling_time is None:
       settling_time = [5] * self.num_channels
-    elif not all(0 <= x <= 99 for x in settling_time):
-      raise ValueError("settling_time must be in range 0 to 99")
-
     if mix_volume is None:
       mix_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 12500 for x in mix_volume):
-      raise ValueError("mix_volume must be in range 0 to 12500")
-
     if mix_cycles is None:
       mix_cycles = [0] * self.num_channels
-    elif not all(0 <= x <= 99 for x in mix_cycles):
-      raise ValueError("mix_cycles must be in range 0 to 99")
-
     if mix_position_in_z_direction_from_liquid_surface is None:
       mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
-    elif not all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface):
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900")
-
     if mix_speed is None:
       mix_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in mix_speed):
-      raise ValueError("mix_speed must be in range 10 to 10000")
-
     if surface_following_distance_during_mixing is None:
       surface_following_distance_during_mixing = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in surface_following_distance_during_mixing):
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 3600")
-
     if TODO_DD_2 is None:
       TODO_DD_2 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DD_2):
-      raise ValueError("TODO_DD_2 must be in range 0 to 1")
-
-    if not 0 <= tadm_algorithm_on_off <= 1:
-      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
-
     if limit_curve_index is None:
       limit_curve_index = [0] * self.num_channels
-    elif not all(0 <= x <= 999 for x in limit_curve_index):
-      raise ValueError("limit_curve_index must be in range 0 to 999")
 
-    if not 0 <= recording_mode <= 2:
-      raise ValueError("recording_mode must be in range 0 to 2")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DD",
-      dm=type_of_dispensing_mode,
-      tm=tip_pattern,
-      xp=x_position,
-      yp=y_position,
-      zx=minimum_height,
-      lp=lld_search_height,
-      zl=liquid_surface_at_function_without_lld,
-      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      ip=immersion_depth,
-      fp=surface_following_distance,
-      zu=tube_2nd_section_height_measured_from_zm,
-      zr=tube_2nd_section_ratio,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      dv=[f"{vol:04}" for vol in dispense_volume],  # it appears at least 4 digits are needed
-      ds=dispense_speed,
-      ss=cut_off_speed,
-      rv=stop_back_volume,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      lm=lld_mode,
-      dj=side_touch_off_distance,
-      zo=dispense_position_above_z_touch_off,
-      ll=lld_sensitivity,
-      lv=pressure_lld_sensitivity,
-      de=swap_speed,
-      wt=settling_time,
-      mv=mix_volume,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      ms=mix_speed,
-      mh=surface_following_distance_during_mixing,
-      la=TODO_DD_2,
-      gj=tadm_algorithm_on_off,
-      gi=limit_curve_index,
-      gk=recording_mode,
+    return await self._vantage_pip._pip_dispense(
+      x_position=x_position,
+      y_position=y_position,
+      tip_pattern=tip_pattern,
+      type_of_dispensing_mode=type_of_dispensing_mode,
+      minimum_height=[v / 10 for v in minimum_height],
+      lld_search_height=[v / 10 for v in lld_search_height],
+      liquid_surface_at_function_without_lld=[
+        v / 10 for v in liquid_surface_at_function_without_lld
+      ],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=[
+        v / 10 for v in pull_out_distance_to_take_transport_air_in_function_without_lld
+      ],
+      immersion_depth=[v / 10 for v in immersion_depth],
+      surface_following_distance=[v / 10 for v in surface_following_distance],
+      tube_2nd_section_height_measured_from_zm=[
+        v / 10 for v in tube_2nd_section_height_measured_from_zm
+      ],
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      dispense_volume=[v / 100 for v in dispense_volume],
+      dispense_speed=[v / 10 for v in dispense_speed],
+      cut_off_speed=[v / 10 for v in cut_off_speed],
+      stop_back_volume=[v / 10 for v in stop_back_volume],
+      transport_air_volume=[v / 10 for v in transport_air_volume],
+      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
+      lld_mode=lld_mode,
+      side_touch_off_distance=side_touch_off_distance / 10,
+      dispense_position_above_z_touch_off=[v / 10 for v in dispense_position_above_z_touch_off],
+      lld_sensitivity=lld_sensitivity,
+      pressure_lld_sensitivity=pressure_lld_sensitivity,
+      swap_speed=[v / 10 for v in swap_speed],
+      settling_time=[v / 10 for v in settling_time],
+      mix_volume=[v / 10 for v in mix_volume],
+      mix_cycles=mix_cycles,
+      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
+      mix_speed=[v / 10 for v in mix_speed],
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      limit_curve_index=limit_curve_index,
+      recording_mode=recording_mode,
+      TODO_DD_2=TODO_DD_2,
     )
 
   async def simultaneous_aspiration_dispensation_of_liquid(
@@ -2341,339 +1335,168 @@ class VantageBackend(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """Simultaneous aspiration & dispensation of liquid
-
-    Args:
-      type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
-      type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
-          surface 3 = Blow at surface 4 = Empty.
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      TODO_DM_1: (0).
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      lld_search_height: LLD search height [0.1mm].
-      clot_detection_height: (0).
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      pull_out_distance_to_take_transport_air_in_function_without_lld:
-          Pull out distance to take transp. air in function without LLD [0.1mm]
-        .
-      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
-      immersion_depth: Immersion depth [0.1mm].
-      surface_following_distance: Surface following distance [0.1mm].
-      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
-      tube_2nd_section_ratio: Tube 2nd section ratio.
-      aspiration_volume: Aspiration volume [0.01ul].
-      TODO_DM_3: (0).
-      aspiration_speed: Aspiration speed [0.1ul]/s.
-      dispense_volume: Dispense volume [0.01ul].
-      dispense_speed: Dispense speed [0.1ul/s].
-      cut_off_speed: Cut off speed [0.1ul/s].
-      stop_back_volume: Stop back volume [0.1ul].
-      transport_air_volume: Transport air volume [0.1ul].
-      blow_out_air_volume: Blow out air volume [0.01ul].
-      pre_wetting_volume: Pre wetting volume [0.1ul].
-      lld_mode: LLD Mode (0 = off).
-      aspirate_position_above_z_touch_off: (0).
-      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
-      pressure_lld_sensitivity: Pressure LLD sensitivity (1= high, 4=low).
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
-      settling_time: Settling time [0.1s].
-      mix_volume: Mix volume [0.1ul].
-      mix_cycles: Mix cycles.
-      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
-        surface[0.1mm].
-      mix_speed: Mix speed [0.1ul/s].
-      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
-      TODO_DM_5: (0).
-      capacitive_mad_supervision_on_off: Capacitive MAD supervision on/off (0 = OFF).
-      pressure_mad_supervision_on_off: Pressure MAD supervision on/off (0 = OFF).
-      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
-      limit_curve_index: Limit curve index.
-      recording_mode:
-          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
-        .
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.simultaneous_aspiration_dispensation_of_liquid."""
+    n = self.num_channels
     if type_of_aspiration is None:
-      type_of_aspiration = [0] * self.num_channels
-    elif not all(0 <= x <= 2 for x in type_of_aspiration):
-      raise ValueError("type_of_aspiration must be in range 0 to 2")
-
+      type_of_aspiration = [0] * n
     if type_of_dispensing_mode is None:
-      type_of_dispensing_mode = [0] * self.num_channels
-    elif not all(0 <= x <= 4 for x in type_of_dispensing_mode):
-      raise ValueError("type_of_dispensing_mode must be in range 0 to 4")
-
+      type_of_dispensing_mode = [0] * n
     if tip_pattern is None:
-      tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
+      tip_pattern = [False] * n
     if TODO_DM_1 is None:
-      TODO_DM_1 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DM_1):
-      raise ValueError("TODO_DM_1 must be in range 0 to 1")
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
+      TODO_DM_1 = [0] * n
     if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
+      y_position = [3000] * n
     if minimal_traverse_height_at_begin_of_command is None:
-      minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
+      minimal_traverse_height_at_begin_of_command = [3600] * n
     if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
+      minimal_height_at_command_end = [3600] * n
     if lld_search_height is None:
-      lld_search_height = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in lld_search_height):
-      raise ValueError("lld_search_height must be in range 0 to 3600")
-
+      lld_search_height = [0] * n
     if clot_detection_height is None:
-      clot_detection_height = [60] * self.num_channels
-    elif not all(0 <= x <= 500 for x in clot_detection_height):
-      raise ValueError("clot_detection_height must be in range 0 to 500")
-
+      clot_detection_height = [60] * n
     if liquid_surface_at_function_without_lld is None:
-      liquid_surface_at_function_without_lld = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
-
+      liquid_surface_at_function_without_lld = [3600] * n
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
-      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
-    elif not all(
-      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
-    ):
-      raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3600"
-      )
-
+      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * n
     if minimum_height is None:
-      minimum_height = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimum_height):
-      raise ValueError("minimum_height must be in range 0 to 3600")
-
+      minimum_height = [3600] * n
     if immersion_depth is None:
-      immersion_depth = [0] * self.num_channels
-    elif not all(-3600 <= x <= 3600 for x in immersion_depth):
-      raise ValueError("immersion_depth must be in range -3600 to 3600")
-
+      immersion_depth = [0] * n
     if surface_following_distance is None:
-      surface_following_distance = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in surface_following_distance):
-      raise ValueError("surface_following_distance must be in range 0 to 3600")
-
+      surface_following_distance = [0] * n
     if tube_2nd_section_height_measured_from_zm is None:
-      tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm):
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3600")
-
+      tube_2nd_section_height_measured_from_zm = [0] * n
     if tube_2nd_section_ratio is None:
-      tube_2nd_section_ratio = [0] * self.num_channels
-    elif not all(0 <= x <= 10000 for x in tube_2nd_section_ratio):
-      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
-
+      tube_2nd_section_ratio = [0] * n
     if aspiration_volume is None:
-      aspiration_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in aspiration_volume):
-      raise ValueError("aspiration_volume must be in range 0 to 125000")
-
+      aspiration_volume = [0] * n
     if TODO_DM_3 is None:
-      TODO_DM_3 = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in TODO_DM_3):
-      raise ValueError("TODO_DM_3 must be in range 0 to 125000")
-
+      TODO_DM_3 = [0] * n
     if aspiration_speed is None:
-      aspiration_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in aspiration_speed):
-      raise ValueError("aspiration_speed must be in range 10 to 10000")
-
+      aspiration_speed = [500] * n
     if dispense_volume is None:
-      dispense_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in dispense_volume):
-      raise ValueError("dispense_volume must be in range 0 to 125000")
-
+      dispense_volume = [0] * n
     if dispense_speed is None:
-      dispense_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in dispense_speed):
-      raise ValueError("dispense_speed must be in range 10 to 10000")
-
+      dispense_speed = [500] * n
     if cut_off_speed is None:
-      cut_off_speed = [250] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in cut_off_speed):
-      raise ValueError("cut_off_speed must be in range 10 to 10000")
-
+      cut_off_speed = [250] * n
     if stop_back_volume is None:
-      stop_back_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 180 for x in stop_back_volume):
-      raise ValueError("stop_back_volume must be in range 0 to 180")
-
+      stop_back_volume = [0] * n
     if transport_air_volume is None:
-      transport_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 500 for x in transport_air_volume):
-      raise ValueError("transport_air_volume must be in range 0 to 500")
-
+      transport_air_volume = [0] * n
     if blow_out_air_volume is None:
-      blow_out_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in blow_out_air_volume):
-      raise ValueError("blow_out_air_volume must be in range 0 to 125000")
-
+      blow_out_air_volume = [0] * n
     if pre_wetting_volume is None:
-      pre_wetting_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 999 for x in pre_wetting_volume):
-      raise ValueError("pre_wetting_volume must be in range 0 to 999")
-
+      pre_wetting_volume = [0] * n
     if lld_mode is None:
-      lld_mode = [1] * self.num_channels
-    elif not all(0 <= x <= 4 for x in lld_mode):
-      raise ValueError("lld_mode must be in range 0 to 4")
-
+      lld_mode = [1] * n
     if aspirate_position_above_z_touch_off is None:
-      aspirate_position_above_z_touch_off = [5] * self.num_channels
-    elif not all(0 <= x <= 100 for x in aspirate_position_above_z_touch_off):
-      raise ValueError("aspirate_position_above_z_touch_off must be in range 0 to 100")
-
+      aspirate_position_above_z_touch_off = [5] * n
     if lld_sensitivity is None:
-      lld_sensitivity = [1] * self.num_channels
-    elif not all(1 <= x <= 4 for x in lld_sensitivity):
-      raise ValueError("lld_sensitivity must be in range 1 to 4")
-
+      lld_sensitivity = [1] * n
     if pressure_lld_sensitivity is None:
-      pressure_lld_sensitivity = [1] * self.num_channels
-    elif not all(1 <= x <= 4 for x in pressure_lld_sensitivity):
-      raise ValueError("pressure_lld_sensitivity must be in range 1 to 4")
-
+      pressure_lld_sensitivity = [1] * n
     if swap_speed is None:
-      swap_speed = [100] * self.num_channels
-    elif not all(3 <= x <= 1600 for x in swap_speed):
-      raise ValueError("swap_speed must be in range 3 to 1600")
-
+      swap_speed = [100] * n
     if settling_time is None:
-      settling_time = [5] * self.num_channels
-    elif not all(0 <= x <= 99 for x in settling_time):
-      raise ValueError("settling_time must be in range 0 to 99")
-
+      settling_time = [5] * n
     if mix_volume is None:
-      mix_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 12500 for x in mix_volume):
-      raise ValueError("mix_volume must be in range 0 to 12500")
-
+      mix_volume = [0] * n
     if mix_cycles is None:
-      mix_cycles = [0] * self.num_channels
-    elif not all(0 <= x <= 99 for x in mix_cycles):
-      raise ValueError("mix_cycles must be in range 0 to 99")
-
+      mix_cycles = [0] * n
     if mix_position_in_z_direction_from_liquid_surface is None:
-      mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
-    elif not all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface):
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900")
-
+      mix_position_in_z_direction_from_liquid_surface = [250] * n
     if mix_speed is None:
-      mix_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in mix_speed):
-      raise ValueError("mix_speed must be in range 10 to 10000")
-
+      mix_speed = [500] * n
     if surface_following_distance_during_mixing is None:
-      surface_following_distance_during_mixing = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in surface_following_distance_during_mixing):
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 3600")
-
+      surface_following_distance_during_mixing = [0] * n
     if TODO_DM_5 is None:
-      TODO_DM_5 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DM_5):
-      raise ValueError("TODO_DM_5 must be in range 0 to 1")
-
+      TODO_DM_5 = [0] * n
     if capacitive_mad_supervision_on_off is None:
-      capacitive_mad_supervision_on_off = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in capacitive_mad_supervision_on_off):
-      raise ValueError("capacitive_mad_supervision_on_off must be in range 0 to 1")
-
+      capacitive_mad_supervision_on_off = [0] * n
     if pressure_mad_supervision_on_off is None:
-      pressure_mad_supervision_on_off = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in pressure_mad_supervision_on_off):
-      raise ValueError("pressure_mad_supervision_on_off must be in range 0 to 1")
-
-    if not 0 <= tadm_algorithm_on_off <= 1:
-      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
-
+      pressure_mad_supervision_on_off = [0] * n
     if limit_curve_index is None:
-      limit_curve_index = [0] * self.num_channels
-    elif not all(0 <= x <= 999 for x in limit_curve_index):
-      raise ValueError("limit_curve_index must be in range 0 to 999")
+      limit_curve_index = [0] * n
 
-    if not 0 <= recording_mode <= 2:
-      raise ValueError("recording_mode must be in range 0 to 2")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DM",
-      at=type_of_aspiration,
-      dm=type_of_dispensing_mode,
-      tm=tip_pattern,
-      dd=TODO_DM_1,
-      xp=x_position,
-      yp=y_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      lp=lld_search_height,
-      ch=clot_detection_height,
-      zl=liquid_surface_at_function_without_lld,
-      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      zx=minimum_height,
-      ip=immersion_depth,
-      fp=surface_following_distance,
-      zu=tube_2nd_section_height_measured_from_zm,
-      zr=tube_2nd_section_ratio,
-      av=aspiration_volume,
-      ar=TODO_DM_3,
-      as_=aspiration_speed,
-      dv=dispense_volume,
-      ds=dispense_speed,
-      ss=cut_off_speed,
-      rv=stop_back_volume,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      oa=pre_wetting_volume,
-      lm=lld_mode,
-      zo=aspirate_position_above_z_touch_off,
-      ll=lld_sensitivity,
-      lv=pressure_lld_sensitivity,
-      de=swap_speed,
-      wt=settling_time,
-      mv=mix_volume,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      ms=mix_speed,
-      mh=surface_following_distance_during_mixing,
-      la=TODO_DM_5,
-      lb=capacitive_mad_supervision_on_off,
-      lc=pressure_mad_supervision_on_off,
-      gj=tadm_algorithm_on_off,
-      gi=limit_curve_index,
-      gk=recording_mode,
+    return await self._vantage_pip.simultaneous_aspiration_dispensation_of_liquid(
+      x_position=x_position,
+      y_position=y_position,  # x_position and y_position are already in 0.1mm (firmware units)
+      type_of_aspiration=type_of_aspiration,
+      type_of_dispensing_mode=type_of_dispensing_mode,
+      tip_pattern=tip_pattern,
+      TODO_DM_1=TODO_DM_1,
+      # distances: 0.1mm -> mm (/10)
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      lld_search_height=[v / 10 for v in lld_search_height],
+      clot_detection_height=[v / 10 for v in clot_detection_height],
+      liquid_surface_at_function_without_lld=[
+        v / 10 for v in liquid_surface_at_function_without_lld
+      ],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=[
+        v / 10 for v in pull_out_distance_to_take_transport_air_in_function_without_lld
+      ],
+      minimum_height=[v / 10 for v in minimum_height],
+      immersion_depth=[v / 10 for v in immersion_depth],
+      surface_following_distance=[v / 10 for v in surface_following_distance],
+      tube_2nd_section_height_measured_from_zm=[
+        v / 10 for v in tube_2nd_section_height_measured_from_zm
+      ],
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      # volumes: 0.01uL -> uL (/100)
+      aspiration_volume=[v / 100 for v in aspiration_volume],
+      TODO_DM_3=[v / 100 for v in TODO_DM_3],
+      dispense_volume=[v / 100 for v in dispense_volume],
+      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
+      # speeds: 0.1uL/s -> uL/s (/10)
+      aspiration_speed=[v / 10 for v in aspiration_speed],
+      dispense_speed=[v / 10 for v in dispense_speed],
+      cut_off_speed=[v / 10 for v in cut_off_speed],
+      mix_speed=[v / 10 for v in mix_speed],
+      # volumes: 0.1uL -> uL (/10)
+      stop_back_volume=[v / 10 for v in stop_back_volume],
+      transport_air_volume=[v / 10 for v in transport_air_volume],
+      pre_wetting_volume=[v / 10 for v in pre_wetting_volume],
+      mix_volume=[v / 10 for v in mix_volume],
+      lld_mode=lld_mode,
+      # distance: 0.1mm -> mm (/10)
+      aspirate_position_above_z_touch_off=[v / 10 for v in aspirate_position_above_z_touch_off],
+      lld_sensitivity=lld_sensitivity,
+      pressure_lld_sensitivity=pressure_lld_sensitivity,
+      # swap_speed: 0.1mm/s -> mm/s (/10)
+      swap_speed=[v / 10 for v in swap_speed],
+      # settling_time: 0.1s -> s (/10)
+      settling_time=[v / 10 for v in settling_time],
+      mix_cycles=mix_cycles,
+      # distance: 0.1mm -> mm (/10)
+      mix_position_in_z_direction_from_liquid_surface=[
+        v / 10 for v in mix_position_in_z_direction_from_liquid_surface
+      ],
+      surface_following_distance_during_mixing=[
+        v / 10 for v in surface_following_distance_during_mixing
+      ],
+      TODO_DM_5=TODO_DM_5,
+      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off,
+      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      limit_curve_index=limit_curve_index,
+      recording_mode=recording_mode,
     )
 
   async def dispense_on_fly(
     self,
     y_position: List[int],
     tip_pattern: Optional[List[bool]] = None,
-    first_shoot_x_pos: int = 0,  # 1
-    dispense_on_fly_pos_command_end: int = 0,  # 2
-    x_acceleration_distance_before_first_shoot: int = 100,  # 3
-    space_between_shoots: int = 900,  # 4
+    first_shoot_x_pos: int = 0,
+    dispense_on_fly_pos_command_end: int = 0,
+    x_acceleration_distance_before_first_shoot: int = 100,
+    space_between_shoots: int = 900,
     x_speed: int = 270,
-    number_of_shoots: int = 1,  # 5
+    number_of_shoots: int = 1,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
     liquid_surface_at_function_without_lld: Optional[List[int]] = None,
@@ -2686,133 +1509,55 @@ class VantageBackend(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """Dispense on fly
-
-    Args:
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      first_shoot_x_pos: First shoot X-position [0.1mm]
-      dispense_on_fly_pos_command_end: Dispense on fly position on command end [0.1mm]
-      x_acceleration_distance_before_first_shoot: X- acceleration distance before first shoot
-        [0.1mm] Space between shoots (raster pitch) [0.01mm]
-      space_between_shoots: Space between shoots (raster pitch) [0.01mm]
-      x_speed: X speed [0.1mm/s].
-      number_of_shoots: Number of shoots
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      y_position: Y Position [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      dispense_volume: Dispense volume [0.01ul].
-      dispense_speed: Dispense speed [0.1ul/s].
-      cut_off_speed: Cut off speed [0.1ul/s].
-      stop_back_volume: Stop back volume [0.1ul].
-      transport_air_volume: Transport air volume [0.1ul].
-      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
-      limit_curve_index: Limit curve index.
-      recording_mode: Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements).
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.dispense_on_fly."""
+    n = self.num_channels
     if tip_pattern is None:
-      tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if not -50000 <= first_shoot_x_pos <= 50000:
-      raise ValueError("first_shoot_x_pos must be in range -50000 to 50000")
-
-    if not -50000 <= dispense_on_fly_pos_command_end <= 50000:
-      raise ValueError("dispense_on_fly_pos_command_end must be in range -50000 to 50000")
-
-    if not 0 <= x_acceleration_distance_before_first_shoot <= 900:
-      raise ValueError("x_acceleration_distance_before_first_shoot must be in range 0 to 900")
-
-    if not 1 <= space_between_shoots <= 2500:
-      raise ValueError("space_between_shoots must be in range 1 to 2500")
-
-    if not 20 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 20 to 25000")
-
-    if not 1 <= number_of_shoots <= 48:
-      raise ValueError("number_of_shoots must be in range 1 to 48")
-
-    if minimal_traverse_height_at_begin_of_command is None:
-      minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
-    if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
+      tip_pattern = [False] * n
     if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
+      y_position = [3000] * n
+    if minimal_traverse_height_at_begin_of_command is None:
+      minimal_traverse_height_at_begin_of_command = [3600] * n
+    if minimal_height_at_command_end is None:
+      minimal_height_at_command_end = [3600] * n
     if liquid_surface_at_function_without_lld is None:
-      liquid_surface_at_function_without_lld = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
-
+      liquid_surface_at_function_without_lld = [3600] * n
     if dispense_volume is None:
-      dispense_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in dispense_volume):
-      raise ValueError("dispense_volume must be in range 0 to 125000")
-
+      dispense_volume = [0] * n
     if dispense_speed is None:
-      dispense_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in dispense_speed):
-      raise ValueError("dispense_speed must be in range 10 to 10000")
-
+      dispense_speed = [500] * n
     if cut_off_speed is None:
-      cut_off_speed = [250] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in cut_off_speed):
-      raise ValueError("cut_off_speed must be in range 10 to 10000")
-
+      cut_off_speed = [250] * n
     if stop_back_volume is None:
-      stop_back_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 180 for x in stop_back_volume):
-      raise ValueError("stop_back_volume must be in range 0 to 180")
-
+      stop_back_volume = [0] * n
     if transport_air_volume is None:
-      transport_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 500 for x in transport_air_volume):
-      raise ValueError("transport_air_volume must be in range 0 to 500")
-
-    if not 0 <= tadm_algorithm_on_off <= 1:
-      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
-
+      transport_air_volume = [0] * n
     if limit_curve_index is None:
-      limit_curve_index = [0] * self.num_channels
-    elif not all(0 <= x <= 999 for x in limit_curve_index):
-      raise ValueError("limit_curve_index must be in range 0 to 999")
+      limit_curve_index = [0] * n
 
-    if not 0 <= recording_mode <= 2:
-      raise ValueError("recording_mode must be in range 0 to 2")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DF",
-      tm=tip_pattern,
-      xa=first_shoot_x_pos,
-      xf=dispense_on_fly_pos_command_end,
-      xh=x_acceleration_distance_before_first_shoot,
-      xy=space_between_shoots,
-      xv=x_speed,
-      xi=number_of_shoots,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      yp=y_position,
-      zl=liquid_surface_at_function_without_lld,
-      dv=dispense_volume,
-      ds=dispense_speed,
-      ss=cut_off_speed,
-      rv=stop_back_volume,
-      ta=transport_air_volume,
-      gj=tadm_algorithm_on_off,
-      gi=limit_curve_index,
-      gk=recording_mode,
+    return await self._vantage_pip.dispense_on_fly(
+      y_position=[v / 10 for v in y_position],
+      tip_pattern=tip_pattern,
+      first_shoot_x_pos=first_shoot_x_pos / 10,
+      dispense_on_fly_pos_command_end=dispense_on_fly_pos_command_end / 10,
+      x_acceleration_distance_before_first_shoot=x_acceleration_distance_before_first_shoot / 10,
+      space_between_shoots=space_between_shoots / 100,
+      x_speed=x_speed / 10,
+      number_of_shoots=number_of_shoots,
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      liquid_surface_at_function_without_lld=[
+        v / 10 for v in liquid_surface_at_function_without_lld
+      ],
+      dispense_volume=[v / 100 for v in dispense_volume],
+      dispense_speed=[v / 10 for v in dispense_speed],
+      cut_off_speed=[v / 10 for v in cut_off_speed],
+      stop_back_volume=[v / 10 for v in stop_back_volume],
+      transport_air_volume=[v / 10 for v in transport_air_volume],
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      limit_curve_index=limit_curve_index,
+      recording_mode=recording_mode,
     )
 
   async def nano_pulse_dispense(
@@ -2836,139 +1581,66 @@ class VantageBackend(HamiltonLiquidHandler):
     TODO_DB_11: Optional[List[int]] = None,
     TODO_DB_12: Optional[List[int]] = None,
   ):
-    """Nano pulse dispense
-
-    Args:
-      TODO_DB_0: (0).
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      TODO_DB_1: (0).
-      TODO_DB_2: (0).
-      TODO_DB_3: (0).
-      TODO_DB_4: (0).
-      TODO_DB_5: (0).
-      TODO_DB_6: (0).
-      TODO_DB_7: (0).
-      TODO_DB_8: (0).
-      TODO_DB_9: (0).
-      TODO_DB_10: (0).
-      TODO_DB_11: (0).
-      TODO_DB_12: (0).
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.nano_pulse_dispense."""
+    n = self.num_channels
     if TODO_DB_0 is None:
-      TODO_DB_0 = [1] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DB_0):
-      raise ValueError("TODO_DB_0 must be in range 0 to 1")
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
+      TODO_DB_0 = [1] * n
     if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
+      y_position = [3000] * n
     if liquid_surface_at_function_without_lld is None:
-      liquid_surface_at_function_without_lld = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
-
+      liquid_surface_at_function_without_lld = [3600] * n
     if minimal_traverse_height_at_begin_of_command is None:
-      minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
+      minimal_traverse_height_at_begin_of_command = [3600] * n
     if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
+      minimal_height_at_command_end = [3600] * n
     if TODO_DB_1 is None:
-      TODO_DB_1 = [0] * self.num_channels
-    elif not all(0 <= x <= 20000 for x in TODO_DB_1):
-      raise ValueError("TODO_DB_1 must be in range 0 to 20000")
-
+      TODO_DB_1 = [0] * n
     if TODO_DB_2 is None:
-      TODO_DB_2 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DB_2):
-      raise ValueError("TODO_DB_2 must be in range 0 to 1")
-
+      TODO_DB_2 = [0] * n
     if TODO_DB_3 is None:
-      TODO_DB_3 = [0] * self.num_channels
-    elif not all(0 <= x <= 10000 for x in TODO_DB_3):
-      raise ValueError("TODO_DB_3 must be in range 0 to 10000")
-
+      TODO_DB_3 = [0] * n
     if TODO_DB_4 is None:
-      TODO_DB_4 = [0] * self.num_channels
-    elif not all(0 <= x <= 100 for x in TODO_DB_4):
-      raise ValueError("TODO_DB_4 must be in range 0 to 100")
-
+      TODO_DB_4 = [0] * n
     if TODO_DB_5 is None:
-      TODO_DB_5 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DB_5):
-      raise ValueError("TODO_DB_5 must be in range 0 to 1")
-
+      TODO_DB_5 = [0] * n
     if TODO_DB_6 is None:
-      TODO_DB_6 = [0] * self.num_channels
-    elif not all(0 <= x <= 10000 for x in TODO_DB_6):
-      raise ValueError("TODO_DB_6 must be in range 0 to 10000")
-
+      TODO_DB_6 = [0] * n
     if TODO_DB_7 is None:
-      TODO_DB_7 = [0] * self.num_channels
-    elif not all(0 <= x <= 100 for x in TODO_DB_7):
-      raise ValueError("TODO_DB_7 must be in range 0 to 100")
-
+      TODO_DB_7 = [0] * n
     if TODO_DB_8 is None:
-      TODO_DB_8 = [0] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DB_8):
-      raise ValueError("TODO_DB_8 must be in range 0 to 1")
-
+      TODO_DB_8 = [0] * n
     if TODO_DB_9 is None:
-      TODO_DB_9 = [0] * self.num_channels
-    elif not all(0 <= x <= 10000 for x in TODO_DB_9):
-      raise ValueError("TODO_DB_9 must be in range 0 to 10000")
-
+      TODO_DB_9 = [0] * n
     if TODO_DB_10 is None:
-      TODO_DB_10 = [0] * self.num_channels
-    elif not all(0 <= x <= 100 for x in TODO_DB_10):
-      raise ValueError("TODO_DB_10 must be in range 0 to 100")
-
+      TODO_DB_10 = [0] * n
     if TODO_DB_11 is None:
-      TODO_DB_11 = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in TODO_DB_11):
-      raise ValueError("TODO_DB_11 must be in range 0 to 3600")
-
+      TODO_DB_11 = [0] * n
     if TODO_DB_12 is None:
-      TODO_DB_12 = [1] * self.num_channels
-    elif not all(0 <= x <= 1 for x in TODO_DB_12):
-      raise ValueError("TODO_DB_12 must be in range 0 to 1")
+      TODO_DB_12 = [1] * n
 
-    return await self.send_command(
-      module="A1PM",
-      command="DB",
-      tm=TODO_DB_0,
-      xp=x_position,
-      yp=y_position,
-      zl=liquid_surface_at_function_without_lld,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      pe=TODO_DB_1,
-      pd=TODO_DB_2,
-      pf=TODO_DB_3,
-      pg=TODO_DB_4,
-      ph=TODO_DB_5,
-      pj=TODO_DB_6,
-      pk=TODO_DB_7,
-      pl=TODO_DB_8,
-      pp=TODO_DB_9,
-      pq=TODO_DB_10,
-      pi=TODO_DB_11,
-      pm=TODO_DB_12,
+    return await self._vantage_pip.nano_pulse_dispense(
+      x_position=x_position,
+      y_position=[v / 10 for v in y_position],
+      TODO_DB_0=TODO_DB_0,
+      liquid_surface_at_function_without_lld=[
+        v / 10 for v in liquid_surface_at_function_without_lld
+      ],
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      TODO_DB_1=TODO_DB_1,
+      TODO_DB_2=TODO_DB_2,
+      TODO_DB_3=TODO_DB_3,
+      TODO_DB_4=TODO_DB_4,
+      TODO_DB_5=TODO_DB_5,
+      TODO_DB_6=TODO_DB_6,
+      TODO_DB_7=TODO_DB_7,
+      TODO_DB_8=TODO_DB_8,
+      TODO_DB_9=TODO_DB_9,
+      TODO_DB_10=TODO_DB_10,
+      TODO_DB_11=[v / 10 for v in TODO_DB_11],
+      TODO_DB_12=TODO_DB_12,
     )
 
   async def wash_tips(
@@ -2986,93 +1658,44 @@ class VantageBackend(HamiltonLiquidHandler):
     wash_cycles: int = 0,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """Wash tips
-
-    Args:
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      aspiration_volume: Aspiration volume [0.01ul].
-      aspiration_speed: Aspiration speed [0.1ul]/s.
-      dispense_speed: Dispense speed [0.1ul/s].
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
-      soak_time: (0).
-      wash_cycles: (0).
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.wash_tips."""
+    n = self.num_channels
     if tip_pattern is None:
-      tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
+      tip_pattern = [False] * n
     if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
+      y_position = [3000] * n
     if minimal_traverse_height_at_begin_of_command is None:
-      minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
+      minimal_traverse_height_at_begin_of_command = [3600] * n
     if liquid_surface_at_function_without_lld is None:
-      liquid_surface_at_function_without_lld = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
-
+      liquid_surface_at_function_without_lld = [3600] * n
     if aspiration_volume is None:
-      aspiration_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in aspiration_volume):
-      raise ValueError("aspiration_volume must be in range 0 to 125000")
-
+      aspiration_volume = [0] * n
     if aspiration_speed is None:
-      aspiration_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in aspiration_speed):
-      raise ValueError("aspiration_speed must be in range 10 to 10000")
-
+      aspiration_speed = [500] * n
     if dispense_speed is None:
-      dispense_speed = [500] * self.num_channels
-    elif not all(10 <= x <= 10000 for x in dispense_speed):
-      raise ValueError("dispense_speed must be in range 10 to 10000")
-
+      dispense_speed = [500] * n
     if swap_speed is None:
-      swap_speed = [100] * self.num_channels
-    elif not all(3 <= x <= 1600 for x in swap_speed):
-      raise ValueError("swap_speed must be in range 3 to 1600")
-
-    if not 0 <= soak_time <= 3600:
-      raise ValueError("soak_time must be in range 0 to 3600")
-
-    if not 0 <= wash_cycles <= 99:
-      raise ValueError("wash_cycles must be in range 0 to 99")
-
+      swap_speed = [100] * n
     if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
+      minimal_height_at_command_end = [3600] * n
 
-    return await self.send_command(
-      module="A1PM",
-      command="DW",
-      tm=tip_pattern,
-      xp=x_position,
-      yp=y_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      zl=liquid_surface_at_function_without_lld,
-      av=aspiration_volume,
-      as_=aspiration_speed,
-      ds=dispense_speed,
-      de=swap_speed,
-      sa=soak_time,
-      dc=wash_cycles,
-      te=minimal_height_at_command_end,
+    return await self._vantage_pip.wash_tips(
+      x_position=x_position,
+      y_position=[v / 10 for v in y_position],
+      tip_pattern=tip_pattern,
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      liquid_surface_at_function_without_lld=[
+        v / 10 for v in liquid_surface_at_function_without_lld
+      ],
+      aspiration_volume=[v / 100 for v in aspiration_volume],
+      aspiration_speed=[v / 10 for v in aspiration_speed],
+      dispense_speed=[v / 10 for v in dispense_speed],
+      swap_speed=[v / 10 for v in swap_speed],
+      soak_time=soak_time,
+      wash_cycles=wash_cycles,
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
     )
 
   async def pip_tip_pick_up(
@@ -3088,84 +1711,38 @@ class VantageBackend(HamiltonLiquidHandler):
     blow_out_air_volume: Optional[List[int]] = None,
     tip_handling_method: Optional[List[int]] = None,
   ):
-    """Tip Pick up
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      tip_type: Tip type (see command TT).
-      begin_z_deposit_position: (0).
-      end_z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-       [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      blow_out_air_volume: Blow out air volume [0.01ul].
-      tip_handling_method: Tip handling method. (Unconfirmed, but likely: 0 = auto selection (see
-        command TT parameter tu), 1 = pick up out of rack, 2 = pick up out of wash liquid (slowly))
-    """
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
-    if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
+    """Deprecated: use ``VantagePIPBackend._pip_tip_pick_up``."""
 
     if tip_pattern is None:
       tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
     if tip_type is None:
       tip_type = [4] * self.num_channels
-    elif not all(0 <= x <= 199 for x in tip_type):
-      raise ValueError("tip_type must be in range 0 to 199")
-
     if begin_z_deposit_position is None:
       begin_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in begin_z_deposit_position):
-      raise ValueError("begin_z_deposit_position must be in range 0 to 3600")
-
     if end_z_deposit_position is None:
       end_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in end_z_deposit_position):
-      raise ValueError("end_z_deposit_position must be in range 0 to 3600")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
     if blow_out_air_volume is None:
       blow_out_air_volume = [0] * self.num_channels
-    elif not all(0 <= x <= 125000 for x in blow_out_air_volume):
-      raise ValueError("blow_out_air_volume must be in range 0 to 125000")
-
     if tip_handling_method is None:
       tip_handling_method = [0] * self.num_channels
-    elif not all(0 <= x <= 9 for x in tip_handling_method):
-      raise ValueError("tip_handling_method must be in range 0 to 9")
 
-    return await self.send_command(
-      module="A1PM",
-      command="TP",
-      xp=x_position,
-      yp=y_position,
-      tm=tip_pattern,
-      tt=tip_type,
-      tp=begin_z_deposit_position,
-      tz=end_z_deposit_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      ba=blow_out_air_volume,
-      td=tip_handling_method,
+    return await self._vantage_pip._pip_tip_pick_up(
+      x_position=x_position,
+      y_position=y_position,
+      tip_pattern=tip_pattern,
+      tip_type=tip_type,
+      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position],
+      end_z_deposit_position=[v / 10 for v in end_z_deposit_position],
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      tip_handling_method=tip_handling_method,
+      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
     )
 
   async def pip_tip_discard(
@@ -3180,74 +1757,33 @@ class VantageBackend(HamiltonLiquidHandler):
     TODO_TR_2: int = 0,
     tip_handling_method: Optional[List[int]] = None,
   ):
-    """Tip Discard
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      begin_z_deposit_position: (0).
-      end_z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      TODO_TR_2: (0).
-      tip_handling_method: Tip handling method.
-    """
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
-    if y_position is None:
-      y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
+    """Deprecated: use ``VantagePIPBackend._pip_tip_discard``."""
 
     if begin_z_deposit_position is None:
       begin_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in begin_z_deposit_position):
-      raise ValueError("begin_z_deposit_position must be in range 0 to 3600")
-
     if end_z_deposit_position is None:
       end_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in end_z_deposit_position):
-      raise ValueError("end_z_deposit_position must be in range 0 to 3600")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
-
     if tip_pattern is None:
       tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if not -1000 <= TODO_TR_2 <= 1000:
-      raise ValueError("TODO_TR_2 must be in range -1000 to 1000")
-
     if tip_handling_method is None:
       tip_handling_method = [0] * self.num_channels
-    elif not all(0 <= x <= 9 for x in tip_handling_method):
-      raise ValueError("tip_handling_method must be in range 0 to 9")
 
-    return await self.send_command(
-      module="A1PM",
-      command="TR",
-      xp=x_position,
-      yp=y_position,
-      tp=begin_z_deposit_position,
-      tz=end_z_deposit_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      tm=tip_pattern,
-      ts=TODO_TR_2,
-      td=tip_handling_method,
+    return await self._vantage_pip._pip_tip_discard(
+      x_position=x_position,
+      y_position=y_position,
+      tip_pattern=tip_pattern,
+      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position],
+      end_z_deposit_position=[v / 10 for v in end_z_deposit_position],
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
+      tip_handling_method=tip_handling_method,
+      TODO_TR_2=TODO_TR_2,
     )
 
   async def search_for_teach_in_signal_in_x_direction(
@@ -3256,71 +1792,33 @@ class VantageBackend(HamiltonLiquidHandler):
     x_search_distance: int = 0,
     x_speed: int = 270,
   ):
-    """Search for Teach in signal in X direction
-
-    Args:
-      channel_index: Channel index.
-      x_search_distance: X search distance [0.1mm].
-      x_speed: X speed [0.1mm/s].
-    """
-
-    if not 1 <= channel_index <= 16:
-      raise ValueError("channel_index must be in range 1 to 16")
-
-    if not -50000 <= x_search_distance <= 50000:
-      raise ValueError("x_search_distance must be in range -50000 to 50000")
-
-    if not 20 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 20 to 25000")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DL",
-      pn=channel_index,
-      xs=x_search_distance,
-      xv=x_speed,
+    """Deprecated: delegates to VantagePIPBackend.search_for_teach_in_signal_in_x_direction."""
+    return await self._vantage_pip.search_for_teach_in_signal_in_x_direction(
+      channel_index=channel_index,
+      x_search_distance=x_search_distance / 10,
+      x_speed=x_speed / 10,
     )
 
   async def position_all_channels_in_y_direction(
     self,
     y_position: List[int],
   ):
-    """Position all channels in Y direction
-
-    Args:
-      y_position: Y Position [0.1mm].
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.position_all_channels_in_y_direction."""
     if y_position is None:
       y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DY",
-      yp=y_position,
+    return await self._vantage_pip.position_all_channels_in_y_direction(
+      y_position=[v / 10 for v in y_position],
     )
 
   async def position_all_channels_in_z_direction(
     self,
     z_position: Optional[List[int]] = None,
   ):
-    """Position all channels in Z direction
-
-    Args:
-      z_position: Z Position [0.1mm].
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.position_all_channels_in_z_direction."""
     if z_position is None:
       z_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in z_position):
-      raise ValueError("z_position must be in range 0 to 3600")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DZ",
-      zp=z_position,
+    return await self._vantage_pip.position_all_channels_in_z_direction(
+      z_position=[v / 10 for v in z_position],
     )
 
   async def position_single_channel_in_y_direction(
@@ -3328,24 +1826,10 @@ class VantageBackend(HamiltonLiquidHandler):
     channel_index: int = 1,
     y_position: int = 3000,
   ):
-    """Position single channel in Y direction
-
-    Args:
-      channel_index: Channel index.
-      y_position: Y Position [0.1mm].
-    """
-
-    if not 1 <= channel_index <= 16:
-      raise ValueError("channel_index must be in range 1 to 16")
-
-    if not 0 <= y_position <= 6500:
-      raise ValueError("y_position must be in range 0 to 6500")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DV",
-      pn=channel_index,
-      yj=y_position,
+    """Deprecated: delegates to VantagePIPBackend.position_single_channel_in_y_direction."""
+    return await self._vantage_pip.position_single_channel_in_y_direction(
+      channel_index=channel_index,
+      y_position=y_position / 10,
     )
 
   async def position_single_channel_in_z_direction(
@@ -3353,24 +1837,10 @@ class VantageBackend(HamiltonLiquidHandler):
     channel_index: int = 1,
     z_position: int = 0,
   ):
-    """Position single channel in Z direction
-
-    Args:
-      channel_index: Channel index.
-      z_position: Z Position [0.1mm].
-    """
-
-    if not 1 <= channel_index <= 16:
-      raise ValueError("channel_index must be in range 1 to 16")
-
-    if not 0 <= z_position <= 3600:
-      raise ValueError("z_position must be in range 0 to 3600")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DU",
-      pn=channel_index,
-      zj=z_position,
+    """Deprecated: delegates to VantagePIPBackend.position_single_channel_in_z_direction."""
+    return await self._vantage_pip.position_single_channel_in_z_direction(
+      channel_index=channel_index,
+      z_position=z_position / 10,
     )
 
   async def move_to_defined_position(
@@ -3381,48 +1851,24 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     z_position: Optional[List[int]] = None,
   ):
-    """Move to defined position
-
-    Args:
-      tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      z_position: Z Position [0.1mm].
-    """
-
+    """Deprecated: delegates to VantagePIPBackend.move_to_defined_position."""
     if tip_pattern is None:
       tip_pattern = [False] * self.num_channels
-    elif not all(0 <= x <= 1 for x in tip_pattern):
-      raise ValueError("tip_pattern must be in range 0 to 1")
-
-    if not all(0 <= x <= 50000 for x in x_position):
-      raise ValueError("x_position must be in range 0 to 50000")
-
     if y_position is None:
       y_position = [3000] * self.num_channels
-    elif not all(0 <= x <= 6500 for x in y_position):
-      raise ValueError("y_position must be in range 0 to 6500")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if z_position is None:
       z_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in z_position):
-      raise ValueError("z_position must be in range 0 to 3600")
 
-    return await self.send_command(
-      module="A1PM",
-      command="DN",
-      tm=tip_pattern,
-      xp=x_position,
-      yp=y_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      zp=z_position,
+    return await self._vantage_pip.move_to_defined_position(
+      x_position=x_position,
+      y_position=[v / 10 for v in y_position],
+      tip_pattern=tip_pattern,
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      z_position=[v / 10 for v in z_position],
     )
 
   async def teach_rack_using_channel_n(
@@ -3433,62 +1879,25 @@ class VantageBackend(HamiltonLiquidHandler):
     gap_center_z_direction: int = 0,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """Teach rack using channel n
-
-    Attention! Channels not involved must first be taken out of measurement range.
-
-    Args:
-      channel_index: Channel index.
-      gap_center_x_direction: Gap center X direction [0.1mm].
-      gap_center_y_direction: Gap center Y direction [0.1mm].
-      gap_center_z_direction: Gap center Z direction [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not 1 <= channel_index <= 16:
-      raise ValueError("channel_index must be in range 1 to 16")
-
-    if not -50000 <= gap_center_x_direction <= 50000:
-      raise ValueError("gap_center_x_direction must be in range -50000 to 50000")
-
-    if not 0 <= gap_center_y_direction <= 6500:
-      raise ValueError("gap_center_y_direction must be in range 0 to 6500")
-
-    if not 0 <= gap_center_z_direction <= 3600:
-      raise ValueError("gap_center_z_direction must be in range 0 to 3600")
-
+    """Deprecated: delegates to VantagePIPBackend.teach_rack_using_channel_n."""
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
 
-    return await self.send_command(
-      module="A1PM",
-      command="DT",
-      pn=channel_index,
-      xa=gap_center_x_direction,
-      yj=gap_center_y_direction,
-      zj=gap_center_z_direction,
-      te=minimal_height_at_command_end,
+    return await self._vantage_pip.teach_rack_using_channel_n(
+      channel_index=channel_index,
+      gap_center_x_direction=gap_center_x_direction / 10,
+      gap_center_y_direction=gap_center_y_direction / 10,
+      gap_center_z_direction=gap_center_z_direction / 10,
+      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
     )
 
   async def expose_channel_n(
     self,
     channel_index: int = 1,
   ):
-    """Expose channel n
-
-    Args:
-      channel_index: Channel index.
-    """
-
-    if not 1 <= channel_index <= 16:
-      raise ValueError("channel_index must be in range 1 to 16")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DQ",
-      pn=channel_index,
+    """Deprecated: delegates to VantagePIPBackend.expose_channel_n."""
+    return await self._vantage_pip.expose_channel_n(
+      channel_index=channel_index,
     )
 
   async def calculates_check_sums_and_compares_them_with_the_value_saved_in_flash_eprom(
@@ -3501,58 +1910,26 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     first_pip_channel_node_no: int = 1,
   ):
-    """Calculates check sums and compares them with the value saved in Flash EPROM
-
-    Args:
-      TODO_DC_0: (0).
-      TODO_DC_1: (0).
-      tip_type: Tip type (see command TT).
-      TODO_DC_2: (0).
-      z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      first_pip_channel_node_no: First (lower) pip. channel node no. (0 = disabled).
-    """
-
-    if not -50000 <= TODO_DC_0 <= 50000:
-      raise ValueError("TODO_DC_0 must be in range -50000 to 50000")
-
-    if not 0 <= TODO_DC_1 <= 6500:
-      raise ValueError("TODO_DC_1 must be in range 0 to 6500")
-
+    """Deprecated: delegates to VantagePIPBackend.calculates_check_sums_and_compares_them_with_the_value_saved_in_flash_eprom."""
     if tip_type is None:
       tip_type = [4] * self.num_channels
-    elif not all(0 <= x <= 199 for x in tip_type):
-      raise ValueError("tip_type must be in range 0 to 199")
-
     if TODO_DC_2 is None:
       TODO_DC_2 = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in TODO_DC_2):
-      raise ValueError("TODO_DC_2 must be in range 0 to 3600")
-
     if z_deposit_position is None:
       z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in z_deposit_position):
-      raise ValueError("z_deposit_position must be in range 0 to 3600")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
 
-    if not 1 <= first_pip_channel_node_no <= 16:
-      raise ValueError("first_pip_channel_node_no must be in range 1 to 16")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DC",
-      xa=TODO_DC_0,
-      yj=TODO_DC_1,
-      tt=tip_type,
-      tp=TODO_DC_2,
-      tz=z_deposit_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      pa=first_pip_channel_node_no,
+    return await self._vantage_pip.calculates_check_sums_and_compares_them_with_the_value_saved_in_flash_eprom(
+      TODO_DC_0=TODO_DC_0 / 10,
+      TODO_DC_1=TODO_DC_1 / 10,
+      tip_type=tip_type,
+      TODO_DC_2=[v / 10 for v in TODO_DC_2],
+      z_deposit_position=[v / 10 for v in z_deposit_position],
+      minimal_traverse_height_at_begin_of_command=[
+        v / 10 for v in minimal_traverse_height_at_begin_of_command
+      ],
+      first_pip_channel_node_no=first_pip_channel_node_no,
     )
 
   async def discard_core_gripper_tool(
@@ -3566,65 +1943,29 @@ class VantageBackend(HamiltonLiquidHandler):
     first_pip_channel_node_no: int = 1,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """Discard CoRe gripper tool
-
-    Args:
-      gripper_tool_x_position: (0).
-      first_gripper_tool_y_pos: First (lower channel) CoRe gripper tool Y pos. [0.1mm]
-      tip_type: Tip type (see command TT).
-      begin_z_deposit_position: (0).
-      end_z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      first_pip_channel_node_no: First (lower) pip. channel node no. (0 = disabled).
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -50000 <= gripper_tool_x_position <= 50000:
-      raise ValueError("gripper_tool_x_position must be in range -50000 to 50000")
-
-    if not 0 <= first_gripper_tool_y_pos <= 6500:
-      raise ValueError("first_gripper_tool_y_pos must be in range 0 to 6500")
+    """Deprecated: delegates to VantageCoreGripper.discard_tool. Use that instead."""
 
     if tip_type is None:
       tip_type = [4] * self.num_channels
-    elif not all(0 <= x <= 199 for x in tip_type):
-      raise ValueError("tip_type must be in range 0 to 199")
-
     if begin_z_deposit_position is None:
       begin_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in begin_z_deposit_position):
-      raise ValueError("begin_z_deposit_position must be in range 0 to 3600")
-
     if end_z_deposit_position is None:
       end_z_deposit_position = [0] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in end_z_deposit_position):
-      raise ValueError("end_z_deposit_position must be in range 0 to 3600")
-
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
-    if not 1 <= first_pip_channel_node_no <= 16:
-      raise ValueError("first_pip_channel_node_no must be in range 1 to 16")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
 
-    return await self.send_command(
-      module="A1PM",
-      command="DJ",
-      xa=gripper_tool_x_position,
-      yj=first_gripper_tool_y_pos,
-      tt=tip_type,
-      tp=begin_z_deposit_position,
-      tz=end_z_deposit_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      pa=first_pip_channel_node_no,
-      te=minimal_height_at_command_end,
+    return await self._vantage_core_gripper.discard_tool(
+      x_position=gripper_tool_x_position / 10,
+      first_gripper_tool_y_pos=first_gripper_tool_y_pos / 10,
+      tip_type=tip_type,
+      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position],
+      end_z_deposit_position=[v / 10 for v in end_z_deposit_position],
+      first_pip_channel_node_no=first_pip_channel_node_no,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command[0]
+      / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end[0] / 10,
     )
 
   async def grip_plate(
@@ -3640,69 +1981,25 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """Grip plate
-
-    Args:
-      plate_center_x_direction: Plate center X direction [0.1mm].
-      plate_center_y_direction: Plate center Y direction [0.1mm].
-      plate_center_z_direction: Plate center Z direction [0.1mm].
-      z_speed: Z speed [0.1mm/sec].
-      open_gripper_position: Open gripper position [0.1mm].
-      plate_width: Plate width [0.1mm].
-      acceleration_index: Acceleration index.
-      grip_strength: Grip strength (0 = low 99 = high).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -50000 <= plate_center_x_direction <= 50000:
-      raise ValueError("plate_center_x_direction must be in range -50000 to 50000")
-
-    if not 0 <= plate_center_y_direction <= 6500:
-      raise ValueError("plate_center_y_direction must be in range 0 to 6500")
-
-    if not 0 <= plate_center_z_direction <= 3600:
-      raise ValueError("plate_center_z_direction must be in range 0 to 3600")
-
-    if not 3 <= z_speed <= 1600:
-      raise ValueError("z_speed must be in range 3 to 1600")
-
-    if not 0 <= open_gripper_position <= 9999:
-      raise ValueError("open_gripper_position must be in range 0 to 9999")
-
-    if not 0 <= plate_width <= 9999:
-      raise ValueError("plate_width must be in range 0 to 9999")
-
-    if not 0 <= acceleration_index <= 4:
-      raise ValueError("acceleration_index must be in range 0 to 4")
-
-    if not 0 <= grip_strength <= 99:
-      raise ValueError("grip_strength must be in range 0 to 99")
+    """Deprecated: delegates to VantageCoreGripper._grip_plate. Use that instead."""
 
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
 
-    return await self.send_command(
-      module="A1PM",
-      command="DG",
-      xa=plate_center_x_direction,
-      yj=plate_center_y_direction,
-      zj=plate_center_z_direction,
-      zy=z_speed,
-      yo=open_gripper_position,
-      yg=plate_width,
-      ai=acceleration_index,
-      yw=grip_strength,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
+    return await self._vantage_core_gripper._grip_plate(
+      x_position=plate_center_x_direction / 10,
+      y_position=plate_center_y_direction / 10,
+      z_position=plate_center_z_direction / 10,
+      z_speed=z_speed / 10,
+      open_gripper_position=open_gripper_position / 10,
+      plate_width=plate_width / 10,
+      acceleration_index=acceleration_index,
+      grip_strength=grip_strength,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command[0]
+      / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end[0] / 10,
     )
 
   async def put_plate(
@@ -3716,59 +2013,23 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """Put plate
-
-    Args:
-      plate_center_x_direction: Plate center X direction [0.1mm].
-      plate_center_y_direction: Plate center Y direction [0.1mm].
-      plate_center_z_direction: Plate center Z direction [0.1mm].
-      press_on_distance: Press on distance [0.1mm].
-      z_speed: Z speed [0.1mm/sec].
-      open_gripper_position: Open gripper position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -50000 <= plate_center_x_direction <= 50000:
-      raise ValueError("plate_center_x_direction must be in range -50000 to 50000")
-
-    if not 0 <= plate_center_y_direction <= 6500:
-      raise ValueError("plate_center_y_direction must be in range 0 to 6500")
-
-    if not 0 <= plate_center_z_direction <= 3600:
-      raise ValueError("plate_center_z_direction must be in range 0 to 3600")
-
-    if not 0 <= press_on_distance <= 999:
-      raise ValueError("press_on_distance must be in range 0 to 999")
-
-    if not 3 <= z_speed <= 1600:
-      raise ValueError("z_speed must be in range 3 to 1600")
-
-    if not 0 <= open_gripper_position <= 9999:
-      raise ValueError("open_gripper_position must be in range 0 to 9999")
+    """Deprecated: delegates to VantageCoreGripper._put_plate. Use that instead."""
 
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
-
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_height_at_command_end):
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3600")
 
-    return await self.send_command(
-      module="A1PM",
-      command="DR",
-      xa=plate_center_x_direction,
-      yj=plate_center_y_direction,
-      zj=plate_center_z_direction,
-      zi=press_on_distance,
-      zy=z_speed,
-      yo=open_gripper_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
+    return await self._vantage_core_gripper._put_plate(
+      x_position=plate_center_x_direction / 10,
+      y_position=plate_center_y_direction / 10,
+      z_position=plate_center_z_direction / 10,
+      press_on_distance=press_on_distance / 10,
+      z_speed=z_speed / 10,
+      open_gripper_position=open_gripper_position / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command[0]
+      / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end[0] / 10,
     )
 
   async def move_to_position(
@@ -3779,149 +2040,77 @@ class VantageBackend(HamiltonLiquidHandler):
     z_speed: int = 1287,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
   ):
-    """Move to position
-
-    Args:
-      plate_center_x_direction: Plate center X direction [0.1mm].
-      plate_center_y_direction: Plate center Y direction [0.1mm].
-      plate_center_z_direction: Plate center Z direction [0.1mm].
-      z_speed: Z speed [0.1mm/sec].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-    """
-
-    if not -50000 <= plate_center_x_direction <= 50000:
-      raise ValueError("plate_center_x_direction must be in range -50000 to 50000")
-
-    if not 0 <= plate_center_y_direction <= 6500:
-      raise ValueError("plate_center_y_direction must be in range 0 to 6500")
-
-    if not 0 <= plate_center_z_direction <= 3600:
-      raise ValueError("plate_center_z_direction must be in range 0 to 3600")
-
-    if not 3 <= z_speed <= 1600:
-      raise ValueError("z_speed must be in range 3 to 1600")
+    """Deprecated: delegates to VantageCoreGripper._move_to_position. Use that instead."""
 
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
 
-    return await self.send_command(
-      module="A1PM",
-      command="DH",
-      xa=plate_center_x_direction,
-      yj=plate_center_y_direction,
-      zj=plate_center_z_direction,
-      zy=z_speed,
-      th=minimal_traverse_height_at_begin_of_command,
+    return await self._vantage_core_gripper._move_to_position(
+      x_position=plate_center_x_direction / 10,
+      y_position=plate_center_y_direction / 10,
+      z_position=plate_center_z_direction / 10,
+      z_speed=z_speed / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command[0]
+      / 10,
     )
 
   async def release_object(
     self,
     first_pip_channel_node_no: int = 1,
   ):
-    """Release object
+    """Deprecated: use ``VantageCoreGripper.open_gripper``."""
+    from pylabrobot.hamilton.liquid_handlers.vantage.core import VantageCoreGripper
 
-    Args:
-      first_pip_channel_node_no: First (lower) pip. channel node no. (0 = disabled).
-    """
-
-    if not 1 <= first_pip_channel_node_no <= 16:
-      raise ValueError("first_pip_channel_node_no must be in range 1 to 16")
-
-    return await self.send_command(
-      module="A1PM",
-      command="DO",
-      pa=first_pip_channel_node_no,
+    return await self._vantage_core_gripper.open_gripper(
+      0,
+      backend_params=VantageCoreGripper.OpenGripperParams(
+        first_pip_channel_node_no=first_pip_channel_node_no
+      ),
     )
 
   async def set_any_parameter_within_this_module(self):
-    """Set any parameter within this module"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="AA",
-    )
+    """Deprecated: delegates to VantagePIPBackend.set_any_parameter_within_this_module."""
+    return await self._vantage_pip.set_any_parameter_within_this_module()
 
   async def request_y_positions_of_all_channels(self):
-    """Request Y Positions of all channels"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="RY",
-    )
+    """Deprecated: delegates to VantagePIPBackend.request_y_positions_of_all_channels."""
+    return await self._vantage_pip.request_y_positions_of_all_channels()
 
   async def request_y_position_of_channel_n(self, channel_index: int = 1):
-    """Request Y Position of channel n"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="RB",
-      pn=channel_index,
+    """Deprecated: delegates to VantagePIPBackend.request_y_position_of_channel_n."""
+    return await self._vantage_pip.request_y_position_of_channel_n(
+      channel_index=channel_index,
     )
 
   async def request_z_positions_of_all_channels(self):
-    """Request Z Positions of all channels"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="RZ",
-    )
+    """Deprecated: delegates to VantagePIPBackend.request_z_positions_of_all_channels."""
+    return await self._vantage_pip.request_z_positions_of_all_channels()
 
   async def request_z_position_of_channel_n(self, channel_index: int = 1):
-    """Request Z Position of channel n"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="RD",
-      pn=channel_index,
+    """Deprecated: delegates to VantagePIPBackend.request_z_position_of_channel_n."""
+    return await self._vantage_pip.request_z_position_of_channel_n(
+      channel_index=channel_index,
     )
 
   async def query_tip_presence(self) -> List[bool]:
-    """Query Tip presence"""
-
-    resp = await self.send_command(module="A1PM", command="QA", fmt={"rt": "[int]"})
-    presences_int = cast(List[int], resp["rt"])
-    return [bool(p) for p in presences_int]
+    """Deprecated: use ``VantageDriver.query_tip_presence``."""
+    return await self.driver.query_tip_presence()
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
-    """Request tip presence on each channel.
-
-    Returns:
-      A list of length `num_channels` where each element is `True` if a tip is mounted,
-      `False` if not, or `None` if unknown.
-    """
-    result: List[Optional[bool]] = list(await self.query_tip_presence())
-    return result
+    """Deprecated: use ``VantageDriver.query_tip_presence``."""
+    return list(await self.query_tip_presence())
 
   async def request_height_of_last_lld(self):
-    """Request height of last LLD"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="RL",
-    )
+    """Deprecated: delegates to VantagePIPBackend.request_height_of_last_lld."""
+    return await self._vantage_pip.request_height_of_last_lld()
 
   async def request_channel_dispense_on_fly_status(self):
-    """Request channel dispense on fly status"""
-
-    return await self.send_command(
-      module="A1PM",
-      command="QF",
-    )
+    """Deprecated: delegates to VantagePIPBackend.request_channel_dispense_on_fly_status."""
+    return await self._vantage_pip.request_channel_dispense_on_fly_status()
 
   async def core96_request_initialization_status(self) -> bool:
-    """Request CoRe96 initialization status
-
-    This method is inferred from I1AM and A1AM commands ("QW").
-
-    Returns:
-      bool: True if initialized, False otherwise.
-    """
-
-    resp = await self.send_command(module="A1HM", command="QW", fmt={"qw": "int"})
-    return resp is not None and resp["qw"] == 1
+    """Deprecated: use ``VantageDriver.core96_request_initialization_status``."""
+    return await self.driver.core96_request_initialization_status()
 
   async def core96_initialize(
     self,
@@ -3933,51 +2122,18 @@ class VantageBackend(HamiltonLiquidHandler):
     end_z_deposit_position: int = 0,
     tip_type: int = 4,
   ):
-    """Initialize 96 head.
+    """Deprecated: use ``VantageDriver.core96_initialize``.
 
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      z_position: Z Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      end_z_deposit_position: Z deposit position [0.1mm] (collar bearing position). (not documented,
-        but present in the log files.)
-      tip_type: Tip type (see command TT).
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
     """
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= z_position <= 3900:
-      raise ValueError("z_position must be in range 0 to 3900")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    if not 0 <= minimal_height_at_command_end <= 3900:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
-
-    if not 0 <= end_z_deposit_position <= 3600:
-      raise ValueError("end_z_deposit_position must be in range 0 to 3600")
-
-    if not 0 <= tip_type <= 199:
-      raise ValueError("tip_type must be in range 0 to 199")
-
-    return await self.send_command(
-      module="A1HM",
-      command="DI",
-      xp=x_position,
-      yp=y_position,
-      zp=z_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      tz=end_z_deposit_position,
-      tt=tip_type,
+    return await self.driver.core96_initialize(
+      x_position / 10,
+      y_position / 10,
+      z_position / 10,
+      minimal_traverse_height_at_begin_of_command / 10,
+      minimal_height_at_command_end / 10,
+      end_z_deposit_position / 10,
+      tip_type,
     )
 
   async def core96_aspiration_of_liquid(
@@ -4014,181 +2170,40 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
-    """Aspiration of liquid using the 96 head.
-
-    Args:
-      type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-        command [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      lld_search_height: LLD search height [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      pull_out_distance_to_take_transport_air_in_function_without_lld:
-          Pull out distance to take transp. air in function without LLD [0.1mm].
-      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
-      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
-      tube_2nd_section_ratio: Tube 2nd section ratio.
-      immersion_depth: Immersion depth [0.1mm].
-      surface_following_distance: Surface following distance [0.1mm].
-      aspiration_volume: Aspiration volume [0.01ul].
-      aspiration_speed: Aspiration speed [0.1ul]/s.
-      transport_air_volume: Transport air volume [0.1ul].
-      blow_out_air_volume: Blow out air volume [0.01ul].
-      pre_wetting_volume: Pre wetting volume [0.1ul].
-      lld_mode: LLD Mode (0 = off).
-      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
-      settling_time: Settling time [0.1s].
-      mix_volume: Mix volume [0.1ul].
-      mix_cycles: Mix cycles.
-      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
-        surface[0.1mm].
-      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
-      mix_speed: Mix speed [0.1ul/s].
-      limit_curve_index: Limit curve index.
-      tadm_channel_pattern: TADM Channel pattern.
-      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
-      recording_mode:
-          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
-        .
-    """
-
-    if not 0 <= type_of_aspiration <= 2:
-      raise ValueError("type_of_aspiration must be in range 0 to 2")
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    if not 0 <= minimal_height_at_command_end <= 3900:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
-
-    if not 0 <= lld_search_height <= 3900:
-      raise ValueError("lld_search_height must be in range 0 to 3900")
-
-    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
-
-    if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
-      raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3900"
-      )
-
-    if not 0 <= minimum_height <= 3900:
-      raise ValueError("minimum_height must be in range 0 to 3900")
-
-    if not 0 <= tube_2nd_section_height_measured_from_zm <= 3900:
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3900")
-
-    if not 0 <= tube_2nd_section_ratio <= 10000:
-      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
-
-    if not -990 <= immersion_depth <= 990:
-      raise ValueError("immersion_depth must be in range -990 to 990")
-
-    if not 0 <= surface_following_distance <= 990:
-      raise ValueError("surface_following_distance must be in range 0 to 990")
-
-    if not 0 <= aspiration_volume <= 115000:
-      raise ValueError("aspiration_volume must be in range 0 to 115000")
-
-    if not 3 <= aspiration_speed <= 5000:
-      raise ValueError("aspiration_speed must be in range 3 to 5000")
-
-    if not 0 <= transport_air_volume <= 1000:
-      raise ValueError("transport_air_volume must be in range 0 to 1000")
-
-    if not 0 <= blow_out_air_volume <= 115000:
-      raise ValueError("blow_out_air_volume must be in range 0 to 115000")
-
-    if not 0 <= pre_wetting_volume <= 11500:
-      raise ValueError("pre_wetting_volume must be in range 0 to 11500")
-
-    if not 0 <= lld_mode <= 1:
-      raise ValueError("lld_mode must be in range 0 to 1")
-
-    if not 1 <= lld_sensitivity <= 4:
-      raise ValueError("lld_sensitivity must be in range 1 to 4")
-
-    if not 3 <= swap_speed <= 1000:
-      raise ValueError("swap_speed must be in range 3 to 1000")
-
-    if not 0 <= settling_time <= 99:
-      raise ValueError("settling_time must be in range 0 to 99")
-
-    if not 0 <= mix_volume <= 11500:
-      raise ValueError("mix_volume must be in range 0 to 11500")
-
-    if not 0 <= mix_cycles <= 99:
-      raise ValueError("mix_cycles must be in range 0 to 99")
-
-    if not 0 <= mix_position_in_z_direction_from_liquid_surface <= 990:
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990")
-
-    if not 0 <= surface_following_distance_during_mixing <= 990:
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
-
-    if not 3 <= mix_speed <= 5000:
-      raise ValueError("mix_speed must be in range 3 to 5000")
-
-    if not 0 <= limit_curve_index <= 999:
-      raise ValueError("limit_curve_index must be in range 0 to 999")
-
-    if tadm_channel_pattern is None:
-      tadm_channel_pattern = [True] * 96
-    elif not len(tadm_channel_pattern) < 24:
-      raise ValueError(
-        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
-      )
-    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
-
-    if not 0 <= tadm_algorithm_on_off <= 1:
-      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
-
-    if not 0 <= recording_mode <= 2:
-      raise ValueError("recording_mode must be in range 0 to 2")
-
-    return await self.send_command(
-      module="A1HM",
-      command="DA",
-      at=type_of_aspiration,
-      xp=x_position,
-      yp=y_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      lp=lld_search_height,
-      zl=liquid_surface_at_function_without_lld,
-      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      zx=minimum_height,
-      zu=tube_2nd_section_height_measured_from_zm,
-      zr=tube_2nd_section_ratio,
-      ip=immersion_depth,
-      fp=surface_following_distance,
-      av=aspiration_volume,
-      as_=aspiration_speed,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      oa=pre_wetting_volume,
-      lm=lld_mode,
-      ll=lld_sensitivity,
-      de=swap_speed,
-      wt=settling_time,
-      mv=mix_volume,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      mh=surface_following_distance_during_mixing,
-      ms=mix_speed,
-      gi=limit_curve_index,
-      cw=hex(tadm_channel_pattern_num)[2:].upper(),
-      gj=tadm_algorithm_on_off,
-      gk=recording_mode,
+    """Deprecated: use ``VantageHead96Backend._core96_aspiration_of_liquid``."""
+    return await self._vantage_head96._core96_aspiration_of_liquid(
+      type_of_aspiration=type_of_aspiration,
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
+      lld_search_height=lld_search_height / 10,
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld / 10,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=pull_out_distance_to_take_transport_air_in_function_without_lld
+      / 10,
+      minimum_height=minimum_height / 10,
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm / 10,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      immersion_depth=immersion_depth / 10,
+      surface_following_distance=surface_following_distance / 10,
+      aspiration_volume=aspiration_volume / 100,
+      aspiration_speed=aspiration_speed / 10,
+      transport_air_volume=transport_air_volume / 10,
+      blow_out_air_volume=blow_out_air_volume / 100,
+      pre_wetting_volume=pre_wetting_volume / 10,
+      lld_mode=lld_mode,
+      lld_sensitivity=lld_sensitivity,
+      swap_speed=swap_speed / 10,
+      settling_time=settling_time / 10,
+      mix_volume=mix_volume / 10,
+      mix_cycles=mix_cycles,
+      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      mix_speed=mix_speed / 10,
+      limit_curve_index=limit_curve_index,
+      tadm_channel_pattern=tadm_channel_pattern,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      recording_mode=recording_mode,
     )
 
   async def core96_dispensing_of_liquid(
@@ -4227,193 +2242,42 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
-    """Dispensing of liquid using the 96 head.
-
-    Args:
-      type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
-          surface 3 = Blow at surface 4 = Empty.
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
-      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
-      tube_2nd_section_ratio: Tube 2nd section ratio.
-      lld_search_height: LLD search height [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      pull_out_distance_to_take_transport_air_in_function_without_lld:
-          Pull out distance to take transp. air in function without LLD [0.1mm]
-        .
-      immersion_depth: Immersion depth [0.1mm].
-      surface_following_distance: Surface following distance [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-        command [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-      dispense_volume: Dispense volume [0.01ul].
-      dispense_speed: Dispense speed [0.1ul/s].
-      cut_off_speed: Cut off speed [0.1ul/s].
-      stop_back_volume: Stop back volume [0.1ul].
-      transport_air_volume: Transport air volume [0.1ul].
-      blow_out_air_volume: Blow out air volume [0.01ul].
-      lld_mode: LLD Mode (0 = off).
-      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
-      side_touch_off_distance: Side touch off distance [0.1mm].
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
-      settling_time: Settling time [0.1s].
-      mix_volume: Mix volume [0.1ul].
-      mix_cycles: Mix cycles.
-      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
-        surface[0.1mm].
-      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
-      mix_speed: Mix speed [0.1ul/s].
-      limit_curve_index: Limit curve index.
-      tadm_channel_pattern: TADM Channel pattern.
-      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
-      recording_mode:
-          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
-        .
-    """
-
-    if not 0 <= type_of_dispensing_mode <= 4:
-      raise ValueError("type_of_dispensing_mode must be in range 0 to 4")
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= minimum_height <= 3900:
-      raise ValueError("minimum_height must be in range 0 to 3900")
-
-    if not 0 <= tube_2nd_section_height_measured_from_zm <= 3900:
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3900")
-
-    if not 0 <= tube_2nd_section_ratio <= 10000:
-      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
-
-    if not 0 <= lld_search_height <= 3900:
-      raise ValueError("lld_search_height must be in range 0 to 3900")
-
-    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
-
-    if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
-      raise ValueError(
-        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 3900"
-      )
-
-    if not -990 <= immersion_depth <= 990:
-      raise ValueError("immersion_depth must be in range -990 to 990")
-
-    if not 0 <= surface_following_distance <= 990:
-      raise ValueError("surface_following_distance must be in range 0 to 990")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    if not 0 <= minimal_height_at_command_end <= 3900:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
-
-    if not 0 <= dispense_volume <= 115000:
-      raise ValueError("dispense_volume must be in range 0 to 115000")
-
-    if not 3 <= dispense_speed <= 5000:
-      raise ValueError("dispense_speed must be in range 3 to 5000")
-
-    if not 3 <= cut_off_speed <= 5000:
-      raise ValueError("cut_off_speed must be in range 3 to 5000")
-
-    if not 0 <= stop_back_volume <= 2000:
-      raise ValueError("stop_back_volume must be in range 0 to 2000")
-
-    if not 0 <= transport_air_volume <= 1000:
-      raise ValueError("transport_air_volume must be in range 0 to 1000")
-
-    if not 0 <= blow_out_air_volume <= 115000:
-      raise ValueError("blow_out_air_volume must be in range 0 to 115000")
-
-    if not 0 <= lld_mode <= 1:
-      raise ValueError("lld_mode must be in range 0 to 1")
-
-    if not 1 <= lld_sensitivity <= 4:
-      raise ValueError("lld_sensitivity must be in range 1 to 4")
-
-    if not 0 <= side_touch_off_distance <= 30:
-      raise ValueError("side_touch_off_distance must be in range 0 to 30")
-
-    if not 3 <= swap_speed <= 1000:
-      raise ValueError("swap_speed must be in range 3 to 1000")
-
-    if not 0 <= settling_time <= 99:
-      raise ValueError("settling_time must be in range 0 to 99")
-
-    if not 0 <= mix_volume <= 11500:
-      raise ValueError("mix_volume must be in range 0 to 11500")
-
-    if not 0 <= mix_cycles <= 99:
-      raise ValueError("mix_cycles must be in range 0 to 99")
-
-    if not 0 <= mix_position_in_z_direction_from_liquid_surface <= 990:
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990")
-
-    if not 0 <= surface_following_distance_during_mixing <= 990:
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
-
-    if not 3 <= mix_speed <= 5000:
-      raise ValueError("mix_speed must be in range 3 to 5000")
-
-    if not 0 <= limit_curve_index <= 999:
-      raise ValueError("limit_curve_index must be in range 0 to 999")
-
-    if tadm_channel_pattern is None:
-      tadm_channel_pattern = [True] * 96
-    elif not len(tadm_channel_pattern) < 24:
-      raise ValueError(
-        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
-      )
-    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
-
-    if not 0 <= tadm_algorithm_on_off <= 1:
-      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
-
-    if not 0 <= recording_mode <= 2:
-      raise ValueError("recording_mode must be in range 0 to 2")
-
-    return await self.send_command(
-      module="A1HM",
-      command="DD",
-      dm=type_of_dispensing_mode,
-      xp=x_position,
-      yp=y_position,
-      zx=minimum_height,
-      zu=tube_2nd_section_height_measured_from_zm,
-      zr=tube_2nd_section_ratio,
-      lp=lld_search_height,
-      zl=liquid_surface_at_function_without_lld,
-      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      ip=immersion_depth,
-      fp=surface_following_distance,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
-      dv=dispense_volume,
-      ds=dispense_speed,
-      ss=cut_off_speed,
-      rv=stop_back_volume,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      lm=lld_mode,
-      ll=lld_sensitivity,
-      dj=side_touch_off_distance,
-      de=swap_speed,
-      wt=settling_time,
-      mv=mix_volume,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      mh=surface_following_distance_during_mixing,
-      ms=mix_speed,
-      gi=limit_curve_index,
-      cw=hex(tadm_channel_pattern_num)[2:].upper(),
-      gj=tadm_algorithm_on_off,
-      gk=recording_mode,
+    """Deprecated: use ``VantageHead96Backend._core96_dispensing_of_liquid``."""
+    return await self._vantage_head96._core96_dispensing_of_liquid(
+      type_of_dispensing_mode=type_of_dispensing_mode,
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      minimum_height=minimum_height / 10,
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm / 10,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      lld_search_height=lld_search_height / 10,
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld / 10,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=pull_out_distance_to_take_transport_air_in_function_without_lld
+      / 10,
+      immersion_depth=immersion_depth / 10,
+      surface_following_distance=surface_following_distance / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
+      dispense_volume=dispense_volume / 100,
+      dispense_speed=dispense_speed / 10,
+      cut_off_speed=cut_off_speed / 10,
+      stop_back_volume=stop_back_volume / 10,
+      transport_air_volume=transport_air_volume / 10,
+      blow_out_air_volume=blow_out_air_volume / 100,
+      lld_mode=lld_mode,
+      lld_sensitivity=lld_sensitivity,
+      side_touch_off_distance=side_touch_off_distance / 10,
+      swap_speed=swap_speed / 10,
+      settling_time=settling_time / 10,
+      mix_volume=mix_volume / 10,
+      mix_cycles=mix_cycles,
+      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      mix_speed=mix_speed / 10,
+      limit_curve_index=limit_curve_index,
+      tadm_channel_pattern=tadm_channel_pattern,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      recording_mode=recording_mode,
     )
 
   async def core96_tip_pick_up(
@@ -4426,50 +2290,15 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: int = 3900,
     minimal_height_at_command_end: int = 3900,
   ):
-    """Tip Pick up using the 96 head.
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      tip_type: Tip type (see command TT).
-      tip_handling_method: Tip handling method.
-      z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-        command [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= tip_type <= 199:
-      raise ValueError("tip_type must be in range 0 to 199")
-
-    if not 0 <= tip_handling_method <= 2:
-      raise ValueError("tip_handling_method must be in range 0 to 2")
-
-    if not 0 <= z_deposit_position <= 3900:
-      raise ValueError("z_deposit_position must be in range 0 to 3900")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    if not 0 <= minimal_height_at_command_end <= 3900:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
-
-    return await self.send_command(
-      module="A1HM",
-      command="TP",
-      xp=x_position,
-      yp=y_position,
-      tt=tip_type,
-      td=tip_handling_method,
-      tz=z_deposit_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
+    """Deprecated: use ``VantageHead96Backend._core96_tip_pick_up``."""
+    return await self._vantage_head96._core96_tip_pick_up(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      tip_type=tip_type,
+      tip_handling_method=tip_handling_method,
+      z_deposit_position=z_deposit_position / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
     )
 
   async def core96_tip_discard(
@@ -4480,40 +2309,13 @@ class VantageBackend(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: int = 3900,
     minimal_height_at_command_end: int = 3900,
   ):
-    """Tip Discard using the 96 head.
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-        command [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= z_deposit_position <= 3900:
-      raise ValueError("z_deposit_position must be in range 0 to 3900")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    if not 0 <= minimal_height_at_command_end <= 3900:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
-
-    return await self.send_command(
-      module="A1HM",
-      command="TR",
-      xp=x_position,
-      yp=y_position,
-      tz=z_deposit_position,
-      th=minimal_traverse_height_at_begin_of_command,
-      te=minimal_height_at_command_end,
+    """Deprecated: use ``VantageHead96Backend._core96_tip_discard``."""
+    return await self._vantage_head96._core96_tip_discard(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      z_deposit_position=z_deposit_position / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
     )
 
   async def core96_move_to_defined_position(
@@ -4523,35 +2325,12 @@ class VantageBackend(HamiltonLiquidHandler):
     z_position: int = 0,
     minimal_traverse_height_at_begin_of_command: int = 3900,
   ):
-    """Move to defined position using the 96 head.
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      z_position: Z Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-       command [0.1mm].
-    """
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= z_position <= 3900:
-      raise ValueError("z_position must be in range 0 to 3900")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    return await self.send_command(
-      module="A1HM",
-      command="DN",
-      xp=x_position,
-      yp=y_position,
-      zp=z_position,
-      th=minimal_traverse_height_at_begin_of_command,
+    """Deprecated: use ``VantageHead96Backend._core96_move_to_defined_position``."""
+    return await self._vantage_head96._core96_move_to_defined_position(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      z_position=z_position / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
     )
 
   async def core96_wash_tips(
@@ -4566,60 +2345,17 @@ class VantageBackend(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_speed: int = 2000,
   ):
-    """Wash tips on the 96 head.
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
-      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
-        [0.1mm].
-      mix_volume: Mix volume [0.1ul].
-      mix_cycles: Mix cycles.
-      mix_speed: Mix speed [0.1ul/s].
-    """
-
-    if not -500000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -500000 to 50000")
-
-    if not 422 <= y_position <= 5921:
-      raise ValueError("y_position must be in range 422 to 5921")
-
-    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
-
-    if not 0 <= minimum_height <= 3900:
-      raise ValueError("minimum_height must be in range 0 to 3900")
-
-    if not 0 <= surface_following_distance_during_mixing <= 990:
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
-
-    if not 0 <= mix_volume <= 11500:
-      raise ValueError("mix_volume must be in range 0 to 11500")
-
-    if not 0 <= mix_cycles <= 99:
-      raise ValueError("mix_cycles must be in range 0 to 99")
-
-    if not 3 <= mix_speed <= 5000:
-      raise ValueError("mix_speed must be in range 3 to 5000")
-
-    return await self.send_command(
-      module="A1HM",
-      command="DW",
-      xp=x_position,
-      yp=y_position,
-      zl=liquid_surface_at_function_without_lld,
-      zx=minimum_height,
-      mh=surface_following_distance_during_mixing,
-      th=minimal_traverse_height_at_begin_of_command,
-      mv=mix_volume,
-      mc=mix_cycles,
-      ms=mix_speed,
+    """Deprecated: use ``VantageHead96Backend._core96_wash_tips``."""
+    return await self._vantage_head96._core96_wash_tips(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld / 10,
+      minimum_height=minimum_height / 10,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
+      mix_volume=mix_volume / 10,
+      mix_cycles=mix_cycles,
+      mix_speed=mix_speed / 10,
     )
 
   async def core96_empty_washed_tips(
@@ -4627,24 +2363,10 @@ class VantageBackend(HamiltonLiquidHandler):
     liquid_surface_at_function_without_lld: int = 3900,
     minimal_height_at_command_end: int = 3900,
   ):
-    """Empty washed tips (end of wash procedure only) on the 96 head.
-
-    Args:
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
-
-    if not 0 <= minimal_height_at_command_end <= 3900:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
-
-    return await self.send_command(
-      module="A1HM",
-      command="EE",
-      zl=liquid_surface_at_function_without_lld,
-      te=minimal_height_at_command_end,
+    """Deprecated: use ``VantageHead96Backend._core96_empty_washed_tips``."""
+    return await self._vantage_head96._core96_empty_washed_tips(
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
     )
 
   async def core96_search_for_teach_in_signal_in_x_direction(
@@ -4652,142 +2374,69 @@ class VantageBackend(HamiltonLiquidHandler):
     x_search_distance: int = 0,
     x_speed: int = 50,
   ):
-    """Search for Teach in signal in X direction on the 96 head.
-
-    Args:
-      x_search_distance: X search distance [0.1mm].
-      x_speed: X speed [0.1mm/s].
-    """
-
-    if not -50000 <= x_search_distance <= 50000:
-      raise ValueError("x_search_distance must be in range -50000 to 50000")
-
-    if not 20 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 20 to 25000")
-
-    return await self.send_command(
-      module="A1HM",
-      command="DL",
-      xs=x_search_distance,
-      xv=x_speed,
+    """Deprecated: use ``VantageHead96Backend._core96_search_for_teach_in_signal_in_x_direction``."""
+    return await self._vantage_head96._core96_search_for_teach_in_signal_in_x_direction(
+      x_search_distance=x_search_distance / 10,
+      x_speed=x_speed / 10,
     )
 
   async def core96_set_any_parameter(self):
-    """Set any parameter within the 96 head module."""
-
-    return await self.send_command(
-      module="A1HM",
-      command="AA",
-    )
+    """Deprecated: use ``VantageHead96Backend._core96_set_any_parameter``."""
+    return await self._vantage_head96._core96_set_any_parameter()
 
   async def core96_query_tip_presence(self):
-    """Query Tip presence on the 96 head."""
-
-    return await self.send_command(
-      module="A1HM",
-      command="QA",
-    )
+    """Deprecated: use ``VantageHead96Backend._core96_query_tip_presence``."""
+    return await self._vantage_head96._core96_query_tip_presence()
 
   async def core96_request_position(self):
-    """Request position of the 96 head."""
-
-    return await self.send_command(
-      module="A1HM",
-      command="QI",
-    )
+    """Deprecated: use ``VantageHead96Backend._core96_request_position``."""
+    return await self._vantage_head96._core96_request_position()
 
   async def core96_request_tadm_error_status(
     self,
     tadm_channel_pattern: Optional[List[bool]] = None,
   ):
-    """Request TADM error status on the 96 head.
-
-    Args:
-      tadm_channel_pattern: TADM Channel pattern.
-    """
-
-    if tadm_channel_pattern is None:
-      tadm_channel_pattern = [True] * 96
-    elif not len(tadm_channel_pattern) < 24:
-      raise ValueError(
-        f"tadm_channel_pattern must be of length 24, but is '{len(tadm_channel_pattern)}'"
-      )
-    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
-
-    return await self.send_command(
-      module="A1HM",
-      command="VB",
-      cw=hex(tadm_channel_pattern_num)[2:].upper(),
+    """Deprecated: use ``VantageHead96Backend._core96_request_tadm_error_status``."""
+    return await self._vantage_head96._core96_request_tadm_error_status(
+      tadm_channel_pattern=tadm_channel_pattern,
     )
 
   async def ipg_request_initialization_status(self) -> bool:
-    """Request initialization status of IPG.
-
-    This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
-    to "arm".
-
-    Returns:
-      True if the ipg module is initialized, False otherwise.
-    """
-
-    resp = await self.send_command(module="A1RM", command="QW", fmt={"qw": "int"})
-    return resp is not None and resp["qw"] == 1
+    """Deprecated: use ``IPGBackend.request_initialization_status``."""
+    return await self._vantage_ipg.request_initialization_status()
 
   async def ipg_initialize(self):
-    """Initialize IPG"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="DI",
-    )
+    """Deprecated: use ``IPGBackend.initialize``."""
+    return await self._vantage_ipg.initialize()
 
   async def ipg_park(self):
-    """Park IPG"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="GP",
-    )
+    """Deprecated: use ``IPGBackend.park``."""
+    return await self._vantage_ipg.park()
 
   async def ipg_expose_channel_n(self):
-    """Expose channel n"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="DQ",
-    )
+    """Deprecated: use ``IPGBackend.expose_channel_n``."""
+    return await self._vantage_ipg.expose_channel_n()
 
   async def ipg_release_object(self):
-    """Release object"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="DO",
-    )
+    """Deprecated: use ``IPGBackend.open_gripper``."""
+    return await self._vantage_ipg.open_gripper(0)
 
   async def ipg_search_for_teach_in_signal_in_x_direction(
     self,
     x_search_distance: int = 0,
     x_speed: int = 50,
   ):
-    """Search for Teach in signal in X direction
+    """Deprecated: use ``IPGBackend.search_for_teach_in_signal_in_x_direction``.
+
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
 
     Args:
       x_search_distance: X search distance [0.1mm].
       x_speed: X speed [0.1mm/s].
     """
-
-    if not -50000 <= x_search_distance <= 50000:
-      raise ValueError("x_search_distance must be in range -50000 to 50000")
-
-    if not 20 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 20 to 25000")
-
-    return await self.send_command(
-      module="A1RM",
-      command="DL",
-      xs=x_search_distance,
-      xv=x_speed,
+    return await self._vantage_ipg.search_for_teach_in_signal_in_x_direction(
+      x_search_distance=x_search_distance / 10,
+      x_speed=x_speed / 10,
     )
 
   async def ipg_grip_plate(
@@ -4804,69 +2453,19 @@ class VantageBackend(HamiltonLiquidHandler):
     hotel_depth: int = 0,
     minimal_height_at_command_end: int = 3600,
   ):
-    """Grip plate
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      z_position: Z Position [0.1mm].
-      grip_strength: Grip strength (0 = low 99 = high).
-      open_gripper_position: Open gripper position [0.1mm].
-      plate_width: Plate width [0.1mm].
-      plate_width_tolerance: Plate width tolerance [0.1mm].
-      acceleration_index: Acceleration index.
-      z_clearance_height: Z clearance height [0.1mm].
-      hotel_depth: Hotel depth [0.1mm] (0 = Stack).
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -50000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -50000 to 50000")
-
-    if not -10000 <= y_position <= 10000:
-      raise ValueError("y_position must be in range -10000 to 10000")
-
-    if not 0 <= z_position <= 4000:
-      raise ValueError("z_position must be in range 0 to 4000")
-
-    if not 0 <= grip_strength <= 160:
-      raise ValueError("grip_strength must be in range 0 to 160")
-
-    if not 0 <= open_gripper_position <= 9999:
-      raise ValueError("open_gripper_position must be in range 0 to 9999")
-
-    if not 0 <= plate_width <= 9999:
-      raise ValueError("plate_width must be in range 0 to 9999")
-
-    if not 0 <= plate_width_tolerance <= 99:
-      raise ValueError("plate_width_tolerance must be in range 0 to 99")
-
-    if not 0 <= acceleration_index <= 4:
-      raise ValueError("acceleration_index must be in range 0 to 4")
-
-    if not 0 <= z_clearance_height <= 999:
-      raise ValueError("z_clearance_height must be in range 0 to 999")
-
-    if not 0 <= hotel_depth <= 3000:
-      raise ValueError("hotel_depth must be in range 0 to 3000")
-
-    if not 0 <= minimal_height_at_command_end <= 4000:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 4000")
-
-    return await self.send_command(
-      module="A1RM",
-      command="DG",
-      xp=x_position,
-      yp=y_position,
-      zp=z_position,
-      yw=grip_strength,
-      yo=open_gripper_position,
-      yg=plate_width,
-      pt=plate_width_tolerance,
-      ai=acceleration_index,
-      zc=z_clearance_height,
-      hd=hotel_depth,
-      te=minimal_height_at_command_end,
+    """Deprecated: use ``IPGBackend.grip_plate``."""
+    return await self._vantage_ipg.grip_plate(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      z_position=z_position / 10,
+      grip_strength=grip_strength,
+      open_gripper_position=open_gripper_position / 10,
+      plate_width=plate_width / 10,
+      plate_width_tolerance=plate_width_tolerance / 10,
+      acceleration_index=acceleration_index,
+      z_clearance_height=z_clearance_height / 10,
+      hotel_depth=hotel_depth / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
     )
 
   async def ipg_put_plate(
@@ -4880,54 +2479,16 @@ class VantageBackend(HamiltonLiquidHandler):
     hotel_depth: int = 0,
     minimal_height_at_command_end: int = 3600,
   ):
-    """Put plate
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      z_position: Z Position [0.1mm].
-      open_gripper_position: Open gripper position [0.1mm].
-      z_clearance_height: Z clearance height [0.1mm].
-      press_on_distance: Press on distance [0.1mm].
-      hotel_depth: Hotel depth [0.1mm] (0 = Stack).
-      minimal_height_at_command_end: Minimal height at command end [0.1mm].
-    """
-
-    if not -50000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -50000 to 50000")
-
-    if not -10000 <= y_position <= 10000:
-      raise ValueError("y_position must be in range -10000 to 10000")
-
-    if not 0 <= z_position <= 4000:
-      raise ValueError("z_position must be in range 0 to 4000")
-
-    if not 0 <= open_gripper_position <= 9999:
-      raise ValueError("open_gripper_position must be in range 0 to 9999")
-
-    if not 0 <= z_clearance_height <= 999:
-      raise ValueError("z_clearance_height must be in range 0 to 999")
-
-    if not 0 <= press_on_distance <= 999:
-      raise ValueError("press_on_distance must be in range 0 to 999")
-
-    if not 0 <= hotel_depth <= 3000:
-      raise ValueError("hotel_depth must be in range 0 to 3000")
-
-    if not 0 <= minimal_height_at_command_end <= 4000:
-      raise ValueError("minimal_height_at_command_end must be in range 0 to 4000")
-
-    return await self.send_command(
-      module="A1RM",
-      command="DR",
-      xp=x_position,
-      yp=y_position,
-      zp=z_position,
-      yo=open_gripper_position,
-      zc=z_clearance_height,
-      # zi=press_on_distance, # not sent?
-      hd=hotel_depth,
-      te=minimal_height_at_command_end,
+    """Deprecated: use ``IPGBackend.put_plate``."""
+    return await self._vantage_ipg.put_plate(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      z_position=z_position / 10,
+      open_gripper_position=open_gripper_position / 10,
+      z_clearance_height=z_clearance_height / 10,
+      press_on_distance=press_on_distance / 10,
+      hotel_depth=hotel_depth / 10,
+      minimal_height_at_command_end=minimal_height_at_command_end / 10,
     )
 
   async def ipg_prepare_gripper_orientation(
@@ -4935,25 +2496,10 @@ class VantageBackend(HamiltonLiquidHandler):
     grip_orientation: int = 32,
     minimal_traverse_height_at_begin_of_command: int = 3600,
   ):
-    """Prepare gripper orientation
-
-    Args:
-      grip_orientation: Grip orientation.
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-        command [0.1mm].
-    """
-
-    if not 1 <= grip_orientation <= 44:
-      raise ValueError("grip_orientation must be in range 1 to 44")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 4000:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 4000")
-
-    return await self.send_command(
-      module="A1RM",
-      command="GA",
-      gd=grip_orientation,
-      th=minimal_traverse_height_at_begin_of_command,
+    """Deprecated: use ``IPGBackend.prepare_gripper_orientation``."""
+    return await self._vantage_ipg.prepare_gripper_orientation(
+      grip_orientation=grip_orientation,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
     )
 
   async def ipg_move_to_defined_position(
@@ -4963,110 +2509,57 @@ class VantageBackend(HamiltonLiquidHandler):
     z_position: int = 3600,
     minimal_traverse_height_at_begin_of_command: int = 3600,
   ):
-    """Move to defined position
-
-    Args:
-      x_position: X Position [0.1mm].
-      y_position: Y Position [0.1mm].
-      z_position: Z Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
-        command [0.1mm].
-    """
-
-    if not -50000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -50000 to 50000")
-
-    if not -10000 <= y_position <= 10000:
-      raise ValueError("y_position must be in range -10000 to 10000")
-
-    if not 0 <= z_position <= 4000:
-      raise ValueError("z_position must be in range 0 to 4000")
-
-    if not 0 <= minimal_traverse_height_at_begin_of_command <= 4000:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 4000")
-
-    return await self.send_command(
-      module="A1RM",
-      command="DN",
-      xp=x_position,
-      yp=y_position,
-      zp=z_position,
-      th=minimal_traverse_height_at_begin_of_command,
+    """Deprecated: use ``IPGBackend.move_to_defined_position``."""
+    return await self._vantage_ipg.move_to_defined_position(
+      x_position=x_position / 10,
+      y_position=y_position / 10,
+      z_position=z_position / 10,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command / 10,
     )
 
   async def ipg_set_any_parameter_within_this_module(self):
-    """Set any parameter within this module"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="AA",
-    )
+    """Deprecated: use ``IPGBackend.set_any_parameter_within_this_module``."""
+    return await self._vantage_ipg.set_any_parameter_within_this_module()
 
   async def ipg_get_parking_status(self) -> bool:
-    """Get parking status. Returns `True` if parked."""
-
-    resp = await self.send_command(module="A1RM", command="RG", fmt={"rg": "int"})
-    return resp is not None and resp["rg"] == 1
+    """Deprecated: use ``IPGBackend.get_parking_status``."""
+    return await self._vantage_ipg.get_parking_status()
 
   async def ipg_query_tip_presence(self):
-    """Query Tip presence"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="QA",
-    )
+    """Deprecated: use ``IPGBackend.query_tip_presence``."""
+    return await self._vantage_ipg.query_tip_presence()
 
   async def ipg_request_access_range(self, grip_orientation: int = 32):
-    """Request access range
+    """Deprecated: use ``IPGBackend.request_access_range``.
 
     Args:
-      grip_orientation: Grip orientation.
+      grip_orientation: Grip orientation (1-44).
     """
-
-    if not 1 <= grip_orientation <= 44:
-      raise ValueError("grip_orientation must be in range 1 to 44")
-
-    return await self.send_command(
-      module="A1RM",
-      command="QR",
-      gd=grip_orientation,
+    return await self._vantage_ipg.request_access_range(
+      grip_orientation=grip_orientation,
     )
 
   async def ipg_request_position(self, grip_orientation: int = 32):
-    """Request position
+    """Deprecated: use ``IPGBackend.request_position``.
 
     Args:
-      grip_orientation: Grip orientation.
+      grip_orientation: Grip orientation (1-44).
     """
-
-    if not 1 <= grip_orientation <= 44:
-      raise ValueError("grip_orientation must be in range 1 to 44")
-
-    return await self.send_command(
-      module="A1RM",
-      command="QI",
-      gd=grip_orientation,
+    return await self._vantage_ipg.request_position(
+      grip_orientation=grip_orientation,
     )
 
   async def ipg_request_actual_angular_dimensions(self):
-    """Request actual angular dimensions"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="RR",
-    )
+    """Deprecated: use ``IPGBackend.request_actual_angular_dimensions``."""
+    return await self._vantage_ipg.request_actual_angular_dimensions()
 
   async def ipg_request_configuration(self):
-    """Request configuration"""
-
-    return await self.send_command(
-      module="A1RM",
-      command="RS",
-    )
+    """Deprecated: use ``IPGBackend.request_configuration``."""
+    return await self._vantage_ipg.request_configuration()
 
   async def x_arm_initialize(self):
-    """Initialize the x arm"""
-    return await self.send_command(module="A1XM", command="XI")
+    """Deprecated: use ``VantageXArm.initialize``."""
+    return await self._vantage_x_arm.initialize()
 
   async def x_arm_move_to_x_position(
     self,
@@ -5074,24 +2567,13 @@ class VantageBackend(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XI_1: int = 1,
   ):
-    """Move arm to X position
+    """Deprecated: use ``VantageXArm.move_to``.
 
-    Args:
-      x_position: X Position [0.1mm].
-      x_speed: X speed [0.1mm/s].
-      TODO_XI_1: (0).
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
     """
-
-    if not -50000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -50000 to 50000")
-
-    if not 1 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 1 to 25000")
-
-    if not 1 <= TODO_XI_1 <= 25000:
-      raise ValueError("TODO_XI_1 must be in range 1 to 25000")
-
-    return await self.send_command(module="A1XM", command="XP", xp=x_position, xv=x_speed)
+    return await self._vantage_x_arm.move_to(
+      x_position=x_position / 10, x_speed=x_speed / 10
+    )
 
   async def x_arm_move_to_x_position_with_all_attached_components_in_z_safety_position(
     self,
@@ -5099,29 +2581,12 @@ class VantageBackend(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XA_1: int = 1,
   ):
-    """Move arm to X position with all attached components in Z safety position
+    """Deprecated: use ``VantageXArm.move_to_safe``.
 
-    Args:
-      x_position: X Position [0.1mm].
-      x_speed: X speed [0.1mm/s].
-      TODO_XA_1: (0).
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
     """
-
-    if not -50000 <= x_position <= 50000:
-      raise ValueError("x_position must be in range -50000 to 50000")
-
-    if not 1 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 1 to 25000")
-
-    if not 1 <= TODO_XA_1 <= 25000:
-      raise ValueError("TODO_XA_1 must be in range 1 to 25000")
-
-    return await self.send_command(
-      module="A1XM",
-      command="XA",
-      xp=x_position,
-      xv=x_speed,
-      xx=TODO_XA_1,
+    return await self._vantage_x_arm.move_to_safe(
+      x_position=x_position / 10, x_speed=x_speed / 10, xx=TODO_XA_1
     )
 
   async def x_arm_move_arm_relatively_in_x(
@@ -5130,29 +2595,12 @@ class VantageBackend(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XS_1: int = 1,
   ):
-    """Move arm relatively in X
+    """Deprecated: use ``VantageXArm.move_relatively``.
 
-    Args:
-      x_search_distance: X search distance [0.1mm].
-      x_speed: X speed [0.1mm/s].
-      TODO_XS_1: (0).
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
     """
-
-    if not -50000 <= x_search_distance <= 50000:
-      raise ValueError("x_search_distance must be in range -50000 to 50000")
-
-    if not 1 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 1 to 25000")
-
-    if not 1 <= TODO_XS_1 <= 25000:
-      raise ValueError("TODO_XS_1 must be in range 1 to 25000")
-
-    return await self.send_command(
-      module="A1XM",
-      command="XS",
-      xs=x_search_distance,
-      xv=x_speed,
-      xx=TODO_XS_1,
+    return await self._vantage_x_arm.move_relatively(
+      x_search_distance=x_search_distance / 10, x_speed=x_speed / 10, xx=TODO_XS_1
     )
 
   async def x_arm_search_x_for_teach_signal(
@@ -5161,162 +2609,65 @@ class VantageBackend(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XT_1: int = 1,
   ):
-    """Search X for teach signal
+    """Deprecated: use ``VantageXArm.search_teach_signal``.
 
-    Args:
-      x_search_distance: X search distance [0.1mm].
-      x_speed: X speed [0.1mm/s].
-      TODO_XT_1: (0).
+    Note: this legacy method accepts values in 0.1mm and converts to mm for the new API.
     """
-
-    if not -50000 <= x_search_distance <= 50000:
-      raise ValueError("x_search_distance must be in range -50000 to 50000")
-
-    if not 1 <= x_speed <= 25000:
-      raise ValueError("x_speed must be in range 1 to 25000")
-
-    if not 1 <= TODO_XT_1 <= 25000:
-      raise ValueError("TODO_XT_1 must be in range 1 to 25000")
-
-    return await self.send_command(
-      module="A1XM",
-      command="XT",
-      xs=x_search_distance,
-      xv=x_speed,
-      xx=TODO_XT_1,
+    return await self._vantage_x_arm.search_teach_signal(
+      x_search_distance=x_search_distance / 10, x_speed=x_speed / 10, xx=TODO_XT_1
     )
 
   async def x_arm_set_x_drive_angle_of_alignment(
     self,
     TODO_XL_1: int = 1,
   ):
-    """Set X drive angle of alignment
-
-    Args:
-      TODO_XL_1: (0).
-    """
-
-    if not 1 <= TODO_XL_1 <= 1:
-      raise ValueError("TODO_XL_1 must be in range 1 to 1")
-
-    return await self.send_command(
-      module="A1XM",
-      command="XL",
-      xl=TODO_XL_1,
-    )
+    """Deprecated: use ``VantageXArm.set_x_drive_angle_of_alignment``."""
+    return await self._vantage_x_arm.set_x_drive_angle_of_alignment(xl=TODO_XL_1)
 
   async def x_arm_turn_x_drive_off(self):
-    return await self.send_command(module="A1XM", command="XO")
+    """Deprecated: use ``VantageXArm.turn_off``."""
+    return await self._vantage_x_arm.turn_off()
 
   async def x_arm_send_message_to_motion_controller(
     self,
     TODO_BD_1: str = "",
   ):
-    """Send message to motion controller
-
-    Args:
-      TODO_BD_1: (0).
-    """
-
-    return await self.send_command(
-      module="A1XM",
-      command="BD",
-      bd=TODO_BD_1,
-    )
+    """Deprecated: use ``VantageXArm.send_message_to_motion_controller``."""
+    return await self._vantage_x_arm.send_message_to_motion_controller(bd=TODO_BD_1)
 
   async def x_arm_set_any_parameter_within_this_module(
     self,
     TODO_AA_1: int = 0,
     TODO_AA_2: int = 1,
   ):
-    """Set any parameter within this module
-
-    Args:
-      TODO_AA_1: (0).
-      TODO_AA_2: (0).
-    """
-
-    return await self.send_command(
-      module="A1XM",
-      command="AA",
-      xm=TODO_AA_1,
-      xt=TODO_AA_2,
+    """Deprecated: use ``VantageXArm.set_any_parameter_within_this_module``."""
+    return await self._vantage_x_arm.set_any_parameter_within_this_module(
+      xm=TODO_AA_1, xt=TODO_AA_2
     )
 
   async def x_arm_request_arm_x_position(self):
-    """Request arm X position. This returns a list, of which the first value is one that can be
-    used with x_arm_move_to_x_position."""
-    return await self.send_command(module="A1XM", command="RX")
+    """Deprecated: use ``VantageXArm.request_position``."""
+    return await self._vantage_x_arm.request_position()
 
   async def x_arm_request_error_code(self):
-    """X arm request error code"""
-    return await self.send_command(module="A1XM", command="RE")
+    """Deprecated: use ``VantageXArm.request_error_code``."""
+    return await self._vantage_x_arm.request_error_code()
 
   async def x_arm_request_x_drive_recorded_data(
     self,
     TODO_QL_1: int = 0,
     TODO_QL_2: int = 0,
   ):
-    """Request X drive recorded data
-
-    Args:
-      TODO_QL_1: (0).
-      TODO_QL_2: (0).
-    """
-
-    return await self.send_command(
-      module="A1RM",
-      command="QL",
-      lj=TODO_QL_1,
-      ln=TODO_QL_2,
-    )
+    """Deprecated: use ``VantageXArm.request_x_drive_recorded_data``."""
+    return await self._vantage_x_arm.request_x_drive_recorded_data(lj=TODO_QL_1, ln=TODO_QL_2)
 
   async def disco_mode(self):
-    """Easter egg."""
-    for _ in range(69):
-      r, g, b = (
-        random.randint(30, 100),
-        random.randint(30, 100),
-        random.randint(30, 100),
-      )
-      await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
-      await asyncio.sleep(0.1)
+    """Deprecated: use ``VantageDriver.disco_mode``."""
+    await self.driver.disco_mode()
 
   async def russian_roulette(self):
-    """Dangerous easter egg."""
-    sure = input(
-      "Are you sure you want to play Russian Roulette? This will turn on the uv-light "
-      "with a probability of 1/6. (yes/no) "
-    )
-    if sure.lower() != "yes":
-      print("boring")
-      return
-
-    if random.randint(1, 6) == 6:
-      await self.set_led_color(
-        "on",
-        intensity=100,
-        white=100,
-        red=100,
-        green=0,
-        blue=0,
-        uv=100,
-      )
-      print("You lost.")
-    else:
-      await self.set_led_color("on", intensity=100, white=100, red=0, green=100, blue=0, uv=0)
-      print("You won.")
-
-    await asyncio.sleep(5)
-    await self.set_led_color(
-      "on",
-      intensity=100,
-      white=100,
-      red=100,
-      green=100,
-      blue=100,
-      uv=0,
-    )
+    """Deprecated: use ``VantageDriver.russian_roulette``."""
+    await self.driver.russian_roulette()
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
