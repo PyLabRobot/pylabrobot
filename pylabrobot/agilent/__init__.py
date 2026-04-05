@@ -1,8 +1,10 @@
 from .biotek import (
   EL406,
+  AravisImagingConfig,
   BioTekBackend,
   Cytation1,
   Cytation5,
+  CytationAravisDriver,
   CytationBackend,
   CytationImagingConfig,
   EL406Driver,
