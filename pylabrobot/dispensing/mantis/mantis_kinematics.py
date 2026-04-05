@@ -7,7 +7,7 @@ Provides:
 """
 
 import math
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # ==========================================
 # Arm geometry constants
@@ -223,7 +223,7 @@ class MantisMapGenerator:
     machine_y = (h4 * ideal_x + h5 * ideal_y + h6) / denom
     return machine_x, machine_y
 
-  def get_well_coordinate(self, row: int, col: int) -> Dict[str, object]:
+  def get_well_coordinate(self, row: int, col: int) -> Dict[str, Any]:
     """Generate the machine coordinate for a single well.
 
     Args:
@@ -245,7 +245,7 @@ class MantisMapGenerator:
       "z": round(self.z, 3),
     }
 
-  def generate_map(self) -> List[Dict[str, object]]:
+  def generate_map(self) -> List[Dict[str, Any]]:
     """Generate the dispense map for the entire plate."""
     results = []
     for r in range(self.rows):

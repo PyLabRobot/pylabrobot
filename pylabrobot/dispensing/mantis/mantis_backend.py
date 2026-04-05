@@ -187,12 +187,22 @@ class MantisBackend(DispenserBackend):
         geom = DEFAULT_PLATE_GEOMETRY.copy()
         geom.update(self._plate_geometry)
 
-        gen = MantisMapGenerator(**geom)
+        gen = MantisMapGenerator(
+          a1_x=geom["a1_x"],
+          a1_y=geom["a1_y"],
+          row_pitch=geom["row_pitch"],
+          col_pitch=geom["col_pitch"],
+          rows=int(geom["rows"]),
+          cols=int(geom["cols"]),
+          z=geom["z"],
+        )
         dispense_list: List[Tuple[Tuple[float, float, float], float]] = []
         for op in chip_ops:
           row, col = self._well_to_row_col(op.resource.name)
           coord = gen.get_well_coordinate(row, col)
-          dispense_list.append(((coord["x"], coord["y"], coord["z"]), op.volume))
+          dispense_list.append(
+            ((float(coord["x"]), float(coord["y"]), float(coord["z"])), op.volume)
+          )
 
         c_type = self._get_chip_type(chip_number)
         if "low_volume" in c_type:
@@ -308,7 +318,7 @@ class MantisBackend(DispenserBackend):
       if not is_busy:
         if (status & MotorStatusCode.error_mask()) and raise_on_error:
           raise RuntimeError(f"Motor {motor_id} stopped with error status: 0x{status:04X}")
-        return status
+        return int(status)
       await asyncio.sleep(0.1)
 
     raise TimeoutError(
@@ -324,7 +334,7 @@ class MantisBackend(DispenserBackend):
       raise RuntimeError(
         f"Motor {motor_id} expected to be HOMED but is not (status: 0x{status:04X})"
       )
-    return status
+    return int(status)
 
   async def _wait_for_pressure_settled(self, sensor_id: int, timeout: float = 30.0) -> None:
     start_time = time.time()
