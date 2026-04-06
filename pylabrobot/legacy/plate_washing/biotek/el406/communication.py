@@ -7,6 +7,6 @@ from pylabrobot.agilent.biotek.el406.driver import (  # noqa: F401
   LONG_READ_TIMEOUT,
   DevicePollResult,
 )
-from pylabrobot.agilent.biotek.el406.driver import (
+from pylabrobot.agilent.biotek.el406.driver import (  # noqa: F401
   EL406Driver as EL406CommunicationMixin,
 )

@@ -3,10 +3,10 @@ from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval
 from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling import HumidityController
 from pylabrobot.capabilities.shaking import Shaker
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device
 from pylabrobot.resources import (
   Coordinate,

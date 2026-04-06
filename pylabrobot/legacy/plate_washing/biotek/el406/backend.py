@@ -109,6 +109,7 @@ class ExperimentalBioTekEL406Backend(
     if self.io is not None:
       self._new_driver.io = self.io
     from pylabrobot.agilent.biotek.el406.driver import EL406Driver
+
     await self._new_driver.setup(backend_params=EL406Driver.SetupParams(skip_reset=skip_reset))
     # Sync back so legacy code can access io/lock
     self.io = self._new_driver.io

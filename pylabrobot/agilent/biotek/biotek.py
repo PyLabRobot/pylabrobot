@@ -351,7 +351,10 @@ class BioTekBackend(
 
     logger.info(
       "[BioTek %s] read_absorbance: plate=%s, wavelength=%dnm, wells=%d",
-      self.io.device_id, plate.name, wavelength, len(wells),
+      self.io.device_id,
+      plate.name,
+      wavelength,
+      len(wells),
     )
     await self.set_plate(plate)
 
@@ -418,7 +421,9 @@ class BioTekBackend(
 
     logger.info(
       "[BioTek %s] read_luminescence: plate=%s, wells=%d",
-      self.io.device_id, plate.name, len(wells),
+      self.io.device_id,
+      plate.name,
+      len(wells),
     )
     await self.set_plate(plate)
 
@@ -493,7 +498,11 @@ class BioTekBackend(
 
     logger.info(
       "[BioTek %s] read_fluorescence: plate=%s, excitation=%dnm, emission=%dnm, wells=%d",
-      self.io.device_id, plate.name, excitation_wavelength, emission_wavelength, len(wells),
+      self.io.device_id,
+      plate.name,
+      excitation_wavelength,
+      emission_wavelength,
+      len(wells),
     )
     await self.set_plate(plate)
 

@@ -19,7 +19,6 @@ from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Resource
-from pylabrobot.resources import Plate
 
 from .enums import (
   EL406Motor,

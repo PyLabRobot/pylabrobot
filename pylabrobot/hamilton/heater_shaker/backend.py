@@ -85,14 +85,22 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend, HasContinuousShaking):
     if not (500 <= acceleration <= 10_000):
       raise ValueError("Acceleration must be between 500 and 10_000")
 
-    logger.info("[HHS %d] start shaking: speed=%d rpm, direction=%d, acceleration=%d", self.driver.index, int_speed, direction, acceleration)
+    logger.info(
+      "[HHS %d] start shaking: speed=%d rpm, direction=%d, acceleration=%d",
+      self.driver.index,
+      int_speed,
+      direction,
+      acceleration,
+    )
     now = time.time()
     while True:
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
       if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
-        logger.error("[HHS %d] failed to start shaking within %ss timeout", self.driver.index, timeout)
+        logger.error(
+          "[HHS %d] failed to start shaking within %ss timeout", self.driver.index, timeout
+        )
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):

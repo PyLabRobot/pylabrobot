@@ -74,13 +74,13 @@ class HamiltonTiltModuleDriver(Driver):
       err_code = int(error_matches.group(0)[2:])
       if 1 <= err_code <= 7:
         error_msg = {
-            1: "Init Position not found",
-            2: "**Step** loss",
-            3: "Not initialized",
-            5: "Stepper Motor end stage defective",
-            6: "Parameter out **of** Range",
-            7: "Undefined Command",
-          }[err_code]
+          1: "Init Position not found",
+          2: "**Step** loss",
+          3: "Not initialized",
+          5: "Stepper Motor end stage defective",
+          6: "Parameter out **of** Range",
+          7: "Undefined Command",
+        }[err_code]
         logger.error("[Tilt %s] error %d: %s", self.com_port, err_code, error_msg)
         raise TiltModuleError(error_msg)
       if err_code != 0:

@@ -1928,8 +1928,21 @@ class STARPIPBackend(PIPBackend):
         }
       )
 
-      await self.channels[front_channel].move_tool_z(z_location)
-      await self.channels[back_channel].move_tool_z(z_location)
+      # Use KZ directly rather than move_tool_z to avoid the extra firmware queries
+      # (tip presence, tip length, etc.) that move_tool_z performs. In this context
+      # we know the channels have tips and the target Z is the plate top.
+      await self.driver.send_command(
+        module="C0",
+        command="KZ",
+        pn=f"{front_channel + 1:02}",
+        zj=f"{round(z_location * 10):04}",
+      )
+      await self.driver.send_command(
+        module="C0",
+        command="KZ",
+        pn=f"{back_channel + 1:02}",
+        zj=f"{round(z_location * 10):04}",
+      )
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
       # the just above the foil, in case the foil pops up.

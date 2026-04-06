@@ -62,7 +62,14 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
       backend_params = ByonoyLuminescence96Backend.LuminescenceParams()
 
     integration_time = backend_params.integration_time
-    logger.info("[Byonoy L96 pid=0x%04X] reading luminescence: plate='%s', integration_time=%.1fs, wells=%d/%d", self.io.pid, plate.name, integration_time, len(wells), plate.num_items)
+    logger.info(
+      "[Byonoy L96 pid=0x%04X] reading luminescence: plate='%s', integration_time=%.1fs, wells=%d/%d",
+      self.io.pid,
+      plate.name,
+      integration_time,
+      len(wells),
+      plate.num_items,
+    )
 
     await self.send_command(
       report_id=0x0010,

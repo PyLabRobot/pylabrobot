@@ -301,7 +301,9 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     """Initialize scale after driver connects: set output unit to grams and read serial."""
     await self.driver.send_command("M21 0 0")
     self.serial_number = await self.request_serial_number()
-    logger.info("[MettlerToledo %s] initialized: serial_number=%s", self.driver.io.port, self.serial_number)
+    logger.info(
+      "[MettlerToledo %s] initialized: serial_number=%s", self.driver.io.port, self.serial_number
+    )
 
   # === Public high-level API ===
 

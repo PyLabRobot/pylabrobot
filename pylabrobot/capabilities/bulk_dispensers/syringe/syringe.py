@@ -26,9 +26,7 @@ class SyringeDispensing(Capability):
   @plate.setter
   def plate(self, value: Optional[Plate]):
     if value is not None and self._plate is not None:
-      raise RuntimeError(
-        f"A plate is already assigned ({self._plate.name}). Unassign it first."
-      )
+      raise RuntimeError(f"A plate is already assigned ({self._plate.name}). Unassign it first.")
     self._plate = value
 
   @need_capability_ready

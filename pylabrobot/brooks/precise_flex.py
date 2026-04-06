@@ -523,7 +523,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Pick up at the specified joint position."""
     logger.info(
       "[PreciseFlex %s] pick_up: joints=%s, resource_width_mm=%s",
-      self.driver.io._host, position, resource_width,
+      self.driver.io._host,
+      position,
+      resource_width,
     )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
@@ -562,7 +564,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Drop at the specified joint position."""
     logger.info(
       "[PreciseFlex %s] drop: joints=%s, resource_width_mm=%s",
-      self.driver.io._host, position, resource_width,
+      self.driver.io._host,
+      position,
+      resource_width,
     )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()
@@ -645,7 +649,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Pick up at the specified Cartesian location."""
     logger.info(
       "[PreciseFlex %s] pick_up: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
-      self.driver.io._host, location.x, location.y, location.z, direction, resource_width,
+      self.driver.io._host,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
@@ -676,7 +685,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Drop at the specified Cartesian location."""
     logger.info(
       "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
-      self.driver.io._host, location.x, location.y, location.z, direction, resource_width,
+      self.driver.io._host,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()

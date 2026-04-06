@@ -865,7 +865,6 @@ class PIPChannel:
     post_detection_dist: float = 2.0,
     move_channels_to_safe_pos_after: bool = False,
   ) -> float:
-    print("rick2")
     """Probe the liquid surface Z-height using this channel's capacitive LLD (cLLD).
 
     Ensures a tip is mounted, reads the tip length, converts tip-referenced positions

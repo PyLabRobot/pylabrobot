@@ -4879,9 +4879,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def position_single_pipetting_channel_in_y_direction(
     self, pipetting_channel_index: int, y_position: int
   ):
-    """Deprecated: use ``star.pip.backend.position_single_pipetting_channel_in_y_direction()``."""
-    return await self.driver.pip.position_single_pipetting_channel_in_y_direction(
-      channel_idx=pipetting_channel_index - 1, y_position=y_position
+    """Deprecated: use ``star.pip.backend.position_channels_in_y_direction()``."""
+    return await self.driver.pip.position_channels_in_y_direction(
+      ys={pipetting_channel_index - 1: y_position / 10}
     )
 
   async def position_single_pipetting_channel_in_z_direction(
@@ -4913,6 +4913,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self, pipetting_channel_index: int, x_position: int
   ):
     """Deprecated: use ``star.driver.left_x_arm.clld_probe_x_position()``."""
+    if self.driver.left_x_arm is None:
+      raise RuntimeError("left_x_arm not configured")
     return await self.driver.left_x_arm.clld_probe_x_position(
       channel_idx=pipetting_channel_index - 1,
       probing_direction="right",
@@ -7484,6 +7486,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     read_timeout: float = 240.0,
   ) -> float:
     """Deprecated: use ``star.driver.left_x_arm.clld_probe_x_position()``."""
+    if self.driver.left_x_arm is None:
+      raise RuntimeError("left_x_arm not configured")
     return await self.driver.left_x_arm.clld_probe_x_position(
       channel_idx=channel_idx,
       probing_direction=probing_direction,
@@ -7698,8 +7702,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self._pip_channels[channel_idx].request_probe_z_position()
 
   async def request_tip_len_on_channel(self, channel_idx: int) -> float:
-    """Deprecated: use ``star.pip.backend.request_tip_len_on_channel()``."""
-    return await self.driver.pip.request_tip_len_on_channel(channel_idx)
+    """Deprecated: use ``star.pip.backend.channels[n].request_tip_length()``."""
+    return await self._pip_channels[channel_idx].request_tip_length()
 
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)

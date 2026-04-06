@@ -31,9 +31,11 @@ class Shaker(Capability):
     """
     if self.backend.supports_locking:
       await self.backend.lock_plate()
-    await self.backend.shake(speed=speed, duration=duration, backend_params=backend_params)
-    if self.backend.supports_locking:
-      await self.backend.unlock_plate()
+    try:
+      await self.backend.shake(speed=speed, duration=duration, backend_params=backend_params)
+    finally:
+      if self.backend.supports_locking:
+        await self.backend.unlock_plate()
 
   @need_capability_ready
   async def start_shaking(self, speed: float):

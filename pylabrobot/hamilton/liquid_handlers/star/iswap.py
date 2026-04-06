@@ -728,7 +728,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     logger.info(
       "[iSWAP] pick up plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
-      location.x, location.y, location.z, direction, resource_width,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
 
     await self.driver.send_command(
@@ -821,7 +825,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     logger.info(
       "[iSWAP] release plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
-      location.x, location.y, location.z, direction, resource_width,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
 
     await self.driver.send_command(
@@ -906,7 +914,10 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     logger.info(
       "[iSWAP] move held plate to: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg",
-      location.x, location.y, location.z, direction,
+      location.x,
+      location.y,
+      location.z,
+      direction,
     )
 
     await self.driver.send_command(

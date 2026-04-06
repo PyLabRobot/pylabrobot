@@ -125,7 +125,7 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     if backend_params.use_cam:
       try:
         await self._set_up_camera()
-      except:
+      except Exception:
         try:
           await self.stop()
         except Exception:
@@ -229,7 +229,7 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
       try:
         self._cam.Init()
         break
-      except:  # noqa
+      except Exception:
         await asyncio.sleep(0.1)
     else:
       raise RuntimeError(
