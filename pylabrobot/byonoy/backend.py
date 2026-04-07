@@ -6,6 +6,7 @@ import time
 from abc import ABCMeta
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
@@ -30,7 +31,7 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     self._sending_pings = False
     self._device_type = device_type
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     logger.info("[Byonoy %s pid=0x%04X] connected", self._device_type.name, self.io.pid)
     self._stop_background.clear()
@@ -64,7 +65,12 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     t0 = time.time()
     while True:
       if time.time() - t0 > 120:
-        logger.error("[Byonoy %s pid=0x%04X] timeout waiting for response to command 0x%04X after 120s", self._device_type.name, self.io.pid, report_id)
+        logger.error(
+          "[Byonoy %s pid=0x%04X] timeout waiting for response to command 0x%04X after 120s",
+          self._device_type.name,
+          self.io.pid,
+          report_id,
+        )
         raise TimeoutError("Reading data timed out after 2 minutes.")
       response = await self.io.read(64, timeout=30)
       if len(response) == 0:

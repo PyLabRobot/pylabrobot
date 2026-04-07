@@ -104,15 +104,28 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
     self._objective: Optional[Objective] = None
     self._acquiring = False
 
-  async def setup(self, use_cam: bool = False) -> None:
+  @dataclass
+  class SetupParams(BackendParams):
+    """Cytation-specific parameters for ``setup``.
+
+    Args:
+      use_cam: If True, initialize the Spinnaker camera during setup.
+    """
+
+    use_cam: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
+    if not isinstance(backend_params, CytationBackend.SetupParams):
+      backend_params = CytationBackend.SetupParams()
+
     logger.info(f"{self.__class__.__name__} setting up")
 
     await super().setup()
 
-    if use_cam:
+    if backend_params.use_cam:
       try:
         await self._set_up_camera()
-      except:
+      except Exception:
         try:
           await self.stop()
         except Exception:
@@ -216,7 +229,7 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
       try:
         self._cam.Init()
         break
-      except:  # noqa
+      except Exception:
         await asyncio.sleep(0.1)
     else:
       raise RuntimeError(

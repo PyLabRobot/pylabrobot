@@ -42,8 +42,8 @@ class _BaseArm(Capability):
     self._picked_up: Optional[_PickedUpState] = None
     self._holding_resource_width: Optional[float] = None
 
-  async def _on_setup(self, **backend_kwargs):
-    await super()._on_setup(**backend_kwargs)
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None, **backend_kwargs):
+    await super()._on_setup(backend_params=backend_params, **backend_kwargs)
     self._picked_up = None
     self._holding_resource_width = None
 

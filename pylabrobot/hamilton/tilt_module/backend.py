@@ -10,6 +10,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.tilting.backend import TilterBackend, TiltModuleError
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
@@ -48,7 +49,7 @@ class HamiltonTiltModuleDriver(Driver):
       human_readable_device_name="Hamilton Tilt Module",
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
     logger.info("[Tilt %s] connected", self.com_port)
 
@@ -73,13 +74,13 @@ class HamiltonTiltModuleDriver(Driver):
       err_code = int(error_matches.group(0)[2:])
       if 1 <= err_code <= 7:
         error_msg = {
-            1: "Init Position not found",
-            2: "**Step** loss",
-            3: "Not initialized",
-            5: "Stepper Motor end stage defective",
-            6: "Parameter out **of** Range",
-            7: "Undefined Command",
-          }[err_code]
+          1: "Init Position not found",
+          2: "**Step** loss",
+          3: "Not initialized",
+          5: "Stepper Motor end stage defective",
+          6: "Parameter out **of** Range",
+          7: "Undefined Command",
+        }[err_code]
         logger.error("[Tilt %s] error %d: %s", self.com_port, err_code, error_msg)
         raise TiltModuleError(error_msg)
       if err_code != 0:
@@ -99,7 +100,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
   def __init__(self, driver: HamiltonTiltModuleDriver):
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.tilt_initial_offset(0)
     await self.tilt_initialize()
 

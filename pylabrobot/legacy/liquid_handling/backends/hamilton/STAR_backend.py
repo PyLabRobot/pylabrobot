@@ -4879,9 +4879,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def position_single_pipetting_channel_in_y_direction(
     self, pipetting_channel_index: int, y_position: int
   ):
-    """Deprecated: use ``star.pip.backend.position_single_pipetting_channel_in_y_direction()``."""
-    return await self.driver.pip.position_single_pipetting_channel_in_y_direction(
-      channel_idx=pipetting_channel_index - 1, y_position=y_position
+    """Deprecated: use ``star.pip.backend.position_channels_in_y_direction()``."""
+    return await self.driver.pip.position_channels_in_y_direction(
+      ys={pipetting_channel_index - 1: y_position / 10}
     )
 
   async def position_single_pipetting_channel_in_z_direction(
@@ -4913,6 +4913,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self, pipetting_channel_index: int, x_position: int
   ):
     """Deprecated: use ``star.driver.left_x_arm.clld_probe_x_position()``."""
+    if self.driver.left_x_arm is None:
+      raise RuntimeError("left_x_arm not configured")
     return await self.driver.left_x_arm.clld_probe_x_position(
       channel_idx=pipetting_channel_index - 1,
       probing_direction="right",
@@ -4987,16 +4989,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:RY): Request Y-Positions of all pipetting channels
 
   async def request_x_pos_channel_n(self, pipetting_channel_index: int = 0) -> float:
-    """Request X-Position of Pipetting channel n (in mm)"""
-
-    resp = await self.request_left_x_arm_position()
-    # TODO: check validity for 2 X-arm system
-
-    return round(resp, 1)
+    """Deprecated: use ``star.pip.channels[n].request_x_pos()``."""
+    return await self.driver.pip.channels[pipetting_channel_index].request_x_pos()
 
   async def request_y_pos_channel_n(self, pipetting_channel_index: int) -> float:
-    """Deprecated: use ``star.pip.backend.request_y_pos_channel_n()``."""
-    return await self.driver.pip.request_y_pos_channel_n(pipetting_channel_index)
+    """Deprecated: use ``star.pip.channels[n].request_y_pos()``."""
+    return await self.driver.pip.channels[pipetting_channel_index].request_y_pos()
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
@@ -5008,8 +5006,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.request_tip_bottom_z_position(channel_idx=pipetting_channel_index)
 
   async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
-    """Deprecated: use ``star.pip.backend.request_tip_bottom_z_position()``."""
-    return await self.driver.pip.request_tip_bottom_z_position(channel_idx)
+    """Deprecated: use ``star.pip.channels[n].request_tip_bottom_z_position()``."""
+    return await self.driver.pip.channels[channel_idx].request_tip_bottom_z_position()
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Deprecated: use ``star.pip.backend.request_tip_presence()``."""
@@ -5030,13 +5028,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.driver.pip.request_pip_height_last_lld()
 
   async def request_tadm_status(self):
-    """Request PIP height of last LLD
-
-    Returns:
-      TADM channel status 0 = off, 1 = on
-    """
-
-    return await self.send_command(module="C0", command="QS", fmt="qs# (n)")
+    """Deprecated: use ``star.pip.channels[n].request_tadm_enabled()``."""
+    return {i: await ch.request_tadm_enabled() for i, ch in enumerate(self.driver.pip.channels)}
 
   # TODO:(command:FS) Request PIP channel dispense on fly status
   # TODO:(command:VE) Request PIP channel 2nd section aspiration data
@@ -6864,9 +6857,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self._iswap.initialize()
 
   async def position_components_for_free_iswap_y_range(self):
-    """Position all components so that there is maximum free Y range for iSWAP"""
-
-    return await self.send_command(module="C0", command="FY")
+    """Deprecated: use ``star.pip.backend.position_components_for_free_iswap_y_range()``."""
+    return await self.driver.pip.position_components_for_free_iswap_y_range()
 
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """Deprecated: use ``star.iswap.backend.move_relative_x()``."""
@@ -7494,6 +7486,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     read_timeout: float = 240.0,
   ) -> float:
     """Deprecated: use ``star.driver.left_x_arm.clld_probe_x_position()``."""
+    if self.driver.left_x_arm is None:
+      raise RuntimeError("left_x_arm not configured")
     return await self.driver.left_x_arm.clld_probe_x_position(
       channel_idx=channel_idx,
       probing_direction=probing_direction,
@@ -7708,8 +7702,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self._pip_channels[channel_idx].request_probe_z_position()
 
   async def request_tip_len_on_channel(self, channel_idx: int) -> float:
-    """Deprecated: use ``star.pip.backend.request_tip_len_on_channel()``."""
-    return await self.driver.pip.request_tip_len_on_channel(channel_idx)
+    """Deprecated: use ``star.pip.backend.channels[n].request_tip_length()``."""
+    return await self._pip_channels[channel_idx].request_tip_length()
 
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)

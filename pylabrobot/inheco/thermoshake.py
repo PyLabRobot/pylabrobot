@@ -1,8 +1,9 @@
+import asyncio
 import logging
-import warnings
 from typing import Optional
 
 from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder
@@ -13,7 +14,9 @@ from .cpac import InhecoTemperatureControllerBackend
 logger = logging.getLogger(__name__)
 
 
-class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend):
+class InhecoThermoshakeBackend(
+  InhecoTemperatureControllerBackend, ShakerBackend, HasContinuousShaking
+):
   """Backend for Inheco Thermoshake devices.
 
   https://www.inheco.com/thermoshake-ac.html
@@ -31,9 +34,9 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     return await self.interface.send_command(f"{self.index}ASE0")
 
   async def set_shaker_speed(self, speed: float):
-    if speed not in range(60, 2001):
+    if not (60 <= speed <= 2000):
       raise ValueError("Speed must be in the range 60 to 2000 RPM")
-    return await self.interface.send_command(f"1SSR{speed}")
+    return await self.interface.send_command(f"{self.index}SSR{speed}")
 
   async def set_shaker_shape(self, shape: int):
     """Set the shaking shape.
@@ -44,22 +47,22 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, ShakerBackend
     """
     if shape not in range(6):
       raise ValueError("Shape must be in the range 0 to 5")
-    return await self.interface.send_command(f"1SSS{shape}")
+    return await self.interface.send_command(f"{self.index}SSS{shape}")
 
   async def start_shaking(self, speed: float, shape: int = 0):
-    logger.info("[Inheco ThermoShake idx=%d] start shaking: speed=%.0f, shape=%d", self.index, speed, shape)
+    logger.info(
+      "[Inheco ThermoShake idx=%d] start shaking: speed=%.0f, shape=%d", self.index, speed, shape
+    )
     await self.set_shaker_speed(speed=speed)
     await self.set_shaker_shape(shape=shape)
     await self._start_shaking_command()
 
-  async def shake(self, speed: float, shape: int = 0):
-    """Deprecated alias for start_shaking."""
-    warnings.warn(
-      "InhecoThermoshakeBackend.shake() is deprecated. Use start_shaking() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    await self.start_shaking(speed=speed, shape=shape)
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    try:
+      await asyncio.sleep(duration)
+    finally:
+      await self.stop_shaking()
 
   @property
   def supports_locking(self) -> bool:

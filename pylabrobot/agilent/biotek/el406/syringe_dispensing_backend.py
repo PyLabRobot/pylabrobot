@@ -201,7 +201,7 @@ class EL406SyringeDispensingBackend(SyringeDispensingBackend):
       column_mask=column_mask,
     )
     framed_command = build_framed_message(command=0xA1, data=data)
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command)
 
   async def _syringe_prime(
@@ -250,7 +250,7 @@ class EL406SyringeDispensingBackend(SyringeDispensingBackend):
     )
     framed_command = build_framed_message(command=0xA2, data=data)
     prime_timeout = self._driver.timeout + params.submerge_duration + 30
-    async with self._driver.batch(plate):
+    async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=prime_timeout)
 
   # =========================================================================

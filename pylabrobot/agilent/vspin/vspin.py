@@ -88,7 +88,7 @@ class VSpinDriver(Driver):
     self.io = FTDI(human_readable_device_name="Agilent VSpin Centrifuge", device_id=device_id)
     self.device_id = device_id
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     logger.info("[vSpin %s] connected", self.device_id)
     await self.io.setup()
     for _ in range(3):
@@ -221,7 +221,7 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
     if driver.device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(driver.device_id)
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     driver = self.driver
 
     await driver.send_command(bytes.fromhex("aa01121f32"))
@@ -559,7 +559,7 @@ class Access2Driver(Driver):
     await self.io.write(command)
     return await self._read()
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     logger.debug("[loader] setup")
 
     await self.io.setup()

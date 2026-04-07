@@ -13,6 +13,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.sealing import Sealer, SealerBackend
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
@@ -88,8 +89,8 @@ class A4SDriver(Driver):
       stopbits=serial.STOPBITS_ONE,
     )
 
-  async def setup(self):
-    await super().setup()  # type: ignore[safe-super]
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await super().setup(backend_params=backend_params)  # type: ignore[safe-super]
     await self.io.setup()
     await self.system_reset()
     logger.info("[A4S %s] connected and reset", self.port)

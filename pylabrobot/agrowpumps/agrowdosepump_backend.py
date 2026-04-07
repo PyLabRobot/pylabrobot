@@ -12,7 +12,7 @@ except ImportError as e:
   AsyncModbusSerialClient = None  # type: ignore
   _MODBUS_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import BackendParams, Capability
 from pylabrobot.capabilities.pumping.backend import PumpBackend
 from pylabrobot.capabilities.pumping.calibration import PumpCalibration
 from pylabrobot.capabilities.pumping.pumping import Pump
@@ -84,7 +84,7 @@ class AgrowDriver(Driver):
     self._keep_alive_thread = threading.Thread(target=manage_async_keep_alive, daemon=True)
     self._keep_alive_thread.start()
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self._setup_modbus()
     register_return = await self.modbus.read_holding_registers(19, 2, unit=self.address)  # type: ignore[call-arg, misc]
     self._num_channels = int(
@@ -92,7 +92,9 @@ class AgrowDriver(Driver):
     )
     self._start_keep_alive_thread()
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
-    logger.info("[Agrow %s addr=%s] connected: channels=%d", self.port, self.address, self._num_channels)
+    logger.info(
+      "[Agrow %s addr=%s] connected: channels=%d", self.port, self.address, self._num_channels
+    )
 
   async def _setup_modbus(self):
     if AsyncModbusSerialClient is None:
@@ -147,11 +149,19 @@ class AgrowChannelBackend(PumpBackend):
     )
 
   async def run_continuously(self, speed: float):
-    logger.info("[Agrow %s addr=%s] channel %d: run_continuously at speed %d", self.driver.port, self.driver.address, self._channel, int(speed))
+    logger.info(
+      "[Agrow %s addr=%s] channel %d: run_continuously at speed %d",
+      self.driver.port,
+      self.driver.address,
+      self._channel,
+      int(speed),
+    )
     await self.driver.write_speed(self._channel, int(speed))
 
   async def halt(self):
-    logger.info("[Agrow %s addr=%s] channel %d: halt", self.driver.port, self.driver.address, self._channel)
+    logger.info(
+      "[Agrow %s addr=%s] channel %d: halt", self.driver.port, self.driver.address, self._channel
+    )
     await self.driver.write_speed(self._channel, 0)
 
   def serialize(self):
@@ -180,8 +190,8 @@ class AgrowDosePumpArray(Device):
     super().__init__(driver=AgrowDriver(port=port, address=address))
     self.driver: AgrowDriver
 
-  async def setup(self):
-    await self.driver.setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await self.driver.setup(backend_params=backend_params)
     num_channels = self.driver.num_channels
 
     self._channel_backends = [AgrowChannelBackend(self.driver, ch) for ch in range(num_channels)]

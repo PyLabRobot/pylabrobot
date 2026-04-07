@@ -16,6 +16,7 @@ from typing import (
   Union,
 )
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
 from pylabrobot.device import Driver
 from pylabrobot.io.usb import USB
@@ -100,8 +101,8 @@ class HamiltonLiquidHandler(Driver, metaclass=ABCMeta):
       return
     super().__setattr__(name, value)
 
-  async def setup(self):
-    await super().setup()  # type: ignore[safe-super]
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await super().setup(backend_params=backend_params)  # type: ignore[safe-super]
     await self.io.setup()
     self._reading_thread_stop.clear()
     self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)

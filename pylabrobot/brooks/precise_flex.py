@@ -147,17 +147,30 @@ class PreciseFlexDriver(Driver):
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def setup(self, skip_home: bool = False):
+  @dataclass
+  class SetupParams(BackendParams):
+    """PreciseFlex-specific parameters for ``setup``.
+
+    Args:
+      skip_home: If True, skip the homing step during setup.
+    """
+
+    skip_home: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the PreciseFlex driver.
 
     Opens the socket connection, sets response mode to PC, powers on the
     robot, attaches it, and (optionally) homes it.
     """
+    if not isinstance(backend_params, PreciseFlexDriver.SetupParams):
+      backend_params = PreciseFlexDriver.SetupParams()
+
     await self.io.setup()
     await self.set_response_mode("pc")
     await self.power_on_robot()
     await self.attach(1)
-    if not skip_home:
+    if not backend_params.skip_home:
       await self.home()
     logger.info("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
@@ -510,7 +523,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Pick up at the specified joint position."""
     logger.info(
       "[PreciseFlex %s] pick_up: joints=%s, resource_width_mm=%s",
-      self.driver.io._host, position, resource_width,
+      self.driver.io._host,
+      position,
+      resource_width,
     )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
@@ -549,7 +564,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Drop at the specified joint position."""
     logger.info(
       "[PreciseFlex %s] drop: joints=%s, resource_width_mm=%s",
-      self.driver.io._host, position, resource_width,
+      self.driver.io._host,
+      position,
+      resource_width,
     )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()
@@ -632,7 +649,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Pick up at the specified Cartesian location."""
     logger.info(
       "[PreciseFlex %s] pick_up: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
-      self.driver.io._host, location.x, location.y, location.z, direction, resource_width,
+      self.driver.io._host,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
@@ -663,7 +685,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Drop at the specified Cartesian location."""
     logger.info(
       "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
-      self.driver.io._host, location.x, location.y, location.z, direction, resource_width,
+      self.driver.io._host,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()

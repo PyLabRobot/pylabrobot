@@ -1,10 +1,13 @@
+import asyncio
 import logging
 import time
 import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
@@ -32,7 +35,7 @@ class HamiltonHeaterShakerDriver(Driver):
     self.index = index
     self.interface = interface
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   async def stop(self):
@@ -51,14 +54,19 @@ class HamiltonHeaterShakerDriver(Driver):
     return await self.interface.send_hhs_command(index=self.index, command=command, **kwargs)
 
 
-class HamiltonHeaterShakerShakerBackend(ShakerBackend):
+class HamiltonHeaterShakerShakerBackend(ShakerBackend, HasContinuousShaking):
   """Translates ShakerBackend interface into Hamilton Heater Shaker driver commands."""
 
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.driver.send_command("SI")
+
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    await asyncio.sleep(duration)
+    await self.stop_shaking()
 
   async def start_shaking(
     self,
@@ -77,14 +85,22 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend):
     if not (500 <= acceleration <= 10_000):
       raise ValueError("Acceleration must be between 500 and 10_000")
 
-    logger.info("[HHS %d] start shaking: speed=%d rpm, direction=%d, acceleration=%d", self.driver.index, int_speed, direction, acceleration)
+    logger.info(
+      "[HHS %d] start shaking: speed=%d rpm, direction=%d, acceleration=%d",
+      self.driver.index,
+      int_speed,
+      direction,
+      acceleration,
+    )
     now = time.time()
     while True:
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
       if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
-        logger.error("[HHS %d] failed to start shaking within %ss timeout", self.driver.index, timeout)
+        logger.error(
+          "[HHS %d] failed to start shaking within %ss timeout", self.driver.index, timeout
+        )
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
@@ -130,7 +146,7 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.driver.send_command("LI")
 
   @property

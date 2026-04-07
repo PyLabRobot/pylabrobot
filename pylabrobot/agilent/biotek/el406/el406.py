@@ -7,7 +7,7 @@ from pylabrobot.capabilities.bulk_dispensers.syringe import SyringeDispensing
 from pylabrobot.capabilities.plate_washing import PlateWashingCapability
 from pylabrobot.capabilities.shaking import Shaker
 from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, PlateHolder, Resource
+from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
 
 from .driver import EL406Driver
 from .peristaltic_dispensing_backend import EL406PeristalticDispensingBackend
@@ -45,7 +45,7 @@ class EL406(Resource, Device):
       model="BioTek EL406",
     )
     Device.__init__(self, driver=driver)
-    self._driver: EL406Driver = driver
+    self.driver: EL406Driver = driver
 
     self.washer = PlateWashingCapability(backend=EL406PlateWashingBackend(driver))
     self.shaker = Shaker(backend=EL406ShakingBackend(driver))
@@ -62,6 +62,22 @@ class EL406(Resource, Device):
       child_location=Coordinate.zero(),
     )
     self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self.plate_holder.register_did_assign_resource_callback(self._on_plate_assigned)
+    self.plate_holder.register_did_unassign_resource_callback(self._on_plate_unassigned)
+
+  def _on_plate_assigned(self, resource: Resource) -> None:
+    if isinstance(resource, Plate):
+      self.driver._cached_plate = resource
+      self.washer.plate = resource
+      self.syringe.plate = resource
+      self.peristaltic.plate = resource
+
+  def _on_plate_unassigned(self, resource: Resource) -> None:
+    if isinstance(resource, Plate):
+      self.driver._cached_plate = None
+      self.washer.plate = None
+      self.syringe.plate = None
+      self.peristaltic.plate = None
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}

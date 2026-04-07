@@ -285,7 +285,7 @@ class MolecularDevicesDriver(Driver):
       timeout=0.2,
     )
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     await self.send_command("!")
     logger.info("[SpectraMax %s] connected", self.port)
@@ -316,7 +316,9 @@ class MolecularDevicesDriver(Driver):
       raw_response += await self.io.readline()
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
-        logger.error("[SpectraMax %s] timeout waiting for response to command: %s", self.port, command)
+        logger.error(
+          "[SpectraMax %s] timeout waiting for response to command: %s", self.port, command
+        )
         raise TimeoutError(f"Timeout waiting for response to command: {command}")
       if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
         break

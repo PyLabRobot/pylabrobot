@@ -3,6 +3,7 @@ import logging
 import time
 from typing import Optional, Union
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
@@ -24,7 +25,7 @@ class CLARIOstarDriver(Driver):
       human_readable_device_name="BMG CLARIOstar", device_id=device_id, vid=0x0403, pid=0xBB68
     )
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     await self.io.set_baudrate(125000)
     await self.io.set_line_property(8, 0, 0)  # 8N1

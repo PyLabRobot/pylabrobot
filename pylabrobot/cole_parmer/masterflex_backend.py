@@ -1,4 +1,12 @@
 import logging
+from typing import Optional
+
+from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.pumping.backend import PumpBackend
+from pylabrobot.capabilities.pumping.calibration import PumpCalibration
+from pylabrobot.capabilities.pumping.pumping import Pump
+from pylabrobot.device import Device, Driver
+from pylabrobot.io.serial import Serial
 
 try:
   import serial  # type: ignore
@@ -8,15 +16,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from typing import Optional
-
 logger = logging.getLogger(__name__)
-
-from pylabrobot.capabilities.pumping.backend import PumpBackend
-from pylabrobot.capabilities.pumping.calibration import PumpCalibration
-from pylabrobot.capabilities.pumping.pumping import Pump
-from pylabrobot.device import Device, Driver
-from pylabrobot.io.serial import Serial
 
 
 class MasterflexDriver(Driver):
@@ -56,7 +56,7 @@ class MasterflexDriver(Driver):
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")
@@ -83,7 +83,9 @@ class MasterflexBackend(PumpBackend):
 
   async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
-    logger.info("[Masterflex %s] dispensing %.2f revolutions", self.driver.com_port, num_revolutions)
+    logger.info(
+      "[Masterflex %s] dispensing %.2f revolutions", self.driver.com_port, num_revolutions
+    )
     cmd = f"V{num_revolutions}G"
     await self.driver.send_command(cmd)
 
@@ -92,7 +94,12 @@ class MasterflexBackend(PumpBackend):
       await self.halt()
       return
 
-    logger.info("[Masterflex %s] pumping continuously at speed=%s direction=%s", self.driver.com_port, abs(speed), "forward" if speed > 0 else "reverse")
+    logger.info(
+      "[Masterflex %s] pumping continuously at speed=%s direction=%s",
+      self.driver.com_port,
+      abs(speed),
+      "forward" if speed > 0 else "reverse",
+    )
     direction = "+" if speed > 0 else "-"
     speed_int = int(abs(speed))
     cmd = f"S{direction}{speed_int}G0"

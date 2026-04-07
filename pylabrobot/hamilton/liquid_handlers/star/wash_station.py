@@ -25,7 +25,7 @@ class STARWashStation:
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params=None):
     pass
 
   async def _on_stop(self):

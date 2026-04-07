@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
@@ -25,7 +26,7 @@ class OpentronsTemperatureModuleUSBDriver(Driver):
       raise RuntimeError("Serial device not initialized. Call setup() first.")
     return self._serial
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     self._serial = Serial(
       human_readable_device_name="Opentrons Temperature Module",
       port=self.port,
@@ -84,7 +85,9 @@ class OpentronsTemperatureModuleUSBTemperatureBackend(TemperatureControllerBacke
     return True
 
   async def set_temperature(self, temperature: float):
-    logger.info("[OT TempModule USB %s] setting temperature to %.1f C", self.driver.port, temperature)
+    logger.info(
+      "[OT TempModule USB %s] setting temperature to %.1f C", self.driver.port, temperature
+    )
     tmp_message = f"M104 S{temperature}\r\n"
     await self.driver.send_and_check(tmp_message.encode("utf-8"))
 

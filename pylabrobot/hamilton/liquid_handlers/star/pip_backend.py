@@ -254,7 +254,7 @@ class STARPIPBackend(PIPBackend):
     async with self._fw_lock.px():
       return await self.driver.send_command(module=module, command=command, **kwargs)
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     self.channels = [PIPChannel(self.driver, i, backend=self) for i in range(self.num_channels)]
 
     # Initialize PIP channels if the instrument was not yet initialized
@@ -1756,54 +1756,16 @@ class STARPIPBackend(PIPBackend):
       pn=f"{channel + 1:02}",
     )
 
-  # -- C0 channel queries -----------------------------------------------------
-
-  async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
-    """Request Z-position of the tip bottom on channel `channel_idx` (mm).
-
-    Raises RuntimeError if no tip is mounted.
-    """
-    if not (await self.request_tip_presence())[channel_idx]:
-      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RD",
-      fmt="rd####",
-      pn=f"{channel_idx + 1:02}",
-    )
-    return float(resp["rd"] / 10)
-
-  async def request_y_pos_channel_n(self, channel_idx: int) -> float:
-    """Request current Y-position of channel `channel_idx` (mm)."""
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RB",
-      fmt="rb####",
-      pn=f"{channel_idx + 1:02}",
-    )
-    return float(resp["rb"] / 10)
-
-  async def request_x_pos_channel_n(self, channel_idx: int) -> float:
-    """Request current X-position of channel `channel_idx` (mm).
-
-    All PIP channels share the same X arm, so this returns the arm position.
-    """
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RA",
-      fmt="ra#####",
-      pn=f"{channel_idx + 1:02}",
-    )
-    return float(resp["ra"] / 10)
+  # -- C0 multi-channel queries ------------------------------------------------
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """Return absolute liquid heights (mm) from the last LLD event for each channel."""
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
     return [float(v / 10) for v in resp.get("lh")]
 
-  async def move_channel_y(self, channel: int, y: float):
-    """Convenience wrapper: delegates to ``self.channels[channel].move_y(y)``."""
-    await self.channels[channel].move_y(y)
+  async def position_components_for_free_iswap_y_range(self):
+    """Position all components so that there is maximum free Y range for iSWAP."""
+    return await self.driver.send_command(module="C0", command="FY")
 
   # -- foil piercing ----------------------------------------------------------
 
@@ -1966,8 +1928,21 @@ class STARPIPBackend(PIPBackend):
         }
       )
 
-      await self.channels[front_channel].move_tool_z(z_location)
-      await self.channels[back_channel].move_tool_z(z_location)
+      # Use KZ directly rather than move_tool_z to avoid the extra firmware queries
+      # (tip presence, tip length, etc.) that move_tool_z performs. In this context
+      # we know the channels have tips and the target Z is the plate top.
+      await self.driver.send_command(
+        module="C0",
+        command="KZ",
+        pn=f"{front_channel + 1:02}",
+        zj=f"{round(z_location * 10):04}",
+      )
+      await self.driver.send_command(
+        module="C0",
+        command="KZ",
+        pn=f"{back_channel + 1:02}",
+        zj=f"{round(z_location * 10):04}",
+      )
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
       # the just above the foil, in case the foil pops up.

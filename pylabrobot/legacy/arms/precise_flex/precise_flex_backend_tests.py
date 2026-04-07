@@ -27,14 +27,22 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.write.return_value = None
     self.mock_socket_instance.setup.return_value = None  # Configure setup to return None
     self.mock_socket_instance._writer = AsyncMock()  # Mock the _writer attribute
+    self.mock_socket_instance._host = "localhost"  # Mock the _host attribute for logging
+    self.mock_socket_instance._port = 10100  # Mock the _port attribute for logging
 
-    # Patch the Socket class where it's used in PreciseFlexBackend
-    patcher = patch(
+    # Patch the Socket class where it's used in PreciseFlexBackend and the new driver
+    patcher_legacy = patch(
       "pylabrobot.legacy.arms.precise_flex.precise_flex_backend.Socket",
       return_value=self.mock_socket_instance,
     )
-    self.MockSocketClass = patcher.start()  # Store the mock of the class
-    self.addCleanup(patcher.stop)
+    patcher_new = patch(
+      "pylabrobot.brooks.precise_flex.Socket",
+      return_value=self.mock_socket_instance,
+    )
+    self.MockSocketClass = patcher_legacy.start()
+    patcher_new.start()
+    self.addCleanup(patcher_legacy.stop)
+    self.addCleanup(patcher_new.stop)
 
     self.backend = PreciseFlexBackend(has_rail=False, host="localhost", port=10100)
     # self.backend.io is already self.mock_socket_instance because of the patch
@@ -254,7 +262,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approach_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or CartesianCoords."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
     ):
       await self.backend.approach("invalid")  # type: ignore
 
@@ -285,7 +293,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 OK\r\n",  # For set_grasp_data
     ]
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or CartesianCoords."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
     ):
       await self.backend.pick_up_resource("invalid", plate_width=1.0)  # type: ignore
 
@@ -309,7 +317,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_place_plate_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, "place_plate only supports CartesianCoords for PreciseFlex."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
     ):
       await self.backend.drop_resource("invalid")  # type: ignore
 
@@ -341,7 +349,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or CartesianCoords."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
     ):
       await self.backend.move_to("invalid")  # type: ignore
 

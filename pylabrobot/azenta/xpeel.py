@@ -74,7 +74,7 @@ class XPeelDriver(Driver):
       rtscts=False,
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
 
   async def stop(self):

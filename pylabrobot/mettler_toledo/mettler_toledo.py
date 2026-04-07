@@ -5,6 +5,7 @@ import logging
 import time
 from typing import List, Literal, Optional, Union
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.weighing import ScaleBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
@@ -170,7 +171,7 @@ class MettlerToledoWXS205SDUDriver(Driver):
       timeout=1,
     )
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     logger.info("[MettlerToledo %s] connected", self.io.port)
 
@@ -296,11 +297,13 @@ class MettlerToledoWXS205SDUScaleBackend(ScaleBackend):
     self.driver = driver
     self.serial_number: Optional[str] = None
 
-  async def _on_setup(self) -> None:
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Initialize scale after driver connects: set output unit to grams and read serial."""
     await self.driver.send_command("M21 0 0")
     self.serial_number = await self.request_serial_number()
-    logger.info("[MettlerToledo %s] initialized: serial_number=%s", self.driver.io.port, self.serial_number)
+    logger.info(
+      "[MettlerToledo %s] initialized: serial_number=%s", self.driver.io.port, self.serial_number
+    )
 
   # === Public high-level API ===
 

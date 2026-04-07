@@ -1,8 +1,11 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Optional, Union
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,
@@ -81,9 +84,22 @@ class BioShakeDriver(Driver):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def setup(self, skip_home: bool = False):
+  @dataclass
+  class SetupParams(BackendParams):
+    """BioShake-specific parameters for ``setup``.
+
+    Args:
+      skip_home: If True, skip the reset and home steps during setup.
+    """
+
+    skip_home: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    if not isinstance(backend_params, BioShakeDriver.SetupParams):
+      backend_params = BioShakeDriver.SetupParams()
+
     await self.io.setup()
-    if not skip_home:
+    if not backend_params.skip_home:
       await self.reset()
       await asyncio.sleep(4)
       await self.home()
@@ -122,11 +138,16 @@ class BioShakeDriver(Driver):
     await self.send_command(cmd="shakeGoHome", delay=5)
 
 
-class BioShakeShakerBackend(ShakerBackend):
+class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
   """Translates ShakerBackend calls into BioShake serial commands."""
 
   def __init__(self, driver: BioShakeDriver):
     self.driver = driver
+
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    await asyncio.sleep(duration)
+    await self.stop_shaking()
 
   async def start_shaking(self, speed: float, acceleration: Union[int, float] = 0):
     if isinstance(speed, float):
@@ -167,7 +188,9 @@ class BioShakeShakerBackend(ShakerBackend):
       )
 
     await self.driver.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
-    logger.info("[BioShake %s] start shaking: speed=%d, accel=%d", self.driver.port, speed, acceleration)
+    logger.info(
+      "[BioShake %s] start shaking: speed=%d, accel=%d", self.driver.port, speed, acceleration
+    )
     await self.driver.send_command(cmd="shakeOn", delay=0.2)
 
   async def stop_shaking(self, deceleration: Union[int, float] = 0):
