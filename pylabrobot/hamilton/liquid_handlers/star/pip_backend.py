@@ -88,7 +88,7 @@ def _ops_to_fw_positions(
   """Convert ops + use_channels into firmware x/y positions and tip pattern.
 
   Uses absolute coordinates (get_absolute_location) so the driver does not
-  need a ``deck`` reference.  This mirrors HamiltonLiquidHandler._ops_to_fw_positions
+  need a ``deck`` reference.  This mirrors ``HamiltonLiquidHandler._ops_to_fw_positions``
   but is self-contained.
   """
   if use_channels != sorted(use_channels):

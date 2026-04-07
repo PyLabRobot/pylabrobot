@@ -62,7 +62,7 @@ await lh.iswap.drop_resource(reader, direction=GripDirection.FRONT)
 ## Tips and gotchas
 
 - **Coordinates are in the reference resource's frame** (typically the deck). The arm computes gripper target coordinates from the resource's position, dimensions, and the destination type.
-- **`pickup_distance_from_top`** controls how far down from the top face the gripper grips. If `None`, the resource's `preferred_pickup_location` is used, or a default of 5 mm.
+- **`pickup_distance_from_bottom`** controls how far up from the bottom of the resource the gripper grips. If `None`, the resource's `preferred_pickup_location` is used, or a default of 5 mm from the top (`size_z - 5`).
 - **Resource tree is updated automatically.** After a successful `drop_resource`, the resource is unassigned from its old parent and assigned to the destination.
 - **`GripOrientation`** is either a {class}`~pylabrobot.capabilities.arms.standard.GripDirection` enum (`FRONT`, `RIGHT`, `BACK`, `LEFT`) or a float in degrees.
 - **`request_gripper_location()`** queries the hardware for the current end effector position. `get_picked_up_resource()` returns the internally tracked state (no hardware call).

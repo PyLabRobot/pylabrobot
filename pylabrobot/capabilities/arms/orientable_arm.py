@@ -72,12 +72,12 @@ class OrientableArm(_BaseArm):
     self,
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: Optional[float] = None,
+    pickup_distance_from_bottom: Optional[float] = None,
     direction: GripOrientation = GripDirection.FRONT,
     backend_params: Optional[BackendParams] = None,
   ):
-    location, pickup_distance_from_top = self._prepare_pickup(
-      resource, offset, pickup_distance_from_top
+    location, pickup_distance_from_bottom = self._prepare_pickup(
+      resource, offset, pickup_distance_from_bottom
     )
     dir_degrees = _resolve_direction(direction)
     resource_width = self._resource_width_for_direction(resource, dir_degrees)
@@ -88,7 +88,7 @@ class OrientableArm(_BaseArm):
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
-      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
       resource_width=resource_width,
       rotation=Rotation(z=dir_degrees),
     )
@@ -126,7 +126,7 @@ class OrientableArm(_BaseArm):
       resource=resource,
       destination=destination,
       offset=offset,
-      pickup_distance_from_top=self._picked_up.pickup_distance_from_top,
+      pickup_distance_from_bottom=self._picked_up.pickup_distance_from_bottom,
       rotation_applied_by_move=rotation_applied_by_move,
     )
     await self.drop_at_location(location, drop_dir, backend_params)
@@ -155,7 +155,7 @@ class OrientableArm(_BaseArm):
       raise RuntimeError("No resource picked up")
     dir_degrees = _resolve_direction(direction)
     location = self._move_location(
-      self._picked_up.resource, to, offset, self._picked_up.pickup_distance_from_top
+      self._picked_up.resource, to, offset, self._picked_up.pickup_distance_from_bottom
     )
     await self.backend.move_to_location(
       location=location, direction=dir_degrees, backend_params=backend_params
@@ -168,7 +168,7 @@ class OrientableArm(_BaseArm):
     intermediate_locations: Optional[List[Coordinate]] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
+    pickup_distance_from_bottom: Optional[float] = None,
     pickup_direction: GripOrientation = GripDirection.FRONT,
     drop_direction: GripOrientation = GripDirection.FRONT,
     pickup_backend_params: Optional[BackendParams] = None,
@@ -177,7 +177,7 @@ class OrientableArm(_BaseArm):
     await self.pick_up_resource(
       resource=resource,
       offset=pickup_offset,
-      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
       direction=pickup_direction,
       backend_params=pickup_backend_params,
     )

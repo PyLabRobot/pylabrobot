@@ -56,19 +56,19 @@ class ArticulatedArm(_BaseArm):
     self,
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: Optional[float] = None,
+    pickup_distance_from_bottom: Optional[float] = None,
     rotation: Rotation = Rotation(),
     backend_params: Optional[BackendParams] = None,
   ):
-    location, pickup_distance_from_top = self._prepare_pickup(
-      resource, offset, pickup_distance_from_top
+    location, pickup_distance_from_bottom = self._prepare_pickup(
+      resource, offset, pickup_distance_from_bottom
     )
     resource_width = self._resource_width_for_rotation(resource, rotation)
     await self.pick_up_at_location(location, resource_width, rotation, backend_params)
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
-      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
       resource_width=resource_width,
       rotation=rotation,
     )
@@ -106,7 +106,7 @@ class ArticulatedArm(_BaseArm):
       resource=resource,
       destination=destination,
       offset=offset,
-      pickup_distance_from_top=self._picked_up.pickup_distance_from_top,
+      pickup_distance_from_bottom=self._picked_up.pickup_distance_from_bottom,
       rotation_applied_by_move=rotation_applied_by_move,
     )
     await self.drop_at_location(location, rotation, backend_params)
@@ -134,7 +134,7 @@ class ArticulatedArm(_BaseArm):
     if self._picked_up is None:
       raise RuntimeError("No resource picked up")
     location = self._move_location(
-      self._picked_up.resource, to, offset, self._picked_up.pickup_distance_from_top
+      self._picked_up.resource, to, offset, self._picked_up.pickup_distance_from_bottom
     )
     await self.backend.move_to_location(
       location=location, rotation=rotation, backend_params=backend_params
@@ -147,7 +147,7 @@ class ArticulatedArm(_BaseArm):
     intermediate_locations: Optional[List[Coordinate]] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
+    pickup_distance_from_bottom: Optional[float] = None,
     pickup_rotation: Rotation = Rotation(),
     drop_rotation: Rotation = Rotation(),
     pickup_backend_params: Optional[BackendParams] = None,
@@ -156,7 +156,7 @@ class ArticulatedArm(_BaseArm):
     await self.pick_up_resource(
       resource=resource,
       offset=pickup_offset,
-      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
       rotation=pickup_rotation,
       backend_params=pickup_backend_params,
     )

@@ -38,7 +38,7 @@ The STAR device only exposes Capabilities (PIP, Head96, iSWAP). Subsystems (auto
 User code:
 
 ```python
-star = STAR(deck=deck)
+star = STAR()
 await star.setup()
 
 # Capabilities — on the device
@@ -46,6 +46,9 @@ await star.pip.pick_up_tips(...)
 await star.pip.aspirate(...)
 await star.head96.aspirate96(...)
 await star.iswap.move_resource(plate, destination)
+
+# Deck — on the device
+star.deck.assign_child_resource(carrier, rails=3)
 
 # Subsystems — on the driver
 await star._driver.autoload.load_carrier(carrier_end_rail=10)
@@ -60,7 +63,7 @@ await star._driver.halt()
 
 ## STARDriver
 
-Subclass of `HamiltonLiquidHandler` (which extends `Driver`). Owns the USB connection and all firmware protocol logic.
+Subclass of `HamiltonLiquidHandler` (which extends `HamiltonUSBDriver`, which extends `Driver`). Owns the USB connection and all firmware protocol logic.
 
 ```python
 class STARDriver(HamiltonLiquidHandler):
@@ -205,10 +208,10 @@ The user-facing class. Wires driver backends to capability frontends during `set
 
 ```python
 class STAR(Device):
-    def __init__(self, deck: HamiltonDeck, chatterbox: bool = False):
+    def __init__(self, chatterbox: bool = False):
         driver = STARChatterboxDriver() if chatterbox else STARDriver()
         super().__init__(driver=driver)
-        self.deck = deck
+        self.deck = STARDeck()
 ```
 
 ### setup() flow

@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
 
@@ -9,9 +8,7 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import ShakerBackend
 from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
-from pylabrobot.device import Driver
-
-from .box import HamiltonHeaterShakerInterface
+from pylabrobot.hamilton.usb.driver import HamiltonUSBDriver
 
 logger = logging.getLogger(__name__)
 
@@ -21,47 +18,24 @@ class PlateLockPosition(Enum):
   UNLOCKED = 0
 
 
-class HamiltonHeaterShakerDriver(Driver):
-  """Driver for Hamilton Heater Shaker devices.
+class HamiltonHeaterShakerBackend(
+  ShakerBackend, HasContinuousShaking, TemperatureControllerBackend
+):
+  """Backend for Hamilton Heater Shaker: combined shaking and temperature control."""
 
-  Owns the HamiltonHeaterShakerInterface I/O and setup/stop lifecycle.
-  Device-level operations (initialize lock, initialize shaker drive) live here.
-  """
-
-  def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
-    super().__init__()
-    if index < 0:
-      raise ValueError("Shaker index must be non-negative")
-    self.index = index
-    self.interface = interface
-
-  async def setup(self, backend_params: Optional[BackendParams] = None):
-    pass
-
-  async def stop(self):
-    pass
-
-  def serialize(self) -> dict:
-    warnings.warn("The interface is not serialized.")
-    return {
-      **super().serialize(),
-      "index": self.index,
-      "interface": None,
-    }
-
-  async def send_command(self, command: str, **kwargs) -> str:
-    """Send a command to the heater shaker via the interface."""
-    return await self.interface.send_hhs_command(index=self.index, command=command, **kwargs)
-
-
-class HamiltonHeaterShakerShakerBackend(ShakerBackend, HasContinuousShaking):
-  """Translates ShakerBackend interface into Hamilton Heater Shaker driver commands."""
-
-  def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
+  def __init__(self, driver: HamiltonUSBDriver, index: int) -> None:
     self.driver = driver
+    self.index = index
+
+  async def _send_command(self, command: str, **kwargs) -> str:
+    resp = await self.driver.send_command(module=f"T{self.index}", command=command, **kwargs)
+    return resp  # type: ignore[return-value]
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
-    await self.driver.send_command("SI")
+    await self._send_command("SI")
+    await self._send_command("LI")
+
+  # -- shaking --
 
   async def shake(self, speed: float, duration: float, backend_params=None):
     await self.start_shaking(speed=speed)
@@ -87,67 +61,46 @@ class HamiltonHeaterShakerShakerBackend(ShakerBackend, HasContinuousShaking):
 
     logger.info(
       "[HHS %d] start shaking: speed=%d rpm, direction=%d, acceleration=%d",
-      self.driver.index,
+      self.index,
       int_speed,
       direction,
       acceleration,
     )
     now = time.time()
     while True:
-      await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+      speed_str = str(int_speed).zfill(4)
+      acceleration_str = str(acceleration).zfill(5)
+      await self._send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
       if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
         logger.error(
-          "[HHS %d] failed to start shaking within %ss timeout", self.driver.index, timeout
+          "[HHS %d] failed to start shaking within %ss timeout", self.index, timeout
         )
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
-    logger.info("[HHS %d] stop shaking", self.driver.index)
-    await self._stop_shaking()
-    await self._wait_for_stop()
+    logger.info("[HHS %d] stop shaking", self.index)
+    await self._send_command("SC")
+    await self._send_command("SW")
 
   async def request_is_shaking(self) -> bool:
-    response = await self.driver.send_command("RD")
+    response = await self._send_command("RD")
     is_shaking = response.endswith("1")
-    logger.debug("[HHS %d] read shaking status: is_shaking=%s", self.driver.index, is_shaking)
+    logger.debug("[HHS %d] read shaking status: is_shaking=%s", self.index, is_shaking)
     return is_shaking
-
-  async def _move_plate_lock(self, position: PlateLockPosition):
-    return await self.driver.send_command("LP", lp=position.value)
 
   @property
   def supports_locking(self) -> bool:
     return True
 
   async def lock_plate(self):
-    await self._move_plate_lock(PlateLockPosition.LOCKED)
+    await self._send_command("LP", lp=PlateLockPosition.LOCKED.value)
 
   async def unlock_plate(self):
-    await self._move_plate_lock(PlateLockPosition.UNLOCKED)
+    await self._send_command("LP", lp=PlateLockPosition.UNLOCKED.value)
 
-  async def _start_shaking(self, direction: int, speed: int, acceleration: int):
-    speed_str = str(speed).zfill(4)
-    acceleration_str = str(acceleration).zfill(5)
-    return await self.driver.send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
-
-  async def _stop_shaking(self):
-    return await self.driver.send_command("SC")
-
-  async def _wait_for_stop(self):
-    return await self.driver.send_command("SW")
-
-
-class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
-  """Translates TemperatureControllerBackend interface into Hamilton Heater Shaker driver
-  commands."""
-
-  def __init__(self, driver: HamiltonHeaterShakerDriver) -> None:
-    self.driver = driver
-
-  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
-    await self.driver.send_command("LI")
+  # -- temperature --
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -156,12 +109,12 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   async def set_temperature(self, temperature: float):
     if not (0 < temperature <= 105):
       raise ValueError(f"Temperature must be between 0 (exclusive) and 105, got {temperature}")
-    logger.info("[HHS %d] set temperature: target=%.1f C", self.driver.index, temperature)
+    logger.info("[HHS %d] set temperature: target=%.1f C", self.index, temperature)
     temp_str = f"{round(10 * temperature):04d}"
-    return await self.driver.send_command("TA", ta=temp_str)
+    await self._send_command("TA", ta=temp_str)
 
   async def _request_current_temperature(self) -> Dict[str, float]:
-    response = await self.driver.send_command("RT")
+    response = await self._send_command("RT")
     response = response.split("rt")[1]
     middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
     edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
@@ -170,15 +123,15 @@ class HamiltonHeaterShakerTemperatureBackend(TemperatureControllerBackend):
   async def request_current_temperature(self) -> float:
     response = await self._request_current_temperature()
     temp = response["middle"]
-    logger.info("[HHS %d] read temperature: actual=%.1f C", self.driver.index, temp)
+    logger.info("[HHS %d] read temperature: actual=%.1f C", self.index, temp)
     return temp
 
   async def request_edge_temperature(self) -> float:
     response = await self._request_current_temperature()
     temp = response["edge"]
-    logger.info("[HHS %d] read edge temperature: actual=%.1f C", self.driver.index, temp)
+    logger.info("[HHS %d] read edge temperature: actual=%.1f C", self.index, temp)
     return temp
 
   async def deactivate(self):
-    logger.info("[HHS %d] deactivate temperature control", self.driver.index)
-    return await self.driver.send_command("TO")
+    logger.info("[HHS %d] deactivate temperature control", self.index)
+    await self._send_command("TO")

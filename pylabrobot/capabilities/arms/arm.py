@@ -27,7 +27,7 @@ GripOrientation = Union[GripDirection, float]
 class _PickedUpState:
   resource: Resource
   offset: Coordinate
-  pickup_distance_from_top: float
+  pickup_distance_from_bottom: float
   resource_width: float
   rotation: Rotation = Rotation()
 
@@ -96,15 +96,15 @@ class _BaseArm(Capability):
     self,
     resource: Resource,
     offset: Coordinate,
-    pickup_distance_from_top: float,
+    pickup_distance_from_bottom: float,
   ) -> Coordinate:
     assert self._reference_resource is not None
     center = resource.center().rotated(resource.get_absolute_rotation())
     if resource.is_in_subtree_of(self._reference_resource):
-      loc = resource.get_location_wrt(self._reference_resource, "l", "f", "t") + center + offset
+      loc = resource.get_location_wrt(self._reference_resource, "l", "f", "b") + center + offset
     else:
       loc = center + offset
-    return Coordinate(loc.x, loc.y, loc.z - pickup_distance_from_top)
+    return Coordinate(loc.x, loc.y, loc.z + pickup_distance_from_bottom)
 
   def _destination_location(
     self,
@@ -150,7 +150,7 @@ class _BaseArm(Capability):
     resource: Resource,
     to_location: Coordinate,
     offset: Coordinate,
-    pickup_distance_from_top: float,
+    pickup_distance_from_bottom: float,
     rotation_applied_by_move: float,
   ) -> Coordinate:
     center = resource.center().rotated(
@@ -160,7 +160,7 @@ class _BaseArm(Capability):
     return Coordinate(
       loc.x,
       loc.y,
-      loc.z + resource.get_absolute_size_z() - pickup_distance_from_top,
+      loc.z + pickup_distance_from_bottom,
     )
 
   def _move_location(
@@ -168,27 +168,28 @@ class _BaseArm(Capability):
     resource: Resource,
     to: Coordinate,
     offset: Coordinate,
-    pickup_distance_from_top: float,
+    pickup_distance_from_bottom: float,
   ) -> Coordinate:
-    return to + resource.get_anchor("c", "c", "t") - Coordinate(z=pickup_distance_from_top) + offset
+    return to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
 
   def _resolve_pickup_distance(
-    self, resource: Resource, pickup_distance_from_top: Optional[float]
+    self, resource: Resource, pickup_distance_from_bottom: Optional[float]
   ) -> float:
-    if pickup_distance_from_top is not None:
-      return pickup_distance_from_top
+    if pickup_distance_from_bottom is not None:
+      return pickup_distance_from_bottom
     if resource.preferred_pickup_location is not None:
       logger.debug(
-        "Using preferred pickup location for resource %s as pickup_distance_from_top was "
+        "Using preferred pickup location for resource %s as pickup_distance_from_bottom was "
         "not specified.",
         resource.name,
       )
-      return resource.get_size_z() - resource.preferred_pickup_location.z
+      return resource.preferred_pickup_location.z
     logger.debug(
-      "No preferred pickup location for resource %s. Using default pickup distance of 5mm.",
+      "No preferred pickup location for resource %s. Using default pickup distance of 5mm "
+      "from top (= size_z - 5).",
       resource.name,
     )
-    return 5.0
+    return resource.get_size_z() - 5.0
 
   def _assign_after_drop(
     self,
@@ -228,7 +229,7 @@ class _BaseArm(Capability):
     resource: Resource,
     destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     offset: Coordinate,
-    pickup_distance_from_top: float,
+    pickup_distance_from_bottom: float,
     rotation_applied_by_move: float = 0,
   ) -> Tuple[Coordinate, float]:
     resource_absolute_rotation_after_move = (
@@ -253,7 +254,7 @@ class _BaseArm(Capability):
       resource, destination, resource_rotation_wrt_destination_wrt_local
     )
     location = self._compute_end_effector_location(
-      resource, to_location, offset, pickup_distance_from_top, rotation_applied_by_move
+      resource, to_location, offset, pickup_distance_from_bottom, rotation_applied_by_move
     )
     return location, resource_rotation_wrt_destination
 
@@ -261,13 +262,13 @@ class _BaseArm(Capability):
     self,
     resource: Resource,
     offset: Coordinate,
-    pickup_distance_from_top: Optional[float],
+    pickup_distance_from_bottom: Optional[float],
   ) -> Tuple[Coordinate, float]:
-    pickup_distance_from_top = self._resolve_pickup_distance(resource, pickup_distance_from_top)
+    pickup_distance_from_bottom = self._resolve_pickup_distance(resource, pickup_distance_from_bottom)
     assert resource.get_absolute_rotation().x == 0 and resource.get_absolute_rotation().y == 0
     assert resource.get_absolute_rotation().z % 90 == 0
-    location = self._pickup_location(resource, offset, pickup_distance_from_top)
-    return location, pickup_distance_from_top
+    location = self._pickup_location(resource, offset, pickup_distance_from_bottom)
+    return location, pickup_distance_from_bottom
 
   def _prepare_drop(
     self,
@@ -344,18 +345,18 @@ class GripperArm(_BaseArm):
     self,
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: Optional[float] = None,
+    pickup_distance_from_bottom: Optional[float] = None,
     backend_params: Optional[BackendParams] = None,
   ):
-    location, pickup_distance_from_top = self._prepare_pickup(
-      resource, offset, pickup_distance_from_top
+    location, pickup_distance_from_bottom = self._prepare_pickup(
+      resource, offset, pickup_distance_from_bottom
     )
     resource_width = self._resource_width(resource)
     await self.pick_up_at_location(location, resource_width, backend_params)
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
-      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
       resource_width=resource_width,
     )
     self._state_updated()
@@ -385,7 +386,7 @@ class GripperArm(_BaseArm):
       resource=resource,
       destination=destination,
       offset=offset,
-      pickup_distance_from_top=self._picked_up.pickup_distance_from_top,
+      pickup_distance_from_bottom=self._picked_up.pickup_distance_from_bottom,
     )
     await self.drop_at_location(location, backend_params)
     self._finalize_drop(resource, destination, rotation)
@@ -404,7 +405,7 @@ class GripperArm(_BaseArm):
     if self._picked_up is None:
       raise RuntimeError("No resource picked up")
     location = self._move_location(
-      self._picked_up.resource, to, offset, self._picked_up.pickup_distance_from_top
+      self._picked_up.resource, to, offset, self._picked_up.pickup_distance_from_bottom
     )
     await self.backend.move_to_location(location=location, backend_params=backend_params)
 
@@ -415,14 +416,14 @@ class GripperArm(_BaseArm):
     intermediate_locations: Optional[List[Coordinate]] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
+    pickup_distance_from_bottom: Optional[float] = None,
     pickup_backend_params: Optional[BackendParams] = None,
     drop_backend_params: Optional[BackendParams] = None,
   ):
     await self.pick_up_resource(
       resource=resource,
       offset=pickup_offset,
-      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
       backend_params=pickup_backend_params,
     )
     for loc in intermediate_locations or []:

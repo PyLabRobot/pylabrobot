@@ -11,19 +11,19 @@ from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate
-from pylabrobot.resources.hamilton import HamiltonDeck
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
+from pylabrobot.resources.hamilton import HamiltonDeck, STARDeck, STARLetDeck
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers, HamiltonSTARDeck
 
 from .chatterbox import STARChatterboxDriver
 from .core import CoreGripper
 from .driver import STARDriver
 
 
-class STAR(Device):
-  """Hamilton STAR liquid handler.
+class _HamiltonSTAR(Device):
+  """Base class for Hamilton STAR/STARLet liquid handlers.
 
-  User-facing device that wires capability frontends (PIP, Head96, iSWAP) to the
-  STARDriver's backends after hardware discovery during setup().
+  Wires capability frontends (PIP, Head96, iSWAP) to the STARDriver's backends
+  after hardware discovery during setup().
   """
 
   def __init__(self, deck: HamiltonDeck, chatterbox: bool = False):
@@ -134,3 +134,17 @@ class STAR(Device):
         end_z=205.0 + z_offset,
         traversal_height=traversal_height,
       )
+
+
+class STAR(_HamiltonSTAR):
+  """Hamilton STAR liquid handler."""
+
+  def __init__(self, chatterbox: bool = False):
+    super().__init__(deck=STARDeck(), chatterbox=chatterbox)
+
+
+class STARLet(_HamiltonSTAR):
+  """Hamilton STARLet liquid handler."""
+
+  def __init__(self, chatterbox: bool = False):
+    super().__init__(deck=STARLetDeck(), chatterbox=chatterbox)

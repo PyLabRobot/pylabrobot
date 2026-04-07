@@ -55,7 +55,6 @@ from pylabrobot.hamilton.liquid_handlers.star.fw_parsing import parse_star_fw_st
 from pylabrobot.hamilton.liquid_handlers.star.pip_channel import (
   PressureLLDMode as _NewPressureLLDMode,
 )
-from pylabrobot.legacy.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
@@ -343,7 +342,7 @@ class Head96Information:
   head_type: HeadType
 
 
-class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
+class STARBackend(HamiltonLiquidHandler):
   """Interface for the Hamilton STARBackend."""
 
   PIP_X_MIN_WITH_LEFT_SIDE_PANEL: float = 320.0
@@ -7931,17 +7930,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Deprecated: use ``star.iswap.slow()``."""
     async with self._iswap.slow(wrist_velocity=wrist_velocity, gripper_velocity=gripper_velocity):
       yield
-
-  # HamiltonHeaterShakerInterface
-
-  async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
-    resp = await self.send_command(
-      module=f"T{index}",
-      command=command,
-      **kwargs,
-    )
-    assert isinstance(resp, str)
-    return resp
 
   # ------------ STAR(RS-232/TCC1/2)-connected Hamilton Heater Cooler (HHS) -------------
 

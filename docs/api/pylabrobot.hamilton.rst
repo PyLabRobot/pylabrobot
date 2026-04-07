@@ -45,11 +45,8 @@ Heater Shaker
   :recursive:
 
     HamiltonHeaterShaker
-    HamiltonHeaterShakerDriver
-    HamiltonHeaterShakerShakerBackend
-    HamiltonHeaterShakerTemperatureBackend
+    HamiltonHeaterShakerBackend
     HamiltonHeaterShakerBox
-    HamiltonHeaterShakerInterface
 
 
 STAR Liquid Handler
