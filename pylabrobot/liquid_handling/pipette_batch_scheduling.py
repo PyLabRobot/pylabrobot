@@ -17,7 +17,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Union, cast
 
-from pylabrobot.liquid_handling.utils import (
+from pylabrobot.liquid_handling.channel_positioning import (
   MIN_SPACING_EDGE,
   get_wide_single_resource_liquid_op_offsets,
 )
