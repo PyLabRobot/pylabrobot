@@ -72,21 +72,21 @@ def print_batches(
   for xg_i, x_key in enumerate(xg_keys):
     xg_batches = x_groups[x_key]
     is_last_xg = xg_i == len(xg_keys) - 1
-    xg_branch = "\u2514" if is_last_xg else "\u251c"
-    xg_cont = " " if is_last_xg else "\u2502"
-    print(f"  {xg_branch}\u2500\u2500 x-group {xg_i + 1} (x={x_key:.1f} mm)")
+    xg_branch = "└" if is_last_xg else "├"
+    xg_cont = " " if is_last_xg else "│"
+    print(f"  {xg_branch}── x-group {xg_i + 1} (x={x_key:.1f} mm)")
     for yb_i, b in enumerate(xg_batches):
       is_last_yb = yb_i == len(xg_batches) - 1
-      yb_branch = "\u2514" if is_last_yb else "\u251c"
-      yb_cont = " " if is_last_yb else "\u2502"
-      print(f"  {xg_cont}   {yb_branch}\u2500\u2500 y-batch {yb_i + 1}")
+      yb_branch = "└" if is_last_yb else "├"
+      yb_cont = " " if is_last_yb else "│"
+      print(f"  {xg_cont}   {yb_branch}── y-batch {yb_i + 1}")
       for ch in sorted(b.y_positions.keys()):
         is_last_ch = ch == max(b.y_positions.keys())
-        ch_branch = "\u2514" if is_last_ch else "\u251c"
+        ch_branch = "└" if is_last_ch else "├"
         active = "*" if ch in b.channels else " "
         container_name = f" ({ch_to_container[ch].name})" if ch in ch_to_container else ""
         print(
-          f"  {xg_cont}   {yb_cont}   {ch_branch}\u2500\u2500 {active}ch{ch}: y={b.y_positions[ch]:.1f} mm{container_name}"
+          f"  {xg_cont}   {yb_cont}   {ch_branch}── {active}ch{ch}: y={b.y_positions[ch]:.1f} mm{container_name}"
         )
 
 
@@ -155,20 +155,22 @@ def _channel_fits_batch(
 
 def _interpolate_phantoms(
   channels: List[int], y_positions: Dict[int, float], spacings: List[float]
-) -> None:
-  """Fill in Y positions for phantom channels between non-consecutive batch members.
+) -> Dict[int, float]:
+  """Return Y positions with phantom channels filled in between non-consecutive batch members.
 
   Each phantom is placed at its actual pairwise spacing from the previous channel,
   so non-uniform spacings are respected (e.g. a wide channel only widens its own gaps).
   """
+  result = dict(y_positions)
   sorted_chs = sorted(channels)
   for k in range(len(sorted_chs) - 1):
     ch_lo, ch_hi = sorted_chs[k], sorted_chs[k + 1]
     cumulative = 0.0
     for phantom in range(ch_lo + 1, ch_hi):
       cumulative += _min_spacing_between(spacings, phantom - 1, phantom)
-      if phantom not in y_positions:
-        y_positions[phantom] = y_positions[ch_lo] - cumulative
+      if phantom not in result:
+        result[phantom] = result[ch_lo] - cumulative
+  return result
 
 
 def _partition_into_y_batches(
@@ -207,7 +209,7 @@ def _partition_into_y_batches(
   for batch in batches:
     batch_channels = [use_channels[i] for i in batch.indices]
     y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in batch.indices}
-    _interpolate_phantoms(batch_channels, y_positions, spacings)
+    y_positions = _interpolate_phantoms(batch_channels, y_positions, spacings)
     result.append(
       ChannelBatch(
         x_position=x_position,

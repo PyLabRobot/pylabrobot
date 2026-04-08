@@ -2059,10 +2059,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def execute_batched(
     self,
-    func: Callable[[ChannelBatch], Awaitable[None]],
+    func: Callable[[ChannelBatch], Awaitable[T]],
     batches: List[ChannelBatch],
     min_traverse_height_during_command: Optional[float] = None,
-  ) -> None:
+  ) -> List[T]:
     """Execute a Z-axis callback across pre-planned batches with X/Y positioning.
 
     Handles inter-batch safety: raises channels between batches, moves X when the
@@ -2075,7 +2075,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       batches: Pre-planned batches from ``plan_batches()``.
       min_traverse_height_during_command: Absolute Z height (mm) for inter-batch
         channel raises. ``None`` uses full Z safety.
+
+    Returns:
+      List of results from each batch callback, in batch order.
     """
+    results: List[T] = []
     try:
       prev_batch: Optional[ChannelBatch] = None
       for batch in batches:
@@ -2091,7 +2095,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           await self.move_channel_x(0, batch.x_position)
 
         await self.position_channels_in_y_direction(batch.y_positions)
-        await func(batch)
+        results.append(await func(batch))
         prev_batch = batch
 
     except Exception:  # firmware errors, RuntimeError, etc.
@@ -2100,6 +2104,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     except BaseException:  # KeyboardInterrupt, SystemExit — still must raise channels
       await self.move_all_channels_in_z_safety()
       raise
+
+    return results
 
   async def probe_liquid_heights(
     self,
@@ -2213,12 +2219,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       detect_func = self._search_for_surface_using_plld
 
-    # Execute batches
-    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
-      ch: [] for ch in use_channels
-    }
-
-    async def _probe_batch_heights(batch: ChannelBatch) -> None:
+    async def _probe_batch_heights(
+      batch: ChannelBatch,
+    ) -> Dict[int, List[Optional[float]]]:
       batch_lowest_immers = [
         z_cavity_bottom[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH for i in batch.indices
       ]
@@ -2226,6 +2229,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         z_top[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH + self.SEARCH_START_CLEARANCE_MM
         for i in batch.indices
       ]
+
+      measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
 
       for _ in range(n_replicates):
         results = await asyncio.gather(
@@ -2262,13 +2267,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             raise result
           else:
             height = current_absolute_liquid_heights[ch_idx]
-          absolute_heights_measurements[ch_idx].append(height)
+          measurements[ch_idx].append(height)
 
-    await self.execute_batched(
+      return measurements
+
+    batch_results = await self.execute_batched(
       func=_probe_batch_heights,
       batches=batches,
       min_traverse_height_during_command=min_traverse_height_during_command,
     )
+
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {}
+    for batch_measurements in batch_results:
+      for ch, heights in batch_measurements.items():
+        absolute_heights_measurements.setdefault(ch, []).extend(heights)
 
     # Compute liquid heights relative to well bottom
     relative_to_well: List[float] = []
