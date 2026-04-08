@@ -50,6 +50,19 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
 
 logger = logging.getLogger(__name__)
 
+# Connection/transport errors that should propagate immediately rather than
+# being swallowed by introspection catch blocks. A dead connection would
+# otherwise cause N individual timeouts (one per method) before the caller
+# sees any error.
+_TRANSIENT_ERRORS = (
+  TimeoutError,
+  ConnectionError,
+  ConnectionResetError,
+  ConnectionAbortedError,
+  BrokenPipeError,
+  OSError,
+)
+
 # ============================================================================
 # TYPE RESOLUTION HELPERS
 # ============================================================================
@@ -105,6 +118,7 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
   77: "List[str]",
   82: "List[enum]",  # Complex type, needs source_id + enum_id
   102: "f32",
+  113: "List[f32]",  # Inferred from CalibrateZTipHeight(tipHeights) context; not protocol-confirmed
   # ReturnElement types (18-24, 35, 43, 47, 51, 55, 68, 76)
   18: "u8",
   19: "i16",
@@ -147,7 +161,7 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
 
 # Type ID sets for categorization
 # 78 = enum (Argument); 60, 64 = struct (ReturnValue) — see _INTROSPECTION_TYPE_NAMES comments
-_ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 78, 82, 102}
+_ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 78, 82, 102, 113}
 _RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 63, 68, 76}
 _RETURN_VALUE_TYPE_IDS = {
   25,
@@ -999,6 +1013,8 @@ class HamiltonIntrospection:
         method = await self.get_method(address, i)
         if method.interface_id == 0:
           supported.add(method.method_id)
+      except _TRANSIENT_ERRORS:
+        raise
       except Exception as e:
         logger.debug("get_method(%s, %d) failed: %s", address, i, e)
     return supported
@@ -1066,7 +1082,12 @@ class HamiltonIntrospection:
 
     return Address(response.module_id, response.node_id, response.object_id)
 
-  async def get_interfaces(self, address: Address) -> List[InterfaceInfo]:
+  async def get_interfaces(
+    self,
+    address: Address,
+    *,
+    _supported: Optional[Set[int]] = None,
+  ) -> List[InterfaceInfo]:
     """Get available interfaces.
 
     The device returns 2 columnar fragments: interface_ids (I8_ARRAY) and
@@ -1075,12 +1096,15 @@ class HamiltonIntrospection:
 
     Args:
       address: Object address
+      _supported: Pre-computed supported Interface 0 method IDs (internal;
+        avoids redundant device queries when the caller already has them).
 
     Returns:
       List of interface information
     """
-    supported = await self.get_supported_interface0_method_ids(address)
-    if GET_INTERFACES not in supported:
+    if _supported is None:
+      _supported = await self.get_supported_interface0_method_ids(address)
+    if GET_INTERFACES not in _supported:
       logger.debug(
         "Object at %s does not support GetInterfaces (interface 0, method 4); returning []",
         address,
@@ -1208,20 +1232,30 @@ class HamiltonIntrospection:
       name_offset += cnt
     return result
 
-  async def get_all_methods(self, address: Address) -> List[MethodInfo]:
+  async def get_all_methods(
+    self,
+    address: Address,
+    *,
+    _supported: Optional[Set[int]] = None,
+    _object_info: Optional[ObjectInfo] = None,
+  ) -> List[MethodInfo]:
     """Get all methods for an object.
 
     Returns [] if the object does not support GetMethod (interface 0, method 2).
 
     Args:
       address: Object address
+      _supported: Pre-computed supported Interface 0 method IDs (internal).
+      _object_info: Pre-fetched ObjectInfo (internal; avoids redundant GetObject).
 
     Returns:
       List of all method signatures
     """
-    object_info = await self.get_object(address)
-    supported = await self.get_supported_interface0_method_ids(address)
-    if GET_METHOD not in supported:
+    if _object_info is None:
+      _object_info = await self.get_object(address)
+    if _supported is None:
+      _supported = await self.get_supported_interface0_method_ids(address)
+    if GET_METHOD not in _supported:
       logger.debug(
         "Object at %s does not support GetMethod (interface 0, method 2); returning []",
         address,
@@ -1229,10 +1263,12 @@ class HamiltonIntrospection:
       return []
 
     methods = []
-    for i in range(object_info.method_count):
+    for i in range(_object_info.method_count):
       try:
         method = await self.get_method(address, i)
         methods.append(method)
+      except _TRANSIENT_ERRORS:
+        raise
       except Exception as e:
         logger.warning(f"Failed to get method {i} for {address}: {e}")
 
@@ -1242,6 +1278,8 @@ class HamiltonIntrospection:
     self,
     address: Union[Address, str],
     global_pool: Optional[GlobalTypePool] = None,
+    *,
+    _supported: Optional[Set[int]] = None,
   ) -> TypeRegistry:
     """Build a complete TypeRegistry for an object.
 
@@ -1253,32 +1291,35 @@ class HamiltonIntrospection:
     Args:
       address: Object address or dot-path (e.g. "MLPrepRoot.MphRoot.MPH").
       global_pool: Optional GlobalTypePool for resolving source_id=1 refs.
+      _supported: Pre-computed supported Interface 0 method IDs (internal;
+        avoids redundant device queries when the caller already has them).
 
     Returns:
       TypeRegistry with all type information for this object
     """
     address = self._resolve_address(address)
     registry = TypeRegistry(address=address, global_pool=global_pool)
-    supported = await self.get_supported_interface0_method_ids(address)
+    if _supported is None:
+      _supported = await self.get_supported_interface0_method_ids(address)
 
-    if GET_INTERFACES in supported:
-      interfaces = await self.get_interfaces(address)
+    if GET_INTERFACES in _supported:
+      interfaces = await self.get_interfaces(address, _supported=_supported)
       for iface in interfaces:
         registry.interfaces[iface.interface_id] = iface
     else:
       interfaces = []
 
-    if GET_METHOD in supported:
-      registry.methods = await self.get_all_methods(address)
+    if GET_METHOD in _supported:
+      registry.methods = await self.get_all_methods(address, _supported=_supported)
     else:
       registry.methods = []
 
     for iface in interfaces:
-      if GET_STRUCTS in supported:
+      if GET_STRUCTS in _supported:
         structs = await self.get_structs(address, iface.interface_id)
         if structs:
           registry.structs[iface.interface_id] = {s.struct_id: s for s in structs}
-      if GET_ENUMS in supported:
+      if GET_ENUMS in _supported:
         enums = await self.get_enums(address, iface.interface_id)
         if enums:
           registry.enums[iface.interface_id] = {e.enum_id: e for e in enums}
@@ -1308,10 +1349,10 @@ class HamiltonIntrospection:
       TypeRegistry that can resolve types from both parent and children.
     """
     address = self._resolve_address(address)
-    registry = await self.build_type_registry(address, global_pool=global_pool)
+    supported = await self.get_supported_interface0_method_ids(address)
+    registry = await self.build_type_registry(address, global_pool=global_pool, _supported=supported)
 
     if subobject_addresses is None:
-      supported = await self.get_supported_interface0_method_ids(address)
       if GET_SUBOBJECT_ADDRESS not in supported:
         subobject_addresses = []
       else:
@@ -1321,6 +1362,8 @@ class HamiltonIntrospection:
           try:
             sub_addr = await self.get_subobject_address(address, i)
             subobject_addresses.append(sub_addr)
+          except _TRANSIENT_ERRORS:
+            raise
           except Exception:
             logger.debug("get_subobject_address(%d) failed for %s", i, address)
 
@@ -1331,6 +1374,8 @@ class HamiltonIntrospection:
           registry.structs.setdefault(iid, {}).update(struct_map)
         for iid, enum_map in child_reg.enums.items():
           registry.enums.setdefault(iid, {}).update(enum_map)
+      except _TRANSIENT_ERRORS:
+        raise
       except Exception as e:
         logger.debug("build_type_registry failed for child %s: %s", sub_addr, e)
 
@@ -1361,7 +1406,7 @@ class HamiltonIntrospection:
         if GET_INTERFACES not in supported:
           continue
 
-        interfaces = await self.get_interfaces(addr)
+        interfaces = await self.get_interfaces(addr, _supported=supported)
         for iface in interfaces:
           if GET_STRUCTS in supported:
             structs = await self.get_structs(addr, iface.interface_id)
@@ -1370,8 +1415,10 @@ class HamiltonIntrospection:
           if GET_ENUMS in supported:
             enums = await self.get_enums(addr, iface.interface_id)
             pool.enums.extend(enums)
+      except _TRANSIENT_ERRORS:
+        raise
       except Exception as e:
-        logger.debug("build_global_type_pool failed for %s: %s", addr, e)
+        logger.warning("build_global_type_pool failed for %s: %s", addr, e)
 
     logger.info(
       "Global type pool built: %d structs, %d enums from %d global objects",

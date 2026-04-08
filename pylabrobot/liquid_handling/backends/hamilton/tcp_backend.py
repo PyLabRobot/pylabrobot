@@ -436,6 +436,7 @@ class HamiltonTCPClient:
     self._sequence_numbers: Dict[Address, int] = {}
     self._registry = ObjectRegistry(self)
     self._type_registries: Dict[Address, TypeRegistry] = {}
+    self._introspection_cache: Dict[str, tuple[GlobalTypePool, TypeRegistry]] = {}
     self._global_object_addresses: list[Address] = []
 
   @property
@@ -1030,13 +1031,12 @@ class HamiltonTCPClient:
     raise last_error
 
   async def introspect(
-    self, object_path: Optional[str] = None
+    self, object_path: Optional[str] = None, *, cache: bool = False
   ) -> tuple[GlobalTypePool, TypeRegistry]:
     """Build introspection data on demand (for diagnostics/validation).
 
     Queries the device for global structs/enums and optionally builds a
-    TypeRegistry for a specific object. Does not cache — each call queries
-    the device fresh.
+    TypeRegistry for a specific object.
 
     Example::
 
@@ -1048,17 +1048,33 @@ class HamiltonTCPClient:
       object_path: Optional dot-path to build a TypeRegistry for
         (e.g. "MLPrepRoot.PipettorRoot.Pipettor"). If None, returns
         an empty TypeRegistry with just the global pool attached.
+      cache: If True, cache results keyed by object_path and return
+        cached data on subsequent calls. Default False (fresh query
+        each time). Use clear_introspection_cache() to invalidate.
 
     Returns:
       (GlobalTypePool, TypeRegistry) tuple.
     """
+    cache_key = object_path or ""
+    if cache and cache_key in self._introspection_cache:
+      return self._introspection_cache[cache_key]
+
     intro = HamiltonIntrospection(self)
     pool = await intro.build_global_type_pool(self._global_object_addresses)
     if object_path:
       reg = await intro.build_type_registry(object_path, global_pool=pool)
     else:
       reg = TypeRegistry(address=None, global_pool=pool)
+
+    if cache:
+      self._introspection_cache[cache_key] = (pool, reg)
+      if reg.address is not None:
+        self._type_registries[reg.address] = reg
     return pool, reg
+
+  def clear_introspection_cache(self) -> None:
+    """Clear cached introspection results (from ``introspect(cache=True)``)."""
+    self._introspection_cache.clear()
 
   async def stop(self):
     """Close connection."""

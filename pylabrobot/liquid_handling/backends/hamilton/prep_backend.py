@@ -305,6 +305,9 @@ class PrepBackend(LiquidHandlerBackend):
         for v in resp.channels
       )
       return present
+    except (TimeoutError, ConnectionError, ConnectionResetError, ConnectionAbortedError,
+            BrokenPipeError, OSError):
+      raise
     except Exception:
       return None
 
