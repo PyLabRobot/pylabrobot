@@ -9,8 +9,9 @@ Moved from prep_backend.py to separate protocol contracts from domain logic.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import IntEnum
+import math
 from typing import Annotated, Optional, Tuple
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
@@ -205,6 +206,17 @@ class ChannelCalibrationValuesInfo:
   z_tip_height: float
   core_ii: bool
 
+  def to_pretty_string(self) -> str:
+    """Return a stable one-line representation for logging/reporting."""
+    return (
+      f"index={self.index}, y_offset={self.y_offset}, z_offset={self.z_offset}, "
+      f"squeeze_position={self.squeeze_position}, z_touchoff={self.z_touchoff}, "
+      f"pressure_shift={self.pressure_shift}, "
+      f"pressure_monitoring_shift={self.pressure_monitoring_shift}, "
+      f"dispenser_return_distance={self.dispenser_return_distance}, "
+      f"z_tip_height={self.z_tip_height}, core_ii={self.core_ii}"
+    )
+
 
 @dataclass(frozen=True)
 class CalibrationValues:
@@ -213,6 +225,154 @@ class CalibrationValues:
   independent_offset_x: float
   mph_offset_x: float
   channel_values: Tuple["ChannelCalibrationValuesInfo", ...]
+
+  def to_pretty_string(self, sort_by_index: bool = True) -> str:
+    """Return deterministic, human-readable calibration output."""
+    channels = self.channel_values
+    if sort_by_index:
+      channels = tuple(sorted(channels, key=lambda cv: cv.index))
+
+    lines = [
+      f"Independent offset X: {self.independent_offset_x}",
+      f"MPH offset X: {self.mph_offset_x}",
+      "Per-channel calibration values:",
+    ]
+    for cv in channels:
+      lines.append(f"  {cv.to_pretty_string()}")
+    return "\n".join(lines)
+
+  def __str__(self) -> str:
+    return self.to_pretty_string()
+
+
+@dataclass(frozen=True)
+class CalibrationFieldChange:
+  field: str
+  old: object
+  new: object
+
+
+@dataclass(frozen=True)
+class ChannelCalibrationDiff:
+  index: int
+  state: str  # "added" | "removed" | "changed"
+  changes: Tuple[CalibrationFieldChange, ...]
+  old: Optional[ChannelCalibrationValuesInfo]
+  new: Optional[ChannelCalibrationValuesInfo]
+
+
+@dataclass(frozen=True)
+class CalibrationValuesDiff:
+  top_level_changes: Tuple[CalibrationFieldChange, ...]
+  channel_diffs: Tuple[ChannelCalibrationDiff, ...]
+
+  @property
+  def has_changes(self) -> bool:
+    return bool(self.top_level_changes or self.channel_diffs)
+
+
+def _calibration_value_equal(old: object, new: object, float_tol: float) -> bool:
+  if isinstance(old, float) and isinstance(new, float):
+    return math.isclose(old, new, rel_tol=0.0, abs_tol=float_tol)
+  return old == new
+
+
+def diff_calibration_values(
+  old: CalibrationValues,
+  new: CalibrationValues,
+  float_tol: float = 1e-6,
+) -> CalibrationValuesDiff:
+  """Return structured diff between two calibration snapshots."""
+
+  top_level_changes = []
+  for field_name in ("independent_offset_x", "mph_offset_x"):
+    old_value = getattr(old, field_name)
+    new_value = getattr(new, field_name)
+    if not _calibration_value_equal(old_value, new_value, float_tol=float_tol):
+      top_level_changes.append(CalibrationFieldChange(field=field_name, old=old_value, new=new_value))
+
+  old_channels = {cv.index: cv for cv in old.channel_values}
+  new_channels = {cv.index: cv for cv in new.channel_values}
+  channel_diffs = []
+  for idx in sorted(set(old_channels) | set(new_channels)):
+    old_cv = old_channels.get(idx)
+    new_cv = new_channels.get(idx)
+    if old_cv is None and new_cv is not None:
+      channel_diffs.append(
+        ChannelCalibrationDiff(
+          index=idx,
+          state="added",
+          changes=(),
+          old=None,
+          new=new_cv,
+        )
+      )
+      continue
+    if old_cv is not None and new_cv is None:
+      channel_diffs.append(
+        ChannelCalibrationDiff(
+          index=idx,
+          state="removed",
+          changes=(),
+          old=old_cv,
+          new=None,
+        )
+      )
+      continue
+    assert old_cv is not None and new_cv is not None
+
+    field_changes = []
+    for f in fields(ChannelCalibrationValuesInfo):
+      field_name = f.name
+      old_value = getattr(old_cv, field_name)
+      new_value = getattr(new_cv, field_name)
+      if not _calibration_value_equal(old_value, new_value, float_tol=float_tol):
+        field_changes.append(CalibrationFieldChange(field=field_name, old=old_value, new=new_value))
+    if field_changes:
+      channel_diffs.append(
+        ChannelCalibrationDiff(
+          index=idx,
+          state="changed",
+          changes=tuple(field_changes),
+          old=old_cv,
+          new=new_cv,
+        )
+      )
+
+  return CalibrationValuesDiff(
+    top_level_changes=tuple(top_level_changes),
+    channel_diffs=tuple(channel_diffs),
+  )
+
+
+def format_calibration_diff(diff: CalibrationValuesDiff) -> str:
+  """Return a concise, human-readable diff summary."""
+  if not diff.has_changes:
+    return "No calibration differences."
+
+  lines = ["Calibration differences:"]
+  if diff.top_level_changes:
+    lines.append("Top-level:")
+    for change in diff.top_level_changes:
+      lines.append(f"  {change.field}: {change.old} -> {change.new}")
+
+  if diff.channel_diffs:
+    lines.append("Per-channel:")
+    for channel_diff in diff.channel_diffs:
+      if channel_diff.state == "added":
+        assert channel_diff.new is not None
+        lines.append(f"  index={channel_diff.index}: added ({channel_diff.new.to_pretty_string()})")
+        continue
+      if channel_diff.state == "removed":
+        assert channel_diff.old is not None
+        lines.append(f"  index={channel_diff.index}: removed ({channel_diff.old.to_pretty_string()})")
+        continue
+      changed_fields = ", ".join(
+        f"{change.field}: {change.old} -> {change.new}" for change in channel_diff.changes
+      )
+      lines.append(f"  index={channel_diff.index}: {changed_fields}")
+
+  return "\n".join(lines)
 
 
 @dataclass(frozen=True)

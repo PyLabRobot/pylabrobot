@@ -23,11 +23,12 @@ Standalone access: ``lh.backend.client.interfaces.MLPrepRoot.MphRoot.MPH.address
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import enum
 import logging
 import math
 import random
-from typing import List, Optional, Tuple, Union, overload
+from typing import Awaitable, Callable, List, Literal, Optional, Tuple, Union, overload
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
@@ -265,6 +266,7 @@ class PrepBackend(LiquidHandlerBackend):
     self._mlprep_cpu_addr: Optional[Address] = None
     self._module_info_addr: Optional[Address] = None
     self._channel_bounds: list[dict] = []
+    self._calibration_session_active: bool = False
 
   def _has_interface(self, name: str) -> bool:
     """Return True if the interface was resolved and is present."""
@@ -616,6 +618,26 @@ class PrepBackend(LiquidHandlerBackend):
     """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Set at setup from GetPresentChannels."""
     return bool(self._has_mph) if self._has_mph is not None else False
 
+  def _set_calibration_session_active(self, active: bool) -> None:
+    self._calibration_session_active = active
+
+  def calibration_session(
+    self,
+    *,
+    float_tol: float = 1e-6,
+    report_after_command: bool = True,
+    report_scope: Literal["related", "full"] = "related",
+    session_read_timeout: Optional[float] = None,
+  ) -> "PrepCalibrationSession":
+    """Create a managed calibration session bound to this backend."""
+    return PrepCalibrationSession(
+      self,
+      float_tol=float_tol,
+      report_after_command=report_after_command,
+      report_scope=report_scope,
+      session_read_timeout=session_read_timeout,
+    )
+
   @property
   def num_arms(self) -> int:
     """Number of resource-handling arms. 1 when deck has core_grippers and 2 channels, else 0."""
@@ -752,179 +774,44 @@ class PrepBackend(LiquidHandlerBackend):
       PrepCmd.PrepCalibrationInitialize(dest=await self._require("calibration"))
     )
 
-  async def self_calibrate(
-    self,
-    site_index: int = 0,
-    channel: PrepCmd.ChannelIndex = PrepCmd.ChannelIndex.RearChannel,
-    axis: bool = True,
-    pressure: bool = True,
-    touchoff: bool = True,
-    needle: Optional[PrepCmd.NeedleDefinition] = None,
-  ) -> None:
-    """Run self-calibration (SelfCalibrate, cmd=6).
+  async def read_calibration_values(
+    self, read_timeout: Optional[float] = None
+  ) -> PrepCmd.CalibrationValues:
+    """Read calibration values without requiring a managed calibration session.
 
-    Args:
-      site_index: Calibration site index.
-      channel: Which channel to calibrate.
-      axis: Run axis calibration phase.
-      pressure: Run pressure calibration phase.
-      touchoff: Run touchoff calibration phase.
-      needle: Needle definition; defaults to ``NeedleDefinition.defaults()``
-              (firmware uses stored parameters).
-    """
-    if needle is None:
-      needle = PrepCmd.NeedleDefinition.defaults()
-    await self.client.send_command(
-      PrepCmd.PrepSelfCalibrate(
-        dest=await self._require("calibration"),
-        site_index=site_index,
-        channels=int(channel),
-        axis=axis,
-        pressure=pressure,
-        touchoff=touchoff,
-        needle=needle,
-      )
-    )
-
-  async def get_channel_hardware_configuration(
-    self,
-  ) -> Tuple[PrepCmd.ChannelHardwareConfigInfo, ...]:
-    """Return per-channel hardware configuration (GetChannelHardwareConfiguration, cmd=24).
-
-    Each entry maps a channel to its hardware type. Requires ``calibration``
-    (``MLPrepRoot.MLPrepCalibration``) to be resolved.
+    This is intended for pre-run validation/checks where no calibration mutation
+    commands are being executed.
     """
     result = await self.client.send_command(
-      PrepCmd.PrepGetChannelHardwareConfiguration(dest=await self._require("calibration"))
-    )
-    if result is None or not getattr(result, "channels", None):
-      return ()
-    return tuple(
-      PrepCmd.ChannelHardwareConfigInfo(
-        channel=int(s.channel),
-        hardware=int(s.hardware),
-      )
-      for s in result.channels
-    )
-
-  async def get_calibration_values(self) -> PrepCmd.CalibrationValues:
-    """Return calibration values (GetCalibrationValues, cmd=16).
-
-    Returns independent X offset, MPH X offset, and per-channel calibration values
-    (Y/Z offsets, squeeze position, touchoff, pressure shifts, etc.).
-    """
-    result = await self.client.send_command(
-      PrepCmd.PrepGetCalibrationValues(dest=await self._require("calibration"))
+      PrepCmd.PrepGetCalibrationValues(dest=await self._require("calibration")),
+      read_timeout=read_timeout,
     )
     if result is None:
       return PrepCmd.CalibrationValues(
-        independent_offset_x=0.0, mph_offset_x=0.0, channel_values=()
+        independent_offset_x=0.0,
+        mph_offset_x=0.0,
+        channel_values=(),
       )
-    channel_values = tuple(
-      PrepCmd.ChannelCalibrationValuesInfo(
-        index=int(cv.index),
-        y_offset=float(cv.y_offset),
-        z_offset=float(cv.z_offset),
-        squeeze_position=int(cv.squeeze_position),
-        z_touchoff=int(cv.z_touchoff),
-        pressure_shift=int(cv.pressure_shift),
-        pressure_monitoring_shift=int(cv.pressure_monitoring_shift),
-        dispenser_return_distance=float(cv.dispenser_return_distance),
-        z_tip_height=float(cv.z_tip_height),
-        core_ii=bool(cv.core_ii),
-      )
-      for cv in (result.channel_values or [])
-    )
+
     return PrepCmd.CalibrationValues(
       independent_offset_x=float(result.independent_offset_x),
       mph_offset_x=float(result.mph_offset_x),
-      channel_values=channel_values,
+      channel_values=tuple(
+        PrepCmd.ChannelCalibrationValuesInfo(
+          index=int(cv.index),
+          y_offset=float(cv.y_offset),
+          z_offset=float(cv.z_offset),
+          squeeze_position=int(cv.squeeze_position),
+          z_touchoff=int(cv.z_touchoff),
+          pressure_shift=int(cv.pressure_shift),
+          pressure_monitoring_shift=int(cv.pressure_monitoring_shift),
+          dispenser_return_distance=float(cv.dispenser_return_distance),
+          z_tip_height=float(cv.z_tip_height),
+          core_ii=bool(cv.core_ii),
+        )
+        for cv in (result.channel_values or [])
+      ),
     )
-
-  async def calibrate_x_axis(
-    self, site_index: int, channel: PrepCmd.ChannelIndex
-  ) -> float:
-    """Run X-axis calibration (CalibrateXAxis, cmd=7). Returns measured offset in mm."""
-    result = await self.client.send_command(
-      PrepCmd.PrepCalibrateXAxis(
-        dest=await self._require("calibration"),
-        site_index=site_index,
-        channel=int(channel),
-      )
-    )
-    return float(result.offset)
-
-  async def calibrate_y_axis(
-    self, site_index: int, channel: PrepCmd.ChannelIndex
-  ) -> float:
-    """Run Y-axis calibration (CalibrateYAxis, cmd=8). Returns measured offset in mm."""
-    result = await self.client.send_command(
-      PrepCmd.PrepCalibrateYAxis(
-        dest=await self._require("calibration"),
-        site_index=site_index,
-        channel=int(channel),
-      )
-    )
-    return float(result.offset)
-
-  async def calibrate_z_axis(
-    self, site_index: int, channel: PrepCmd.ChannelIndex
-  ) -> float:
-    """Run Z-axis calibration (CalibrateZAxis, cmd=9). Returns measured offset in mm."""
-    result = await self.client.send_command(
-      PrepCmd.PrepCalibrateZAxis(
-        dest=await self._require("calibration"),
-        site_index=site_index,
-        channel=int(channel),
-      )
-    )
-    return float(result.offset)
-
-  async def calibrate_squeeze_tips(
-    self,
-    tip_spots: List[TipSpot],
-    use_channels: Optional[List[int]] = None,
-    z_seek_offset: Optional[float] = None,
-  ) -> Tuple[int, ...]:
-    """Run squeeze-tip calibration (CalibrateSqueezeTips, cmd=15).
-
-    Builds TipPositionParameters from tip spots (same geometry as pick_up_tips)
-    and sends to MLPrepCalibration. Returns per-channel squeeze positions.
-
-    Args:
-      tip_spots: Tip spots to calibrate (e.g. ``tip_rack["A1:B1"]``).
-      use_channels: Channel indices (0-based). Defaults to sequential assignment.
-      z_seek_offset: Additive mm on top of default z_seek. None = 0.
-      # TODO: Refine for 8MPH, currently works only for channels
-    """
-    if use_channels is None:
-      use_channels = list(range(len(tip_spots)))
-    assert len(tip_spots) == len(use_channels)
-
-    indexed_spots = {ch: spot for ch, spot in zip(use_channels, tip_spots)}
-    tip_positions: List[PrepCmd.TipPositionParameters] = []
-    for ch in range(self.num_channels):
-      if ch not in indexed_spots:
-        continue
-      spot = indexed_spots[ch]
-      loc = spot.get_absolute_location("c", "c", "t")
-      params = PrepCmd.TipPositionParameters.for_op(
-        _CHANNEL_INDEX[ch],
-        loc,
-        spot.get_tip(),
-        z_seek_offset=z_seek_offset,
-      )
-      tip_positions.append(params)
-
-    result = await self.client.send_command(
-      PrepCmd.PrepCalibrateSqueezeTips(
-        dest=await self._require("calibration"),
-        channels=tip_positions,
-      )
-    )
-    if result is None or not getattr(result, "positions", None):
-      return ()
-    return tuple(int(p) for p in result.positions)
 
   # ---------------------------------------------------------------------------
   # LiquidHandlerBackend abstract methods
@@ -2835,3 +2722,405 @@ class PrepBackend(LiquidHandlerBackend):
 
   def serialize(self) -> dict:
     return {**super().serialize(), **self.client.serialize()}
+
+
+@dataclass(frozen=True)
+class CalibrationCommandReport:
+  """Structured report for one calibration command execution."""
+
+  command: str
+  result: object
+  before: PrepCmd.CalibrationValues
+  after: PrepCmd.CalibrationValues
+  diff: PrepCmd.CalibrationValuesDiff
+
+  @property
+  def changed_fields_count(self) -> int:
+    channel_changes = sum(len(cd.changes) for cd in self.diff.channel_diffs if cd.state == "changed")
+    return len(self.diff.top_level_changes) + channel_changes + sum(
+      1 for cd in self.diff.channel_diffs if cd.state in ("added", "removed")
+    )
+
+
+class PrepCalibrationSession:
+  """Context manager for stateful Prep calibration workflows."""
+
+  def __init__(
+    self,
+    backend: PrepBackend,
+    *,
+    float_tol: float = 1e-6,
+    report_after_command: bool = True,
+    report_scope: Literal["related", "full"] = "related",
+    session_read_timeout: Optional[float] = None,
+  ) -> None:
+    self.backend = backend
+    self.float_tol = float_tol
+    self.report_after_command = report_after_command
+    self.report_scope = report_scope
+    self.session_read_timeout = session_read_timeout
+
+    self._started = False
+    self._ended = False
+    self._baseline: Optional[PrepCmd.CalibrationValues] = None
+    self._last_snapshot: Optional[PrepCmd.CalibrationValues] = None
+    self.history: List[CalibrationCommandReport] = []
+
+    if report_scope not in ("related", "full"):
+      raise ValueError(f"report_scope must be 'related' or 'full', got: {report_scope}")
+
+  @property
+  def baseline(self) -> PrepCmd.CalibrationValues:
+    if self._baseline is None:
+      raise RuntimeError("Session baseline unavailable. Enter the session first.")
+    return self._baseline
+
+  @property
+  def last_snapshot(self) -> PrepCmd.CalibrationValues:
+    if self._last_snapshot is None:
+      raise RuntimeError("Session snapshot unavailable. Enter the session first.")
+    return self._last_snapshot
+
+  def _effective_timeout(self, read_timeout: Optional[float]) -> Optional[float]:
+    return self.session_read_timeout if read_timeout is None else read_timeout
+
+  def _ensure_started(self) -> None:
+    if not self._started:
+      raise RuntimeError("Calibration session is not started. Call `await session.start()` first.")
+    if self._ended:
+      raise RuntimeError("Calibration session is already ended.")
+
+  def _select_snapshot_scope(
+    self,
+    values: PrepCmd.CalibrationValues,
+    *,
+    channel: Optional[PrepCmd.ChannelIndex] = None,
+  ) -> PrepCmd.CalibrationValues:
+    if self.report_scope == "full" or channel is None:
+      return values
+    channel_index = int(channel)
+    return PrepCmd.CalibrationValues(
+      independent_offset_x=values.independent_offset_x,
+      mph_offset_x=values.mph_offset_x,
+      channel_values=tuple(cv for cv in values.channel_values if cv.index == channel_index),
+    )
+
+  def _log_report(self, report: CalibrationCommandReport) -> None:
+    if report.diff.has_changes:
+      logger.info(
+        "Calibration session %s changed %d field(s)",
+        report.command,
+        report.changed_fields_count,
+      )
+    else:
+      logger.info("Calibration session %s produced no calibration changes", report.command)
+
+    if logger.isEnabledFor(logging.DEBUG):
+      logger.debug("Calibration report diff for %s:\n%s", report.command, PrepCmd.format_calibration_diff(report.diff))
+
+  async def _get_calibration_values(
+    self,
+    *,
+    read_timeout: Optional[float] = None,
+  ) -> PrepCmd.CalibrationValues:
+    return await self.backend.read_calibration_values(read_timeout=read_timeout)
+
+  async def _run_with_report(
+    self,
+    command_name: str,
+    op: Callable[[Optional[float]], Awaitable[object]],
+    *,
+    channel: Optional[PrepCmd.ChannelIndex] = None,
+    read_timeout: Optional[float] = None,
+  ) -> Union[object, CalibrationCommandReport]:
+    timeout = self._effective_timeout(read_timeout)
+    if not self.report_after_command:
+      result = await op(timeout)
+      # Keep "last snapshot" updated for subsequent diff_from_last calls.
+      self._last_snapshot = await self._get_calibration_values(read_timeout=timeout)
+      return result
+
+    before_full = await self._get_calibration_values(read_timeout=timeout)
+    result = await op(timeout)
+    after_full = await self._get_calibration_values(read_timeout=timeout)
+    self._last_snapshot = after_full
+
+    before = self._select_snapshot_scope(before_full, channel=channel)
+    after = self._select_snapshot_scope(after_full, channel=channel)
+    diff = PrepCmd.diff_calibration_values(before, after, float_tol=self.float_tol)
+    report = CalibrationCommandReport(
+      command=command_name,
+      result=result,
+      before=before,
+      after=after,
+      diff=diff,
+    )
+    self.history.append(report)
+    self._log_report(report)
+    return report
+
+  async def __aenter__(self) -> "PrepCalibrationSession":
+    await self.start()
+    return self
+
+  async def start(self) -> "PrepCalibrationSession":
+    """Start calibration mode and capture baseline snapshot."""
+    if self._started:
+      return self
+    if self._ended:
+      raise RuntimeError("Calibration session is already ended; create a new session.")
+    if self.backend._calibration_session_active:
+      raise RuntimeError("A calibration session is already active on this backend.")
+    await self.backend.begin_calibration()
+    await self.backend.calibration_initialize()
+    self.backend._set_calibration_session_active(True)
+    try:
+      snapshot = await self._get_calibration_values(read_timeout=self.session_read_timeout)
+    except Exception:
+      self.backend._set_calibration_session_active(False)
+      raise
+    self._baseline = snapshot
+    self._last_snapshot = snapshot
+    self._started = True
+    logger.info("Calibration session started")
+    return self
+
+  async def __aexit__(self, exc_type, exc, tb) -> bool:
+    if self._ended:
+      return False
+    try:
+      await self.end(save=False)
+    except Exception:
+      logger.exception("Failed to rollback calibration session")
+      if exc is None:
+        raise
+    return False
+
+  async def snapshot(self, *, read_timeout: Optional[float] = None) -> PrepCmd.CalibrationValues:
+    self._ensure_started()
+    snapshot = await self._get_calibration_values(read_timeout=self._effective_timeout(read_timeout))
+    self._last_snapshot = snapshot
+    return snapshot
+
+  async def diff_from_start(
+    self,
+    *,
+    float_tol: Optional[float] = None,
+    read_timeout: Optional[float] = None,
+  ) -> PrepCmd.CalibrationValuesDiff:
+    self._ensure_started()
+    current = await self.snapshot(read_timeout=read_timeout)
+    return PrepCmd.diff_calibration_values(
+      self.baseline,
+      current,
+      float_tol=self.float_tol if float_tol is None else float_tol,
+    )
+
+  async def diff_from_last(
+    self,
+    *,
+    float_tol: Optional[float] = None,
+    read_timeout: Optional[float] = None,
+  ) -> PrepCmd.CalibrationValuesDiff:
+    self._ensure_started()
+    previous = self.last_snapshot
+    current = await self.snapshot(read_timeout=read_timeout)
+    return PrepCmd.diff_calibration_values(
+      previous,
+      current,
+      float_tol=self.float_tol if float_tol is None else float_tol,
+    )
+
+  async def end(self, *, save: bool = True, date_time: Optional[PrepCmd.HoiDateTime] = None) -> None:
+    """End the calibration session, optionally saving values."""
+    if self._ended:
+      return
+    self._ensure_started()
+    if save:
+      await self.backend.end_calibration(date_time=date_time)
+      logger.info("Calibration session ended and saved")
+    else:
+      await self.backend.cancel_calibration()
+      logger.info("Calibration session ended without saving")
+    self._ended = True
+    self._started = False
+    self.backend._set_calibration_session_active(False)
+
+  async def reset(self, *, store: bool = False) -> None:
+    """Reset calibration values during an active calibration session."""
+    self._ensure_started()
+    await self.backend.reset_calibration(store=store)
+    self._last_snapshot = await self._get_calibration_values(read_timeout=self.session_read_timeout)
+
+  async def calibrate_x_axis(
+    self,
+    *,
+    site_index: int,
+    channel: PrepCmd.ChannelIndex,
+    read_timeout: Optional[float] = None,
+  ) -> Union[float, CalibrationCommandReport]:
+    self._ensure_started()
+
+    async def _op(timeout: Optional[float]) -> object:
+      result = await self.backend.client.send_command(
+        PrepCmd.PrepCalibrateXAxis(
+          dest=await self.backend._require("calibration"),
+          site_index=site_index,
+          channel=int(channel),
+        ),
+        read_timeout=timeout,
+      )
+      return float(result.offset)
+
+    return await self._run_with_report(
+      f"calibrate_x_axis(channel={channel.name}, site_index={site_index})",
+      _op,
+      channel=channel,
+      read_timeout=read_timeout,
+    )
+
+  async def calibrate_y_axis(
+    self,
+    *,
+    site_index: int,
+    channel: PrepCmd.ChannelIndex,
+    read_timeout: Optional[float] = None,
+  ) -> Union[float, CalibrationCommandReport]:
+    self._ensure_started()
+
+    async def _op(timeout: Optional[float]) -> object:
+      result = await self.backend.client.send_command(
+        PrepCmd.PrepCalibrateYAxis(
+          dest=await self.backend._require("calibration"),
+          site_index=site_index,
+          channel=int(channel),
+        ),
+        read_timeout=timeout,
+      )
+      return float(result.offset)
+
+    return await self._run_with_report(
+      f"calibrate_y_axis(channel={channel.name}, site_index={site_index})",
+      _op,
+      channel=channel,
+      read_timeout=read_timeout,
+    )
+
+  async def calibrate_z_axis(
+    self,
+    *,
+    site_index: int,
+    channel: PrepCmd.ChannelIndex,
+    read_timeout: Optional[float] = None,
+  ) -> Union[float, CalibrationCommandReport]:
+    self._ensure_started()
+
+    async def _op(timeout: Optional[float]) -> object:
+      result = await self.backend.client.send_command(
+        PrepCmd.PrepCalibrateZAxis(
+          dest=await self.backend._require("calibration"),
+          site_index=site_index,
+          channel=int(channel),
+        ),
+        read_timeout=timeout,
+      )
+      return float(result.offset)
+
+    return await self._run_with_report(
+      f"calibrate_z_axis(channel={channel.name}, site_index={site_index})",
+      _op,
+      channel=channel,
+      read_timeout=read_timeout,
+    )
+
+  async def calibrate_squeeze_tips(
+    self,
+    tip_spots: List[TipSpot],
+    *,
+    use_channels: Optional[List[int]] = None,
+    z_seek_offset: Optional[float] = None,
+    read_timeout: Optional[float] = None,
+  ) -> Union[Tuple[int, ...], CalibrationCommandReport]:
+    self._ensure_started()
+
+    async def _op(timeout: Optional[float]) -> object:
+      channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
+      assert len(tip_spots) == len(channels)
+
+      indexed_spots = {ch: spot for ch, spot in zip(channels, tip_spots)}
+      tip_positions: List[PrepCmd.TipPositionParameters] = []
+      for ch in range(self.backend.num_channels):
+        if ch not in indexed_spots:
+          continue
+        spot = indexed_spots[ch]
+        loc = spot.get_absolute_location("c", "c", "t")
+        tip_positions.append(
+          PrepCmd.TipPositionParameters.for_op(
+            _CHANNEL_INDEX[ch],
+            loc,
+            spot.get_tip(),
+            z_seek_offset=z_seek_offset,
+          )
+        )
+
+      result = await self.backend.client.send_command(
+        PrepCmd.PrepCalibrateSqueezeTips(
+          dest=await self.backend._require("calibration"),
+          channels=tip_positions,
+        ),
+        read_timeout=timeout,
+      )
+      if result is None or not getattr(result, "positions", None):
+        return ()
+      return tuple(int(p) for p in result.positions)
+
+    return await self._run_with_report(
+      "calibrate_squeeze_tips",
+      _op,
+      read_timeout=read_timeout,
+    )
+
+  async def calibrate_squeeze_tips_mph(
+    self,
+    tip_spot: Union[TipSpot, List[TipSpot]],
+    *,
+    z_seek_offset: Optional[float] = None,
+    read_timeout: Optional[float] = None,
+  ) -> Union[Tuple[int, ...], CalibrationCommandReport]:
+    self._ensure_started()
+
+    async def _op(timeout: Optional[float]) -> object:
+      if not self.backend.has_mph:
+        raise RuntimeError(
+          "Instrument does not have an 8MPH head. Cannot use calibrate_squeeze_tips_mph."
+        )
+      spots = tip_spot if isinstance(tip_spot, list) else [tip_spot]
+      if not spots:
+        raise ValueError("calibrate_squeeze_tips_mph: tip_spot list is empty")
+
+      ref_spot = spots[0]
+      loc = ref_spot.get_absolute_location("c", "c", "t")
+      tip_position = PrepCmd.TipPositionParameters.for_op(
+        PrepCmd.ChannelIndex.MPHChannel,
+        loc,
+        ref_spot.get_tip(),
+        z_seek_offset=z_seek_offset,
+      )
+
+      result = await self.backend.client.send_command(
+        PrepCmd.PrepCalibrateSqueezeTips(
+          dest=await self.backend._require("calibration"),
+          channels=[tip_position],
+        ),
+        read_timeout=timeout,
+      )
+      if result is None or not getattr(result, "positions", None):
+        return ()
+      return tuple(int(p) for p in result.positions)
+
+    return await self._run_with_report(
+      "calibrate_squeeze_tips_mph",
+      _op,
+      channel=PrepCmd.ChannelIndex.MPHChannel,
+      read_timeout=read_timeout,
+    )

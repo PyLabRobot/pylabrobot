@@ -7,11 +7,14 @@ All tests mock client.send_command — no real TCP connection required.
 
 import asyncio
 import math
+from types import SimpleNamespace
 import unittest
 import unittest.mock
 
 from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.prep_backend import (
+  CalibrationCommandReport,
+  PrepCalibrationSession,
   PrepBackend,
   _absolute_z_from_well,
   _build_container_segments,
@@ -1151,6 +1154,197 @@ class TestPrepBackendConvenience(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(NotImplementedError):
       await self.backend.dispense96(None)  # type: ignore[arg-type]
 
+
+class TestPrepCalibrationModelUtilities(unittest.TestCase):
+  def _make_values(self, z_offset: float = 10.0) -> PrepCmd.CalibrationValues:
+    return PrepCmd.CalibrationValues(
+      independent_offset_x=1.0,
+      mph_offset_x=2.0,
+      channel_values=(
+        PrepCmd.ChannelCalibrationValuesInfo(
+          index=2,
+          y_offset=20.0,
+          z_offset=z_offset,
+          squeeze_position=100,
+          z_touchoff=5,
+          pressure_shift=7,
+          pressure_monitoring_shift=9,
+          dispenser_return_distance=1.5,
+          z_tip_height=2.5,
+          core_ii=False,
+        ),
+      ),
+    )
+
+  def test_calibration_values_to_pretty_string(self):
+    values = self._make_values()
+    text = values.to_pretty_string()
+    self.assertIn("Independent offset X: 1.0", text)
+    self.assertIn("MPH offset X: 2.0", text)
+    self.assertIn("index=2", text)
+
+  def test_diff_calibration_values_uses_tolerance(self):
+    old = self._make_values(z_offset=10.0)
+    new = self._make_values(z_offset=10.0000001)
+    diff = PrepCmd.diff_calibration_values(old, new, float_tol=1e-6)
+    self.assertFalse(diff.has_changes)
+
+    changed = self._make_values(z_offset=10.01)
+    diff_changed = PrepCmd.diff_calibration_values(old, changed, float_tol=1e-6)
+    self.assertTrue(diff_changed.has_changes)
+    formatted = PrepCmd.format_calibration_diff(diff_changed)
+    self.assertIn("index=2", formatted)
+    self.assertIn("z_offset", formatted)
+
+
+class TestPrepCalibrationReadOnly(unittest.IsolatedAsyncioTestCase):
+  async def test_read_calibration_values_outside_session(self):
+    backend = _setup_backend()
+    backend.client.send_command = unittest.mock.AsyncMock(
+      return_value=SimpleNamespace(
+        independent_offset_x=1.25,
+        mph_offset_x=2.5,
+        channel_values=[
+          SimpleNamespace(
+            index=2,
+            y_offset=20.0,
+            z_offset=10.0,
+            squeeze_position=100,
+            z_touchoff=5,
+            pressure_shift=7,
+            pressure_monitoring_shift=9,
+            dispenser_return_distance=1.5,
+            z_tip_height=2.5,
+            core_ii=False,
+          )
+        ],
+      )
+    )  # type: ignore[method-assign]
+
+    values = await backend.read_calibration_values()
+    self.assertAlmostEqual(values.independent_offset_x, 1.25)
+    self.assertAlmostEqual(values.mph_offset_x, 2.5)
+    self.assertEqual(len(values.channel_values), 1)
+    self.assertEqual(values.channel_values[0].index, 2)
+
+
+class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.backend = _setup_backend(num_channels=2, has_mph=True)
+    self.backend.client.send_command = unittest.mock.AsyncMock(side_effect=self._dispatch)  # type: ignore[method-assign]
+    self._z_offset = 10.0
+
+  def _calibration_result(self):
+    return SimpleNamespace(
+      independent_offset_x=1.0,
+      mph_offset_x=2.0,
+      channel_values=[
+        SimpleNamespace(
+          index=2,
+          y_offset=20.0,
+          z_offset=self._z_offset,
+          squeeze_position=100,
+          z_touchoff=5,
+          pressure_shift=7,
+          pressure_monitoring_shift=9,
+          dispenser_return_distance=1.5,
+          z_tip_height=2.5,
+          core_ii=False,
+        )
+      ],
+    )
+
+  async def _dispatch(self, command, **kwargs):
+    if isinstance(command, PrepCmd.PrepCalibrateZAxis):
+      self._z_offset = 11.0
+      return SimpleNamespace(offset=self._z_offset)
+    if isinstance(command, PrepCmd.PrepGetCalibrationValues):
+      return self._calibration_result()
+    if isinstance(
+      command,
+      (
+        PrepCmd.PrepBeginCalibration,
+        PrepCmd.PrepCalibrationInitialize,
+        PrepCmd.PrepCancelCalibration,
+        PrepCmd.PrepEndCalibration,
+      ),
+    ):
+      return None
+    if isinstance(command, PrepCmd.PrepCalibrateSqueezeTips):
+      return SimpleNamespace(positions=[111, 222])
+    return None
+
+  async def test_session_reports_changes_by_default(self):
+    async with PrepCalibrationSession(self.backend) as session:
+      result = await session.calibrate_z_axis(
+        site_index=0,
+        channel=PrepCmd.ChannelIndex.RearChannel,
+      )
+      self.assertIsInstance(result, CalibrationCommandReport)
+      self.assertEqual(len(session.history), 1)
+      self.assertTrue(result.diff.has_changes)
+      self.assertEqual(result.before.channel_values[0].index, int(PrepCmd.ChannelIndex.RearChannel))
+      await session.rollback()
+
+  async def test_session_commit_skips_auto_rollback(self):
+    async with PrepCalibrationSession(self.backend) as session:
+      await session.commit()
+    sent = [c.args[0] for c in self.backend.client.send_command.call_args_list]
+    self.assertEqual(sum(isinstance(c, PrepCmd.PrepEndCalibration) for c in sent), 1)
+    self.assertEqual(sum(isinstance(c, PrepCmd.PrepCancelCalibration) for c in sent), 0)
+
+  async def test_session_start_end_without_save(self):
+    session = self.backend.calibration_session(report_after_command=False)
+    await session.start()
+    await session.end(save=False)
+    sent = [c.args[0] for c in self.backend.client.send_command.call_args_list]
+    self.assertEqual(sum(isinstance(c, PrepCmd.PrepBeginCalibration) for c in sent), 1)
+    self.assertEqual(sum(isinstance(c, PrepCmd.PrepCalibrationInitialize) for c in sent), 1)
+    self.assertEqual(sum(isinstance(c, PrepCmd.PrepCancelCalibration) for c in sent), 1)
+
+  async def test_calibrate_squeeze_tips_mph_uses_mph_channel(self):
+    backend, _, tip_rack, _ = _setup_backend_with_deck(has_mph=True)
+    async def _dispatch(command, **kwargs):
+      if isinstance(command, PrepCmd.PrepGetCalibrationValues):
+        return SimpleNamespace(
+          independent_offset_x=0.0,
+          mph_offset_x=0.0,
+          channel_values=[],
+        )
+      if isinstance(command, PrepCmd.PrepCalibrateSqueezeTips):
+        return SimpleNamespace(positions=[777])
+      return None
+
+    mock_send = unittest.mock.AsyncMock(side_effect=_dispatch)
+    backend.client.send_command = mock_send  # type: ignore[method-assign]
+    spot = tip_rack.get_item("A1")
+    async with backend.calibration_session(report_after_command=False) as session:
+      positions = await session.calibrate_squeeze_tips_mph(spot)
+    self.assertEqual(positions, (777,))
+    cmd = _get_commands(mock_send, PrepCmd.PrepCalibrateSqueezeTips)[0]
+    self.assertEqual(len(cmd.channels), 1)
+    self.assertEqual(cmd.channels[0].channel, PrepCmd.ChannelIndex.MPHChannel)
+
+  async def test_calibrate_squeeze_tips_mph_requires_hardware(self):
+    backend, _, tip_rack, _ = _setup_backend_with_deck(has_mph=False)
+    async def _dispatch(command, **kwargs):
+      if isinstance(command, PrepCmd.PrepGetCalibrationValues):
+        return SimpleNamespace(
+          independent_offset_x=0.0,
+          mph_offset_x=0.0,
+          channel_values=[],
+        )
+      return None
+
+    backend.client.send_command = unittest.mock.AsyncMock(side_effect=_dispatch)  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      async with backend.calibration_session(report_after_command=False) as session:
+        await session.calibrate_squeeze_tips_mph(tip_rack.get_item("A1"))
+
+  def test_calibration_methods_are_session_owned(self):
+    backend = _setup_backend()
+    self.assertFalse(hasattr(backend, "calibrate_z_axis"))
+    self.assertFalse(hasattr(backend, "calibrate_squeeze_tips_mph"))
 
 if __name__ == "__main__":
   unittest.main()
