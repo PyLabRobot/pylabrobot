@@ -332,7 +332,7 @@ def validate_channel_selections(
     Validated list of channel indices.
 
   Raises:
-    ValueError: If channels are empty, out of range, or contain duplicates.
+    ValueError: If channels are empty or out of range.
   """
   if use_channels is None:
     use_channels = list(range(len(containers)))
@@ -342,8 +342,6 @@ def validate_channel_selections(
     raise ValueError(
       f"All use_channels must be integers in range [0, {num_channels - 1}], got {use_channels}."
     )
-  if len(use_channels) != len(set(use_channels)):
-    raise ValueError("use_channels must not contain duplicates.")
   if len(containers) != len(use_channels):
     raise ValueError(
       f"Length of containers and use_channels must match, "

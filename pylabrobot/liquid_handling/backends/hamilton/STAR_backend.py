@@ -2114,7 +2114,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     min_traverse_height_at_beginning_of_command: Optional[float] = None,
     min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
-    # X grouping tolerance (mm) — containers within this distance share an X group
     x_grouping_tolerance: Optional[float] = None,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
@@ -2152,8 +2151,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Mean of measured liquid heights for each container (mm from cavity bottom).
 
     Raises:
-      ValueError: If ``use_channels`` is empty, contains out-of-range indices, contains
-        duplicates, or if input list lengths don't match.
+      ValueError: If ``use_channels`` is empty, contains out-of-range indices,
+        or if input list lengths don't match.
       RuntimeError: If any specified channel lacks a tip.
     """
 
