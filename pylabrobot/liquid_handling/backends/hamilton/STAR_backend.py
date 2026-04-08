@@ -2168,8 +2168,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     use_channels = validate_channel_selections(
       containers=containers,
-      use_channels=use_channels,
       num_channels=self.num_channels,
+      use_channels=use_channels,
     )
     idle_channels = sorted(set(range(self.num_channels)) - set(use_channels))
 
@@ -2192,12 +2192,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       await self.move_all_channels_in_z_safety()
 
-    # Compute Z positions
-    z_cavity_bottom: List[float] = []
-    z_top: List[float] = []
-    for resource in containers:
-      z_cavity_bottom.append(resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z)
-      z_top.append(resource.get_location_wrt(self.deck, "c", "c", "t").z)
+    z_cavity_bottom = [
+      r.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z for r in containers
+    ]
+    z_top = [r.get_location_wrt(self.deck, "c", "c", "t").z for r in containers]
 
     batches = plan_batches(
       use_channels=use_channels,

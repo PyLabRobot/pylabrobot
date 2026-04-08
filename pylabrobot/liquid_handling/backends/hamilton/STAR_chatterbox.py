@@ -369,8 +369,8 @@ class STARChatterboxBackend(STARBackend):
 
     use_channels = validate_channel_selections(
       containers=containers,
-      use_channels=use_channels,
       num_channels=self.num_channels,
+      use_channels=use_channels,
     )
 
     # Validate tip presence using tip tracker

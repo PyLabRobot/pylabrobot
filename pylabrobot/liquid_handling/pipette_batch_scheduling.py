@@ -321,8 +321,8 @@ def compute_single_container_offsets(
 
 def validate_channel_selections(
   containers: List[Container],
-  use_channels: Optional[List[int]],
   num_channels: int,
+  use_channels: Optional[List[int]] = None,
 ) -> List[int]:
   """Validate and normalize channel selection.
 
