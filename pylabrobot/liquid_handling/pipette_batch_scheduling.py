@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot.liquid_handling.channel_positioning import (
   MIN_SPACING_EDGE,
-  get_wide_single_resource_liquid_op_offsets,
+  compute_channel_offsets,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -241,10 +241,11 @@ def _offsets_for_consecutive_group(
   if container.get_absolute_size_y() < min_required:
     return None
 
-  all_offsets = get_wide_single_resource_liquid_op_offsets(
+  all_offsets = compute_channel_offsets(
     resource=container,
     num_channels=num_physical,
-    min_spacing=spacing,
+    spread="wide",
+    channel_spacings=[spacing] * num_physical,
   )
   offsets = [all_offsets[ch - ch_lo] for ch in use_channels]
 
@@ -418,6 +419,8 @@ def plan_batches(
     Flat list of ChannelBatch sorted by ascending X position.
   """
 
+  if x_tolerance <= 0:
+    raise ValueError(f"x_tolerance must be > 0, got {x_tolerance}.")
   if len(use_channels) != len(targets):
     raise ValueError(
       f"use_channels and targets must have the same length, "

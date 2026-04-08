@@ -174,9 +174,7 @@ class TestContainerTargets(unittest.TestCase):
   def _mock_deck(self):
     return MagicMock(spec=Resource)
 
-  @patch(
-    "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
-  )
+  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
   def test_same_container_auto_spreads(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     trough = self._mock_container(100.0, 200.0, size_y=50.0, name="trough")
@@ -193,9 +191,7 @@ class TestContainerTargets(unittest.TestCase):
     batches = plan_batches([0, 1], [well, well], self.S, x_tolerance=0.1, wrt_resource=deck)
     self.assertEqual(len(batches), 2)
 
-  @patch(
-    "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
-  )
+  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
   def test_resource_offsets_skips_auto_spreading(self, mock_offsets):
     trough = self._mock_container(100.0, 200.0, size_y=50.0, name="trough")
     deck = self._mock_deck()
@@ -223,9 +219,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     c.get_absolute_size_y.return_value = size_y
     return c
 
-  @patch(
-    "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
-  )
+  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
   def test_even_span_no_center_offset(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     result = compute_single_container_offsets(self._mock_container(50.0), [0, 1], self.S)
@@ -233,9 +227,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     self.assertAlmostEqual(result[0].y, 4.5)
     self.assertAlmostEqual(result[1].y, -4.5)
 
-  @patch(
-    "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
-  )
+  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
   def test_odd_span_center_offset_when_wide_enough(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 9.0, 0),
@@ -250,9 +242,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
   def test_container_too_small_returns_none(self):
     self.assertIsNone(compute_single_container_offsets(self._mock_container(10.0), [0, 1], self.S))
 
-  @patch(
-    "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
-  )
+  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
   def test_non_consecutive_uses_full_physical_span(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 10.0, 0),
@@ -263,12 +253,10 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     assert result is not None
     self.assertEqual(len(result), 2)
     mock_offsets.assert_called_once_with(
-      resource=unittest.mock.ANY, num_channels=3, min_spacing=self.S
+      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[self.S] * 3
     )
 
-  @patch(
-    "pylabrobot.liquid_handling.pipette_batch_scheduling.get_wide_single_resource_liquid_op_offsets"
-  )
+  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
   def test_mixed_spacing_uses_effective(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 18.0, 0),
@@ -278,7 +266,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     result = compute_single_container_offsets(self._mock_container(100.0), [0, 2], [9.0, 9.0, 18.0])
     self.assertIsNotNone(result)
     mock_offsets.assert_called_once_with(
-      resource=unittest.mock.ANY, num_channels=3, min_spacing=18.0
+      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[18.0] * 3
     )
 
 

@@ -2127,15 +2127,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       use_channels: Channel indices to use for probing (0-indexed).
       resource_offsets: Optional XYZ offsets from container centers. When not provided,
         ``plan_batches`` auto-spreads channels targeting the same container.
-      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.
-        Defaults to capacitive.
+      lld_mode: Detection mode - GAMMA for capacitive, PRESSURE for pressure-based.
+        Defaults to GAMMA.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
       move_to_z_safety_after: Whether to move channels to safe Z height after probing.
         Set to False when probing is immediately followed by another Z operation (e.g.
         aspirate) to avoid unnecessary Z travel. Default True.
       min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
-        channels to before the first batch. None (default) uses full Z safety.
+        channels to before the first batch. Must clear all deck obstacles since channels
+        travel laterally at this height. None (default) uses full Z safety.
       min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
         between batches. None (default) uses full Z safety.
       z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
@@ -2158,13 +2159,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
     if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
-      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
+      raise ValueError(
+        f"lld_mode must be GAMMA (capacitive) or PRESSURE (pressure-based), got {lld_mode!r}"
+      )
 
     use_channels = validate_channel_selections(
       containers=containers,
       use_channels=use_channels,
       num_channels=self.num_channels,
     )
+    idle_channels = sorted(set(range(self.num_channels)) - set(use_channels))
 
     # Verify tips and query tip lengths
     tip_presence = await self.request_tip_presence()
@@ -2172,15 +2176,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("All specified channels must have tips attached.")
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    # TODO: this raises ALL channels to max Z, then lowers involved channels back down —
-    # wasteful yoyo motion. Should raise uninvolved to safety and involved to
-    # min_traverse_height_at_beginning_of_command in one pass. Requires a channel-filtered
-    # version of move_all_channels_in_z_safety.
-    await self.move_all_channels_in_z_safety()
     if min_traverse_height_at_beginning_of_command is not None:
+      await asyncio.gather(
+        *[
+          self.move_channel_stop_disk_z(channel_idx=ch_idx, z=self.MAXIMUM_CHANNEL_Z_POSITION)
+          for ch_idx in idle_channels
+        ]
+      )
       await self.position_channels_in_z_direction(
         {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
       )
+    else:
+      await self.move_all_channels_in_z_safety()
 
     # Compute Z positions
     z_cavity_bottom: List[float] = []
@@ -11678,7 +11685,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         offsets = get_wide_single_resource_liquid_op_offsets(
           resource=well,
           num_channels=len(piercing_channels),
-          min_spacing=max(self._channels_minimum_y_spacing),
+          min_spacing=max(
+            self._min_spacing_between(lo, hi)
+            for lo, hi in zip(sorted(piercing_channels)[:-1], sorted(piercing_channels)[1:])
+          ),
         )
       else:
         offsets = get_tight_single_resource_liquid_op_offsets(
