@@ -134,8 +134,8 @@ class TecanEVO(Resource, Device):
 ### Syringe vs Air LiHa → Subclass
 `AirEVOPIPBackend(EVOPIPBackend)` with overridden constants and `_on_setup`. Same pattern as current `AirEVOBackend(EVOBackend)`. Config flag on `TecanEVO(air_liha=True)` selects the backend class.
 
-### Arm Init Ordering
-RoMa must park before LiHa initializes (clears X-axis path). Set `self._capabilities = [arm, pip]` so arm's `_on_setup()` runs first.
+### Init Ordering
+LiHa PIA runs first (PIP capability), then RoMa PIA + park. Set `self._capabilities = [pip, arm]` so PIP's `_on_setup()` runs first. RoMa parks at the end of its `_on_setup()`, clearing the X-axis path for subsequent operations.
 
 ### Firmware Wrappers → Shared via Driver
 `LiHa` and `RoMa` classes are extracted to `firmware/` and accept a duck-typed interface (anything with `send_command`). Both PIP backend and RoMa backend instantiate their own firmware wrapper with a reference to the shared driver. The collision cache (`EVOArm._pos_cache`) remains a class variable.

@@ -45,8 +45,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted
-from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
+from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted, MP_3Pos_Corrected
 from pylabrobot.resources.tecan.tecan_decks import EVO150Deck
 from pylabrobot.tecan.evo import TecanEVO
 from pylabrobot.tecan.evo.errors import TecanError
@@ -100,7 +99,7 @@ async def main():
     write_timeout=120,
   )
 
-  carrier = MP_3Pos("carrier")
+  carrier = MP_3Pos_Corrected("carrier")
   deck.assign_child_resource(carrier, rails=16)
 
   source_plate = Eppendorf_96_wellplate_250ul_Vb_skirted("source")

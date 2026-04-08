@@ -96,9 +96,8 @@ class TecanEVO(Resource, Device):
       roma_backend = EVORoMaBackend(driver=driver, deck=deck_ref)
       self.arm = GripperArm(backend=roma_backend, reference_resource=deck_ref)
 
-    # Capabilities list: arm first (must park before LiHa X-init)
-    caps = []
+    # Capabilities list: PIP first (LiHa PIA), then arm (RoMa PIA + park)
+    caps = [self.pip]
     if self.arm is not None:
       caps.append(self.arm)
-    caps.append(self.pip)
     self._capabilities = caps

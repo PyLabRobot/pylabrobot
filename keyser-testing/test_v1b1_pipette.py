@@ -20,8 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted
-from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
+from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted, MP_3Pos_Corrected
 from pylabrobot.resources.tecan.tecan_decks import EVO150Deck
 from pylabrobot.tecan.evo import TecanEVO
 
@@ -48,7 +47,7 @@ async def main():
     write_timeout=120,
   )
 
-  carrier = MP_3Pos("carrier")
+  carrier = MP_3Pos_Corrected("carrier")
   deck.assign_child_resource(carrier, rails=16)
 
   source_plate = Eppendorf_96_wellplate_250ul_Vb_skirted("source")
@@ -123,6 +122,13 @@ async def main():
     traceback.print_exc()
 
   finally:
+    # Raise channels to Z max
+    pip_be = evo.pip.backend
+    z_range = pip_be._z_range
+    num_ch = pip_be.num_channels
+    z_params = ",".join([str(z_range)] * num_ch)
+    await evo._driver.send_command("C5", command=f"PAZ{z_params}")
+
     print("\nStopping...")
     await evo.stop()
     print("Done.")

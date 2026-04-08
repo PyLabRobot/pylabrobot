@@ -14,8 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from labware_library import DiTi_50ul_SBS_LiHa_Air
-from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
+from labware_library import DiTi_50ul_SBS_LiHa_Air, MP_3Pos_Corrected
 from pylabrobot.resources.tecan.tecan_decks import EVO150Deck
 from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
@@ -30,7 +29,7 @@ async def main():
   driver = TecanEVODriver(packet_read_timeout=1, read_timeout=30, write_timeout=30)
   deck = EVO150Deck()
 
-  carrier = MP_3Pos("carrier")
+  carrier = MP_3Pos_Corrected("carrier")
   deck.assign_child_resource(carrier, rails=16)
   tip_rack = DiTi_50ul_SBS_LiHa_Air("tips")
   carrier[2] = tip_rack

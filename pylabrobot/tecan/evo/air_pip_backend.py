@@ -357,17 +357,20 @@ class AirEVOPIPBackend(EVOPIPBackend):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
 
-    # Use plate z_start directly (absolute Tecan Z coordinate).
+    # Use plate z_start/z_max directly (absolute Tecan Z coordinates).
     # Adjust for mounted tip: tip extends reach, so Z target moves UP
     # by (tip_length - nesting_depth).
     first_par = ops[0].resource.parent
     if isinstance(first_par, TecanPlate):
       z_asp = [None] * self.num_channels
+      z_asp_max = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
-        tip_ext = int(ops[i].tip.total_tip_length * 10) - 50  # ~5mm nesting
+        tip_ext = int(ops[i].tip.total_tip_length * 10) - int(ops[i].tip.fitting_depth * 10)
         z_asp[channel] = int(first_par.z_start) + tip_ext
+        z_asp_max[channel] = int(first_par.z_max) + tip_ext
     else:
       z_asp = z_positions.get("start", [self._z_range] * self.num_channels)
+      z_asp_max = z_positions.get("max", [self._z_range] * self.num_channels)
 
     x, y_adj = self._apply_calibration_offsets(x, y - yi * ys, ops)
     z_asp_first = z_asp[next(i for i, v in enumerate(z_asp) if v is not None)]
@@ -398,10 +401,14 @@ class AirEVOPIPBackend(EVOPIPBackend):
       ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
       await self.liha.set_search_speed(ssl)
       await self.liha.set_search_retract_distance(sdl)
-      await self.liha.set_search_z_start(z_positions["start"])
-      await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
+      await self.liha.set_search_z_start(
+        [z if z is not None else self._z_range for z in z_asp]
+      )
+      await self.liha.set_search_z_max(
+        [z if z is not None else self._z_range for z in z_asp_max]
+      )
       await self.liha.set_search_submerge(sbl)
-      shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
+      shz = [self._z_range] * self.num_channels
       await self.liha.set_z_travel_height(shz)
       await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
       await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
@@ -450,7 +457,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     if isinstance(first_par, TecanPlate):
       z_disp = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
-        tip_ext = int(ops[i].tip.total_tip_length * 10) - 50  # ~5mm nesting
+        tip_ext = int(ops[i].tip.total_tip_length * 10) - int(ops[i].tip.fitting_depth * 10)
         z_disp[channel] = int(first_par.z_dispense) + tip_ext
     else:
       z_disp = [z if z else self._z_range for z in z_positions["dispense"]]

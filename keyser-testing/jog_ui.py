@@ -182,6 +182,14 @@ HTML = """
         <span class="pos-label">R</span>
         <div class="pos-bar"><div class="pos-fill" id="roma-r-bar" style="width:50%"></div></div>
         <span class="pos-value" id="roma-r">—</span>
+
+        <span class="pos-label">G</span>
+        <div class="pos-bar"><div class="pos-fill" id="roma-g-bar" style="width:50%"></div></div>
+        <span class="pos-value" id="roma-g">—</span>
+      </div>
+      <div class="controls" style="margin-top:8px">
+        <button class="btn small" onclick="sendAction('gripper_open')">Open Gripper</button>
+        <button class="btn small" onclick="sendAction('gripper_close')">Close Gripper</button>
       </div>
     </div>
 
@@ -216,6 +224,16 @@ HTML = """
     <div>
       <h2 style="font-size:14px;color:#e94560;margin-bottom:8px;">TEACH FROM CURRENT Z</h2>
       <div class="teach-row">
+        <label style="color:#aaa;font-size:12px;width:70px">Mounted:</label>
+        <select id="teach-tip-type" style="width:140px" onchange="updateTipInfo()">
+          <option value="none">No tip</option>
+          <option value="50ul">DiTi 50µL (ext 531)</option>
+          <option value="200ul">DiTi 200µL (ext 550)</option>
+          <option value="1000ul">DiTi 1000µL (ext 900)</option>
+        </select>
+        <span id="tip-ext-info" style="font-size:11px;color:#888;margin-left:4px"></span>
+      </div>
+      <div class="teach-row" style="margin-top:4px">
         <select id="teach-field" style="width:110px">
           <option value="z_start">z_start</option>
           <option value="z_dispense">z_dispense</option>
@@ -226,7 +244,8 @@ HTML = """
       </div>
       <div class="teach-row" style="margin-top:6px">
         <input type="text" id="teach-label" placeholder="Label (e.g. tip_top)" style="width:160px">
-        <button class="btn" onclick="recordPosition()">Record Position</button>
+        <button class="btn" onclick="recordPosition('liha')">Record LiHa</button>
+        <button class="btn" onclick="recordPosition('roma')">Record RoMa</button>
       </div>
     </div>
 
@@ -235,6 +254,7 @@ HTML = """
       <h2 style="font-size:14px;color:#e94560;margin-bottom:8px;">ACTIONS</h2>
       <div class="controls">
         <button class="btn" onclick="sendAction('home')">Home LiHa</button>
+        <button class="btn" onclick="sendAction('z_up')">Z Up (Clear)</button>
         <button class="btn" onclick="sendAction('park_roma')">Park RoMa</button>
         <button class="btn" onclick="sendAction('tips_status')">Check Tips</button>
         <button class="btn" onclick="sendAction('ree')">Axis Status</button>
@@ -269,6 +289,19 @@ HTML = """
 let arm = 'liha';
 let stepIdx = 4;
 const STEPS = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0];
+const TIP_EXT = {none: 0, '50ul': 531, '200ul': 550, '1000ul': 900};
+
+function updateTipInfo() {
+  const tip = document.getElementById('teach-tip-type').value;
+  const ext = TIP_EXT[tip] || 0;
+  const info = document.getElementById('tip-ext-info');
+  if (ext > 0) {
+    info.textContent = 'Z offset: -' + ext + ' (' + (ext/10).toFixed(1) + 'mm)';
+    info.style.color = '#e9c46a';
+  } else {
+    info.textContent = '';
+  }
+}
 let polling = null;
 
 function setArm(a) {
@@ -347,15 +380,15 @@ async function sendAction(action) {
   }
 }
 
-async function recordPosition() {
+async function recordPosition(armName) {
   const label = document.getElementById('teach-label').value.trim();
   if (!label) { log('Enter a label first', 'err'); return; }
-  log('> RECORD: ' + label, '');
+  log('> RECORD ' + armName.toUpperCase() + ': ' + label, '');
   try {
     const resp = await fetch('/record', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({label: label})
+      body: JSON.stringify({label: label, arm: armName})
     });
     const data = await resp.json();
     log(data.message || data.error, data.error ? 'err' : 'ok');
@@ -366,12 +399,15 @@ async function recordPosition() {
 async function teachLabware() {
   const field = document.getElementById('teach-field').value;
   const labware = document.getElementById('teach-labware').value;
-  log('> TEACH: ' + labware + '.' + field + ' = current Z', '');
+  const tipType = document.getElementById('teach-tip-type').value;
+  const ext = TIP_EXT[tipType] || 0;
+  const extLabel = ext > 0 ? ' (tip offset: -' + ext + ')' : '';
+  log('> TEACH: ' + labware + '.' + field + ' = current Z' + extLabel, '');
   try {
     const resp = await fetch('/teach', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({field: field, labware: labware})
+      body: JSON.stringify({field: field, labware: labware, tip_type: tipType})
     });
     const data = await resp.json();
     log('  ' + (data.message || data.error), data.error ? 'err' : 'ok');
@@ -397,6 +433,10 @@ function updatePositions(data) {
     document.getElementById('roma-y-bar').style.width = Math.min(100, data.roma.y/30) + '%';
     document.getElementById('roma-z-bar').style.width = Math.min(100, data.roma.z/26) + '%';
     document.getElementById('roma-r-bar').style.width = Math.min(100, data.roma.r/36) + '%';
+    if (data.roma.g !== undefined) {
+      document.getElementById('roma-g').textContent = (data.roma.g/10).toFixed(1) + ' mm';
+      document.getElementById('roma-g-bar').style.width = Math.min(100, data.roma.g/10) + '%';
+    }
   }
 }
 
@@ -423,8 +463,13 @@ async function loadSaved() {
     for (const [label, pos] of Object.entries(data)) {
       const div = document.createElement('div');
       div.className = 'saved-pos';
-      div.innerHTML = '<span>' + label + '</span><span style="color:#888">X=' +
-        pos.x + ' Y=' + pos.y + ' Z1=' + (pos.z ? pos.z[0] : '?') + '</span>';
+      if (pos.arm === 'roma') {
+        div.innerHTML = '<span>' + label + ' <span style="color:#0f3460;font-size:10px">[RoMa]</span></span>' +
+          '<span style="color:#888">X=' + pos.x + ' Y=' + pos.y + ' Z=' + pos.z + ' R=' + pos.r + ' G=' + pos.g + '</span>';
+      } else {
+        div.innerHTML = '<span>' + label + ' <span style="color:#0f3460;font-size:10px">[LiHa]</span></span>' +
+          '<span style="color:#888">X=' + pos.x + ' Y=' + pos.y + ' Z1=' + (pos.z ? pos.z[0] : '?') + '</span>';
+      }
       list.appendChild(div);
     }
   } catch(e) {}
@@ -638,32 +683,46 @@ def jog():
 def record():
   data = request.json
   label = data["label"]
+  arm_name = data.get("arm", "liha")
   with _usb_lock:
     try:
-      pos = run_async(get_liha_position())
       saved = load_json_file(POSITIONS_FILE)
-      saved[label] = {"x": pos["x"], "y": pos["y"], "z": pos["z_all"]}
-      save_json_file(POSITIONS_FILE, saved)
-      return jsonify({"message": f"Recorded '{label}': X={pos['x']} Y={pos['y']} Z1={pos['z']}"})
+      if arm_name == "roma":
+        pos = run_async(get_roma_position())
+        saved[label] = {"arm": "roma", "x": pos["x"], "y": pos["y"], "z": pos["z"], "r": pos["r"], "g": pos["g"]}
+        save_json_file(POSITIONS_FILE, saved)
+        return jsonify({"message": f"Recorded RoMa '{label}': X={pos['x']} Y={pos['y']} Z={pos['z']} R={pos['r']} G={pos['g']}"})
+      else:
+        pos = run_async(get_liha_position())
+        saved[label] = {"x": pos["x"], "y": pos["y"], "z": pos["z_all"]}
+        save_json_file(POSITIONS_FILE, saved)
+        return jsonify({"message": f"Recorded LiHa '{label}': X={pos['x']} Y={pos['y']} Z1={pos['z']}"})
     except Exception as e:
       return jsonify({"error": str(e)})
 
 
 @app.route("/teach", methods=["POST"])
 def teach():
+  from labware_library import TIP_TYPES
+
   data = request.json
   field = data["field"]
   labware_name = data["labware"]
+  tip_type = data.get("tip_type", "none")
+  tip_ext = TIP_TYPES.get(tip_type, {}).get("tip_ext", 0)
+
   with _usb_lock:
     try:
       pos = run_async(get_liha_position())
-      z_val = pos["z"]
+      raw_z = pos["z"]
+      z_val = raw_z - tip_ext  # subtract tip extension to get bare-channel Z
       edits = load_json_file(LABWARE_FILE)
       if labware_name not in edits:
         edits[labware_name] = {}
       edits[labware_name][field] = z_val
       save_json_file(LABWARE_FILE, edits)
-      return jsonify({"message": f"{labware_name}.{field} = {z_val} ({z_val / 10:.1f}mm)"})
+      tip_msg = f" (raw={raw_z} - tip_ext={tip_ext})" if tip_ext > 0 else ""
+      return jsonify({"message": f"{labware_name}.{field} = {z_val} ({z_val / 10:.1f}mm){tip_msg}"})
     except Exception as e:
       return jsonify({"error": str(e)})
 
@@ -770,14 +829,16 @@ async def get_roma_position():
     resp_y = await driver.send_command("C1", command="RPY0")
     resp_z = await driver.send_command("C1", command="RPZ0")
     resp_r = await driver.send_command("C1", command="RPR0")
+    resp_g = await driver.send_command("C1", command="RPG0")
     return {
       "x": resp_x["data"][0] if resp_x and resp_x.get("data") else 0,
       "y": resp_y["data"][0] if resp_y and resp_y.get("data") else 0,
       "z": resp_z["data"][0] if resp_z and resp_z.get("data") else 0,
       "r": resp_r["data"][0] if resp_r and resp_r.get("data") else 0,
+      "g": resp_g["data"][0] if resp_g and resp_g.get("data") else 0,
     }
   except Exception:
-    return {"x": 0, "y": 0, "z": 0, "r": 0}
+    return {"x": 0, "y": 0, "z": 0, "r": 0, "g": 0}
 
 
 async def do_jog(arm_name, axis, delta):
@@ -811,6 +872,13 @@ async def do_action(action):
     await pip_be.liha.set_z_travel_height([z_range] * num_ch)
     await pip_be.liha.position_absolute_all_axis(45, 1031, 90, [z_range] * num_ch)
     return "LiHa homed"
+  elif action == "z_up":
+    pip_be = evo.pip.backend
+    z_range = pip_be._z_range
+    num_ch = pip_be.num_channels
+    z_params = ",".join([str(z_range)] * num_ch)
+    await driver.send_command("C5", command=f"PAZ{z_params}")
+    return f"All channels raised to Z={z_range}"
   elif action == "park_roma":
     if evo.arm and evo.arm.backend.roma:
       await evo.arm.backend.park()
@@ -860,6 +928,12 @@ async def do_action(action):
   elif action == "power_off":
     await driver.send_command("O1", command="SPS0")
     return "Motor power: SPS0 (off)"
+  elif action == "gripper_open":
+    await driver.send_command("C1", command="PAG900")
+    return "Gripper opened (G=900)"
+  elif action == "gripper_close":
+    await driver.send_command("C1", command="AGP100,75,710")
+    return "Gripper closed (grip plate ~81mm)"
   return f"Unknown action: {action}"
 
 
@@ -882,8 +956,7 @@ def build_deck():
   """Build the deck and EVO device WITHOUT connecting to hardware."""
   global evo
 
-  from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted
-  from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
+  from labware_library import DiTi_50ul_SBS_LiHa_Air, Eppendorf_96_wellplate_250ul_Vb_skirted, MP_3Pos_Corrected
   from pylabrobot.resources.tecan.tecan_decks import EVO150Deck
   from pylabrobot.tecan.evo import TecanEVO
 
@@ -899,7 +972,7 @@ def build_deck():
     write_timeout=120,
   )
 
-  carrier = MP_3Pos("carrier")
+  carrier = MP_3Pos_Corrected("carrier")
   deck.assign_child_resource(carrier, rails=16)
 
   source_plate = Eppendorf_96_wellplate_250ul_Vb_skirted("source")
