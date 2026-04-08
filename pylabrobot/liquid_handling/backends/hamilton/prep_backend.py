@@ -724,6 +724,28 @@ class PrepBackend(LiquidHandlerBackend):
       PrepCmd.PrepCancelCalibration(dest=await self._require("calibration"))
     )
 
+  async def end_calibration(self, date_time: Optional[PrepCmd.HoiDateTime] = None) -> None:
+    """End calibration and store results with timestamp (EndCalibration, cmd=3).
+
+    Args:
+      date_time: Timestamp for the calibration record. Defaults to now.
+    """
+    if date_time is None:
+      date_time = PrepCmd.HoiDateTime.now()
+    await self.client.send_command(
+      PrepCmd.PrepEndCalibration(dest=await self._require("calibration"), date_time=date_time)
+    )
+
+  async def reset_calibration(self, store: bool = False) -> None:
+    """Reset calibration data (ResetCalibration, cmd=4).
+
+    Args:
+      store: If True, persist current calibration before resetting.
+    """
+    await self.client.send_command(
+      PrepCmd.PrepResetCalibration(dest=await self._require("calibration"), store=store)
+    )
+
   async def calibration_initialize(self) -> None:
     """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
     await self.client.send_command(

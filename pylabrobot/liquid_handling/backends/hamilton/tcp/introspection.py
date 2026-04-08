@@ -63,6 +63,12 @@ _TRANSIENT_ERRORS = (
   OSError,
 )
 
+# Known network/built-in structs (source_id=3). These types are not queryable
+# via introspection — their wire format was determined empirically by calling
+# methods that return them (e.g. GetDeckCalibration on PipettorCalibration).
+# Populated lazily below after StructInfo is defined.
+_NETWORK_STRUCTS: Dict[int, "StructInfo"] = {}
+
 # ============================================================================
 # TYPE RESOLUTION HELPERS
 # ============================================================================
@@ -549,6 +555,8 @@ class TypeRegistry:
       if ho_interface_id is not None:
         return self.structs.get(ho_interface_id, {}).get(idx)
       return _lookup_local_table_entry(self.structs, ref_id)
+    if source_id == 3:
+      return _NETWORK_STRUCTS.get(ref_id)
     logger.warning("resolve_struct: unhandled source_id=%d ref_id=%d", source_id, ref_id)
     return None
 
@@ -656,6 +664,26 @@ class StructInfo:
     ]
     fields_str = "\n  ".join(field_strs) if field_strs else "  (empty)"
     return f"struct {self.name} {{\n  {fields_str}\n}}"
+
+
+# Populate known network structs now that StructInfo is defined.
+# ref_id=3: DateTime — 7 fields: year(U16), month(U8), day(U8), hour(U8),
+# minute(U8), second(U8), millisecond(U16). Wire format confirmed via
+# GetDeckCalibration on PipettorCalibration.
+_NETWORK_STRUCTS[3] = StructInfo(
+  struct_id=3,
+  name="DateTime",
+  fields={
+    "year": ParameterType(type_id=5),  # U16
+    "month": ParameterType(type_id=4),  # U8 (padded)
+    "day": ParameterType(type_id=4),
+    "hour": ParameterType(type_id=4),
+    "minute": ParameterType(type_id=4),
+    "second": ParameterType(type_id=4),
+    "millisecond": ParameterType(type_id=5),  # U16
+  },
+  interface_id=3,
+)
 
 
 @dataclass

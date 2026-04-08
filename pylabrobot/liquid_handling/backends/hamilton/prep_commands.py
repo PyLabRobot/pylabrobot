@@ -118,6 +118,56 @@ class WasteSiteInfo:
   z_seek: float
 
 
+@dataclass
+class HoiDateTime:
+  """Hamilton network/built-in dateTime struct (source_id=3, ref_id=3).
+
+  Wire format: 7 DataFragments — year(U16), month(PaddedU8), day(PaddedU8),
+  hour(PaddedU8), minute(PaddedU8), second(PaddedU8), millisecond(U16).
+
+  Used by EndCalibration and SetChannelHardwareConfiguration to timestamp
+  calibration data. Construct from ``datetime.datetime`` via ``from_datetime()``.
+  """
+
+  year: U16
+  month: PaddedU8
+  day: PaddedU8
+  hour: PaddedU8
+  minute: PaddedU8
+  second: PaddedU8
+  millisecond: U16
+
+  @classmethod
+  def from_datetime(cls, dt: "datetime.datetime") -> "HoiDateTime":
+    """Create from a Python datetime (microseconds truncated to milliseconds)."""
+    return cls(
+      year=dt.year,
+      month=dt.month,
+      day=dt.day,
+      hour=dt.hour,
+      minute=dt.minute,
+      second=dt.second,
+      millisecond=dt.microsecond // 1000,
+    )
+
+  @classmethod
+  def now(cls) -> "HoiDateTime":
+    """Create from the current local time."""
+    import datetime
+
+    return cls.from_datetime(datetime.datetime.now())
+
+  def to_datetime(self) -> "datetime.datetime":
+    """Convert to a Python datetime."""
+    import datetime
+
+    return datetime.datetime(
+      self.year, self.month, self.day,
+      self.hour, self.minute, self.second,
+      self.millisecond * 1000,
+    )
+
+
 @dataclass(frozen=True)
 class CalibrationSiteInfo:
   """A calibration site from DeckConfiguration.GetCalibrationSiteDefinitions."""
@@ -1913,6 +1963,22 @@ class PrepCancelCalibration(PrepCommand):
   """CancelCalibration (cmd=2, dest=MLPrepCalibration). Cancel active calibration session."""
 
   command_id = 2
+
+
+@dataclass
+class PrepEndCalibration(PrepCommand):
+  """EndCalibration (cmd=3, dest=MLPrepCalibration). End calibration and store results with timestamp."""
+
+  command_id = 3
+  date_time: Annotated[HoiDateTime, Struct()]
+
+
+@dataclass
+class PrepResetCalibration(PrepCommand):
+  """ResetCalibration (cmd=4, dest=MLPrepCalibration). Reset calibration data, optionally storing."""
+
+  command_id = 4
+  store: PaddedBool
 
 
 @dataclass
