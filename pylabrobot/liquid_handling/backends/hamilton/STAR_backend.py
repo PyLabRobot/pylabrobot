@@ -1366,6 +1366,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Uses max() of both channels' spacings for firmware safety (conservative).
     For adjacent channels, ceiling-rounded to 0.1mm.
     For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
+
+    TODO: migrate to radii model (spacing[i]/2 + spacing[j]/2) to match
+    compute_channel_offsets. Current max() model is conservative but inconsistent
+    with channel_positioning.py's diameter-based abstraction.
     """
     lo, hi = min(i, j), max(i, j)
     if hi - lo == 1:
