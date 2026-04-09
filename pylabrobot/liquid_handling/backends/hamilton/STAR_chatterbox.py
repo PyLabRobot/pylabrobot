@@ -15,6 +15,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   plan_batches,
   print_batches,
+  resolve_container_targets,
   validate_channel_selections,
 )
 from pylabrobot.resources.container import Container
@@ -353,7 +354,7 @@ class STARChatterboxBackend(STARBackend):
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use (0-indexed). Defaults to ``[0, ..., len(containers)-1]``.
-      resource_offsets: Passed to ``plan_batches`` for auto-spreading. See ``plan_batches``.
+      resource_offsets: Passed to ``resolve_container_targets`` for auto-spreading.
       All other parameters: Accepted for API compatibility but unused in mock.
 
     Returns:
@@ -377,13 +378,18 @@ class STARChatterboxBackend(STARBackend):
     for ch in use_channels:
       self.head[ch].get_tip()  # Raises NoTipError if no tip
 
-    batches = plan_batches(
+    targets = resolve_container_targets(
+      containers=containers,
       use_channels=use_channels,
-      targets=containers,
       channel_spacings=self._channels_minimum_y_spacing,
-      x_tolerance=x_grouping_tolerance,
       wrt_resource=self.deck,
       resource_offsets=resource_offsets,
+    )
+    batches = plan_batches(
+      use_channels=use_channels,
+      targets=targets,
+      channel_spacings=self._channels_minimum_y_spacing,
+      x_tolerance=x_grouping_tolerance,
     )
 
     print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")

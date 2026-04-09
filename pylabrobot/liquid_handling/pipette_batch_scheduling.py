@@ -4,18 +4,15 @@ Multi-channel liquid handlers have physical constraints (single X carriage, mini
 Y spacing, descending Y order by channel index) that limit which channels can act
 simultaneously.
 
-    batches = plan_batches(
-        use_channels, targets=containers,
-        channel_spacings=[9.0]*8, x_tolerance=0.1,
-        wrt_resource=deck,
-    )
+    targets = resolve_container_targets(containers, use_channels, spacings, deck)
+    batches = plan_batches(use_channels, targets, spacings, x_tolerance=0.1)
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
 
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, List, Optional
 
 from pylabrobot.liquid_handling.channel_positioning import (
   MIN_SPACING_EDGE,
@@ -195,6 +192,8 @@ def _partition_into_y_batches(
 
     assigned = False
     for batch in batches:
+      if channel in [use_channels[i] for i in batch.indices]:
+        continue
       if _channel_fits_batch(batch, channel, y, spacings):
         batch.indices.append(idx)
         batch.hi_ch = channel
@@ -265,7 +264,7 @@ def _offsets_for_consecutive_group(
 def compute_single_container_offsets(
   container: Container,
   use_channels: List[int],
-  channel_spacings: Union[float, List[float]],
+  channel_spacings: List[float],
 ) -> Optional[List[Coordinate]]:
   """Compute spread Y offsets for multiple channels targeting the same container.
 
@@ -284,10 +283,12 @@ def compute_single_container_offsets(
     return [Coordinate.zero()]
 
   ch_lo, ch_hi = min(use_channels), max(use_channels)
-  if isinstance(channel_spacings, (int, float)):
-    spacing = float(channel_spacings)
-  else:
-    spacing = _effective_spacing(channel_spacings, ch_lo, ch_hi)
+  if len(channel_spacings) < ch_hi + 1:
+    raise ValueError(
+      f"channel_spacings list must have at least {ch_hi + 1} entries "
+      f"(max channel index is {ch_hi}), got {len(channel_spacings)}."
+    )
+  spacing = _effective_spacing(channel_spacings, ch_lo, ch_hi)
 
   # Try the full span first (all channels including phantoms fit)
   full = _offsets_for_consecutive_group(container, use_channels, spacing)
@@ -352,27 +353,73 @@ def validate_channel_selections(
   return use_channels
 
 
-def compute_positions(
+def resolve_container_targets(
   containers: List[Container],
-  resource_offsets: List[Coordinate],
+  use_channels: List[int],
+  channel_spacings: List[float],
   wrt_resource: Resource,
-) -> Tuple[List[float], List[float]]:
-  """Convert containers and offsets into absolute X/Y positions relative to a resource.
+  resource_offsets: Optional[List[Coordinate]] = None,
+) -> List[Coordinate]:
+  """Convert containers to absolute Coordinates, auto-spreading when needed.
 
-  Each container must be a descendant of *wrt_resource* (checked by
-  ``Resource.get_location_wrt``, which raises ``ValueError`` if not).
+  When *resource_offsets* is ``None`` and multiple channels target the same
+  container, computes spread offsets via ``compute_single_container_offsets``
+  so channels can be batched in parallel. If the container is too narrow to
+  spread, channels stay at center and will be serialized by ``plan_batches``.
+
+  When *resource_offsets* is provided, uses those offsets directly (no
+  auto-spreading).
+
+  Args:
+    containers: Container objects, one per entry in *use_channels*.
+    use_channels: Channel indices being used.
+    channel_spacings: Minimum Y spacing per channel (mm), one entry per
+      channel on the instrument.
+    wrt_resource: Reference resource for computing positions. All containers
+      must be descendants of this resource.
+    resource_offsets: Optional XYZ offsets from container centers.
 
   Returns:
-    (x_positions, y_positions) — parallel lists of coordinates in mm,
-    one entry per container.
+    List of Coordinates (parallel to *use_channels* / *containers*) with
+    absolute X/Y positions ready for ``plan_batches``.
   """
+  if resource_offsets is not None:
+    if len(resource_offsets) != len(containers):
+      raise ValueError(
+        f"resource_offsets length must match containers, "
+        f"got {len(resource_offsets)} and {len(containers)}."
+      )
+    offsets = resource_offsets
+  else:
+    offsets = [Coordinate.zero()] * len(containers)
+
   x_pos: List[float] = []
   y_pos: List[float] = []
-  for resource, offset in zip(containers, resource_offsets):
-    loc = resource.get_location_wrt(wrt_resource, x="c", y="c", z="b")
+  for container, offset in zip(containers, offsets):
+    loc = container.get_location_wrt(wrt_resource, x="c", y="c", z="b")
     x_pos.append(loc.x + offset.x)
     y_pos.append(loc.y + offset.y)
-  return x_pos, y_pos
+
+  # Auto-spread: when multiple channels target the same container and no
+  # explicit offsets were given, compute spread offsets so they can be batched.
+  if resource_offsets is None:
+    container_groups: Dict[int, List[int]] = defaultdict(list)
+    for idx in range(len(containers)):
+      container_groups[id(containers[idx])].append(idx)
+    for c_indices in container_groups.values():
+      if len(c_indices) < 2:
+        continue
+      group_channels = [use_channels[i] for i in c_indices]
+      spread = compute_single_container_offsets(
+        container=containers[c_indices[0]],
+        use_channels=group_channels,
+        channel_spacings=channel_spacings,
+      )
+      if spread is not None:
+        for i, idx_val in enumerate(c_indices):
+          y_pos[idx_val] += spread[i].y
+
+  return [Coordinate(x, y, 0) for x, y in zip(x_pos, y_pos)]
 
 
 # --- Public API ---
@@ -380,40 +427,26 @@ def compute_positions(
 
 def plan_batches(
   use_channels: List[int],
-  targets: Union[List[Container], List[Coordinate]],
-  channel_spacings: Union[float, List[float]],
+  targets: List[Coordinate],
+  channel_spacings: List[float],
   x_tolerance: float,
-  wrt_resource: Optional[Resource] = None,
-  resource_offsets: Optional[List[Coordinate]] = None,
 ) -> List[ChannelBatch]:
   """Partition channel–target pairs into executable batches.
-
-  Targets can be either:
-
-  - **Containers** (with *wrt_resource*): computes X/Y positions from containers relative
-    to a reference resource. When multiple channels target the same container and *resource_offsets*
-    is not provided, automatically spreads them using ``compute_single_container_offsets``.
-    Channels that cannot be spread (container too narrow) stay at the container center
-    and are serialized into separate batches.
-
-  - **Coordinates**: uses absolute X/Y positions directly. No auto-spreading.
 
   Groups by X position (within *x_tolerance*), then within each X group partitions
   into Y sub-batches respecting per-channel minimum spacing. Computes phantom channel
   positions for intermediate channels between non-consecutive batch members.
 
+  Use ``resolve_container_targets`` to convert Container objects to Coordinates
+  before calling this function.
+
   Args:
     use_channels: Channel indices being used (e.g. [0, 1, 2, 5, 6, 7]).
-    targets: Either Container objects (requires *wrt_resource*) or Coordinate objects
-      with absolute X/Y positions. One per entry in *use_channels*.
-    channel_spacings: Minimum Y spacing per channel (mm). Scalar for uniform,
-      or a list with one entry per channel on the instrument.
+    targets: Coordinate objects with absolute X/Y positions. One per entry
+      in *use_channels*.
+    channel_spacings: Minimum Y spacing per channel (mm), one entry per
+      channel on the instrument.
     x_tolerance: Positions within this tolerance share an X group.
-    wrt_resource: Reference resource for computing positions. All containers must
-      be descendants of this resource. Required when *targets* are Containers.
-    resource_offsets: Optional XYZ offsets from container centers. When provided,
-      auto-spreading is disabled and these offsets are used directly. Only valid
-      when *targets* are Containers.
 
   Returns:
     Flat list of ChannelBatch sorted by ascending X position.
@@ -428,33 +461,16 @@ def plan_batches(
     )
   if len(use_channels) == 0:
     raise ValueError("use_channels must not be empty.")
-
-  if wrt_resource is not None:
-    containers = cast(List[Container], targets)
-    if resource_offsets is not None:
-      if len(resource_offsets) != len(containers):
-        raise ValueError(
-          f"resource_offsets length must match containers, "
-          f"got {len(resource_offsets)} and {len(containers)}."
-        )
-      offsets = resource_offsets
-    else:
-      offsets = [Coordinate.zero()] * len(containers)
-    x_pos, y_pos = compute_positions(containers, offsets, wrt_resource)
-  else:
-    containers = None
-    coordinates = cast(List[Coordinate], targets)
-    x_pos = [c.x for c in coordinates]
-    y_pos = [c.y for c in coordinates]
-
-  # Normalize scalar spacing to per-channel list.
   max_ch = max(use_channels)
-  if isinstance(channel_spacings, (int, float)):
-    spacings: List[float] = [float(channel_spacings)] * (max_ch + 1)
-  else:
-    spacings = list(channel_spacings)
-    if len(spacings) < max_ch + 1:
-      spacings.extend([spacings[-1]] * (max_ch + 1 - len(spacings)))
+  if len(channel_spacings) < max_ch + 1:
+    raise ValueError(
+      f"channel_spacings list must have at least {max_ch + 1} entries "
+      f"(max channel index is {max_ch}), got {len(channel_spacings)}."
+    )
+
+  x_pos = [c.x for c in targets]
+  y_pos = [c.y for c in targets]
+  spacings = list(channel_spacings)
 
   # Group indices by X position. Sorts by X then merges adjacent positions
   # within tolerance into the same group, so positions like 99.99 and 100.01
@@ -467,30 +483,9 @@ def plan_batches(
       current_key = x_pos[i]
     x_groups.setdefault(current_key, []).append(i)
 
-  # When multiple channels target the same container, offset their Y positions
-  # so they can be batched together
-  adjusted_y = list(y_pos)
-  if containers is not None and resource_offsets is None:
-    for indices in x_groups.values():
-      container_groups: Dict[int, List[int]] = defaultdict(list)
-      for idx in indices:
-        container_groups[id(containers[idx])].append(idx)
-      for c_indices in container_groups.values():
-        if len(c_indices) < 2:
-          continue
-        group_channels = [use_channels[i] for i in c_indices]
-        spread = compute_single_container_offsets(
-          container=containers[c_indices[0]],
-          use_channels=group_channels,
-          channel_spacings=channel_spacings,
-        )
-        if spread is not None:
-          for i, idx_val in enumerate(c_indices):
-            adjusted_y[idx_val] += spread[i].y
-
   result: List[ChannelBatch] = []
   for _, indices in sorted(x_groups.items()):
     group_x = x_pos[indices[0]]
-    result.extend(_partition_into_y_batches(indices, use_channels, adjusted_y, spacings, group_x))
+    result.extend(_partition_into_y_batches(indices, use_channels, y_pos, spacings, group_x))
 
   return result

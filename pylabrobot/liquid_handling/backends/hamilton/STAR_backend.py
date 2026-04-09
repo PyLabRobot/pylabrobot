@@ -50,6 +50,7 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   ChannelBatch,
   plan_batches,
+  resolve_container_targets,
   validate_channel_selections,
 )
 from pylabrobot.liquid_handling.standard import (
@@ -2128,14 +2129,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     container positions and sensing the liquid surface. Heights are measured from the bottom
     of each container's cavity.
 
-    Uses ``plan_batches`` for X/Y partitioning and auto-spreading, then ``execute_batched``
-    to iterate batches with Z safety.
+    Uses ``resolve_container_targets`` for position computation and auto-spreading,
+    ``plan_batches`` for X/Y partitioning, then ``execute_batched`` to iterate
+    batches with Z safety.
 
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use for probing (0-indexed).
       resource_offsets: Optional XYZ offsets from container centers. When not provided,
-        ``plan_batches`` auto-spreads channels targeting the same container.
+        ``resolve_container_targets`` auto-spreads channels targeting the same container.
       lld_mode: Detection mode - GAMMA for capacitive, PRESSURE for pressure-based.
         Defaults to GAMMA.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
@@ -2203,13 +2205,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ]
     z_top = [r.get_location_wrt(self.deck, "c", "c", "t").z for r in containers]
 
-    batches = plan_batches(
+    targets = resolve_container_targets(
+      containers=containers,
       use_channels=use_channels,
-      targets=containers,
       channel_spacings=self._channels_minimum_y_spacing,
-      x_tolerance=x_grouping_tolerance,
       wrt_resource=self.deck,
       resource_offsets=resource_offsets,
+    )
+    batches = plan_batches(
+      use_channels=use_channels,
+      targets=targets,
+      channel_spacings=self._channels_minimum_y_spacing,
+      x_tolerance=x_grouping_tolerance,
     )
 
     # Select detection function and kwargs

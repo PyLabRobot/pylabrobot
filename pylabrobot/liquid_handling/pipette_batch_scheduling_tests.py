@@ -1,8 +1,8 @@
 """Tests for pipette_batch_scheduling module.
 
-Tests cover functionality added or changed by this module vs the previous
-planning.py: mixed channel spacing, phantom interpolation, container auto-spreading,
-Coordinate targets, and compute_single_container_offsets.
+Tests cover: mixed channel spacing, phantom interpolation, coordinate batching,
+container-to-coordinate resolution (resolve_container_targets), auto-spreading,
+and compute_single_container_offsets.
 """
 
 import unittest
@@ -13,6 +13,7 @@ from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   _min_spacing_between,
   compute_single_container_offsets,
   plan_batches,
+  resolve_container_targets,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -67,7 +68,7 @@ class TestMixedChannelSpacing(unittest.TestCase):
 class TestCoreBatching(unittest.TestCase):
   """Fundamental X grouping, Y batching, and validation."""
 
-  S = 9.0
+  S = [9.0] * 8
 
   def test_spacing_boundary(self):
     # Exactly 9mm -> one batch
@@ -106,6 +107,14 @@ class TestCoreBatching(unittest.TestCase):
     with self.assertRaises(ValueError):
       plan_batches([0, 1], _coords([100.0], [200.0]), self.S, x_tolerance=0.1)
 
+  def test_duplicate_channels_serialized(self):
+    batches = plan_batches([0, 0], _coords([100.0] * 2, [200.0] * 2), self.S, x_tolerance=0.1)
+    self.assertEqual(len(batches), 2)
+
+  def test_duplicate_channels_three_ops(self):
+    batches = plan_batches([0, 0, 0], _coords([100.0] * 3, [200.0] * 3), self.S, x_tolerance=0.1)
+    self.assertEqual(len(batches), 3)
+
 
 class TestPhantomInterpolation(unittest.TestCase):
   """Phantom channels between non-consecutive batch members."""
@@ -114,7 +123,7 @@ class TestPhantomInterpolation(unittest.TestCase):
     batches = plan_batches(
       [0, 1, 2, 5, 6, 7],
       _coords([100.0] * 6, [300.0, 291.0, 282.0, 255.0, 246.0, 237.0]),
-      9.0,
+      [9.0] * 8,
       x_tolerance=0.1,
     )
     self.assertEqual(len(batches), 1)
@@ -126,7 +135,7 @@ class TestPhantomInterpolation(unittest.TestCase):
 
   def test_phantoms_only_within_batch(self):
     # Split into 2 batches — no phantoms across batches
-    batches = plan_batches([0, 3], _coords([100.0] * 2, [200.0, 250.0]), 9.0, x_tolerance=0.1)
+    batches = plan_batches([0, 3], _coords([100.0] * 2, [200.0, 250.0]), [9.0] * 4, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
     for batch in batches:
       self.assertEqual(len(batch.y_positions), 1)
@@ -139,7 +148,7 @@ class TestCoordinateTargets(unittest.TestCase):
     batches = plan_batches(
       [0, 1, 2, 3],
       _coords([100.0, 100.0, 200.0, 200.0], [200.0, 200.0, 270.0, 261.0]),
-      9.0,
+      [9.0] * 4,
       x_tolerance=0.1,
     )
     x100 = [b for b in batches if abs(b.x_position - 100.0) < 0.01]
@@ -150,7 +159,7 @@ class TestCoordinateTargets(unittest.TestCase):
   def test_indices_map_back_correctly(self):
     use_channels = [3, 7, 0]
     batches = plan_batches(
-      use_channels, _coords([100.0] * 3, [261.0, 237.0, 270.0]), 9.0, x_tolerance=0.1
+      use_channels, _coords([100.0] * 3, [261.0, 237.0, 270.0]), [9.0] * 8, x_tolerance=0.1
     )
     all_indices = [idx for b in batches for idx in b.indices]
     self.assertEqual(sorted(all_indices), [0, 1, 2])
@@ -160,9 +169,9 @@ class TestCoordinateTargets(unittest.TestCase):
 
 
 class TestContainerTargets(unittest.TestCase):
-  """plan_batches with Container targets and auto-spreading."""
+  """resolve_container_targets + plan_batches with Container auto-spreading."""
 
-  S = 9.0
+  S = [9.0] * 8
 
   def _mock_container(self, cx: float, cy: float, size_y: float = 10.0, name: str = "well"):
     c = MagicMock(spec=Container)
@@ -179,7 +188,8 @@ class TestContainerTargets(unittest.TestCase):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     trough = self._mock_container(100.0, 200.0, size_y=50.0, name="trough")
     deck = self._mock_deck()
-    batches = plan_batches([0, 1], [trough, trough], self.S, x_tolerance=0.1, wrt_resource=deck)
+    targets = resolve_container_targets([trough, trough], [0, 1], self.S, deck)
+    batches = plan_batches([0, 1], targets, self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
     self.assertAlmostEqual(y[0], 200.0 + 4.5)
@@ -188,7 +198,8 @@ class TestContainerTargets(unittest.TestCase):
   def test_same_narrow_container_serialized(self):
     well = self._mock_container(100.0, 200.0, size_y=5.0, name="narrow_well")
     deck = self._mock_deck()
-    batches = plan_batches([0, 1], [well, well], self.S, x_tolerance=0.1, wrt_resource=deck)
+    targets = resolve_container_targets([well, well], [0, 1], self.S, deck)
+    batches = plan_batches([0, 1], targets, self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
   @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
@@ -196,15 +207,11 @@ class TestContainerTargets(unittest.TestCase):
     trough = self._mock_container(100.0, 200.0, size_y=50.0, name="trough")
     deck = self._mock_deck()
     user_offsets = [Coordinate(0, 10.0, 0), Coordinate(0, -10.0, 0)]
-    batches = plan_batches(
-      [0, 1],
-      [trough, trough],
-      self.S,
-      x_tolerance=0.1,
-      wrt_resource=deck,
-      resource_offsets=user_offsets,
+    targets = resolve_container_targets(
+      [trough, trough], [0, 1], self.S, deck, resource_offsets=user_offsets
     )
     mock_offsets.assert_not_called()
+    batches = plan_batches([0, 1], targets, self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
     self.assertAlmostEqual(y[0], 210.0)
@@ -212,7 +219,7 @@ class TestContainerTargets(unittest.TestCase):
 
 
 class TestComputeSingleContainerOffsets(unittest.TestCase):
-  S = 9.0
+  S = [9.0] * 8
 
   def _mock_container(self, size_y: float):
     c = MagicMock(spec=["get_absolute_size_y"])
@@ -253,7 +260,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     assert result is not None
     self.assertEqual(len(result), 2)
     mock_offsets.assert_called_once_with(
-      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[self.S] * 3
+      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[9.0] * 3
     )
 
   @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
