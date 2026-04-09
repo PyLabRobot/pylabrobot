@@ -85,7 +85,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     self.serial_number = await self.reset()
 
     # Discover supported commands via I0 (the definitive source per spec Section 2.2)
-    self._supported_commands: Set[str] = await self._request_supported_commands()
+    self._supported_commands = await self._request_supported_commands()
 
     # Device identity (Level 0 - always available)
     # Note: device_type and capacity both use I2 but are separate methods intentionally -
