@@ -5,4 +5,3 @@ from pylabrobot.scales.mettler_toledo.backend import (
   MettlerToledoWXS205SDUBackend,
 )
 from pylabrobot.scales.mettler_toledo.errors import MettlerToledoError
-from pylabrobot.scales.mettler_toledo.simulator import MettlerToledoSICSSimulator

@@ -36,7 +36,7 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
     import warnings
 
     warnings.warn(
-      "get_weight() is deprecated and will be removed in 2026-03. Use read_weight() instead.",
+      "get_weight() is deprecated and will be removed in v1. Use read_weight() instead.",
       DeprecationWarning,
       stacklevel=2,
     )

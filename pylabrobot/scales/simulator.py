@@ -1,8 +1,7 @@
 """Generic scale simulator for testing the Scale frontend and ScaleBackend interface.
 
 This simulator is protocol-agnostic - it tests the abstract scale contract (zero, tare,
-read_weight, request_tare_weight) without any device-specific protocol. For MT-SICS
-protocol-level simulation, use MettlerToledoSICSSimulator instead.
+read_weight, request_tare_weight) without any device-specific protocol.
 """
 
 from pylabrobot.scales.scale_backend import ScaleBackend

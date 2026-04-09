@@ -277,7 +277,6 @@ The MT-SICS spec defines **194 commands** (counting F01-F16 as 16 individual com
 |----------|-------|-------------|
 | Backend (active) | 54 | Implemented and callable |
 | Backend (commented out) | 27 | Set/write counterparts and physical interaction commands |
-| Simulator | 55 | Handled in `_build_response` (all active commands except I0/I1 internal) |
 | Not implemented | 113 | Not available on WXS205SDU or not applicable |
 
 ### WXS205SDU coverage
@@ -296,14 +295,12 @@ The WXS205SDU reports **62 commands** via I0. Of these:
 The remaining ~113 unimplemented spec commands (HIGH/MED/LOW/N/A in the table above)
 are not available on the WXS205SDU and could not be validated. Integrating them
 requires a developer with physical access to a device that supports the command,
-to validate the response format and add a handler to both `backend.py` and
-`simulator.py`. The pattern is:
+to validate the response format. The pattern is:
 
 1. Confirm the command appears in the device's I0 list
 2. Send the command and observe the raw response
 3. Add a method to `backend.py` with `@requires_mt_sics_command`
-4. Add a handler to `simulator.py` with an instance variable for the response value
-5. Add a test to `backend_tests.py`
+4. Add a test to `backend_tests.py`
 
 ### Remaining priorities
 
