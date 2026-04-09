@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
+from pylabrobot.capabilities.loading_tray import HasLoadingTray, LoadingTray
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Resource
-from pylabrobot.resources.carrier import PlateHolder
 
 from .absorbance_backend import TecanInfiniteAbsorbanceBackend
 from .driver import TecanInfiniteDriver
 from .fluorescence_backend import TecanInfiniteFluorescenceBackend
+from .loading_tray_backend import TecanInfiniteLoadingTrayBackend
 from .luminescence_backend import TecanInfiniteLuminescenceBackend
 
 
-class TecanInfinite200Pro(Resource, Device):
+class TecanInfinite200Pro(Resource, Device, HasLoadingTray):
   """Tecan Infinite 200 PRO plate reader.
 
   Supports absorbance, fluorescence, and luminescence measurements.
@@ -57,25 +58,21 @@ class TecanInfinite200Pro(Resource, Device):
     self.absorbance = Absorbance(backend=TecanInfiniteAbsorbanceBackend(driver))
     self.fluorescence = Fluorescence(backend=TecanInfiniteFluorescenceBackend(driver))
     self.luminescence = Luminescence(backend=TecanInfiniteLuminescenceBackend(driver))
-    self._capabilities = [self.absorbance, self.fluorescence, self.luminescence]
-
-    self.plate_holder = PlateHolder(
-      name=name + "_plate_holder",
+    self.loading_tray = LoadingTray(
+      backend=TecanInfiniteLoadingTrayBackend(driver),
+      name=name + "_loading_tray",
       size_x=127.76,
       size_y=85.48,
       size_z=0,
-      pedestal_size_z=0,
       child_location=Coordinate.zero(),
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self._capabilities = [
+      self.absorbance,
+      self.fluorescence,
+      self.luminescence,
+      self.loading_tray,
+    ]
+    self.assign_child_resource(self.loading_tray, location=Coordinate.zero())
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}
-
-  async def open(self) -> None:
-    """Open the plate tray."""
-    await self.driver.open_tray()
-
-  async def close(self) -> None:
-    """Close the plate tray."""
-    await self.driver.close_tray()
