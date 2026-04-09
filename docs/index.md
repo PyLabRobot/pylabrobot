@@ -200,6 +200,7 @@ api/pylabrobot
 ```{toctree}
 :hidden:
 
+community-protocols/index
 Community <https://discuss.pylabrobot.org/>
 ```
 
