@@ -226,5 +226,5 @@ Root cause of systematic X/Y offset identified and fixed:
 1. ~~Aspirate STL fix~~ — validated 2026-04-07
 2. ~~Dispense~~ — validated 2026-04-07 with z_dispense=99
 3. ~~Init ordering changed~~ — PIP before RoMa validated on cold boot 2026-04-08
-4. **200uL / 1000uL tips** — fitting_depth=11.0mm measured on hardware (consistent across all 3 sizes), 50uL re-validated 2026-04-09. 200uL/1000uL pipetting not yet tested.
+4. ~~200uL / 1000uL tips~~ — fitting_depth=11.0mm measured on hardware, all 3 sizes validated (50uL/200uL/1000uL) 2026-04-09
 5. ~~RoMa plate handling~~ — validated 2026-04-08, move_resource API working

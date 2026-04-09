@@ -97,6 +97,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
   ):
     super().__init__(driver=driver, deck=deck, diti_count=diti_count)
     self.zaap: Optional[ZaapMotion] = None
+    self._agt_z_start: Optional[int] = None  # set during pickup, used to validate drop
 
   def _apply_calibration_offsets(
     self,
@@ -306,6 +307,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     await self.liha.get_disposable_tip(
       self._bin_use_channels(use_channels), agt_z_start, agt_z_search
     )
+    self._agt_z_start = agt_z_start
 
   async def drop_tips(
     self,
@@ -339,9 +341,15 @@ class AirEVOPIPBackend(EVOPIPBackend):
     await self.liha.position_plunger_absolute([0] * self.num_channels)
     await self._zaapmotion_force_off()
 
-    # Set DiTi discard parameters and drop
-    await self.liha.set_disposable_tip_params(1, 1000, 200)
-    await self.liha.drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=1)
+    # Position at tip rack z_start and eject using mode=0 (above rack).
+    # Mode=1 (in rack) uses z_discard to push further down, which crashes
+    # on taller tip racks. Mode=0 ejects at the current Z reliably.
+    par = ops[0].resource.parent
+    assert isinstance(par, TecanTipRack), f"Expected TecanTipRack, got {type(par)}"
+    z_start = int(par.z_start)
+    await self.liha.move_absolute_z([z_start] * self.num_channels)
+    await self._driver.send_command("C5", command="SDT0,50,200")
+    await self.liha.drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
 
   async def aspirate(
     self,
