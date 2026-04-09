@@ -226,8 +226,20 @@ class AirEVOBackend(EVOBackend):
       pass  # may fail if already in app mode, non-critical
 
     # Standard arm init (PIA, BMX, etc.)
+    # LiHa first, then home it to clear path before RoMa PIA
     logger.info("Initializing arms (PIA)...")
     self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
+
+    if self.liha_connected:
+      self.liha = LiHa(self, EVOBackend.LIHA)
+      await self.liha.position_initialization_x()
+      # Home LiHa to far left before RoMa PIA to prevent collision
+      num_ch = await self.liha.report_number_tips()
+      z_range = (await self.liha.report_z_param(5))[0]
+      await self.liha.set_z_travel_height([z_range] * num_ch)
+      await self.liha.position_absolute_all_axis(45, 1031, 90, [z_range] * num_ch)
+      logger.info("LiHa homed before RoMa PIA.")
+
     self._mca_connected = await self.setup_arm(EVOBackend.MCA)
     self._roma_connected = await self.setup_arm(EVOBackend.ROMA)
 
@@ -237,10 +249,6 @@ class AirEVOBackend(EVOBackend):
       self.roma = RoMa(self, EVOBackend.ROMA)
       await self.roma.position_initialization_x()
       await self._park_roma()
-
-    if self.liha_connected:
-      self.liha = LiHa(self, EVOBackend.LIHA)
-      await self.liha.position_initialization_x()
 
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
@@ -266,6 +274,7 @@ class AirEVOBackend(EVOBackend):
     33 motor configuration commands (PID gains, current limits, encoder config).
     """
     zaap = ZaapMotion(self)
+    all_failed_tips = []
     for tip in range(8):
       # Check current mode
       try:
@@ -297,11 +306,24 @@ class AirEVOBackend(EVOBackend):
 
       # Send motor configuration
       logger.info("Configuring ZaapMotion tip %d (%d commands)", tip + 1, len(ZAAPMOTION_CONFIG))
+      failures = 0
       for cmd in ZAAPMOTION_CONFIG:
         try:
           await zaap.configure_motor(tip, cmd)
         except TecanError as e:
+          failures += 1
           logger.warning("ZaapMotion tip %d config command '%s' failed: %s", tip + 1, cmd, e)
+
+      if failures == len(ZAAPMOTION_CONFIG):
+        all_failed_tips.append(tip + 1)
+
+    if all_failed_tips:
+      raise TecanError(
+        f"ZaapMotion controllers not responding (tips {all_failed_tips}). "
+        "Power cycle the EVO and try again.",
+        "C5",
+        5,
+      )
 
     self.zaap = zaap
 
@@ -480,8 +502,11 @@ class AirEVOBackend(EVOBackend):
     if isinstance(first_par, _TP):
       z_travel = [self._z_range] * self.num_channels
       z_aspirate: List[Optional[int]] = [None] * self.num_channels
+      z_asp_max: List[Optional[int]] = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
-        z_aspirate[channel] = int(first_par.z_start)
+        tip_ext = int(ops[i].tip.total_tip_length * 10) - int(ops[i].tip.fitting_depth * 10)
+        z_aspirate[channel] = int(first_par.z_start) + tip_ext
+        z_asp_max[channel] = int(first_par.z_max) + tip_ext
     else:
       z_travel = [z if z else self._z_range for z in z_positions["travel"]]
       z_aspirate = z_positions["start"]
@@ -517,8 +542,10 @@ class AirEVOBackend(EVOBackend):
       ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
       await self.liha.set_search_speed(ssl)
       await self.liha.set_search_retract_distance(sdl)
-      await self.liha.set_search_z_start(z_positions["start"])
-      await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
+      await self.liha.set_search_z_start(
+        [z if z is not None else self._z_range for z in z_aspirate]
+      )
+      await self.liha.set_search_z_max([z if z is not None else self._z_range for z in z_asp_max])
       await self.liha.set_search_submerge(sbl)
       shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
       await self.liha.set_z_travel_height(shz)
@@ -535,7 +562,7 @@ class AirEVOBackend(EVOBackend):
     await self.liha.move_tracking_relative(mtr)
     await self._zaapmotion_force_off()
     await self.liha.set_slow_speed_z(ssz_r)
-    await self.liha.move_absolute_z(z_positions["start"])
+    await self.liha.move_absolute_z(z_aspirate)  # retract to aspirate start height
 
     # Aspirate trailing airgap (with force mode)
     pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
@@ -567,12 +594,25 @@ class AirEVOBackend(EVOBackend):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
+
+    # Use plate z_dispense with tip extension adjustment
+    from pylabrobot.resources import TecanPlate as _TP
+
+    first_par = ops[0].resource.parent
+    if isinstance(first_par, _TP):
+      z_disp: List[Optional[int]] = [None] * self.num_channels
+      for i, channel in enumerate(use_channels):
+        tip_ext = int(ops[i].tip.total_tip_length * 10) - int(ops[i].tip.fitting_depth * 10)
+        z_disp[channel] = int(first_par.z_dispense) + tip_ext
+    else:
+      z_disp = [z if z else self._z_range for z in z_positions["dispense"]]
+
+    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
       ys,
-      [z if z else self._z_range for z in z_positions["dispense"]],
+      z_disp,  # type: ignore[arg-type]
     )
 
     sep, spp, stz, mtr = self._dispense_action(ops, use_channels, tecan_liquid_classes)
@@ -661,6 +701,14 @@ class AirEVOBackend(EVOBackend):
     await self.liha.position_plunger_absolute([0] * self.num_channels)
     await self._zaapmotion_force_off()
 
-    # Set DiTi discard parameters and drop
-    await self.liha.set_disposable_tip_params(1, 1000, 200)
-    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=1)
+    # Position at tip rack z_start and eject using mode=0 (above rack).
+    # Mode=1 (in rack) uses z_discard to push further down, which crashes
+    # on taller tip racks. Mode=0 ejects at the current Z reliably.
+    from pylabrobot.resources import TecanTipRack
+
+    par = ops[0].resource.parent
+    assert isinstance(par, TecanTipRack), f"Expected TecanTipRack, got {type(par)}"
+    z_start = int(par.z_start)
+    await self.liha.move_absolute_z([z_start] * self.num_channels)
+    await self.send_command("C5", command="SDT0,50,200")
+    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
