@@ -1,11 +1,11 @@
-"""Pipette orchestration: partition channel–target pairs into executable batches.
+"""Pipette orchestration: resolve container positions and partition into executable batches.
 
 Multi-channel liquid handlers have physical constraints (single X carriage, minimum
 Y spacing, descending Y order by channel index) that limit which channels can act
 simultaneously.
 
-    targets = resolve_container_targets(containers, use_channels, spacings, deck)
-    batches = plan_batches(use_channels, targets, spacings, x_tolerance=0.1)
+    targets = resolve_container_targets(containers, use_channels, channel_spacings, deck)
+    batches = plan_batches(use_channels, targets, channel_spacings, x_tolerance=0.1)
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
 
@@ -224,43 +224,8 @@ def _partition_into_y_batches(
 # --- Input validation and position computation ---
 
 
-# Shift applied to odd channel spans to avoid center divider walls in troughs.
-# Will be replaced by per-container no_go_zones (see docs/proposals/container_no_go_zones.md).
-_ODD_SPAN_CENTER_AVOIDANCE = 5.5  # mm
-
-
-def _offsets_for_consecutive_group(
-  container: Container,
-  use_channels: List[int],
-  spacing: float,
-) -> Optional[List[Coordinate]]:
-  """Compute spread offsets for a group of channels whose full physical span fits the container."""
-  ch_lo, ch_hi = min(use_channels), max(use_channels)
-  num_physical = ch_hi - ch_lo + 1
-  min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
-
-  if container.get_absolute_size_y() < min_required:
-    return None
-
-  all_offsets = compute_channel_offsets(
-    resource=container,
-    num_channels=num_physical,
-    spread="wide",
-    channel_spacings=[spacing] * num_physical,
-  )
-  offsets = [all_offsets[ch - ch_lo] for ch in use_channels]
-
-  # Shift odd channel spans to avoid center divider walls, but only if the
-  # outermost channel (center + half-spacing) stays within the container.
-  if num_physical > 1 and num_physical % 2 != 0:
-    max_offset_y = max(o.y for o in offsets)
-    container_half_y = container.get_absolute_size_y() / 2
-    if max_offset_y + _ODD_SPAN_CENTER_AVOIDANCE + spacing / 2 <= container_half_y:
-      offsets = [o + Coordinate(0, _ODD_SPAN_CENTER_AVOIDANCE, 0) for o in offsets]
-
-  return offsets
-
-
+# TODO: eliminate once compute_channel_offsets supports use_channels directly
+# (non-consecutive channel handling + sub-group fallback would move there).
 def compute_single_container_offsets(
   container: Container,
   use_channels: List[int],
@@ -290,8 +255,23 @@ def compute_single_container_offsets(
     )
   spacing = _effective_spacing(channel_spacings, ch_lo, ch_hi)
 
+  def _try_group(channels: List[int]) -> Optional[List[Coordinate]]:
+    """Try to fit channels into the container, returning None if too narrow."""
+    g_lo, g_hi = min(channels), max(channels)
+    num_physical = g_hi - g_lo + 1
+    min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
+    if container.get_absolute_size_y() < min_required:
+      return None
+    all_offsets = compute_channel_offsets(
+      resource=container,
+      num_channels=num_physical,
+      spread="wide",
+      channel_spacings=[spacing] * num_physical,
+    )
+    return [all_offsets[ch - g_lo] for ch in channels]
+
   # Try the full span first (all channels including phantoms fit)
-  full = _offsets_for_consecutive_group(container, use_channels, spacing)
+  full = _try_group(use_channels)
   if full is not None:
     return full
 
@@ -312,7 +292,7 @@ def compute_single_container_offsets(
   # Compute offsets per sub-group
   ch_to_offset: Dict[int, Coordinate] = {}
   for group in groups:
-    group_offsets = _offsets_for_consecutive_group(container, group, spacing)
+    group_offsets = _try_group(group)
     if group_offsets is None:
       return None  # even a sub-group doesn't fit
     for ch, offset in zip(group, group_offsets):
@@ -335,7 +315,8 @@ def validate_channel_selections(
     Validated list of channel indices.
 
   Raises:
-    ValueError: If channels are empty or out of range.
+    ValueError: If channels are empty, out of range, or if *containers*
+      and *use_channels* have different lengths.
   """
   if use_channels is None:
     use_channels = list(range(len(containers)))

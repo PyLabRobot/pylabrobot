@@ -235,16 +235,16 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     self.assertAlmostEqual(result[1].y, -4.5)
 
   @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
-  def test_odd_span_center_offset_when_wide_enough(self, mock_offsets):
+  def test_odd_span_passes_through_offsets(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 9.0, 0),
       Coordinate(0, 0.0, 0),
       Coordinate(0, -9.0, 0),
     ]
-    # 50mm: max_offset=9.0, 9.0 + 5.5 + 4.5 = 19.0 <= 25.0 -> shift applied
+    # No additional shift; compute_channel_offsets handles no-go zones directly
     result = compute_single_container_offsets(self._mock_container(50.0), [0, 1, 2], self.S)
     assert result is not None
-    self.assertAlmostEqual(result[0].y, 9.0 + 5.5)
+    self.assertAlmostEqual(result[0].y, 9.0)
 
   def test_container_too_small_returns_none(self):
     self.assertIsNone(compute_single_container_offsets(self._mock_container(10.0), [0, 1], self.S))
