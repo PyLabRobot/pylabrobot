@@ -83,7 +83,8 @@ class Cytation5(Resource, Device):
     self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
 
   async def setup(self) -> None:
-    await self.driver.setup()
+    from .cytation_aravis_driver import CytationAravisDriver
+    await self.driver.setup(backend_params=CytationAravisDriver.SetupParams(use_cam=True))
     self.microscopy = Microscopy(backend=self.driver.microscopy_backend)
 
     # Plate reading + temperature use the driver directly

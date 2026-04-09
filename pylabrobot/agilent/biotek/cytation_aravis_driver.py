@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
   FocalPosition,
@@ -30,7 +31,7 @@ from pylabrobot.capabilities.microscopy.standard import (
 
 from .aravis_camera import AravisCamera
 from .biotek import BioTekBackend
-from .cytation_aravis_microscopy import CytationAravisMicroscopyBackend
+from .cytation_microscopy_backend import CytationMicroscopyBackend
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class CytationAravisDriver(BioTekBackend):
   - Optics control methods (filter wheel, objectives, focus, LED, positioning)
   - Camera control methods (exposure, gain, auto-exposure, trigger)
 
-  During setup(), creates a CytationAravisMicroscopyBackend that the
+  During setup(), creates a CytationMicroscopyBackend that the
   device class reads to wire the Microscopy capability.
 
   Usage::
@@ -99,7 +100,7 @@ class CytationAravisDriver(BioTekBackend):
     self._acquiring = False
 
     # Created during setup()
-    self.microscopy_backend: CytationAravisMicroscopyBackend
+    self.microscopy_backend: CytationMicroscopyBackend
 
   @property
   def filters(self) -> List[Optional[ImagingMode]]:
@@ -115,13 +116,26 @@ class CytationAravisDriver(BioTekBackend):
 
   # ─── Lifecycle ───────────────────────────────────────────────────────
 
-  async def setup(self, use_cam: bool = True) -> None:
+  @dataclass
+  class SetupParams(BackendParams):
+    """Cytation-specific parameters for ``setup``.
+
+    Args:
+      use_cam: If True, initialize the Aravis camera during setup.
+    """
+
+    use_cam: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Set up serial connection and camera."""
+    if not isinstance(backend_params, CytationAravisDriver.SetupParams):
+      backend_params = CytationAravisDriver.SetupParams()
+
     logger.info("CytationAravisDriver setting up")
 
     await super().setup()
 
-    if use_cam:
+    if backend_params.use_cam:
       serial = self._camera_serial or (
         self.imaging_config.camera_serial_number if self.imaging_config else None
       )
@@ -135,7 +149,7 @@ class CytationAravisDriver(BioTekBackend):
       await self._load_objectives()
 
     # Create microscopy backend (device reads this to wire Microscopy capability)
-    self.microscopy_backend = CytationAravisMicroscopyBackend(driver=self)
+    self.microscopy_backend = CytationMicroscopyBackend(driver=self)
 
     logger.info("CytationAravisDriver setup complete")
 
@@ -346,17 +360,20 @@ class CytationAravisDriver(BioTekBackend):
       self._acquiring = False
 
   async def acquire_image(self) -> Image:
-    """Trigger camera and read image."""
+    """Trigger camera and read image, with retry on failure."""
     config = self.imaging_config
     for attempt in range(config.max_image_read_attempts):
       try:
-        image = await self.camera.trigger(timeout_ms=5000)
-        return image
+        return await self.camera.trigger(timeout_ms=5000)
       except Exception:
         if attempt < config.max_image_read_attempts - 1:
+          logger.warning("Failed to get image, retrying...")
+          self.stop_acquisition()
+          self.start_acquisition()
           await asyncio.sleep(config.image_read_delay)
         else:
           raise
+    raise TimeoutError("max_image_read_attempts reached")
 
   async def get_exposure(self) -> float:
     """Get current exposure time in ms."""
@@ -410,11 +427,21 @@ class CytationAravisDriver(BioTekBackend):
         await self.send_command("Y", f"P0c{filter_index:02}")
         await self.send_command("Y", "P0f01")
     else:
-      await self.send_command("Y", f"P0c{filter_index:02}")
+      if mode == ImagingMode.PHASE_CONTRAST:
+        await self.send_command("Y", "P1120")
+        await self.send_command("Y", "P0d05")
+        await self.send_command("Y", "P1002")
+      elif mode == ImagingMode.BRIGHTFIELD:
+        await self.send_command("Y", "P1101")
+        await self.send_command("Y", "P0d05")
+        await self.send_command("Y", "P1002")
+      else:
+        await self.send_command("Y", "P1101")
+        await self.send_command("Y", f"P0d{filter_index:02}")
+        await self.send_command("Y", "P1001")
 
     self._imaging_mode = mode
     await self.led_on(intensity=led_intensity)
-    await asyncio.sleep(0.5)
 
   async def set_objective(self, objective: Objective) -> None:
     """Rotate objective turret to the specified objective."""
