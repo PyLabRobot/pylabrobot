@@ -244,8 +244,6 @@ def compute_single_container_offsets(
 
   if len(use_channels) == 0:
     return []
-  if len(use_channels) == 1:
-    return [Coordinate.zero()]
 
   ch_lo, ch_hi = min(use_channels), max(use_channels)
   if len(channel_spacings) < ch_hi + 1:
