@@ -1,11 +1,5 @@
 # Protocol: MT-SICS (Mettler Toledo Standard Interface Command Set)
 
-<!--
-  Template version: 1.0
-  This document follows the PyLabRobot device protocol documentation pattern.
-  Copy this structure when documenting a new device backend's communication protocol.
--->
-
 ## Overview
 
 | Property | Value |
@@ -145,7 +139,7 @@ reports I1 levels [0, 1] but I0 discovers 62 commands across levels 0-3, includi
 M21, M28, and many other Level 2 commands.
 
 During `setup()`, the backend queries I0 to discover all available commands.
-Methods decorated with `@requires_mt_sics_command("CMD")` check against this list.
+`send_command` checks the command against this list and raises if unsupported.
 
 ## Command levels
 

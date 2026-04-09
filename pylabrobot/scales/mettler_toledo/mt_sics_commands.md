@@ -8,7 +8,7 @@ Source: MT-SICS Interface Command Set for Automated Precision Weigh Modules (spe
 **Important:** I1 reports which standardized level sets are fully implemented, but
 individual commands may exist outside those levels. I0 is the definitive source of
 command support. During setup(), the backend queries I0 to discover all available
-commands and gates methods via `@requires_mt_sics_command`.
+commands. `send_command` checks the command against this list and raises if unsupported.
 
 **Hardware-validated on WXS205SDU WXA-Bridge (S/N: B207696838, firmware: 1.10):**
 I1 reports levels [0, 1] but I0 discovers 62 commands across levels 0-3.
@@ -299,7 +299,7 @@ to validate the response format. The pattern is:
 
 1. Confirm the command appears in the device's I0 list
 2. Send the command and observe the raw response
-3. Add a method to `backend.py` with `@requires_mt_sics_command`
+3. Add a method to `backend.py` (the command check happens in `send_command`)
 4. Add a test to `backend_tests.py`
 
 ### Remaining priorities
