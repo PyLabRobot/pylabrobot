@@ -108,8 +108,9 @@ class EL406SyringeDispensingBackend8(SyringeDispensingBackend8):
       else:
         groups.append((vol, [col]))
 
-    for vol, cols in groups:
-      await self._syringe_dispense(plate, volume=vol, columns=cols, params=backend_params)
+    async with self._driver.batch():
+      for vol, cols in groups:
+        await self._syringe_dispense(plate, volume=vol, columns=cols, params=backend_params)
 
   async def _syringe_dispense(
     self,

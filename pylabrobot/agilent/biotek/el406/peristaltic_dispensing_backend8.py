@@ -131,8 +131,9 @@ class EL406PeristalticDispensingBackend8(PeristalticDispensingBackend8):
       else:
         groups.append((vol, [col]))
 
-    for vol, cols in groups:
-      await self._peristaltic_dispense(plate, volume=vol, columns=cols, params=backend_params)
+    async with self._driver.batch():
+      for vol, cols in groups:
+        await self._peristaltic_dispense(plate, volume=vol, columns=cols, params=backend_params)
 
   @dataclass
   class PrimeParams(BackendParams):
