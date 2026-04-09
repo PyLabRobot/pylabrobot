@@ -142,7 +142,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
   async def _is_initialized(self) -> bool:
     """Check if LiHa axes are already initialized."""
     try:
-      arm = EVOArm(self._driver, "C5")
+      arm = EVOArm(self._driver, "C5")  # type: ignore[arg-type]
       err = await arm.read_error_register(0)
       err = str(err)  # may be int if all digits
       # A = init failed (1), G = not initialized (7)
@@ -156,8 +156,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
     """Fast setup when axes are already initialized."""
     from pylabrobot.tecan.evo.firmware import LiHa
 
-    self.liha = LiHa(self._driver, "C5")
-    self.zaap = ZaapMotion(self._driver)
+    self.liha = LiHa(self._driver, "C5")  # type: ignore[arg-type]
+    self.zaap = ZaapMotion(self._driver)  # type: ignore[arg-type]
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
     self._y_range = (await self.liha.report_y_param(5))[0]
@@ -166,7 +166,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
 
   async def _configure_zaapmotion(self) -> None:
     """Exit boot mode and configure all 8 ZaapMotion motor controllers."""
-    zaap = ZaapMotion(self._driver)
+    zaap = ZaapMotion(self._driver)  # type: ignore[arg-type]
     all_failed_tips = []
     for tip in range(8):
       # Check current mode
@@ -214,7 +214,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
       raise TecanError(
         f"ZaapMotion controllers not responding (tips {all_failed_tips}). "
         "Power cycle the EVO and try again.",
-        "C5", 5,
+        "C5",
+        5,
       )
 
     self.zaap = zaap
@@ -383,8 +384,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
     # by (tip_length - nesting_depth).
     first_par = ops[0].resource.parent
     if isinstance(first_par, TecanPlate):
-      z_asp = [None] * self.num_channels
-      z_asp_max = [None] * self.num_channels
+      z_asp: List[Optional[int]] = [None] * self.num_channels
+      z_asp_max: List[Optional[int]] = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
         tip_ext = int(ops[i].tip.total_tip_length * 10) - int(ops[i].tip.fitting_depth * 10)
         z_asp[channel] = int(first_par.z_start) + tip_ext
@@ -422,12 +423,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
       ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
       await self.liha.set_search_speed(ssl)
       await self.liha.set_search_retract_distance(sdl)
-      await self.liha.set_search_z_start(
-        [z if z is not None else self._z_range for z in z_asp]
-      )
-      await self.liha.set_search_z_max(
-        [z if z is not None else self._z_range for z in z_asp_max]
-      )
+      await self.liha.set_search_z_start([z if z is not None else self._z_range for z in z_asp])
+      await self.liha.set_search_z_max([z if z is not None else self._z_range for z in z_asp_max])
       await self.liha.set_search_submerge(sbl)
       shz = [self._z_range] * self.num_channels
       await self.liha.set_z_travel_height(shz)
@@ -476,7 +473,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
     # Adjust for mounted tip.
     first_par = ops[0].resource.parent
     if isinstance(first_par, TecanPlate):
-      z_disp = [None] * self.num_channels
+      z_disp: List[Optional[int]] = [None] * self.num_channels
       for i, channel in enumerate(use_channels):
         tip_ext = int(ops[i].tip.total_tip_length * 10) - int(ops[i].tip.fitting_depth * 10)
         z_disp[channel] = int(first_par.z_dispense) + tip_ext
@@ -492,7 +489,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
       x,
       y_adj,
       ys,
-      z_disp,
+      z_disp,  # type: ignore[arg-type]
     )
 
     sep, spp, stz, mtr = self._dispense_action(ops, use_channels, tecan_liquid_classes)

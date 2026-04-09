@@ -88,11 +88,13 @@ class TecanEVO(Resource, Device):
     deck_ref = deck or self
 
     # PIP capability
+    pip_backend: EVOPIPBackend
     if air_liha:
       pip_backend = AirEVOPIPBackend(driver=driver, deck=deck_ref, diti_count=diti_count)
     else:
       pip_backend = EVOPIPBackend(driver=driver, deck=deck_ref, diti_count=diti_count)
     self.pip = PIP(backend=pip_backend)
+    self._pip_backend = pip_backend
 
     # RoMa arm capability
     self.arm: Optional[TecanGripperArm] = None
@@ -101,7 +103,7 @@ class TecanEVO(Resource, Device):
       self.arm = TecanGripperArm(backend=roma_backend, reference_resource=deck_ref)
 
     # Capabilities list: PIP first (LiHa PIA), then arm (RoMa PIA + park)
-    caps = [self.pip]
+    caps: list = [self.pip]
     if self.arm is not None:
       caps.append(self.arm)
     self._capabilities = caps
@@ -122,14 +124,16 @@ class TecanEVO(Resource, Device):
       roma_backend = self.arm.backend
       roma_needs_init = await self._roma_needs_init(roma_backend)
 
-      if roma_needs_init and self.pip.backend.liha is not None:
+      if (
+        roma_needs_init
+        and self._pip_backend.liha is not None
+        and self._pip_backend._z_range is not None
+      ):
         logger.info("RoMa needs PIA — homing LiHa to clear path.")
-        z_range = self.pip.backend._z_range
-        num_ch = self.pip.backend.num_channels
-        await self.pip.backend.liha.set_z_travel_height([z_range] * num_ch)
-        await self.pip.backend.liha.position_absolute_all_axis(
-          45, 1031, 90, [z_range] * num_ch
-        )
+        z_range = self._pip_backend._z_range
+        num_ch = self._pip_backend.num_channels
+        await self._pip_backend.liha.set_z_travel_height([z_range] * num_ch)
+        await self._pip_backend.liha.position_absolute_all_axis(45, 1031, 90, [z_range] * num_ch)
 
       await self.arm._on_setup()
 
@@ -139,7 +143,7 @@ class TecanEVO(Resource, Device):
     """Check if RoMa needs PIA (not already initialized)."""
     from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
 
-    arm = EVOArm(self._driver, "C1")
+    arm = EVOArm(self._driver, "C1")  # type: ignore[arg-type]
     try:
       roma_err = await arm.read_error_register()
     except TecanError as e:

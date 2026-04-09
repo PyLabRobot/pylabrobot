@@ -73,7 +73,7 @@ class EVORoMaBackend(GripperArmBackend):
   async def _on_setup(self) -> None:
     """Initialize RoMa arm. Skips PIA if already initialized."""
 
-    arm = EVOArm(self._driver, ROMA)
+    arm = EVOArm(self._driver, ROMA)  # type: ignore[arg-type]
 
     # Check if RoMa is present and already initialized
     try:
@@ -87,7 +87,7 @@ class EVORoMaBackend(GripperArmBackend):
     if roma_err and all(c == "@" for c in roma_err):
       # Already initialized — skip PIA, just set up firmware wrapper
       logger.info("RoMa already initialized (REE=%s), skipping PIA.", roma_err)
-      self.roma = RoMa(self._driver, ROMA)
+      self.roma = RoMa(self._driver, ROMA)  # type: ignore[arg-type]
       return
 
     # Full init: PIA + park
@@ -101,7 +101,7 @@ class EVORoMaBackend(GripperArmBackend):
       raise
     await arm.set_bus_mode(2)
 
-    self.roma = RoMa(self._driver, ROMA)
+    self.roma = RoMa(self._driver, ROMA)  # type: ignore[arg-type]
     await self.roma.position_initialization_x()
     await self.park()
     logger.info("RoMa initialized and parked.")

@@ -87,7 +87,7 @@ class EVOPIPBackend(PIPBackend):
     # Setup arm (PIA + BMX)
     await self._setup_arm(LIHA)
 
-    self.liha = LiHa(self._driver, LIHA)
+    self.liha = LiHa(self._driver, LIHA)  # type: ignore[arg-type]
     await self.liha.position_initialization_x()
 
     self._num_channels = await self.liha.report_number_tips()
@@ -109,7 +109,7 @@ class EVOPIPBackend(PIPBackend):
 
   async def _setup_arm(self, module: str) -> bool:
     """Send PIA + BMX to initialize an arm module."""
-    arm = EVOArm(self._driver, module)
+    arm = EVOArm(self._driver, module)  # type: ignore[arg-type]
     try:
       if module == MCA:
         await arm.position_init_bus()
@@ -152,7 +152,7 @@ class EVOPIPBackend(PIPBackend):
     """Get Y-spacing from plate well pitch or resource size."""
     par = ops[0].resource.parent
     if hasattr(par, "item_dy"):
-      return int(par.item_dy * 10)
+      return int(par.item_dy * 10)  # type: ignore[union-attr]
     return int(ops[0].resource.get_absolute_size_y() * 10)
 
   def _liha_positions(
@@ -172,8 +172,10 @@ class EVOPIPBackend(PIPBackend):
       "max": [None] * self.num_channels,
     }
 
+    z_range = self._z_range
+
     def get_z_position(z: float, z_off: float, tip_length: int) -> int:
-      return int(self._z_range - z + z_off * 10 + tip_length)
+      return int(z_range - z + z_off * 10 + tip_length)
 
     for i, (op, channel) in enumerate(zip(ops, use_channels)):
       location = op.resource.get_location_wrt(self._deck) + op.resource.center()
