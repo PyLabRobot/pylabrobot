@@ -139,9 +139,22 @@
 
 ---
 
-## Test 8: RoMa Plate Handling — NOT STARTED
+## Test 8: RoMa Plate Handling — PASSED
 
-RoMa init works (cold + warm). Plate handling not yet tested.
+**Date:** 2026-04-08
+
+### Fixes Applied
+- Calibrated `roma_x` (1878 → 1670) and `roma_y` (423 → 380) from taught positions
+- Created `TecanGripperArm(GripperArm)` to route `move_resource` through carrier-based backend
+- High-level API now works: `evo.arm.move_resource(plate, carrier_dst[0])`
+
+| Step | Expected | Pass? |
+|------|----------|-------|
+| Pick up from carrier_src[0] | Plate gripped | [x] |
+| Place at carrier_dst[0] | Plate released in position | [x] |
+| Move carrier_dst[0] → [1] → [2] | All 3 positions work | [x] |
+| Return to carrier_src[0] | Plate back at origin | [x] |
+| Resource tracking | plate.parent updates automatically | [x] |
 
 ---
 
@@ -212,6 +225,6 @@ Root cause of systematic X/Y offset identified and fixed:
 
 1. ~~Aspirate STL fix~~ — validated 2026-04-07
 2. ~~Dispense~~ — validated 2026-04-07 with z_dispense=99
-3. **Init ordering changed** — PIP before RoMa in evo.py, needs cold boot validation
-4. **200uL / 1000uL tips** — definitions added to labware library, tip lengths need caliper measurement, Z values need teaching
-5. **RoMa plate handling** — init works, pick/place not tested
+3. ~~Init ordering changed~~ — PIP before RoMa validated on cold boot 2026-04-08
+4. **200uL / 1000uL tips** — fitting_depth=11.0mm measured on hardware (consistent across all 3 sizes), 50uL re-validated 2026-04-09. 200uL/1000uL pipetting not yet tested.
+5. ~~RoMa plate handling~~ — validated 2026-04-08, move_resource API working

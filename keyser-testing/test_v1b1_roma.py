@@ -1,12 +1,14 @@
 """Hardware test: TecanEVO v1b1 RoMa plate handling.
 
-Tests RoMa pick up and place of a plate between two carriers.
+Tests RoMa pick/place via the high-level move_resource API.
+
+Route: carrier_src[0] -> carrier_dst[0] -> carrier_dst[1] -> carrier_dst[2] -> carrier_src[0]
 
 Deck layout:
   Rail 16: MP_3Pos carrier ("carrier_src")
     Position 1: source plate (Eppendorf 96-well)
   Rail 22: MP_3Pos carrier ("carrier_dst")
-    Position 1: destination (empty, plate will be placed here)
+    All positions empty
 
 Usage:
   python keyser-testing/test_v1b1_roma.py
@@ -26,7 +28,7 @@ from pylabrobot.tecan.evo.params import TecanRoMaParams
 
 logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
-# Slow speeds for first test — defaults are x=10000, y=5000, z=1300, r=5000
+# Slow speeds for testing — defaults are x=10000, y=5000, z=1300, r=5000
 SLOW_PARAMS = TecanRoMaParams(
   speed_x=3000,
   speed_y=2000,
@@ -39,7 +41,8 @@ SLOW_PARAMS = TecanRoMaParams(
 
 async def main():
   print("=" * 60)
-  print("  TecanEVO v1b1 RoMa Plate Handling Test")
+  print("  TecanEVO v1b1 RoMa Multi-Position Test")
+  print("  Using high-level move_resource API")
   print("=" * 60)
 
   # --- Deck setup ---
@@ -60,14 +63,13 @@ async def main():
   deck.assign_child_resource(carrier_src, rails=16)
   deck.assign_child_resource(carrier_dst, rails=22)
 
-  source_plate = Eppendorf_96_wellplate_250ul_Vb_skirted("plate")
-  carrier_src[0] = source_plate
+  plate = Eppendorf_96_wellplate_250ul_Vb_skirted("plate")
+  carrier_src[0] = plate
 
   print("\nDeck layout:")
-  print(f"  Rail 16: {carrier_src.name}")
-  print(f"    Position 1: {source_plate.name}")
-  print(f"  Rail 22: {carrier_dst.name}")
-  print(f"    Position 1: (destination)")
+  print(f"  Rail 16: {carrier_src.name}  [plate in pos 1]")
+  print(f"  Rail 22: {carrier_dst.name}  [all empty]")
+  print("\nRoute: src[0] -> dst[0] -> dst[1] -> dst[2] -> src[0]")
 
   print("\nInitializing...")
   try:
@@ -82,45 +84,32 @@ async def main():
     return
 
   assert evo.arm is not None, "RoMa arm not initialized"
-  roma_backend = evo.arm.backend
 
   try:
-    # --- Report computed positions ---
-    z_range = await roma_backend.roma.report_z_param(5)
-    print(f"\n  RoMa Z range: {z_range}")
+    moves = [
+      (carrier_dst[0], "carrier_src[0] -> carrier_dst[0]"),
+      (carrier_dst[1], "carrier_dst[0] -> carrier_dst[1]"),
+      (carrier_dst[2], "carrier_dst[1] -> carrier_dst[2]"),
+      (carrier_src[0], "carrier_dst[2] -> carrier_src[0] (return)"),
+    ]
 
-    src_offset = source_plate.get_location_wrt(deck)
-    src_x, src_y, src_z = roma_backend._roma_positions(source_plate, src_offset, z_range)
-    print(f"\n  Source (carrier_src pos 1):")
-    print(f"    X={src_x}  Y={src_y}")
-    print(f"    Z safe={src_z['safe']}  travel={src_z['travel']}  end={src_z['end']}")
+    for i, (destination, label) in enumerate(moves, 1):
+      print(f"\n--- Step {i}: {label} ---")
+      print(f"  Plate at: {plate.parent.parent.name}[{plate.parent.name}]")
+      input("Press Enter to move...")
 
-    dst_site = carrier_dst[0]
-    dst_offset = dst_site.get_location_wrt(deck)
-    dst_x, dst_y, dst_z = roma_backend._roma_positions(source_plate, dst_offset, z_range)
-    print(f"\n  Destination (carrier_dst pos 1):")
-    print(f"    X={dst_x}  Y={dst_y}")
-    print(f"    Z safe={dst_z['safe']}  travel={dst_z['travel']}  end={dst_z['end']}")
+      await evo.arm.move_resource(
+        plate, destination,
+        pickup_backend_params=SLOW_PARAMS,
+        drop_backend_params=SLOW_PARAMS,
+      )
+      print(f"  Plate now at: {plate.parent.parent.name}[{plate.parent.name}]")
 
-    # --- Test 1: Pick up plate ---
-    print("\n--- Test 1: Pick Up Plate ---")
-    print("  (slow speeds: x=3000, y=2000, z=800, r=2000)")
-    input("Press Enter to pick up plate from carrier_src position 1...")
-    await roma_backend.pick_up_from_carrier(source_plate, backend_params=SLOW_PARAMS)
-    print("Plate picked up!")
+    # Park
+    await evo.arm.backend.park()
+    print("\nRoMa parked!")
 
-    # --- Test 2: Place plate ---
-    print("\n--- Test 2: Place Plate ---")
-    input("Press Enter to place plate at carrier_dst position 1...")
-    await roma_backend.drop_at_carrier(source_plate, dst_offset, backend_params=SLOW_PARAMS)
-    print("Plate placed!")
-
-    # --- Test 3: Park RoMa ---
-    print("\n--- Test 3: Park RoMa ---")
-    await roma_backend.park()
-    print("RoMa parked!")
-
-    print("\n*** ROMA PLATE HANDLING TEST PASSED ***")
+    print("\n*** ROMA MULTI-POSITION TEST PASSED ***")
 
   except Exception as e:
     print(f"\nTest FAILED: {type(e).__name__}: {e}")

@@ -188,8 +188,9 @@ HTML = """
         <span class="pos-value" id="roma-g">—</span>
       </div>
       <div class="controls" style="margin-top:8px">
-        <button class="btn small" onclick="sendAction('gripper_open')">Open Gripper</button>
-        <button class="btn small" onclick="sendAction('gripper_close')">Close Gripper</button>
+        <button class="btn small" onclick="sendJog('roma','g',-1)">G Close ←</button>
+        <button class="btn small" onclick="sendJog('roma','g',1)">G Open →</button>
+        <button class="btn small" onclick="sendAction('gripper_open')">Full Open</button>
       </div>
     </div>
 
@@ -205,7 +206,8 @@ HTML = """
       <span class="key">←</span>/<span class="key">→</span> X &nbsp;
       <span class="key">↑</span>/<span class="key">↓</span> Y &nbsp;
       <span class="key">PgUp</span>/<span class="key">PgDn</span> Z &nbsp;
-      <span class="key">Home</span>/<span class="key">End</span> R
+      <span class="key">Home</span>/<span class="key">End</span> R &nbsp;
+      <span class="key">[</span>/<span class="key">]</span> G close/open
     </div>
   </div>
 
@@ -227,9 +229,9 @@ HTML = """
         <label style="color:#aaa;font-size:12px;width:70px">Mounted:</label>
         <select id="teach-tip-type" style="width:140px" onchange="updateTipInfo()">
           <option value="none">No tip</option>
-          <option value="50ul">DiTi 50µL (ext 531)</option>
-          <option value="200ul">DiTi 200µL (ext 550)</option>
-          <option value="1000ul">DiTi 1000µL (ext 900)</option>
+          <option value="50ul">DiTi 50µL (ext 470)</option>
+          <option value="200ul">DiTi 200µL (ext 475)</option>
+          <option value="1000ul">DiTi 1000µL (ext 851)</option>
         </select>
         <span id="tip-ext-info" style="font-size:11px;color:#888;margin-left:4px"></span>
       </div>
@@ -289,7 +291,7 @@ HTML = """
 let arm = 'liha';
 let stepIdx = 4;
 const STEPS = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0];
-const TIP_EXT = {none: 0, '50ul': 531, '200ul': 550, '1000ul': 900};
+const TIP_EXT = {none: 0, '50ul': 470, '200ul': 475, '1000ul': 851};
 
 function updateTipInfo() {
   const tip = document.getElementById('teach-tip-type').value;
@@ -505,6 +507,8 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'PageDown') { sendJog('roma', 'z', -1); return; } // down
   if (e.key === 'Home') { sendJog('roma', 'r', -1); return; }
   if (e.key === 'End') { sendJog('roma', 'r', 1); return; }
+  if (e.key === '[' && !e.target.tagName.match(/INPUT/i)) { sendJog('roma', 'g', -1); return; }
+  if (e.key === ']' && !e.target.tagName.match(/INPUT/i)) { sendJog('roma', 'g', 1); return; }
 });
 
 let isConnected = false;
@@ -862,6 +866,8 @@ async def do_jog(arm_name, axis, delta):
       await driver.send_command(module, command=f"PRZ{delta}")
     elif axis == "r":
       await driver.send_command(module, command=f"PRR{delta}")
+    elif axis == "g":
+      await driver.send_command(module, command=f"PRG{delta}")
 
 
 async def do_action(action):
@@ -931,9 +937,6 @@ async def do_action(action):
   elif action == "gripper_open":
     await driver.send_command("C1", command="PAG900")
     return "Gripper opened (G=900)"
-  elif action == "gripper_close":
-    await driver.send_command("C1", command="AGP100,75,710")
-    return "Gripper closed (grip plate ~81mm)"
   return f"Unknown action: {action}"
 
 
@@ -974,6 +977,9 @@ def build_deck():
 
   carrier = MP_3Pos_Corrected("carrier")
   deck.assign_child_resource(carrier, rails=16)
+
+  carrier2 = MP_3Pos_Corrected("carrier2")
+  deck.assign_child_resource(carrier2, rails=22)
 
   source_plate = Eppendorf_96_wellplate_250ul_Vb_skirted("source")
   dest_plate = Eppendorf_96_wellplate_250ul_Vb_skirted("dest")

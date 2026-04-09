@@ -45,8 +45,8 @@ def MP_3Pos_Corrected(name: str) -> TecanPlateCarrier:
     size_z=62.5,
     off_x=12.0,
     off_y=24.7,
-    roma_x=1828,
-    roma_y=423,
+    roma_x=1670,
+    roma_y=380,
     roma_z_safe=946,
     roma_z_end=2537,
     sites=create_homogeneous_resources(
@@ -113,7 +113,7 @@ def Eppendorf_96_wellplate_250ul_Vb_skirted(name: str) -> TecanPlate:
     lid=None,
     model="Eppendorf_96_wellplate_250ul_Vb_skirted",
     z_start=300.0,     # taught: ~260-295, start slightly above plate top
-    z_dispense=99.0,   # taught: bottom of well (bare channel)
+    z_dispense=164.0,  # 99 + 65 (compensate for fitting_depth 4.9->11.0 correction)
     z_max=100.0,       # max depth (~10mm below dispense)
     area=33.2,
     ordered_items=create_ordered_items_2d(
@@ -150,7 +150,7 @@ def DiTi_50ul_SBS_LiHa_Air_tip(name: Optional[str] = None) -> TecanTip:
     name=name,
     has_filter=False,
     total_tip_length=58.0,
-    fitting_depth=4.9,
+    fitting_depth=11.0,
     maximal_volume=55.0,
     tip_type=TipType.AIRDITI,
   )
@@ -164,7 +164,8 @@ def DiTi_200ul_SBS_LiHa_Air_tip(name: Optional[str] = None) -> TecanTip:
   return TecanTip(
     name=name,
     has_filter=False,
-    total_tip_length=58.5,  # TODO: measure fitting_depth with calipers
+    total_tip_length=58.5,
+    fitting_depth=11.0,
     maximal_volume=220.0,
     tip_type=TipType.AIRDITI,
   )
@@ -178,7 +179,8 @@ def DiTi_1000ul_SBS_LiHa_Air_tip(name: Optional[str] = None) -> TecanTip:
   return TecanTip(
     name=name,
     has_filter=False,
-    total_tip_length=95.0,  # TODO: measure with calipers
+    total_tip_length=96.1,
+    fitting_depth=11.0,
     maximal_volume=1100.0,
     tip_type=TipType.AIRDITI,
   )
@@ -188,9 +190,9 @@ def DiTi_1000ul_SBS_LiHa_Air_tip(name: Optional[str] = None) -> TecanTip:
 # Used by jog UI to compensate Z readings when tips are mounted.
 TIP_TYPES = {
   "none": {"label": "No tip", "tip_ext": 0},
-  "50ul": {"label": "DiTi 50µL", "tip_ext": int(58.1 * 10) - 50},    # 531
-  "200ul": {"label": "DiTi 200µL", "tip_ext": int(60.0 * 10) - 50},   # 550 (TODO: update)
-  "1000ul": {"label": "DiTi 1000µL", "tip_ext": int(95.0 * 10) - 50}, # 900 (TODO: update)
+  "50ul": {"label": "DiTi 50µL", "tip_ext": 470},    # 58.0 - 11.0 = 47.0mm
+  "200ul": {"label": "DiTi 200µL", "tip_ext": 475},   # 58.5 - 11.0 = 47.5mm
+  "1000ul": {"label": "DiTi 1000µL", "tip_ext": 851}, # 96.1 - 11.0 = 85.1mm
 }
 
 
@@ -206,9 +208,9 @@ def DiTi_200ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
     size_y=86.8,
     size_z=30.0,
     model="DiTi_200ul_SBS_LiHa_Air",
-    z_start=850.0,   # TODO: teach from hardware
-    z_dispense=850.0,
-    z_max=550.0,      # TODO: teach from hardware
+    z_start=770.0,   # same box height as 50uL
+    z_dispense=770.0,
+    z_max=550.0,
     area=33.2,
     ordered_items=create_ordered_items_2d(
       TipSpot,
@@ -238,9 +240,9 @@ def DiTi_1000ul_SBS_LiHa_Air(name: str) -> TecanTipRack:
     size_y=85.8,
     size_z=25.0,
     model="DiTi_1000ul_SBS_LiHa_Air",
-    z_start=850.0,   # TODO: teach from hardware
-    z_dispense=850.0,
-    z_max=550.0,      # TODO: teach from hardware
+    z_start=1180.0,   # 50uL z_start(770) + 41mm taller box (410 units)
+    z_dispense=1180.0,
+    z_max=960.0,      # 50uL z_max(550) + 410
     area=33.2,
     ordered_items=create_ordered_items_2d(
       TipSpot,

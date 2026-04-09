@@ -6,17 +6,21 @@ capabilities using the v1b1 Device architecture.
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
-from pylabrobot.arms.arm import GripperArm
+from pylabrobot.tecan.evo.arm import TecanGripperArm
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Resource
 
 from pylabrobot.tecan.evo.air_pip_backend import AirEVOPIPBackend
 from pylabrobot.tecan.evo.driver import TecanEVODriver
+from pylabrobot.tecan.evo.errors import TecanError
 from pylabrobot.tecan.evo.pip_backend import EVOPIPBackend
 from pylabrobot.tecan.evo.roma_backend import EVORoMaBackend
+
+logger = logging.getLogger(__name__)
 
 
 class TecanEVO(Resource, Device):
@@ -91,13 +95,58 @@ class TecanEVO(Resource, Device):
     self.pip = PIP(backend=pip_backend)
 
     # RoMa arm capability
-    self.arm: Optional[GripperArm] = None
+    self.arm: Optional[TecanGripperArm] = None
     if has_roma:
       roma_backend = EVORoMaBackend(driver=driver, deck=deck_ref)
-      self.arm = GripperArm(backend=roma_backend, reference_resource=deck_ref)
+      self.arm = TecanGripperArm(backend=roma_backend, reference_resource=deck_ref)
 
     # Capabilities list: PIP first (LiHa PIA), then arm (RoMa PIA + park)
     caps = [self.pip]
     if self.arm is not None:
       caps.append(self.arm)
     self._capabilities = caps
+
+  async def setup(self):
+    """Initialize EVO with collision-safe ordering.
+
+    If the LiHa is already initialized but the RoMa needs PIA, the LiHa
+    is homed first to clear the RoMa's path.
+    """
+    await self._driver.setup()
+
+    # Initialize PIP (LiHa) first
+    await self.pip._on_setup()
+
+    # Before RoMa init, check if RoMa needs PIA — if so, home LiHa first
+    if self.arm is not None:
+      roma_backend = self.arm.backend
+      roma_needs_init = await self._roma_needs_init(roma_backend)
+
+      if roma_needs_init and self.pip.backend.liha is not None:
+        logger.info("RoMa needs PIA — homing LiHa to clear path.")
+        z_range = self.pip.backend._z_range
+        num_ch = self.pip.backend.num_channels
+        await self.pip.backend.liha.set_z_travel_height([z_range] * num_ch)
+        await self.pip.backend.liha.position_absolute_all_axis(
+          45, 1031, 90, [z_range] * num_ch
+        )
+
+      await self.arm._on_setup()
+
+    self._setup_finished = True
+
+  async def _roma_needs_init(self, roma_backend: EVORoMaBackend) -> bool:
+    """Check if RoMa needs PIA (not already initialized)."""
+    from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
+
+    arm = EVOArm(self._driver, "C1")
+    try:
+      roma_err = await arm.read_error_register()
+    except TecanError as e:
+      if e.error_code == 5:
+        return False  # RoMa not present
+      return True
+
+    if roma_err and all(c == "@" for c in roma_err):
+      return False  # Already initialized
+    return True

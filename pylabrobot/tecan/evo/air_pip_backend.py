@@ -166,6 +166,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
   async def _configure_zaapmotion(self) -> None:
     """Exit boot mode and configure all 8 ZaapMotion motor controllers."""
     zaap = ZaapMotion(self._driver)
+    all_failed_tips = []
     for tip in range(8):
       # Check current mode
       try:
@@ -197,11 +198,23 @@ class AirEVOPIPBackend(EVOPIPBackend):
 
       # Send motor configuration
       logger.info("Configuring ZaapMotion tip %d (%d commands)", tip + 1, len(ZAAPMOTION_CONFIG))
+      failures = 0
       for cmd in ZAAPMOTION_CONFIG:
         try:
           await zaap.configure_motor(tip, cmd)
         except TecanError as e:
+          failures += 1
           logger.warning("ZaapMotion tip %d config '%s' failed: %s", tip + 1, cmd, e)
+
+      if failures == len(ZAAPMOTION_CONFIG):
+        all_failed_tips.append(tip + 1)
+
+    if all_failed_tips:
+      raise TecanError(
+        f"ZaapMotion controllers not responding (tips {all_failed_tips}). "
+        "Power cycle the EVO and try again.",
+        "C5", 5,
+      )
 
     self.zaap = zaap
 
