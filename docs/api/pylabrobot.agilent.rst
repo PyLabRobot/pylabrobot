@@ -89,6 +89,21 @@ BioTek Cytation
 .. autoclass:: pylabrobot.agilent.biotek.cytation.CytationBackend.CaptureParams
    :members:
 
+.. currentmodule:: pylabrobot.agilent.biotek.loading_tray_backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BioTekLoadingTrayBackend
+
+.. autoclass:: pylabrobot.agilent.biotek.loading_tray_backend.BioTekLoadingTrayBackend.OpenParams
+   :members:
+
+.. autoclass:: pylabrobot.agilent.biotek.loading_tray_backend.BioTekLoadingTrayBackend.CloseParams
+   :members:
+
 
 BioTek Synergy H1
 ------------------

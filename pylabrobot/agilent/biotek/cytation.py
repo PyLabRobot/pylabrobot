@@ -25,9 +25,12 @@ from pylabrobot.capabilities.microscopy.standard import (
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
+from pylabrobot.capabilities.loading_tray import LoadingTray
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource
+from pylabrobot.resources import Coordinate, Plate, Resource
+
+from .loading_tray_backend import BioTekLoadingTrayBackend
 from pylabrobot.serializer import SerializableMixin
 
 try:
@@ -917,32 +920,26 @@ class Cytation5(Resource, Device):
     self.fluorescence = Fluorescence(backend=backend)
     self.microscope = Microscopy(backend=backend)
     self.temperature = TemperatureController(backend=backend)
+    self.loading_tray = LoadingTray(
+      backend=BioTekLoadingTrayBackend(driver=backend),
+      name=name + "_loading_tray",
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
+      child_location=Coordinate.zero(),  # TODO: measure
+    )
     self._capabilities = [
       self.absorbance,
       self.luminescence,
       self.fluorescence,
       self.microscope,
       self.temperature,
+      self.loading_tray,
     ]
-
-    self.plate_holder = PlateHolder(
-      name=name + "_plate_holder",
-      size_x=127.76,
-      size_y=85.48,
-      size_z=0,  # TODO: measure
-      pedestal_size_z=0,
-      child_location=Coordinate.zero(),  # TODO: measure
-    )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self.assign_child_resource(self.loading_tray, location=Coordinate.zero())
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}
-
-  async def open(self, slow: bool = False) -> None:
-    await self.driver.open(slow=slow)
-
-  async def close(self, slow: bool = False) -> None:
-    await self.driver.close(slow=slow)
 
 
 class Cytation1(Resource, Device):
@@ -969,23 +966,16 @@ class Cytation1(Resource, Device):
     self.driver: BioTekBackend = backend
     self.microscope = Microscopy(backend=backend)  # type: ignore[arg-type]
     self.temperature = TemperatureController(backend=backend)
-    self._capabilities = [self.microscope, self.temperature]
-
-    self.plate_holder = PlateHolder(
-      name=name + "_plate_holder",
+    self.loading_tray = LoadingTray(
+      backend=BioTekLoadingTrayBackend(driver=backend),
+      name=name + "_loading_tray",
       size_x=127.76,
       size_y=85.48,
       size_z=0,  # TODO: measure
-      pedestal_size_z=0,
       child_location=Coordinate.zero(),  # TODO: measure
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self._capabilities = [self.microscope, self.temperature, self.loading_tray]
+    self.assign_child_resource(self.loading_tray, location=Coordinate.zero())
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}
-
-  async def open(self, slow: bool = False) -> None:
-    await self.driver.open(slow=slow)
-
-  async def close(self, slow: bool = False) -> None:
-    await self.driver.close(slow=slow)

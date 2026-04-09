@@ -113,6 +113,28 @@ Peeling
     PeelerBackend
 
 
+Loading Tray
+------------
+
+.. currentmodule:: pylabrobot.capabilities.loading_tray.loading_tray
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    LoadingTray
+
+.. currentmodule:: pylabrobot.capabilities.loading_tray.backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    LoadingTrayBackend
+
+
 Tilting
 -------
 

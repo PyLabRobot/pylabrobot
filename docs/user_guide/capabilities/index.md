@@ -51,6 +51,7 @@ centrifuging
 sealing
 peeling
 tilting
+loading-tray
 pumping
 weighing
 barcode-scanning
