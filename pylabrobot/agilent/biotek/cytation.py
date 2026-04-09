@@ -25,7 +25,7 @@ from pylabrobot.capabilities.microscopy.standard import (
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
-from pylabrobot.capabilities.loading_tray import LoadingTray
+from pylabrobot.capabilities.loading_tray import HasLoadingTray, LoadingTray
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Plate, Resource
@@ -892,7 +892,7 @@ class CytationBackend(BioTekBackend, MicroscopyBackend):
 # ---------------------------------------------------------------------------
 
 
-class Cytation5(Resource, Device):
+class Cytation5(Resource, Device, HasLoadingTray):
   """Agilent BioTek Cytation 5 — plate reader + imager."""
 
   def __init__(
@@ -942,7 +942,7 @@ class Cytation5(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
 
-class Cytation1(Resource, Device):
+class Cytation1(Resource, Device, HasLoadingTray):
   """Agilent BioTek Cytation 1 — plate reader only (no imager)."""
 
   def __init__(

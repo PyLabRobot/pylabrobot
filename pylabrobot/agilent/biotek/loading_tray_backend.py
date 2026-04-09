@@ -23,9 +23,11 @@ class BioTekLoadingTrayBackend(LoadingTrayBackend):
   async def open(self, backend_params: Optional[BackendParams] = None):
     if not isinstance(backend_params, self.OpenParams):
       backend_params = self.OpenParams()
-    await self._driver.open(slow=backend_params.slow)
+    await self._driver._set_slow_mode(backend_params.slow)
+    await self._driver.send_command("J")
 
   async def close(self, backend_params: Optional[BackendParams] = None):
     if not isinstance(backend_params, self.CloseParams):
       backend_params = self.CloseParams()
-    await self._driver.close(slow=backend_params.slow)
+    await self._driver._set_slow_mode(backend_params.slow)
+    await self._driver.send_command("A")
