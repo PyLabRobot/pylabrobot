@@ -2169,11 +2169,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
-    if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
-      raise ValueError(
-        f"lld_mode must be GAMMA (capacitive) or PRESSURE (pressure-based), got {lld_mode!r}"
-      )
-
     use_channels = validate_channel_selections(
       containers=containers,
       num_channels=self.num_channels,
@@ -2219,12 +2214,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_tolerance=x_grouping_tolerance,
     )
 
-    # Select detection function and kwargs
     detect_func: Callable[..., Any]
     if lld_mode == self.LLDMode.GAMMA:
       detect_func = self._move_z_drive_to_liquid_surface_using_clld
-    else:
+    elif lld_mode == self.LLDMode.PRESSURE:
       detect_func = self._search_for_surface_using_plld
+    else:
+      raise ValueError(f"Unsupported lld_mode: {lld_mode!r}")
 
     async def _probe_batch_heights(
       batch: ChannelBatch,

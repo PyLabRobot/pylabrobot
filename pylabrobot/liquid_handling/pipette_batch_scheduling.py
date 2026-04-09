@@ -386,8 +386,6 @@ def resolve_container_targets(
     for idx in range(len(containers)):
       container_groups[id(containers[idx])].append(idx)
     for c_indices in container_groups.values():
-      if len(c_indices) < 2:
-        continue
       group_channels = [use_channels[i] for i in c_indices]
       spread = compute_single_container_offsets(
         container=containers[c_indices[0]],
