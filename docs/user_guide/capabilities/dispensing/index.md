@@ -48,5 +48,5 @@ syringe
 
 ## API reference
 
-- {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic.PeristalticDispensing` / {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.backend.PeristalticDispensingBackend`
-- {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.syringe.SyringeDispensing` / {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.backend.SyringeDispensingBackend`
+- {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic8.PeristalticDispensing8` / {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.backend8.PeristalticDispensingBackend8`
+- {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.syringe8.SyringeDispensing8` / {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.backend8.SyringeDispensingBackend8`

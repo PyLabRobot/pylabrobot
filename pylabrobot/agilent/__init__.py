@@ -6,7 +6,7 @@ from .biotek import (
   CytationBackend,
   CytationImagingConfig,
   EL406Driver,
-  EL406PlateWashingBackend,
+  EL406PlateWasher96Backend,
   EL406ShakingBackend,
   SynergyH1,
   SynergyH1Backend,

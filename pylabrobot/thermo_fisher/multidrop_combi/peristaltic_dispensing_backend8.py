@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from pylabrobot.capabilities.bulk_dispensers.peristaltic import PeristalticDispensingBackend
+from pylabrobot.capabilities.bulk_dispensers.peristaltic import PeristalticDispensingBackend8
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Plate
 from pylabrobot.thermo_fisher.multidrop_combi.driver import MultidropCombiDriver
@@ -28,8 +28,8 @@ def _ul_to_tenths(volume_ul: float) -> int:
   return round(volume_ul * 10)
 
 
-class MultidropCombiPeristalticDispensingBackend(PeristalticDispensingBackend):
-  """Translates PeristalticDispensingBackend operations into Multidrop Combi commands."""
+class MultidropCombiPeristalticDispensingBackend8(PeristalticDispensingBackend8):
+  """Translates PeristalticDispensingBackend8 operations into Multidrop Combi commands."""
 
   def __init__(self, driver: MultidropCombiDriver):
     super().__init__()

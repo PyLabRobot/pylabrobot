@@ -670,7 +670,7 @@ class EL406Driver(Driver):
   async def batch(self) -> AsyncIterator[None]:
     """Context manager for batching step commands.
 
-    Each step command (manifold_wash, syringe_prime, etc.) automatically wraps
+    Each step command (wash, syringe_prime, etc.) automatically wraps
     its execution in a batch. Use this context manager to group multiple step
     commands into a single batch, avoiding repeated start/cleanup cycles.
 

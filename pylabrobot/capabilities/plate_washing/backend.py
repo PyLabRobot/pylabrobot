@@ -5,7 +5,7 @@ from pylabrobot.capabilities.capability import BackendParams, CapabilityBackend
 from pylabrobot.resources import Plate
 
 
-class PlateWashingBackend(CapabilityBackend, metaclass=ABCMeta):
+class PlateWasher96Backend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for plate washing devices."""
 
   @abstractmethod
@@ -56,10 +56,12 @@ class PlateWashingBackend(CapabilityBackend, metaclass=ABCMeta):
   @abstractmethod
   async def prime(
     self,
+    plate: Plate,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Prime fluid lines.
 
     Args:
+      plate: Target plate.
       backend_params: Backend-specific parameters.
     """

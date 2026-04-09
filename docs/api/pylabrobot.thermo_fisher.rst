@@ -24,22 +24,22 @@ Multidrop Combi
 
     MultidropCombiDriver
 
-.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend
+.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    MultidropCombiPeristalticDispensingBackend
+    MultidropCombiPeristalticDispensingBackend8
 
-.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend.MultidropCombiPeristalticDispensingBackend.DispenseParams
+.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8.MultidropCombiPeristalticDispensingBackend8.DispenseParams
    :members:
 
-.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend.MultidropCombiPeristalticDispensingBackend.PrimeParams
+.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8.MultidropCombiPeristalticDispensingBackend8.PrimeParams
    :members:
 
-.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend.MultidropCombiPeristalticDispensingBackend.PurgeParams
+.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8.MultidropCombiPeristalticDispensingBackend8.PurgeParams
    :members:
 
 .. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.enums

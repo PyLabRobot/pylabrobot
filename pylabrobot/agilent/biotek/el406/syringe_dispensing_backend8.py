@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Literal, Optional
 
-from pylabrobot.capabilities.bulk_dispensers.syringe.backend import SyringeDispensingBackend
+from pylabrobot.capabilities.bulk_dispensers.syringe.backend8 import SyringeDispensingBackend8
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
@@ -48,22 +48,12 @@ def validate_syringe_flow_rate(flow_rate: int) -> None:
     raise ValueError(f"Syringe flow rate must be 1-5, got {flow_rate}")
 
 
-def validate_syringe_volume(volume: float) -> None:
-  if not 80 <= volume <= 9999:
-    raise ValueError(f"Syringe volume must be 80-9999 uL, got {volume}")
-
-
 def validate_pump_delay(delay: int) -> None:
   if not 0 <= delay <= 5000:
     raise ValueError(f"Pump delay must be 0-5000 ms, got {delay}")
 
 
-def validate_submerge_duration(duration: int) -> None:
-  if not 0 <= duration <= 1439:
-    raise ValueError(f"Submerge duration must be 0-1439 minutes, got {duration}")
-
-
-class EL406SyringeDispensingBackend(SyringeDispensingBackend):
+class EL406SyringeDispensingBackend8(SyringeDispensingBackend8):
   """Syringe dispensing backend for the BioTek EL406."""
 
   @dataclass
@@ -121,6 +111,47 @@ class EL406SyringeDispensingBackend(SyringeDispensingBackend):
     for vol, cols in groups:
       await self._syringe_dispense(plate, volume=vol, columns=cols, params=backend_params)
 
+  async def _syringe_dispense(
+    self,
+    plate: Plate,
+    volume: float,
+    columns: Optional[list[int]] = None,
+    params: Optional[DispenseParams] = None,
+  ) -> None:
+    """Send a single syringe dispense command to the firmware."""
+    if params is None:
+      params = self.DispenseParams()
+    p = params
+
+    pump_delay_ms = round(p.pump_delay * 1000)
+
+    if volume <= 0:
+      raise ValueError(f"volume must be positive, got {volume}")
+    validate_syringe(p.syringe)
+    validate_syringe_flow_rate(p.flow_rate)
+    validate_pump_delay(pump_delay_ms)
+
+    column_mask = columns_to_column_mask(columns, plate_wells=plate_well_count(plate))
+
+    logger.info("Syringe dispense: %.1f uL from syringe %s, flow rate %d",
+                volume, p.syringe, p.flow_rate)
+
+    # Convert mm → 0.1mm steps for wire protocol
+    offset_x_steps = round(p.offset_x * 10)
+    offset_y_steps = round(p.offset_y * 10)
+    offset_z_steps = round(p.offset_z * 10)
+
+    data = self._build_syringe_dispense_command(
+      plate=plate, volume=volume, syringe=p.syringe, flow_rate=p.flow_rate,
+      offset_x=offset_x_steps, offset_y=offset_y_steps, offset_z=offset_z_steps,
+      pump_delay_ms=pump_delay_ms, pre_dispense=p.pre_dispense,
+      pre_dispense_volume=p.pre_dispense_volume,
+      num_pre_dispenses=p.num_pre_dispenses, column_mask=column_mask,
+    )
+    framed_command = build_framed_message(command=0xA1, data=data)
+    async with self._driver.batch():
+      await self._driver._send_step_command(framed_command)
+
   @dataclass
   class PrimeParams(BackendParams):
     """Parameters for syringe prime.
@@ -149,107 +180,58 @@ class EL406SyringeDispensingBackend(SyringeDispensingBackend):
     volume: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
+    """Prime the syringe pump fluid lines.
+
+    Fills the syringe pump tubing with liquid by performing one or more
+    aspirate-dispense cycles (refills). Optionally submerges the tips in
+    fluid after priming is complete.
+
+    Args:
+      plate: PLR Plate resource.
+      volume: Prime volume in uL per refill (80-9999).
+      backend_params: :class:`PrimeParams` with syringe, flow_rate, refills,
+        pump_delay, submerge_tips, and submerge_duration settings.
+
+    Raises:
+      ValueError: If parameters are invalid.
+    """
     if not isinstance(backend_params, self.PrimeParams):
       backend_params = self.PrimeParams()
-    await self._syringe_prime(plate, volume=volume, params=backend_params)
+    p = backend_params
 
-  async def _syringe_dispense(
-    self,
-    plate: Plate,
-    volume: float,
-    columns: list[int] | None = None,
-    params: DispenseParams | None = None,
-  ) -> None:
-    """Send a single syringe dispense command to the firmware."""
-    if params is None:
-      params = self.DispenseParams()
-
-    pump_delay_ms = round(params.pump_delay * 1000)
-
-    if volume <= 0:
-      raise ValueError(f"volume must be positive, got {volume}")
-    validate_syringe(params.syringe)
-    validate_syringe_flow_rate(params.flow_rate)
-    validate_pump_delay(pump_delay_ms)
-
-    column_mask = columns_to_column_mask(columns, plate_wells=plate_well_count(plate))
-
-    logger.info(
-      "Syringe dispense: %.1f uL from syringe %s, flow rate %d",
-      volume,
-      params.syringe,
-      params.flow_rate,
-    )
-
-    # Convert mm → 0.1mm steps for wire protocol
-    offset_x_steps = round(params.offset_x * 10)
-    offset_y_steps = round(params.offset_y * 10)
-    offset_z_steps = round(params.offset_z * 10)
-
-    data = self._build_syringe_dispense_command(
-      plate=plate,
-      volume=volume,
-      syringe=params.syringe,
-      flow_rate=params.flow_rate,
-      offset_x=offset_x_steps,
-      offset_y=offset_y_steps,
-      offset_z=offset_z_steps,
-      pump_delay_ms=pump_delay_ms,
-      pre_dispense=params.pre_dispense,
-      pre_dispense_volume=params.pre_dispense_volume,
-      num_pre_dispenses=params.num_pre_dispenses,
-      column_mask=column_mask,
-    )
-    framed_command = build_framed_message(command=0xA1, data=data)
-    async with self._driver.batch():
-      await self._driver._send_step_command(framed_command)
-
-  async def _syringe_prime(
-    self,
-    plate: Plate,
-    volume: float,
-    params: PrimeParams | None = None,
-  ) -> None:
-    """Send a single syringe prime command to the firmware."""
-    if params is None:
-      params = self.PrimeParams()
-
-    pump_delay_ms = round(params.pump_delay * 1000)
-    if params.submerge_duration != 0 and params.submerge_duration % 60 != 0:
+    pump_delay_ms = round(p.pump_delay * 1000)
+    if p.submerge_duration != 0 and p.submerge_duration % 60 != 0:
       raise ValueError(
         f"Submerge duration must be a multiple of 60 seconds (device resolution is 1 minute), "
-        f"got {params.submerge_duration}"
+        f"got {p.submerge_duration}"
       )
-    submerge_duration_min = round(params.submerge_duration / 60)
+    submerge_duration_min = round(p.submerge_duration / 60)
 
-    validate_syringe(params.syringe)
-    validate_syringe_volume(volume)
-    validate_syringe_flow_rate(params.flow_rate)
+    validate_syringe(p.syringe)
+    # validate syringe volume
+    if not 80 <= volume <= 9999:
+      raise ValueError(f"Syringe volume must be 80-9999 uL, got {volume}")
+    validate_syringe_flow_rate(p.flow_rate)
     validate_pump_delay(pump_delay_ms)
-    validate_submerge_duration(submerge_duration_min)
-    if not 1 <= params.refills <= 255:
-      raise ValueError(f"refills must be 1-255, got {params.refills}")
+    # validate submerge duration
+    if not 0 <= submerge_duration_min <= 1439:
+      raise ValueError(f"Submerge duration must be 0-1439 minutes, got {submerge_duration_min}")
+    if not 1 <= p.refills <= 255:
+      raise ValueError(f"refills must be 1-255, got {p.refills}")
 
     logger.info(
       "Syringe prime: syringe %s, %.1f uL, flow rate %d, %d refills",
-      params.syringe,
-      volume,
-      params.flow_rate,
-      params.refills,
+      p.syringe, volume, p.flow_rate, p.refills,
     )
 
     data = self._build_syringe_prime_command(
-      plate=plate,
-      volume=volume,
-      syringe=params.syringe,
-      flow_rate=params.flow_rate,
-      refills=params.refills,
-      pump_delay_ms=pump_delay_ms,
-      submerge_tips=params.submerge_tips,
+      plate=plate, volume=volume, syringe=p.syringe,
+      flow_rate=p.flow_rate, refills=p.refills,
+      pump_delay_ms=pump_delay_ms, submerge_tips=p.submerge_tips,
       submerge_duration_min=submerge_duration_min,
     )
     framed_command = build_framed_message(command=0xA2, data=data)
-    prime_timeout = self._driver.timeout + params.submerge_duration + 30
+    prime_timeout = self._driver.timeout + p.submerge_duration + 30
     async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=prime_timeout)
 
@@ -270,7 +252,7 @@ class EL406SyringeDispensingBackend(SyringeDispensingBackend):
     pre_dispense: bool = False,
     pre_dispense_volume: float = 0.0,
     num_pre_dispenses: int = 2,
-    column_mask: list[int] | None = None,
+    column_mask: Optional[list[int]] = None,
   ) -> bytes:
     """Build syringe dispense command bytes.
 

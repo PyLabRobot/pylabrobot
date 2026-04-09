@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Literal, Optional
 
-from pylabrobot.capabilities.bulk_dispensers.peristaltic.backend import PeristalticDispensingBackend
+from pylabrobot.capabilities.bulk_dispensers.peristaltic.backend8 import PeristalticDispensingBackend8
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
@@ -42,7 +42,7 @@ def cassette_to_byte(cassette: Cassette) -> int:
 
 
 def encode_quadrant_mask_inverted(
-  rows: list[int] | None,
+  rows: Optional[list[int]],
   num_row_groups: int = 4,
 ) -> int:
   """Encode row/quadrant selection as inverted bitmask.
@@ -81,7 +81,7 @@ def validate_peristaltic_flow_rate(flow_rate: PeristalticFlowRate) -> None:
     )
 
 
-class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
+class EL406PeristalticDispensingBackend8(PeristalticDispensingBackend8):
   """Peristaltic dispensing backend for the BioTek EL406."""
 
   @dataclass
@@ -97,8 +97,6 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
       pre_dispense_volume: Pre-dispense volume in uL (0 to disable).
       num_pre_dispenses: Number of pre-dispenses (default 2).
       cassette: Cassette type ("Any", "1uL", "5uL", "10uL").
-      columns: List of 1-indexed column numbers to dispense to, or None for all.
-        For 96-well: 1-12, for 384-well: 1-24, for 1536-well: 1-48.
       rows: List of 1-indexed row group numbers, or None for all.
         For 96-well: only 1 (no selection). For 384-well: 1-2. For 1536-well: 1-4.
     """
@@ -110,8 +108,7 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
     pre_dispense_volume: float = 10.0
     num_pre_dispenses: int = 2
     cassette: Cassette = "Any"
-    columns: list[int] | None = None
-    rows: list[int] | None = None
+    rows: Optional[list[int]] = None
 
   def __init__(self, driver: EL406Driver) -> None:
     self._driver = driver
@@ -135,18 +132,7 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
         groups.append((vol, [col]))
 
     for vol, cols in groups:
-      params = self.DispenseParams(
-        flow_rate=backend_params.flow_rate,
-        offset_x=backend_params.offset_x,
-        offset_y=backend_params.offset_y,
-        offset_z=backend_params.offset_z,
-        pre_dispense_volume=backend_params.pre_dispense_volume,
-        num_pre_dispenses=backend_params.num_pre_dispenses,
-        cassette=backend_params.cassette,
-        columns=cols,
-        rows=backend_params.rows,
-      )
-      await self._peristaltic_dispense(plate, volume=vol, params=params)
+      await self._peristaltic_dispense(plate, volume=vol, columns=cols, params=backend_params)
 
   @dataclass
   class PrimeParams(BackendParams):
@@ -167,9 +153,55 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
     duration: Optional[int] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
+    """Prime the peristaltic pump fluid lines.
+
+    Fills the peristaltic pump tubing with liquid. Specify either volume
+    or duration, but not both. If neither is specified, defaults to 1000 uL.
+
+    Note: Peristaltic prime has no buffer selection. Use the manifold
+    ``prime()`` on :class:`EL406PlateWasher96Backend` for buffer-specific priming.
+
+    Args:
+      plate: PLR Plate resource.
+      volume: Prime volume in uL (1-3000). Mutually exclusive with duration.
+      duration: Fixed prime duration in seconds (1-300). Mutually exclusive
+        with volume.
+      backend_params: :class:`PrimeParams` with flow_rate and cassette settings.
+
+    Raises:
+      ValueError: If parameters are invalid or both volume and duration given.
+    """
     if not isinstance(backend_params, self.PrimeParams):
       backend_params = self.PrimeParams()
-    await self._peristaltic_prime(plate, volume=volume, duration=duration, params=backend_params)
+    p = backend_params
+
+    if volume is not None and duration is not None:
+      raise ValueError("Specify either volume or duration, not both.")
+    if duration is not None:
+      if not 1 <= duration <= 300:
+        raise ValueError("duration must be 1-300 seconds")
+      wire_volume, wire_duration = 0.0, duration
+    else:
+      if volume is None:
+        volume = 1000.0
+      if not 1 <= volume <= 3000:
+        raise ValueError("volume must be 1-3000 uL (GUI limit)")
+      wire_volume, wire_duration = volume, 0
+
+    validate_peristaltic_flow_rate(p.flow_rate)
+    logger.info("Peristaltic prime: %.1f uL, flow rate %s, cassette %s",
+                wire_volume, p.flow_rate, p.cassette)
+
+    data = self._build_peristaltic_prime_command(
+      plate=plate, volume=wire_volume, duration=wire_duration,
+      flow_rate=PERISTALTIC_FLOW_RATE_MAP[p.flow_rate],
+      reverse=True, cassette=p.cassette, pump=1,
+    )
+    framed_command = build_framed_message(command=0x90, data=data)
+    async with self._driver.batch():
+      await self._driver._send_step_command(
+        framed_command, timeout=self._driver.timeout + wire_duration + 30
+      )
 
   async def purge(
     self,
@@ -178,256 +210,147 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
     duration: Optional[int] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
+    """Purge the peristaltic pump fluid lines.
+
+    Clears liquid from the peristaltic pump tubing. Uses the same wire
+    format as prime (identical data bytes, different command byte 0x91).
+    Specify either volume or duration, but not both.
+
+    Args:
+      plate: PLR Plate resource.
+      volume: Purge volume in uL (1-3000). Mutually exclusive with duration.
+      duration: Fixed purge duration in seconds (1-300). Mutually exclusive
+        with volume.
+      backend_params: :class:`PrimeParams` with flow_rate and cassette settings.
+
+    Raises:
+      ValueError: If parameters are invalid, both are given, or neither is given.
+    """
     if not isinstance(backend_params, self.PrimeParams):
       backend_params = self.PrimeParams()
-    await self._peristaltic_purge(plate, volume=volume, duration=duration, params=backend_params)
+    p = backend_params
 
-  def _validate_peristaltic_well_selection(
+    if volume is not None and duration is not None:
+      raise ValueError("Specify either volume or duration, not both.")
+    if volume is None and duration is None:
+      raise ValueError("Either volume or duration must be specified.")
+    if duration is not None:
+      if not 1 <= duration <= 300:
+        raise ValueError("duration must be 1-300 seconds")
+      wire_volume, wire_duration = 0.0, duration
+    else:
+      assert volume is not None
+      if not 1 <= volume <= 3000:
+        raise ValueError("volume must be 1-3000 uL (GUI limit)")
+      wire_volume, wire_duration = volume, 0
+
+    validate_peristaltic_flow_rate(p.flow_rate)
+    logger.info("Peristaltic purge: %.1f uL, flow rate %s, cassette %s",
+                wire_volume, p.flow_rate, p.cassette)
+
+    data = self._build_peristaltic_prime_command(
+      plate=plate, volume=wire_volume, duration=wire_duration,
+      flow_rate=PERISTALTIC_FLOW_RATE_MAP[p.flow_rate],
+      reverse=True, cassette=p.cassette, pump=1,
+    )
+    framed_command = build_framed_message(command=0x91, data=data)
+    async with self._driver.batch():
+      await self._driver._send_step_command(
+        framed_command, timeout=self._driver.timeout + wire_duration + 30
+      )
+
+  def _validate_well_selection(
     self,
     plate: Plate,
-    columns: list[int] | None,
-    rows: list[int] | None,
-  ) -> list[int] | None:
+    columns: Optional[list[int]],
+    rows: Optional[list[int]],
+  ) -> Optional[list[int]]:
     """Validate column/row selection and return column mask."""
     max_cols = plate_max_columns(plate)
     if columns is not None:
       for col in columns:
         if col < 1 or col > max_cols:
           raise ValueError(f"Column {col} out of range for plate type (1-{max_cols}).")
-
     max_rows = plate_max_row_groups(plate)
     if rows is not None:
       for row in rows:
         if row < 1 or row > max_rows:
           raise ValueError(f"Row {row} out of range for plate type (1-{max_rows}).")
-
     return columns_to_column_mask(columns, plate_wells=plate_well_count(plate))
 
-  def _validate_peristaltic_dispense_params(
+  def _validate_dispense_params(
     self,
     plate: Plate,
     volume: float,
-    flow_rate: PeristalticFlowRate,
-    offset_x: int,
-    offset_y: int,
-    offset_z: int | None,
-    pre_dispense_volume: float,
-    columns: list[int] | None,
-    rows: list[int] | None,
-  ) -> tuple[int, int, list[int] | None]:
+    columns: Optional[list[int]],
+    p: "EL406PeristalticDispensingBackend8.DispenseParams",
+  ) -> tuple[int, int, int, int, Optional[list[int]]]:
     """Validate peristaltic dispense parameters and resolve defaults.
 
     Returns:
-      (offset_z, flow_rate_enum, column_mask)
+      (offset_x_steps, offset_y_steps, offset_z_steps, flow_rate_enum, column_mask)
     """
+    # Convert mm → 0.1mm steps for wire protocol
+    offset_x_steps = round(p.offset_x * 10)
+    offset_y_steps = round(p.offset_y * 10)
+    offset_z_steps = round(p.offset_z * 10) if p.offset_z is not None else None
+
     if not 1 <= volume <= 3000:
       raise ValueError(f"Peri-pump dispense volume must be 1-3000 uL, got {volume}")
-    validate_peristaltic_flow_rate(flow_rate)
-    if not -125 <= offset_x <= 125:
-      raise ValueError(f"Peri-pump dispense X-axis offset must be -125..125, got {offset_x}")
-    if not -40 <= offset_y <= 40:
-      raise ValueError(f"Peri-pump dispense Y-axis offset must be -40..40, got {offset_y}")
+    validate_peristaltic_flow_rate(p.flow_rate)
+    if not -125 <= offset_x_steps <= 125:
+      raise ValueError(f"Peri-pump dispense X-axis offset must be -125..125, got {offset_x_steps}")
+    if not -40 <= offset_y_steps <= 40:
+      raise ValueError(f"Peri-pump dispense Y-axis offset must be -40..40, got {offset_y_steps}")
 
-    if offset_z is None:
-      offset_z = plate_default_z(plate)
-    if not 1 <= offset_z <= 1500:
-      raise ValueError(f"Peri-pump dispense Z-axis offset must be 1..1500, got {offset_z}")
+    if offset_z_steps is None:
+      offset_z_steps = plate_default_z(plate)
+    if not 1 <= offset_z_steps <= 1500:
+      raise ValueError(f"Peri-pump dispense Z-axis offset must be 1..1500, got {offset_z_steps}")
 
-    if pre_dispense_volume < 0:
-      raise ValueError(f"pre_dispense_volume must be non-negative, got {pre_dispense_volume}")
+    if p.pre_dispense_volume < 0:
+      raise ValueError(f"pre_dispense_volume must be non-negative, got {p.pre_dispense_volume}")
 
-    column_mask = self._validate_peristaltic_well_selection(plate, columns, rows)
+    column_mask = self._validate_well_selection(plate, columns, p.rows)
+    flow_rate_enum = PERISTALTIC_FLOW_RATE_MAP[p.flow_rate]
 
-    return (offset_z, PERISTALTIC_FLOW_RATE_MAP[flow_rate], column_mask)
-
-  async def _peristaltic_prime(
-    self,
-    plate: Plate,
-    volume: Optional[float] = None,
-    duration: Optional[int] = None,
-    params: Optional[PrimeParams] = None,
-  ) -> None:
-    """Prime the peristaltic fluid lines.
-
-    Specify either ``volume`` (uL/tube) or ``duration`` (seconds), not both.
-    If neither is given, defaults to volume mode with 1000 uL.
-
-    Note: Peristaltic prime has no buffer selection.
-    Use ``manifold_prime()`` for buffer-specific priming.
-
-    Args:
-      plate: PLR Plate resource.
-      volume: Volume to prime in microliters.
-      duration: Fixed duration in seconds (alternative to volume).
-      flow_rate: Flow rate ("Low", "Medium", or "High").
-      cassette: Cassette type ("Any", "1uL", "5uL", "10uL").
-
-    Raises:
-      ValueError: If both volume and duration are specified, or if parameters are invalid.
-    """
-    if volume is not None and duration is not None:
-      raise ValueError("Specify either volume or duration, not both.")
-
-    if duration is not None:
-      if not 1 <= duration <= 300:
-        raise ValueError("duration must be 1-300 seconds")
-      prime_volume = 0.0
-      prime_duration = duration
-    else:
-      if volume is None:
-        volume = 1000.0
-      if not 1 <= volume <= 3000:
-        raise ValueError("volume must be 1-3000 uL (GUI limit)")
-      prime_volume = volume
-      prime_duration = 0
-
-    if params is None:
-      params = self.PrimeParams()
-
-    validate_peristaltic_flow_rate(params.flow_rate)
-
-    logger.info(
-      "Peristaltic prime: %.1f uL, flow rate %s, cassette %s",
-      prime_volume,
-      params.flow_rate,
-      params.cassette,
-    )
-
-    data = self._build_peristaltic_prime_command(
-      plate=plate,
-      volume=prime_volume,
-      duration=prime_duration,
-      flow_rate=PERISTALTIC_FLOW_RATE_MAP[params.flow_rate],
-      reverse=True,
-      cassette=params.cassette,
-      pump=1,
-    )
-    framed_command = build_framed_message(command=0x90, data=data)
-    # Timeout: duration (if specified) + buffer for volume-based priming
-    prime_timeout = self._driver.timeout + prime_duration + 30
-    async with self._driver.batch():
-      await self._driver._send_step_command(framed_command, timeout=prime_timeout)
+    return (offset_x_steps, offset_y_steps, offset_z_steps, flow_rate_enum, column_mask)
 
   async def _peristaltic_dispense(
     self,
     plate: Plate,
     volume: float,
+    columns: Optional[list[int]] = None,
     params: Optional[DispenseParams] = None,
   ) -> None:
-    """Dispense liquid using the peristaltic pump.
+    """Send a single peristaltic dispense command for a set of columns.
 
     Args:
       plate: PLR Plate resource.
       volume: Dispense volume in microliters (1-3000).
-      params: Dispense parameters (flow rate, offsets, cassette, column/row selection).
+      columns: 1-indexed column numbers to dispense to, or None for all.
+      params: Backend-specific parameters (flow rate, offsets, cassette).
     """
     if params is None:
       params = self.DispenseParams()
+    p = params
 
-    # Convert mm → 0.1mm steps for wire protocol
-    offset_x_steps = round(params.offset_x * 10)
-    offset_y_steps = round(params.offset_y * 10)
-    offset_z_steps = round(params.offset_z * 10) if params.offset_z is not None else None
-
-    offset_z_steps, flow_rate_enum, column_mask = self._validate_peristaltic_dispense_params(
-      plate=plate,
-      volume=volume,
-      flow_rate=params.flow_rate,
-      offset_x=offset_x_steps,
-      offset_y=offset_y_steps,
-      offset_z=offset_z_steps,
-      pre_dispense_volume=params.pre_dispense_volume,
-      columns=params.columns,
-      rows=params.rows,
+    offset_x_steps, offset_y_steps, offset_z_steps, flow_rate_enum, column_mask = (
+      self._validate_dispense_params(plate, volume, columns, p)
     )
 
-    logger.info(
-      "Peristaltic dispense: %.1f uL, flow rate %s, cassette %s",
-      volume,
-      params.flow_rate,
-      params.cassette,
-    )
+    logger.info("Peristaltic dispense: %.1f uL, flow rate %s, cassette %s",
+                volume, p.flow_rate, p.cassette)
 
     data = self._build_peristaltic_dispense_command(
-      plate=plate,
-      volume=volume,
-      flow_rate=flow_rate_enum,
-      cassette=params.cassette,
-      offset_x=offset_x_steps,
-      offset_y=offset_y_steps,
-      offset_z=offset_z_steps,
-      pre_dispense_volume=params.pre_dispense_volume,
-      num_pre_dispenses=params.num_pre_dispenses,
-      column_mask=column_mask,
-      rows=params.rows,
-      pump=1,
+      plate=plate, volume=volume, flow_rate=flow_rate_enum, cassette=p.cassette,
+      offset_x=offset_x_steps, offset_y=offset_y_steps, offset_z=offset_z_steps,
+      pre_dispense_volume=p.pre_dispense_volume, num_pre_dispenses=p.num_pre_dispenses,
+      column_mask=column_mask, rows=p.rows, pump=1,
     )
     framed_command = build_framed_message(command=0x8F, data=data)
     async with self._driver.batch():
       await self._driver._send_step_command(framed_command)
-
-  async def _peristaltic_purge(
-    self,
-    plate: Plate,
-    volume: Optional[float] = None,
-    duration: Optional[int] = None,
-    params: Optional[PrimeParams] = None,
-  ) -> None:
-    """Purge the fluid lines using the peristaltic pump.
-
-    Specify either ``volume`` (uL/tube) or ``duration`` (seconds), not both.
-
-    PERISTALTIC_PURGE uses the same data format as PERISTALTIC_PRIME
-    (both send identical data bytes).
-
-    Args:
-      plate: PLR Plate resource.
-      volume: Purge volume in microliters.
-      duration: Fixed duration in seconds (alternative to volume).
-      params: Prime/purge parameters (flow rate, cassette).
-    """
-    if params is None:
-      params = self.PrimeParams()
-
-    if volume is not None and duration is not None:
-      raise ValueError("Specify either volume or duration, not both.")
-    if volume is None and duration is None:
-      raise ValueError("Either volume or duration must be specified.")
-
-    if duration is not None:
-      if not 1 <= duration <= 300:
-        raise ValueError("duration must be 1-300 seconds")
-      purge_volume = 0.0
-      purge_duration = duration
-    else:
-      assert volume is not None
-      if not 1 <= volume <= 3000:
-        raise ValueError("volume must be 1-3000 uL (GUI limit)")
-      purge_volume = volume
-      purge_duration = 0
-
-    validate_peristaltic_flow_rate(params.flow_rate)
-
-    logger.info(
-      "Peristaltic purge: %.1f uL, flow rate %s, cassette %s",
-      purge_volume,
-      params.flow_rate,
-      params.cassette,
-    )
-
-    data = self._build_peristaltic_prime_command(
-      plate=plate,
-      volume=purge_volume,
-      duration=purge_duration,
-      flow_rate=PERISTALTIC_FLOW_RATE_MAP[params.flow_rate],
-      reverse=True,
-      cassette=params.cassette,
-      pump=1,
-    )
-    framed_command = build_framed_message(command=0x91, data=data)
-    purge_timeout = self._driver.timeout + purge_duration + 30
-    async with self._driver.batch():
-      await self._driver._send_step_command(framed_command, timeout=purge_timeout)
 
   # =========================================================================
   # COMMAND BUILDERS
@@ -492,8 +415,8 @@ class EL406PeristalticDispensingBackend(PeristalticDispensingBackend):
     offset_z: int = 336,
     pre_dispense_volume: float = 0.0,
     num_pre_dispenses: int = 2,
-    column_mask: list[int] | None = None,
-    rows: list[int] | None = None,
+    column_mask: Optional[list[int]] = None,
+    rows: Optional[list[int]] = None,
     pump: int = 1,
   ) -> bytes:
     """Build peristaltic dispense command bytes.

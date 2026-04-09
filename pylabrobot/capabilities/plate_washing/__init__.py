@@ -1,2 +1,2 @@
-from .backend import PlateWashingBackend
-from .plate_washing import PlateWashingCapability
+from .backend import PlateWasher96Backend
+from .plate_washing import PlateWasher96

@@ -272,7 +272,7 @@ Bulk Dispensing - Peristaltic
   :nosignatures:
   :recursive:
 
-    PeristalticDispensing
+    PeristalticDispensing8
 
 .. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.backend
 
@@ -281,7 +281,7 @@ Bulk Dispensing - Peristaltic
   :nosignatures:
   :recursive:
 
-    PeristalticDispensingBackend
+    PeristalticDispensingBackend8
 
 
 Bulk Dispensing - Syringe
@@ -294,7 +294,7 @@ Bulk Dispensing - Syringe
   :nosignatures:
   :recursive:
 
-    SyringeDispensing
+    SyringeDispensing8
 
 .. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.backend
 
@@ -303,7 +303,7 @@ Bulk Dispensing - Syringe
   :nosignatures:
   :recursive:
 
-    SyringeDispensingBackend
+    SyringeDispensingBackend8
 
 
 Liquid Handling - PIP (Independent Channels)

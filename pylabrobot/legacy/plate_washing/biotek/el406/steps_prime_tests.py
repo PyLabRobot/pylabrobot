@@ -473,7 +473,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_step_type(self):
     """Manifold prime command should have step type prefix 0x04."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -484,7 +484,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_buffer_a(self):
     """Manifold prime buffer A should encode as 'A' (0x41)."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -495,7 +495,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_buffer_b(self):
     """Manifold prime buffer B should encode as 'B' (0x42)."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="B",
@@ -506,7 +506,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_lowercase_buffer(self):
     """Manifold prime should accept lowercase buffer and encode as uppercase."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="b",
@@ -517,7 +517,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_volume_encoding(self):
     """Manifold prime should encode volume as little-endian 2 bytes."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -530,7 +530,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_volume_500ml(self):
     """Manifold prime with 500 mL."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=500.0,
       buffer="A",
@@ -543,7 +543,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_volume_max(self):
     """Manifold prime with maximum volume (65535 mL)."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=65535.0,
       buffer="A",
@@ -555,7 +555,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_flow_rate(self):
     """Manifold prime should encode flow rate as single byte."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -566,7 +566,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_flow_rate_min(self):
     """Manifold prime should encode minimum flow rate 1."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -577,7 +577,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_flow_rate_max(self):
     """Manifold prime should encode maximum flow rate 9."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=1000.0,
       buffer="A",
@@ -588,7 +588,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
 
   def test_manifold_prime_full_command(self):
     """Test complete manifold prime command with all parameters."""
-    cmd = self.backend._plate_washing._build_manifold_prime_command(
+    cmd = self.backend._plate_washing._build_prime_command(
       PT96,
       volume_ml=2000.0,
       buffer="B",

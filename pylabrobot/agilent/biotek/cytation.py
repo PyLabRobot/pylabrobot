@@ -915,13 +915,13 @@ class Cytation5(Resource, Device):
     self.absorbance = Absorbance(backend=backend)
     self.luminescence = Luminescence(backend=backend)
     self.fluorescence = Fluorescence(backend=backend)
-    self.microscopy = Microscopy(backend=backend)
+    self.microscope = Microscopy(backend=backend)
     self.temperature = TemperatureController(backend=backend)
     self._capabilities = [
       self.absorbance,
       self.luminescence,
       self.fluorescence,
-      self.microscopy,
+      self.microscope,
       self.temperature,
     ]
 
@@ -967,9 +967,9 @@ class Cytation1(Resource, Device):
     )
     Device.__init__(self, driver=backend)
     self.driver: BioTekBackend = backend
-    self.microscopy = Microscopy(backend=backend)  # type: ignore[arg-type]
+    self.microscope = Microscopy(backend=backend)  # type: ignore[arg-type]
     self.temperature = TemperatureController(backend=backend)
-    self._capabilities = [self.microscopy, self.temperature]
+    self._capabilities = [self.microscope, self.temperature]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",

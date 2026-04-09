@@ -20,7 +20,7 @@ await microscope.setup()
 ### Basic capture
 
 ```python
-result = await microscope.microscopy.capture(
+result = await microscope.microscope.capture(
     well=plate.get_well("A1"),
     mode=ImagingMode.BRIGHTFIELD,
     objective=Objective.O_10X_PL_FL,
@@ -37,7 +37,7 @@ PLR can optimize exposure time via a binary search. You provide a callback that 
 ```python
 from pylabrobot.capabilities.microscopy.microscopy import AutoExposure, max_pixel_at_fraction
 
-result = await microscope.microscopy.capture(
+result = await microscope.microscope.capture(
     well=plate.get_well("A1"),
     mode=ImagingMode.BRIGHTFIELD,
     objective=Objective.O_10X_PL_FL,
@@ -60,7 +60,7 @@ PLR can optimize focal height via a golden-ratio search:
 ```python
 from pylabrobot.capabilities.microscopy.microscopy import AutoFocus, evaluate_focus_nvmg_sobel
 
-result = await microscope.microscopy.capture(
+result = await microscope.microscope.capture(
     well=(0, 0),  # can also pass a (row, col) tuple
     mode=ImagingMode.BRIGHTFIELD,
     objective=Objective.O_10X_PL_FL,

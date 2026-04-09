@@ -17,18 +17,18 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Literal, Optional
 
 from pylabrobot.agilent.biotek.el406.driver import EL406Driver
-from pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend import (
+from pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend8 import (
   Cassette,
-  EL406PeristalticDispensingBackend,
+  EL406PeristalticDispensingBackend8,
   PeristalticFlowRate,
 )
-from pylabrobot.agilent.biotek.el406.plate_washing_backend import EL406PlateWashingBackend
+from pylabrobot.agilent.biotek.el406.plate_washing_backend import EL406PlateWasher96Backend
 from pylabrobot.agilent.biotek.el406.shaking_backend import EL406ShakingBackend
-from pylabrobot.agilent.biotek.el406.syringe_dispensing_backend import (
-  EL406SyringeDispensingBackend,
+from pylabrobot.agilent.biotek.el406.syringe_dispensing_backend8 import (
+  EL406SyringeDispensingBackend8,
   Syringe,
 )
 from pylabrobot.legacy.machines.backend import MachineBackend
@@ -53,13 +53,13 @@ class ExperimentalBioTekEL406Backend(
     >>> backend = BioTekEL406Backend()
     >>> await backend.setup()
     >>> await backend.peristaltic_prime(plate, volume=300.0, flow_rate="High")
-    >>> await backend.manifold_wash(plate, cycles=3)
+    >>> await backend.wash(plate, cycles=3)
   """
 
   def __init__(
     self,
     timeout: float = 15.0,
-    device_id: str | None = None,
+    device_id: Optional[str] = None,
   ) -> None:
     """Initialize the EL406 backend.
 
@@ -69,16 +69,16 @@ class ExperimentalBioTekEL406Backend(
     """
     super().__init__()
     self._device_id = device_id
-    self._command_lock: asyncio.Lock | None = None
+    self._command_lock: Optional[asyncio.Lock] = None
     self._in_batch: bool = False
 
     # New architecture: driver + capability backends
     self._new_driver = EL406Driver(timeout=timeout, device_id=device_id)
 
-    self._plate_washing = EL406PlateWashingBackend(self._new_driver)
+    self._plate_washing = EL406PlateWasher96Backend(self._new_driver)
     self._shaking = EL406ShakingBackend(self._new_driver)
-    self._syringe = EL406SyringeDispensingBackend(self._new_driver)
-    self._peristaltic = EL406PeristalticDispensingBackend(self._new_driver)
+    self._syringe = EL406SyringeDispensingBackend8(self._new_driver)
+    self._peristaltic = EL406PeristalticDispensingBackend8(self._new_driver)
 
   @property
   def io(self):
@@ -203,48 +203,197 @@ class ExperimentalBioTekEL406Backend(
     await self._new_driver.set_washer_manifold(manifold)
 
   # ---------------------------------------------------------------------------
-  # Manifold methods — delegate to new EL406PlateWashingBackend
+  # Manifold methods — delegate to new EL406PlateWasher96Backend
   # ---------------------------------------------------------------------------
 
-  async def manifold_aspirate(self, plate, **kwargs):
+  async def manifold_aspirate(
+    self,
+    plate: Plate,
+    vacuum_filtration: bool = False,
+    travel_rate: str = "3",
+    delay: float = 0.0,
+    vacuum_time: float = 30.0,
+    offset_x: int = 0,
+    offset_y: int = 0,
+    offset_z: Optional[int] = None,
+    secondary_aspirate: bool = False,
+    secondary_x: int = 0,
+    secondary_y: int = 0,
+    secondary_z: Optional[int] = None,
+  ) -> None:
     async with self.batch(plate):
-      await self._plate_washing.manifold_aspirate(plate, **kwargs)
+      await self._plate_washing.aspirate(
+        plate,
+        backend_params=EL406PlateWasher96Backend.AspirateParams(
+          vacuum_filtration=vacuum_filtration,
+          travel_rate=travel_rate,
+          delay=delay,
+          vacuum_time=vacuum_time,
+          offset_x=offset_x,
+          offset_y=offset_y,
+          offset_z=offset_z,
+          secondary_aspirate=secondary_aspirate,
+          secondary_x=secondary_x,
+          secondary_y=secondary_y,
+          secondary_z=secondary_z,
+        ),
+      )
 
-  async def manifold_dispense(self, plate, volume, **kwargs):
+  async def manifold_dispense(
+    self,
+    plate: Plate,
+    volume: float,
+    buffer: str = "A",
+    flow_rate: int = 7,
+    offset_x: int = 0,
+    offset_y: int = 0,
+    offset_z: Optional[int] = None,
+    pre_dispense_volume: float = 0.0,
+    pre_dispense_flow_rate: int = 9,
+    vacuum_delay_volume: float = 0.0,
+  ) -> None:
     async with self.batch(plate):
-      await self._plate_washing.manifold_dispense(plate, volume=volume, **kwargs)
+      await self._plate_washing.dispense(
+        plate,
+        volume=volume,
+        backend_params=EL406PlateWasher96Backend.DispenseParams(
+          buffer=buffer,
+          flow_rate=flow_rate,
+          offset_x=offset_x,
+          offset_y=offset_y,
+          offset_z=offset_z,
+          pre_dispense_volume=pre_dispense_volume,
+          pre_dispense_flow_rate=pre_dispense_flow_rate,
+          vacuum_delay_volume=vacuum_delay_volume,
+        ),
+      )
 
-  async def manifold_wash(self, plate, **kwargs):
+  async def manifold_wash(
+    self,
+    plate: Plate,
+    cycles: int = 3,
+    dispense_volume: Optional[float] = None,
+    buffer: str = "A",
+    dispense_flow_rate: int = 7,
+    dispense_x: int = 0,
+    dispense_y: int = 0,
+    dispense_z: Optional[int] = None,
+    aspirate_travel_rate: int = 3,
+    aspirate_z: Optional[int] = None,
+    pre_dispense_flow_rate: int = 9,
+    aspirate_delay: float = 0.0,
+    aspirate_x: int = 0,
+    aspirate_y: int = 0,
+    final_aspirate: bool = True,
+    final_aspirate_z: Optional[int] = None,
+    final_aspirate_x: int = 0,
+    final_aspirate_y: int = 0,
+    final_aspirate_delay: float = 0.0,
+    pre_dispense_volume: float = 0.0,
+    vacuum_delay_volume: float = 0.0,
+    soak_duration: int = 0,
+    shake_duration: int = 0,
+    shake_intensity: str = "Medium",
+    secondary_aspirate: bool = False,
+    secondary_z: Optional[int] = None,
+    secondary_x: int = 0,
+    secondary_y: int = 0,
+    final_secondary_aspirate: bool = False,
+    final_secondary_z: Optional[int] = None,
+    final_secondary_x: int = 0,
+    final_secondary_y: int = 0,
+    bottom_wash: bool = False,
+    bottom_wash_volume: float = 0.0,
+    bottom_wash_flow_rate: int = 5,
+    pre_dispense_between_cycles_volume: float = 0.0,
+    pre_dispense_between_cycles_flow_rate: int = 9,
+    wash_format: str = "Plate",
+    sectors: Optional[list[int]] = None,
+    move_home_first: bool = False,
+  ) -> None:
     async with self.batch(plate):
-      await self._plate_washing.manifold_wash(plate, **kwargs)
+      await self._plate_washing.wash(
+        plate, cycles=cycles, dispense_volume=dispense_volume,
+        backend_params=EL406PlateWasher96Backend.WashParams(
+          buffer=buffer, dispense_flow_rate=dispense_flow_rate,
+          dispense_x=dispense_x, dispense_y=dispense_y, dispense_z=dispense_z,
+          aspirate_travel_rate=aspirate_travel_rate, aspirate_z=aspirate_z,
+          pre_dispense_flow_rate=pre_dispense_flow_rate,
+          aspirate_delay=aspirate_delay, aspirate_x=aspirate_x, aspirate_y=aspirate_y,
+          final_aspirate=final_aspirate, final_aspirate_z=final_aspirate_z,
+          final_aspirate_x=final_aspirate_x, final_aspirate_y=final_aspirate_y,
+          final_aspirate_delay=final_aspirate_delay,
+          pre_dispense_volume=pre_dispense_volume, vacuum_delay_volume=vacuum_delay_volume,
+          soak_duration=soak_duration, shake_duration=shake_duration,
+          shake_intensity=shake_intensity,
+          secondary_aspirate=secondary_aspirate, secondary_z=secondary_z,
+          secondary_x=secondary_x, secondary_y=secondary_y,
+          final_secondary_aspirate=final_secondary_aspirate,
+          final_secondary_z=final_secondary_z,
+          final_secondary_x=final_secondary_x, final_secondary_y=final_secondary_y,
+          bottom_wash=bottom_wash, bottom_wash_volume=bottom_wash_volume,
+          bottom_wash_flow_rate=bottom_wash_flow_rate,
+          pre_dispense_between_cycles_volume=pre_dispense_between_cycles_volume,
+          pre_dispense_between_cycles_flow_rate=pre_dispense_between_cycles_flow_rate,
+          wash_format=wash_format, sectors=sectors, move_home_first=move_home_first,
+        ),
+      )
 
-  async def manifold_prime(self, plate, volume, **kwargs):
+  async def manifold_prime(
+    self,
+    plate: Plate,
+    volume: float,
+    buffer: str = "A",
+    flow_rate: int = 9,
+    low_flow_volume: float = 5000.0,
+    submerge_duration: float = 0.0,
+  ) -> None:
     async with self.batch(plate):
-      await self._plate_washing.manifold_prime(plate, volume=volume, **kwargs)
+      await self._plate_washing.prime(
+        plate=plate,
+        backend_params=EL406PlateWasher96Backend.PrimeParams(
+          volume=volume,
+          buffer=buffer,
+          flow_rate=flow_rate,
+          low_flow_volume=low_flow_volume,
+          submerge_duration=submerge_duration,
+        ),
+      )
 
-  async def manifold_auto_clean(self, plate, **kwargs):
+  async def manifold_auto_clean(
+    self,
+    plate: Plate,
+    buffer: str = "A",
+    duration: float = 60.0,
+  ) -> None:
     async with self.batch(plate):
-      await self._plate_washing.manifold_auto_clean(plate, **kwargs)
+      await self._plate_washing.auto_clean(plate, buffer=buffer, duration=duration)
 
   # ---------------------------------------------------------------------------
   # Shake — delegate to new EL406ShakingBackend
   # ---------------------------------------------------------------------------
 
-  async def shake(self, plate, **kwargs):
+  async def shake(
+    self,
+    plate: Plate,
+    duration: int = 0,
+    intensity: str = "Medium",
+    soak_duration: int = 0,
+    move_home_first: bool = True,
+  ) -> None:
     async with self.batch(plate):
-      params = EL406ShakingBackend.ShakeParams(
-        intensity=kwargs.pop("intensity", "Medium"),
-        soak_duration=kwargs.pop("soak_duration", 0),
-        move_home_first=kwargs.pop("move_home_first", True),
-      )
       await self._shaking.shake(
         speed=0,
-        duration=kwargs.pop("duration", 0),
-        backend_params=params,
+        duration=duration,
+        backend_params=EL406ShakingBackend.ShakeParams(
+          intensity=intensity,
+          soak_duration=soak_duration,
+          move_home_first=move_home_first,
+        ),
       )
 
   # ---------------------------------------------------------------------------
-  # Syringe — delegate to new EL406SyringeDispensingBackend
+  # Syringe — delegate to new EL406SyringeDispensingBackend8
   # ---------------------------------------------------------------------------
 
   async def syringe_dispense(
@@ -260,10 +409,10 @@ class ExperimentalBioTekEL406Backend(
     pre_dispense: bool = False,
     pre_dispense_volume: float = 0.0,
     num_pre_dispenses: int = 2,
-    columns: list[int] | None = None,
+    columns: Optional[list[int]] = None,
   ) -> None:
     async with self.batch(plate):
-      params = EL406SyringeDispensingBackend.DispenseParams(
+      params = EL406SyringeDispensingBackend8.DispenseParams(
         syringe=syringe,
         flow_rate=flow_rate,
         offset_x=offset_x / 10,  # legacy 0.1mm → mm
@@ -288,7 +437,7 @@ class ExperimentalBioTekEL406Backend(
     submerge_duration: float = 0.0,
   ) -> None:
     async with self.batch(plate):
-      params = EL406SyringeDispensingBackend.PrimeParams(
+      params = EL406SyringeDispensingBackend8.PrimeParams(
         syringe=syringe,
         flow_rate=flow_rate,
         refills=refills,
@@ -296,30 +445,30 @@ class ExperimentalBioTekEL406Backend(
         submerge_tips=submerge_tips,
         submerge_duration=submerge_duration,
       )
-      await self._syringe._syringe_prime(plate, volume=volume, params=params)
+      await self._syringe.prime(plate, volume=volume, backend_params=params)
 
   # ---------------------------------------------------------------------------
-  # Peristaltic — delegate to new EL406PeristalticDispensingBackend
+  # Peristaltic — delegate to new EL406PeristalticDispensingBackend8
   # ---------------------------------------------------------------------------
 
   async def peristaltic_prime(
     self,
     plate: Plate,
-    volume: float | None = None,
-    duration: int | None = None,
+    volume: Optional[float] = None,
+    duration: Optional[int] = None,
     flow_rate: PeristalticFlowRate = "High",
     cassette: Cassette = "Any",
   ) -> None:
     async with self.batch(plate):
-      params = EL406PeristalticDispensingBackend.PrimeParams(
+      params = EL406PeristalticDispensingBackend8.PrimeParams(
         flow_rate=flow_rate,
         cassette=cassette,
       )
-      await self._peristaltic._peristaltic_prime(
+      await self._peristaltic.prime(
         plate,
         volume=volume,
         duration=duration,
-        params=params,
+        backend_params=params,
       )
 
   async def peristaltic_dispense(
@@ -329,15 +478,15 @@ class ExperimentalBioTekEL406Backend(
     flow_rate: PeristalticFlowRate = "High",
     offset_x: int = 0,
     offset_y: int = 0,
-    offset_z: int | None = None,
+    offset_z: Optional[int] = None,
     pre_dispense_volume: float = 10.0,
     num_pre_dispenses: int = 2,
     cassette: Cassette = "Any",
-    columns: list[int] | None = None,
-    rows: list[int] | None = None,
+    columns: Optional[list[int]] = None,
+    rows: Optional[list[int]] = None,
   ) -> None:
     async with self.batch(plate):
-      params = EL406PeristalticDispensingBackend.DispenseParams(
+      params = EL406PeristalticDispensingBackend8.DispenseParams(
         flow_rate=flow_rate,
         offset_x=offset_x / 10 if offset_x is not None else 0.0,  # legacy 0.1mm → mm
         offset_y=offset_y / 10 if offset_y is not None else 0.0,
@@ -345,29 +494,30 @@ class ExperimentalBioTekEL406Backend(
         pre_dispense_volume=pre_dispense_volume,
         num_pre_dispenses=num_pre_dispenses,
         cassette=cassette,
-        columns=columns,
         rows=rows,
       )
-      await self._peristaltic._peristaltic_dispense(plate, volume=volume, params=params)
+      await self._peristaltic._peristaltic_dispense(
+        plate, volume=volume, columns=columns, params=params
+      )
 
   async def peristaltic_purge(
     self,
     plate: Plate,
-    volume: float | None = None,
-    duration: int | None = None,
+    volume: Optional[float] = None,
+    duration: Optional[int] = None,
     flow_rate: PeristalticFlowRate = "High",
     cassette: Cassette = "Any",
   ) -> None:
     async with self.batch(plate):
-      params = EL406PeristalticDispensingBackend.PrimeParams(
+      params = EL406PeristalticDispensingBackend8.PrimeParams(
         flow_rate=flow_rate,
         cassette=cassette,
       )
-      await self._peristaltic._peristaltic_purge(
+      await self._peristaltic.purge(
         plate,
         volume=volume,
         duration=duration,
-        params=params,
+        backend_params=params,
       )
 
   def serialize(self) -> dict:
