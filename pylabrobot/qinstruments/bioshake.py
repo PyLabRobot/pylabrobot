@@ -188,7 +188,9 @@ class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
       )
 
     await self.driver.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
-    logger.info("[BioShake %s] start shaking: speed=%d, accel=%d", self.driver.port, speed, acceleration)
+    logger.info(
+      "[BioShake %s] start shaking: speed=%d, accel=%d", self.driver.port, speed, acceleration
+    )
     await self.driver.send_command(cmd="shakeOn", delay=0.2)
 
   async def stop_shaking(self, deceleration: Union[int, float] = 0):

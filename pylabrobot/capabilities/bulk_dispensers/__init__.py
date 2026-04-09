@@ -1,2 +1,2 @@
-from .peristaltic import PeristalticDispensing, PeristalticDispensingBackend
-from .syringe import SyringeDispensing, SyringeDispensingBackend
+from .peristaltic import PeristalticDispensing8, PeristalticDispensingBackend8
+from .syringe import SyringeDispensing8, SyringeDispensingBackend8

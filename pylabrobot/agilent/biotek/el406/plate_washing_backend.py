@@ -1,7 +1,7 @@
 """EL406 manifold step methods.
 
-Provides manifold_aspirate, manifold_dispense, manifold_wash, manifold_prime,
-and manifold_auto_clean operations plus their corresponding command builders.
+Provides aspirate, dispense, wash, prime,
+and auto_clean operations plus their corresponding command builders.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.plate_washing.backend import PlateWashingBackend
+from pylabrobot.capabilities.plate_washing.backend import PlateWasher96Backend
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
 
@@ -99,10 +99,10 @@ def validate_travel_rate(rate: int) -> None:
     raise ValueError(f"travel_rate must be 1-9, got {rate}")
 
 
-class EL406PlateWashingBackend(PlateWashingBackend):
+class EL406PlateWasher96Backend(PlateWasher96Backend):
   """Manifold plate washing backend for the BioTek EL406.
 
-  Implements the abstract PlateWashingBackend interface and also exposes the
+  Implements the abstract PlateWasher96Backend interface and also exposes the
   full EL406-specific manifold API for users who need fine-grained control.
   """
 
@@ -112,689 +112,6 @@ class EL406PlateWashingBackend(PlateWashingBackend):
 
     Attributes:
       buffer: Buffer valve selection (A, B, C, D). Default A.
-      dispense_flow_rate: Flow rate for dispensing (1-9). Default 7.
-      aspirate_travel_rate: Travel rate for aspiration (1-9). Default 3.
-      soak_duration: Soak duration in seconds (0 to disable, 0-3599). Default 0.
-      shake_duration: Shake duration in seconds (0 to disable, 0-3599). Default 0.
-      shake_intensity: Shake intensity ("Variable", "Slow", "Medium", "Fast").
-        Default "Medium".
-    """
-
-    buffer: Buffer = "A"
-    dispense_flow_rate: int = 7
-    aspirate_travel_rate: int = 3
-    soak_duration: int = 0
-    shake_duration: int = 0
-    shake_intensity: Intensity = "Medium"
-
-  @dataclass
-  class PrimeParams(BackendParams):
-    """Parameters for manifold prime.
-
-    Attributes:
-      plate: PLR Plate resource.
-      volume: Prime volume in uL. Range: 5000-999000 uL.
-        Wire resolution: 1000 uL (1 mL).
-      buffer: Buffer valve selection (A, B, C, D).
-      flow_rate: Flow rate (3-11, default 9).
-    """
-
-    plate: Optional[Plate] = None
-    volume: float = 10000.0
-    buffer: Buffer = "A"
-    flow_rate: int = 9
-
-  def __init__(self, driver: EL406Driver) -> None:
-    self._driver = driver
-
-  async def aspirate(
-    self,
-    plate: Plate,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    await self.manifold_aspirate(plate)
-
-  async def dispense(
-    self,
-    plate: Plate,
-    volume: float,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    await self.manifold_dispense(plate, volume=volume)
-
-  async def wash(
-    self,
-    plate: Plate,
-    cycles: int = 3,
-    dispense_volume: Optional[float] = None,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    if not isinstance(backend_params, self.WashParams):
-      backend_params = self.WashParams()
-    await self.manifold_wash(
-      plate,
-      cycles=cycles,
-      dispense_volume=dispense_volume,
-      buffer=backend_params.buffer,
-      dispense_flow_rate=backend_params.dispense_flow_rate,
-      aspirate_travel_rate=backend_params.aspirate_travel_rate,
-      soak_duration=backend_params.soak_duration,
-      shake_duration=backend_params.shake_duration,
-      shake_intensity=backend_params.shake_intensity,
-    )
-
-  async def prime(
-    self,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    if not isinstance(backend_params, self.PrimeParams):
-      raise NotImplementedError(
-        "prime() requires PrimeParams with plate and volume. "
-        "Use manifold_prime(plate, volume) directly."
-      )
-    assert backend_params.plate is not None, "PrimeParams.plate must not be None"
-    await self.manifold_prime(
-      backend_params.plate,
-      volume=backend_params.volume,
-      buffer=backend_params.buffer,
-      flow_rate=backend_params.flow_rate,
-    )
-
-  @staticmethod
-  def _validate_manifold_xy(x: int, y: int, label: str) -> None:
-    """Validate manifold X/Y offsets (X: -60..60, Y: -40..40)."""
-    if not -60 <= x <= 60:
-      raise ValueError(f"{label} X offset must be -60..60, got {x}")
-    if not -40 <= y <= 40:
-      raise ValueError(f"{label} Y offset must be -40..40, got {y}")
-
-  @staticmethod
-  def _validate_aspirate_mode_params(
-    vacuum_filtration: bool,
-    travel_rate: TravelRate,
-    delay_ms: int,
-    vacuum_time_sec: int,
-  ) -> tuple[int, int]:
-    """Validate aspirate mode-specific params and return (time_value, rate_byte)."""
-    if not vacuum_filtration:
-      if travel_rate not in TRAVEL_RATE_TO_BYTE:
-        raise ValueError(
-          f"Invalid travel rate '{travel_rate}'. Must be one of: "
-          f"{', '.join(repr(r) for r in sorted(TRAVEL_RATE_TO_BYTE))}"
-        )
-      if not 0 <= delay_ms <= 5000:
-        raise ValueError(f"Aspirate delay must be 0-5000 ms, got {delay_ms}")
-      return (delay_ms, travel_rate_to_byte(travel_rate))
-
-    if not 5 <= vacuum_time_sec <= 999:
-      raise ValueError(f"Vacuum filtration time must be 5-999 seconds, got {vacuum_time_sec}")
-    return (vacuum_time_sec, travel_rate_to_byte("3"))
-
-  @classmethod
-  def _validate_aspirate_offsets(
-    cls,
-    offset_x: int,
-    offset_y: int,
-    offset_z: int,
-    secondary_aspirate: bool,
-    secondary_x: int,
-    secondary_y: int,
-    secondary_z: int,
-  ) -> None:
-    """Validate aspirate XYZ offset ranges (primary and secondary)."""
-    cls._validate_manifold_xy(offset_x, offset_y, "Aspirate")
-    if not 1 <= offset_z <= 210:
-      raise ValueError(f"Aspirate Z offset must be 1-210, got {offset_z}")
-    if secondary_aspirate:
-      cls._validate_manifold_xy(secondary_x, secondary_y, "Secondary")
-      if not 1 <= secondary_z <= 210:
-        raise ValueError(f"Secondary Z offset must be 1-210, got {secondary_z}")
-
-  def _validate_aspirate_params(
-    self,
-    plate: Plate,
-    vacuum_filtration: bool,
-    travel_rate: TravelRate,
-    delay_ms: int,
-    vacuum_time_sec: int,
-    offset_x: int,
-    offset_y: int,
-    offset_z: int | None,
-    secondary_aspirate: bool,
-    secondary_x: int,
-    secondary_y: int,
-    secondary_z: int | None,
-  ) -> tuple[int, int, int, int]:
-    """Validate aspirate parameters and resolve plate-type defaults.
-
-    Returns:
-      (offset_z, secondary_z, time_value, rate_byte)
-    """
-    pt_defaults = get_plate_wash_defaults(plate)
-    if offset_z is None:
-      offset_z = pt_defaults["aspirate_z"]
-    if secondary_z is None:
-      secondary_z = pt_defaults["aspirate_z"]
-
-    time_value, rate_byte = self._validate_aspirate_mode_params(
-      vacuum_filtration,
-      travel_rate,
-      delay_ms,
-      vacuum_time_sec,
-    )
-    self._validate_aspirate_offsets(
-      offset_x,
-      offset_y,
-      offset_z,
-      secondary_aspirate,
-      secondary_x,
-      secondary_y,
-      secondary_z,
-    )
-    return (offset_z, secondary_z, time_value, rate_byte)
-
-  @staticmethod
-  def _validate_dispense_extras(
-    pre_dispense_volume: float,
-    pre_dispense_flow_rate: int,
-    vacuum_delay_volume: float,
-  ) -> None:
-    """Validate pre-dispense and vacuum-delay parameters for manifold dispense."""
-    if pre_dispense_volume != 0 and not 25 <= pre_dispense_volume <= 3000:
-      raise ValueError(
-        f"Manifold pre-dispense volume must be 0 (disabled) or 25-3000 uL, "
-        f"got {pre_dispense_volume}"
-      )
-    if not 3 <= pre_dispense_flow_rate <= 11:
-      raise ValueError(
-        f"Manifold pre-dispense flow rate must be 3-11, got {pre_dispense_flow_rate}"
-      )
-    if not 0 <= vacuum_delay_volume <= 3000:
-      raise ValueError(f"Manifold vacuum delay volume must be 0-3000 uL, got {vacuum_delay_volume}")
-
-  def _validate_dispense_params(
-    self,
-    plate: Plate,
-    volume: float,
-    buffer: Buffer,
-    flow_rate: int,
-    offset_x: int,
-    offset_y: int,
-    offset_z: int | None,
-    pre_dispense_volume: float,
-    pre_dispense_flow_rate: int,
-    vacuum_delay_volume: float,
-  ) -> int:
-    """Validate dispense parameters and resolve plate-type defaults.
-
-    Returns:
-      Resolved offset_z.
-    """
-    if offset_z is None:
-      pt_defaults = get_plate_wash_defaults(plate)
-      offset_z = pt_defaults["dispense_z"]
-
-    if not 25 <= volume <= 3000:
-      raise ValueError(f"Manifold dispense volume must be 25-3000 uL, got {volume}")
-    validate_buffer(buffer)
-    if not 1 <= flow_rate <= 11:
-      raise ValueError(f"Manifold dispense flow rate must be 1-11, got {flow_rate}")
-    if flow_rate <= 2 and vacuum_delay_volume <= 0:
-      raise ValueError(
-        f"Flow rates 1-2 (cell wash) require vacuum_delay_volume > 0, "
-        f"got flow_rate={flow_rate} with vacuum_delay_volume={vacuum_delay_volume}"
-      )
-    self._validate_manifold_xy(offset_x, offset_y, "Manifold dispense")
-    if not 1 <= offset_z <= 210:
-      raise ValueError(f"Manifold dispense Z offset must be 1-210, got {offset_z}")
-    self._validate_dispense_extras(pre_dispense_volume, pre_dispense_flow_rate, vacuum_delay_volume)
-
-    return offset_z
-
-  def _resolve_wash_defaults(
-    self,
-    plate: Plate,
-    dispense_volume: float | None,
-    dispense_z: int | None,
-    aspirate_z: int | None,
-    secondary_z: int | None,
-    final_secondary_z: int | None,
-  ) -> tuple[float, int, int, int, int]:
-    """Resolve plate-type-aware defaults for wash parameters."""
-    pt_defaults = get_plate_wash_defaults(plate)
-    if dispense_volume is None:
-      dispense_volume = pt_defaults["dispense_volume"]
-    if dispense_z is None:
-      dispense_z = pt_defaults["dispense_z"]
-    if aspirate_z is None:
-      aspirate_z = pt_defaults["aspirate_z"]
-    if secondary_z is None:
-      secondary_z = pt_defaults["aspirate_z"]
-    if final_secondary_z is None:
-      final_secondary_z = pt_defaults["aspirate_z"]
-    return (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z)
-
-  @classmethod
-  def _validate_wash_core_params(
-    cls,
-    cycles: int,
-    buffer: Buffer,
-    dispense_volume: float,
-    dispense_flow_rate: int,
-    dispense_x: int,
-    dispense_y: int,
-    aspirate_travel_rate: int,
-    aspirate_x: int,
-    aspirate_y: int,
-    pre_dispense_flow_rate: int,
-    aspirate_delay_ms: int,
-    wash_format: Literal["Plate", "Sector"],
-    sector_mask: int,
-  ) -> None:
-    """Validate core wash dispense/aspirate parameters."""
-    validate_cycles(cycles)
-    if dispense_volume <= 0:
-      raise ValueError(f"dispense_volume must be positive, got {dispense_volume}")
-    validate_buffer(buffer)
-    validate_flow_rate(dispense_flow_rate)
-    cls._validate_manifold_xy(dispense_x, dispense_y, "Wash dispense")
-    validate_travel_rate(aspirate_travel_rate)
-    cls._validate_manifold_xy(aspirate_x, aspirate_y, "Wash aspirate")
-    if wash_format not in ("Plate", "Sector"):
-      raise ValueError(f"wash_format must be 'Plate' or 'Sector', got '{wash_format}'")
-    if not 0 <= sector_mask <= 0xFFFF:
-      raise ValueError(f"sector_mask must be 0x0000-0xFFFF, got 0x{sector_mask:04X}")
-    validate_flow_rate(pre_dispense_flow_rate)
-    validate_delay_ms(aspirate_delay_ms)
-
-  @classmethod
-  def _validate_wash_final_and_extras(
-    cls,
-    final_aspirate_x: int,
-    final_aspirate_y: int,
-    final_aspirate_delay_ms: int,
-    pre_dispense_volume: float,
-    vacuum_delay_volume: float,
-    soak_duration: int,
-    shake_duration: int,
-    shake_intensity: Intensity,
-  ) -> None:
-    """Validate final-aspirate, pre-dispense, soak/shake parameters."""
-    cls._validate_manifold_xy(final_aspirate_x, final_aspirate_y, "Final aspirate")
-    validate_delay_ms(final_aspirate_delay_ms)
-    if pre_dispense_volume != 0 and not 25 <= pre_dispense_volume <= 3000:
-      raise ValueError(
-        f"Wash pre-dispense volume must be 0 (disabled) or 25-3000 uL, got {pre_dispense_volume}"
-      )
-    if not 0 <= vacuum_delay_volume <= 3000:
-      raise ValueError(f"Wash vacuum delay volume must be 0-3000 uL, got {vacuum_delay_volume}")
-    if not 0 <= soak_duration <= 3599:
-      raise ValueError(f"Wash soak duration must be 0-3599 seconds, got {soak_duration}")
-    if not 0 <= shake_duration <= 3599:
-      raise ValueError(f"Wash shake duration must be 0-3599 seconds, got {shake_duration}")
-    validate_intensity(shake_intensity)
-
-  @classmethod
-  def _validate_wash_secondary_aspirates(
-    cls,
-    secondary_aspirate: bool,
-    secondary_x: int,
-    secondary_y: int,
-    final_secondary_aspirate: bool,
-    final_secondary_x: int,
-    final_secondary_y: int,
-  ) -> None:
-    """Validate secondary and final-secondary aspirate offsets."""
-    if secondary_aspirate:
-      cls._validate_manifold_xy(secondary_x, secondary_y, "Secondary")
-    if final_secondary_aspirate:
-      cls._validate_manifold_xy(final_secondary_x, final_secondary_y, "Final secondary")
-
-  @staticmethod
-  def _validate_wash_optional_features(
-    bottom_wash: bool,
-    bottom_wash_volume: float,
-    bottom_wash_flow_rate: int,
-    pre_dispense_between_cycles_volume: float,
-    pre_dispense_between_cycles_flow_rate: int,
-  ) -> None:
-    """Validate bottom wash and mid-cycle pre-dispense."""
-    if bottom_wash:
-      if not 25 <= bottom_wash_volume <= 3000:
-        raise ValueError(f"Bottom wash volume must be 25-3000 uL, got {bottom_wash_volume}")
-      validate_flow_rate(bottom_wash_flow_rate)
-    if pre_dispense_between_cycles_volume != 0:
-      if not 25 <= pre_dispense_between_cycles_volume <= 3000:
-        raise ValueError(
-          f"Pre-dispense between cycles volume must be 0 (disabled) or "
-          f"25-3000 uL, got {pre_dispense_between_cycles_volume}"
-        )
-      validate_flow_rate(pre_dispense_between_cycles_flow_rate)
-
-  def _validate_wash_params(
-    self,
-    plate: Plate,
-    cycles: int,
-    buffer: Buffer,
-    dispense_volume: float | None,
-    dispense_flow_rate: int,
-    dispense_x: int,
-    dispense_y: int,
-    dispense_z: int | None,
-    aspirate_travel_rate: int,
-    aspirate_z: int | None,
-    aspirate_x: int,
-    aspirate_y: int,
-    pre_dispense_flow_rate: int,
-    aspirate_delay_ms: int,
-    final_aspirate_x: int,
-    final_aspirate_y: int,
-    final_aspirate_delay_ms: int,
-    pre_dispense_volume: float,
-    vacuum_delay_volume: float,
-    soak_duration: int,
-    shake_duration: int,
-    shake_intensity: Intensity,
-    secondary_aspirate: bool,
-    secondary_z: int | None,
-    secondary_x: int,
-    secondary_y: int,
-    final_secondary_aspirate: bool,
-    final_secondary_z: int | None,
-    final_secondary_x: int,
-    final_secondary_y: int,
-    bottom_wash: bool,
-    bottom_wash_volume: float,
-    bottom_wash_flow_rate: int,
-    pre_dispense_between_cycles_volume: float,
-    pre_dispense_between_cycles_flow_rate: int,
-    wash_format: Literal["Plate", "Sector"],
-    sector_mask: int,
-  ) -> tuple[float, int, int, int, int]:
-    """Validate wash parameters and resolve plate-type defaults.
-
-    Returns:
-      (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z)
-    """
-    (
-      dispense_volume,
-      dispense_z,
-      aspirate_z,
-      secondary_z,
-      final_secondary_z,
-    ) = self._resolve_wash_defaults(
-      plate,
-      dispense_volume,
-      dispense_z,
-      aspirate_z,
-      secondary_z,
-      final_secondary_z,
-    )
-    self._validate_wash_core_params(
-      cycles,
-      buffer,
-      dispense_volume,
-      dispense_flow_rate,
-      dispense_x,
-      dispense_y,
-      aspirate_travel_rate,
-      aspirate_x,
-      aspirate_y,
-      pre_dispense_flow_rate,
-      aspirate_delay_ms,
-      wash_format,
-      sector_mask,
-    )
-    self._validate_wash_final_and_extras(
-      final_aspirate_x,
-      final_aspirate_y,
-      final_aspirate_delay_ms,
-      pre_dispense_volume,
-      vacuum_delay_volume,
-      soak_duration,
-      shake_duration,
-      shake_intensity,
-    )
-    self._validate_wash_secondary_aspirates(
-      secondary_aspirate,
-      secondary_x,
-      secondary_y,
-      final_secondary_aspirate,
-      final_secondary_x,
-      final_secondary_y,
-    )
-    self._validate_wash_optional_features(
-      bottom_wash,
-      bottom_wash_volume,
-      bottom_wash_flow_rate,
-      pre_dispense_between_cycles_volume,
-      pre_dispense_between_cycles_flow_rate,
-    )
-    return (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z)
-
-  async def manifold_aspirate(
-    self,
-    plate: Plate,
-    vacuum_filtration: bool = False,
-    travel_rate: TravelRate = "3",
-    delay: float = 0.0,
-    vacuum_time: float = 30.0,
-    offset_x: int = 0,
-    offset_y: int = 0,
-    offset_z: int | None = None,
-    secondary_aspirate: bool = False,
-    secondary_x: int = 0,
-    secondary_y: int = 0,
-    secondary_z: int | None = None,
-  ) -> None:
-    """Aspirate liquid from all wells via the wash manifold.
-
-    Two modes based on vacuum_filtration:
-    - Normal (vacuum_filtration=False): Uses travel_rate and delay.
-    - Vacuum filtration (vacuum_filtration=True): Uses vacuum_time.
-      Travel rate is ignored (greyed out in GUI).
-
-    Args:
-      plate: PLR Plate resource.
-      vacuum_filtration: Enable vacuum filtration mode.
-      travel_rate: Head travel rate. Normal: "1"-"5".
-        Cell wash: "1 CW", "2 CW", "3 CW", "4 CW", "6 CW".
-        Ignored when vacuum_filtration=True.
-      delay: Post-aspirate delay in seconds (0-5). Only used when
-        vacuum_filtration=False. Wire resolution: 1 ms.
-      vacuum_time: Vacuum filtration time in seconds (5-999). Only used when
-        vacuum_filtration=True.
-      offset_x: X offset in steps (-60 to +60).
-      offset_y: Y offset in steps (-40 to +40).
-      offset_z: Z offset in steps (1-210). Default None (plate-type-aware:
-        29 for 96-well, 22 for 384-well, etc.).
-      secondary_aspirate: Enable secondary aspirate (perform a second aspirate
-        at a different position). Not available for 1536-well plates.
-      secondary_x: Secondary aspirate X offset (-60 to +60).
-      secondary_y: Secondary aspirate Y offset (-40 to +40).
-      secondary_z: Secondary aspirate Z offset (1-210). Default None
-        (plate-type-aware, same as offset_z default).
-
-    Raises:
-      ValueError: If parameters are invalid.
-    """
-    # Convert PLR units (seconds) to wire units: seconds → milliseconds, seconds → integer seconds
-    delay_ms = round(delay * 1000)
-    vacuum_time_sec = round(vacuum_time)
-
-    offset_z, secondary_z, time_value, rate_byte = self._validate_aspirate_params(
-      plate=plate,
-      vacuum_filtration=vacuum_filtration,
-      travel_rate=travel_rate,
-      delay_ms=delay_ms,
-      vacuum_time_sec=vacuum_time_sec,
-      offset_x=offset_x,
-      offset_y=offset_y,
-      offset_z=offset_z,
-      secondary_aspirate=secondary_aspirate,
-      secondary_x=secondary_x,
-      secondary_y=secondary_y,
-      secondary_z=secondary_z,
-    )
-
-    logger.info(
-      "Aspirating: vacuum=%s, travel_rate=%s, delay=%.3f s",
-      vacuum_filtration,
-      travel_rate,
-      delay,
-    )
-
-    data = self._build_aspirate_command(
-      plate=plate,
-      vacuum_filtration=vacuum_filtration,
-      time_value=time_value,
-      travel_rate_byte=rate_byte,
-      offset_x=offset_x,
-      offset_y=offset_y,
-      offset_z=offset_z,
-      secondary_mode=1 if secondary_aspirate else 0,
-      secondary_x=secondary_x,
-      secondary_y=secondary_y,
-      secondary_z=secondary_z,
-    )
-    framed_command = build_framed_message(command=0xA5, data=data)
-    async with self._driver.batch():
-      await self._driver._send_step_command(framed_command)
-
-  async def manifold_dispense(
-    self,
-    plate: Plate,
-    volume: float,
-    buffer: Buffer = "A",
-    flow_rate: int = 7,
-    offset_x: int = 0,
-    offset_y: int = 0,
-    offset_z: int | None = None,
-    pre_dispense_volume: float = 0.0,
-    pre_dispense_flow_rate: int = 9,
-    vacuum_delay_volume: float = 0.0,
-  ) -> None:
-    """Dispense liquid to all wells via the wash manifold.
-
-    Args:
-      plate: PLR Plate resource.
-      volume: Volume to dispense in uL/well. Range: 25-3000 uL (manifold-dependent:
-        96-tube manifolds require ≥50, 192/128-tube manifolds allow ≥25).
-      buffer: Buffer valve selection (A, B, C, D).
-      flow_rate: Dispense flow rate (1-11, default 7).
-        Rates 1-2 are for cell wash mode only (96-tube dual-action manifold)
-        and require vacuum_delay_volume > 0.
-        Standard range is 3-11.
-      offset_x: X offset in steps (-60 to +60).
-      offset_y: Y offset in steps (-40 to +40).
-      offset_z: Z offset in steps (1-210). Default None (plate-type-aware:
-        121 for 96-well, 120 for 384-well, etc.).
-      pre_dispense_volume: Pre-dispense volume in uL/tube (0 to disable, 25-3000 when enabled).
-      pre_dispense_flow_rate: Pre-dispense flow rate (3-11, default 9).
-      vacuum_delay_volume: Delay start of vacuum until volume dispensed in uL/well
-        (0 to disable, 0-3000 when enabled). Required for cell wash flow rates 1-2.
-
-    Raises:
-      ValueError: If parameters are invalid.
-    """
-    offset_z = self._validate_dispense_params(
-      plate=plate,
-      volume=volume,
-      buffer=buffer,
-      flow_rate=flow_rate,
-      offset_x=offset_x,
-      offset_y=offset_y,
-      offset_z=offset_z,
-      pre_dispense_volume=pre_dispense_volume,
-      pre_dispense_flow_rate=pre_dispense_flow_rate,
-      vacuum_delay_volume=vacuum_delay_volume,
-    )
-
-    logger.info(
-      "Dispensing %.1f uL from buffer %s, flow rate %d",
-      volume,
-      buffer,
-      flow_rate,
-    )
-
-    data = self._build_dispense_command(
-      plate=plate,
-      volume=volume,
-      buffer=buffer,
-      flow_rate=flow_rate,
-      offset_x=offset_x,
-      offset_y=offset_y,
-      offset_z=offset_z,
-      pre_dispense_volume=pre_dispense_volume,
-      pre_dispense_flow_rate=pre_dispense_flow_rate,
-      vacuum_delay_volume=vacuum_delay_volume,
-    )
-    framed_command = build_framed_message(command=0xA6, data=data)
-    async with self._driver.batch():
-      await self._driver._send_step_command(framed_command)
-
-  async def manifold_wash(
-    self,
-    plate: Plate,
-    cycles: int = 3,
-    buffer: Buffer = "A",
-    dispense_volume: float | None = None,
-    dispense_flow_rate: int = 7,
-    dispense_x: int = 0,
-    dispense_y: int = 0,
-    dispense_z: int | None = None,
-    aspirate_travel_rate: int = 3,
-    aspirate_z: int | None = None,
-    pre_dispense_flow_rate: int = 9,
-    aspirate_delay: float = 0.0,
-    aspirate_x: int = 0,
-    aspirate_y: int = 0,
-    final_aspirate: bool = True,
-    final_aspirate_z: int | None = None,
-    final_aspirate_x: int = 0,
-    final_aspirate_y: int = 0,
-    final_aspirate_delay: float = 0.0,
-    pre_dispense_volume: float = 0.0,
-    vacuum_delay_volume: float = 0.0,
-    soak_duration: int = 0,
-    shake_duration: int = 0,
-    shake_intensity: Intensity = "Medium",
-    secondary_aspirate: bool = False,
-    secondary_z: int | None = None,
-    secondary_x: int = 0,
-    secondary_y: int = 0,
-    final_secondary_aspirate: bool = False,
-    final_secondary_z: int | None = None,
-    final_secondary_x: int = 0,
-    final_secondary_y: int = 0,
-    bottom_wash: bool = False,
-    bottom_wash_volume: float = 0.0,
-    bottom_wash_flow_rate: int = 5,
-    pre_dispense_between_cycles_volume: float = 0.0,
-    pre_dispense_between_cycles_flow_rate: int = 9,
-    wash_format: Literal["Plate", "Sector"] = "Plate",
-    sectors: list[int] | None = None,
-    move_home_first: bool = False,
-  ) -> None:
-    """Perform manifold wash cycles.
-
-    Sends a 102-byte MANIFOLD_WASH (0xA4) command that performs repeated
-    dispense-aspirate cycles. The wire format contains two dispense sections,
-    two aspirate sections, and a final shake/soak section.
-
-    The wash command supports 4 independent coordinate sets:
-    - Primary aspirate (aspirate_x/y/z): between-cycle aspirate position
-    - Primary secondary (secondary_x/y/z): second aspirate position per cycle
-    - Final aspirate (final_aspirate_x/y/z): aspirate after last cycle
-    - Final secondary (final_secondary_x/y/z): second position for final aspirate
-
-    Args:
-      plate: PLR Plate resource.
-      cycles: Number of wash cycles (1-250). Default 3.
-        Encoded at header byte [6].
-      buffer: Buffer valve selection (A, B, C, D). Default A.
-      dispense_volume: Volume to dispense per cycle in uL. Default None
-        (plate-type-aware: 300 for 96-well, 100 for others).
       dispense_flow_rate: Flow rate for dispensing (1-9). Default 7.
       dispense_x: Dispense X offset in steps (-60 to +60). Default 0.
       dispense_y: Dispense Y offset in steps (-40 to +40). Default 0.
@@ -855,165 +172,484 @@ class EL406PlateWashingBackend(PlateWashingBackend):
       move_home_first: Move carrier to home position before shake/soak.
         Default False. Same as in standalone shake interface.
         Encoded at wire [87] (shake/soak section byte 0).
-
-    Raises:
-      ValueError: If parameters are invalid.
     """
-    # Convert PLR units (seconds) to wire units (ms)
-    aspirate_delay_ms = round(aspirate_delay * 1000)
-    final_aspirate_delay_ms = round(final_aspirate_delay * 1000)
 
-    # Convert sectors list to bitmask
-    if sectors is not None:
+    buffer: Buffer = "A"
+    dispense_flow_rate: int = 7
+    dispense_x: int = 0
+    dispense_y: int = 0
+    dispense_z: Optional[int] = None
+    aspirate_travel_rate: int = 3
+    aspirate_z: Optional[int] = None
+    pre_dispense_flow_rate: int = 9
+    aspirate_delay: float = 0.0
+    aspirate_x: int = 0
+    aspirate_y: int = 0
+    final_aspirate: bool = True
+    final_aspirate_z: Optional[int] = None
+    final_aspirate_x: int = 0
+    final_aspirate_y: int = 0
+    final_aspirate_delay: float = 0.0
+    pre_dispense_volume: float = 0.0
+    vacuum_delay_volume: float = 0.0
+    soak_duration: int = 0
+    shake_duration: int = 0
+    shake_intensity: Intensity = "Medium"
+    secondary_aspirate: bool = False
+    secondary_z: Optional[int] = None
+    secondary_x: int = 0
+    secondary_y: int = 0
+    final_secondary_aspirate: bool = False
+    final_secondary_z: Optional[int] = None
+    final_secondary_x: int = 0
+    final_secondary_y: int = 0
+    bottom_wash: bool = False
+    bottom_wash_volume: float = 0.0
+    bottom_wash_flow_rate: int = 5
+    pre_dispense_between_cycles_volume: float = 0.0
+    pre_dispense_between_cycles_flow_rate: int = 9
+    wash_format: Literal["Plate", "Sector"] = "Plate"
+    sectors: Optional[list[int]] = None
+    move_home_first: bool = False
+
+  @dataclass
+  class PrimeParams(BackendParams):
+    """Parameters for manifold prime.
+
+    Attributes:
+      volume: Prime volume in uL (5000-999000). Wire resolution: 1000 uL.
+      buffer: Buffer valve selection (A, B, C, D).
+      flow_rate: Flow rate (3-11, default 9).
+      low_flow_volume: Low flow path volume in uL (5000-999000, default 5000).
+        Set to 0 to disable.
+      submerge_duration: Submerge duration in seconds (0 to disable, 60-86340).
+        Must be a multiple of 60.
+    """
+
+    volume: float = 10000.0
+    buffer: Buffer = "A"
+    flow_rate: int = 9
+    low_flow_volume: float = 5000.0
+    submerge_duration: float = 0.0
+
+  @dataclass
+  class AspirateParams(BackendParams):
+    """Parameters for manifold aspirate.
+
+    Attributes:
+      vacuum_filtration: Enable vacuum filtration mode.
+      travel_rate: Head travel rate ("1"-"5", or cell wash "1 CW"-"6 CW").
+      delay: Post-aspirate delay in seconds (0-5).
+      vacuum_time: Vacuum filtration time in seconds (5-999).
+      offset_x: X offset in steps (-60 to +60).
+      offset_y: Y offset in steps (-40 to +40).
+      offset_z: Z offset in steps (1-210). None for plate-type default.
+      secondary_aspirate: Enable secondary aspirate at a different position.
+      secondary_x: Secondary X offset (-60 to +60).
+      secondary_y: Secondary Y offset (-40 to +40).
+      secondary_z: Secondary Z offset (1-210). None for plate-type default.
+    """
+
+    vacuum_filtration: bool = False
+    travel_rate: TravelRate = "3"
+    delay: float = 0.0
+    vacuum_time: float = 30.0
+    offset_x: int = 0
+    offset_y: int = 0
+    offset_z: Optional[int] = None
+    secondary_aspirate: bool = False
+    secondary_x: int = 0
+    secondary_y: int = 0
+    secondary_z: Optional[int] = None
+
+  @dataclass
+  class DispenseParams(BackendParams):
+    """Parameters for manifold dispense.
+
+    Attributes:
+      buffer: Buffer valve selection (A, B, C, D).
+      flow_rate: Dispense flow rate (1-11, default 7).
+      offset_x: X offset in steps (-60 to +60).
+      offset_y: Y offset in steps (-40 to +40).
+      offset_z: Z offset in steps (1-210). None for plate-type default.
+      pre_dispense_volume: Pre-dispense volume in uL/tube (0 to disable).
+      pre_dispense_flow_rate: Pre-dispense flow rate (3-11, default 9).
+      vacuum_delay_volume: Delay start of vacuum until volume dispensed in uL/well.
+    """
+
+    buffer: Buffer = "A"
+    flow_rate: int = 7
+    offset_x: int = 0
+    offset_y: int = 0
+    offset_z: Optional[int] = None
+    pre_dispense_volume: float = 0.0
+    pre_dispense_flow_rate: int = 9
+    vacuum_delay_volume: float = 0.0
+
+  def __init__(self, driver: EL406Driver) -> None:
+    self._driver = driver
+
+  @staticmethod
+  def _validate_manifold_xy(x: int, y: int, label: str) -> None:
+    """Validate manifold X/Y offsets (X: -60..60, Y: -40..40)."""
+    if not -60 <= x <= 60:
+      raise ValueError(f"{label} X offset must be -60..60, got {x}")
+    if not -40 <= y <= 40:
+      raise ValueError(f"{label} Y offset must be -40..40, got {y}")
+
+  def _validate_aspirate_params(
+    self,
+    plate: Plate,
+    p: "EL406PlateWasher96Backend.AspirateParams",
+  ) -> tuple[int, int, int, int]:
+    """Validate aspirate parameters and resolve plate-type defaults.
+
+    Returns:
+      (offset_z, secondary_z, time_value, rate_byte)
+    """
+    pt_defaults = get_plate_wash_defaults(plate)
+    offset_z = p.offset_z if p.offset_z is not None else pt_defaults["aspirate_z"]
+    secondary_z = p.secondary_z if p.secondary_z is not None else pt_defaults["aspirate_z"]
+
+    # validate aspiration mode
+    delay_ms = round(p.delay * 1000)
+    vacuum_time_sec = round(p.vacuum_time)
+    if not p.vacuum_filtration:
+      if p.travel_rate not in TRAVEL_RATE_TO_BYTE:
+        raise ValueError(
+          f"Invalid travel rate '{p.travel_rate}'. Must be one of: "
+          f"{', '.join(repr(r) for r in sorted(TRAVEL_RATE_TO_BYTE))}"
+        )
+      if not 0 <= delay_ms <= 5000:
+        raise ValueError(f"Aspirate delay must be 0-5000 ms, got {delay_ms}")
+      time_value, rate_byte = delay_ms, travel_rate_to_byte(p.travel_rate)
+    else:
+      if not 5 <= vacuum_time_sec <= 999:
+        raise ValueError(f"Vacuum filtration time must be 5-999 seconds, got {vacuum_time_sec}")
+      time_value, rate_byte = vacuum_time_sec, travel_rate_to_byte("3")
+
+    # validate offsets
+    self._validate_manifold_xy(p.offset_x, p.offset_y, "Aspirate")
+    if not 1 <= offset_z <= 210:
+      raise ValueError(f"Aspirate Z offset must be 1-210, got {offset_z}")
+    if p.secondary_aspirate:
+      self._validate_manifold_xy(p.secondary_x, p.secondary_y, "Secondary")
+      if not 1 <= secondary_z <= 210:
+        raise ValueError(f"Secondary Z offset must be 1-210, got {secondary_z}")
+
+    return (offset_z, secondary_z, time_value, rate_byte)
+
+  def _validate_dispense_params(
+    self,
+    plate: Plate,
+    volume: float,
+    p: "EL406PlateWasher96Backend.DispenseParams",
+  ) -> int:
+    """Validate dispense parameters and resolve plate-type defaults.
+
+    Returns:
+      Resolved offset_z.
+    """
+    offset_z = p.offset_z
+    if offset_z is None:
+      pt_defaults = get_plate_wash_defaults(plate)
+      offset_z = pt_defaults["dispense_z"]
+
+    if not 25 <= volume <= 3000:
+      raise ValueError(f"Manifold dispense volume must be 25-3000 uL, got {volume}")
+    validate_buffer(p.buffer)
+    if not 1 <= p.flow_rate <= 11:
+      raise ValueError(f"Manifold dispense flow rate must be 1-11, got {p.flow_rate}")
+    if p.flow_rate <= 2 and p.vacuum_delay_volume <= 0:
+      raise ValueError(
+        f"Flow rates 1-2 (cell wash) require vacuum_delay_volume > 0, "
+        f"got flow_rate={p.flow_rate} with vacuum_delay_volume={p.vacuum_delay_volume}"
+      )
+    self._validate_manifold_xy(p.offset_x, p.offset_y, "Manifold dispense")
+    if not 1 <= offset_z <= 210:
+      raise ValueError(f"Manifold dispense Z offset must be 1-210, got {offset_z}")
+
+    # validate pre-dispense and vacuum delay
+    if p.pre_dispense_volume != 0 and not 25 <= p.pre_dispense_volume <= 3000:
+      raise ValueError(
+        f"Manifold pre-dispense volume must be 0 (disabled) or 25-3000 uL, "
+        f"got {p.pre_dispense_volume}"
+      )
+    if not 3 <= p.pre_dispense_flow_rate <= 11:
+      raise ValueError(f"Manifold pre-dispense flow rate must be 3-11, got {p.pre_dispense_flow_rate}")
+    if not 0 <= p.vacuum_delay_volume <= 3000:
+      raise ValueError(f"Manifold vacuum delay volume must be 0-3000 uL, got {p.vacuum_delay_volume}")
+
+    return offset_z
+
+  def _resolve_wash_defaults(
+    self,
+    plate: Plate,
+    dispense_volume: Optional[float],
+    dispense_z: Optional[int],
+    aspirate_z: Optional[int],
+    secondary_z: Optional[int],
+    final_secondary_z: Optional[int],
+  ) -> tuple[float, int, int, int, int]:
+    """Resolve plate-type-aware defaults for wash parameters."""
+    pt_defaults = get_plate_wash_defaults(plate)
+    if dispense_volume is None:
+      dispense_volume = pt_defaults["dispense_volume"]
+    if dispense_z is None:
+      dispense_z = pt_defaults["dispense_z"]
+    if aspirate_z is None:
+      aspirate_z = pt_defaults["aspirate_z"]
+    if secondary_z is None:
+      secondary_z = pt_defaults["aspirate_z"]
+    if final_secondary_z is None:
+      final_secondary_z = pt_defaults["aspirate_z"]
+    return (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z)
+
+  def _validate_wash_params(
+    self,
+    plate: Plate,
+    cycles: int,
+    dispense_volume: Optional[float],
+    p: "EL406PlateWasher96Backend.WashParams",
+  ) -> tuple[float, int, int, int, int, int, int, int]:
+    """Validate wash parameters and resolve plate-type defaults.
+
+    Returns:
+      (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z,
+       aspirate_delay_ms, final_aspirate_delay_ms, sector_mask)
+    """
+    aspirate_delay_ms = round(p.aspirate_delay * 1000)
+    final_aspirate_delay_ms = round(p.final_aspirate_delay * 1000)
+
+    if p.sectors is not None:
       sector_mask = 0
-      for q in sectors:
+      for q in p.sectors:
         if not 1 <= q <= 4:
           raise ValueError(f"Sector/quadrant must be 1-4, got {q}")
         sector_mask |= 1 << (q - 1)
     else:
       sector_mask = 0x0F
-
+    # resolve plate-type defaults
     (
       dispense_volume,
       dispense_z,
       aspirate_z,
       secondary_z,
       final_secondary_z,
-    ) = self._validate_wash_params(
+    ) = self._resolve_wash_defaults(
+      plate, dispense_volume, p.dispense_z, p.aspirate_z, p.secondary_z, p.final_secondary_z,
+    )
+
+    # core dispense/aspirate params
+    validate_cycles(cycles)
+    if dispense_volume <= 0:
+      raise ValueError(f"dispense_volume must be positive, got {dispense_volume}")
+    validate_buffer(p.buffer)
+    validate_flow_rate(p.dispense_flow_rate)
+    self._validate_manifold_xy(p.dispense_x, p.dispense_y, "Wash dispense")
+    validate_travel_rate(p.aspirate_travel_rate)
+    self._validate_manifold_xy(p.aspirate_x, p.aspirate_y, "Wash aspirate")
+    if p.wash_format not in ("Plate", "Sector"):
+      raise ValueError(f"wash_format must be 'Plate' or 'Sector', got '{p.wash_format}'")
+    if not 0 <= sector_mask <= 0xFFFF:
+      raise ValueError(f"sector_mask must be 0x0000-0xFFFF, got 0x{sector_mask:04X}")
+    validate_flow_rate(p.pre_dispense_flow_rate)
+    validate_delay_ms(aspirate_delay_ms)
+
+    # final aspirate, pre-dispense, soak/shake
+    self._validate_manifold_xy(p.final_aspirate_x, p.final_aspirate_y, "Final aspirate")
+    validate_delay_ms(final_aspirate_delay_ms)
+    if p.pre_dispense_volume != 0 and not 25 <= p.pre_dispense_volume <= 3000:
+      raise ValueError(
+        f"Wash pre-dispense volume must be 0 (disabled) or 25-3000 uL, got {p.pre_dispense_volume}"
+      )
+    if not 0 <= p.vacuum_delay_volume <= 3000:
+      raise ValueError(f"Wash vacuum delay volume must be 0-3000 uL, got {p.vacuum_delay_volume}")
+    if not 0 <= p.soak_duration <= 3599:
+      raise ValueError(f"Wash soak duration must be 0-3599 seconds, got {p.soak_duration}")
+    if not 0 <= p.shake_duration <= 3599:
+      raise ValueError(f"Wash shake duration must be 0-3599 seconds, got {p.shake_duration}")
+    validate_intensity(p.shake_intensity)
+
+    # secondary aspirates
+    if p.secondary_aspirate:
+      self._validate_manifold_xy(p.secondary_x, p.secondary_y, "Secondary")
+    if p.final_secondary_aspirate:
+      self._validate_manifold_xy(p.final_secondary_x, p.final_secondary_y, "Final secondary")
+
+    # bottom wash and mid-cycle pre-dispense
+    if p.bottom_wash:
+      if not 25 <= p.bottom_wash_volume <= 3000:
+        raise ValueError(f"Bottom wash volume must be 25-3000 uL, got {p.bottom_wash_volume}")
+      validate_flow_rate(p.bottom_wash_flow_rate)
+    if p.pre_dispense_between_cycles_volume != 0:
+      if not 25 <= p.pre_dispense_between_cycles_volume <= 3000:
+        raise ValueError(
+          f"Pre-dispense between cycles volume must be 0 (disabled) or "
+          f"25-3000 uL, got {p.pre_dispense_between_cycles_volume}"
+        )
+      validate_flow_rate(p.pre_dispense_between_cycles_flow_rate)
+
+    return (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z,
+            aspirate_delay_ms, final_aspirate_delay_ms, sector_mask)
+
+  async def aspirate(
+    self,
+    plate: Plate,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Aspirate liquid from all wells via the wash manifold.
+
+    Two modes based on ``vacuum_filtration`` in :class:`AspirateParams`:
+
+    - Normal (vacuum_filtration=False): Uses travel_rate and delay.
+    - Vacuum filtration (vacuum_filtration=True): Uses vacuum_time.
+      Travel rate is ignored (greyed out in GUI).
+
+    Args:
+      plate: PLR Plate resource.
+      backend_params: :class:`AspirateParams` with vacuum_filtration, travel_rate,
+        delay, vacuum_time, offset_x/y/z, secondary aspirate settings.
+    """
+    if not isinstance(backend_params, self.AspirateParams):
+      backend_params = self.AspirateParams()
+    p = backend_params
+
+    offset_z, secondary_z, time_value, rate_byte = self._validate_aspirate_params(plate, p)
+
+    logger.info("Aspirating: vacuum=%s, travel_rate=%s, delay=%.3f s",
+                p.vacuum_filtration, p.travel_rate, p.delay)
+
+    data = self._build_aspirate_command(
       plate=plate,
-      cycles=cycles,
-      buffer=buffer,
-      dispense_volume=dispense_volume,
-      dispense_flow_rate=dispense_flow_rate,
-      dispense_x=dispense_x,
-      dispense_y=dispense_y,
-      dispense_z=dispense_z,
-      aspirate_travel_rate=aspirate_travel_rate,
-      aspirate_z=aspirate_z,
-      aspirate_x=aspirate_x,
-      aspirate_y=aspirate_y,
-      pre_dispense_flow_rate=pre_dispense_flow_rate,
-      aspirate_delay_ms=aspirate_delay_ms,
-      final_aspirate_x=final_aspirate_x,
-      final_aspirate_y=final_aspirate_y,
-      final_aspirate_delay_ms=final_aspirate_delay_ms,
-      pre_dispense_volume=pre_dispense_volume,
-      vacuum_delay_volume=vacuum_delay_volume,
-      soak_duration=soak_duration,
-      shake_duration=shake_duration,
-      shake_intensity=shake_intensity,
-      secondary_aspirate=secondary_aspirate,
+      vacuum_filtration=p.vacuum_filtration,
+      time_value=time_value,
+      travel_rate_byte=rate_byte,
+      offset_x=p.offset_x,
+      offset_y=p.offset_y,
+      offset_z=offset_z,
+      secondary_mode=1 if p.secondary_aspirate else 0,
+      secondary_x=p.secondary_x,
+      secondary_y=p.secondary_y,
       secondary_z=secondary_z,
-      secondary_x=secondary_x,
-      secondary_y=secondary_y,
-      final_secondary_aspirate=final_secondary_aspirate,
-      final_secondary_z=final_secondary_z,
-      final_secondary_x=final_secondary_x,
-      final_secondary_y=final_secondary_y,
-      bottom_wash=bottom_wash,
-      bottom_wash_volume=bottom_wash_volume,
-      bottom_wash_flow_rate=bottom_wash_flow_rate,
-      pre_dispense_between_cycles_volume=pre_dispense_between_cycles_volume,
-      pre_dispense_between_cycles_flow_rate=pre_dispense_between_cycles_flow_rate,
-      wash_format=wash_format,
-      sector_mask=sector_mask,
     )
-
-    logger.info(
-      "Manifold wash: %d cycles, %.1f uL, buffer %s, flow %d, "
-      "disp_xy=(%d,%d), z_disp=%d, z_asp=%d, pre_disp_flow=%d, "
-      "asp_delay=%.3f s, asp_xy=(%d,%d), final_asp=%s, "
-      "pre_disp=%.1f, vac_delay=%.1f, soak=%d, shake=%d/%s, "
-      "sec_asp=%s, sec_z=%d, sec_xy=(%d,%d), "
-      "btm_wash=%s/%.1f/%d, midcyc=%.1f/%d",
-      cycles,
-      dispense_volume,
-      buffer,
-      dispense_flow_rate,
-      dispense_x,
-      dispense_y,
-      dispense_z,
-      aspirate_z,
-      pre_dispense_flow_rate,
-      aspirate_delay,
-      aspirate_x,
-      aspirate_y,
-      final_aspirate,
-      pre_dispense_volume,
-      vacuum_delay_volume,
-      soak_duration,
-      shake_duration,
-      shake_intensity,
-      secondary_aspirate,
-      secondary_z,
-      secondary_x,
-      secondary_y,
-      bottom_wash,
-      bottom_wash_volume,
-      bottom_wash_flow_rate,
-      pre_dispense_between_cycles_volume,
-      pre_dispense_between_cycles_flow_rate,
-    )
-
-    data = self._build_wash_composite_command(
-      plate=plate,
-      cycles=cycles,
-      buffer=buffer,
-      dispense_volume=dispense_volume,
-      dispense_flow_rate=dispense_flow_rate,
-      dispense_x=dispense_x,
-      dispense_y=dispense_y,
-      dispense_z=dispense_z,
-      aspirate_travel_rate=aspirate_travel_rate,
-      aspirate_z=aspirate_z,
-      pre_dispense_flow_rate=pre_dispense_flow_rate,
-      aspirate_delay_ms=aspirate_delay_ms,
-      aspirate_x=aspirate_x,
-      aspirate_y=aspirate_y,
-      final_aspirate=final_aspirate,
-      final_aspirate_z=final_aspirate_z,
-      final_aspirate_x=final_aspirate_x,
-      final_aspirate_y=final_aspirate_y,
-      final_aspirate_delay_ms=final_aspirate_delay_ms,
-      pre_dispense_volume=pre_dispense_volume,
-      vacuum_delay_volume=vacuum_delay_volume,
-      soak_duration=soak_duration,
-      shake_duration=shake_duration,
-      shake_intensity=shake_intensity,
-      secondary_aspirate=secondary_aspirate,
-      secondary_z=secondary_z,
-      secondary_x=secondary_x,
-      secondary_y=secondary_y,
-      final_secondary_aspirate=final_secondary_aspirate,
-      final_secondary_z=final_secondary_z,
-      final_secondary_x=final_secondary_x,
-      final_secondary_y=final_secondary_y,
-      bottom_wash=bottom_wash,
-      bottom_wash_volume=bottom_wash_volume,
-      bottom_wash_flow_rate=bottom_wash_flow_rate,
-      pre_dispense_between_cycles_volume=pre_dispense_between_cycles_volume,
-      pre_dispense_between_cycles_flow_rate=pre_dispense_between_cycles_flow_rate,
-      wash_format=wash_format,
-      sector_mask=sector_mask,
-      move_home_first=move_home_first,
-    )
-
-    framed_command = build_framed_message(command=0xA4, data=data)
-    # Dynamic timeout: base per cycle + shake + soak + buffer
-    # Each cycle takes ~10-30s depending on volume/flow/plate type.
-    # Use 60s per cycle as generous safety margin to avoid false timeouts.
-    wash_timeout = (cycles * 60) + shake_duration + soak_duration + 120
+    framed_command = build_framed_message(command=0xA5, data=data)
     async with self._driver.batch():
-      await self._driver._send_step_command(framed_command, timeout=wash_timeout)
+      await self._driver._send_step_command(framed_command)
 
-  async def manifold_prime(
+  async def dispense(
     self,
     plate: Plate,
     volume: float,
-    buffer: Buffer = "A",
-    flow_rate: int = 9,
-    low_flow_volume: float = 5000.0,
-    submerge_duration: float = 0.0,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Dispense liquid to all wells via the wash manifold.
+
+    Args:
+      plate: PLR Plate resource.
+      volume: Volume to dispense in uL/well (25-3000).
+      backend_params: :class:`DispenseParams` with buffer, flow_rate, offsets,
+        pre_dispense_volume, pre_dispense_flow_rate, vacuum_delay_volume.
+    """
+    if not isinstance(backend_params, self.DispenseParams):
+      backend_params = self.DispenseParams()
+    p = backend_params
+
+    offset_z = self._validate_dispense_params(plate, volume, p)
+
+    logger.info("Dispensing %.1f uL from buffer %s, flow rate %d",
+                volume, p.buffer, p.flow_rate)
+
+    data = self._build_dispense_command(
+      plate=plate, volume=volume, buffer=p.buffer, flow_rate=p.flow_rate,
+      offset_x=p.offset_x, offset_y=p.offset_y, offset_z=offset_z,
+      pre_dispense_volume=p.pre_dispense_volume,
+      pre_dispense_flow_rate=p.pre_dispense_flow_rate,
+      vacuum_delay_volume=p.vacuum_delay_volume,
+    )
+    framed_command = build_framed_message(command=0xA6, data=data)
+    async with self._driver.batch():
+      await self._driver._send_step_command(framed_command)
+
+  async def wash(
+    self,
+    plate: Plate,
+    cycles: int = 3,
+    dispense_volume: Optional[float] = None,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Perform manifold wash cycles.
+
+    Sends a 102-byte MANIFOLD_WASH (0xA4) command that performs repeated
+    dispense-aspirate cycles. The wire format contains two dispense sections,
+    two aspirate sections, and a final shake/soak section.
+
+    The wash command supports 4 independent coordinate sets:
+    - Primary aspirate (aspirate_x/y/z): between-cycle aspirate position
+    - Primary secondary (secondary_x/y/z): second aspirate position per cycle
+    - Final aspirate (final_aspirate_x/y/z): aspirate after last cycle
+    - Final secondary (final_secondary_x/y/z): second position for final aspirate
+
+    Args:
+      plate: PLR Plate resource.
+      cycles: Number of wash cycles (1-250). Default 3.
+        Encoded at header byte [6].
+      dispense_volume: Volume to dispense per cycle in uL. Default None
+        (plate-type-aware: 300 for 96-well, 100 for others).
+      backend_params: :class:`WashParams` with buffer, flow rates, offsets,
+        aspirate settings, soak/shake, secondary aspirate, bottom wash,
+        wash format, and other manifold-specific parameters. See
+        :class:`WashParams` for full documentation of all fields.
+
+    Raises:
+      ValueError: If parameters are invalid.
+    """
+    if not isinstance(backend_params, self.WashParams):
+      backend_params = self.WashParams()
+    p = backend_params
+
+    # Validate — returns resolved defaults and derived wire values
+    (
+      dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z,
+      aspirate_delay_ms, final_aspirate_delay_ms, sector_mask,
+    ) = self._validate_wash_params(plate, cycles, dispense_volume, p)
+
+    data = self._build_wash_composite_command(
+      plate=plate, cycles=cycles, buffer=p.buffer,
+      dispense_volume=dispense_volume, dispense_flow_rate=p.dispense_flow_rate,
+      dispense_x=p.dispense_x, dispense_y=p.dispense_y, dispense_z=dispense_z,
+      aspirate_travel_rate=p.aspirate_travel_rate, aspirate_z=aspirate_z,
+      pre_dispense_flow_rate=p.pre_dispense_flow_rate,
+      aspirate_delay_ms=aspirate_delay_ms,
+      aspirate_x=p.aspirate_x, aspirate_y=p.aspirate_y,
+      final_aspirate=p.final_aspirate, final_aspirate_z=p.final_aspirate_z,
+      final_aspirate_x=p.final_aspirate_x, final_aspirate_y=p.final_aspirate_y,
+      final_aspirate_delay_ms=final_aspirate_delay_ms,
+      pre_dispense_volume=p.pre_dispense_volume, vacuum_delay_volume=p.vacuum_delay_volume,
+      soak_duration=p.soak_duration, shake_duration=p.shake_duration,
+      shake_intensity=p.shake_intensity,
+      secondary_aspirate=p.secondary_aspirate, secondary_z=secondary_z,
+      secondary_x=p.secondary_x, secondary_y=p.secondary_y,
+      final_secondary_aspirate=p.final_secondary_aspirate,
+      final_secondary_z=final_secondary_z,
+      final_secondary_x=p.final_secondary_x, final_secondary_y=p.final_secondary_y,
+      bottom_wash=p.bottom_wash, bottom_wash_volume=p.bottom_wash_volume,
+      bottom_wash_flow_rate=p.bottom_wash_flow_rate,
+      pre_dispense_between_cycles_volume=p.pre_dispense_between_cycles_volume,
+      pre_dispense_between_cycles_flow_rate=p.pre_dispense_between_cycles_flow_rate,
+      wash_format=p.wash_format, sector_mask=sector_mask,
+      move_home_first=p.move_home_first,
+    )
+
+    framed_command = build_framed_message(command=0xA4, data=data)
+    wash_timeout = (cycles * 60) + p.shake_duration + p.soak_duration + 120
+    async with self._driver.batch():
+      await self._driver._send_step_command(framed_command, timeout=wash_timeout)
+
+  async def prime(
+    self,
+    plate: Plate,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Prime the manifold fluid lines.
 
@@ -1023,75 +659,53 @@ class EL406PlateWashingBackend(PlateWashingBackend):
 
     Args:
       plate: PLR Plate resource.
-      volume: Prime volume in uL. Range: 5000-999000 uL.
-        Wire resolution: 1000 uL (1 mL).
-      buffer: Buffer valve selection (A, B, C, D).
-      flow_rate: Flow rate (3-11, default 9).
-      low_flow_volume: Low flow path volume in uL (5000-999000, default 5000).
-        Set to 0 to disable. Wire resolution: 1000 uL (1 mL).
-      submerge_duration: Submerge duration in seconds (0 to disable, 60-86340 when
-        enabled). Wire resolution: 60 s (1 minute).
+      backend_params: :class:`PrimeParams` with volume, buffer, flow_rate,
+        low_flow_volume, submerge_duration.
 
     Raises:
       ValueError: If parameters are invalid.
     """
+    if not isinstance(backend_params, self.PrimeParams):
+      backend_params = self.PrimeParams()
+    p = backend_params
+
     # Validate in PLR units
-    if not 5000 <= volume <= 999000:
-      raise ValueError(f"Washer prime volume must be 5000-999000 uL, got {volume}")
-    validate_buffer(buffer)
-    if not 3 <= flow_rate <= 11:
-      raise ValueError(f"Washer prime flow rate must be 3-11, got {flow_rate}")
-    if low_flow_volume != 0 and not 5000 <= low_flow_volume <= 999000:
+    if not 5000 <= p.volume <= 999000:
+      raise ValueError(f"Washer prime volume must be 5000-999000 uL, got {p.volume}")
+    validate_buffer(p.buffer)
+    if not 3 <= p.flow_rate <= 11:
+      raise ValueError(f"Washer prime flow rate must be 3-11, got {p.flow_rate}")
+    if p.low_flow_volume != 0 and not 5000 <= p.low_flow_volume <= 999000:
       raise ValueError(
-        f"Low flow path volume must be 0 (disabled) or 5000-999000 uL, got {low_flow_volume}"
+        f"Low flow path volume must be 0 (disabled) or 5000-999000 uL, got {p.low_flow_volume}"
       )
-    if submerge_duration != 0 and not 60 <= submerge_duration <= 86340:
+    if p.submerge_duration != 0 and not 60 <= p.submerge_duration <= 86340:
       raise ValueError(
-        f"Submerge duration must be 0 (disabled) or 60-86340 seconds, got {submerge_duration}"
+        f"Submerge duration must be 0 (disabled) or 60-86340 seconds, got {p.submerge_duration}"
       )
-    if submerge_duration % 60 != 0:
+    if p.submerge_duration % 60 != 0:
       raise ValueError(
         f"Submerge duration must be a multiple of 60 seconds (device resolution is 1 minute), "
-        f"got {submerge_duration}"
+        f"got {p.submerge_duration}"
       )
 
-    # Convert to wire units: uL → mL, seconds → minutes
-    volume_ml = round(volume / 1000)
-    low_flow_volume_ml = round(low_flow_volume / 1000)
-    submerge_duration_min = round(submerge_duration / 60)
+    volume_ml = round(p.volume / 1000)
+    low_flow_volume_ml = round(p.low_flow_volume / 1000)
+    submerge_duration_min = round(p.submerge_duration / 60)
+    low_flow_enabled = p.low_flow_volume > 0
+    submerge_enabled = p.submerge_duration > 0
 
-    low_flow_enabled = low_flow_volume > 0
-    submerge_enabled = submerge_duration > 0
-
-    logger.info(
-      "Manifold prime: %.1f uL from buffer %s, flow rate %d, low_flow=%s/%.0f uL, "
-      "submerge=%s/%.0f s",
-      volume,
-      buffer,
-      flow_rate,
-      "enabled" if low_flow_enabled else "disabled",
-      low_flow_volume,
-      "enabled" if submerge_enabled else "disabled",
-      submerge_duration,
-    )
-
-    data = self._build_manifold_prime_command(
-      plate=plate,
-      buffer=buffer,
-      volume_ml=volume_ml,
-      flow_rate=flow_rate,
-      low_flow_volume_ml=low_flow_volume_ml,
-      low_flow_enabled=low_flow_enabled,
-      submerge_enabled=submerge_enabled,
-      submerge_duration_min=submerge_duration_min,
+    data = self._build_prime_command(
+      plate=plate, buffer=p.buffer, volume_ml=volume_ml, flow_rate=p.flow_rate,
+      low_flow_volume_ml=low_flow_volume_ml, low_flow_enabled=low_flow_enabled,
+      submerge_enabled=submerge_enabled, submerge_duration_min=submerge_duration_min,
     )
     framed_command = build_framed_message(command=0xA7, data=data)
-    # Timeout: base time for priming + submerge duration + buffer
-    prime_timeout = self._driver.timeout + submerge_duration + 30
+    prime_timeout = self._driver.timeout + p.submerge_duration + 30
     async with self._driver.batch():
       await self._driver._send_step_command(framed_command, timeout=prime_timeout)
 
-  async def manifold_auto_clean(
+  async def auto_clean(
     self,
     plate: Plate,
     buffer: Buffer = "A",
@@ -1141,19 +755,19 @@ class EL406PlateWashingBackend(PlateWashingBackend):
     plate: Plate,
     cycles: int = 3,
     buffer: Buffer = "A",
-    dispense_volume: float | None = None,
+    dispense_volume: Optional[float] = None,
     dispense_flow_rate: int = 7,
     dispense_x: int = 0,
     dispense_y: int = 0,
-    dispense_z: int | None = None,
+    dispense_z: Optional[int] = None,
     aspirate_travel_rate: int = 3,
-    aspirate_z: int | None = None,
+    aspirate_z: Optional[int] = None,
     pre_dispense_flow_rate: int = 9,
     aspirate_delay_ms: int = 0,
     aspirate_x: int = 0,
     aspirate_y: int = 0,
     final_aspirate: bool = True,
-    final_aspirate_z: int | None = None,
+    final_aspirate_z: Optional[int] = None,
     final_aspirate_x: int = 0,
     final_aspirate_y: int = 0,
     final_aspirate_delay_ms: int = 0,
@@ -1163,11 +777,11 @@ class EL406PlateWashingBackend(PlateWashingBackend):
     shake_duration: int = 0,
     shake_intensity: Intensity = "Medium",
     secondary_aspirate: bool = False,
-    secondary_z: int | None = None,
+    secondary_z: Optional[int] = None,
     secondary_x: int = 0,
     secondary_y: int = 0,
     final_secondary_aspirate: bool = False,
-    final_secondary_z: int | None = None,
+    final_secondary_z: Optional[int] = None,
     final_secondary_x: int = 0,
     final_secondary_y: int = 0,
     bottom_wash: bool = False,
@@ -1449,7 +1063,7 @@ class EL406PlateWashingBackend(PlateWashingBackend):
       .finish()
     )  # fmt: skip
 
-  def _build_manifold_prime_command(
+  def _build_prime_command(
     self,
     plate: Plate,
     buffer: Buffer,

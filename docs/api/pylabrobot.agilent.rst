@@ -23,12 +23,12 @@ BioTek EL406
   :nosignatures:
   :recursive:
 
-    EL406PlateWashingBackend
+    EL406PlateWasher96Backend
 
-.. autoclass:: pylabrobot.agilent.biotek.el406.plate_washing_backend.EL406PlateWashingBackend.WashParams
+.. autoclass:: pylabrobot.agilent.biotek.el406.plate_washing_backend.EL406PlateWasher96Backend.WashParams
    :members:
 
-.. autoclass:: pylabrobot.agilent.biotek.el406.plate_washing_backend.EL406PlateWashingBackend.PrimeParams
+.. autoclass:: pylabrobot.agilent.biotek.el406.plate_washing_backend.EL406PlateWasher96Backend.PrimeParams
    :members:
 
 .. currentmodule:: pylabrobot.agilent.biotek.el406.shaking_backend
@@ -40,34 +40,34 @@ BioTek EL406
 
     EL406ShakingBackend
 
-.. currentmodule:: pylabrobot.agilent.biotek.el406.syringe_dispensing_backend
+.. currentmodule:: pylabrobot.agilent.biotek.el406.syringe_dispensing_backend8
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    EL406SyringeDispensingBackend
+    EL406SyringeDispensingBackend8
 
-.. autoclass:: pylabrobot.agilent.biotek.el406.syringe_dispensing_backend.EL406SyringeDispensingBackend.DispenseParams
+.. autoclass:: pylabrobot.agilent.biotek.el406.syringe_dispensing_backend8.EL406SyringeDispensingBackend8.DispenseParams
    :members:
 
-.. autoclass:: pylabrobot.agilent.biotek.el406.syringe_dispensing_backend.EL406SyringeDispensingBackend.PrimeParams
+.. autoclass:: pylabrobot.agilent.biotek.el406.syringe_dispensing_backend8.EL406SyringeDispensingBackend8.PrimeParams
    :members:
 
-.. currentmodule:: pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend
+.. currentmodule:: pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend8
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    EL406PeristalticDispensingBackend
+    EL406PeristalticDispensingBackend8
 
-.. autoclass:: pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend.EL406PeristalticDispensingBackend.DispenseParams
+.. autoclass:: pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend8.EL406PeristalticDispensingBackend8.DispenseParams
    :members:
 
-.. autoclass:: pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend.EL406PeristalticDispensingBackend.PrimeParams
+.. autoclass:: pylabrobot.agilent.biotek.el406.peristaltic_dispensing_backend8.EL406PeristalticDispensingBackend8.PrimeParams
    :members:
 
 
@@ -87,6 +87,21 @@ BioTek Cytation
     CytationImagingConfig
 
 .. autoclass:: pylabrobot.agilent.biotek.cytation.CytationBackend.CaptureParams
+   :members:
+
+.. currentmodule:: pylabrobot.agilent.biotek.loading_tray_backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BioTekLoadingTrayBackend
+
+.. autoclass:: pylabrobot.agilent.biotek.loading_tray_backend.BioTekLoadingTrayBackend.OpenParams
+   :members:
+
+.. autoclass:: pylabrobot.agilent.biotek.loading_tray_backend.BioTekLoadingTrayBackend.CloseParams
    :members:
 
 

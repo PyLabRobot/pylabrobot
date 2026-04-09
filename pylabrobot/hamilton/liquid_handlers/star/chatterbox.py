@@ -1,4 +1,6 @@
-"""STARChatterboxDriver: prints commands instead of sending them over USB."""
+"""STARChatterboxDriver: logs commands instead of sending them over USB."""
+
+import logging
 
 from .autoload import STARAutoload
 from .cover import STARCover
@@ -33,8 +35,11 @@ _DEFAULT_EXTENDED_CONF = ExtendedConfiguration(
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 class STARChatterboxDriver(STARDriver):
-  """Chatterbox driver for STAR. Prints firmware commands instead of sending them over USB."""
+  """Chatterbox driver for STAR. Logs firmware commands instead of sending them over USB."""
 
   def __init__(
     self,
@@ -53,7 +58,7 @@ class STARChatterboxDriver(STARDriver):
 
   # -- lifecycle: skip USB, use canned config --------------------------------
 
-  async def setup(self, deck=None, backend_params=None):
+  async def setup(self, deck=None, backend_params=None):  # type: ignore[override]
     # No USB — just set config and create backends.
     self.id_ = 0
     self.machine_conf = self._machine_configuration
@@ -134,9 +139,9 @@ class STARChatterboxDriver(STARDriver):
       tip_pattern=tip_pattern,
       **kwargs,
     )
-    print(cmd)
+    logger.debug("chatterbox cmd: %s", cmd)
     return None
 
   async def send_raw_command(self, command, write_timeout=None, read_timeout=None, wait=True):
-    print(command)
+    logger.debug("chatterbox raw: %s", command)
     return None

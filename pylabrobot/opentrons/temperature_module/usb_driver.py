@@ -85,7 +85,9 @@ class OpentronsTemperatureModuleUSBTemperatureBackend(TemperatureControllerBacke
     return True
 
   async def set_temperature(self, temperature: float):
-    logger.info("[OT TempModule USB %s] setting temperature to %.1f C", self.driver.port, temperature)
+    logger.info(
+      "[OT TempModule USB %s] setting temperature to %.1f C", self.driver.port, temperature
+    )
     tmp_message = f"M104 S{temperature}\r\n"
     await self.driver.send_and_check(tmp_message.encode("utf-8"))
 

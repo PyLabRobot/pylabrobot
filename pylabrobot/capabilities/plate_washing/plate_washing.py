@@ -3,15 +3,15 @@ from typing import Optional
 from pylabrobot.capabilities.capability import BackendParams, Capability, need_capability_ready
 from pylabrobot.resources import Plate
 
-from .backend import PlateWashingBackend
+from .backend import PlateWasher96Backend
 
 
-class PlateWashingCapability(Capability):
+class PlateWasher96(Capability):
   """Plate washing capability."""
 
-  def __init__(self, backend: PlateWashingBackend):
+  def __init__(self, backend: PlateWasher96Backend):
     super().__init__(backend=backend)
-    self.backend: PlateWashingBackend = backend
+    self.backend: PlateWasher96Backend = backend
     self._plate: Optional[Plate] = None
 
   @property
@@ -23,9 +23,7 @@ class PlateWashingCapability(Capability):
   @plate.setter
   def plate(self, value: Optional[Plate]):
     if value is not None and self._plate is not None:
-      raise RuntimeError(
-        f"A plate is already assigned ({self._plate.name}). Unassign it first."
-      )
+      raise RuntimeError(f"A plate is already assigned ({self._plate.name}). Unassign it first.")
     self._plate = value
 
   @need_capability_ready
@@ -77,4 +75,4 @@ class PlateWashingCapability(Capability):
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Prime fluid lines."""
-    await self.backend.prime(backend_params=backend_params)
+    await self.backend.prime(plate=self.plate, backend_params=backend_params)

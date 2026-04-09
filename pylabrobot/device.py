@@ -7,10 +7,9 @@ import weakref
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, List, Optional, TypeVar
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
-
-from pylabrobot.capabilities.capability import BackendParams
 
 if TYPE_CHECKING:
   from pylabrobot.capabilities.capability import Capability

@@ -143,14 +143,20 @@ class SCILATemperatureBackend(TemperatureControllerBackend):
     return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
 
   async def set_temperature(self, temperature: float) -> None:
-    logger.info("[SCILA %s] set temperature: target=%.1f C", self.driver._sila_interface.machine_ip, temperature)
+    logger.info(
+      "[SCILA %s] set temperature: target=%.1f C",
+      self.driver._sila_interface.machine_ip,
+      temperature,
+    )
     await self.driver.send_command(
       "SetTemperature", targetTemperature=temperature, temperatureControl=True
     )
 
   async def request_current_temperature(self) -> float:
-    temp = (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
-    logger.info("[SCILA %s] read temperature: actual=%.1f C", self.driver._sila_interface.machine_ip, temp)
+    temp: float = (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore[index]
+    logger.info(
+      "[SCILA %s] read temperature: actual=%.1f C", self.driver._sila_interface.machine_ip, temp
+    )
     return temp
 
   async def deactivate(self) -> None:

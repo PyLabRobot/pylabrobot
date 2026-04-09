@@ -222,20 +222,20 @@ class iSWAPBackend(OrientableGripperArmBackend):
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
     return round(self.driver.y_drive_increment_to_mm(iswap_y_pos), 1)
 
-  async def move_x(self, x_position: float) -> None:
+  async def move_x(self, x: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_relative_x(step_size=x_position - loc.x, allow_splitting=True)
+    await self.move_relative_x(step_size=x - loc.x, allow_splitting=True)
 
-  async def move_y(self, y_position: float) -> None:
+  async def move_y(self, y: float) -> None:
     """Move iSWAP Y to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_relative_y(step_size=y_position - loc.y, allow_splitting=True)
+    await self.move_relative_y(step_size=y - loc.y, allow_splitting=True)
 
-  async def move_z(self, z_position: float) -> None:
+  async def move_z(self, z: float) -> None:
     """Move iSWAP Z to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_relative_z(step_size=z_position - loc.z, allow_splitting=True)
+    await self.move_relative_z(step_size=z - loc.z, allow_splitting=True)
 
   # -- rotation / wrist drive ------------------------------------------------
 
@@ -612,12 +612,12 @@ class iSWAPBackend(OrientableGripperArmBackend):
     Args:
       grip_strength: Grip strength (0 = low, 9 = high). Must be between 0 and 9.
         Default 5.
-      plate_width_tolerance: Plate width tolerance in mm. Must be between 0 and 9.9.
-        Default 0.
+      plate_width_tolerance: Plate width tolerance in mm. Must be between 0.5 and 9.9.
+        Default 2.0.
     """
 
     grip_strength: int = 5
-    plate_width_tolerance: float = 0
+    plate_width_tolerance: float = 2.0
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -635,8 +635,8 @@ class iSWAPBackend(OrientableGripperArmBackend):
       raise ValueError("grip_strength must be between 0 and 9")
     if not 0 <= gripper_width <= 999.9:
       raise ValueError("gripper_width must be between 0 and 999.9")
-    if not 0 <= backend_params.plate_width_tolerance <= 9.9:
-      raise ValueError("plate_width_tolerance must be between 0 and 9.9")
+    if not 0.5 <= backend_params.plate_width_tolerance <= 9.9:
+      raise ValueError("plate_width_tolerance must be between 0.5 and 9.9")
 
     await self.driver.send_command(
       module="C0",
@@ -728,7 +728,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     logger.info(
       "[iSWAP] pick up plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
-      location.x, location.y, location.z, direction, resource_width,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
 
     await self.driver.send_command(
@@ -821,7 +825,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     logger.info(
       "[iSWAP] release plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
-      location.x, location.y, location.z, direction, resource_width,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
     )
 
     await self.driver.send_command(
@@ -906,7 +914,10 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     logger.info(
       "[iSWAP] move held plate to: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg",
-      location.x, location.y, location.z, direction,
+      location.x,
+      location.y,
+      location.z,
+      direction,
     )
 
     await self.driver.send_command(

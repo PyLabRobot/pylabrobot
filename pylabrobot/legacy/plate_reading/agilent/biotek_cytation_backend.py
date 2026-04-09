@@ -43,6 +43,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
 
   async def setup(self, use_cam: bool = False) -> None:
     from pylabrobot.agilent.biotek.cytation import CytationBackend as _NewCytationBackend
+
     await self._new.setup(backend_params=_NewCytationBackend.SetupParams(use_cam=use_cam))
 
   async def stop(self):

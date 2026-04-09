@@ -5,7 +5,7 @@ from pylabrobot.capabilities.capability import BackendParams, CapabilityBackend
 from pylabrobot.resources import Plate
 
 
-class SyringeDispensingBackend(CapabilityBackend, metaclass=ABCMeta):
+class SyringeDispensingBackend8(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for syringe pump dispensing devices."""
 
   @abstractmethod

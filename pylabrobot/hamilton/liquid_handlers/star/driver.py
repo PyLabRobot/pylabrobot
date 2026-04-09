@@ -263,7 +263,7 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- lifecycle ------------------------------------------------------------
 
-  async def setup(self, deck=None, backend_params: Optional[BackendParams] = None):
+  async def setup(self, deck=None, backend_params: Optional[BackendParams] = None):  # type: ignore[override]
     await super().setup(backend_params=backend_params)
     self.id_ = 0
     self.machine_conf = await self._request_machine_configuration()
@@ -646,16 +646,18 @@ class STARDriver(HamiltonLiquidHandler):
 
   async def store_installation_data(
     self,
-    date: datetime.datetime = datetime.datetime.now(),
+    date: Optional[datetime.datetime] = None,
     serial_number: str = "0000",
   ):
     """Store installation data (C0:SI).
 
     Args:
-      date: installation date.
+      date: installation date. Defaults to now.
       serial_number: 4-character serial number string.
     """
 
+    if date is None:
+      date = datetime.datetime.now()
     if len(serial_number) != 4:
       raise ValueError("serial number must be 4 chars long")
 
@@ -664,17 +666,19 @@ class STARDriver(HamiltonLiquidHandler):
   async def store_verification_data(
     self,
     verification_subject: int = 0,
-    date: datetime.datetime = datetime.datetime.now(),
+    date: Optional[datetime.datetime] = None,
     verification_status: bool = False,
   ):
     """Store verification data (C0:AV).
 
     Args:
       verification_subject: verification subject. Default 0. Must be between 0 and 24.
-      date: verification date.
+      date: verification date. Defaults to now.
       verification_status: verification status.
     """
 
+    if date is None:
+      date = datetime.datetime.now()
     if not 0 <= verification_subject <= 24:
       raise ValueError("verification_subject must be between 0 and 24")
 
@@ -691,13 +695,15 @@ class STARDriver(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="AT")
 
-  async def save_download_date(self, date: datetime.datetime = datetime.datetime.now()):
+  async def save_download_date(self, date: Optional[datetime.datetime] = None):
     """Save Download date (C0:AO).
 
     Args:
       date: download date. Default now.
     """
 
+    if date is None:
+      date = datetime.datetime.now()
     return await self.send_command(
       module="C0",
       command="AO",

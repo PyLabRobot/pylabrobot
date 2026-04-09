@@ -2493,7 +2493,7 @@ function buildSingleArm(armData, anchorDropdown, armId) {
       attrs.push({ key: "resource_name", value: armData.resource_name });
       attrs.push({ key: "resource_type", value: armData.resource_type || "Unknown" });
       attrs.push({ key: "direction", value: armData.direction || "?" });
-      attrs.push({ key: "pickup_distance_from_top", value: (armData.pickup_distance_from_top || 0) + " mm" });
+      attrs.push({ key: "pickup_distance_from_bottom", value: (armData.pickup_distance_from_bottom || 0) + " mm" });
       attrs.push({ key: "size", value: (armData.size_x || "?") + " × " + (armData.size_y || "?") + " × " + (armData.size_z || "?") + " mm" });
       if (armData.num_items_x) attrs.push({ key: "wells", value: (armData.num_items_x * (armData.num_items_y || 1)) });
     }

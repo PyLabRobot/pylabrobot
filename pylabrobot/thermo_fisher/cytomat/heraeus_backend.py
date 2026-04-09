@@ -12,10 +12,10 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
-from pylabrobot.capabilities.shaking.backend import ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
@@ -30,6 +30,7 @@ class HeraeusCytomatBackend(
   TemperatureControllerBackend,
   HumidityControllerBackend,
   ShakerBackend,
+  HasContinuousShaking,
   Driver,
 ):
   """
@@ -132,7 +133,9 @@ class HeraeusCytomatBackend(
     await self._send_command("ST 1903")
 
   async def store_plate(self, plate: Plate, site: PlateHolder):
-    logger.info("[Heraeus %s] store plate: plate='%s', site='%s'", self.io.port, plate.name, site.name)
+    logger.info(
+      "[Heraeus %s] store plate: plate='%s', site='%s'", self.io.port, plate.name, site.name
+    )
     m, n = self._site_to_m_n(site)
     await self._send_command(f"WR DM0 {m}")
     await self._send_command(f"WR DM5 {n}")
@@ -178,6 +181,13 @@ class HeraeusCytomatBackend(
 
   async def unlock_plate(self):
     raise NotImplementedError("Heraeus Cytomat does not support plate locking")
+
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    try:
+      await asyncio.sleep(duration)
+    finally:
+      await self.stop_shaking()
 
   async def start_shaking(self, speed: float):
     logger.info("[Heraeus %s] start shaking", self.io.port)

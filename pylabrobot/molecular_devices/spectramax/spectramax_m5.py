@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.loading_tray import HasLoadingTray, LoadingTray
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
@@ -12,7 +13,7 @@ from pylabrobot.capabilities.plate_reading.luminescence.backend import Luminesce
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, PlateHolder, Resource
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
@@ -33,6 +34,7 @@ from .backend import (
   SpectrumSettings,
   _MolecularDevicesProtocol,
 )
+from .loading_tray_backend import MolecularDevicesLoadingTrayBackend
 
 logger = logging.getLogger(__name__)
 
@@ -429,7 +431,7 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
 # ---------------------------------------------------------------------------
 
 
-class SpectraMaxM5(Resource, Device):
+class SpectraMaxM5(Resource, Device, HasLoadingTray):
   """Molecular Devices SpectraMax M5 plate reader.
 
   Supports absorbance, fluorescence, and luminescence capabilities.
@@ -460,17 +462,22 @@ class SpectraMaxM5(Resource, Device):
     self.luminescence = Luminescence(backend=SpectraMaxM5LuminescenceBackend(driver))
     self.fluorescence = Fluorescence(backend=SpectraMaxM5FluorescenceBackend(driver))
     self.tc = TemperatureController(backend=MolecularDevicesTemperatureBackend(driver))
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.tc]
-
-    self.plate_holder = PlateHolder(
-      name=name + "_plate_holder",
+    self.loading_tray = LoadingTray(
+      backend=MolecularDevicesLoadingTrayBackend(driver),
+      name=name + "_loading_tray",
       size_x=127.76,
       size_y=85.48,
       size_z=0,  # TODO: measure
-      pedestal_size_z=0,  # TODO: measure
       child_location=Coordinate.zero(),  # TODO: measure
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self._capabilities = [
+      self.absorbance,
+      self.luminescence,
+      self.fluorescence,
+      self.tc,
+      self.loading_tray,
+    ]
+    self.assign_child_resource(self.loading_tray, location=Coordinate.zero())
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}

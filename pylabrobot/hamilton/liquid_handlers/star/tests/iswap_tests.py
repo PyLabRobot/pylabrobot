@@ -151,7 +151,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
   async def test_close_gripper(self):
     await self.iswap.close_gripper(
       gripper_width=86.0,
-      backend_params=iSWAPBackend.CloseGripperParams(grip_strength=5, plate_width_tolerance=0),
+      backend_params=iSWAPBackend.CloseGripperParams(grip_strength=5, plate_width_tolerance=2.0),
     )
 
     self.mock_driver.send_command.assert_called_once_with(
@@ -159,7 +159,7 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       command="GC",
       gw=5,
       gb="0860",
-      gt="00",
+      gt="20",
     )
 
   async def test_is_gripper_closed(self):

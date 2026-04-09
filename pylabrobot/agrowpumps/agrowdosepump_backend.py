@@ -92,7 +92,9 @@ class AgrowDriver(Driver):
     )
     self._start_keep_alive_thread()
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
-    logger.info("[Agrow %s addr=%s] connected: channels=%d", self.port, self.address, self._num_channels)
+    logger.info(
+      "[Agrow %s addr=%s] connected: channels=%d", self.port, self.address, self._num_channels
+    )
 
   async def _setup_modbus(self):
     if AsyncModbusSerialClient is None:
@@ -147,11 +149,19 @@ class AgrowChannelBackend(PumpBackend):
     )
 
   async def run_continuously(self, speed: float):
-    logger.info("[Agrow %s addr=%s] channel %d: run_continuously at speed %d", self.driver.port, self.driver.address, self._channel, int(speed))
+    logger.info(
+      "[Agrow %s addr=%s] channel %d: run_continuously at speed %d",
+      self.driver.port,
+      self.driver.address,
+      self._channel,
+      int(speed),
+    )
     await self.driver.write_speed(self._channel, int(speed))
 
   async def halt(self):
-    logger.info("[Agrow %s addr=%s] channel %d: halt", self.driver.port, self.driver.address, self._channel)
+    logger.info(
+      "[Agrow %s addr=%s] channel %d: halt", self.driver.port, self.driver.address, self._channel
+    )
     await self.driver.write_speed(self._channel, 0)
 
   def serialize(self):

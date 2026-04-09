@@ -61,20 +61,20 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
     self.arm = GripperArm(backend=self.mock_backend, reference_resource=self.deck)
 
   async def test_pick_up_resource(self):
-    # plate center: site_a(100,100,50) + child_loc(5,5,0) + center(60,40,10) = (165, 145, 60)
-    # pickup_distance_from_top=2 → z = 60 - 2 = 58
-    await self.arm.pick_up_resource(self.plate, pickup_distance_from_top=2)
+    # plate at site_a(100,100,50) + child_loc(5,5,0), center_xy=(60,40), size_z=10
+    # pickup_distance_from_bottom=8 → z = 50 + 8 = 58
+    await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8)
     call = self.mock_backend.pick_up_at_location.call_args
     _assert_location(self, call, 165, 145, 58)
     # default grip_axis="x" → resource_width is X size = 120
     self.assertAlmostEqual(call.kwargs["resource_width"], 120)
 
   async def test_drop_resource(self):
-    await self.arm.pick_up_resource(self.plate, pickup_distance_from_top=2)
+    await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8)
     await self.arm.drop_resource(self.site_b)
     call = self.mock_backend.drop_at_location.call_args
-    # site_b(100,300,50) + default_child_loc(0,0,0) + center(60,40,10) = (160, 340, 60)
-    # pickup_distance_from_top=2 → z = 60 - 2 = 58
+    # site_b(100,300,50) + default_child_loc(0,0,0), size_z=10
+    # pickup_distance_from_bottom=8 → z = 50 + 8 = 58
     _assert_location(self, call, 160, 340, 58)
     self.assertEqual(self.plate.parent.name, "site_b")
 
@@ -115,7 +115,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
   async def test_grip_axis_y(self):
     """With grip_axis='y', resource_width should be the Y size."""
     arm_y = GripperArm(backend=self.mock_backend, reference_resource=self.deck, grip_axis="y")
-    await arm_y.pick_up_resource(self.plate, pickup_distance_from_top=2)
+    await arm_y.pick_up_resource(self.plate, pickup_distance_from_bottom=8)
     call = self.mock_backend.pick_up_at_location.call_args
     # plate size_y=80
     self.assertAlmostEqual(call.kwargs["resource_width"], 80)
@@ -138,7 +138,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_pick_up_front(self):
     await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_top=2, direction=GripDirection.FRONT
+      self.plate, pickup_distance_from_bottom=8, direction=GripDirection.FRONT
     )
     call = self.mock_backend.pick_up_at_location.call_args
     _assert_location(self, call, 165, 145, 58)
@@ -148,7 +148,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_pick_up_right(self):
     await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_top=2, direction=GripDirection.RIGHT
+      self.plate, pickup_distance_from_bottom=8, direction=GripDirection.RIGHT
     )
     call = self.mock_backend.pick_up_at_location.call_args
     self.assertAlmostEqual(call.kwargs["direction"], 90.0)
@@ -173,7 +173,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
   async def test_move_plate(self):
     """Pick from site_a, drop at site_b."""
     await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_top=2, direction=GripDirection.FRONT
+      self.plate, pickup_distance_from_bottom=8, direction=GripDirection.FRONT
     )
     await self.arm.drop_resource(self.site_b, direction=GripDirection.FRONT)
     drop_call = self.mock_backend.drop_at_location.call_args

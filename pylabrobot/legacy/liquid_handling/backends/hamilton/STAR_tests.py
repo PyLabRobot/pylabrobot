@@ -1272,6 +1272,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
       HamiltonLiquidHandler.send_command, self.star.driver
     )
     self.star._write_and_read_command = unittest.mock.AsyncMock(return_value=None)
+    self.star.driver._write_and_read_command = self.star._write_and_read_command
     self.star.driver.io = unittest.mock.AsyncMock()
     self.star.driver.id_ = 0
 

@@ -113,10 +113,11 @@ def _make_disp(
 
 
 class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
+  async def asyncSetUp(self):
     self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.backend, deck=self.deck)
+    await self.lh.setup()
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")

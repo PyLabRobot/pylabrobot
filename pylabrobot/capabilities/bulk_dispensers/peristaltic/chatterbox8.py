@@ -4,12 +4,12 @@ from typing import Dict, Optional
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Plate
 
-from .backend import PeristalticDispensingBackend
+from .backend8 import PeristalticDispensingBackend8
 
 logger = logging.getLogger(__name__)
 
 
-class PeristalticDispensingChatterboxBackend(PeristalticDispensingBackend):
+class PeristalticDispensingChatterboxBackend8(PeristalticDispensingBackend8):
   """Chatterbox backend for device-free testing."""
 
   async def dispense(

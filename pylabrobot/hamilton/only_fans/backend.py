@@ -160,7 +160,9 @@ class HamiltonHepaFanFanBackend(FanBackend):
   async def turn_on(self, intensity: int) -> None:
     if int(intensity) != intensity or not 0 <= intensity <= 100:
       raise ValueError("Intensity must be an integer between 0 and 100")
-    logger.info("[HEPA fan %s] turning on at intensity %d%%", self.driver.io.device_id or "default", intensity)
+    logger.info(
+      "[HEPA fan %s] turning on at intensity %d%%", self.driver.io.device_id or "default", intensity
+    )
     await self.driver.send(b"\x35\x41\x01\xff\x75")
     await self.driver.send(bytes.fromhex(_SPEED_TABLE[intensity]))
 

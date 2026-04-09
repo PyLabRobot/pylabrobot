@@ -65,7 +65,12 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     t0 = time.time()
     while True:
       if time.time() - t0 > 120:
-        logger.error("[Byonoy %s pid=0x%04X] timeout waiting for response to command 0x%04X after 120s", self._device_type.name, self.io.pid, report_id)
+        logger.error(
+          "[Byonoy %s pid=0x%04X] timeout waiting for response to command 0x%04X after 120s",
+          self._device_type.name,
+          self.io.pid,
+          report_id,
+        )
         raise TimeoutError("Reading data timed out after 2 minutes.")
       response = await self.io.read(64, timeout=30)
       if len(response) == 0:

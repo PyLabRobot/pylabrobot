@@ -3,6 +3,7 @@ import time
 from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import (
   Absorbance,
   AbsorbanceBackend,
@@ -32,11 +33,15 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
     super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96)
     self.available_wavelengths: List[float] = []
 
-  async def setup(self, **backend_kwargs) -> None:
-    await super().setup(**backend_kwargs)
+  async def setup(self, backend_params: Optional["BackendParams"] = None) -> None:
+    await super().setup(backend_params=backend_params)
     await self.initialize_measurements()
     self.available_wavelengths = await self.request_available_absorbance_wavelengths()
-    logger.info("[Byonoy A96 pid=0x%04X] ready, available wavelengths: %s nm", self.io.pid, self.available_wavelengths)
+    logger.info(
+      "[Byonoy A96 pid=0x%04X] ready, available wavelengths: %s nm",
+      self.io.pid,
+      self.available_wavelengths,
+    )
 
   async def request_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
@@ -77,7 +82,12 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
 
     while True:
       if time.time() - t0 > 120:
-        logger.error("[Byonoy A96 pid=0x%04X] measurement timed out after 120s (signal=%d nm, ref=%d nm)", self.io.pid, signal_wl, reference_wl)
+        logger.error(
+          "[Byonoy A96 pid=0x%04X] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
+          self.io.pid,
+          signal_wl,
+          reference_wl,
+        )
         raise TimeoutError("Measurement timeout.")
 
       chunk = await self.io.read(64, timeout=30)
@@ -124,7 +134,14 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
       f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
     )
 
-    logger.info("[Byonoy A96 pid=0x%04X] reading absorbance: plate='%s', wavelength=%d nm, wells=%d/%d", self.io.pid, plate.name, wavelength, len(wells), plate.num_items)
+    logger.info(
+      "[Byonoy A96 pid=0x%04X] reading absorbance: plate='%s', wavelength=%d nm, wells=%d/%d",
+      self.io.pid,
+      plate.name,
+      wavelength,
+      len(wells),
+      plate.num_items,
+    )
     rows = await self._run_abs_measurement(
       signal_wl=wavelength,
       reference_wl=0,
