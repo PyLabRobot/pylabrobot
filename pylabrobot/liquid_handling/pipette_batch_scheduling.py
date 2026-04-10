@@ -117,6 +117,8 @@ def _min_spacing_between(spacings: List[float], i: int, j: int) -> float:
   Mirrors ``STARBackend._min_spacing_between`` (which operates on
   ``self._channels_minimum_y_spacing`` instead of an explicit list).
   """
+  if not abs(i - j) == 1:
+    raise ValueError(f"Channels {i} and {j} are not adjacent.")
   return math.ceil(max(spacings[i], spacings[j]) * 10) / 10
 
 
