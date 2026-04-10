@@ -4,7 +4,7 @@ Multi-channel liquid handlers have physical constraints (single X carriage, mini
 Y spacing, descending Y order by channel index) that limit which channels can act
 simultaneously.
 
-    targets = resolve_container_targets(containers, use_channels, channel_spacings, deck)
+    targets = resolve_container_targets(containers, use_channels, channel_spacings, wrt_resource)
     batches = plan_batches(use_channels, targets, channel_spacings, x_tolerance=0.1)
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
@@ -101,21 +101,12 @@ def _span_required(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
 # --- Batch partitioning ---
 
 
-@dataclass
-class _BatchAccumulator:
-  """Mutable working state for a batch being built up during partitioning."""
-
-  indices: List[int]
-  hi_ch: int
-  hi_y: float
-
-
 def _interpolate_phantoms(
   channels: List[int], y_positions: Dict[int, float], spacings: List[float]
 ) -> Dict[int, float]:
   """Return Y positions with phantom channels filled in between non-consecutive batch members.
 
-  Each phantom is placed at its actual pairwise spacing from the previous channel,
+  Each phantom is placed using the conservative max-spacing model (via ``_span_required``),
   so non-uniform spacings are respected (e.g. a wide channel only widens its own gaps).
   """
   result = dict(y_positions)
@@ -125,57 +116,6 @@ def _interpolate_phantoms(
     for phantom in range(ch_lo + 1, ch_hi):
       if phantom not in result:
         result[phantom] = result[ch_lo] - _span_required(spacings, ch_lo, phantom)
-  return result
-
-
-def _partition_into_y_batches(
-  indices: List[int],
-  use_channels: List[int],
-  y_pos: List[float],
-  spacings: List[float],
-  x_position: float,
-) -> List[ChannelBatch]:
-  """Partition channels within an X group into minimum parallel-compatible batches.
-
-  Uses greedy first-fit: processes channels in ascending order and assigns each to
-  the first batch where it fits, or creates a new batch.
-  """
-
-  channels_by_index = sorted(indices, key=lambda i: use_channels[i])
-  batches: List[_BatchAccumulator] = []
-
-  for idx in channels_by_index:
-    channel = use_channels[idx]
-    y = y_pos[idx]
-
-    assigned = False
-    for batch in batches:
-      if channel in [use_channels[i] for i in batch.indices]:
-        continue
-      if batch.hi_y - y >= _span_required(spacings, batch.hi_ch, channel) - 1e-9:
-        batch.indices.append(idx)
-        batch.hi_ch = channel
-        batch.hi_y = y
-        assigned = True
-        break
-
-    if not assigned:
-      batches.append(_BatchAccumulator(indices=[idx], hi_ch=channel, hi_y=y))
-
-  result: List[ChannelBatch] = []
-  for batch in batches:
-    batch_channels = [use_channels[i] for i in batch.indices]
-    y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in batch.indices}
-    y_positions = _interpolate_phantoms(batch_channels, y_positions, spacings)
-    result.append(
-      ChannelBatch(
-        x_position=x_position,
-        indices=batch.indices,
-        channels=batch_channels,
-        y_positions=y_positions,
-      )
-    )
-
   return result
 
 
@@ -342,9 +282,39 @@ def plan_batches(
       current_key = x_pos[i]
     x_groups.setdefault(current_key, []).append(i)
 
+  # Within each X group, batch by Y position (greedy first-fit)
   result: List[ChannelBatch] = []
-  for _, indices in sorted(x_groups.items()):
-    group_x = x_pos[indices[0]]
-    result.extend(_partition_into_y_batches(indices, use_channels, y_pos, spacings, group_x))
+  for _, x_group_indices in sorted(x_groups.items()):
+    group_x = x_pos[x_group_indices[0]]
+    channels_by_index = sorted(x_group_indices, key=lambda i: use_channels[i])
+    y_batches: List[List[int]] = []
+
+    for idx in channels_by_index:
+      channel = use_channels[idx]
+      y = y_pos[idx]
+
+      for batch in y_batches:
+        if channel in [use_channels[i] for i in batch]:
+          continue
+        hi_ch = use_channels[batch[-1]]
+        hi_y = y_pos[batch[-1]]
+        if hi_y - y >= _span_required(spacings, hi_ch, channel) - 1e-9:
+          batch.append(idx)
+          break
+      else:
+        y_batches.append([idx])
+
+    for batch in y_batches:
+      batch_channels = [use_channels[i] for i in batch]
+      y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in batch}
+      y_positions = _interpolate_phantoms(batch_channels, y_positions, spacings)
+      result.append(
+        ChannelBatch(
+          x_position=group_x,
+          indices=batch,
+          channels=batch_channels,
+          y_positions=y_positions,
+        )
+      )
 
   return result

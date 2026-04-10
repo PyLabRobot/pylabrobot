@@ -1364,9 +1364,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
 
-    Uses max() of both channels' spacings for firmware safety (conservative).
-    For adjacent channels, ceiling-rounded to 0.1mm.
-    For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
+    For each adjacent pair, takes max() of both channels' spacings and ceiling-rounds
+    to 0.1mm. For non-adjacent channels, sums these per-pair spacings.
 
     TODO: migrate to radii model (spacing[i]/2 + spacing[j]/2) to match
     compute_channel_offsets. Current max() model is conservative but inconsistent

@@ -348,14 +348,18 @@ class STARChatterboxBackend(STARBackend):
   ) -> List[float]:
     """Probe liquid heights by computing from tracked container volumes.
 
-    Instead of simulating hardware LLD, this mock computes liquid heights directly from
-    each container's volume tracker using ``container.compute_height_from_volume()``.
+    Instead of simulating hardware LLD, this mock computes liquid heights from
+    each container's volume tracker. Returns 0.0 for empty containers, otherwise
+    uses ``container.compute_height_from_volume()``.
 
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use (0-indexed). Defaults to ``[0, ..., len(containers)-1]``.
       resource_offsets: Passed to ``resolve_container_targets`` for auto-spreading.
-      All other parameters: Accepted for API compatibility but unused in mock.
+      x_grouping_tolerance: X tolerance for batch grouping (defaults to instrument setting).
+      lld_mode, search_speed, n_replicates, move_to_z_safety_after,
+        min_traverse_height_at_beginning_of_command, min_traverse_height_during_command,
+        z_position_at_end_of_command: Accepted for API compatibility but unused.
 
     Returns:
       Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
