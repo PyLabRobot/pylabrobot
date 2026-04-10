@@ -116,26 +116,8 @@ class _BatchAccumulator:
   """Mutable working state for a batch being built up during partitioning."""
 
   indices: List[int]
-  lo_ch: int
   hi_ch: int
-  lo_y: float
   hi_y: float
-
-
-def _channel_fits_batch(
-  batch: _BatchAccumulator, channel: int, y: float, spacings: List[float]
-) -> bool:
-  """Check whether *channel* at *y* can be added to *batch* without violating spacing.
-
-  Two checks suffice because channels are processed in ascending order, so the candidate
-  is always the new high end. The (lo → candidate) check covers the full span; the
-  (hi → candidate) check catches the local gap.
-  """
-  if batch.hi_y - y < _span_required(spacings, batch.hi_ch, channel) - 1e-9:
-    return False
-  if batch.lo_y - y < _span_required(spacings, batch.lo_ch, channel) - 1e-9:
-    return False
-  return True
 
 
 def _interpolate_phantoms(
@@ -180,7 +162,7 @@ def _partition_into_y_batches(
     for batch in batches:
       if channel in [use_channels[i] for i in batch.indices]:
         continue
-      if _channel_fits_batch(batch, channel, y, spacings):
+      if batch.hi_y - y >= _span_required(spacings, batch.hi_ch, channel) - 1e-9:
         batch.indices.append(idx)
         batch.hi_ch = channel
         batch.hi_y = y
@@ -188,7 +170,7 @@ def _partition_into_y_batches(
         break
 
     if not assigned:
-      batches.append(_BatchAccumulator(indices=[idx], lo_ch=channel, hi_ch=channel, lo_y=y, hi_y=y))
+      batches.append(_BatchAccumulator(indices=[idx], hi_ch=channel, hi_y=y))
 
   result: List[ChannelBatch] = []
   for batch in batches:
