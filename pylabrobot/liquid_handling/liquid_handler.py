@@ -156,15 +156,13 @@ class LiquidHandler(Resource, Machine):
   def _resource_pickup(self, value: Optional[ResourcePickup]) -> None:
     self._resource_pickups[0] = value
 
-  async def setup(self, **backend_kwargs):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     """Prepare the robot for use."""
-
-    if self.setup_finished:
-      raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
     self.backend.set_heads(head=self.head, head96=self.head96)
-    await super().setup(**backend_kwargs)
+
+    await super()._enter_lifespan(stack)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
@@ -182,6 +180,7 @@ class LiquidHandler(Resource, Machine):
       tracker.register_callback(self._state_updated)
 
     self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
+
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to

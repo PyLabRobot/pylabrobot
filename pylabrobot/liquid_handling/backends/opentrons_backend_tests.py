@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import patch
+import contextlib
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 import pytest
 
@@ -78,7 +80,7 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
+class OpentronsBackendCommandTests(AnyioTestBase):
   """Tests Opentrons commands"""
 
   @patch("ot_api.runs.create")
@@ -87,8 +89,9 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
   @patch("ot_api.health.get")
-  async def asyncSetUp(
+  async def _enter_lifespan(
     self,
+    stack,
     mock_health_get,
     mock_define,
     mock_add,
@@ -108,7 +111,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     self.backend = OpentronsOT2Backend(host="localhost", port=1338)
     self.deck = OTDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
@@ -147,7 +150,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     mock_drop_tip.side_effect = assert_parameters
 
-    await self.test_tip_pick_up()
+    await self.test_tip_pick_up.original_func(self)
     await self.lh.drop_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.aspirate_in_place")
@@ -166,7 +169,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     mock_aspirate.side_effect = assert_parameters
 
-    await self.test_tip_pick_up()
+    await self.test_tip_pick_up.original_func(self)
     self.plate.get_well("A1").tracker.set_volume(10)
     await self.lh.aspirate(self.plate["A1"], vols=[10])
 

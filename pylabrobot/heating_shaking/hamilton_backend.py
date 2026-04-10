@@ -43,13 +43,13 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     self._id += 1
     return self._id % 10000
 
-  async def setup(self):
+  async def Xsetup(self):
     """
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self.io.setup()
 
-  async def stop(self):
+  async def Xstop(self):
     await self.io.stop()
 
   async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:

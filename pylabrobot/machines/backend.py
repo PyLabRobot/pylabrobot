@@ -1,26 +1,34 @@
 import inspect
+import sys
 import weakref
+import contextlib
+from typing import Optional
 from abc import ABC, abstractmethod
+
+import anyio
 
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
+from pylabrobot.concurrency import global_manager, AsyncResource
 
 
-class MachineBackend(SerializableMixin, ABC):
+class MachineBackend(SerializableMixin, AsyncResource):
   """Abstract class for machine backends."""
 
   _instances: weakref.WeakSet["MachineBackend"] = weakref.WeakSet()
 
   def __init__(self):
     self._instances.add(self)
+    self._stack: Optional[contextlib.AsyncExitStack] = None
 
-  @abstractmethod
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    pass
+
   async def setup(self):
-    pass
+    await global_manager.manage_context(self)
 
-  @abstractmethod
   async def stop(self):
-    pass
+    await global_manager.release_context(self)
 
   def serialize(self) -> dict:
     return {"type": self.__class__.__name__}

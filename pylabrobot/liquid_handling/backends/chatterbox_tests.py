@@ -1,4 +1,8 @@
 import unittest
+import contextlib
+from types import SimpleNamespace
+
+import pytest
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.chatterbox import (
@@ -10,12 +14,13 @@ from pylabrobot.resources import (
   hamilton_96_tiprack_1000uL_filter,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class ChatterboxBackendTests(unittest.IsolatedAsyncioTestCase):
+class ChatterboxBackendTests(AnyioTestBase):
   """Tests for chatterbox backend"""
 
-  def setUp(self) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack) -> None:
     self.deck = STARLetDeck()
     self.backend = LiquidHandlerChatterboxBackend(num_channels=8)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
@@ -23,14 +28,7 @@ class ChatterboxBackendTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_rack, rails=3)
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, rails=9)
-
-  async def asyncSetUp(self) -> None:
-    await super().asyncSetUp()
-    await self.lh.setup()
-
-  async def asyncTearDown(self) -> None:
-    await self.lh.stop()
-    await super().asyncTearDown()
+    await stack.enter_async_context(self.lh)
 
   async def test_pick_up_tips(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])

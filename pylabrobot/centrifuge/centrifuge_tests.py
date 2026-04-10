@@ -1,4 +1,6 @@
 import unittest
+from pylabrobot.testing.concurrency import AnyioTestBase
+
 
 from pylabrobot.centrifuge import (
   BucketHasPlateError,
@@ -28,8 +30,8 @@ class CentrifugeTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(deserialized, centrifuge)
 
 
-class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class CentrifugeLoaderResourceModelTests(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
     self.mock_centrifuge_backend = unittest.mock.MagicMock(spec=CentrifugeBackend)
     self.mock_loader_backend = unittest.mock.MagicMock(spec=LoaderBackend)
     self.centrifuge = Centrifuge(
@@ -45,7 +47,6 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
-    return await super().asyncSetUp()
 
   async def test_go_to_bucket(self):
     self.assertIsNone(self.centrifuge.at_bucket)

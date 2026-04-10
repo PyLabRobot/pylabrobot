@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import functools
 import sys
+import contextlib
 from abc import ABC
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.serializer import SerializableMixin
+from pylabrobot.concurrency import global_manager, AsyncResource
 
 if sys.version_info < (3, 10):
   from typing_extensions import ParamSpec
@@ -38,16 +40,16 @@ def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   return wrapper
 
 
-class Machine(SerializableMixin, ABC):
+
+class Machine(SerializableMixin, AsyncResource):
   """Abstract base class for machine frontends."""
 
   def __init__(self, backend: MachineBackend):
     self.backend = backend
-    self._setup_finished = False
 
   @property
   def setup_finished(self) -> bool:
-    return self._setup_finished
+    return self._active_lifespan is not None
 
   def serialize(self) -> dict:
     return {"backend": self.backend.serialize()}
@@ -60,18 +62,17 @@ class Machine(SerializableMixin, ABC):
     data_copy["backend"] = backend
     return cls(**data_copy)
 
-  async def setup(self, **backend_kwargs):
-    await self.backend.setup(**backend_kwargs)
-    self._setup_finished = True
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await stack.enter_async_context(self.backend)
 
-  @need_setup_finished
+  async def setup(self, **kwargs):
+    if kwargs:
+      # TODO: Design question: Do we need kwargs? We could elevate
+      # `_lifespan` to a public API `lifespan`, taking kwargs. However, having
+      # both `lifespan` as well as `__aenter__`/`__aexit__` goes against the
+      # python ZEN "There should be one, and preferably only one obvious way to do it".
+      raise ValueError("Keyword arguments during setup are not allowed anymore")
+    await global_manager.manage_context(self)
+
   async def stop(self):
-    await self.backend.stop()
-    self._setup_finished = False
-
-  async def __aenter__(self):
-    await self.setup()
-    return self
-
-  async def __aexit__(self, exc_type, exc_value, traceback):
-    await self.stop()
+    await global_manager.release_context(self)

@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+import anyio
+import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Optional
 
@@ -102,8 +103,6 @@ class USB(IOBase):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
-    self._executor: Optional[ThreadPoolExecutor] = None
-
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
     self._human_readable_device_name = human_readable_device_name
@@ -124,23 +123,26 @@ class USB(IOBase):
       timeout = self.write_timeout
 
     # write command to endpoint
-    loop = asyncio.get_running_loop()
     write_endpoint = self.write_endpoint
     dev = self.dev
-    if self._executor is None or dev is None or write_endpoint is None:
+    if dev is None or write_endpoint is None:
       raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
-    await loop.run_in_executor(
-      self._executor,
-      lambda: dev.write(
-        write_endpoint, data, timeout=int(timeout * 1000)
-      ),  # PyUSB expects timeout in milliseconds
-    )
-    if len(data) % write_endpoint.wMaxPacketSize == 0:
-      # send a zero-length packet to indicate the end of the transfer
-      await loop.run_in_executor(
-        self._executor,
-        lambda: dev.write(write_endpoint, b"", timeout=int(timeout * 1000)),
+
+    async def write(d):
+      t = anyio.current_effective_deadline() - anyio.current_time()
+      assert t < float("inf"), "Timeout must be set"
+      timeout_ms = int(t * 1000)
+      await anyio.to_thread.run_sync(
+        lambda :dev.write(write_endpoint, d, timeout=timeout_ms)
       )
+
+    with contextlib.ExitStack() as stack:
+      if timeout is not None:
+        stack.enter_context(anyio.fail_after(timeout))
+      await write(data)
+      if len(data) % write_endpoint.wMaxPacketSize == 0:
+        # send a zero-length packet to indicate the end of the transfer
+        await write(b"")
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
       USBCommand(
@@ -150,7 +152,7 @@ class USB(IOBase):
       )
     )
 
-  def _read_packet(
+  async def _read_packet(
     self,
     size: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -197,16 +199,20 @@ class USB(IOBase):
       timeout = self.packet_read_timeout
 
     try:
-      res = self.dev.read(
-        ep,
-        read_size,
-        timeout=int(timeout * 1000),  # timeout in ms
-      )
+      with anyio.fail_after(timeout):
+        res = await anyio.to_thread.run_sync(
+          lambda: self.dev.read(
+            ep,
+            read_size,
+            timeout=int(timeout * 1000),  # timeout in ms
+          ),
+          abandon_on_cancel=True,
+        )
 
       if res is not None:
         return bytearray(res)
       return None
-    except usb.core.USBError:
+    except (usb.core.USBError, TimeoutError):
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
 
@@ -226,48 +232,43 @@ class USB(IOBase):
     if timeout is None:
       timeout = self.read_timeout
 
-    def read_or_timeout():
-      # Attempt to read packets until timeout, or when we identify the right id.
-      timeout_time = time.time() + timeout
 
-      while time.time() < timeout_time:
-        # read response from endpoint, and keep reading until the packet is smaller than the max
-        # packet size: if the packet is that size, it means that there may be more data to read.
-        resp = bytearray()
-        last_packet: Optional[bytearray] = None
-        while True:  # read while we have data, and while the last packet is the max size.
-          remaining = size - len(resp) if size is not None else None
-          last_packet = self._read_packet(size=remaining)
-          if last_packet is not None:
-            resp += last_packet
-          if self.read_endpoint is None:
-            raise RuntimeError("Read endpoint is None. Call setup() first.")
-          if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
-            break
-          if size is not None and len(resp) >= size:
-            break
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          # read response from endpoint, and keep reading until the packet is smaller than the max
+          # packet size: if the packet is that size, it means that there may be more data to read.
+          resp = bytearray()
+          last_packet: Optional[bytearray] = None
+          while True:  # read while we have data, and while the last packet is the max size.
+            remaining = size - len(resp) if size is not None else None
+            last_packet = await self._read_packet(size=remaining)
+            if last_packet is not None:
+              resp += last_packet
+            if self.read_endpoint is None:
+              raise RuntimeError("Read endpoint is None. Call setup() first.")
+            if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
+              break
+            if size is not None and len(resp) >= size:
+              break
 
-        if len(resp) == 0:
-          continue
+          if len(resp) == 0:
+            continue
 
-        logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
-        capturer.record(
-          USBCommand(
-            device_id=self._unique_id,
-            action="read",
-            data=resp.decode("unicode_escape", errors="backslashreplace"),
+          logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
+          capturer.record(
+            USBCommand(
+              device_id=self._unique_id,
+              action="read",
+              data=resp.decode("unicode_escape", errors="backslashreplace"),
+            )
           )
-        )
-        return resp
-
+          return resp
+    except TimeoutError:
+      # Translate TimeoutError to a more specific error message.
       raise TimeoutError(
         f"Timeout while reading from USB device '{self._human_readable_device_name}'."
-      )
-
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self.dev is None:
-      raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
-    return await loop.run_in_executor(self._executor, read_or_timeout)
+      ) from None
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """Get a list of available devices that match the specified vendor and product IDs, and serial
@@ -373,15 +374,8 @@ class USB(IOBase):
 
     return bytearray(res)
 
-  async def setup(self, empty_buffer=True):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, empty_buffer=True):
     """Initialize the USB connection to the machine."""
-
-    if self.dev is not None:
-      # previous setup did not properly finish,
-      # or we are re-initializing the device.
-      logger.warning("USB device already connected. Closing previous connection.")
-      await self.stop()
-
     if not USE_USB:
       raise RuntimeError(
         "pyusb/libusb is not installed. Install with: pip install pylabrobot[usb]. "
@@ -397,6 +391,13 @@ class USB(IOBase):
     if len(devices) > 1:
       logger.warning("Multiple devices found. Using the first one.")
     self.dev = devices[0]
+
+    # at this point, we manage `self.dev`; make sure it gets cleaned up again.
+    @stack.callback
+    def cleanup():
+      logger.warning("Closing connection to USB device.")
+      usb.util.dispose_resources(self.dev)
+      self.dev = None
 
     logger.info("Found USB device.")
 
@@ -444,23 +445,10 @@ class USB(IOBase):
 
     # Empty the read buffer.
     if empty_buffer:
-      while self._read_packet() is not None:
+      while await self._read_packet() is not None:
         pass
 
-    self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
-  async def stop(self):
-    """Close the USB connection to the machine."""
-
-    if self.dev is None:
-      raise ValueError("USB device was not connected.")
-    logger.warning("Closing connection to USB device.")
-    usb.util.dispose_resources(self.dev)
-    self.dev = None
-
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""

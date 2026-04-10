@@ -1,0 +1,211 @@
+import asyncio
+import sys
+import abc
+import warnings
+import contextlib
+import typing
+
+import anyio
+import sniffio
+
+MachineID: typing.TypeAlias = typing.Any
+
+
+class MachineConnectionClosedError(Exception):
+  """ Raised when a machine task is being aborted because the connection is, or has been closed."""
+
+
+class _AsyncResourceBase:
+  """ Implementation of `AsyncResource`, but without any `__new__` to implement ABC checking. """
+
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, **kwargs):
+    raise NotImplementedError("Subclasses must override _enter_lifespan or _lifespan.")
+
+  @contextlib.asynccontextmanager
+  async def _lifespan(self, **kwargs):
+    """The resource's lifespan.
+
+    Subclasses should override this method to provide their own lifespan.
+    Alternatively, they can provide `_enter_lifespan(stack)` which gets called with an `AsyncExitStack`.
+    """
+    # typical implementation
+    async with contextlib.AsyncExitStack() as stack:
+      await self._enter_lifespan(stack, **kwargs)
+      yield
+      # there shouldn't be anything here - explicit cleanup is unstructured,
+      # register your cleanup already when you enter.
+
+  async def __aenter__(self):
+    """Enter the resource's lifespan.
+    This method should not be overridden by subclasses;
+    separate `__aenter__` and `__aexit__` calls are difficult to implement correcty,
+    implement `_lifespan` or `_enter_lifespan` instead.
+    """
+    if getattr(self, "_active_lifespan", None) is not None:
+      raise RuntimeError(f"lifespan of {type(self).__name__} is already entered")
+    active_lifespan = self._lifespan()
+    await active_lifespan.__aenter__()
+    self._active_lifespan = active_lifespan
+
+  async def __aexit__(self, exc_type, exc_val, exc_tb):
+    """Exit the resource's context.
+    This method should never be overriden.
+    """
+    ret = await self._active_lifespan.__aexit__(exc_type, exc_val, exc_tb)
+    self._active_lifespan = None
+    return ret
+
+
+class AsyncResource(_AsyncResourceBase, abc.ABC):
+  """An abstract base class for all resources."""
+
+  def __new__(cls, *args, **kwargs):
+    # Check if both methods are still the base implementations
+    if (cls._enter_lifespan is AsyncResource._enter_lifespan and
+        cls._lifespan is AsyncResource._lifespan):
+        raise TypeError(
+            f"Can't instantiate abstract class {cls.__name__} "
+            "without an implementation for either '_enter_lifespan' or '_lifespan'"
+        )
+
+    return super().__new__(cls)
+
+
+class GlobalManager:
+  """A global task manager to enable interactive (notebook) usage of async context managers."""
+
+  def __init__(self):
+    self._tg: anyio.abc.TaskGroup | None = None
+    self._running_task: asyncio.Task | None = None
+    self._started: anyio.Event | None = None
+    self._stop: anyio.Event | None = None
+    self._pending: set[MachineID] = set()
+    self._stop_events: dict[MachineID, anyio.Event] = {}
+    self._exit_events: dict[MachineID, anyio.Event] = {}
+    self._errors: dict[MachineID, Exception] = {}
+
+
+  async def _run_global_task_group(self):
+    async with anyio.create_task_group() as tg:
+      assert self._tg is None
+      self._tg = tg
+      self._stop = anyio.Event()
+      self._started.set()
+      await self._stop.wait()
+
+
+  @contextlib.asynccontextmanager
+  async def _reserve_runner_for(self, obj):
+    try:
+      backend = sniffio.current_async_library()
+    except sniffio.AsyncLibraryNotFoundError:
+      backend = "asyncio"
+
+    if backend != "asyncio":
+      raise RuntimeError(
+        f"The global manager for interactive setup/stop is currently only supported "
+        f"on asyncio (Jupyter). Caught: {backend}. Please use `async with machine:` directly."
+      )
+
+    loop = asyncio.get_running_loop()
+
+    try:
+      self._pending.add(obj)
+      if self._tg is None:
+        try:
+          self._started = anyio.Event()
+          self._running_task = loop.create_task(self._run_global_task_group())
+          await self._started.wait()
+        finally:
+          self._started = None
+      yield self._tg
+    finally:
+      self._pending.discard(obj)
+
+
+  async def manage_context(self, obj: any):
+    """Schedules an object's async context manager into the global task group."""
+
+    stop_event = self._stop_events.get(obj)
+    if stop_event is not None:
+      warnings.warn(
+        f"Object {obj} is already managed by the global task group."
+        )
+      return
+    warnings.warn(
+      "Prefer using structured concurrency (`async with resource:`) over `.setup` calls.",
+      DeprecationWarning
+      )
+
+    async def wrapper(*,task_status=anyio.TASK_STATUS_IGNORED):
+      try:
+        print("entering obj context manager")
+        async with obj:
+          print("entered obj context manager")
+          task_status.started()
+          await stop_event.wait()
+      except Exception as e:
+        self._errors[obj] = e
+      finally:
+        self._stop_events.pop(obj, None)
+        exit_event = self._exit_events.get(obj)
+        if exit_event is not None:
+          exit_event.set()
+        if not self._pending and not self._stop_events:
+          self._stop.set()
+          self._stop = None
+          self._tg = None
+          self._running_task = None
+
+    try:
+      async with self._reserve_runner_for(obj) as tg:
+        self._stop_events[obj] = stop_event = anyio.Event()
+        await self._tg.start(wrapper)
+    except Exception:
+      self._stop_events.pop(obj, None)
+      raise
+    finally:
+      e = self._errors.pop(obj, None)
+      if e is not None:
+        raise e
+
+  async def release_context(self, obj: any):
+    """Signals the given object's context manager to gracefully exit."""
+    errors = self._errors.pop(obj, None)
+    if errors is not None:
+      raise errors
+
+    stop_event = self._stop_events.pop(obj, None)
+
+    if stop_event is None:
+      warnings.warn(
+        f"Object {obj} is not managed by the global task group. "
+        )
+      return
+
+    try:
+      self._exit_events[obj] = exit_event = anyio.Event()
+      stop_event.set()
+      await exit_event.wait()
+    finally:
+      self._exit_events.pop(obj, None)
+
+  async def stop_all(self):
+    """Forcefully stops all managed objects and terminates the global TaskGroup."""
+    async def do_release(obj, go, *, task_status=anyio.TASK_STATUS_IGNORED):
+      with anyio.CancelScope(shield=True):
+        task_status.started()
+        await go.wait()
+        await self.release_context(obj)
+
+    # Release all managed objects simultaneously in a task group.
+    # Each release is shielded from cancellation; this guarantees that
+    # all objects attempt to exit, and we get all errors in one ExceptionGroup.
+    async with anyio.create_task_group() as tg:
+      go = anyio.Event()
+      for obj in list(self._stop_events.keys()):
+        await tg.start(do_release, obj, go)
+      go.set()
+
+
+global_manager = GlobalManager()
