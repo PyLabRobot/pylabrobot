@@ -332,6 +332,13 @@ class STARChatterboxBackend(STARBackend):
   async def request_pip_height_last_lld(self):
     return list(range(12))
 
+  async def execute_batched(self, func, batches, min_traverse_height_during_command=None):
+    """Iterate batches and call func without physical X/Y/Z moves."""
+    results = []
+    for batch in batches:
+      results.append(await func(batch))
+    return results
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
@@ -348,9 +355,12 @@ class STARChatterboxBackend(STARBackend):
   ) -> List[float]:
     """Probe liquid heights by computing from tracked container volumes.
 
-    Instead of simulating hardware LLD, this mock computes liquid heights from
-    each container's volume tracker. Returns 0.0 for empty containers, otherwise
-    uses ``container.compute_height_from_volume()``.
+    Runs the same validation, target resolution, and batch planning as the real
+    backend so that protocols developed off-hardware encounter the same errors
+    and batch structure they would on the physical instrument. Only the LLD
+    callback is replaced: instead of firmware sensing, heights are computed from
+    each container's volume tracker (0.0 for empty, otherwise
+    ``container.compute_height_from_volume()``).
 
     Args:
       containers: List of Container objects to probe, one per channel.
@@ -384,7 +394,6 @@ class STARChatterboxBackend(STARBackend):
         f"channels, call probe_liquid_heights multiple times in sequence."
       )
 
-    # Validate tip presence using tip tracker
     for ch in use_channels:
       self.head[ch].get_tip()  # Raises NoTipError if no tip
 
@@ -404,15 +413,25 @@ class STARChatterboxBackend(STARBackend):
 
     print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
 
-    # Compute heights from volume trackers
-    heights: List[float] = []
-    for container in containers:
-      volume = container.tracker.get_used_volume()
-      if volume == 0:
-        heights.append(0.0)
-      else:
-        height = container.compute_height_from_volume(volume)
-        heights.append(height)
+    async def _mock_probe(batch):
+      heights = {}
+      for idx, ch in zip(batch.indices, batch.channels):
+        container = containers[idx]
+        volume = container.tracker.get_used_volume()
+        if volume == 0:
+          heights[ch] = 0.0
+        else:
+          heights[ch] = container.compute_height_from_volume(volume)
+      return heights
 
-    print(f"  heights: {[f'{h:.2f}' for h in heights]} mm")
-    return heights
+    batch_results = await self.execute_batched(
+      func=_mock_probe,
+      batches=batches,
+    )
+
+    # Merge batch results in use_channels order
+    ch_to_height = {}
+    for batch_heights in batch_results:
+      ch_to_height.update(batch_heights)
+
+    return [ch_to_height[ch] for ch in use_channels]
