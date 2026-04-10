@@ -2,7 +2,7 @@
 
 Layer: Camera driver (standalone, no PLR dependencies except numpy)
 Adjacent layers:
-  - Above: CytationAravisDriver delegates camera operations here
+  - Above: CytationMicroscopyBackend delegates camera operations here
   - Below: Aravis library (via PyGObject) talks to camera via USB3 Vision/GenICam
 
 Aravis talks directly to the camera via the GenICam standard over USB3 Vision.
@@ -15,7 +15,10 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import numpy as np
+try:
+  import numpy as np
+except ImportError:
+  np = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +327,21 @@ class AravisCamera:
       raise RuntimeError("Camera is not initialized. Call setup() first.")
     self._device.set_string_feature_value("GainAuto", "Off")
     self._camera.set_gain(gain)
+
+  async def set_auto_gain(self, mode: str) -> None:
+    """Set auto-gain mode.
+
+    Args:
+        mode: One of "off", "once", "continuous". Maps to GenICam
+            GainAuto node values: Off, Once, Continuous.
+    """
+    if self._camera is None:
+      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    mode_map = {"off": "Off", "once": "Once", "continuous": "Continuous"}
+    aravis_mode = mode_map.get(mode.lower())
+    if aravis_mode is None:
+      raise ValueError(f"Invalid auto-gain mode '{mode}'. Use 'off', 'once', or 'continuous'.")
+    self._device.set_string_feature_value("GainAuto", aravis_mode)
 
   async def get_gain(self) -> float:
     """Read current gain value (from hardware, not cached)."""

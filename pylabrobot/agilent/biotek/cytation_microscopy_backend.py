@@ -302,7 +302,9 @@ class CytationMicroscopyBackend(MicroscopyBackend):
     if gain == self._gain:
       return
 
-    if gain != "machine-auto":
+    if gain == "machine-auto":
+      await self.camera.set_auto_gain("continuous")
+    else:
       await self.camera.set_gain(float(gain))
 
     self._gain = gain
@@ -499,7 +501,7 @@ class CytationMicroscopyBackend(MicroscopyBackend):
     """Cytation-specific parameters for image capture.
 
     Args:
-      led_intensity: LED intensity (0-100). Default 10.
+      led_intensity: LED intensity (1-10). Default 10.
       coverage: Image tiling coverage. ``"full"`` for full-well montage, or a
         ``(rows, cols)`` tuple for a specific tile grid. Default ``(1, 1)`` (single
         image).
@@ -540,7 +542,8 @@ class CytationMicroscopyBackend(MicroscopyBackend):
     overlap = backend_params.overlap
     auto_stop_acquisition = backend_params.auto_stop_acquisition
 
-    assert overlap is None, "not implemented yet"
+    if overlap is not None:
+      raise NotImplementedError("overlap is not implemented yet")
 
     await self.driver.set_plate(plate)
 

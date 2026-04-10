@@ -2,8 +2,11 @@
 
 from typing import Optional
 
-from pylabrobot.agilent.biotek import cytation_aravis_driver
-from pylabrobot.agilent.biotek.cytation_aravis_driver import CytationImagingConfig
+from pylabrobot.agilent.biotek.biotek import BioTekBackend
+from pylabrobot.agilent.biotek.cytation_microscopy_backend import (
+  CytationImagingConfig,
+  CytationMicroscopyBackend,
+)
 from pylabrobot.legacy.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend
 from pylabrobot.legacy.plate_reading.standard import (
@@ -18,9 +21,9 @@ from pylabrobot.resources import Plate
 
 
 class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
-  """Legacy. Use pylabrobot.agilent.CytationAravisDriver instead."""
+  """Legacy. Use pylabrobot.agilent.CytationMicroscopyBackend instead."""
 
-  _new: cytation_aravis_driver.CytationAravisDriver
+  _new: BioTekBackend
 
   def __init__(
     self,
@@ -28,24 +31,28 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     device_id: Optional[str] = None,
     imaging_config: Optional[CytationImagingConfig] = None,
   ) -> None:
-    self._new = cytation_aravis_driver.CytationAravisDriver(
-      timeout=timeout, device_id=device_id, imaging_config=imaging_config
+    self._new = BioTekBackend(
+      timeout=timeout, device_id=device_id, human_readable_device_name="Agilent BioTek Cytation"
+    )
+    self._microscopy_backend = CytationMicroscopyBackend(
+      driver=self._new, imaging_config=imaging_config
     )
 
   @property
   def imaging_config(self):
-    return self._new.imaging_config
+    return self._microscopy_backend.imaging_config
 
   @imaging_config.setter
   def imaging_config(self, value):
-    self._new.imaging_config = value
+    self._microscopy_backend.imaging_config = value
 
   async def setup(self, use_cam: bool = False) -> None:
-    from pylabrobot.agilent.biotek.cytation_aravis_driver import CytationAravisDriver
-
-    await self._new.setup(backend_params=CytationAravisDriver.SetupParams(use_cam=use_cam))
+    await self._new.setup()
+    self._microscopy_backend._use_cam = use_cam
+    await self._microscopy_backend._on_setup()
 
   async def stop(self):
+    await self._microscopy_backend._on_stop()
     await self._new.stop()
 
   @property
@@ -58,50 +65,50 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
 
   @property
   def objectives(self):
-    return self._new.microscopy_backend.objectives
+    return self._microscopy_backend.objectives
 
   @property
   def filters(self):
-    return self._new.microscopy_backend.filters
+    return self._microscopy_backend.filters
 
   async def close(self, plate=None, slow=False):
     await self._new.close(plate=plate, slow=slow)
 
   def start_acquisition(self):
-    self._new.microscopy_backend.start_acquisition()
+    self._microscopy_backend.start_acquisition()
 
   def stop_acquisition(self):
-    self._new.microscopy_backend.stop_acquisition()
+    self._microscopy_backend.stop_acquisition()
 
   async def led_on(self, intensity=10):
-    await self._new.microscopy_backend.led_on(intensity=intensity)
+    await self._microscopy_backend.led_on(intensity=intensity)
 
   async def led_off(self):
-    await self._new.microscopy_backend.led_off()
+    await self._microscopy_backend.led_off()
 
   async def set_focus(self, focal_position):
-    await self._new.microscopy_backend.set_focus(focal_position)
+    await self._microscopy_backend.set_focus(focal_position)
 
   async def set_position(self, x, y):
-    await self._new.microscopy_backend.set_position(x, y)
+    await self._microscopy_backend.set_position(x, y)
 
   async def set_auto_exposure(self, auto_exposure):
-    await self._new.microscopy_backend.set_auto_exposure(auto_exposure)
+    await self._microscopy_backend.set_auto_exposure(auto_exposure)
 
   async def set_exposure(self, exposure):
-    await self._new.microscopy_backend.set_exposure(exposure)
+    await self._microscopy_backend.set_exposure(exposure)
 
   async def select(self, row, column):
-    await self._new.microscopy_backend.select(row, column)
+    await self._microscopy_backend.select(row, column)
 
   async def set_gain(self, gain):
-    await self._new.microscopy_backend.set_gain(gain)
+    await self._microscopy_backend.set_gain(gain)
 
   async def set_objective(self, objective):
-    await self._new.microscopy_backend.set_objective(objective)
+    await self._microscopy_backend.set_objective(objective)
 
   async def set_imaging_mode(self, mode, led_intensity):
-    await self._new.microscopy_backend.set_imaging_mode(mode, led_intensity)
+    await self._microscopy_backend.set_imaging_mode(mode, led_intensity)
 
   async def capture(
     self,
@@ -121,7 +128,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     new_mode = NewImagingMode[mode.name]
     new_objective = NewObjective[objective.name]
 
-    result = await self._new.microscopy_backend.capture(
+    result = await self._microscopy_backend.capture(
       row=row,
       column=column,
       mode=new_mode,
