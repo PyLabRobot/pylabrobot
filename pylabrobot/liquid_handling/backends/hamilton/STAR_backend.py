@@ -1723,8 +1723,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
       # Cache per-channel hardware configuration for version-specific behavior
-      assert self._num_channels is not None
-      for ch in range(self._num_channels):
+      for ch in range(self.num_channels):
         hw_tokens = await self._pip_channel_request_configuration(ch)
         self._pip_channel_information.append(
           PipChannelInformation(
