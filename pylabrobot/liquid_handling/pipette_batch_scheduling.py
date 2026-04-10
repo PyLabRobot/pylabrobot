@@ -247,17 +247,17 @@ def compute_single_container_offsets(
   if len(use_channels) == 0:
     return []
 
-  ch_lo, ch_hi = min(use_channels), max(use_channels)
+  ch_hi = max(use_channels)
   if len(channel_spacings) < ch_hi + 1:
     raise ValueError(
       f"channel_spacings list must have at least {ch_hi + 1} entries "
       f"(max channel index is {ch_hi}), got {len(channel_spacings)}."
     )
-  spacing = _effective_spacing(channel_spacings, ch_lo, ch_hi)
 
   def _try_group(channels: List[int]) -> Optional[List[Coordinate]]:
     """Try to fit channels into the container, returning None if too narrow."""
     g_lo, g_hi = min(channels), max(channels)
+    spacing = _effective_spacing(channel_spacings, g_lo, g_hi)
     num_physical = g_hi - g_lo + 1
     min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
     if container.get_absolute_size_y() < min_required:
