@@ -1285,6 +1285,21 @@ class ExtendedConfiguration:
 
 
 @dataclass
+class PipChannelInformation:
+  """Installed hardware information for a single pipetting channel (VW command)."""
+
+  ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
+  HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
+  StopDiscType = Literal["core_i", "core_ii"]
+  PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
+
+  channel_type: ChannelType
+  head_type: HeadType
+  stop_disc_type: StopDiscType
+  pressure_adc: PressureADC
+
+
+@dataclass
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1351,6 +1366,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._unsafe = UnSafe(self)
 
     self._iswap_version: Optional[str] = None  # loaded lazily
+    self._pip_channel_information: List[PipChannelInformation] = []
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
@@ -1513,6 +1529,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       str,
       (await self.send_command(STARBackend.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"],
     )
+
+  async def _pip_channel_request_configuration(self, channel: int) -> List[str]:
+    """Request installed hardware for a pipetting channel (raw) using the VW command.
+
+    The instrument returns four space-separated values. This method returns
+    those values as raw string tokens without decoding them, but the following
+    indices are currently understood:
+
+        - index 0: channel_type (codes: 0=ML_STAR, 1=ML_STAR_RPC)
+        - index 1: head_type (codes: 0=ML_STAR, 1=ML_STAR_PLE, 2=ML_STAR_RPC)
+        - index 2: stop_disc_type (codes: 0=CO-RE_I, 1=CO-RE_II)
+        - index 3: pressure_adc (codes: 0=Renesas_X9268, 1=Analog_Devices_AD5263)
+
+    Args:
+      channel: 0-indexed channel number.
+
+    Returns:
+      Raw positional tokens extracted from the VW response.
+    """
+    resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
+    return resp.split("vw")[-1].strip().split()
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -1684,6 +1721,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
+
+      # Cache per-channel hardware configuration for version-specific behavior
+      channel_type_map: dict[str, PipChannelInformation.ChannelType] = {
+        "0": "ML_STAR",
+        "1": "ML_STAR_RPC",
+      }
+      head_type_map: dict[str, PipChannelInformation.HeadType] = {
+        "0": "ML_STAR",
+        "1": "ML_STAR_PLE",
+        "2": "ML_STAR_RPC",
+      }
+      stop_disc_map: dict[str, PipChannelInformation.StopDiscType] = {
+        "0": "core_i",
+        "1": "core_ii",
+      }
+      adc_map: dict[str, PipChannelInformation.PressureADC] = {
+        "0": "Renesas_X9268",
+        "1": "Analog_Devices_AD5263",
+      }
+      for ch in range(self._num_channels):
+        hw_tokens = await self._pip_channel_request_configuration(ch)
+        self._pip_channel_information.append(
+          PipChannelInformation(
+            channel_type=channel_type_map.get(hw_tokens[0], hw_tokens[0]),
+            head_type=head_type_map.get(hw_tokens[1], hw_tokens[1]),
+            stop_disc_type=stop_disc_map.get(hw_tokens[2], hw_tokens[2]),
+            pressure_adc=adc_map.get(hw_tokens[3], hw_tokens[3]),
+          )
+        )
 
     async def set_up_autoload():
       if self.machine_conf.auto_load_installed and not skip_autoload:
