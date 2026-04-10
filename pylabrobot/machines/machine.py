@@ -49,7 +49,7 @@ class Machine(SerializableMixin, AsyncResource):
 
   @property
   def setup_finished(self) -> bool:
-    return self._active_lifespan is not None
+    return getattr(self, "_active_lifespan", None) is not None
 
   def serialize(self) -> dict:
     return {"backend": self.backend.serialize()}

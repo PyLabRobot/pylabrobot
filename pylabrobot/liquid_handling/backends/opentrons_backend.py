@@ -1,4 +1,5 @@
 import uuid
+import contextlib
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot import utils
@@ -95,7 +96,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       "port": self.port,
     }
 
-  async def setup(self, skip_home: bool = False):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, skip_home: bool = False):
     # create run
     run_id = ot_api.runs.create()
     ot_api.set_run(run_id)
@@ -112,30 +113,31 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if not skip_home:
       await self.home()
 
+    @stack.callback
+    def cleanup():
+      self._plr_name_to_load_name = {}
+      self._tip_racks = {}
+      self.left_pipette = None
+      self.right_pipette = None
+
+      # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
+      run_id = getattr(ot_api, "run_id", None)
+      if run_id:
+        try:
+          _req.post(f"/runs/{run_id}/cancel")
+        except Exception:
+          try:
+            _req.post(f"/runs/{run_id}/actions/cancel")
+          except Exception:
+            try:
+              _req.delete(f"/runs/{run_id}")
+            except Exception:
+              pass
+
   @property
   def num_channels(self) -> int:
     return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
 
-  async def stop(self):
-    """Cancel any active OT run, then clear labware definitions."""
-    self._plr_name_to_load_name = {}
-    self._tip_racks = {}
-    self.left_pipette = None
-    self.right_pipette = None
-
-    # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
-    run_id = getattr(ot_api, "run_id", None)
-    if run_id:
-      try:
-        _req.post(f"/runs/{run_id}/cancel")
-      except Exception:
-        try:
-          _req.post(f"/runs/{run_id}/actions/cancel")
-        except Exception:
-          try:
-            _req.delete(f"/runs/{run_id}")
-          except Exception:
-            pass
 
   def get_ot_name(self, plr_resource_name: str) -> str:
     """Opentrons only allows names in ^[a-z0-9._]+$, but in PLR we are flexible.

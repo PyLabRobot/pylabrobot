@@ -1,6 +1,6 @@
 """High-level Thermocycler resource wrapping a backend."""
 
-import asyncio
+import anyio
 import time
 from typing import List, Optional
 
@@ -230,7 +230,7 @@ class Thermocycler(ResourceHolder, Machine):
       currents = await self.get_block_current_temperature(**backend_kwargs)
       if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
         return
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
     raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
@@ -250,7 +250,7 @@ class Thermocycler(ResourceHolder, Machine):
         status = await self.get_lid_status(**backend_kwargs)
         if status in ["idle", "holding at target"]:
           return
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
     raise TimeoutError("Lid temperature timeout.")
 
   async def is_profile_running(self, **backend_kwargs) -> bool:
@@ -275,7 +275,7 @@ class Thermocycler(ResourceHolder, Machine):
   async def wait_for_profile_completion(self, poll_interval: float = 60.0, **backend_kwargs):
     """Block until the profile finishes, polling at `poll_interval` seconds."""
     while await self.is_profile_running(**backend_kwargs):
-      await asyncio.sleep(poll_interval)
+      await anyio.sleep(poll_interval)
 
   def serialize(self) -> dict:
     """JSON-serializable representation."""

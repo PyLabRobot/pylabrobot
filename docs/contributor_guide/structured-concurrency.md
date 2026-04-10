@@ -49,3 +49,7 @@ Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTe
 
 ### References to `unittest`
  - Async tests now *require* pytest - let's remove all calls to `unittest.main()`
+
+### Check for other signs that are frowned upon with structured concurrency:
+ - Anthing involving `time.time()` or `time.monotonic()` - should at least be `anyio.current_time()`, but often is a sign for a busy-loop or manual timeout handling.
+ - Check for use of `threading`.

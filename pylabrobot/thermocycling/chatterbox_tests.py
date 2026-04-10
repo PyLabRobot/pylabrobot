@@ -7,9 +7,11 @@ from pylabrobot.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 
-class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
-  def __init__(self, methodName="runTest"):
-    super().__init__(methodName)
+from pylabrobot.testing.concurrency import AnyioTestBase
+
+
+class TestThermocyclerChatterbox(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
     self.tc = Thermocycler(
       name="tc_test",
       size_x=1,
@@ -18,6 +20,7 @@ class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
       backend=ThermocyclerChatterboxBackend(),
       child_location=Coordinate.zero(),
     )
+
 
   async def test_chatterbox_run_profile(self):
     """Test that the chatterbox produces the correct log for a generic profile."""

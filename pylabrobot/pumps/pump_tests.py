@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import AsyncMock, Mock
 
 from pylabrobot.pumps import PumpArray
@@ -6,16 +5,19 @@ from pylabrobot.pumps.backend import PumpArrayBackend, PumpBackend
 from pylabrobot.pumps.calibration import PumpCalibration
 from pylabrobot.pumps.errors import NotCalibratedError
 from pylabrobot.pumps.pump import Pump
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class TestPump(unittest.IsolatedAsyncioTestCase):
+class TestPump(AnyioTestBase):
   """Tests for the Pump class.
 
   Currently, only the Cole Palmer Masterflex pump is implemented.
   """
 
-  def setUp(self):
+  async def _enter_lifespan(self, stack):
     self.mock_backend = Mock(spec=PumpBackend)
+    self.mock_backend.__aenter__ = AsyncMock(return_value=self.mock_backend)
+    self.mock_backend.__aexit__ = AsyncMock(return_value=None)
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=1)
 
   async def test_setup(self):
@@ -30,22 +32,17 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
       await pump.run_revolutions(num_revolutions=1)
 
 
-class TestPumpArray(unittest.IsolatedAsyncioTestCase):
+class TestPumpArray(AnyioTestBase):
   """Tests for the AgrowPumpArrayTester class."""
 
-  def setUp(self):
-    self.mock_backend = Mock(spec=PumpArrayBackend)
+  async def _enter_lifespan(self, stack):
+    self.mock_backend = AsyncMock(spec=PumpArrayBackend)
     self.mock_backend.num_channels = 6
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=6)
 
-  async def asyncSetUp(self) -> None:
-    await super().asyncSetUp()
     self.pump_array = PumpArray(backend=self.mock_backend, calibration=None)
-    await self.pump_array.setup()
+    await stack.enter_async_context(self.pump_array)
 
-  async def asyncTearDown(self) -> None:
-    await self.pump_array.stop()
-    await super().asyncTearDown()
 
   async def test_setup(self):
     """Test that the AgrowPumpArrayTester class can be initialized."""

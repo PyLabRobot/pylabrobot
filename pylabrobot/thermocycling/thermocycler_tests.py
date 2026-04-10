@@ -1,6 +1,6 @@
-import asyncio
-import unittest
 from unittest.mock import AsyncMock, MagicMock
+
+import anyio
 
 from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling import (
@@ -38,9 +38,12 @@ def mock_backend() -> MagicMock:
   return mock
 
 
-class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
+from pylabrobot.testing.concurrency import AnyioTestBase
+
+
+class TestThermocycler(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
+
     self.tc = Thermocycler(
       name="test_tc",
       size_x=10,
@@ -49,6 +52,7 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       backend=mock_backend(),
       child_location=Coordinate(0, 0, 0),
     )
+
 
   def test_thermocycler_serialization(self):
     """Test that the high-level resource serializes and deserializes correctly."""
@@ -107,18 +111,19 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     """Test that wait_for_profile_completion correctly polls is_profile_running."""
     self.tc.backend.get_hold_time.side_effect = [10.0, 5.0, 0.0]  # type: ignore
 
-    # Patch asyncio.sleep to a no-op for the test.
-    original_sleep = asyncio.sleep
+    # Patch anyio.sleep to a no-op for the test.
+    original_sleep = anyio.sleep
 
     async def mock_sleep(*args, **kwargs):
       pass
 
-    asyncio.sleep = mock_sleep
+    anyio.sleep = mock_sleep
     try:
       await self.tc.wait_for_profile_completion(poll_interval=0.01)
       assert self.tc.backend.get_hold_time.call_count == 3  # type: ignore
     finally:
-      asyncio.sleep = original_sleep
+      anyio.sleep = original_sleep
+
 
   async def test_is_profile_running_logic(self):
     """Test that `is_profile_running` returns the correct boolean based on various profile states."""

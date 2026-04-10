@@ -1,16 +1,16 @@
 # mypy: disable-error-code="union-attr,assignment,arg-type,attr-defined"
 """Mock FTDI IO for EL406 testing."""
 
-import asyncio
-import unittest
+import anyio
 from unittest.mock import patch
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.resources import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
 
-_real_sleep = asyncio.sleep
+_real_sleep = anyio.sleep
 
 
 async def _noop(*a, **kw):
@@ -50,22 +50,26 @@ PT1536 = _make_plate("test_1536", 1536)
 PT1536F = _make_plate("test_1536_flange", 1536, size_z=10.0)
 
 
-class EL406TestCase(unittest.IsolatedAsyncioTestCase):
-  """Base test case with mock FTDI IO and patched asyncio.sleep."""
+class EL406TestCase(AnyioTestBase):
+  """Base test case with mock FTDI IO and patched anyio.sleep."""
 
-  async def asyncSetUp(self):
-    self._sleep_patcher = patch("asyncio.sleep", side_effect=_noop)
+  async def _enter_lifespan(self, stack):
+    self._sleep_patcher = patch("anyio.sleep", side_effect=_noop)
     self._sleep_patcher.start()
+    stack.callback(self._sleep_patcher.stop)
+
     self.backend = ExperimentalBioTekEL406Backend()
     self.backend.io = MockFTDI()
     await self.backend.setup()
+
+    async def cleanup():
+      if self.backend.io is not None:
+        self.backend.io.set_read_buffer(b"\x06" * 500)
+        await self.backend.stop()
+    stack.push_async_callback(cleanup)
+
     self.backend.io.set_read_buffer(b"\x06" * 500)
 
-  async def asyncTearDown(self):
-    if self.backend.io is not None:
-      self.backend.io.set_read_buffer(b"\x06" * 500)
-      await self.backend.stop()
-    self._sleep_patcher.stop()
 
 
 class MockFTDI:

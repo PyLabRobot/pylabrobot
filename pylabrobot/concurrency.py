@@ -46,6 +46,8 @@ class _AsyncResourceBase:
     active_lifespan = self._lifespan()
     await active_lifespan.__aenter__()
     self._active_lifespan = active_lifespan
+    return self
+
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
     """Exit the resource's context.

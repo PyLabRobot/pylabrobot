@@ -20,13 +20,7 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   """An abstract class for a plate reader. Plate readers are devices that can read luminescence,
   absorbance, or fluorescence from a plate."""
 
-  @abstractmethod
-  async def setup(self) -> None:
-    """Set up the plate reader. This should be called before any other methods."""
 
-  @abstractmethod
-  async def stop(self) -> None:
-    """Close all connections to the plate reader and make sure setup() can be called again."""
 
   @abstractmethod
   async def open(self) -> None:

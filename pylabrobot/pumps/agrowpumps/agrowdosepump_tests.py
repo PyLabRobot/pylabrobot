@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, call
 
 import pytest
 
+from pylabrobot.testing.concurrency import AnyioTestBase
+
 pytest.importorskip("pymodbus")
 
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
@@ -41,26 +43,24 @@ class SimulatedModbusClient(AsyncModbusSerialClient):
   write_register = AsyncMock()
 
   def close(self, reconnect=False):
-    assert not self.connected, "Modbus connection not established"
+    assert self.connected, "Modbus connection not established"
+
     self._connected = False
 
 
-class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
+class TestAgrowPumps(AnyioTestBase):
   """TestAgrowPumps allows users to test AgrowPumps."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.agrow_backend = AgrowPumpArrayBackend(port="simulated", address=1)
+    self.agrow_backend._modbus = SimulatedModbusClient(connected=False)
 
-    async def _mock_setup_modbus():
-      self.agrow_backend._modbus = SimulatedModbusClient()
-
-    self.agrow_backend._setup_modbus = _mock_setup_modbus  # type: ignore[method-assign]
 
     self.pump_array = PumpArray(backend=self.agrow_backend, calibration=None)
-    await self.pump_array.setup()
+    await stack.enter_async_context(self.pump_array)
 
-  async def asyncTearDown(self):
-    await self.pump_array.stop()
+
+
 
   async def test_setup(self):
     self.assertEqual(self.agrow_backend.port, "simulated")

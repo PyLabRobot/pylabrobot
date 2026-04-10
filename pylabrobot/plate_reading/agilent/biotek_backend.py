@@ -1,8 +1,12 @@
 import asyncio
+import contextlib
 import enum
 import logging
 import time
 from typing import Dict, Iterable, List, Optional, Tuple
+
+import anyio
+
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -78,10 +82,12 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     rects.sort()
     return rects
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     logger.info(f"{self.__class__.__name__} setting up")
 
-    await self.io.setup()
+    await self.io._enter_lifespan(stack)
+
     await self.io.usb_reset()
     await self.io.set_latency_timer(16)
     await self.io.set_baudrate(9600)  # 0x38 0x41
@@ -100,12 +106,13 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
 
-  async def stop(self) -> None:
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
+    async def _cleanup():
+      logger.info(f"{self.__class__.__name__} stopping")
+      await self.stop_shaking()
+      self._slow_mode = None
 
-    self._slow_mode = None
+    stack.push_async_callback(_cleanup)
+
 
   @property
   def version(self) -> str:
@@ -159,20 +166,21 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       timeout = self.timeout
     x = None
     res = b""
-    t0 = time.time()
-    while x != terminator:
-      x = await self.io.read(1)
-      res += x
+    try:
+      with anyio.fail_after(timeout):
+        while x != terminator:
+          x = await self.io.read(1)
+          res += x
 
-      if time.time() - t0 > timeout:
-        logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
-        raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response")
-
-      if x == b"":
-        await asyncio.sleep(0.01)
+          if x == b"":
+            await anyio.sleep(0.01)
+    except TimeoutError:
+      logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
+      raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response") from None
 
     logger.debug(f"{self.__class__.__name__} received %s", res)
     return res
+
 
   async def send_command(
     self,

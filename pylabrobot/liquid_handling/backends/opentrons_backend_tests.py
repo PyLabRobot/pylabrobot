@@ -37,7 +37,7 @@ def _mock_health_get():
   }
 
 
-class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
+class OpentronsBackendSetupTests(AnyioTestBase):
   """Tests for setup and stop"""
 
   @patch("ot_api.runs.create")
@@ -46,8 +46,10 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
   @patch("ot_api.health.get")
-  async def test_setup(
+  async def _enter_lifespan(
     self,
+    stack,
+    *,
     mock_health_get,
     mock_define,
     mock_add,
@@ -66,7 +68,21 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
 
     self.backend = OpentronsOT2Backend(host="localhost", port=1338)
     self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
-    await self.lh.setup()
+
+    self.mock_create = mock_create
+    self.mock_home = mock_home
+    self.mock_add_mounted_pipettes = mock_add_mounted_pipettes
+    self.mock_define = mock_define
+    self.mock_add = mock_add
+    self.mock_health_get = mock_health_get
+
+    await stack.enter_async_context(self.lh)
+
+  async def test_setup(self):
+    self.mock_create.assert_called_once()
+    self.mock_home.assert_called_once()
+    self.mock_add_mounted_pipettes.assert_called_once()
+
 
   def test_serialize(self):
     serialized = OpentronsOT2Backend(host="localhost", port=1337).serialize()

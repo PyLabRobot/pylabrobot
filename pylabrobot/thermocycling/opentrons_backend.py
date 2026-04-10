@@ -1,6 +1,7 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 from typing import List, Optional, cast
+import contextlib
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
@@ -45,13 +46,11 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     self.opentrons_id = opentrons_id
     self._current_protocol: Optional[Protocol] = None
 
-  async def setup(self):
-    """No extra setup needed for HTTP-API thermocycler."""
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    """Gracefully deactivate both heaters on exit."""
+    stack.push_async_callback(self.deactivate_lid)
+    stack.push_async_callback(self.deactivate_block)
 
-  async def stop(self):
-    """Gracefully deactivate both heaters."""
-    await self.deactivate_block()
-    await self.deactivate_lid()
 
   def serialize(self) -> dict:
     """Include the Opentrons module ID in serialized state."""

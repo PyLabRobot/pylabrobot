@@ -4,16 +4,19 @@ import unittest.mock
 
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 from pylabrobot.thermocycling.thermo_fisher.proflex import ProflexBackend
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+class TestProflexBackend(AnyioTestBase):
+
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.proflex = ProflexBackend(ip="1.2.3.4")
     self.proflex.num_temp_zones = 2
     self.proflex.io.write = unittest.mock.AsyncMock()  # type: ignore
     self.proflex.io.read = unittest.mock.AsyncMock()  # type: ignore
     self.proflex.io.read_until_eof = unittest.mock.AsyncMock()  # type: ignore
+
 
   async def test_run_protocol(self):
     scpi_command = (

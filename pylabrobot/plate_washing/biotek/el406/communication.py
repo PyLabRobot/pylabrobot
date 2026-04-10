@@ -6,7 +6,7 @@ with the BioTek EL406 plate washer.
 
 from __future__ import annotations
 
-import asyncio
+import anyio
 import logging
 import time
 from typing import TYPE_CHECKING, NamedTuple
@@ -98,7 +98,7 @@ class EL406CommunicationMixin:
           )
         if byte[0] == 0x06:  # ACK
           return
-      await asyncio.sleep(0.01)
+      await anyio.sleep(0.01)
     raise TimeoutError("Timeout waiting for ACK")
 
   async def _read_exact_bytes(self, count: int, timeout: float, t0: float) -> bytes:
@@ -119,7 +119,7 @@ class EL406CommunicationMixin:
       if chunk:
         buf += chunk
       else:
-        await asyncio.sleep(0.01)
+        await anyio.sleep(0.01)
     return buf
 
   async def _purge_buffers(self) -> None:
@@ -246,7 +246,7 @@ class EL406CommunicationMixin:
       logger.debug("Sent header: %s", header.hex())
 
       if data:
-        await asyncio.sleep(0.001)  # Small delay between header and data
+        await anyio.sleep(0.001)  # Small delay between header and data
         await self._write_to_device(data)
         logger.debug("Sent data: %s", data.hex())
       logger.debug("Sent framed: %s", framed_message.hex())
@@ -312,7 +312,7 @@ class EL406CommunicationMixin:
 
       await self._write_to_device(header)
       if data:
-        await asyncio.sleep(0.001)
+        await anyio.sleep(0.001)
         await self._write_to_device(data)
       logger.debug("Sent action command: %s", framed_message.hex())
 
@@ -384,7 +384,7 @@ class EL406CommunicationMixin:
       logger.debug("Sent query header 0x%04X: %s", command, msg_header.hex())
 
       if msg_data:
-        await asyncio.sleep(0.001)
+        await anyio.sleep(0.001)
         await self._write_to_device(msg_data)
         logger.debug("Sent query data: %s", msg_data.hex())
 
@@ -472,7 +472,7 @@ class EL406CommunicationMixin:
       poll = await self._poll_device_state()
       if poll.state != STATE_RUNNING:
         return
-      await asyncio.sleep(poll_interval)
+      await anyio.sleep(poll_interval)
     raise TimeoutError(f"Device still busy (STATE_RUNNING) after {timeout}s waiting for readiness")
 
   async def _send_step_command(
@@ -523,7 +523,7 @@ class EL406CommunicationMixin:
     logger.debug("Step command sent, got initial response: %s", response.hex())
 
     # 3. Initial delay before polling
-    await asyncio.sleep(0.5)
+    await anyio.sleep(0.5)
 
     # 4. Poll for completion
     t0 = time.monotonic()
@@ -532,7 +532,7 @@ class EL406CommunicationMixin:
     logger.debug("Starting polling loop...")
 
     while time.monotonic() - t0 < timeout:
-      await asyncio.sleep(poll_interval)
+      await anyio.sleep(poll_interval)
       poll_count += 1
 
       poll = await self._poll_device_state()

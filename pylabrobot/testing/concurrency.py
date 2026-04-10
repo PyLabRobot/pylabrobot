@@ -56,7 +56,10 @@ class AnyioTestBase(_AsyncResourceBase):
         lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
         async def async_wrapper():
           async with self._lifespan(**lifespan_kwargs):
-            return await wrapped(self)
+            if inspect.iscoroutinefunction(wrapped):
+              return await wrapped(self)
+            else:
+              return wrapped(self)
         return anyio.run(async_wrapper, backend=backend)
       sync_wrapper.original_func = wrapped
       return sync_wrapper
@@ -64,8 +67,9 @@ class AnyioTestBase(_AsyncResourceBase):
     for name, value in list(vars(cls).items()):
       if name in {"setUp","asyncSetUp","tearDown","asyncTearDown"}:
         raise TypeError(f"Class {cls.__name__} should not have {name} method, use _lifespan or _enter_lifespan instead.")
-      if name.startswith("test_") and inspect.iscoroutinefunction(value):
+      if name.startswith("test_"):
         setattr(cls, name, wrap(value))
+
   async def _enter_lifespan(self, stack, **kwargs):
     pass
 
@@ -95,8 +99,15 @@ class AnyioTestBase(_AsyncResourceBase):
 
   def assertFalse(self, expr, msg=None):
     assert not expr, msg or f"{expr!r} is not False"
+
   def assertIsNone(self, obj, msg=None):
     assert obj is None, msg or f"{obj!r} is not None"
+
+  def assertGreater(self, a, b, msg=None):
+    assert a > b, msg or f"{a} not greater than {b}"
+
+  def assertIsNotNone(self, obj, msg=None):
+    assert obj is not None, msg or f"{obj!r} is None"
 
   @contextmanager
   def assertRaises(self, exc_type, exc_value=None, msg=None):
@@ -116,3 +127,12 @@ class AnyioTestBase(_AsyncResourceBase):
         raise AssertionError(msg or f"Expected {msg}, got {e}")
     else:
       raise AssertionError(msg or "No exception raised")
+
+  @contextmanager
+  def assertRaisesRegex(self, exc_type, regex, msg=None):
+    with self.assertRaises(exc_type) as ctx:
+      yield ctx
+    if ctx.exception is not None:
+      import re
+      if not re.search(regex, str(ctx.exception)):
+        raise AssertionError(msg or f"{regex!r} does not match {str(ctx.exception)!r}")

@@ -1,4 +1,5 @@
 import unittest
+import anyio
 from typing import Dict
 from unittest.mock import AsyncMock, patch
 
@@ -7,23 +8,27 @@ from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCar
 from pylabrobot.arms.precise_flex.joints import PFAxis
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend, PreciseFlexError
 from pylabrobot.io.socket import Socket  # Import Socket for mocking
+from pylabrobot.testing.concurrency import AnyioTestBase
+
 from pylabrobot.resources import Coordinate, Rotation
 
 
-class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
+class TestPreciseFlexBackendHardware(AnyioTestBase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
 
 
-class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
+class TestPreciseFlexBackend(AnyioTestBase):
   """Unit tests for PreciseFlexBackend"""
 
-  def setUp(self):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
+
     self.mock_socket_instance = AsyncMock(spec=Socket)
     self.mock_socket_instance.read.return_value = b""
     self.mock_socket_instance.readline.return_value = b""
     self.mock_socket_instance.write.return_value = None
-    self.mock_socket_instance.setup.return_value = None  # Configure setup to return None
     self.mock_socket_instance._writer = AsyncMock()  # Mock the _writer attribute
+
 
     # Patch the Socket class where it's used in PreciseFlexBackend
     patcher = patch(
@@ -31,9 +36,10 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       return_value=self.mock_socket_instance,
     )
     self.MockSocketClass = patcher.start()  # Store the mock of the class
-    self.addCleanup(patcher.stop)
+    stack.push_async_callback(lambda: anyio.to_thread.run_sync(patcher.stop))
 
     self.backend = PreciseFlexBackend(has_rail=False, host="localhost", port=10100)
+
     # self.backend.io is already self.mock_socket_instance because of the patch
 
   async def test_init(self):
@@ -92,9 +98,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 OK\r\n",  # power_on_robot
       b"0 OK\r\n",  # attach
       b"0 OK\r\n",  # home
+      b"0 attach\r\n",  # detach
+      b"0 hp\r\n",  # power_off_robot
+      b"0 exit\r\n",  # exit
     ]
-    await self.backend.setup()
-    self.mock_socket_instance.setup.assert_called_once()
+    async with self.backend:
+      pass
+    self.mock_socket_instance.__aenter__.assert_called_once()
+
     self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
     self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
     self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
@@ -102,15 +113,20 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_stop(self):
     self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # set_mode
+      b"0 OK\r\n",  # power_on_robot
+      b"0 OK\r\n",  # attach
+      b"0 OK\r\n",  # home
       b"0 attach\r\n",  # detach
       b"0 hp\r\n",  # power_off_robot
       b"0 exit\r\n",  # exit
     ]
-    await self.backend.stop()
+    async with self.backend:
+      pass
     self.mock_socket_instance.write.assert_any_call(b"attach 0\n")
     self.mock_socket_instance.write.assert_any_call(b"hp 0\n")
     self.mock_socket_instance.write.assert_any_call(b"exit\n")
-    self.mock_socket_instance.stop.assert_called_once()
+    self.mock_socket_instance.__aexit__.assert_called_once()
 
   async def test_set_speed(self):
     self.mock_socket_instance.readline.return_value = b"0 Speed 1 50.0\r\n"

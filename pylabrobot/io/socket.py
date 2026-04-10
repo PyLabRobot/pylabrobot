@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import contextlib
 import ssl
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
@@ -55,8 +56,10 @@ class Socket(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Socket object while capture or validation is active")
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     await self._connect()
+    stack.push_async_callback(self._disconnect)
 
   async def _connect(self):
     self._reader, self._writer = await asyncio.open_connection(
@@ -65,9 +68,6 @@ class Socket(IOBase):
       ssl=self._ssl_context,
       server_hostname=self._server_hostname,
     )
-
-  async def stop(self):
-    await self._disconnect()
 
   async def _disconnect(self):
     async with self._read_lock, self._write_lock:
