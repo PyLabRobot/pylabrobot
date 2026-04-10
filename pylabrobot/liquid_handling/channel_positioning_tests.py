@@ -10,7 +10,7 @@ from pylabrobot.liquid_handling.channel_positioning import (
   _resolve_channel_spacings,
   _space_needed,
   compute_channel_offsets,
-  compute_single_container_offsets,
+  compute_nonconsecutive_channel_offsets,
   required_spacing_between,
 )
 from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
@@ -415,7 +415,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
   @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_even_span_no_center_offset(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
-    result = compute_single_container_offsets(self._mock_container(50.0), [0, 1], self.S)
+    result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 1], self.S)
     assert result is not None
     self.assertAlmostEqual(result[0].y, 4.5)
     self.assertAlmostEqual(result[1].y, -4.5)
@@ -428,12 +428,14 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
       Coordinate(0, -9.0, 0),
     ]
     # No additional shift; compute_channel_offsets handles no-go zones directly
-    result = compute_single_container_offsets(self._mock_container(50.0), [0, 1, 2], self.S)
+    result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 1, 2], self.S)
     assert result is not None
     self.assertAlmostEqual(result[0].y, 9.0)
 
   def test_container_too_small_returns_none(self):
-    self.assertIsNone(compute_single_container_offsets(self._mock_container(10.0), [0, 1], self.S))
+    self.assertIsNone(
+      compute_nonconsecutive_channel_offsets(self._mock_container(10.0), [0, 1], self.S)
+    )
 
   @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_non_consecutive_uses_full_physical_span(self, mock_offsets):
@@ -442,7 +444,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
       Coordinate(0, 0.0, 0),
       Coordinate(0, -10.0, 0),
     ]
-    result = compute_single_container_offsets(self._mock_container(50.0), [0, 2], self.S)
+    result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 2], self.S)
     assert result is not None
     self.assertEqual(len(result), 2)
     mock_offsets.assert_called_once_with(
@@ -456,7 +458,9 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
       Coordinate(0, 0.0, 0),
       Coordinate(0, -18.0, 0),
     ]
-    result = compute_single_container_offsets(self._mock_container(100.0), [0, 2], [9.0, 9.0, 18.0])
+    result = compute_nonconsecutive_channel_offsets(
+      self._mock_container(100.0), [0, 2], [9.0, 9.0, 18.0]
+    )
     self.assertIsNotNone(result)
     mock_offsets.assert_called_once_with(
       resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[18.0] * 3

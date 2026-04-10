@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from pylabrobot.liquid_handling.channel_positioning import (
-  compute_single_container_offsets,
+  compute_nonconsecutive_channel_offsets,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -224,7 +224,7 @@ def resolve_container_targets(
   """Convert containers to absolute Coordinates, auto-spreading when needed.
 
   When *resource_offsets* is ``None`` and multiple channels target the same
-  container, computes spread offsets via ``compute_single_container_offsets``
+  container, computes spread offsets via ``compute_nonconsecutive_channel_offsets``
   so channels can be batched in parallel. If the container is too narrow to
   spread, channels stay at center and will be serialized by ``plan_batches``.
 
@@ -269,7 +269,7 @@ def resolve_container_targets(
       container_groups[id(containers[idx])].append(idx)
     for c_indices in container_groups.values():
       group_channels = [use_channels[i] for i in c_indices]
-      spread = compute_single_container_offsets(
+      spread = compute_nonconsecutive_channel_offsets(
         container=containers[c_indices[0]],
         use_channels=group_channels,
         channel_spacings=channel_spacings,

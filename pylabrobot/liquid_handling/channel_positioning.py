@@ -298,10 +298,11 @@ def compute_channel_offsets(
   spread: str = "wide",
   channel_spacings: Optional[List[float]] = None,
 ) -> List[Coordinate]:
-  """Compute Y offsets for positioning pipette channels in a resource.
+  """Compute Y offsets for positioning consecutive channels (0..num_channels-1) in a resource.
 
-  Single entry point for all channel positioning logic. Handles containers with no-go zones
-  (distributing channels across compartments) and plain resources (wide/tight spread).
+  Handles container geometry: compartments with no-go zones, wide/tight spread.
+  Assumes channels are consecutively indexed — for non-consecutive channel selections
+  (e.g. [0, 2, 5]), use ``compute_nonconsecutive_channel_offsets`` instead.
 
   Args:
     resource: The target resource (Container, Trough, Well, etc.).
@@ -453,20 +454,28 @@ def compute_channel_offsets(
 # ---------------------------------------------------------------------------
 
 
-def compute_single_container_offsets(
+def compute_nonconsecutive_channel_offsets(
   container: Container,
   use_channels: List[int],
   channel_spacings: List[float],
 ) -> Optional[List[Coordinate]]:
-  """Compute spread Y offsets for multiple channels targeting the same container.
+  """Compute Y offsets for non-consecutive channel selections targeting one container.
 
-  Accounts for the full physical span including phantom intermediate channels.
-  When the full span doesn't fit, splits active channels into consecutive
-  sub-groups at gaps in the channel sequence and computes offsets per sub-group.
-  Each sub-group gets centered spread offsets, so plan_batches will naturally
-  batch sub-groups that can't coexist into separate Y batches.
+  Wraps ``compute_channel_offsets``: fills in phantom channels for gaps in the
+  channel sequence (e.g. [0, 2, 5] → physical span 0..5), attempts to fit the
+  full span, and falls back to splitting into consecutive sub-groups when it
+  doesn't fit.
 
-  Returns None if even a single pair of adjacent active channels can't fit.
+  Args:
+    container: The target container.
+    use_channels: Channel indices being used (e.g. [0, 2, 5]). Need not be
+      consecutive — gaps are filled with phantom channels.
+    channel_spacings: Per-channel occupancy diameters in mm. Must have at least
+      ``max(use_channels) + 1`` entries.
+
+  Returns:
+    List of Y offsets (one per entry in *use_channels*), or None if even a
+    single pair of adjacent channels can't fit in the container.
   """
 
   if len(use_channels) == 0:
@@ -487,12 +496,15 @@ def compute_single_container_offsets(
     min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
     if container.get_absolute_size_y() < min_required:
       return None
-    all_offsets = compute_channel_offsets(
-      resource=container,
-      num_channels=num_physical,
-      spread="wide",
-      channel_spacings=[spacing] * num_physical,
-    )
+    try:
+      all_offsets = compute_channel_offsets(
+        resource=container,
+        num_channels=num_physical,
+        spread="wide",
+        channel_spacings=[spacing] * num_physical,
+      )
+    except (ChannelsDoNotFitError, ValueError):
+      return None
     return [all_offsets[ch - g_lo] for ch in channels]
 
   # Try the full span first (all channels including phantoms fit)
