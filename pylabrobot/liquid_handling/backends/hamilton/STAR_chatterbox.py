@@ -377,6 +377,12 @@ class STARChatterboxBackend(STARBackend):
       num_channels=self.num_channels,
       use_channels=use_channels,
     )
+    if len(use_channels) != len(set(use_channels)):
+      raise ValueError(
+        f"Duplicate channels in use_channels {use_channels}: each physical channel "
+        f"can only probe one container per call. To probe more containers than available "
+        f"channels, call probe_liquid_heights multiple times in sequence."
+      )
 
     # Validate tip presence using tip tracker
     for ch in use_channels:
