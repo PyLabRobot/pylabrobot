@@ -102,24 +102,10 @@ def _effective_spacing(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
 def _span_required(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
   """Minimum total Y distance required between channels ch_lo and ch_hi.
 
-  Sums the rounded pairwise spacing for each adjacent pair in the range via
-  ``_min_spacing_between``, matching what the firmware enforces.
+  Sums the rounded pairwise spacing for each adjacent pair in the range,
+  matching what the firmware enforces.
   """
-  return sum(_min_spacing_between(spacings, ch, ch + 1) for ch in range(ch_lo, ch_hi))
-
-
-def _min_spacing_between(spacings: List[float], i: int, j: int) -> float:
-  """Minimum Y spacing between adjacent channels *i* and *j*.
-
-  Takes the larger of the two channels' spacings, then rounds up to 0.1 mm:
-  ``math.ceil(max(spacings[i], spacings[j]) * 10) / 10``.
-
-  Mirrors ``STARBackend._min_spacing_between`` (which operates on
-  ``self._channels_minimum_y_spacing`` instead of an explicit list).
-  """
-  if not abs(i - j) == 1:
-    raise ValueError(f"Channels {i} and {j} are not adjacent.")
-  return math.ceil(max(spacings[i], spacings[j]) * 10) / 10
+  return sum(math.ceil(max(spacings[ch], spacings[ch + 1]) * 10) / 10 for ch in range(ch_lo, ch_hi))
 
 
 # --- Batch partitioning ---
@@ -164,11 +150,9 @@ def _interpolate_phantoms(
   sorted_chs = sorted(channels)
   for k in range(len(sorted_chs) - 1):
     ch_lo, ch_hi = sorted_chs[k], sorted_chs[k + 1]
-    cumulative = 0.0
     for phantom in range(ch_lo + 1, ch_hi):
-      cumulative += _min_spacing_between(spacings, phantom - 1, phantom)
       if phantom not in result:
-        result[phantom] = result[ch_lo] - cumulative
+        result[phantom] = result[ch_lo] - _span_required(spacings, ch_lo, phantom)
   return result
 
 

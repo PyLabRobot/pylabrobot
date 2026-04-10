@@ -10,7 +10,7 @@ from typing import List
 from unittest.mock import MagicMock, patch
 
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
-  _min_spacing_between,
+  _span_required,
   compute_single_container_offsets,
   plan_batches,
   resolve_container_targets,
@@ -32,9 +32,9 @@ class TestMixedChannelSpacing(unittest.TestCase):
 
   def test_pairwise_rounding(self):
     # max(8.98, 17.96) = 17.96 -> ceil(179.6)/10 = 18.0
-    self.assertAlmostEqual(_min_spacing_between(self.SPACINGS, 1, 2), 18.0)
+    self.assertAlmostEqual(_span_required(self.SPACINGS, 1, 2), 18.0)
     # max(8.98, 8.98) = 8.98 -> ceil(89.8)/10 = 9.0
-    self.assertAlmostEqual(_min_spacing_between(self.SPACINGS, 0, 1), 9.0)
+    self.assertAlmostEqual(_span_required(self.SPACINGS, 0, 1), 9.0)
 
   def test_mixed_spacing_boundary(self):
     # 18.0mm needed between ch1 (1mL) and ch2 (5mL)
