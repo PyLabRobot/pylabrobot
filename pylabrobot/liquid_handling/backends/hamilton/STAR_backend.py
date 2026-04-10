@@ -1723,31 +1723,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
       # Cache per-channel hardware configuration for version-specific behavior
-      channel_type_map: dict[str, PipChannelInformation.ChannelType] = {
-        "0": "ML_STAR",
-        "1": "ML_STAR_RPC",
-      }
-      head_type_map: dict[str, PipChannelInformation.HeadType] = {
-        "0": "ML_STAR",
-        "1": "ML_STAR_PLE",
-        "2": "ML_STAR_RPC",
-      }
-      stop_disc_map: dict[str, PipChannelInformation.StopDiscType] = {
-        "0": "core_i",
-        "1": "core_ii",
-      }
-      adc_map: dict[str, PipChannelInformation.PressureADC] = {
-        "0": "Renesas_X9268",
-        "1": "Analog_Devices_AD5263",
-      }
+      assert self._num_channels is not None
       for ch in range(self._num_channels):
         hw_tokens = await self._pip_channel_request_configuration(ch)
         self._pip_channel_information.append(
           PipChannelInformation(
-            channel_type=channel_type_map.get(hw_tokens[0], hw_tokens[0]),
-            head_type=head_type_map.get(hw_tokens[1], hw_tokens[1]),
-            stop_disc_type=stop_disc_map.get(hw_tokens[2], hw_tokens[2]),
-            pressure_adc=adc_map.get(hw_tokens[3], hw_tokens[3]),
+            channel_type="ML_STAR_RPC" if hw_tokens[0] == "1" else "ML_STAR",
+            head_type="ML_STAR_PLE"
+            if hw_tokens[1] == "1"
+            else "ML_STAR_RPC"
+            if hw_tokens[1] == "2"
+            else "ML_STAR",
+            stop_disc_type="core_i" if hw_tokens[2] == "0" else "core_ii",
+            pressure_adc="Analog_Devices_AD5263"
+            if hw_tokens[3] == "1"
+            else "Renesas_X9268",
           )
         )
 
