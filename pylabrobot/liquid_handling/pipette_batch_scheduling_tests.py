@@ -1,8 +1,7 @@
 """Tests for pipette_batch_scheduling module.
 
 Tests cover: mixed channel spacing, phantom interpolation, coordinate batching,
-container-to-coordinate resolution (resolve_container_targets), auto-spreading,
-and compute_single_container_offsets.
+and container-to-coordinate resolution (resolve_container_targets).
 """
 
 import unittest
@@ -11,7 +10,6 @@ from unittest.mock import MagicMock, patch
 
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   _span_required,
-  compute_single_container_offsets,
   plan_batches,
   resolve_container_targets,
 )
@@ -183,7 +181,7 @@ class TestContainerTargets(unittest.TestCase):
   def _mock_deck(self):
     return MagicMock(spec=Resource)
 
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
+  @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_same_container_auto_spreads(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     trough = self._mock_container(100.0, 200.0, size_y=50.0, name="trough")
@@ -202,7 +200,7 @@ class TestContainerTargets(unittest.TestCase):
     batches = plan_batches([0, 1], targets, self.S, x_tolerance=0.1)
     self.assertEqual(len(batches), 2)
 
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
+  @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_resource_offsets_skips_auto_spreading(self, mock_offsets):
     trough = self._mock_container(100.0, 200.0, size_y=50.0, name="trough")
     deck = self._mock_deck()
@@ -216,65 +214,6 @@ class TestContainerTargets(unittest.TestCase):
     y = batches[0].y_positions
     self.assertAlmostEqual(y[0], 210.0)
     self.assertAlmostEqual(y[1], 190.0)
-
-
-class TestComputeSingleContainerOffsets(unittest.TestCase):
-  S = [9.0] * 8
-
-  def _mock_container(self, size_y: float):
-    c = MagicMock(spec=["get_absolute_size_y"])
-    c.get_absolute_size_y.return_value = size_y
-    return c
-
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
-  def test_even_span_no_center_offset(self, mock_offsets):
-    mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
-    result = compute_single_container_offsets(self._mock_container(50.0), [0, 1], self.S)
-    assert result is not None
-    self.assertAlmostEqual(result[0].y, 4.5)
-    self.assertAlmostEqual(result[1].y, -4.5)
-
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
-  def test_odd_span_passes_through_offsets(self, mock_offsets):
-    mock_offsets.return_value = [
-      Coordinate(0, 9.0, 0),
-      Coordinate(0, 0.0, 0),
-      Coordinate(0, -9.0, 0),
-    ]
-    # No additional shift; compute_channel_offsets handles no-go zones directly
-    result = compute_single_container_offsets(self._mock_container(50.0), [0, 1, 2], self.S)
-    assert result is not None
-    self.assertAlmostEqual(result[0].y, 9.0)
-
-  def test_container_too_small_returns_none(self):
-    self.assertIsNone(compute_single_container_offsets(self._mock_container(10.0), [0, 1], self.S))
-
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
-  def test_non_consecutive_uses_full_physical_span(self, mock_offsets):
-    mock_offsets.return_value = [
-      Coordinate(0, 10.0, 0),
-      Coordinate(0, 0.0, 0),
-      Coordinate(0, -10.0, 0),
-    ]
-    result = compute_single_container_offsets(self._mock_container(50.0), [0, 2], self.S)
-    assert result is not None
-    self.assertEqual(len(result), 2)
-    mock_offsets.assert_called_once_with(
-      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[9.0] * 3
-    )
-
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling.compute_channel_offsets")
-  def test_mixed_spacing_uses_effective(self, mock_offsets):
-    mock_offsets.return_value = [
-      Coordinate(0, 18.0, 0),
-      Coordinate(0, 0.0, 0),
-      Coordinate(0, -18.0, 0),
-    ]
-    result = compute_single_container_offsets(self._mock_container(100.0), [0, 2], [9.0, 9.0, 18.0])
-    self.assertIsNotNone(result)
-    mock_offsets.assert_called_once_with(
-      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[18.0] * 3
-    )
 
 
 if __name__ == "__main__":

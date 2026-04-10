@@ -15,8 +15,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from pylabrobot.liquid_handling.channel_positioning import (
-  MIN_SPACING_EDGE,
-  compute_channel_offsets,
+  compute_single_container_offsets,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -88,15 +87,6 @@ def print_batches(
 
 
 # --- Spacing helpers ---
-
-
-def _effective_spacing(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
-  """Max of per-channel spacings across ch_lo..ch_hi (inclusive).
-
-  Used by ``compute_single_container_offsets`` to determine a single uniform spacing
-  for spreading channels across a wide container.
-  """
-  return max(spacings[ch_lo : ch_hi + 1])
 
 
 def _span_required(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
@@ -190,82 +180,6 @@ def _partition_into_y_batches(
 
 
 # --- Input validation and position computation ---
-
-
-# TODO: eliminate once compute_channel_offsets supports use_channels directly
-# (non-consecutive channel handling + sub-group fallback would move there).
-def compute_single_container_offsets(
-  container: Container,
-  use_channels: List[int],
-  channel_spacings: List[float],
-) -> Optional[List[Coordinate]]:
-  """Compute spread Y offsets for multiple channels targeting the same container.
-
-  Accounts for the full physical span including phantom intermediate channels.
-  When the full span doesn't fit, splits active channels into consecutive
-  sub-groups at gaps in the channel sequence and computes offsets per sub-group.
-  Each sub-group gets centered spread offsets, so plan_batches will naturally
-  batch sub-groups that can't coexist into separate Y batches.
-
-  Returns None if even a single pair of adjacent active channels can't fit.
-  """
-
-  if len(use_channels) == 0:
-    return []
-
-  ch_hi = max(use_channels)
-  if len(channel_spacings) < ch_hi + 1:
-    raise ValueError(
-      f"channel_spacings list must have at least {ch_hi + 1} entries "
-      f"(max channel index is {ch_hi}), got {len(channel_spacings)}."
-    )
-
-  def _try_group(channels: List[int]) -> Optional[List[Coordinate]]:
-    """Try to fit channels into the container, returning None if too narrow."""
-    g_lo, g_hi = min(channels), max(channels)
-    spacing = _effective_spacing(channel_spacings, g_lo, g_hi)
-    num_physical = g_hi - g_lo + 1
-    min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
-    if container.get_absolute_size_y() < min_required:
-      return None
-    all_offsets = compute_channel_offsets(
-      resource=container,
-      num_channels=num_physical,
-      spread="wide",
-      channel_spacings=[spacing] * num_physical,
-    )
-    return [all_offsets[ch - g_lo] for ch in channels]
-
-  # Try the full span first (all channels including phantoms fit)
-  full = _try_group(use_channels)
-  if full is not None:
-    return full
-
-  # Full span doesn't fit. Split at gaps in the sorted channel sequence
-  # into consecutive sub-groups and compute offsets for each independently.
-  sorted_chs = sorted(use_channels)
-  groups: List[List[int]] = [[sorted_chs[0]]]
-  for i in range(1, len(sorted_chs)):
-    if sorted_chs[i] == sorted_chs[i - 1] + 1:
-      groups[-1].append(sorted_chs[i])
-    else:
-      groups.append([sorted_chs[i]])
-
-  # If there's only one consecutive group and it didn't fit above, container is too small
-  if len(groups) == 1:
-    return None
-
-  # Compute offsets per sub-group
-  ch_to_offset: Dict[int, Coordinate] = {}
-  for group in groups:
-    group_offsets = _try_group(group)
-    if group_offsets is None:
-      return None  # even a sub-group doesn't fit
-    for ch, offset in zip(group, group_offsets):
-      ch_to_offset[ch] = offset
-
-  # Return in the original use_channels order
-  return [ch_to_offset[ch] for ch in use_channels]
 
 
 def validate_channel_selections(
