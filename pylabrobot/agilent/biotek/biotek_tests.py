@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("pylibftdi")
 
 from pylabrobot.agilent.biotek.biotek import BioTekBackend
-from pylabrobot.agilent.biotek.cytation import CytationBackend
+from pylabrobot.agilent.biotek.cytation_aravis_driver import CytationAravisDriver as CytationBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
