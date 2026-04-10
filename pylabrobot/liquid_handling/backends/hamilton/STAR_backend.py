@@ -1735,9 +1735,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             if hw_tokens[1] == "2"
             else "ML_STAR",
             stop_disc_type="core_i" if hw_tokens[2] == "0" else "core_ii",
-            pressure_adc="Analog_Devices_AD5263"
-            if hw_tokens[3] == "1"
-            else "Renesas_X9268",
+            pressure_adc="Analog_Devices_AD5263" if hw_tokens[3] == "1" else "Renesas_X9268",
           )
         )
 
