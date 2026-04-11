@@ -1,16 +1,15 @@
-"""Formulatrix Mantis backend for :class:`pylabrobot.dispensing.Dispenser`.
+"""Formulatrix Mantis contactless liquid dispenser backend.
 
-This backend drives the Formulatrix Mantis chip-based contactless liquid
-dispenser over an FTDI/USB serial link using the FMLX protocol.
+Drives the Formulatrix Mantis over an FTDI/USB serial link using the FMLX
+protocol.
 
 Example::
 
-    >>> from pylabrobot.dispensing import Dispenser
-    >>> from pylabrobot.dispensing.mantis import MantisBackend
-    >>> d = Dispenser(backend=MantisBackend(serial_number="M-000438"))
-    >>> await d.setup()
-    >>> await d.dispense(plate["A1:H12"], volume=5.0, chip=3)
-    >>> await d.stop()
+    >>> from pylabrobot.formulatrix.mantis import MantisBackend
+    >>> m = MantisBackend(serial_number="M-000438")
+    >>> await m.setup()
+    >>> await m.dispense(plate["A1:H12"], volume=5.0, chip=3)
+    >>> await m.stop()
 """
 
 from __future__ import annotations
@@ -18,11 +17,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
-from pylabrobot.dispensing.backend import DispenserBackend
-from pylabrobot.dispensing.standard import DispenseOp
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Plate, Well
 
 from .fmlx_driver import (
@@ -83,7 +81,7 @@ DEFAULT_CHIP_TYPE_MAP: Dict[int, str] = {
 }
 
 
-class MantisBackend(DispenserBackend):
+class MantisBackend(MachineBackend):
   """Backend for the Formulatrix Mantis contactless liquid dispenser.
 
   Args:
@@ -118,7 +116,7 @@ class MantisBackend(DispenserBackend):
       raise RuntimeError("Driver not initialised. Call setup() first.")
     return self._driver
 
-  # -- DispenserBackend interface --
+  # -- MachineBackend interface --
 
   async def setup(self) -> None:
     """Connect to the Mantis, home all axes, and initialise pressure."""
@@ -155,68 +153,60 @@ class MantisBackend(DispenserBackend):
     self._driver = None
     logger.info("Mantis shutdown complete.")
 
-  async def dispense(self, ops: List[DispenseOp], **backend_kwargs) -> None:
-    """Execute dispense operations.
+  async def dispense(
+    self,
+    wells: Union[Well, Sequence[Well]],
+    volume: float,
+    chip: Optional[int] = None,
+    prime_volume: float = 20.0,
+  ) -> None:
+    """Dispense ``volume`` µL into each of ``wells`` using ``chip``.
 
-    Groups ops by chip number, then for each chip: attaches, primes,
-    dispenses to all target wells, and detaches.
+    Attaches and primes the chip if not already primed, dispenses to all target
+    wells, and detaches the chip at the end.
     """
-    if not ops:
+    if isinstance(wells, Well):
+      wells = [wells]
+    if not wells:
       return
+    if volume <= 0:
+      raise ValueError(f"Volume must be positive, got {volume}")
 
-    # Group by chip
-    by_chip: Dict[Optional[int], List[DispenseOp]] = {}
-    for op in ops:
-      by_chip.setdefault(op.chip, []).append(op)
+    chip_number = chip if chip is not None else self._default_chip()
+    logger.info("Dispensing %.2f µL to %d well(s) using chip %d", volume, len(wells), chip_number)
 
-    for chip, chip_ops in by_chip.items():
-      chip_number = chip if chip is not None else self._default_chip()
-      logger.info(
-        "Dispensing to %d well(s) using chip %d",
-        len(chip_ops),
-        chip_number,
-      )
+    if not (self._current_chip == chip_number and self._is_primed):
+      await self._prime_chip(chip_number, volume=prime_volume)
 
-      # Ensure primed
-      if not (self._current_chip == chip_number and self._is_primed):
-        prime_volume = backend_kwargs.get("prime_volume", 20.0)
-        await self._prime_chip(chip_number, volume=prime_volume)
+    try:
+      c_type = self._get_chip_type(chip_number)
+      if "low_volume" in c_type:
+        large_vol, small_vol = 0.5, 0.1
+        large_seq, small_seq = "dispense_500nL", "dispense_100nL"
+      else:
+        large_vol, small_vol = 5.0, 1.0
+        large_seq, small_seq = "dispense_5uL", "dispense_1uL"
 
-      try:
-        dispense_list: List[Tuple[Tuple[float, float, float], float]] = []
-        for op in chip_ops:
-          x, y, z = self._well_to_machine_coord(op.resource)
-          dispense_list.append(((x, y, z), op.volume))
+      num_large = int(volume / large_vol)
+      rem = volume - (num_large * large_vol)
+      num_small = int(round(rem / small_vol))
+      if num_large == 0 and num_small == 0:
+        num_small = 1
 
-        c_type = self._get_chip_type(chip_number)
-        if "low_volume" in c_type:
-          large_vol, small_vol = 0.5, 0.1
-          large_seq, small_seq = "dispense_500nL", "dispense_100nL"
-        else:
-          large_vol, small_vol = 5.0, 1.0
-          large_seq, small_seq = "dispense_5uL", "dispense_1uL"
+      for well in wells:
+        pos = self._well_to_machine_coord(well)
+        await self._queue_move_xy(pos, VEL_DEFAULT)
+        for _ in range(num_large):
+          await self._execute_ppi_sequence(chip_number, large_seq)
+        for _ in range(num_small):
+          await self._execute_ppi_sequence(chip_number, small_seq)
 
-        for pos, vol in dispense_list:
-          await self._queue_move_xy(pos, VEL_DEFAULT)
+      await self._move_to_home()
+      sid = await self._move_to_ready()
+      await self._wait_for_seq_progress(sid)
 
-          num_large = int(vol / large_vol)
-          rem = vol - (num_large * large_vol)
-          num_small = int(round(rem / small_vol))
-
-          if num_large == 0 and num_small == 0 and vol > 0:
-            num_small = 1
-
-          for _ in range(num_large):
-            await self._execute_ppi_sequence(chip_number, large_seq)
-          for _ in range(num_small):
-            await self._execute_ppi_sequence(chip_number, small_seq)
-
-        await self._move_to_home()
-        sid = await self._move_to_ready()
-        await self._wait_for_seq_progress(sid)
-
-      finally:
-        await self._detach_chip(chip_number)
+    finally:
+      await self._detach_chip(chip_number)
 
   # -- serialization --
 

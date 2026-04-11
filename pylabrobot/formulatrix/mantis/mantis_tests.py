@@ -7,9 +7,9 @@ and constants — all without requiring hardware.
 import struct
 import unittest
 
-from pylabrobot.dispensing.mantis.fmlx_driver import FmlxPacket, decode_response
-from pylabrobot.dispensing.mantis.mantis_constants import MotorStatusCode, PressureControlStatus
-from pylabrobot.dispensing.mantis.mantis_kinematics import (
+from pylabrobot.formulatrix.mantis.fmlx_driver import FmlxPacket, decode_response
+from pylabrobot.formulatrix.mantis.mantis_constants import MotorStatusCode, PressureControlStatus
+from pylabrobot.formulatrix.mantis.mantis_kinematics import (
   MOTOR_1_CONFIG,
   MOTOR_3_CONFIG,
   MantisKinematics,
@@ -186,7 +186,7 @@ class TestMantisBackendCoordinates(unittest.TestCase):
     """PLR 'A1' is physically at the back (high y); after y-flip it lands at
     low y in Mantis frame, matching the Mantis convention where 'A1' is at the
     front of the plate."""
-    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
 
     plate = self._make_plate()
     backend = MantisBackend(serial_number="M-TEST", dispense_z=44.331)
@@ -197,7 +197,7 @@ class TestMantisBackendCoordinates(unittest.TestCase):
     self.assertAlmostEqual(ideal_y, 11.11, places=6)
 
   def test_h1_maps_to_front_of_plate(self):
-    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
 
     plate = self._make_plate()
     backend = MantisBackend(serial_number="M-TEST")
@@ -207,7 +207,7 @@ class TestMantisBackendCoordinates(unittest.TestCase):
     self.assertAlmostEqual(ideal_y, 74.11, places=6)
 
   def test_h12_corner(self):
-    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
 
     plate = self._make_plate()
     backend = MantisBackend(serial_number="M-TEST")
@@ -219,7 +219,7 @@ class TestMantisBackendCoordinates(unittest.TestCase):
   def test_machine_coord_applies_homography_and_z(self):
     """The full _well_to_machine_coord should apply the stage homography and
     return the configured dispense_z."""
-    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
 
     plate = self._make_plate()
     backend = MantisBackend(serial_number="M-TEST", dispense_z=42.0)
@@ -232,7 +232,7 @@ class TestMantisBackendCoordinates(unittest.TestCase):
     self.assertEqual(mz, 42.0)
 
   def test_well_without_plate_parent_raises(self):
-    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
     from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
     orphan = Well(
