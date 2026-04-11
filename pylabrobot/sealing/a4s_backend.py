@@ -4,7 +4,13 @@ import enum
 import time
 from typing import Set
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError as e:
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.sealing.backend import SealerBackend
@@ -12,6 +18,11 @@ from pylabrobot.sealing.backend import SealerBackend
 
 class A4SBackend(SealerBackend):
   def __init__(self, port: str, timeout=20) -> None:
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
     super().__init__()
     self.port = port
     self.timeout = timeout

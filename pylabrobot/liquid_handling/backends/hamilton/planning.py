@@ -1,6 +1,6 @@
 from typing import Callable, Dict, List
 
-from pylabrobot.liquid_handling.utils import MIN_SPACING_BETWEEN_CHANNELS
+from pylabrobot.liquid_handling.channel_positioning import MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.resources import Coordinate
 
 

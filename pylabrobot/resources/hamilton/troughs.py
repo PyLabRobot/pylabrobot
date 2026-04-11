@@ -2,6 +2,7 @@
 
 import warnings
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.trough import Trough, TroughBottomType
 
 # --------------------------------------------------------------------------- #
@@ -11,7 +12,7 @@ from pylabrobot.resources.trough import Trough, TroughBottomType
 # Calibration data: height (mm) → volume (µL).
 # Obtained via ztouch probing of cavity_bottom, manual addition of known volumes,
 # and LLD measurement of liquid height relative to cavity_bottom.
-_hamilton_1_trough_60ml_Vb_height_volume_data = {
+_hamilton_1_trough_60mL_Vb_height_volume_data = {
   0.0: 0.0,
   2.2: 500.0,
   3.5: 1_000.0,
@@ -38,16 +39,14 @@ _hamilton_1_trough_60ml_Vb_height_volume_data = {
 }
 
 
-def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
+def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 56694-01 (white/translucent), 56694-02 (black/conductive)
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
   Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
+  Has a center support wall (~1.2mm wide at Y=44-46mm) but is still open
+  at the bottom.
   """
-  warnings.warn(
-    "hamilton_1_trough_60ml_Vb has a center support that can interfere with pipetting.\
-     If using an odd number of channels, use spread='custom' and define offsets for each channel to avoid collision."
-  )
 
   return Trough(
     name=name,
@@ -57,9 +56,12 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
     material_z_thickness=1.58,
     through_base_to_container_base=1.0,
     max_volume=60_000,  # units: µL
-    model=hamilton_1_trough_60ml_Vb.__name__,
+    model=hamilton_1_trough_60mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    height_volume_data=_hamilton_1_trough_60ml_Vb_height_volume_data,
+    height_volume_data=_hamilton_1_trough_60mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 44.4, 5.0), Coordinate(19.0, 45.6, 60.25)),  # center divider
+    ],
   )
 
 
@@ -92,12 +94,9 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
   Trough 120 mL, without lid, self standing (V-bottom).
   True maximal volume capacity ~120 mL.
   Compatible with Trough_CAR_?? (194058 <- not yet integrated into PLR!).
+  Has 3 in-container support beams (~2.5mm wide at base, ~0.8mm at top, tapered)
+  but is still open at the bottom.
   """
-  warnings.warn(
-    "hamilton_1_trough_120ml_Vb has 3 (!) in-container support beams that can interfere with "
-    "pipetting. If using an odd number of channels, use spread='custom' and define offsets "
-    "for each channel to avoid collision."
-  )
 
   return Trough(
     name=name,
@@ -110,6 +109,11 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
     model=hamilton_1_trough_120mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
     height_volume_data=_hamilton_1_trough_120mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 39.7, 12.0), Coordinate(19.0, 42.2, 70.0)),  # beam 1
+      (Coordinate(0, 73.5, 12.0), Coordinate(19.0, 76.0, 70.0)),  # beam 2
+      (Coordinate(0, 107.3, 12.0), Coordinate(19.0, 109.8, 70.0)),  # beam 3
+    ],
   )
 
 
@@ -117,7 +121,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
 # Hamilton 1-trough 200 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_200ml_Vb_height_volume_data = {
+_hamilton_1_trough_200mL_Vb_height_volume_data = {
   0.0: 0.0,
   5.8: 6_000.0,
   7.4: 10_000.0,
@@ -131,11 +135,12 @@ _hamilton_1_trough_200ml_Vb_height_volume_data = {
 }
 
 
-def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
+def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 56695-01 (white/translucent), 56695-02 (black/conductive)
   Trough 200 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~300 mL.
   Compatible with Trough_CAR_4R200_A00 (185436).
+  Has a center support wall (~1.2mm wide at Y=59-61mm) which is open at the bottom.
   """
   return Trough(
     name=name,
@@ -145,9 +150,12 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
     material_z_thickness=1.5,
     through_base_to_container_base=1.2,
     max_volume=200_000,  # units: µL
-    model=hamilton_1_trough_200ml_Vb.__name__,
+    model=hamilton_1_trough_200mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    height_volume_data=_hamilton_1_trough_200ml_Vb_height_volume_data,
+    height_volume_data=_hamilton_1_trough_200mL_Vb_height_volume_data,
+    no_go_zones=[
+      (Coordinate(0, 60, 8.0), Coordinate(37.0, 61.7, 60.0))  # center divider
+    ],
   )
 
 
@@ -156,16 +164,46 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:
 # --------------------------------------------------------------------------- #
 
 
-def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-01
-  """Deprecated alias for hamilton_1_trough_200ml_Vb().
+def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_200mL_Vb().
 
-  This alias will be removed after 2026-01. Use the lowercase
-  `hamilton_1_trough_200ml_Vb()` instead.
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_200mL_Vb()` instead.
   """
   warnings.warn(
-    "Hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-01. "
-    "Use hamilton_1_trough_200ml_Vb() instead.",
+    "Hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_200mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_1_trough_200ml_Vb(name)
+  return hamilton_1_trough_200mL_Vb(name)
+
+
+def hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_200mL_Vb().
+
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_200mL_Vb()` instead (note capital L in 'mL').
+  """
+  warnings.warn(
+    "hamilton_1_trough_200ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_200mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_1_trough_200mL_Vb(name)
+
+
+def hamilton_1_trough_60ml_Vb(name: str) -> Trough:  # remove 2026-07
+  """Deprecated alias for hamilton_1_trough_60mL_Vb().
+
+  This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
+  Use `hamilton_1_trough_60mL_Vb()` instead (note capital L in 'mL').
+  """
+  warnings.warn(
+    "hamilton_1_trough_60ml_Vb() is deprecated and will be removed after 2026-07. "
+    "Use hamilton_1_trough_60mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_1_trough_60mL_Vb(name)
