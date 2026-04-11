@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pylabrobot.agilent.biotek.biotek import BioTekBackend
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.loading_tray.backend import LoadingTrayBackend
 

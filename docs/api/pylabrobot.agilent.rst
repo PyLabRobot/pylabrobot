@@ -74,7 +74,7 @@ BioTek EL406
 BioTek Cytation
 ---------------
 
-.. currentmodule:: pylabrobot.agilent.biotek.cytation
+.. currentmodule:: pylabrobot.agilent.biotek.plate_readers.cytation
 
 .. autosummary::
   :toctree: _autosummary
@@ -83,10 +83,10 @@ BioTek Cytation
 
     Cytation1
     Cytation5
-    CytationBackend
+    CytationMicroscopyBackend
     CytationImagingConfig
 
-.. autoclass:: pylabrobot.agilent.biotek.cytation.CytationBackend.CaptureParams
+.. autoclass:: pylabrobot.agilent.biotek.plate_readers.cytation.microscopy_backend.CytationMicroscopyBackend.CaptureParams
    :members:
 
 .. currentmodule:: pylabrobot.agilent.biotek.loading_tray_backend
@@ -108,7 +108,7 @@ BioTek Cytation
 BioTek Synergy H1
 ------------------
 
-.. currentmodule:: pylabrobot.agilent.biotek.synergy_h1
+.. currentmodule:: pylabrobot.agilent.biotek.plate_readers.synergy
 
 .. autosummary::
   :toctree: _autosummary
@@ -118,7 +118,7 @@ BioTek Synergy H1
     SynergyH1
     SynergyH1Backend
 
-.. autoclass:: pylabrobot.agilent.biotek.biotek.BioTekBackend.LuminescenceParams
+.. autoclass:: pylabrobot.agilent.biotek.plate_readers.base.BioTekBackend.LuminescenceParams
    :members:
 
 

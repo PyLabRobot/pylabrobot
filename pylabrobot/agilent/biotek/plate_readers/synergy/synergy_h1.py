@@ -11,7 +11,7 @@ except ImportError:
   HAS_PYLIBFTDI = False
   FtdiError = Exception  # type: ignore[misc,assignment]
 
-from pylabrobot.agilent.biotek.biotek import BioTekBackend
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence

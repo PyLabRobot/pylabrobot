@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional
 
-from pylabrobot.agilent.biotek import biotek
+from pylabrobot.agilent.biotek.plate_readers import base as biotek
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
 
@@ -158,7 +158,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
   ) -> List[Dict]:
-    from pylabrobot.agilent.biotek.biotek import BioTekBackend
+    from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 
     params = BioTekBackend.LuminescenceParams(integration_time=integration_time)
     results = await self._new.read_luminescence(
