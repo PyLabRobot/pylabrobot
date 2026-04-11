@@ -13,7 +13,7 @@ def _install_mock_xarm(mock_arm: MagicMock) -> MagicMock:
   mock_xarm.wrapper = mock_wrapper  # type: ignore[attr-defined]
   sys.modules["xarm"] = mock_xarm
   sys.modules["xarm.wrapper"] = mock_wrapper
-  return mock_wrapper.XArmAPI  # type: ignore[attr-defined]
+  return mock_wrapper.XArmAPI  # type: ignore[attr-defined,no-any-return]
 
 
 class TestXArm6Driver(unittest.IsolatedAsyncioTestCase):
@@ -94,9 +94,7 @@ class TestXArm6Driver(unittest.IsolatedAsyncioTestCase):
 
   async def test_call_sdk_ignores_none_return(self):
     self.mock_arm.emergency_stop.return_value = None
-    result = await self.driver._call_sdk(
-      self.mock_arm.emergency_stop, op="emergency_stop"
-    )
+    result = await self.driver._call_sdk(self.mock_arm.emergency_stop, op="emergency_stop")
     self.assertIsNone(result)
 
   async def test_call_sdk_retries_after_clear_errors(self):
@@ -112,9 +110,7 @@ class TestXArm6Driver(unittest.IsolatedAsyncioTestCase):
   async def test_call_sdk_reraises_if_all_retries_fail(self):
     self.mock_arm.move_gohome.side_effect = [9, 9]
     with self.assertRaises(XArm6Error) as ctx:
-      await self.driver._call_sdk(
-        self.mock_arm.move_gohome, op="move_gohome", num_retries=1
-      )
+      await self.driver._call_sdk(self.mock_arm.move_gohome, op="move_gohome", num_retries=1)
     self.assertEqual(ctx.exception.code, 9)
     self.assertEqual(self.mock_arm.move_gohome.call_count, 2)
 
@@ -126,9 +122,7 @@ class TestXArm6Driver(unittest.IsolatedAsyncioTestCase):
 
   async def test_call_sdk_multi_retry(self):
     self.mock_arm.move_gohome.side_effect = [9, 9, 0]
-    await self.driver._call_sdk(
-      self.mock_arm.move_gohome, op="move_gohome", num_retries=2
-    )
+    await self.driver._call_sdk(self.mock_arm.move_gohome, op="move_gohome", num_retries=2)
     self.assertEqual(self.mock_arm.move_gohome.call_count, 3)
 
   async def test_clear_errors_sequence(self):
@@ -139,4 +133,3 @@ class TestXArm6Driver(unittest.IsolatedAsyncioTestCase):
     self.mock_arm.clean_error.assert_called_once()
     self.mock_arm.clean_warn.assert_called_once()
     self.mock_arm.motion_enable.assert_called_once_with(True)
-

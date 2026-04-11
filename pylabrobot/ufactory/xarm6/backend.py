@@ -85,12 +85,16 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   # -- Param coercion --------------------------------------------------------
 
-  def _cart_params(self, backend_params: Optional[BackendParams]) -> "XArm6ArmBackend.CartesianMoveParams":
+  def _cart_params(
+    self, backend_params: Optional[BackendParams]
+  ) -> "XArm6ArmBackend.CartesianMoveParams":
     if isinstance(backend_params, XArm6ArmBackend.CartesianMoveParams):
       return backend_params
     return XArm6ArmBackend.CartesianMoveParams()
 
-  def _joint_params(self, backend_params: Optional[BackendParams]) -> "XArm6ArmBackend.JointMoveParams":
+  def _joint_params(
+    self, backend_params: Optional[BackendParams]
+  ) -> "XArm6ArmBackend.JointMoveParams":
     if isinstance(backend_params, XArm6ArmBackend.JointMoveParams):
       return backend_params
     return XArm6ArmBackend.JointMoveParams()
@@ -243,9 +247,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
     self, backend_params: Optional[BackendParams] = None
   ) -> Dict[int, float]:
     """Get current joint angles as ``{1: j1_deg, 2: j2_deg, ...}``."""
-    angles = await self._driver._call_sdk(
-      self._driver._arm.get_servo_angle, op="get_servo_angle"
-    )
+    angles = await self._driver._call_sdk(self._driver._arm.get_servo_angle, op="get_servo_angle")
     return {i + 1: angles[i] for i in range(6)}
 
   async def pick_up_at_joint_position(
@@ -281,9 +283,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
     await self._driver._call_sdk(self._driver._arm.set_mode, 2, op="set_mode")
     await self._driver._call_sdk(self._driver._arm.set_state, 0, op="set_state")
 
-  async def stop_freedrive_mode(
-    self, backend_params: Optional[BackendParams] = None
-  ) -> None:
+  async def stop_freedrive_mode(self, backend_params: Optional[BackendParams] = None) -> None:
     """Exit freedrive mode and return to position control."""
     await self._driver._call_sdk(self._driver._arm.set_mode, 0, op="set_mode")
     await self._driver._call_sdk(self._driver._arm.set_state, 0, op="set_state")

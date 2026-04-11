@@ -47,9 +47,7 @@ class XArm6Driver(Driver):
 
   # -- SDK helpers -----------------------------------------------------------
 
-  async def _call_sdk(
-    self, func, *args, op: str = "", num_retries: int = 0, **kwargs
-  ):
+  async def _call_sdk(self, func, *args, op: str = "", num_retries: int = 0, **kwargs):
     """Run a synchronous xArm SDK call in a thread, check the return code, and
     return any data payload.
 
@@ -122,9 +120,7 @@ class XArm6Driver(Driver):
     await self.clear_errors()
 
     if self._tcp_offset is not None:
-      await self._call_sdk(
-        self._arm.set_tcp_offset, list(self._tcp_offset), op="set_tcp_offset"
-      )
+      await self._call_sdk(self._arm.set_tcp_offset, list(self._tcp_offset), op="set_tcp_offset")
     if self._tcp_load is not None:
       await self._call_sdk(
         self._arm.set_tcp_load, self._tcp_load[0], self._tcp_load[1], op="set_tcp_load"

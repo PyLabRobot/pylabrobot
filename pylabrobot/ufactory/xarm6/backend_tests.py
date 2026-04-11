@@ -31,9 +31,7 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
     self.backend = XArm6ArmBackend(driver=self.driver)
 
   def _sdk_calls_for(self, func) -> list:
-    return [
-      c for c in self.driver._call_sdk.call_args_list if c.args and c.args[0] is func
-    ]
+    return [c for c in self.driver._call_sdk.call_args_list if c.args and c.args[0] is func]
 
   # -- Gripper ---------------------------------------------------------------
 
@@ -118,9 +116,7 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
   # -- Cartesian motion ------------------------------------------------------
 
   async def test_move_to_location_defaults(self):
-    await self.backend.move_to_location(
-      Coordinate(x=300, y=100, z=200), Rotation(x=180, y=0, z=0)
-    )
+    await self.backend.move_to_location(Coordinate(x=300, y=100, z=200), Rotation(x=180, y=0, z=0))
     calls = self._sdk_calls_for(self.driver._arm.set_position)
     self.assertEqual(len(calls), 1)
     self.assertEqual(calls[0].kwargs["x"], 300)
