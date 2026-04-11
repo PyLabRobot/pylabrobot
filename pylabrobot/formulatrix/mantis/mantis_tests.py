@@ -142,7 +142,7 @@ class TestDecodeResponse(unittest.TestCase):
     self.assertIn("error", result)
 
 
-class TestMantisBackendCoordinates(unittest.TestCase):
+class TestMantisDiaphragmCoordinates(unittest.TestCase):
   """Test conversion of PLR Well locations to Mantis machine coordinates."""
 
   def _make_plate(self):
@@ -177,7 +177,7 @@ class TestMantisBackendCoordinates(unittest.TestCase):
       ),
     )
 
-  def _ideal(self, backend, well, plate):
+  def _ideal(self, well, plate):
     """Per-well ideal (pre-homography) Mantis frame coordinate."""
     center = well.get_location_wrt(plate, x="c", y="c", z="b")
     return center.x, plate.get_size_y() - center.y
@@ -186,53 +186,49 @@ class TestMantisBackendCoordinates(unittest.TestCase):
     """PLR 'A1' is physically at the back (high y); after y-flip it lands at
     low y in Mantis frame, matching the Mantis convention where 'A1' is at the
     front of the plate."""
-    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
-
     plate = self._make_plate()
-    backend = MantisBackend(serial_number="M-TEST", dispense_z=44.331)
-    ideal_x, ideal_y = self._ideal(backend, plate.get_item("A1"), plate)
+    ideal_x, ideal_y = self._ideal(plate.get_item("A1"), plate)
     # A1 well LFB = (11.0, 8.0 + 7*9.0 = 71.0); center = (14.0, 74.0)
     # Mantis y = 85.11 - 74.0 = 11.11
     self.assertAlmostEqual(ideal_x, 14.0, places=6)
     self.assertAlmostEqual(ideal_y, 11.11, places=6)
 
   def test_h1_maps_to_front_of_plate(self):
-    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
-
     plate = self._make_plate()
-    backend = MantisBackend(serial_number="M-TEST")
-    ideal_x, ideal_y = self._ideal(backend, plate.get_item("H1"), plate)
+    ideal_x, ideal_y = self._ideal(plate.get_item("H1"), plate)
     # H1 LFB = (11.0, 8.0); center = (14.0, 11.0); flipped y = 74.11
     self.assertAlmostEqual(ideal_x, 14.0, places=6)
     self.assertAlmostEqual(ideal_y, 74.11, places=6)
 
   def test_h12_corner(self):
-    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
-
     plate = self._make_plate()
-    backend = MantisBackend(serial_number="M-TEST")
-    ideal_x, ideal_y = self._ideal(backend, plate.get_item("H12"), plate)
+    ideal_x, ideal_y = self._ideal(plate.get_item("H12"), plate)
     # H12 LFB = (11.0 + 11*9.0, 8.0) = (110.0, 8.0); center = (113.0, 11.0)
     self.assertAlmostEqual(ideal_x, 113.0, places=6)
     self.assertAlmostEqual(ideal_y, 74.11, places=6)
 
   def test_machine_coord_applies_homography_and_z(self):
-    """The full _well_to_machine_coord should apply the stage homography and
-    return the configured dispense_z."""
-    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
+    """The full conversion should apply the stage homography and return the
+    configured dispense_z."""
+    from pylabrobot.formulatrix.mantis.diaphragm_dispenser_backend import (
+      MantisDiaphragmDispenserBackend,
+    )
 
     plate = self._make_plate()
-    backend = MantisBackend(serial_number="M-TEST", dispense_z=42.0)
     well = plate.get_item("A1")
-    ideal_x, ideal_y = self._ideal(backend, well, plate)
+    ideal_x, ideal_y = self._ideal(well, plate)
     expected_mx, expected_my = apply_stage_homography(ideal_x, ideal_y)
-    mx, my, mz = backend._well_to_machine_coord(well)
+    mx, my, mz = MantisDiaphragmDispenserBackend._container_to_machine_coord(
+      well, dispense_z=42.0
+    )
     self.assertAlmostEqual(mx, expected_mx, places=6)
     self.assertAlmostEqual(my, expected_my, places=6)
     self.assertEqual(mz, 42.0)
 
   def test_well_without_plate_parent_raises(self):
-    from pylabrobot.formulatrix.mantis.mantis_backend import MantisBackend
+    from pylabrobot.formulatrix.mantis.diaphragm_dispenser_backend import (
+      MantisDiaphragmDispenserBackend,
+    )
     from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
     orphan = Well(
@@ -245,9 +241,8 @@ class TestMantisBackendCoordinates(unittest.TestCase):
       max_volume=300.0,
       material_z_thickness=1.0,
     )
-    backend = MantisBackend(serial_number="M-TEST")
     with self.assertRaises(ValueError):
-      backend._well_to_machine_coord(orphan)
+      MantisDiaphragmDispenserBackend._container_to_machine_coord(orphan, dispense_z=44.0)
 
 
 if __name__ == "__main__":

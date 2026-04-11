@@ -1,1 +1,3 @@
-from .mantis_backend import MantisBackend
+from .diaphragm_dispenser_backend import MantisDiaphragmDispenserBackend
+from .driver import MantisDriver
+from .mantis import Mantis
