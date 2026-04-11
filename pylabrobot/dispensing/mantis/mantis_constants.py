@@ -470,14 +470,3 @@ PPI_SEQUENCES: Dict[str, Dict[str, List[PPIEntry]]] = {
     + [(35, 40, [25])],
   },
 }
-
-# Default plate geometry for coordinate generation
-DEFAULT_PLATE_GEOMETRY = {
-  "a1_x": 14.35,
-  "a1_y": 11.23,
-  "row_pitch": 9.02,
-  "col_pitch": 9.02,
-  "rows": 8,
-  "cols": 12,
-  "z": 44.331,
-}

@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pylabrobot.dispensing.backend import DispenserBackend
 from pylabrobot.dispensing.standard import DispenseOp
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources import Plate, Well
 
 from .fmlx_driver import (
   FmlxDriver,
@@ -53,7 +54,6 @@ from .fmlx_driver import (
 )
 from .mantis_constants import (
   CHIP_PATHS,
-  DEFAULT_PLATE_GEOMETRY,
   PPI_SEQUENCES,
   SENSOR_PRESSURE,
   SENSOR_VACUUM,
@@ -70,7 +70,7 @@ from .mantis_kinematics import (
   MOTOR_2_CONFIG,
   MOTOR_3_CONFIG,
   MantisKinematics,
-  MantisMapGenerator,
+  apply_stage_homography,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,21 +91,20 @@ class MantisBackend(DispenserBackend):
     chip_type_map: Mapping from chip number (1-6) to chip type string
       (key in ``PPI_SEQUENCES``). If ``None``, defaults to chips 3-5 as
       ``"high_volume"``.
-    plate_geometry: Override default plate geometry dict used by
-      :class:`MantisMapGenerator`.  Keys: ``a1_x``, ``a1_y``, ``row_pitch``,
-      ``col_pitch``, ``rows``, ``cols``, ``z``.
+    dispense_z: Machine-frame Z height at which to dispense, in mm. This is a
+      hardware calibration (chip-to-plate clearance), not a plate property.
   """
 
   def __init__(
     self,
     serial_number: Optional[str] = None,
     chip_type_map: Optional[Dict[int, str]] = None,
-    plate_geometry: Optional[Dict[str, Any]] = None,
+    dispense_z: float = 44.331,
   ) -> None:
     super().__init__()
     self._serial_number = serial_number
     self._chip_type_map = chip_type_map if chip_type_map is not None else DEFAULT_CHIP_TYPE_MAP
-    self._plate_geometry = plate_geometry or {}
+    self._dispense_z = dispense_z
 
     self._driver: Optional[FmlxDriver] = None
     self._current_chip: Optional[int] = None
@@ -184,25 +183,10 @@ class MantisBackend(DispenserBackend):
         await self._prime_chip(chip_number, volume=prime_volume)
 
       try:
-        geom = DEFAULT_PLATE_GEOMETRY.copy()
-        geom.update(self._plate_geometry)
-
-        gen = MantisMapGenerator(
-          a1_x=geom["a1_x"],
-          a1_y=geom["a1_y"],
-          row_pitch=geom["row_pitch"],
-          col_pitch=geom["col_pitch"],
-          rows=int(geom["rows"]),
-          cols=int(geom["cols"]),
-          z=geom["z"],
-        )
         dispense_list: List[Tuple[Tuple[float, float, float], float]] = []
         for op in chip_ops:
-          row, col = self._well_to_row_col(op.resource.name)
-          coord = gen.get_well_coordinate(row, col)
-          dispense_list.append(
-            ((float(coord["x"]), float(coord["y"]), float(coord["z"])), op.volume)
-          )
+          x, y, z = self._well_to_machine_coord(op.resource)
+          dispense_list.append(((x, y, z), op.volume))
 
         c_type = self._get_chip_type(chip_number)
         if "low_volume" in c_type:
@@ -241,7 +225,7 @@ class MantisBackend(DispenserBackend):
       **super().serialize(),
       "serial_number": self._serial_number,
       "chip_type_map": self._chip_type_map,
-      "plate_geometry": self._plate_geometry,
+      "dispense_z": self._dispense_z,
     }
 
   # -- helpers --
@@ -252,12 +236,24 @@ class MantisBackend(DispenserBackend):
       return next(iter(self._chip_type_map))
     raise ValueError("No chips configured in chip_type_map.")
 
-  @staticmethod
-  def _well_to_row_col(name: str) -> Tuple[int, int]:
-    """Convert a well name like ``'A1'`` to 0-indexed (row, col)."""
-    row = ord(name[0].upper()) - ord("A")
-    col = int(name[1:]) - 1
-    return row, col
+  def _well_to_machine_coord(self, well: Well) -> Tuple[float, float, float]:
+    """Compute the Mantis machine-frame (x, y, z) for a well.
+
+    PLR wells store locations as LFB (left-front-bottom) in the plate frame,
+    with A1 at the back (high y). The Mantis plate frame has A1 at the front
+    (low y), so y is mirrored across the plate before applying the stage
+    homography. Z is a machine-level calibration constant from ``dispense_z``.
+    """
+    plate = well.parent
+    if not isinstance(plate, Plate):
+      raise ValueError(
+        f"Well {well.name!r} has no Plate parent; cannot compute Mantis coordinate."
+      )
+    center = well.get_location_wrt(plate, x="c", y="c", z="b")
+    ideal_x = center.x
+    ideal_y = plate.get_size_y() - center.y
+    mx, my = apply_stage_homography(ideal_x, ideal_y)
+    return mx, my, self._dispense_z
 
   def _get_chip_type(self, chip_number: int) -> str:
     return self._chip_type_map.get(chip_number, "high_volume")

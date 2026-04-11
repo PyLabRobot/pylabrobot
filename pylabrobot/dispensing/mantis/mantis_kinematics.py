@@ -3,11 +3,11 @@
 Provides:
   - :class:`MotorConfig` — unit conversion between native and packet units.
   - :class:`MantisKinematics` — inverse/forward kinematics for the dual-arm SCARA mechanism.
-  - :class:`MantisMapGenerator` — microplate well-coordinate generation with homography correction.
+  - :func:`apply_stage_homography` — plate-local → machine-frame mm mapping.
 """
 
 import math
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 
 # ==========================================
 # Arm geometry constants
@@ -167,88 +167,29 @@ class MantisKinematics:
     return [(x3_1, y3_1), (x3_2, y3_2)]
 
 
-class MantisMapGenerator:
-  """Generate machine coordinates for microplate wells using calibrated homography.
+# Calibrated stage mapping coefficients (homography) from plate-local mm
+# (A1 at front-left) to Mantis machine-frame mm.
+_STAGE_H = (
+  0.984626377954,
+  0.012677857034,
+  -46.6545491181,
+  -0.022595831852,
+  0.988661019679,
+  43.0071907794,
+  -0.000031372585,
+  -0.000076070276,
+)
 
-  The pipeline is:
-    1. **Ideal coordinates** from A1 offset + linear pitch spacing.
-    2. **Corrected coordinates** via a calibrated homography model that accounts
-       for rotation, scaling, and non-linearities in the stage.
 
-  Args:
-    a1_x: X offset of well A1 in mm.
-    a1_y: Y offset of well A1 in mm.
-    row_pitch: Row-to-row distance in mm.
-    col_pitch: Column-to-column distance in mm.
-    rows: Number of rows.
-    cols: Number of columns.
-    z: Dispense height in mm.
+def apply_stage_homography(ideal_x: float, ideal_y: float) -> Tuple[float, float]:
+  """Map a plate-local (mm) coordinate to the Mantis machine frame.
+
+  The plate-local frame has its origin at the plate's front-left corner with
+  the Y axis pointing toward the back of the plate. The homography accounts
+  for stage rotation, scaling, and non-linearity.
   """
-
-  # Calibrated stage mapping coefficients (homography)
-  STAGE_H = [
-    0.984626377954,
-    0.012677857034,
-    -46.6545491181,
-    -0.022595831852,
-    0.988661019679,
-    43.0071907794,
-    -0.000031372585,
-    -0.000076070276,
-  ]
-
-  def __init__(
-    self,
-    a1_x: float = 14.38,
-    a1_y: float = 11.24,
-    row_pitch: float = 7.5,
-    col_pitch: float = 7.5,
-    rows: int = 8,
-    cols: int = 12,
-    z: float = 44.331,
-  ) -> None:
-    self.a1_x = a1_x
-    self.a1_y = a1_y
-    self.row_pitch = row_pitch
-    self.col_pitch = col_pitch
-    self.rows = rows
-    self.cols = cols
-    self.z = z
-
-  def get_corrected_coordinate(self, ideal_x: float, ideal_y: float) -> Tuple[float, float]:
-    """Map ideal stage coordinate → corrected machine coordinate via homography."""
-    h1, h2, h3, h4, h5, h6, h7, h8 = self.STAGE_H
-    denom = h7 * ideal_x + h8 * ideal_y + 1.0
-    machine_x = (h1 * ideal_x + h2 * ideal_y + h3) / denom
-    machine_y = (h4 * ideal_x + h5 * ideal_y + h6) / denom
-    return machine_x, machine_y
-
-  def get_well_coordinate(self, row: int, col: int) -> Dict[str, Any]:
-    """Generate the machine coordinate for a single well.
-
-    Args:
-      row: 0-indexed row (0 = A).
-      col: 0-indexed column (0 = 1).
-
-    Returns:
-      A dictionary with keys ``well``, ``row``, ``col``, ``x``, ``y``, ``z``.
-    """
-    ideal_x = self.a1_x + (col * self.col_pitch)
-    ideal_y = self.a1_y + (row * self.row_pitch)
-    mx, my = self.get_corrected_coordinate(ideal_x, ideal_y)
-    return {
-      "well": f"{chr(65 + row)}{col + 1}",
-      "row": row,
-      "col": col,
-      "x": round(mx, 3),
-      "y": round(my, 3),
-      "z": round(self.z, 3),
-    }
-
-  def generate_map(self) -> List[Dict[str, Any]]:
-    """Generate the dispense map for the entire plate."""
-    results = []
-    for r in range(self.rows):
-      for c in range(self.cols):
-        results.append(self.get_well_coordinate(r, c))
-    return results
+  h1, h2, h3, h4, h5, h6, h7, h8 = _STAGE_H
+  denom = h7 * ideal_x + h8 * ideal_y + 1.0
+  machine_x = (h1 * ideal_x + h2 * ideal_y + h3) / denom
+  machine_y = (h4 * ideal_x + h5 * ideal_y + h6) / denom
+  return machine_x, machine_y

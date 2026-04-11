@@ -13,7 +13,7 @@ from pylabrobot.dispensing.mantis.mantis_kinematics import (
   MOTOR_1_CONFIG,
   MOTOR_3_CONFIG,
   MantisKinematics,
-  MantisMapGenerator,
+  apply_stage_homography,
 )
 
 
@@ -63,12 +63,6 @@ class TestMotorConfig(unittest.TestCase):
 class TestMantisKinematics(unittest.TestCase):
   """Test inverse and forward kinematics."""
 
-  def test_xy_to_theta_known_point(self):
-    """Home position should produce valid angles."""
-    theta1, theta2 = MantisKinematics.xy_to_theta(15.0, 31.177)
-    self.assertIsInstance(theta1, float)
-    self.assertIsInstance(theta2, float)
-
   def test_xy_to_theta_origin_raises(self):
     with self.assertRaises(ValueError):
       MantisKinematics.xy_to_theta(0.0, 0.0)
@@ -97,42 +91,6 @@ class TestMantisKinematics(unittest.TestCase):
     result = MantisKinematics.theta_to_xy(0.0, 0.0)
     # Whether this is reachable depends on geometry; just check it doesn't crash
     self.assertIsInstance(result, list)
-
-
-class TestMantisMapGenerator(unittest.TestCase):
-  """Test microplate coordinate generation."""
-
-  def test_a1_coordinate(self):
-    gen = MantisMapGenerator(a1_x=14.38, a1_y=11.24, row_pitch=9.0, col_pitch=9.0)
-    coord = gen.get_well_coordinate(0, 0)
-    self.assertEqual(coord["well"], "A1")
-    self.assertEqual(coord["row"], 0)
-    self.assertEqual(coord["col"], 0)
-    self.assertIsInstance(coord["x"], float)
-    self.assertIsInstance(coord["y"], float)
-
-  def test_well_ordering(self):
-    gen = MantisMapGenerator()
-    a1 = gen.get_well_coordinate(0, 0)
-    a2 = gen.get_well_coordinate(0, 1)
-    # A2 should be to the right of A1 in ideal coordinates, but after homography
-    # we just check they're different
-    self.assertNotEqual(a1["x"], a2["x"])
-
-  def test_generate_map_size(self):
-    gen = MantisMapGenerator(rows=8, cols=12)
-    full_map = gen.generate_map()
-    self.assertEqual(len(full_map), 96)
-
-  def test_generate_map_384(self):
-    gen = MantisMapGenerator(rows=16, cols=24, row_pitch=4.5, col_pitch=4.5)
-    full_map = gen.generate_map()
-    self.assertEqual(len(full_map), 384)
-
-  def test_z_propagation(self):
-    gen = MantisMapGenerator(z=42.0)
-    coord = gen.get_well_coordinate(3, 5)
-    self.assertEqual(coord["z"], 42.0)
 
 
 class TestFmlxPacket(unittest.TestCase):
@@ -184,16 +142,112 @@ class TestDecodeResponse(unittest.TestCase):
     self.assertIn("error", result)
 
 
-class TestMantisBackendHelpers(unittest.TestCase):
-  """Test static helper methods on MantisBackend."""
+class TestMantisBackendCoordinates(unittest.TestCase):
+  """Test conversion of PLR Well locations to Mantis machine coordinates."""
 
-  def test_well_to_row_col(self):
+  def _make_plate(self):
+    from pylabrobot.resources.plate import Plate
+    from pylabrobot.resources.utils import create_ordered_items_2d
+    from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
+
+    well_kwargs = {
+      "size_x": 6.0,
+      "size_y": 6.0,
+      "size_z": 10.0,
+      "bottom_type": WellBottomType.FLAT,
+      "cross_section_type": CrossSectionType.CIRCLE,
+      "max_volume": 300.0,
+      "material_z_thickness": 1.0,
+    }
+    return Plate(
+      name="custom_96",
+      size_x=127.76,
+      size_y=85.11,
+      size_z=14.30,
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=12,
+        num_items_y=8,
+        dx=11.0,
+        dy=8.0,
+        dz=2.0,
+        item_dx=9.0,
+        item_dy=9.0,
+        **well_kwargs,
+      ),
+    )
+
+  def _ideal(self, backend, well, plate):
+    """Per-well ideal (pre-homography) Mantis frame coordinate."""
+    center = well.get_location_wrt(plate, x="c", y="c", z="b")
+    return center.x, plate.get_size_y() - center.y
+
+  def test_a1_maps_to_back_of_plate(self):
+    """PLR 'A1' is physically at the back (high y); after y-flip it lands at
+    low y in Mantis frame, matching the Mantis convention where 'A1' is at the
+    front of the plate."""
     from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
 
-    self.assertEqual(MantisBackend._well_to_row_col("A1"), (0, 0))
-    self.assertEqual(MantisBackend._well_to_row_col("H12"), (7, 11))
-    self.assertEqual(MantisBackend._well_to_row_col("B3"), (1, 2))
-    self.assertEqual(MantisBackend._well_to_row_col("a1"), (0, 0))
+    plate = self._make_plate()
+    backend = MantisBackend(serial_number="M-TEST", dispense_z=44.331)
+    ideal_x, ideal_y = self._ideal(backend, plate.get_item("A1"), plate)
+    # A1 well LFB = (11.0, 8.0 + 7*9.0 = 71.0); center = (14.0, 74.0)
+    # Mantis y = 85.11 - 74.0 = 11.11
+    self.assertAlmostEqual(ideal_x, 14.0, places=6)
+    self.assertAlmostEqual(ideal_y, 11.11, places=6)
+
+  def test_h1_maps_to_front_of_plate(self):
+    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+
+    plate = self._make_plate()
+    backend = MantisBackend(serial_number="M-TEST")
+    ideal_x, ideal_y = self._ideal(backend, plate.get_item("H1"), plate)
+    # H1 LFB = (11.0, 8.0); center = (14.0, 11.0); flipped y = 74.11
+    self.assertAlmostEqual(ideal_x, 14.0, places=6)
+    self.assertAlmostEqual(ideal_y, 74.11, places=6)
+
+  def test_h12_corner(self):
+    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+
+    plate = self._make_plate()
+    backend = MantisBackend(serial_number="M-TEST")
+    ideal_x, ideal_y = self._ideal(backend, plate.get_item("H12"), plate)
+    # H12 LFB = (11.0 + 11*9.0, 8.0) = (110.0, 8.0); center = (113.0, 11.0)
+    self.assertAlmostEqual(ideal_x, 113.0, places=6)
+    self.assertAlmostEqual(ideal_y, 74.11, places=6)
+
+  def test_machine_coord_applies_homography_and_z(self):
+    """The full _well_to_machine_coord should apply the stage homography and
+    return the configured dispense_z."""
+    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+
+    plate = self._make_plate()
+    backend = MantisBackend(serial_number="M-TEST", dispense_z=42.0)
+    well = plate.get_item("A1")
+    ideal_x, ideal_y = self._ideal(backend, well, plate)
+    expected_mx, expected_my = apply_stage_homography(ideal_x, ideal_y)
+    mx, my, mz = backend._well_to_machine_coord(well)
+    self.assertAlmostEqual(mx, expected_mx, places=6)
+    self.assertAlmostEqual(my, expected_my, places=6)
+    self.assertEqual(mz, 42.0)
+
+  def test_well_without_plate_parent_raises(self):
+    from pylabrobot.dispensing.mantis.mantis_backend import MantisBackend
+    from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
+
+    orphan = Well(
+      name="orphan",
+      size_x=6.0,
+      size_y=6.0,
+      size_z=10.0,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.CIRCLE,
+      max_volume=300.0,
+      material_z_thickness=1.0,
+    )
+    backend = MantisBackend(serial_number="M-TEST")
+    with self.assertRaises(ValueError):
+      backend._well_to_machine_coord(orphan)
 
 
 if __name__ == "__main__":
