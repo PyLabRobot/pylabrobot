@@ -2,7 +2,6 @@ import asyncio
 from typing import Any, Dict, Optional, Tuple, Union
 
 from pylabrobot.arms.backend import AccessPattern, HorizontalAccess, VerticalAccess
-from pylabrobot.arms.six_axis_backend import SixAxisBackend
 from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -15,7 +14,7 @@ class XArm6Error(Exception):
     super().__init__(f"XArm6Error {code}: {message}")
 
 
-class XArm6Backend(SixAxisBackend):
+class XArm6Backend:
   """Backend for the UFACTORY xArm 6 robotic arm with bio-gripper.
 
   Uses the xArm Python SDK (xarm-python-sdk) to communicate with the robot
@@ -47,7 +46,6 @@ class XArm6Backend(SixAxisBackend):
     gripper_open_pos: int = 850,
     gripper_close_pos: int = 0,
   ):
-    super().__init__()
     self._ip = ip
     self._arm: Any = None
     self._default_speed = default_speed

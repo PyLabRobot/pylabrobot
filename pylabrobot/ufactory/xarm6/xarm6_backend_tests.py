@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, call
 
 from pylabrobot.arms.backend import HorizontalAccess, VerticalAccess
 from pylabrobot.arms.standard import CartesianCoords
-from pylabrobot.arms.xarm6.xarm6_backend import XArm6Backend, XArm6Error
+from pylabrobot.ufactory.xarm6.xarm6_backend import XArm6Backend, XArm6Error
 from pylabrobot.resources import Coordinate, Rotation
 
 
