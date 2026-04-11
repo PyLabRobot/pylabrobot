@@ -59,7 +59,7 @@ Useful entry points are the examples in the user guide or the unit tests in
 
 Because communication happens over websockets, you can also drive the visualizer
 from unit tests or scripts without a physical robot.  The
-{class}`~pylabrobot.liquid_handling.backends.chatterbox.ChatterboxBackend` works
+{class}`~pylabrobot.legacy.liquid_handling.backends.chatterbox.ChatterboxBackend` works
 well for this purpose.
 
 ## Contributing tips

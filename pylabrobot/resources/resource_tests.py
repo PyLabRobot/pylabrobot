@@ -224,27 +224,15 @@ class TestResource(unittest.TestCase):
       r.serialize(),
       {
         "name": "test",
-        "location": None,
-        "rotation": {
-          "type": "Rotation",
-          "x": 0,
-          "y": 0,
-          "z": 0,
-        },
         "size_x": 10,
         "size_y": 10,
         "size_z": 10,
         "type": "Resource",
-        "children": [],
-        "category": None,
-        "parent_name": None,
-        "model": None,
         "barcode": {
           "data": "1234567890",
           "symbology": "code128",
           "position_on_resource": "left",
         },
-        "preferred_pickup_location": None,
       },
     )
 
@@ -257,13 +245,6 @@ class TestResource(unittest.TestCase):
       r.serialize(),
       {
         "name": "test",
-        "location": None,
-        "rotation": {
-          "type": "Rotation",
-          "x": 0,
-          "y": 0,
-          "z": 0,
-        },
         "size_x": 10,
         "size_y": 10,
         "size_z": 10,
@@ -277,29 +258,13 @@ class TestResource(unittest.TestCase):
               "y": 5,
               "z": 5,
             },
-            "rotation": {
-              "type": "Rotation",
-              "x": 0,
-              "y": 0,
-              "z": 0,
-            },
             "size_x": 1,
             "size_y": 1,
             "size_z": 1,
             "type": "Resource",
-            "children": [],
-            "category": None,
             "parent_name": "test",
-            "model": None,
-            "barcode": None,
-            "preferred_pickup_location": None,
           }
         ],
-        "category": None,
-        "parent_name": None,
-        "model": None,
-        "barcode": None,
-        "preferred_pickup_location": None,
       },
     )
 

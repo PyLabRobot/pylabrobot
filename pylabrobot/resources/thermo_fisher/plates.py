@@ -180,7 +180,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA-, RNAse-, and PCR inhibitor-free with in-process sampling tests'.
   - ANSI/SLAS-format for compatibility with automated systems.
-  - optimal pickup_distance_from_top=4 mm.
+  - optimal pickup_distance_from_top=4 mm (i.e. pickup_distance_from_bottom=size_z-4).
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
   """
@@ -313,7 +313,7 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA/RNase Free'.
   - Warning: NOT ANSI/SLAS-format!
-  - optimal pickup_distance_from_top = 6 mm.
+  - optimal pickup_distance_from_top = 6 mm (i.e. pickup_distance_from_bottom=size_z-6).
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
 

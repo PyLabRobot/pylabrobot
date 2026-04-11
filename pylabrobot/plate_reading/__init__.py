@@ -1,52 +1,10 @@
-from __future__ import annotations
+import warnings
 
-from typing import Any
+warnings.warn(
+  "Importing from pylabrobot.plate_reading is deprecated. "
+  "Use pylabrobot.legacy.plate_reading instead.",
+  DeprecationWarning,
+  stacklevel=2,
+)
 
-from .agilent import (
-  BioTekPlateReaderBackend,
-  Cytation5Backend,
-  Cytation5ImagingConfig,
-  CytationBackend,
-  CytationImagingConfig,
-  SynergyH1Backend,
-)
-from .bmg_labtech import CLARIOstarBackend
-from .byonoy import (
-  ByonoyAbsorbance96AutomateBackend,
-  ByonoyLuminescence96AutomateBackend,
-)
-from .chatterbox import PlateReaderChatterboxBackend
-from .image_reader import ImageReader
-from .imager import Imager
-from .molecular_devices import (
-  Calibrate,
-  CarriageSpeed,
-  KineticSettings,
-  MolecularDevicesBackend,
-  MolecularDevicesError,
-  MolecularDevicesFirmwareError,
-  MolecularDevicesHardwareError,
-  MolecularDevicesMotionError,
-  MolecularDevicesNVRAMError,
-  MolecularDevicesSettings,
-  MolecularDevicesSpectraMax384PlusBackend,
-  MolecularDevicesSpectraMaxM5Backend,
-  MolecularDevicesUnrecognizedCommandError,
-  PmtGain,
-  ReadMode,
-  ReadOrder,
-  ReadType,
-  ShakeSettings,
-  SpectrumSettings,
-)
-from .plate_reader import PlateReader
-from .standard import (
-  Exposure,
-  FocalPosition,
-  Gain,
-  ImagingMode,
-  ImagingResult,
-  Objective,
-)
-from .tecan import ExperimentalTecanInfinite200ProBackend
-from .tecan.spark20m.spark_backend import ExperimentalSparkBackend
+from pylabrobot.legacy.plate_reading import *  # noqa: F401,F403,E402

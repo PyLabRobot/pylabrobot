@@ -90,23 +90,12 @@ class HamiltonTip(Tip):
 
   def serialize(self):
     super_serialized = super().serialize()
-    del super_serialized["fitting_depth"]  # inferred from tip size
+    super_serialized.pop("fitting_depth", None)  # inferred from tip size
     return {
       **super_serialized,
       "pickup_method": self.pickup_method.name,
       "tip_size": self.tip_size.name,
     }
-
-  @classmethod
-  def deserialize(cls, data):
-    return HamiltonTip(
-      name=data["name"],
-      has_filter=data["has_filter"],
-      total_tip_length=data["total_tip_length"],
-      maximal_volume=data["maximal_volume"],
-      tip_size=TipSize[data["tip_size"]],
-      pickup_method=TipPickupMethod[data["pickup_method"]],
-    )
 
 
 def standard_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:

@@ -1,10 +1,9 @@
-from .access2 import Access2
-from .centrifuge import Centrifuge, Loader
-from .standard import (
-  BucketHasPlateError,
-  BucketNoPlateError,
-  CentrifugeDoorError,
-  LoaderNoPlateError,
-  NotAtBucketError,
+import warnings
+
+warnings.warn(
+  "Importing from pylabrobot.centrifuge is deprecated. Use pylabrobot.legacy.centrifuge instead.",
+  DeprecationWarning,
+  stacklevel=2,
 )
-from .vspin_backend import Access2Backend, VSpinBackend
+
+from pylabrobot.legacy.centrifuge import *  # noqa: F401,F403,E402

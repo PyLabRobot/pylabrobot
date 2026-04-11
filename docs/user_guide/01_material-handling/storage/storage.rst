@@ -134,12 +134,3 @@ Combined Retrieval & Access Summary
 
 
 ------------------------------------------
-
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   cytomat
-   inheco/incubator_shaker
-   inheco/scila
-   liconic

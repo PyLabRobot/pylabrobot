@@ -49,9 +49,9 @@ Different machines use different communication modes. Replace `[usb]` with one o
 | `hid` | hid | HID devices: e.g. Inheco Incubator/Shaker (HID mode) |
 | `modbus` | pymodbus | Modbus devices: e.g. Agrow Pump Array |
 | `opentrons` | opentrons-http-api-client | e.g. Opentrons backend |
-| `microscopy` | numpy (1.26), opencv-python | e.g. Cytation imager |
+| `cytation-microscopy` | numpy (1.26), opencv-python | Cytation imager |
 | `sila` | zeroconf, grpcio | SiLA devices |
-| `pico` | microscopy + sila | ImageXpress Pico microscope |
+| `pico` | opencv-python, numpy, sila | ImageXpress Pico microscope |
 | `dev` | All of the above + testing/linting tools | Development |
 
 Or install all dependencies:
@@ -60,7 +60,7 @@ Or install all dependencies:
 pip install 'pylabrobot[all]'
 ```
 
-Microscopy is not included in the `all` group because it requires an older version of numpy. If you want to use microscopy features, you need to install those dependencies separately through `pip install "pylabrobot[microscopy]"`.
+Cytation microscopy is not included in the `all` group because it requires an older version of numpy. If you want to use Cytation imaging features, install those dependencies separately through `pip install "pylabrobot[cytation-microscopy]"`.
 
 ### From source
 
@@ -175,8 +175,9 @@ If you are still having trouble, please reach out on [discuss.pylabrobot.org](ht
 
 In order to use imaging on the Cytation, you need to:
 
-1. Install python 3.10
-2. Download Spinnaker SDK and install (including Python) [https://www.teledynevisionsolutions.com/products/spinnaker-sdk/](https://www.teledynevisionsolutions.com/products/spinnaker-sdk/)
-3. Install numpy==1.26 (this is an older version)
+1. Install the Aravis system library:
+   - macOS: `brew install aravis`
+   - Linux: `sudo apt-get install libaravis-dev gobject-introspection`
+2. Install the cytation-microscopy dependencies: `pip install "pylabrobot[cytation-microscopy]"` (this pulls in PyGObject, numpy, and opencv-python)
 
-If you just want to do plate reading, heating, shaknig, etc. you don't need to follow these specific steps.
+If you just want to do plate reading, heating, shaking, etc. you don't need to follow these specific steps.

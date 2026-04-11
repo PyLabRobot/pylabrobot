@@ -450,10 +450,10 @@ class USB(IOBase):
     self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
   async def stop(self):
-    """Close the USB connection to the machine."""
+    """Close the USB connection to the machine. Safe to call multiple times."""
 
     if self.dev is None:
-      raise ValueError("USB device was not connected.")
+      return
     logger.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
