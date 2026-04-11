@@ -460,6 +460,27 @@ class MethodInfo:
 
     return f"[{self.interface_id}:{self.method_id}] {self.name}({param_str}) -> {return_str}"
 
+  def to_dict(self, registry: Optional["TypeRegistry"] = None) -> dict:
+    """Serialize to a plain dict suitable for YAML/JSON export."""
+    iid = self.interface_id
+    params = []
+    if self.parameter_types:
+      names = [pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types]
+      labels = self.parameter_labels if len(self.parameter_labels) == len(names) else [None] * len(names)
+      params = [{"name": l or f"arg{i}", "type": t} for i, (l, t) in enumerate(zip(labels, names))]
+    returns = []
+    if self.return_types:
+      names = [rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types]
+      labels = self.return_labels if len(self.return_labels) == len(names) else [None] * len(names)
+      returns = [{"name": l or f"ret{i}", "type": t} for i, (l, t) in enumerate(zip(labels, names))]
+    return {
+      "name": self.name,
+      "id": f"[{self.interface_id}:{self.method_id}]",
+      "signature": self.get_signature_string(registry),
+      "params": params,
+      "returns": returns,
+    }
+
 
 _TLocal = TypeVar("_TLocal")
 
@@ -595,6 +616,26 @@ class TypeRegistry:
     """Return the set of interface IDs this object implements."""
     return set(self.interfaces.keys())
 
+  def to_dict(self) -> dict:
+    """Serialize to a plain dict suitable for YAML/JSON export."""
+    addr = (
+      f"{self.address.module}:{self.address.node}:{self.address.object}"
+      if self.address else None
+    )
+    structs_out: dict = {}
+    for iid, table in sorted(self.structs.items()):
+      structs_out[iid] = [s.to_dict(self) for _, s in sorted(table.items())]
+    enums_out: dict = {}
+    for iid, table in sorted(self.enums.items()):
+      enums_out[iid] = [e.to_dict() for _, e in sorted(table.items())]
+    return {
+      "address": addr,
+      "interfaces": [info.to_dict() for _, info in sorted(self.interfaces.items())],
+      "methods": [m.to_dict(self) for m in self.methods],
+      "structs": structs_out,
+      "enums": enums_out,
+    }
+
   def print_summary(self) -> None:
     """Print a summary of all interfaces, structs, enums, and methods."""
     print(f"TypeRegistry for {self.address}")
@@ -618,6 +659,10 @@ class InterfaceInfo:
   name: str
   version: str
 
+  def to_dict(self) -> dict:
+    """Serialize to a plain dict suitable for YAML/JSON export."""
+    return {"interface_id": self.interface_id, "name": self.name, "version": self.version}
+
 
 @dataclass
 class EnumInfo:
@@ -626,6 +671,10 @@ class EnumInfo:
   enum_id: int
   name: str
   values: Dict[str, int]
+
+  def to_dict(self) -> dict:
+    """Serialize to a plain dict suitable for YAML/JSON export."""
+    return {"name": self.name, "enum_id": self.enum_id, "values": dict(self.values)}
 
 
 @dataclass
@@ -650,6 +699,18 @@ class StructInfo:
   def field_type_names(self) -> Dict[str, str]:
     """Get human-readable field type names using HamiltonDataType resolver."""
     return {name: _resolve_struct_field_type(pt) for name, pt in self.fields.items()}
+
+  def to_dict(self, registry: Optional["TypeRegistry"] = None) -> dict:
+    """Serialize to a plain dict suitable for YAML/JSON export."""
+    ho_iid = self.interface_id
+    fields = {
+      name: _resolve_struct_field_type(pt, registry, ho_interface_id=ho_iid)
+      for name, pt in self.fields.items()
+    }
+    d: dict = {"name": self.name, "struct_id": self.struct_id, "fields": fields}
+    if self.interface_id is not None:
+      d["interface_id"] = self.interface_id
+    return d
 
   def get_struct_string(self, registry: Optional["TypeRegistry"] = None) -> str:
     """Get struct definition as a readable string.
@@ -713,6 +774,13 @@ class GlobalTypePool:
     """Look up global enum by 1-based ref_id."""
     idx = ref_id - 1
     return self.enums[idx] if 0 <= idx < len(self.enums) else None
+
+  def to_dict(self) -> dict:
+    """Serialize to a plain dict suitable for YAML/JSON export."""
+    return {
+      "structs": [s.to_dict() for s in self.structs],
+      "enums": [e.to_dict() for e in self.enums],
+    }
 
   def print_summary(self) -> None:
     """Print global pool summary."""
