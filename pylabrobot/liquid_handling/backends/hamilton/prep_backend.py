@@ -131,6 +131,57 @@ def _build_container_segments(resource) -> list[PrepCmd.SegmentDescriptor]:
   ]
 
 
+def _segments_to_cone_geometry(
+  segments: list[PrepCmd.SegmentDescriptor],
+  fallback_radius: float,
+) -> Tuple[float, float, float]:
+  """Convert v2 frustum segments to v1 cone model (tube_radius, cone_height, cone_bottom_radius).
+
+  The v1 firmware models container geometry as a cylinder (tube_radius) with an
+  optional cone at the bottom (cone_height, cone_bottom_radius). Given N frustum
+  segments from the v2 container_description:
+
+  - tube_radius: sqrt(volume-weighted-average-area / pi) over all segments,
+    giving the equivalent constant-area cylinder that displaces the same total
+    volume per unit height.
+  - cone_height / cone_bottom_radius: derived from the bottom segment when it
+    tapers (area_bottom != area_top); zero when the bottom is cylindrical.
+
+  For uniform cylinders this is exact. For tapered wells it is a best-fit
+  single-frustum approximation — the firmware gets one linear dz/dt instead of
+  piecewise, but total volume displacement matches.
+
+  Args:
+    segments: SegmentDescriptor list (may be empty).
+    fallback_radius: Radius to return when segments is empty (from _effective_radius).
+
+  Returns:
+    (tube_radius, cone_height, cone_bottom_radius)
+  """
+  if not segments:
+    return (fallback_radius, 0.0, 0.0)
+
+  total_height = sum(s.height for s in segments)
+  if total_height <= 0:
+    return (fallback_radius, 0.0, 0.0)
+
+  # Volume-weighted average cross-sectional area across all segments.
+  weighted_area = sum(s.height * (s.area_top + s.area_bottom) / 2.0 for s in segments)
+  avg_area = weighted_area / total_height
+  tube_radius = math.sqrt(avg_area / math.pi)
+
+  # Bottom cone: use first (bottom-most) segment if it tapers.
+  bot = segments[0]
+  if abs(bot.area_bottom - bot.area_top) > 1e-6:
+    cone_height = bot.height
+    cone_bottom_radius = math.sqrt(bot.area_bottom / math.pi)
+  else:
+    cone_height = 0.0
+    cone_bottom_radius = 0.0
+
+  return (tube_radius, cone_height, cone_bottom_radius)
+
+
 def _absolute_z_from_well(op, z_air_margin_mm: float = 2.0):
   """Compute absolute Z values from well geometry for aspirate/dispense (STAR-aligned).
 
@@ -172,6 +223,52 @@ _CHANNEL_TO_WASTE_NAME = {
 _EXPECTED_ROOT = "MLPrepRoot"
 
 
+@dataclass(frozen=True)
+class _LldDefaults:
+  """Resolved pLLD / cLLD parameter pair (shared between aspirate and dispense)."""
+
+  p_lld: PrepCmd.PLldParameters
+  c_lld: PrepCmd.CLldParameters
+
+
+@dataclass(frozen=True)
+class _AspirateChannelKit:
+  """Pre-resolved per-channel values for one aspirate channel.
+
+  Computed once by ``_resolve_aspirate_channels``; the variant (LLD x monitoring
+  x v1/v2) only decides which fields get assembled into which wire dataclass.
+  """
+
+  channel: int
+  aspirate: PrepCmd.AspirateParameters
+  common: PrepCmd.CommonParameters
+  segments: list[PrepCmd.SegmentDescriptor]
+  no_lld: PrepCmd.NoLldParameters
+  lld: PrepCmd.LldParameters
+  p_lld: PrepCmd.PLldParameters
+  c_lld: PrepCmd.CLldParameters
+  monitoring: PrepCmd.AspirateMonitoringParameters
+  tadm: PrepCmd.TadmParameters
+  mix: PrepCmd.MixParameters
+  adc: PrepCmd.AdcParameters
+
+
+@dataclass(frozen=True)
+class _DispenseChannelKit:
+  """Pre-resolved per-channel values for one dispense channel."""
+
+  channel: int
+  dispense: PrepCmd.DispenseParameters
+  common: PrepCmd.CommonParameters
+  segments: list[PrepCmd.SegmentDescriptor]
+  no_lld: PrepCmd.NoLldParameters
+  lld: PrepCmd.LldParameters
+  c_lld: PrepCmd.CLldParameters
+  tadm: PrepCmd.TadmParameters
+  mix: PrepCmd.MixParameters
+  adc: PrepCmd.AdcParameters
+
+
 class PrepBackend(LiquidHandlerBackend):
   """Backend for Hamilton Prep instruments using the shared TCP stack.
 
@@ -211,6 +308,9 @@ class PrepBackend(LiquidHandlerBackend):
     "mlprep_service": InterfaceSpec("MLPrepRoot.MLPrepService", False, True),
   }
 
+  # V2 aspirate/dispense command IDs (interface 1 on Pipettor).
+  _V2_PIPETTING_CMD_IDS = {38, 39, 40, 41, 42, 43}
+
   @overload
   def __init__(
     self,
@@ -218,6 +318,7 @@ class PrepBackend(LiquidHandlerBackend):
     host: str,
     port: int = 2000,
     default_traverse_height: Optional[float] = None,
+    use_v1_aspirate_dispense: bool = False,
   ) -> None: ...
 
   @overload
@@ -226,6 +327,7 @@ class PrepBackend(LiquidHandlerBackend):
     *,
     client: HamiltonTCPClient,
     default_traverse_height: Optional[float] = None,
+    use_v1_aspirate_dispense: bool = False,
   ) -> None: ...
 
   def __init__(
@@ -235,6 +337,7 @@ class PrepBackend(LiquidHandlerBackend):
     port: int = 2000,
     client: Optional[HamiltonTCPClient] = None,
     default_traverse_height: Optional[float] = None,
+    use_v1_aspirate_dispense: bool = False,
   ) -> None:
     """Initialize Prep backend.
 
@@ -244,6 +347,10 @@ class PrepBackend(LiquidHandlerBackend):
       client: Optional pre-configured HamiltonTCPClient (mutually exclusive
         with host).
       default_traverse_height: Optional default traverse height in mm.
+      use_v1_aspirate_dispense: When True, skip the v2 capability probe and
+        always use v1 aspirate/dispense commands (cmd 1-6). When False
+        (default), setup probes for v2 commands (cmd 38-43) and raises
+        RuntimeError if they are not available.
     """
     super().__init__()
     if client is not None:
@@ -267,6 +374,8 @@ class PrepBackend(LiquidHandlerBackend):
     self._module_info_addr: Optional[Address] = None
     self._channel_bounds: list[dict] = []
     self._calibration_session_active: bool = False
+    self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
+    self._supports_v2_pipetting: Optional[bool] = None
 
   def _has_interface(self, name: str) -> bool:
     """Return True if the interface was resolved and is present."""
@@ -279,6 +388,42 @@ class PrepBackend(LiquidHandlerBackend):
     the probed value.
     """
     self._user_traverse_height = value
+
+  async def _probe_v2_support(self) -> bool:
+    """Probe the pipettor for v2 aspirate/dispense command support.
+
+    Enumerates interface 1 method IDs on the pipettor object and checks whether
+    all v2 command IDs (38-43) are present. Returns False when the firmware only
+    exposes v1 commands (1-6).
+    """
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import HamiltonIntrospection
+
+    dest = await self._require("pipettor")
+    intro = HamiltonIntrospection(self.client)
+    methods = await intro.get_all_methods(dest)
+    iface1_ids = {m.method_id for m in methods if m.interface_id == 1}
+    return self._V2_PIPETTING_CMD_IDS.issubset(iface1_ids)
+
+  def _resolve_command_version(
+    self, override: Optional[Literal["v1", "v2"]] = None
+  ) -> bool:
+    """Resolve whether to use v2 commands for this call. Returns True for v2.
+
+    Resolution order:
+    1. Per-call override ("v1" or "v2") — takes precedence. Raises ValueError
+       if "v2" requested but firmware doesn't support it.
+    2. Backend-level ``use_v1_aspirate_dispense`` / probe result from setup.
+    """
+    if override == "v1":
+      return False
+    if override == "v2":
+      if self._supports_v2_pipetting is False:
+        raise ValueError(
+          "v2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
+          "Use command_version='v1' or pass use_v1_aspirate_dispense=True to PrepBackend."
+        )
+      return True
+    return self._supports_v2_pipetting is True
 
   # ---------------------------------------------------------------------------
   # Setup & interface resolution
@@ -386,6 +531,23 @@ class PrepBackend(LiquidHandlerBackend):
       logger.info("Channel bounds: %s", self._channel_bounds)
     else:
       logger.warning("Channel bounds not available — move_to_position will skip validation")
+
+    # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
+    if self._use_v1_aspirate_dispense:
+      self._supports_v2_pipetting = False
+      logger.info("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+    else:
+      try:
+        supported = await self._probe_v2_support()
+      except Exception:
+        supported = False
+      if not supported:
+        raise RuntimeError(
+          "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
+          "Pass use_v1_aspirate_dispense=True to PrepBackend to use v1 commands (cmd 1-6) instead."
+        )
+      self._supports_v2_pipetting = True
+      logger.info("V2 aspirate/dispense support: True")
 
     self.setup_finished = True
 
@@ -1110,6 +1272,669 @@ class PrepBackend(LiquidHandlerBackend):
       )
     )
 
+  # ---------------------------------------------------------------------------
+  # V1/V2 aspirate/dispense dispatch helpers
+  # ---------------------------------------------------------------------------
+
+  @staticmethod
+  def _patch_common_with_cone(
+    common: PrepCmd.CommonParameters,
+    segments: list[PrepCmd.SegmentDescriptor],
+  ) -> PrepCmd.CommonParameters:
+    """Return a copy of CommonParameters with cone geometry derived from segments.
+
+    Used when downgrading a v2 parameter set to v1: the v2 container_description
+    is removed and its geometry information is folded into the v1 cone model
+    fields of CommonParameters.
+    """
+    tube_r, cone_h, cone_br = _segments_to_cone_geometry(segments, common.tube_radius)
+    return PrepCmd.CommonParameters(
+      default_values=common.default_values,
+      empty=common.empty,
+      z_minimum=common.z_minimum,
+      z_final=common.z_final,
+      z_liquid_exit_speed=common.z_liquid_exit_speed,
+      liquid_volume=common.liquid_volume,
+      liquid_speed=common.liquid_speed,
+      transport_air_volume=common.transport_air_volume,
+      tube_radius=tube_r,
+      cone_height=cone_h,
+      cone_bottom_radius=cone_br,
+      settling_time=common.settling_time,
+      additional_probes=common.additional_probes,
+    )
+
+  # ---------------------------------------------------------------------------
+  # Shared LLD / TADM resolution helpers
+  # ---------------------------------------------------------------------------
+
+  def _resolve_effective_lld(
+    self,
+    lld_mode: Optional[List[LLDMode]],
+    use_lld: bool,
+    lld: Optional[PrepCmd.LldParameters],
+    n: int,
+    *,
+    allowed_modes: Optional[frozenset[LLDMode]] = None,
+  ) -> bool:
+    """Determine whether LLD is active for this pipetting call.
+
+    Validates ``lld_mode`` length, rejects disallowed modes (e.g. PRESSURE for
+    dispense), enforces all-or-nothing across channels, and returns a single bool.
+    Falls back to ``use_lld`` / ``lld`` presence when ``lld_mode`` is None.
+    """
+    if lld_mode is not None:
+      if len(lld_mode) != n:
+        raise ValueError(f"lld_mode length must match len(ops): {len(lld_mode)} != {n}")
+      if allowed_modes is not None:
+        for m in lld_mode:
+          if m != self.LLDMode.OFF and m not in allowed_modes:
+            raise ValueError(
+              f"Dispense does not support {m.name} LLD — only CAPACITIVE or OFF. "
+              "Pressure-based LLD requires aspiration (plunger movement)."
+            )
+      lld_on = [m != self.LLDMode.OFF for m in lld_mode]
+      if any(lld_on) and not all(lld_on):
+        raise ValueError(
+          "Prep firmware requires all channels to use the same LLD mode category. "
+          "Cannot mix LLDMode.OFF with CAPACITIVE/PRESSURE/DUAL in one call. "
+          "Split into separate calls for channels with different LLD modes."
+        )
+      return all(lld_on)
+    return use_lld or (lld is not None)
+
+  @staticmethod
+  def _default_lld_params(
+    effective_lld: bool,
+    p_lld: Optional[PrepCmd.PLldParameters] = None,
+    c_lld: Optional[PrepCmd.CLldParameters] = None,
+  ) -> _LldDefaults:
+    """Build resolved pLLD / cLLD defaults.
+
+    When LLD is active and no caller override is given, returns non-default
+    parameters (``default_values=False``) so the firmware actually triggers
+    detection.  Otherwise returns firmware defaults.
+    """
+    if effective_lld:
+      resolved_p = p_lld or PrepCmd.PLldParameters(
+        default_values=False,
+        sensitivity=1,
+        dispenser_seek_speed=0.0,
+        lld_height_difference=0.0,
+        detect_mode=0,
+      )
+      resolved_c = c_lld or PrepCmd.CLldParameters(
+        default_values=False,
+        sensitivity=4,
+        clot_check_enable=False,
+        z_clot_check=0.0,
+        detect_mode=0,
+      )
+    else:
+      resolved_p = p_lld or PrepCmd.PLldParameters.default()
+      resolved_c = c_lld or PrepCmd.CLldParameters.default()
+    return _LldDefaults(p_lld=resolved_p, c_lld=resolved_c)
+
+  @staticmethod
+  def _lld_for_well(
+    effective_lld: bool,
+    lld: Optional[PrepCmd.LldParameters],
+    top_of_well_z: float,
+  ) -> PrepCmd.LldParameters:
+    """Per-channel LLD seek parameters from caller override or well geometry."""
+    if effective_lld and lld is None:
+      return PrepCmd.LldParameters(
+        default_values=False,
+        search_start_position=top_of_well_z,
+        channel_speed=5.0,
+        z_submerge=2.0,
+        z_out_of_liquid=0.0,
+      )
+    return lld or PrepCmd.LldParameters.default()
+
+  # ---------------------------------------------------------------------------
+  # Aspirate: resolve, assemble, send
+  # ---------------------------------------------------------------------------
+
+  def _resolve_aspirate_channels(
+    self,
+    ops: List[SingleChannelAspiration],
+    use_channels: List[int],
+    effective_lld: bool,
+    *,
+    z_final: Optional[List[float]] = None,
+    z_fluid: Optional[List[float]] = None,
+    z_air: Optional[List[float]] = None,
+    settling_time: Optional[List[float]] = None,
+    transport_air_volume: Optional[List[float]] = None,
+    z_liquid_exit_speed: Optional[List[float]] = None,
+    prewet_volume: Optional[List[float]] = None,
+    z_minimum: Optional[List[float]] = None,
+    z_bottom_search_offset: Optional[List[float]] = None,
+    lld: Optional[PrepCmd.LldParameters] = None,
+    p_lld: Optional[PrepCmd.PLldParameters] = None,
+    c_lld: Optional[PrepCmd.CLldParameters] = None,
+    tadm: Optional[PrepCmd.TadmParameters] = None,
+    container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
+    auto_container_geometry: bool = False,
+    hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
+  ) -> list[_AspirateChannelKit]:
+    """Resolve all per-channel values for aspirate (pure computation, no I/O)."""
+    assert len(ops) == len(use_channels)
+    if use_channels:
+      assert max(use_channels) < self.num_channels, (
+        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
+      )
+
+    n = len(ops)
+    hlcs: List[Optional[HamiltonLiquidClass]]
+    if hamilton_liquid_classes is not None:
+      if len(hamilton_liquid_classes) != n:
+        raise ValueError(
+          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
+        )
+      hlcs = list(hamilton_liquid_classes)
+    else:
+      hlcs = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=Liquid.WATER,
+          jet=False,
+          blow_out=False,
+        )
+        for op in ops
+      ]
+    disable_volume_correction = (
+      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    )
+    if len(disable_volume_correction) != n:
+      raise ValueError(
+        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
+      )
+    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
+
+    default_settling = [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs]
+    default_transport_air = [
+      hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    default_z_exit_speed = [
+      hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs
+    ]
+    default_prewet = [
+      hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    settling_time = fill_in_defaults(settling_time, default_settling)
+    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air)
+    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_exit_speed)
+    prewet_volume = fill_in_defaults(prewet_volume, default_prewet)
+
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
+    ]
+    flow_rates = [
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
+      for op, hlc in zip(ops, hlcs)
+    ]
+    blowout_volumes = [
+      op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0)
+      for op, hlc in zip(ops, hlcs)
+    ]
+
+    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
+
+    well_geometry = [_absolute_z_from_well(op) for op in ops]
+    default_z_minimum = [g[0] for g in well_geometry]
+    default_z_fluid = [g[1] for g in well_geometry]
+    default_z_air = [g[3] for g in well_geometry]
+    raw_traverse = self._resolve_traverse_height(None)
+    default_z_final = [
+      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
+    ]
+    default_z_bso = [2.0] * n
+    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
+    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
+    z_air = fill_in_defaults(z_air, default_z_air)
+    z_final = fill_in_defaults(z_final, default_z_final)
+    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bso)
+
+    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
+    for i, ch in enumerate(use_channels):
+      if container_segments is not None and i < len(container_segments):
+        ch_segments[ch] = container_segments[i]
+      elif auto_container_geometry:
+        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
+      else:
+        ch_segments[ch] = []
+
+    lld_defaults = self._default_lld_params(effective_lld, p_lld, c_lld)
+    _tadm = tadm or PrepCmd.TadmParameters.default()
+
+    kits: list[_AspirateChannelKit] = []
+    for ch in range(self.num_channels):
+      if ch not in indexed_ops:
+        continue
+      idx = ch_to_idx[ch]
+      op = indexed_ops[ch]
+      loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      radius = _effective_radius(op.resource)
+
+      kits.append(_AspirateChannelKit(
+        channel=_CHANNEL_INDEX[ch],
+        aspirate=PrepCmd.AspirateParameters.for_op(
+          loc, op,
+          prewet_volume=prewet_volume[idx],
+          blowout_volume=blowout_volumes[idx],
+        ),
+        common=PrepCmd.CommonParameters.for_op(
+          volumes[idx], radius,
+          flow_rate=flow_rates[idx],
+          z_minimum=z_minimum[idx],
+          z_final=z_final[idx],
+          z_liquid_exit_speed=z_liquid_exit_speed[idx],
+          transport_air_volume=transport_air_volume[idx],
+          settling_time=settling_time[idx],
+        ),
+        segments=ch_segments[ch],
+        no_lld=PrepCmd.NoLldParameters.for_fixed_z(
+          z_fluid[idx], z_air[idx],
+          z_bottom_search_offset=z_bottom_search_offset[idx],
+        ),
+        lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
+        p_lld=lld_defaults.p_lld,
+        c_lld=lld_defaults.c_lld,
+        monitoring=PrepCmd.AspirateMonitoringParameters.default(),
+        tadm=_tadm,
+        mix=PrepCmd.MixParameters.default(),
+        adc=PrepCmd.AdcParameters.default(),
+      ))
+    return kits
+
+  @staticmethod
+  def _assemble_aspirate_v2(
+    kit: _AspirateChannelKit,
+    effective_lld: bool,
+    is_tadm: bool,
+  ) -> Union[
+    PrepCmd.AspirateParametersLldAndTadm2,
+    PrepCmd.AspirateParametersLldAndMonitoring2,
+    PrepCmd.AspirateParametersNoLldAndTadm2,
+    PrepCmd.AspirateParametersNoLldAndMonitoring2,
+  ]:
+    """Assemble a v2 aspirate parameter struct from pre-resolved kit values."""
+    if effective_lld and is_tadm:
+      return PrepCmd.AspirateParametersLldAndTadm2(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, container_description=kit.segments,
+        common=kit.common, lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
+        mix=kit.mix, tadm=kit.tadm, adc=kit.adc,
+      )
+    elif effective_lld:
+      return PrepCmd.AspirateParametersLldAndMonitoring2(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, container_description=kit.segments,
+        common=kit.common, lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
+        mix=kit.mix, aspirate_monitoring=kit.monitoring, adc=kit.adc,
+      )
+    elif is_tadm:
+      return PrepCmd.AspirateParametersNoLldAndTadm2(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, container_description=kit.segments,
+        common=kit.common, no_lld=kit.no_lld,
+        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+      )
+    else:
+      return PrepCmd.AspirateParametersNoLldAndMonitoring2(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, container_description=kit.segments,
+        common=kit.common, no_lld=kit.no_lld,
+        mix=kit.mix, adc=kit.adc, aspirate_monitoring=kit.monitoring,
+      )
+
+  def _assemble_aspirate_v1(
+    self,
+    kit: _AspirateChannelKit,
+    effective_lld: bool,
+    is_tadm: bool,
+  ) -> Union[
+    PrepCmd.AspirateParametersLldAndTadm,
+    PrepCmd.AspirateParametersLldAndMonitoring,
+    PrepCmd.AspirateParametersNoLldAndTadm,
+    PrepCmd.AspirateParametersNoLldAndMonitoring,
+  ]:
+    """Assemble a v1 aspirate parameter struct (cone-patched, no segments)."""
+    patched = self._patch_common_with_cone(kit.common, kit.segments)
+    if effective_lld and is_tadm:
+      return PrepCmd.AspirateParametersLldAndTadm(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, common=patched,
+        lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
+        mix=kit.mix, tadm=kit.tadm, adc=kit.adc,
+      )
+    elif effective_lld:
+      return PrepCmd.AspirateParametersLldAndMonitoring(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, common=patched,
+        lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
+        mix=kit.mix, aspirate_monitoring=kit.monitoring, adc=kit.adc,
+      )
+    elif is_tadm:
+      return PrepCmd.AspirateParametersNoLldAndTadm(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, common=patched,
+        no_lld=kit.no_lld,
+        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+      )
+    else:
+      return PrepCmd.AspirateParametersNoLldAndMonitoring(
+        default_values=False, channel=kit.channel,
+        aspirate=kit.aspirate, common=patched,
+        no_lld=kit.no_lld,
+        mix=kit.mix, adc=kit.adc, aspirate_monitoring=kit.monitoring,
+      )
+
+  async def _send_aspirate(
+    self,
+    kits: list[_AspirateChannelKit],
+    effective_lld: bool,
+    is_tadm: bool,
+    use_v2: bool,
+    read_timeout: Optional[float] = None,
+  ) -> None:
+    """Assemble the correct param types and send the aspirate command."""
+    dest = await self._require("pipettor")
+    rt = read_timeout if effective_lld else None
+
+    if effective_lld and is_tadm:
+      if use_v2:
+        params_lt2 = [self._assemble_aspirate_v2(k, True, True) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lt2),  # type: ignore[arg-type]
+          read_timeout=rt,
+        )
+      else:
+        params_lt1 = [self._assemble_aspirate_v1(k, True, True) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateWithLldTadm(dest=dest, aspirate_parameters=params_lt1),  # type: ignore[arg-type]
+          read_timeout=rt,
+        )
+    elif effective_lld:
+      if use_v2:
+        params_lm2 = [self._assemble_aspirate_v2(k, True, False) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lm2),  # type: ignore[arg-type]
+          read_timeout=rt,
+        )
+      else:
+        params_lm1 = [self._assemble_aspirate_v1(k, True, False) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateWithLld(dest=dest, aspirate_parameters=params_lm1),  # type: ignore[arg-type]
+          read_timeout=rt,
+        )
+    elif is_tadm:
+      if use_v2:
+        params_nt2 = [self._assemble_aspirate_v2(k, False, True) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateTadmV2(dest=dest, aspirate_parameters=params_nt2),  # type: ignore[arg-type]
+        )
+      else:
+        params_nt1 = [self._assemble_aspirate_v1(k, False, True) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateTadm(dest=dest, aspirate_parameters=params_nt1),  # type: ignore[arg-type]
+        )
+    else:
+      if use_v2:
+        params_nm2 = [self._assemble_aspirate_v2(k, False, False) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateNoLldMonitoringV2(dest=dest, aspirate_parameters=params_nm2),  # type: ignore[arg-type]
+        )
+      else:
+        params_nm1 = [self._assemble_aspirate_v1(k, False, False) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepAspirateNoLldMonitoring(dest=dest, aspirate_parameters=params_nm1),  # type: ignore[arg-type]
+        )
+
+  # ---------------------------------------------------------------------------
+  # Dispense: resolve, assemble, send
+  # ---------------------------------------------------------------------------
+
+  def _resolve_dispense_channels(
+    self,
+    ops: List[SingleChannelDispense],
+    use_channels: List[int],
+    effective_lld: bool,
+    *,
+    final_z: Optional[List[float]] = None,
+    z_fluid: Optional[List[float]] = None,
+    z_air: Optional[List[float]] = None,
+    settling_time: Optional[List[float]] = None,
+    transport_air_volume: Optional[List[float]] = None,
+    z_liquid_exit_speed: Optional[List[float]] = None,
+    stop_back_volume: Optional[List[float]] = None,
+    cutoff_speed: Optional[List[float]] = None,
+    z_minimum: Optional[List[float]] = None,
+    z_bottom_search_offset: Optional[List[float]] = None,
+    lld: Optional[PrepCmd.LldParameters] = None,
+    c_lld: Optional[PrepCmd.CLldParameters] = None,
+    container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
+    auto_container_geometry: bool = False,
+    hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
+  ) -> list[_DispenseChannelKit]:
+    """Resolve all per-channel values for dispense (pure computation, no I/O)."""
+    assert len(ops) == len(use_channels)
+    if use_channels:
+      assert max(use_channels) < self.num_channels, (
+        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
+      )
+
+    n = len(ops)
+    hlcs: List[Optional[HamiltonLiquidClass]]
+    if hamilton_liquid_classes is not None:
+      if len(hamilton_liquid_classes) != n:
+        raise ValueError(
+          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
+        )
+      hlcs = list(hamilton_liquid_classes)
+    else:
+      hlcs = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=Liquid.WATER,
+          jet=False,
+          blow_out=False,
+        )
+        for op in ops
+      ]
+    disable_volume_correction = (
+      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    )
+    if len(disable_volume_correction) != n:
+      raise ValueError(
+        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
+      )
+    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
+
+    default_settling = [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs]
+    default_transport_air = [
+      hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    default_z_exit_speed = [
+      hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs
+    ]
+    default_stop_back = [
+      hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs
+    ]
+    default_cutoff = [
+      hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs
+    ]
+    settling_time = fill_in_defaults(settling_time, default_settling)
+    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air)
+    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_exit_speed)
+    stop_back_volume = fill_in_defaults(stop_back_volume, default_stop_back)
+    cutoff_speed = fill_in_defaults(cutoff_speed, default_cutoff)
+
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
+    ]
+    flow_rates = [
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100.0)
+      for op, hlc in zip(ops, hlcs)
+    ]
+
+    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
+
+    well_geometry = [_absolute_z_from_well(op) for op in ops]
+    default_z_minimum = [g[0] for g in well_geometry]
+    default_z_fluid = [g[1] for g in well_geometry]
+    default_z_air = [g[3] for g in well_geometry]
+    raw_traverse = self._resolve_traverse_height(None)
+    default_final_z = [
+      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
+    ]
+    default_z_bso = [2.0] * n
+    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
+    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
+    z_air = fill_in_defaults(z_air, default_z_air)
+    final_z = fill_in_defaults(final_z, default_final_z)
+    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bso)
+
+    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
+    for i, ch in enumerate(use_channels):
+      if container_segments is not None and i < len(container_segments):
+        ch_segments[ch] = container_segments[i]
+      elif auto_container_geometry:
+        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
+      else:
+        ch_segments[ch] = []
+
+    lld_defaults = self._default_lld_params(effective_lld, c_lld=c_lld)
+
+    kits: list[_DispenseChannelKit] = []
+    for ch in range(self.num_channels):
+      if ch not in indexed_ops:
+        continue
+      idx = ch_to_idx[ch]
+      op = indexed_ops[ch]
+      loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      radius = _effective_radius(op.resource)
+
+      kits.append(_DispenseChannelKit(
+        channel=_CHANNEL_INDEX[ch],
+        dispense=PrepCmd.DispenseParameters.for_op(
+          loc,
+          stop_back_volume=stop_back_volume[idx],
+          cutoff_speed=cutoff_speed[idx],
+        ),
+        common=PrepCmd.CommonParameters.for_op(
+          volumes[idx], radius,
+          flow_rate=flow_rates[idx],
+          z_minimum=z_minimum[idx],
+          z_final=final_z[idx],
+          z_liquid_exit_speed=z_liquid_exit_speed[idx],
+          transport_air_volume=transport_air_volume[idx],
+          settling_time=settling_time[idx],
+        ),
+        segments=ch_segments[ch],
+        no_lld=PrepCmd.NoLldParameters.for_fixed_z(
+          z_fluid[idx], z_air[idx],
+          z_bottom_search_offset=z_bottom_search_offset[idx],
+        ),
+        lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
+        c_lld=lld_defaults.c_lld,
+        tadm=PrepCmd.TadmParameters.default(),
+        mix=PrepCmd.MixParameters.default(),
+        adc=PrepCmd.AdcParameters.default(),
+      ))
+    return kits
+
+  @staticmethod
+  def _assemble_dispense_v2(
+    kit: _DispenseChannelKit,
+    effective_lld: bool,
+  ) -> Union[PrepCmd.DispenseParametersLld2, PrepCmd.DispenseParametersNoLld2]:
+    """Assemble a v2 dispense parameter struct from pre-resolved kit values."""
+    if effective_lld:
+      return PrepCmd.DispenseParametersLld2(
+        default_values=False, channel=kit.channel,
+        dispense=kit.dispense, container_description=kit.segments,
+        common=kit.common, lld=kit.lld, c_lld=kit.c_lld,
+        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+      )
+    else:
+      return PrepCmd.DispenseParametersNoLld2(
+        default_values=False, channel=kit.channel,
+        dispense=kit.dispense, container_description=kit.segments,
+        common=kit.common, no_lld=kit.no_lld,
+        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+      )
+
+  def _assemble_dispense_v1(
+    self,
+    kit: _DispenseChannelKit,
+    effective_lld: bool,
+  ) -> Union[PrepCmd.DispenseParametersLld, PrepCmd.DispenseParametersNoLld]:
+    """Assemble a v1 dispense parameter struct (cone-patched, no segments)."""
+    patched = self._patch_common_with_cone(kit.common, kit.segments)
+    if effective_lld:
+      return PrepCmd.DispenseParametersLld(
+        default_values=False, channel=kit.channel,
+        dispense=kit.dispense, common=patched,
+        lld=kit.lld, c_lld=kit.c_lld,
+        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+      )
+    else:
+      return PrepCmd.DispenseParametersNoLld(
+        default_values=False, channel=kit.channel,
+        dispense=kit.dispense, common=patched,
+        no_lld=kit.no_lld,
+        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+      )
+
+  async def _send_dispense(
+    self,
+    kits: list[_DispenseChannelKit],
+    effective_lld: bool,
+    use_v2: bool,
+  ) -> None:
+    """Assemble the correct param types and send the dispense command."""
+    dest = await self._require("pipettor")
+
+    if effective_lld:
+      if use_v2:
+        params_l2 = [self._assemble_dispense_v2(k, True) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepDispenseWithLldV2(dest=dest, dispense_parameters=params_l2),  # type: ignore[arg-type]
+        )
+      else:
+        params_l1 = [self._assemble_dispense_v1(k, True) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepDispenseWithLld(dest=dest, dispense_parameters=params_l1),  # type: ignore[arg-type]
+        )
+    else:
+      if use_v2:
+        params_n2 = [self._assemble_dispense_v2(k, False) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepDispenseNoLldV2(dest=dest, dispense_parameters=params_n2),  # type: ignore[arg-type]
+        )
+      else:
+        params_n1 = [self._assemble_dispense_v1(k, False) for k in kits]
+        await self.client.send_command(
+          PrepCmd.PrepDispenseNoLld(dest=dest, dispense_parameters=params_n1),  # type: ignore[arg-type]
+        )
+
+  # ---------------------------------------------------------------------------
+  # Public aspirate / dispense orchestrators
+  # ---------------------------------------------------------------------------
+
   async def aspirate(
     self,
     ops: List[SingleChannelAspiration],
@@ -1137,8 +1962,9 @@ class PrepBackend(LiquidHandlerBackend):
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
     read_timeout: Optional[float] = None,
+    command_version: Optional[Literal["v1", "v2"]] = None,
   ):
-    """Aspirate using v2 commands, dispatching to the appropriate variant.
+    """Aspirate, dispatching to the appropriate command variant and version.
 
     Selects the command variant based on ``lld_mode`` (LLD on/off) and
     ``monitoring_mode`` (Monitoring vs TADM).  Z/geometry parameters (z_final,
@@ -1176,291 +2002,45 @@ class PrepBackend(LiquidHandlerBackend):
       disable_volume_correction: Per-op flag to skip volume correction.
       read_timeout: Override read timeout (seconds) for this command. When None,
         auto-calculated from LLD seek distance/speed + 5s buffer.
+      command_version: Override per-call: "v1" (cmd 1-6) or "v2" (cmd 38-43).
+        None uses the version determined at setup. V1 converts container_description
+        frustum segments into the cone model in CommonParameters.
 
     Example::
 
       await backend.aspirate(ops, [0], z_final=[95.0], settling_time=[2.0])
       await backend.aspirate(ops, [0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
       await backend.aspirate(ops, [0], monitoring_mode=PrepCmd.MonitoringMode.TADM)
+      await backend.aspirate(ops, [0], command_version="v1")
     """
-    assert len(ops) == len(use_channels)
-    if use_channels:
-      assert max(use_channels) < self.num_channels, (
-        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
-      )
+    effective_lld = self._resolve_effective_lld(lld_mode, use_lld, lld, len(ops))
+    is_tadm = monitoring_mode == PrepCmd.MonitoringMode.TADM
+    use_v2 = self._resolve_command_version(command_version)
 
-    n = len(ops)
-    hlcs: List[Optional[HamiltonLiquidClass]]
-    if hamilton_liquid_classes is not None:
-      if len(hamilton_liquid_classes) != n:
-        raise ValueError(
-          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
-        )
-      hlcs = list(hamilton_liquid_classes)
-    else:
-      # Defaults from STAR calibration table; add get_prep_liquid_class if Prep needs different values.
-      hlcs = [
-        get_star_liquid_class(
-          tip_volume=op.tip.maximal_volume,
-          is_core=False,
-          is_tip=True,
-          has_filter=op.tip.has_filter,
-          liquid=Liquid.WATER,
-          jet=False,
-          blow_out=False,
-        )
-        for op in ops
-      ]
-    disable_volume_correction = (
-      disable_volume_correction if disable_volume_correction is not None else [False] * n
-    )
-    if len(disable_volume_correction) != n:
-      raise ValueError(
-        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
-      )
-    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
-
-    # Default lists from HLC (fallbacks when HLC is None)
-    default_settling = [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs]
-    default_transport_air_volume = [
-      hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    default_z_liquid_exit_speed = [
-      hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs
-    ]
-    default_prewet_volume = [
-      hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    settling_time = fill_in_defaults(settling_time, default_settling)
-    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air_volume)
-    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_liquid_exit_speed)
-    prewet_volume = fill_in_defaults(prewet_volume, default_prewet_volume)
-
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
-    flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
-      for op, hlc in zip(ops, hlcs)
-    ]
-    blowout_volumes = [
-      op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0)
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    # Resolve LLD mode: lld_mode list takes precedence, then use_lld bool,
-    # then lld parameter presence. The Prep firmware uses separate command variants
-    # for LLD vs no-LLD, so all channels must agree on LLD on/off.
-    if lld_mode is not None:
-      if len(lld_mode) != n:
-        raise ValueError(f"lld_mode length must match len(ops): {len(lld_mode)} != {n}")
-      lld_on = [m != self.LLDMode.OFF for m in lld_mode]
-      if any(lld_on) and not all(lld_on):
-        raise ValueError(
-          "Prep firmware requires all channels to use the same LLD mode category. "
-          "Cannot mix LLDMode.OFF with CAPACITIVE/PRESSURE/DUAL in one call. "
-          "Split into separate calls for channels with different LLD modes."
-        )
-      effective_lld = all(lld_on)
-    else:
-      effective_lld = use_lld or (lld is not None)
-
-    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
-
-    # Precompute well geometry once (used for default Z lists and for LLD in the loop).
-    well_geometry = [_absolute_z_from_well(op) for op in ops]
-    default_z_minimum = [g[0] for g in well_geometry]
-    default_z_fluid = [g[1] for g in well_geometry]
-    default_z_air = [g[3] for g in well_geometry]
-    raw_traverse = self._resolve_traverse_height(None)
-    default_z_final = [
-      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
-    ]
-    default_z_bottom_search_offset = [2.0] * n
-    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
-    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
-    z_air = fill_in_defaults(z_air, default_z_air)
-    z_final = fill_in_defaults(z_final, default_z_final)
-    z_bottom_search_offset = fill_in_defaults(
-      z_bottom_search_offset, default_z_bottom_search_offset
+    kits = self._resolve_aspirate_channels(
+      ops, use_channels, effective_lld,
+      z_final=z_final, z_fluid=z_fluid, z_air=z_air,
+      settling_time=settling_time, transport_air_volume=transport_air_volume,
+      z_liquid_exit_speed=z_liquid_exit_speed, prewet_volume=prewet_volume,
+      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
+      lld=lld, p_lld=p_lld, c_lld=c_lld, tadm=tadm,
+      container_segments=container_segments,
+      auto_container_geometry=auto_container_geometry,
+      hamilton_liquid_classes=hamilton_liquid_classes,
+      disable_volume_correction=disable_volume_correction,
     )
 
-    # Build per-channel segment lists.
-    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
-    for i, ch in enumerate(use_channels):
-      if container_segments is not None and i < len(container_segments):
-        ch_segments[ch] = container_segments[i]
-      elif auto_container_geometry:
-        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
-      else:
-        ch_segments[ch] = []
-
-    # For LLD to actually trigger, both LldParameters and CLldParameters must use
-    # default_values=False. With default_values=True the firmware silently skips LLD.
-    # Empirically validated: sensitivity=4, detect_mode=0 triggers cLLD on the Prep.
-    if effective_lld:
-      _p_lld = p_lld or PrepCmd.PLldParameters(
-        default_values=False,
-        sensitivity=1,
-        dispenser_seek_speed=0.0,
-        lld_height_difference=0.0,
-        detect_mode=0,
-      )
-      _c_lld = c_lld or PrepCmd.CLldParameters(
-        default_values=False,
-        sensitivity=4,
-        clot_check_enable=False,
-        z_clot_check=0.0,
-        detect_mode=0,
-      )
-    else:
-      _p_lld = p_lld or PrepCmd.PLldParameters.default()
-      _c_lld = c_lld or PrepCmd.CLldParameters.default()
-    _tadm = tadm or PrepCmd.TadmParameters.default()
-
-    params_lld_mon: List[PrepCmd.AspirateParametersLldAndMonitoring2] = []
-    params_lld_tadm: List[PrepCmd.AspirateParametersLldAndTadm2] = []
-    params_nolld_mon: List[PrepCmd.AspirateParametersNoLldAndMonitoring2] = []
-    params_nolld_tadm: List[PrepCmd.AspirateParametersNoLldAndTadm2] = []
-
-    for ch in range(self.num_channels):
-      if ch not in indexed_ops:
-        continue
-      idx = ch_to_idx[ch]
-      op = indexed_ops[ch]
-      loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
-      radius = _effective_radius(op.resource)
-      asp = PrepCmd.AspirateParameters.for_op(
-        loc,
-        op,
-        prewet_volume=prewet_volume[idx],
-        blowout_volume=blowout_volumes[idx],
-      )
-      segs = ch_segments[ch]
-
-      z_minimum_ch = z_minimum[idx]
-      z_final_ch = z_final[idx]
-      z_fluid_ch = z_fluid[idx]
-      z_air_ch = z_air[idx]
-      z_bottom_search_offset_ch = z_bottom_search_offset[idx]
-
-      if effective_lld and lld is None:
-        top_of_well_z = well_geometry[idx][2]
-        _lld = PrepCmd.LldParameters(
-          default_values=False,
-          search_start_position=top_of_well_z,
-          channel_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
-          z_submerge=2.0,
-          z_out_of_liquid=0.0,
-        )
-      else:
-        _lld = lld or PrepCmd.LldParameters.default()
-
-      common = PrepCmd.CommonParameters.for_op(
-        volumes[idx],
-        radius,
-        flow_rate=flow_rates[idx],
-        z_minimum=z_minimum_ch,
-        z_final=z_final_ch,
-        z_liquid_exit_speed=z_liquid_exit_speed[idx],
-        transport_air_volume=transport_air_volume[idx],
-        settling_time=settling_time[idx],
-      )
-      no_lld = PrepCmd.NoLldParameters.for_fixed_z(
-        z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch
-      )
-
-      if effective_lld and monitoring_mode == PrepCmd.MonitoringMode.TADM:
-        params_lld_tadm.append(
-          PrepCmd.AspirateParametersLldAndTadm2(
-            default_values=False,
-            channel=_CHANNEL_INDEX[ch],
-            aspirate=asp,
-            container_description=segs,
-            common=common,
-            lld=_lld,
-            p_lld=_p_lld,
-            c_lld=_c_lld,
-            mix=PrepCmd.MixParameters.default(),
-            tadm=_tadm,
-            adc=PrepCmd.AdcParameters.default(),
-          )
-        )
-      elif effective_lld:
-        params_lld_mon.append(
-          PrepCmd.AspirateParametersLldAndMonitoring2(
-            default_values=False,
-            channel=_CHANNEL_INDEX[ch],
-            aspirate=asp,
-            container_description=segs,
-            common=common,
-            lld=_lld,
-            p_lld=_p_lld,
-            c_lld=_c_lld,
-            mix=PrepCmd.MixParameters.default(),
-            aspirate_monitoring=PrepCmd.AspirateMonitoringParameters.default(),
-            adc=PrepCmd.AdcParameters.default(),
-          )
-        )
-      elif monitoring_mode == PrepCmd.MonitoringMode.TADM:
-        params_nolld_tadm.append(
-          PrepCmd.AspirateParametersNoLldAndTadm2(
-            default_values=False,
-            channel=_CHANNEL_INDEX[ch],
-            aspirate=asp,
-            container_description=segs,
-            common=common,
-            no_lld=no_lld,
-            mix=PrepCmd.MixParameters.default(),
-            adc=PrepCmd.AdcParameters.default(),
-            tadm=_tadm,
-          )
-        )
-      else:
-        params_nolld_mon.append(
-          PrepCmd.AspirateParametersNoLldAndMonitoring2(
-            default_values=False,
-            channel=_CHANNEL_INDEX[ch],
-            aspirate=asp,
-            container_description=segs,
-            common=common,
-            no_lld=no_lld,
-            mix=PrepCmd.MixParameters.default(),
-            adc=PrepCmd.AdcParameters.default(),
-            aspirate_monitoring=PrepCmd.AspirateMonitoringParameters.default(),
-          )
-        )
-
-    dest = await self._require("pipettor")
-
-    # For LLD aspirates, auto-calculate read_timeout from seek distance and speed
-    # to prevent connection timeout during slow descents.
-    # Explicit read_timeout from caller takes precedence.
+    # Auto-calculate LLD read timeout from seek distance/speed.
     lld_read_timeout = read_timeout
-    if lld_read_timeout is None and effective_lld and _lld.channel_speed > 0:
-      seek_distance = _lld.search_start_position - min(z_minimum)
-      if seek_distance > 0:
-        lld_read_timeout = seek_distance / _lld.channel_speed + 5.0
+    if lld_read_timeout is None and effective_lld and kits:
+      kit0_lld = kits[0].lld
+      if kit0_lld.channel_speed > 0:
+        min_z_min = min(k.common.z_minimum for k in kits)
+        seek_distance = kit0_lld.search_start_position - min_z_min
+        if seek_distance > 0:
+          lld_read_timeout = seek_distance / kit0_lld.channel_speed + 5.0
 
-    if effective_lld and monitoring_mode == PrepCmd.MonitoringMode.TADM:
-      await self.client.send_command(
-        PrepCmd.PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lld_tadm),
-        read_timeout=lld_read_timeout,
-      )
-    elif effective_lld:
-      await self.client.send_command(
-        PrepCmd.PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lld_mon),
-        read_timeout=lld_read_timeout,
-      )
-    elif monitoring_mode == PrepCmd.MonitoringMode.TADM:
-      await self.client.send_command(
-        PrepCmd.PrepAspirateTadmV2(dest=dest, aspirate_parameters=params_nolld_tadm)
-      )
-    else:
-      await self.client.send_command(
-        PrepCmd.PrepAspirateNoLldMonitoringV2(dest=dest, aspirate_parameters=params_nolld_mon)
-      )
+    await self._send_aspirate(kits, effective_lld, is_tadm, use_v2, lld_read_timeout)
 
   async def dispense(
     self,
@@ -1484,8 +2064,9 @@ class PrepBackend(LiquidHandlerBackend):
     auto_container_geometry: bool = False,  # TODO: Doesn't work with no LLD
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
+    command_version: Optional[Literal["v1", "v2"]] = None,
   ):
-    """Dispense using v2 commands, dispatching to NoLLD or LLD variant.
+    """Dispense, dispatching to the appropriate command variant and version.
 
     Z/geometry parameters (final_z, z_fluid, z_air, z_minimum, z_bottom_search_offset):
     None = use defaults for all channels (derived from well geometry, STAR-aligned).
@@ -1517,228 +2098,37 @@ class PrepBackend(LiquidHandlerBackend):
       auto_container_geometry: Build container segments from well geometry.
       hamilton_liquid_classes: Per-op Hamilton liquid classes. None = auto from tip/liquid.
       disable_volume_correction: Per-op flag to skip volume correction.
+      command_version: Override per-call: "v1" (cmd 5-6) or "v2" (cmd 42-43).
+        None uses the version determined at setup. V1 converts container_description
+        frustum segments into the cone model in CommonParameters.
 
     Example::
 
       await backend.dispense(ops, [0], final_z=[95.0], settling_time=[0.5])
       await backend.dispense(ops, [0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
+      await backend.dispense(ops, [0], command_version="v1")
     """
-    assert len(ops) == len(use_channels)
-    if use_channels:
-      assert max(use_channels) < self.num_channels, (
-        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
-      )
-
-    n = len(ops)
-    hlcs: List[Optional[HamiltonLiquidClass]]
-    if hamilton_liquid_classes is not None:
-      if len(hamilton_liquid_classes) != n:
-        raise ValueError(
-          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
-        )
-      hlcs = list(hamilton_liquid_classes)
-    else:
-      # Defaults from STAR calibration table; add get_prep_liquid_class if Prep needs different values.
-      hlcs = [
-        get_star_liquid_class(
-          tip_volume=op.tip.maximal_volume,
-          is_core=False,
-          is_tip=True,
-          has_filter=op.tip.has_filter,
-          liquid=Liquid.WATER,
-          jet=False,
-          blow_out=False,
-        )
-        for op in ops
-      ]
-    disable_volume_correction = (
-      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    _DISPENSE_ALLOWED_LLD = frozenset({self.LLDMode.CAPACITIVE})
+    effective_lld = self._resolve_effective_lld(
+      lld_mode, use_lld, lld, len(ops), allowed_modes=_DISPENSE_ALLOWED_LLD,
     )
-    if len(disable_volume_correction) != n:
-      raise ValueError(
-        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
-      )
-    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
+    use_v2 = self._resolve_command_version(command_version)
 
-    # Default lists from HLC (fallbacks when HLC is None)
-    default_settling = [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs]
-    default_transport_air_volume = [
-      hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    default_z_liquid_exit_speed = [
-      hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs
-    ]
-    default_stop_back_volume = [
-      hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    default_cutoff_speed = [
-      hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs
-    ]
-    settling_time = fill_in_defaults(settling_time, default_settling)
-    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air_volume)
-    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_liquid_exit_speed)
-    stop_back_volume = fill_in_defaults(stop_back_volume, default_stop_back_volume)
-    cutoff_speed = fill_in_defaults(cutoff_speed, default_cutoff_speed)
-
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
-    flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100.0)
-      for op, hlc in zip(ops, hlcs)
-    ]
-
-    # Resolve LLD mode — same structure as aspirate(), but dispense only supports
-    # capacitive LLD (pressure LLD is physically impossible during dispense).
-    if lld_mode is not None:
-      if len(lld_mode) != n:
-        raise ValueError(f"lld_mode length must match len(ops): {len(lld_mode)} != {n}")
-      for m in lld_mode:
-        if m in (self.LLDMode.PRESSURE, self.LLDMode.DUAL):
-          raise ValueError(
-            f"Dispense does not support {m.name} LLD — only CAPACITIVE or OFF. "
-            "Pressure-based LLD requires aspiration (plunger movement)."
-          )
-      lld_on = [m != self.LLDMode.OFF for m in lld_mode]
-      if any(lld_on) and not all(lld_on):
-        raise ValueError(
-          "Prep firmware requires all channels to use the same LLD mode category. "
-          "Cannot mix LLDMode.OFF with CAPACITIVE in one call. "
-          "Split into separate calls for channels with different LLD modes."
-        )
-      effective_lld = all(lld_on)
-    else:
-      effective_lld = use_lld or (lld is not None)
-
-    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
-
-    # Precompute well geometry once (used for default Z lists and for LLD in the loop).
-    well_geometry = [_absolute_z_from_well(op) for op in ops]
-    default_z_minimum = [g[0] for g in well_geometry]
-    default_z_fluid = [g[1] for g in well_geometry]
-    default_z_air = [g[3] for g in well_geometry]
-    raw_traverse = self._resolve_traverse_height(None)
-    default_final_z = [
-      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
-    ]
-    default_z_bottom_search_offset = [2.0] * n
-    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
-    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
-    z_air = fill_in_defaults(z_air, default_z_air)
-    final_z = fill_in_defaults(final_z, default_final_z)
-    z_bottom_search_offset = fill_in_defaults(
-      z_bottom_search_offset, default_z_bottom_search_offset
+    kits = self._resolve_dispense_channels(
+      ops, use_channels, effective_lld,
+      final_z=final_z, z_fluid=z_fluid, z_air=z_air,
+      settling_time=settling_time, transport_air_volume=transport_air_volume,
+      z_liquid_exit_speed=z_liquid_exit_speed,
+      stop_back_volume=stop_back_volume, cutoff_speed=cutoff_speed,
+      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
+      lld=lld, c_lld=c_lld,
+      container_segments=container_segments,
+      auto_container_geometry=auto_container_geometry,
+      hamilton_liquid_classes=hamilton_liquid_classes,
+      disable_volume_correction=disable_volume_correction,
     )
 
-    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
-    for i, ch in enumerate(use_channels):
-      if container_segments is not None and i < len(container_segments):
-        ch_segments[ch] = container_segments[i]
-      elif auto_container_geometry:
-        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
-      else:
-        ch_segments[ch] = []
-
-    # See aspirate() comment — default_values=False required for LLD to trigger.
-    if effective_lld:
-      _c_lld = c_lld or PrepCmd.CLldParameters(
-        default_values=False,
-        sensitivity=4,
-        clot_check_enable=False,
-        z_clot_check=0.0,
-        detect_mode=0,
-      )
-    else:
-      _c_lld = c_lld or PrepCmd.CLldParameters.default()
-
-    params_nolld: List[PrepCmd.DispenseParametersNoLld2] = []
-    params_lld: List[PrepCmd.DispenseParametersLld2] = []
-
-    for ch in range(self.num_channels):
-      if ch not in indexed_ops:
-        continue
-      idx = ch_to_idx[ch]
-      op = indexed_ops[ch]
-      loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
-      radius = _effective_radius(op.resource)
-      disp = PrepCmd.DispenseParameters.for_op(
-        loc,
-        stop_back_volume=stop_back_volume[idx],
-        cutoff_speed=cutoff_speed[idx],
-      )
-      segs = ch_segments[ch]
-
-      z_minimum_ch = z_minimum[idx]
-      z_final_ch = final_z[idx]
-      z_fluid_ch = z_fluid[idx]
-      z_air_ch = z_air[idx]
-      z_bottom_search_offset_ch = z_bottom_search_offset[idx]
-
-      if effective_lld and lld is None:
-        top_of_well_z = well_geometry[idx][2]
-        _lld = PrepCmd.LldParameters(
-          default_values=False,
-          search_start_position=top_of_well_z,
-          channel_speed=5.0,  # mm/s — must be >0 or firmware rejects with 0x0011
-          z_submerge=2.0,
-          z_out_of_liquid=0.0,
-        )
-      else:
-        _lld = lld or PrepCmd.LldParameters.default()
-
-      common = PrepCmd.CommonParameters.for_op(
-        volumes[idx],
-        radius,
-        flow_rate=flow_rates[idx],
-        z_minimum=z_minimum_ch,
-        z_final=z_final_ch,
-        z_liquid_exit_speed=z_liquid_exit_speed[idx],
-        transport_air_volume=transport_air_volume[idx],
-        settling_time=settling_time[idx],
-      )
-
-      if effective_lld:
-        params_lld.append(
-          PrepCmd.DispenseParametersLld2(
-            default_values=False,
-            channel=_CHANNEL_INDEX[ch],
-            dispense=disp,
-            container_description=segs,
-            common=common,
-            lld=_lld,
-            c_lld=_c_lld,
-            mix=PrepCmd.MixParameters.default(),
-            adc=PrepCmd.AdcParameters.default(),
-            tadm=PrepCmd.TadmParameters.default(),
-          )
-        )
-      else:
-        params_nolld.append(
-          PrepCmd.DispenseParametersNoLld2(
-            default_values=False,
-            channel=_CHANNEL_INDEX[ch],
-            dispense=disp,
-            container_description=segs,
-            common=common,
-            no_lld=PrepCmd.NoLldParameters.for_fixed_z(
-              z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch
-            ),
-            mix=PrepCmd.MixParameters.default(),
-            adc=PrepCmd.AdcParameters.default(),
-            tadm=PrepCmd.TadmParameters.default(),
-          )
-        )
-
-    dest = await self._require("pipettor")
-    if effective_lld:
-      await self.client.send_command(
-        PrepCmd.PrepDispenseWithLldV2(dest=dest, dispense_parameters=params_lld)
-      )
-    else:
-      await self.client.send_command(
-        PrepCmd.PrepDispenseNoLldV2(dest=dest, dispense_parameters=params_nolld)
-      )
+    await self._send_dispense(kits, effective_lld, use_v2)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("pick_up_tips96 is not supported on the Prep")

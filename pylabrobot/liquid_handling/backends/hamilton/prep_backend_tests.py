@@ -85,6 +85,7 @@ def _setup_backend(num_channels: int = 2, has_mph: bool = False) -> PrepBackend:
   backend._resolver._resolved["deck_config"] = _DECK_CONFIG_ADDR
   backend._resolver._resolved["mph"] = _MPH_ADDR if has_mph else None
   backend._resolver._resolved["mlprep_service"] = _SERVICE_ADDR
+  backend._supports_v2_pipetting = True
   backend.setup_finished = True
   return backend
 
@@ -1345,6 +1346,206 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
     backend = _setup_backend()
     self.assertFalse(hasattr(backend, "calibrate_z_axis"))
     self.assertFalse(hasattr(backend, "calibrate_squeeze_tips_mph"))
+
+# =============================================================================
+# V1/V2 aspirate/dispense fallback
+# =============================================================================
+
+
+class TestSegmentsToConeGeometry(unittest.TestCase):
+  """Unit tests for _segments_to_cone_geometry conversion."""
+
+  def test_empty_segments_returns_fallback(self):
+    from pylabrobot.liquid_handling.backends.hamilton.prep_backend import _segments_to_cone_geometry
+
+    r, ch, cbr = _segments_to_cone_geometry([], fallback_radius=4.0)
+    self.assertAlmostEqual(r, 4.0)
+    self.assertAlmostEqual(ch, 0.0)
+    self.assertAlmostEqual(cbr, 0.0)
+
+  def test_single_cylinder_segment(self):
+    from pylabrobot.liquid_handling.backends.hamilton.prep_backend import _segments_to_cone_geometry
+
+    area = math.pi * 4.0**2  # radius 4
+    seg = PrepCmd.SegmentDescriptor(area_top=area, area_bottom=area, height=10.0)
+    r, ch, cbr = _segments_to_cone_geometry([seg], fallback_radius=0.0)
+    self.assertAlmostEqual(r, 4.0, places=5)
+    self.assertAlmostEqual(ch, 0.0)
+    self.assertAlmostEqual(cbr, 0.0)
+
+  def test_tapered_bottom_segment(self):
+    from pylabrobot.liquid_handling.backends.hamilton.prep_backend import _segments_to_cone_geometry
+
+    area_small = math.pi * 2.0**2
+    area_large = math.pi * 4.0**2
+    seg = PrepCmd.SegmentDescriptor(area_top=area_large, area_bottom=area_small, height=5.0)
+    r, ch, cbr = _segments_to_cone_geometry([seg], fallback_radius=0.0)
+    # Volume-weighted avg area = (area_large + area_small) / 2
+    avg_area = (area_large + area_small) / 2.0
+    expected_r = math.sqrt(avg_area / math.pi)
+    self.assertAlmostEqual(r, expected_r, places=5)
+    self.assertAlmostEqual(ch, 5.0)
+    self.assertAlmostEqual(cbr, 2.0, places=5)
+
+  def test_multi_segment_cylinder_plus_cone(self):
+    from pylabrobot.liquid_handling.backends.hamilton.prep_backend import _segments_to_cone_geometry
+
+    area_small = math.pi * 1.0**2
+    area_large = math.pi * 3.0**2
+    cone_seg = PrepCmd.SegmentDescriptor(area_top=area_large, area_bottom=area_small, height=2.0)
+    cyl_seg = PrepCmd.SegmentDescriptor(area_top=area_large, area_bottom=area_large, height=8.0)
+    r, ch, cbr = _segments_to_cone_geometry([cone_seg, cyl_seg], fallback_radius=0.0)
+    # Bottom segment tapers, so cone_height=2.0, cone_bottom_radius=1.0
+    self.assertAlmostEqual(ch, 2.0)
+    self.assertAlmostEqual(cbr, 1.0, places=5)
+    # tube_radius is volume-weighted average across both segments
+    total_h = 10.0
+    weighted = 2.0 * (area_large + area_small) / 2.0 + 8.0 * area_large
+    expected_r = math.sqrt((weighted / total_h) / math.pi)
+    self.assertAlmostEqual(r, expected_r, places=5)
+
+
+class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
+  """V1 command_version dispatch: verify v1 command classes are sent."""
+
+  async def asyncSetUp(self):
+    self.backend, self.deck, self.tip_rack, self.plate = _setup_backend_with_deck()
+    self.backend._supports_v2_pipetting = True  # default: v2 available
+    self.mock_send = unittest.mock.AsyncMock(return_value=None)
+    self.backend.client.send_command = self.mock_send
+    self.tip = self.tip_rack.get_item("A1").get_tip()
+
+  def _make_asp(self, well_name="A1", volume=100.0, liquid_height=5.0):
+    return SingleChannelAspiration(
+      resource=self.plate.get_item(well_name),
+      offset=Coordinate.zero(),
+      tip=self.tip,
+      volume=volume,
+      flow_rate=None,
+      liquid_height=liquid_height,
+      blow_out_air_volume=0.0,
+      mix=None,
+    )
+
+  def _make_disp(self, well_name="A1", volume=100.0, liquid_height=5.0):
+    return SingleChannelDispense(
+      resource=self.plate.get_item(well_name),
+      offset=Coordinate.zero(),
+      tip=self.tip,
+      volume=volume,
+      flow_rate=None,
+      liquid_height=liquid_height,
+      blow_out_air_volume=0.0,
+      mix=None,
+    )
+
+  # --- Aspirate v1 dispatch ---
+
+  async def test_aspirate_v1_nolld_monitoring(self):
+    await self.backend.aspirate([self._make_asp()], use_channels=[0], command_version="v1")
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoring)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)), 0)
+
+  async def test_aspirate_v1_tadm(self):
+    await self.backend.aspirate(
+      [self._make_asp()],
+      use_channels=[0],
+      monitoring_mode=PrepCmd.MonitoringMode.TADM,
+      command_version="v1",
+    )
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateTadm)), 1)
+
+  async def test_aspirate_v1_with_lld(self):
+    await self.backend.aspirate(
+      [self._make_asp()], use_channels=[0], use_lld=True, command_version="v1"
+    )
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLld)), 1)
+
+  async def test_aspirate_v1_with_lld_tadm(self):
+    await self.backend.aspirate(
+      [self._make_asp()],
+      use_channels=[0],
+      use_lld=True,
+      monitoring_mode=PrepCmd.MonitoringMode.TADM,
+      command_version="v1",
+    )
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldTadm)), 1)
+
+  # --- Dispense v1 dispatch ---
+
+  async def test_dispense_v1_nolld(self):
+    await self.backend.dispense([self._make_disp()], use_channels=[0], command_version="v1")
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseNoLld)), 1)
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)), 0)
+
+  async def test_dispense_v1_with_lld(self):
+    await self.backend.dispense(
+      [self._make_disp()], use_channels=[0], use_lld=True, command_version="v1"
+    )
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseWithLld)), 1)
+
+  # --- V1 cone geometry patching ---
+
+  async def test_v1_aspirate_patches_cone_geometry_from_segments(self):
+    """When using v1 with auto_container_geometry, CommonParameters gets cone fields patched."""
+    await self.backend.aspirate(
+      [self._make_asp()],
+      use_channels=[0],
+      auto_container_geometry=True,
+      command_version="v1",
+    )
+    cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoring)[0]
+    common = cmd.aspirate_parameters[0].common
+    # auto_container_geometry builds segments from the well; v1 conversion should
+    # populate tube_radius from those segments (not leave cone_height=0).
+    # For a Cor_96 plate with uniform cross-section, tube_radius should match
+    # _effective_radius, and cone should stay 0 (constant area).
+    self.assertGreater(common.tube_radius, 0.0)
+
+  # --- Default auto-detection ---
+
+  async def test_default_uses_v2_when_supported(self):
+    self.backend._supports_v2_pipetting = True
+    await self.backend.aspirate([self._make_asp()], use_channels=[0])
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoringV2)), 1)
+
+  async def test_default_uses_v1_when_unsupported(self):
+    self.backend._supports_v2_pipetting = False
+    await self.backend.aspirate([self._make_asp()], use_channels=[0])
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoring)), 1)
+
+  async def test_use_v1_aspirate_dispense_forces_v1(self):
+    backend = _setup_backend()
+    backend._use_v1_aspirate_dispense = True
+    backend._supports_v2_pipetting = False
+    mock = unittest.mock.AsyncMock(return_value=None)
+    backend.client.send_command = mock
+    backend._deck = self.deck
+    tip = self.tip_rack.get_item("A1").get_tip()
+    op = SingleChannelAspiration(
+      resource=self.plate.get_item("A1"),
+      offset=Coordinate.zero(),
+      tip=tip,
+      volume=100.0,
+      flow_rate=None,
+      liquid_height=5.0,
+      blow_out_air_volume=0.0,
+      mix=None,
+    )
+    await backend.aspirate([op], use_channels=[0])
+    self.assertEqual(len(_get_commands(mock, PrepCmd.PrepAspirateNoLldMonitoring)), 1)
+
+  async def test_per_call_v1_override_uses_v1(self):
+    """Per-call command_version='v1' forces v1 even when v2 is supported."""
+    self.backend._supports_v2_pipetting = True
+    await self.backend.aspirate([self._make_asp()], use_channels=[0], command_version="v1")
+    self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateNoLldMonitoring)), 1)
+
+  async def test_per_call_v2_override_raises_when_unsupported(self):
+    self.backend._supports_v2_pipetting = False
+    with self.assertRaises(ValueError):
+      await self.backend.aspirate([self._make_asp()], use_channels=[0], command_version="v2")
+
 
 if __name__ == "__main__":
   unittest.main()
