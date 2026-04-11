@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("pylibftdi")
 
-from pylabrobot.agilent.biotek.biotek import BioTekBackend
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 

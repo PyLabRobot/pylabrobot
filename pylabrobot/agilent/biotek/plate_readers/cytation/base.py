@@ -10,9 +10,10 @@ from pylabrobot.capabilities.temperature_controlling import TemperatureControlle
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
-from .biotek import BioTekBackend
-from .cytation_microscopy_backend import CytationImagingConfig, CytationMicroscopyBackend
-from .loading_tray_backend import BioTekLoadingTrayBackend
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
+
+from .microscopy_backend import CytationImagingConfig, CytationMicroscopyBackend
 
 logger = logging.getLogger(__name__)
 

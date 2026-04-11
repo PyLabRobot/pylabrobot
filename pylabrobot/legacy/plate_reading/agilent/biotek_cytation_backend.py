@@ -2,8 +2,8 @@
 
 from typing import Optional
 
-from pylabrobot.agilent.biotek.biotek import BioTekBackend
-from pylabrobot.agilent.biotek.cytation_microscopy_backend import (
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
+from pylabrobot.agilent.biotek.plate_readers.cytation import (
   CytationImagingConfig,
   CytationMicroscopyBackend,
 )
@@ -21,7 +21,7 @@ from pylabrobot.resources import Plate
 
 
 class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
-  """Legacy. Use pylabrobot.agilent.CytationMicroscopyBackend instead."""
+  """Legacy. Use ``from pylabrobot.agilent.biotek import CytationMicroscopyBackend`` instead."""
 
   _new: BioTekBackend
 

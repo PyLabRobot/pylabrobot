@@ -39,7 +39,7 @@ from pylabrobot.serializer import SerializableMixin
 from .aravis_camera import AravisCamera
 
 if TYPE_CHECKING:
-  from .biotek import BioTekBackend
+  from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class CytationImagingConfig:
   camera_serial_number: Optional[str] = None
   filters: Optional[List[Optional[ImagingMode]]] = None
   objectives: Optional[List[Optional[Objective]]] = None
-  max_image_read_attempts: int = 10
+  max_image_read_attempts: int = 50
   image_read_delay: float = 0.3
 
 
@@ -91,7 +91,7 @@ class CytationMicroscopyBackend(MicroscopyBackend):
     self._objective: Optional[Objective] = None
     self._acquiring = False
 
-  async def _on_setup(self) -> None:
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Connect camera (if use_cam) and load filters/objectives from firmware."""
     if self._use_cam:
       serial = self._camera_serial or (
@@ -493,6 +493,7 @@ class CytationMicroscopyBackend(MicroscopyBackend):
       await self.driver.send_command("Y", f"O01{relative_y_str}")
 
     self._pos_x, self._pos_y = x, y
+    await asyncio.sleep(0.1)
 
   # ─── Vendor Params ──────────────────────────────────────────────────
 
@@ -597,7 +598,10 @@ class CytationMicroscopyBackend(MicroscopyBackend):
         t1 = time.time()
         logger.debug("[cytation] acquired image in %.2f seconds", t1 - t0)
     finally:
-      await self.led_off()
+      try:
+        await self.led_off()
+      except Exception:
+        logger.exception("Failed to turn off LED during cleanup")
       if auto_stop_acquisition:
         self.stop_acquisition()
 

@@ -17,7 +17,7 @@ from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
 
-from .cytation_base import _CytationBase
+from .base import _CytationBase
 
 logger = logging.getLogger(__name__)
 

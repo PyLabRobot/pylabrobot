@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from .cytation_base import _CytationBase
+from .base import _CytationBase
 
 logger = logging.getLogger(__name__)
 
