@@ -12,12 +12,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   MachineConfiguration,
   STARBackend,
 )
-from pylabrobot.liquid_handling.pipette_batch_scheduling import (
-  plan_batches,
-  print_batches,
-  resolve_container_targets,
-  validate_channel_selections,
-)
+from pylabrobot.liquid_handling.pipette_batch_scheduling import print_batches
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.well import Well
@@ -379,39 +374,12 @@ class STARChatterboxBackend(STARBackend):
         ``containers`` and ``use_channels`` have different lengths.
       NoTipError: If any specified channel lacks a tip.
     """
-    if x_grouping_tolerance is None:
-      x_grouping_tolerance = self._x_grouping_tolerance_mm
-
-    use_channels = validate_channel_selections(
-      containers=containers,
-      num_channels=self.num_channels,
-      use_channels=use_channels,
-    )
-    if len(use_channels) != len(set(use_channels)):
+    if use_channels is not None and len(use_channels) != len(set(use_channels)):
       raise ValueError(
         f"Duplicate channels in use_channels {use_channels}: each physical channel "
         f"can only probe one container per call. To probe more containers than available "
         f"channels, call probe_liquid_heights multiple times in sequence."
       )
-
-    for ch in use_channels:
-      self.head[ch].get_tip()  # Raises NoTipError if no tip
-
-    targets = resolve_container_targets(
-      containers=containers,
-      use_channels=use_channels,
-      channel_spacings=self._channels_minimum_y_spacing,
-      wrt_resource=self.deck,
-      resource_offsets=resource_offsets,
-    )
-    batches = plan_batches(
-      use_channels=use_channels,
-      targets=targets,
-      channel_spacings=self._channels_minimum_y_spacing,
-      x_tolerance=x_grouping_tolerance,
-    )
-
-    print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
 
     async def _mock_probe(batch):
       heights = {}
@@ -424,10 +392,14 @@ class STARChatterboxBackend(STARBackend):
           heights[ch] = container.compute_height_from_volume(volume)
       return heights
 
-    batch_results = await self.execute_batched(
-      func=_mock_probe,
-      batches=batches,
+    use_channels, _, batches = await self._prepare_batched(
+      containers=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      x_grouping_tolerance=x_grouping_tolerance,
     )
+    print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
+    batch_results = await self.execute_batched(func=_mock_probe, batches=batches)
 
     # Merge batch results in use_channels order
     ch_to_height = {}

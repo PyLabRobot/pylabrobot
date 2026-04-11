@@ -2107,6 +2107,70 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return results
 
+  async def _prepare_batched(
+    self,
+    containers: List[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    x_grouping_tolerance: Optional[float] = None,
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+  ) -> Tuple[List[int], List[float], List[ChannelBatch]]:
+    """Validate channels, verify tips, position Z, resolve targets, plan batches.
+
+    Shared setup for any batched channel operation (probing, aspirate,
+    dispense). Returns everything the caller needs to define its callback
+    and call ``execute_batched``.
+
+    Returns:
+      (use_channels, tip_lengths, batches).
+    """
+    if x_grouping_tolerance is None:
+      x_grouping_tolerance = self._x_grouping_tolerance_mm
+
+    use_channels = validate_channel_selections(
+      containers=containers,
+      num_channels=self.num_channels,
+      use_channels=use_channels,
+    )
+
+    # Verify tips and query tip lengths
+    tip_presence = await self.request_tip_presence()
+    if not all(tip_presence[idx] for idx in use_channels):
+      raise RuntimeError("All specified channels must have tips attached.")
+    tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
+
+    # Z pre-positioning
+    idle_channels = sorted(set(range(self.num_channels)) - set(use_channels))
+    if min_traverse_height_at_beginning_of_command is not None:
+      await asyncio.gather(
+        *[
+          self.move_channel_stop_disk_z(channel_idx=ch_idx, z=self.MAXIMUM_CHANNEL_Z_POSITION)
+          for ch_idx in idle_channels
+        ]
+      )
+      await self.position_channels_in_z_direction(
+        {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
+      )
+    else:
+      await self.move_all_channels_in_z_safety()
+
+    # Resolve targets, plan batches
+    targets = resolve_container_targets(
+      containers=containers,
+      use_channels=use_channels,
+      channel_spacings=self._channels_minimum_y_spacing,
+      wrt_resource=self.deck,
+      resource_offsets=resource_offsets,
+    )
+    batches = plan_batches(
+      use_channels=use_channels,
+      targets=targets,
+      channel_spacings=self._channels_minimum_y_spacing,
+      x_tolerance=x_grouping_tolerance,
+    )
+
+    return use_channels, tip_lengths, batches
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
@@ -2163,61 +2227,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       RuntimeError: If any specified channel lacks a tip.
     """
 
-    if x_grouping_tolerance is None:
-      x_grouping_tolerance = self._x_grouping_tolerance_mm
-
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
-    use_channels = validate_channel_selections(
-      containers=containers,
-      num_channels=self.num_channels,
-      use_channels=use_channels,
-    )
-    if len(use_channels) != len(set(use_channels)):
+    if use_channels is not None and len(use_channels) != len(set(use_channels)):
       raise ValueError(
         f"Duplicate channels in use_channels {use_channels}: each physical channel "
         f"can only probe one container per call. To probe more containers than available "
         f"channels, call probe_liquid_heights multiple times in sequence."
       )
-    idle_channels = sorted(set(range(self.num_channels)) - set(use_channels))
-
-    # Verify tips and query tip lengths
-    tip_presence = await self.request_tip_presence()
-    if not all(tip_presence[idx] for idx in use_channels):
-      raise RuntimeError("All specified channels must have tips attached.")
-    tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
-
-    if min_traverse_height_at_beginning_of_command is not None:
-      await asyncio.gather(
-        *[
-          self.move_channel_stop_disk_z(channel_idx=ch_idx, z=self.MAXIMUM_CHANNEL_Z_POSITION)
-          for ch_idx in idle_channels
-        ]
-      )
-      await self.position_channels_in_z_direction(
-        {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
-      )
-    else:
-      await self.move_all_channels_in_z_safety()
 
     z_cavity_bottom = [
       r.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z for r in containers
     ]
     z_top = [r.get_location_wrt(self.deck, "c", "c", "t").z for r in containers]
-
-    targets = resolve_container_targets(
-      containers=containers,
-      use_channels=use_channels,
-      channel_spacings=self._channels_minimum_y_spacing,
-      wrt_resource=self.deck,
-      resource_offsets=resource_offsets,
-    )
-    batches = plan_batches(
-      use_channels=use_channels,
-      targets=targets,
-      channel_spacings=self._channels_minimum_y_spacing,
-      x_tolerance=x_grouping_tolerance,
-    )
 
     detect_func: Callable[..., Any]
     if lld_mode == self.LLDMode.GAMMA:
@@ -2279,6 +2301,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       return measurements
 
+    use_channels, tip_lengths, batches = await self._prepare_batched(
+      containers=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      x_grouping_tolerance=x_grouping_tolerance,
+      min_traverse_height_at_beginning_of_command=min_traverse_height_at_beginning_of_command,
+    )
     batch_results = await self.execute_batched(
       func=_probe_batch_heights,
       batches=batches,
