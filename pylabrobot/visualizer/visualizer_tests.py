@@ -127,7 +127,7 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
 
   def test_get_index_html(self):
     """Test that the index.html file is returned."""
-    r = urllib.request.urlopen("http://localhost:1337/", timeout=10)
+    r = urllib.request.urlopen(f"http://localhost:{self.vis.fs_port}/", timeout=10)
     self.assertEqual(r.status, 200)
     self.assertIn(
       r.headers["Content-Type"],

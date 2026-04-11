@@ -25,7 +25,7 @@ except ImportError as e:
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 @functools.lru_cache(maxsize=None)
@@ -120,6 +120,12 @@ class Visualizer:
       liquid_color: Hex color code (without ``#``) used to fill wells, troughs, and tubes to
         indicate liquid volume. Default is ``"F39C12"`` (amber).
     """
+
+    if not HAS_WEBSOCKETS:
+      raise RuntimeError(
+        "The visualizer requires websockets to be installed. "
+        f"Import error: {_WEBSOCKETS_IMPORT_ERROR}"
+      )
 
     self.setup_finished = False
     self._show_machine_tools_at_start = show_machine_tools_at_start
@@ -450,11 +456,6 @@ class Visualizer:
 
     Sets up the websocket server. This will run in a separate thread.
     """
-
-    if not HAS_WEBSOCKETS:
-      raise RuntimeError(
-        f"The visualizer requires websockets to be installed. Import error: {_WEBSOCKETS_IMPORT_ERROR}"
-      )
 
     async def run_server():
       self._stop_ = self.loop.create_future()

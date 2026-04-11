@@ -26,8 +26,10 @@ def does_tip_tracking() -> bool:
 def no_tip_tracking():
   old_value = this.tip_tracking_enabled
   this.tip_tracking_enabled = False  # type: ignore
-  yield
-  this.tip_tracking_enabled = old_value  # type: ignore
+  try:
+    yield
+  finally:
+    this.tip_tracking_enabled = old_value  # type: ignore
 
 
 TrackerCallback = Callable[[], None]
@@ -119,7 +121,8 @@ class TipTracker(SerializableMixin):
 
   def rollback(self) -> None:
     """Rollback the pending operations."""
-    assert not self.is_disabled, "Tip tracker is disabled. Call `enable()`."
+    if self.is_disabled:
+      raise RuntimeError("Tip tracker is disabled. Call `enable()`.")
     self._pending_tip = self._tip
 
   def clear(self) -> None:

@@ -3,7 +3,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -52,6 +52,10 @@ class USB(IOBase):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
+    max_workers: int = 1,
+    read_endpoint_address: Optional[int] = None,
+    write_endpoint_address: Optional[int] = None,
   ):
     """Initialize an io.USB object.
 
@@ -65,6 +69,11 @@ class USB(IOBase):
       packet_read_timeout: The timeout for reading packets from the machine in seconds.
       read_timeout: The timeout for reading from the machine in seconds.
       write_timeout: The timeout for writing to the machine in seconds.
+      read_endpoint_address: The address of the read endpoint. If `None`, find the first IN endpoint.
+      write_endpoint_address: The address of the write endpoint. If `None`, find the first OUT endpoint.
+      configuration_callback: A callback that takes the device object as an argument and performs
+        any necessary configuration. If `None`, `dev.set_configuration()` is called.
+      max_workers: The maximum number of worker threads for USB I/O operations.
     """
 
     super().__init__()
@@ -84,8 +93,12 @@ class USB(IOBase):
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
     self.write_timeout = write_timeout
+    self.read_endpoint_address = read_endpoint_address
+    self.write_endpoint_address = write_endpoint_address
+    self.configuration_callback = configuration_callback
+    self.max_workers = max_workers
 
-    self.dev: Optional["usb.core.Device"] = None  # TODO: make this a property
+    self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
@@ -118,13 +131,15 @@ class USB(IOBase):
       raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
     await loop.run_in_executor(
       self._executor,
-      lambda: dev.write(write_endpoint, data, timeout=timeout),
+      lambda: dev.write(
+        write_endpoint, data, timeout=int(timeout * 1000)
+      ),  # PyUSB expects timeout in milliseconds
     )
     if len(data) % write_endpoint.wMaxPacketSize == 0:
       # send a zero-length packet to indicate the end of the transfer
       await loop.run_in_executor(
         self._executor,
-        lambda: dev.write(write_endpoint, b"", timeout=timeout),
+        lambda: dev.write(write_endpoint, b"", timeout=int(timeout * 1000)),
       )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
@@ -135,11 +150,19 @@ class USB(IOBase):
       )
     )
 
-  def _read_packet(self, size: Optional[int] = None) -> Optional[bytearray]:
+  def _read_packet(
+    self,
+    size: Optional[int] = None,
+    timeout: Optional[float] = None,
+    endpoint: Optional[int] = None,
+  ) -> Optional[bytearray]:
     """Read a packet from the machine.
 
     Args:
       size: The maximum number of bytes to read. If `None`, read up to wMaxPacketSize bytes.
+      timeout: The timeout for reading from the device in seconds. If `None`, use the default
+        timeout (specified by the `packet_read_timeout` attribute).
+      endpoint: The endpoint address to read from. If `None`, use the default read endpoint.
 
     Returns:
       A bytearray containing the data read, or None if no data was received.
@@ -148,13 +171,36 @@ class USB(IOBase):
     if self.dev is None or self.read_endpoint is None:
       raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
-    read_size = size if size is not None else self.read_endpoint.wMaxPacketSize
+    ep = endpoint if endpoint is not None else self.read_endpoint
+    if ep is None:
+      raise RuntimeError("Read endpoint not found. Call setup() first.")
+
+    # Get max packet size if size is not provided
+    if size is None:
+      if isinstance(ep, int):
+        # Find endpoint object to get max packet size
+        cfg = self.dev.get_active_configuration()
+        intf = cfg[(0, 0)]
+        ep_obj = usb.util.find_descriptor(
+          intf,
+          custom_match=lambda e: e.bEndpointAddress == ep,
+        )
+        if ep_obj is None:
+          raise ValueError(f"Endpoint 0x{ep:02x} not found.")
+        read_size = ep_obj.wMaxPacketSize
+      else:
+        read_size = ep.wMaxPacketSize
+    else:
+      read_size = size
+
+    if timeout is None:
+      timeout = self.packet_read_timeout
 
     try:
       res = self.dev.read(
-        self.read_endpoint,
+        ep,
         read_size,
-        timeout=int(self.packet_read_timeout * 1000),  # timeout in ms
+        timeout=int(timeout * 1000),  # timeout in ms
       )
 
       if res is not None:
@@ -327,7 +373,7 @@ class USB(IOBase):
 
     return bytearray(res)
 
-  async def setup(self):
+  async def setup(self, empty_buffer=True):
     """Initialize the USB connection to the machine."""
 
     if self.dev is not None:
@@ -356,24 +402,39 @@ class USB(IOBase):
 
     # set the active configuration. With no arguments, the first
     # configuration will be the active one
-    self.dev.set_configuration()
+    if self.configuration_callback is not None:
+      self.configuration_callback(self.dev)
+    else:
+      self.dev.set_configuration()
 
     cfg = self.dev.get_active_configuration()
     intf = cfg[(0, 0)]
 
-    self.write_endpoint = usb.util.find_descriptor(
-      intf,
-      custom_match=lambda e: (
-        usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
-      ),
-    )
+    if self.write_endpoint_address is not None:
+      self.write_endpoint = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: e.bEndpointAddress == self.write_endpoint_address,
+      )
+    else:
+      self.write_endpoint = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: (
+          usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+        ),
+      )
 
-    self.read_endpoint = usb.util.find_descriptor(
-      intf,
-      custom_match=lambda e: (
-        usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
-      ),
-    )
+    if self.read_endpoint_address is not None:
+      self.read_endpoint = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: e.bEndpointAddress == self.read_endpoint_address,
+      )
+    else:
+      self.read_endpoint = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: (
+          usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+        ),
+      )
 
     logger.info(
       "Found endpoints. \nWrite:\n %s \nRead:\n %s",
@@ -382,16 +443,17 @@ class USB(IOBase):
     )
 
     # Empty the read buffer.
-    while self._read_packet() is not None:
-      pass
+    if empty_buffer:
+      while self._read_packet() is not None:
+        pass
 
-    self._executor = ThreadPoolExecutor(max_workers=1)
+    self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
   async def stop(self):
-    """Close the USB connection to the machine."""
+    """Close the USB connection to the machine. Safe to call multiple times."""
 
     if self.dev is None:
-      raise ValueError("USB device was not connected.")
+      return
     logger.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
@@ -403,7 +465,7 @@ class USB(IOBase):
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""
 
-    return {
+    d = {
       **super().serialize(),
       "human_readable_device_name": self._human_readable_device_name,
       "id_vendor": self._id_vendor,
@@ -414,6 +476,11 @@ class USB(IOBase):
       "read_timeout": self.read_timeout,
       "write_timeout": self.write_timeout,
     }
+    if self.read_endpoint_address is not None:
+      d["read_endpoint_address"] = self.read_endpoint_address
+    if self.write_endpoint_address is not None:
+      d["write_endpoint_address"] = self.write_endpoint_address
+    return d
 
 
 class USBValidator(USB):
@@ -428,6 +495,10 @@ class USBValidator(USB):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    read_endpoint_address: Optional[int] = None,
+    write_endpoint_address: Optional[int] = None,
+    configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
+    max_workers: int = 1,
   ):
     super().__init__(
       human_readable_device_name=human_readable_device_name,
@@ -438,10 +509,14 @@ class USBValidator(USB):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
+      read_endpoint_address=read_endpoint_address,
+      write_endpoint_address=write_endpoint_address,
+      configuration_callback=configuration_callback,
+      max_workers=max_workers,
     )
     self.cr = cr
 
-  async def setup(self):
+  async def setup(self, empty_buffer=True):
     pass
 
   async def write(self, data: bytes, timeout: Optional[float] = None):

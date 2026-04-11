@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pylabrobot.serializer import serialize
 from pylabrobot.utils.interpolation import interpolate_1d
@@ -24,6 +24,7 @@ class Container(Resource):
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
+    no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
   ):
     """Create a new container.
 
@@ -35,6 +36,9 @@ class Container(Resource):
         ``compute_volume_from_height`` and ``compute_height_from_volume`` are auto-generated
         via piecewise-linear interpolation if not explicitly passed. The data is also available
         for direct use (e.g. building firmware segments from calibration knots).
+      no_go_zones: List of cuboid regions within the container where tips must not be positioned.
+        Each zone is a tuple of two Coordinates: (front_left_bottom, back_right_top), relative to
+        the container's front-left-bottom origin.
     """
 
     super().__init__(
@@ -77,6 +81,46 @@ class Container(Resource):
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
+    self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = self._validate_no_go_zones(
+      no_go_zones or []
+    )
+
+  def _validate_no_go_zones(
+    self, zones: List[Tuple[Coordinate, Coordinate]]
+  ) -> List[Tuple[Coordinate, Coordinate]]:
+    """Validate no-go zones to ensure they are inside the container and well-formed.
+
+    Each zone is defined as (front_left_bottom, back_right_top).
+    """
+    validated: List[Tuple[Coordinate, Coordinate]] = []
+    for idx, (flb, brt) in enumerate(zones):
+      if not isinstance(flb, Coordinate) or not isinstance(brt, Coordinate):
+        raise TypeError(
+          f"no_go_zones[{idx}] must be a tuple of Coordinate instances, got {type(flb)!r}, {type(brt)!r}."
+        )
+
+      # Ensure front-left-bottom is not beyond back-right-top on any axis.
+      if flb.x > brt.x or flb.y > brt.y or flb.z > brt.z:
+        raise ValueError(
+          f"no_go_zones[{idx}] has invalid ordering: front_left_bottom must not exceed "
+          f"back_right_top on any axis (flb={flb}, brt={brt})."
+        )
+
+      # Ensure all coordinates lie within the container bounds.
+      for coord_label, coord in (("flb", flb), ("brt", brt)):
+        if coord.x < 0 or coord.y < 0 or coord.z < 0:
+          raise ValueError(f"no_go_zones[{idx}].{coord_label} has negative coordinates: {coord}.")
+        if (
+          coord.x > self.get_size_x() or coord.y > self.get_size_y() or coord.z > self.get_size_z()
+        ):
+          raise ValueError(
+            f"no_go_zones[{idx}].{coord_label}={coord} is outside the container bounds "
+            f"(size_x={self.get_size_x()}, size_y={self.get_size_y()}, size_z={self.get_size_z()})."
+          )
+
+      validated.append((flb, brt))
+
+    return validated
 
   @property
   def material_z_thickness(self) -> float:
@@ -99,6 +143,7 @@ class Container(Resource):
       if self.height_volume_data is not None
       else serialize(self._compute_height_from_volume),
       "height_volume_data": self.height_volume_data,
+      "no_go_zones": [(flb.serialize(), brt.serialize()) for flb, brt in self.no_go_zones],
     }
 
   def serialize_state(self) -> Dict[str, Any]:

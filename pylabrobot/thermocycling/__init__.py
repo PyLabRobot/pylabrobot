@@ -1,7 +1,10 @@
-from .backend import ThermocyclerBackend
-from .chatterbox import ThermocyclerChatterboxBackend
-from .opentrons import OpentronsThermocyclerModuleV1, OpentronsThermocyclerModuleV2
-from .opentrons_backend import OpentronsThermocyclerBackend
-from .standard import Step
-from .thermo_fisher import *
-from .thermocycler import Thermocycler
+import warnings
+
+warnings.warn(
+  "Importing from pylabrobot.thermocycling is deprecated. "
+  "Use pylabrobot.legacy.thermocycling instead.",
+  DeprecationWarning,
+  stacklevel=2,
+)
+
+from pylabrobot.legacy.thermocycling import *  # noqa: F401,F403,E402

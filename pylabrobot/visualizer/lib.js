@@ -16,6 +16,8 @@ const RESOURCE_COLORS = {
   TubeRack: "#122D42",
   ResourceHolder: "#5B6277",
   PlateHolder: "#8D99AE",
+  PlateAdapter: "#7A8088",
+  PlateAdapterHole: "#A8AEB4",
   ContainerBackground: "#E0EAEE"
 };
 
@@ -706,6 +708,10 @@ class Resource {
     this.resourceType = resourceData.type || this.constructor.name;
     this.category = resourceData.category || "";
     this.methods = resourceData.methods || [];
+    this.model = resourceData.model || null;
+    this.rotation = resourceData.rotation || null;
+    this.barcode = resourceData.barcode || null;
+    this.preferred_pickup_location = resourceData.preferred_pickup_location || null;
 
     this.color = "#5B6D8F";
 
@@ -1000,6 +1006,10 @@ class Resource {
       size_z: this.size_z,
       children: serializedChildren,
       parent_name: this.parent === undefined ? null : this.parent.name,
+      model: this.model,
+      rotation: this.rotation,
+      barcode: this.barcode,
+      preferred_pickup_location: this.preferred_pickup_location,
     };
   }
 
@@ -1340,6 +1350,7 @@ class Container extends Resource {
     this.maxVolume = max_volume;
     this.volume = resourceData.volume || 0;
     this.material_z_thickness = material_z_thickness;
+    this.has_height_volume_data = resourceData.height_volume_data != null;
   }
 
   static _liquidRGB = null;
@@ -1399,14 +1410,16 @@ class Well extends Container {
 
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    const { cross_section_type } = resourceData;
+    const { cross_section_type, bottom_type } = resourceData;
     this.cross_section_type = cross_section_type;
+    this.bottom_type = bottom_type || null;
   }
 
   serialize() {
     return {
       ...super.serialize(),
       cross_section_type: this.cross_section_type,
+      bottom_type: this.bottom_type,
     };
   }
 
@@ -1661,6 +1674,217 @@ class TubeRack extends Resource {
 }
 
 class PlateHolder extends ResourceHolder {}
+
+class PlateAdapter extends Resource {
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+    this.dx = resourceData.dx;
+    this.dy = resourceData.dy;
+    this.dz = resourceData.dz;
+    this.adapter_hole_size_x = resourceData.adapter_hole_size_x;
+    this.adapter_hole_size_y = resourceData.adapter_hole_size_y;
+    this.adapter_hole_dx = resourceData.adapter_hole_dx;
+    this.adapter_hole_dy = resourceData.adapter_hole_dy;
+    this.plate_z_offset = resourceData.plate_z_offset;
+    this.model = resourceData.model || "";
+    const id = (this.name + " " + this.model).toLowerCase();
+    this.isMagnetic = id.includes("magn");
+  }
+
+  drawMainShape() {
+    const group = new Konva.Group({});
+
+    if (this.isMagnetic) {
+      return this._drawMagneticShape(group);
+    }
+    return this._drawStandardShape(group);
+  }
+
+  _drawStandardShape(group) {
+    // Adapter body — brushed metal with gradient sheen
+    group.add(new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fillLinearGradientStartPoint: { x: 0, y: 0 },
+      fillLinearGradientEndPoint: { x: this.size_x, y: this.size_y },
+      fillLinearGradientColorStops: [
+        0, "#8E949C",
+        0.3, "#7A8088",
+        0.5, "#90969E",
+        0.7, "#7A8088",
+        1, "#6E747C",
+      ],
+      stroke: "#4A5058",
+      strokeWidth: 1.2,
+      cornerRadius: 4,
+    }));
+
+    // Inner bevel — machined edge inset
+    const bevel = 2;
+    group.add(new Konva.Rect({
+      x: bevel,
+      y: bevel,
+      width: this.size_x - 2 * bevel,
+      height: this.size_y - 2 * bevel,
+      stroke: "#9EA4AC",
+      strokeWidth: 0.8,
+      cornerRadius: 3,
+    }));
+
+    this._drawHoles(group, {
+      outerFill: RESOURCE_COLORS["PlateAdapterHole"],
+      outerStroke: "#8A9098",
+      innerFill: "#C0C4CA",
+      innerStroke: "#B0B4BA",
+      arcFill: "#D0D4DA",
+    });
+
+    return group;
+  }
+
+  _drawMagneticShape(group) {
+    // Magnetic body — light blue with subtle gradient
+    group.add(new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fillLinearGradientStartPoint: { x: 0, y: 0 },
+      fillLinearGradientEndPoint: { x: this.size_x, y: this.size_y },
+      fillLinearGradientColorStops: [
+        0, "#7BA4CC",
+        0.3, "#6B94BE",
+        0.5, "#7EA8D0",
+        0.7, "#6B94BE",
+        1, "#5B84AE",
+      ],
+      stroke: "#4A6E8E",
+      strokeWidth: 1.2,
+      cornerRadius: 4,
+    }));
+
+    // Inner bevel
+    const bevel = 2;
+    group.add(new Konva.Rect({
+      x: bevel,
+      y: bevel,
+      width: this.size_x - 2 * bevel,
+      height: this.size_y - 2 * bevel,
+      stroke: "#8EB4D0",
+      strokeWidth: 0.8,
+      cornerRadius: 3,
+    }));
+
+    // Holes with bright silver metallic gradient
+    this._drawHoles(group, {
+      outerStroke: "#B8C0C8",
+      innerFill: "#C8CED6",
+      innerStroke: "#B0B8C0",
+      arcFill: "#D8DEE4",
+      useMetalGradient: true,
+    });
+
+    return group;
+  }
+
+  _drawHoles(group, colors) {
+    const numCols = Math.round((this.size_x - 2 * this.dx - this.adapter_hole_size_x) / this.adapter_hole_dx) + 1;
+    const numRows = Math.round((this.size_y - 2 * this.dy - this.adapter_hole_size_y) / this.adapter_hole_dy) + 1;
+
+    for (let col = 0; col < numCols; col++) {
+      for (let row = 0; row < numRows; row++) {
+        const cx = this.dx + col * this.adapter_hole_dx + this.adapter_hole_size_x / 2;
+        const cy = this.dy + row * this.adapter_hole_dy + this.adapter_hole_size_y / 2;
+        const r = Math.min(this.adapter_hole_size_x, this.adapter_hole_size_y) / 2;
+
+        // Outer rim
+        if (colors.useMetalGradient) {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r,
+            fillLinearGradientStartPoint: { x: -r, y: -r },
+            fillLinearGradientEndPoint: { x: r, y: r },
+            fillLinearGradientColorStops: [
+              0, "#C8CED6",
+              0.3, "#B8C0C8",
+              0.5, "#D0D6DE",
+              0.7, "#B8C0C8",
+              1, "#AAB2BA",
+            ],
+            stroke: colors.outerStroke,
+            strokeWidth: 1,
+            listening: false,
+          }));
+        } else {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r,
+            fill: colors.outerFill,
+            stroke: colors.outerStroke,
+            strokeWidth: 1,
+            listening: false,
+          }));
+        }
+
+        // Inner shadow
+        if (colors.useMetalGradient) {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r * 0.75,
+            fillLinearGradientStartPoint: { x: -r, y: -r },
+            fillLinearGradientEndPoint: { x: r, y: r },
+            fillLinearGradientColorStops: [
+              0, "#BCC4CC",
+              0.5, "#D0D6DE",
+              1, "#AAB2BA",
+            ],
+            stroke: colors.innerStroke,
+            strokeWidth: 0.8,
+            listening: false,
+          }));
+        } else {
+          group.add(new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: r * 0.75,
+            fill: colors.innerFill,
+            stroke: colors.innerStroke,
+            strokeWidth: 0.8,
+            listening: false,
+          }));
+        }
+
+        // Bottom highlight arc
+        group.add(new Konva.Arc({
+          x: cx,
+          y: cy,
+          innerRadius: r * 0.6,
+          outerRadius: r * 0.75,
+          angle: 150,
+          rotation: 185,
+          fill: colors.arcFill,
+          listening: false,
+        }));
+      }
+    }
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      dx: this.dx,
+      dy: this.dy,
+      dz: this.dz,
+      adapter_hole_size_x: this.adapter_hole_size_x,
+      adapter_hole_size_y: this.adapter_hole_size_y,
+      adapter_hole_dx: this.adapter_hole_dx,
+      adapter_hole_dy: this.adapter_hole_dy,
+      plate_z_offset: this.plate_z_offset,
+      model: this.model,
+    };
+  }
+}
 
 // Track the currently open pipette info panel so it can be refreshed on state updates.
 var _pipetteInfoState = null; // { ch, kind ("channel"|"tip"), anchorDropdown }
@@ -2269,7 +2493,7 @@ function buildSingleArm(armData, anchorDropdown, armId) {
       attrs.push({ key: "resource_name", value: armData.resource_name });
       attrs.push({ key: "resource_type", value: armData.resource_type || "Unknown" });
       attrs.push({ key: "direction", value: armData.direction || "?" });
-      attrs.push({ key: "pickup_distance_from_top", value: (armData.pickup_distance_from_top || 0) + " mm" });
+      attrs.push({ key: "pickup_distance_from_bottom", value: (armData.pickup_distance_from_bottom || 0) + " mm" });
       attrs.push({ key: "size", value: (armData.size_x || "?") + " × " + (armData.size_y || "?") + " × " + (armData.size_z || "?") + " mm" });
       if (armData.num_items_x) attrs.push({ key: "wells", value: (armData.num_items_x * (armData.num_items_y || 1)) });
     }
@@ -2532,6 +2756,8 @@ function classForResourceType(type, category) {
       return TubeRack;
     case "Tube":
       return Tube;
+    case "PlateAdapter":
+      return PlateAdapter;
     default:
       break;
   }
@@ -2569,6 +2795,8 @@ function classForResourceType(type, category) {
       return TubeRack;
     case "tube":
       return Tube;
+    case "plate_adapter":
+      return PlateAdapter;
     case "container":
     case "trough":
       return Container;
@@ -3007,6 +3235,13 @@ function getResourceSummary(resource) {
       return `${vol.toFixed(1)} \u00B5L`;
     }
     return "";
+  }
+
+  if (resource instanceof PlateAdapter || resource.category === "plate_adapter") {
+    if (resource.children.length > 0) {
+      return resource.children[0].name;
+    }
+    return "empty";
   }
 
   if (isCarrierLike(resource)) {
@@ -4154,33 +4389,47 @@ function getUmlAttributes(resource) {
   var attrs = [];
   attrs.push({ key: "name", value: JSON.stringify(resource.name) });
   attrs.push({ key: "type", value: resource.resourceType || resource.constructor.name });
+  attrs.push({ key: "children", value: resource.children ? resource.children.length : 0 });
+  if (resource.model) {
+    attrs.push({ key: "model", value: resource.model });
+  }
+  var abs = resource.getAbsoluteLocation();
+  attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
+  if (resource.rotation) {
+    attrs.push({ key: "rotation", value: "(" + resource.rotation.x + ", " + resource.rotation.y + ", " + resource.rotation.z + ")" });
+  }
   attrs.push({ key: "size_x", value: resource.size_x });
   attrs.push({ key: "size_y", value: resource.size_y });
   attrs.push({ key: "size_z", value: resource.size_z });
   if (resource.location) {
     attrs.push({ key: "location", value: "(" + resource.location.x + ", " + resource.location.y + ", " + (resource.location.z || 0) + ")" });
   }
-  var abs = resource.getAbsoluteLocation();
-  attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
   attrs.push({ key: "parent", value: resource.parent ? JSON.stringify(resource.parent.name) : "none" });
-  attrs.push({ key: "children", value: resource.children ? resource.children.length : 0 });
-  if (resource.category) {
-    attrs.push({ key: "category", value: resource.category });
+  if (resource.barcode) {
+    attrs.push({ key: "barcode", value: resource.barcode.data + " (" + resource.barcode.symbology + ", " + resource.barcode.position_on_resource + ")" });
+  }
+  if (resource.preferred_pickup_location) {
+    var ppl = resource.preferred_pickup_location;
+    attrs.push({ key: "preferred_pickup_location", value: "(" + ppl.x + ", " + ppl.y + ", " + ppl.z + ")" });
   }
 
-  // Container (Well/Trough/Tube)
-  if (resource instanceof Container) {
-    attrs.push({ key: "max_volume", value: resource.maxVolume });
-    attrs.push({ key: "volume", value: resource.volume });
-    if (resource.material_z_thickness != null) {
-      attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
-    }
-  }
-  // Well-specific
+  // Well-specific (before general Container attrs)
   if (resource instanceof Well) {
     if (resource.cross_section_type) {
       attrs.push({ key: "cross_section_type", value: resource.cross_section_type });
     }
+    if (resource.bottom_type) {
+      attrs.push({ key: "bottom_type", value: resource.bottom_type });
+    }
+  }
+  // Container (Well/Trough/Tube)
+  if (resource instanceof Container) {
+    if (resource.material_z_thickness != null) {
+      attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
+    }
+    attrs.push({ key: "height_volume_data", value: resource.has_height_volume_data ? "exists" : "None" });
+    attrs.push({ key: "max_volume", value: resource.maxVolume });
+    attrs.push({ key: "volume", value: resource.volume });
   }
   // TipSpot
   if (resource instanceof TipSpot) {
@@ -4201,6 +4450,13 @@ function getUmlAttributes(resource) {
   // HamiltonSTARDeck
   if (resource instanceof HamiltonSTARDeck) {
     attrs.push({ key: "num_rails", value: resource.num_rails });
+  }
+  // PlateAdapter
+  if (resource instanceof PlateAdapter) {
+    attrs.push({ key: "adapter_hole_size", value: resource.adapter_hole_size_x + " x " + resource.adapter_hole_size_y });
+    attrs.push({ key: "hole_spacing", value: resource.adapter_hole_dx + " x " + resource.adapter_hole_dy });
+    attrs.push({ key: "hole_offset (dx,dy,dz)", value: resource.dx + ", " + resource.dy + ", " + resource.dz });
+    attrs.push({ key: "plate_z_offset", value: resource.plate_z_offset });
   }
 
   return attrs;

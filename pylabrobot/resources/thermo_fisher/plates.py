@@ -180,7 +180,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA-, RNAse-, and PCR inhibitor-free with in-process sampling tests'.
   - ANSI/SLAS-format for compatibility with automated systems.
-  - optimal pickup_distance_from_top=4 mm.
+  - optimal pickup_distance_from_top=4 mm (i.e. pickup_distance_from_bottom=size_z-4).
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
   """
@@ -313,7 +313,7 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA/RNase Free'.
   - Warning: NOT ANSI/SLAS-format!
-  - optimal pickup_distance_from_top = 6 mm.
+  - optimal pickup_distance_from_top = 6 mm (i.e. pickup_distance_from_bottom=size_z-6).
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
 
@@ -471,10 +471,10 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
   )
 
 
-# # # # # # # # # # Thermo_TS_Nalgene_1_troughplate_300000uL_Fb # # # # # # # # # #
+# # # # # # # # # # thermo_TS_nalgene_1_troughplate_300mL_Fb # # # # # # # # # #
 
 
-def Thermo_TS_Nalgene_1_troughplate_300000uL_Fb(name: str) -> Plate:
+def thermo_TS_nalgene_1_troughplate_300mL_Fb(name: str) -> Plate:
   """Thermo Fisher Scientific Nalgene 300mL Flat Bottom Reservoir
   - Product Number: 12001300 (non-sterile), 12001301 (sterile)
   - 1-well reservoir with SBS footprint
@@ -487,7 +487,7 @@ def Thermo_TS_Nalgene_1_troughplate_300000uL_Fb(name: str) -> Plate:
     size_x=127.8,  # from spec
     size_y=85.5,  # from spec
     size_z=39.9,  # from spec
-    model=Thermo_TS_Nalgene_1_troughplate_300000uL_Fb.__name__,
+    model=thermo_TS_nalgene_1_troughplate_300mL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,  # from spec

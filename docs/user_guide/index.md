@@ -27,6 +27,26 @@ definitions
 
 ```{toctree}
 :maxdepth: 1
+:caption: Manufacturers
+:hidden:
+
+agilent/index
+azenta/index
+bmg_labtech/index
+brooks/index
+byonoy/index
+hamilton/index
+inheco/index
+liconic/index
+mettler_toledo/index
+molecular_devices/index
+opentrons/index
+qinstruments/index
+thermo_fisher/index
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Machine-Agnostic Features
 :hidden:
 
@@ -37,6 +57,14 @@ machine-agnostic-features/tip-spot-generators
 machine-agnostic-features/logging-and-validation/logging-and-validation
 machine-agnostic-features/error-handling-general
 machine-agnostic-features/sila-discovery
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Capabilities
+:hidden:
+
+capabilities/index
 ```
 
 ```{toctree}

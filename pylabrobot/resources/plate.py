@@ -107,6 +107,12 @@ class Plate(ItemizedResource["Well"]):
     if lid is not None:
       self.assign_child_resource(lid)
 
+  def serialize(self) -> dict:
+    data = super().serialize()
+    if self.plate_type != "skirted":
+      data["plate_type"] = self.plate_type
+    return data
+
   @property
   def lid(self) -> Optional[Lid]:
     return self._lid
@@ -158,12 +164,16 @@ class Plate(ItemizedResource["Well"]):
 
     return super().get_item(identifier)
 
-  def get_wells(self, identifier: Union[str, Sequence[int]]) -> List["Well"]:
+  def get_wells(self, identifier: Optional[Union[str, Sequence[int]]] = None) -> List["Well"]:
     """Get the wells with the given identifier.
+
+    If no identifier is given, all wells are returned.
 
     See :meth:`~.get_items` for more information.
     """
 
+    if identifier is None:
+      return super().get_items(list(range(self.num_items)))
     return super().get_items(identifier)
 
   def has_lid(self) -> bool:

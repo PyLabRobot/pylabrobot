@@ -1,9 +1,10 @@
 import asyncio
+import contextlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import IOBase
-from typing import Optional, cast
+from typing import Iterator, Optional, cast
 
 from pylabrobot.io.errors import ValidationError
 
@@ -48,6 +49,7 @@ class Serial(IOBase):
     timeout=1,
     rtscts: bool = False,
     dsrdtr: bool = False,
+    xonxoff: bool = False,
   ):
     self._human_readable_device_name = human_readable_device_name
     self._port = port
@@ -63,6 +65,7 @@ class Serial(IOBase):
     self.timeout = timeout
     self.rtscts = rtscts
     self.dsrdtr = dsrdtr
+    self.xonxoff = xonxoff
 
     # Instant parameter validation at init time
     if not self._port and not (self._vid and self._pid):
@@ -75,6 +78,26 @@ class Serial(IOBase):
   def port(self) -> str:
     assert self._port is not None, "Port not set. Did you call setup()?"
     return self._port
+
+  def get_read_timeout(self) -> float:
+    """Get the current read timeout in seconds."""
+    assert self._ser is not None, "Serial port not open. Did you call setup()?"
+    return float(self._ser.timeout)
+
+  def set_read_timeout(self, timeout: float) -> None:
+    """Set the read timeout in seconds."""
+    assert self._ser is not None, "Serial port not open. Did you call setup()?"
+    self._ser.timeout = timeout
+
+  @contextlib.contextmanager
+  def temporary_timeout(self, timeout: float) -> Iterator[None]:
+    """Context manager that temporarily changes the read timeout, then restores it."""
+    original = self.get_read_timeout()
+    self.set_read_timeout(timeout)
+    try:
+      yield
+    finally:
+      self.set_read_timeout(original)
 
   async def setup(self):
     """
@@ -171,6 +194,7 @@ class Serial(IOBase):
         timeout=self.timeout,
         rtscts=self.rtscts,
         dsrdtr=self.dsrdtr,
+        xonxoff=self.xonxoff,
       )
 
     try:
@@ -328,21 +352,6 @@ class Serial(IOBase):
       "rtscts": self.rtscts,
       "dsrdtr": self.dsrdtr,
     }
-
-  @classmethod
-  def deserialize(cls, data: dict) -> "Serial":
-    return cls(
-      human_readable_device_name=data["human_readable_device_name"],
-      port=data["port"],
-      baudrate=data["baudrate"],
-      bytesize=data["bytesize"],
-      parity=data["parity"],
-      stopbits=data["stopbits"],
-      write_timeout=data["write_timeout"],
-      timeout=data["timeout"],
-      rtscts=data["rtscts"],
-      dsrdtr=data["dsrdtr"],
-    )
 
 
 class SerialValidator(Serial):
