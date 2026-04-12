@@ -1,6 +1,7 @@
 import unittest
 import contextlib
 from pylabrobot.testing.concurrency import AnyioTestBase
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 from typing import Any, List, Optional
 
@@ -216,12 +217,18 @@ class VantageCommandCatcher(VantageBackend):
     super().__init__()
     self.commands = []
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
     self._num_arms = 1
     self._head96_installed = True
+    self._setup_done = True
+
+    def cleanup():
+      self.stop_finished = True
+      self._setup_done = False
+    stack.callback(cleanup)
 
   async def send_command(
     self,
@@ -239,9 +246,6 @@ class VantageCommandCatcher(VantageBackend):
       module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs
     )
     self.commands.append(cmd)
-
-  async def stop(self):
-    self.stop_finished = True
 
 
 class TestVantageLiquidHandlerCommands(AnyioTestBase):

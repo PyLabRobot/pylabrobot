@@ -3,6 +3,7 @@ import time
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import TemperatureControllerBackend
@@ -93,10 +94,13 @@ class TemperatureController(ResourceHolder, Machine):
     self.target_temperature = None
     return await self.backend.deactivate()
 
-  async def stop(self):
-    """Stop the temperature controller and close the backend connection."""
-    await self.deactivate()
-    await super().stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+
+    async def cleanup():
+      await self.deactivate()
+
+    stack.push_shielded_async_callback(cleanup)
 
   def serialize(self) -> dict:
     return {

@@ -4,6 +4,7 @@ from pylabrobot.machines.machine import Machine
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.shaking import Shaker
 from pylabrobot.temperature_controlling import TemperatureController
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 from .backend import HeaterShakerBackend
 
@@ -34,7 +35,11 @@ class HeaterShaker(TemperatureController, Shaker):
     )
     self.backend: HeaterShakerBackend = backend  # fix type
 
-  async def stop(self):
-    await self.deactivate()
-    await self.stop_shaking()
-    await Machine.stop(self)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+
+    async def cleanup():
+      await self.deactivate()
+      await self.stop_shaking()
+
+    stack.push_shielded_async_callback(cleanup)

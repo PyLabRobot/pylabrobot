@@ -1,6 +1,7 @@
 import asyncio
 
 from pylabrobot.machines.machine import Machine
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 from .backend import FanBackend
 
@@ -14,9 +15,13 @@ class Fan(Machine):
     super().__init__(backend=backend)
     self.backend: FanBackend = backend  # fix type
 
-  async def stop(self):
-    await self.backend.turn_off()
-    await super().stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+
+    async def cleanup():
+      await self.backend.turn_off()
+
+    stack.push_shielded_async_callback(cleanup)
 
   async def turn_on(self, intensity: int, duration=None):
     """Run the fan

@@ -26,9 +26,13 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
   async def test_connect_success(self) -> None:
     # Create a mock USB instance
     mock_usb_instance = AsyncMock()
+    mock_usb_instance.__aenter__.return_value = mock_usb_instance
+    mock_usb_instance.__aexit__.return_value = None
+    mock_usb_instance.dev = MagicMock() # Ensure dev is synchronous
     self.mock_usb_class.return_value = mock_usb_instance
 
-    await self.reader.connect()
+    async with self.reader:
+      pass
 
     # Verify USB initialized for known devices (we iterate all SparkDevices)
     # Just check for one of them
@@ -48,14 +52,13 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.assertIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
     self.assertEqual(self.reader.devices[SparkDevice.PLATE_TRANSPORT], mock_usb_instance)
 
-    mock_usb_instance.setup.assert_awaited()
-
   async def test_connect_no_devices(self) -> None:
     # USB raising RuntimeError means device not found
     self.mock_usb_class.side_effect = RuntimeError("Device not found")
 
     with self.assertRaisesRegex(ValueError, "Failed to connect to any known Spark devices"):
-      await self.reader.connect()
+      async with self.reader:
+        pass
 
   async def test_connect_usb_error(self) -> None:
     # Device 1: Fails with Exception (not RuntimeError)
@@ -65,6 +68,9 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # based on input arguments (id_product).
 
     mock_usb_success = AsyncMock()
+    mock_usb_success.dev = MagicMock() # Ensure dev is synchronous
+    mock_usb_success.__aenter__.return_value = mock_usb_success
+    mock_usb_success.__aexit__.return_value = None
 
     def side_effect(
       id_vendor: int,
@@ -81,12 +87,11 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
     self.mock_usb_class.side_effect = side_effect
 
-    await self.reader.connect()
-
-    # Device 1 should not be in devices
-    self.assertNotIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
-    # Device 2 should be in devices
-    self.assertIn(SparkDevice.ABSORPTION, self.reader.devices)
+    async with self.reader:
+      # Device 1 should not be in devices
+      self.assertNotIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
+      # Device 2 should be in devices
+      self.assertIn(SparkDevice.ABSORPTION, self.reader.devices)
 
   async def test_send_command(self) -> None:
     # Setup connected device
@@ -258,14 +263,17 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.assertIn(DATA2, results)
 
   async def test_close(self) -> None:
-    mock_dev = AsyncMock()
-    self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
+    mock_usb_instance = AsyncMock()
+    mock_usb_instance.__aenter__.return_value = mock_usb_instance
+    mock_usb_instance.__aexit__.return_value = None
+    mock_usb_instance.dev = MagicMock() # Ensure dev is synchronous
+    self.mock_usb_class.return_value = mock_usb_instance
 
-    await self.reader.close()
+    async with self.reader:
+      pass
 
-    self.assertEqual(self.reader.devices, {})
-    # Ensure stop called on the mocked USB device
-    mock_dev.stop.assert_awaited()
+    # Ensure resources released via context manager exit
+    mock_usb_instance.__aexit__.assert_awaited()
 
   async def test_get_response_error(self) -> None:
     with patch(

@@ -13,6 +13,7 @@ except ImportError as e:
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.peeling.backend import PeelerBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class XPeelBackend(PeelerBackend):
@@ -71,12 +72,14 @@ class XPeelBackend(PeelerBackend):
       rtscts=False,
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
-  async def stop(self):
-    await self.io.stop()
-    self.logger.info("Serial interface closed.")
+    def cleanup():
+      self.logger.info("Serial interface closed.")
+
+    stack.callback(cleanup)
 
   @classmethod
   def describe_error(cls, code: int) -> str:

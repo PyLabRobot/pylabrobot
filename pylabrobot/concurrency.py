@@ -75,13 +75,19 @@ class AsyncResource(_AsyncResourceBase, abc.ABC):
   def __new__(cls, *args, **kwargs):
     # Check if both methods are still the base implementations
     if (cls._enter_lifespan is AsyncResource._enter_lifespan and
-        cls._lifespan is AsyncResource._lifespan):
+        cls._lifespan is _AsyncResourceBase._lifespan):
         raise TypeError(
             f"Can't instantiate abstract class {cls.__name__} "
             "without an implementation for either '_enter_lifespan' or '_lifespan'"
         )
 
     return super().__new__(cls)
+
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs):
+    # Non-throwing base class implementation, so that derived classes can
+    # call super()._enter_lifespan() without knowing how many classes are in the chain.
+    pass
 
 
 class GlobalManager:

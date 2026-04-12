@@ -1,5 +1,6 @@
 import re
 from typing import Optional
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 try:
   import serial
@@ -42,13 +43,11 @@ class HamiltonTiltModuleBackend(TilterBackend):
       human_readable_device_name="Hamilton Tilt Module",
     )
 
-  async def setup(self, initial_offset: int = 0):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, initial_offset: int = 0):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.tilt_initial_offset(initial_offset)
     await self.tilt_initialize()
-
-  async def stop(self):
-    await self.io.stop()
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
     """Send a command to the tilt module."""
@@ -303,11 +302,10 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
 
 class HamiltonTiltModuleChatterboxBackend(HamiltonTiltModuleBackend):
-  async def setup(self, initial_offset=0):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, initial_offset=0):
+    await super()._enter_lifespan(stack, initial_offset=initial_offset)
     print(f"[tilter] setup initial offset {initial_offset}")
-
-  async def stop(self):
-    print("[tilter] stopping")
+    stack.callback(lambda: print("[tilter] stopping"))
 
   async def send_command(self, command, parameter=None):
     print(f"[tilter] Sending command: {command} with parameter: {parameter}")

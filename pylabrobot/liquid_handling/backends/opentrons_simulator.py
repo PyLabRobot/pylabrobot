@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsOT2Backend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.standard import (
   Drop,
   Pickup,
@@ -88,26 +89,26 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
       "right_pipette_name": self._right_pipette_name,
     }
 
-  async def setup(self, skip_home: bool = False):
-    await LiquidHandlerBackend.setup(self)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, skip_home: bool = False):
+    await super()._enter_lifespan(stack, skip_home=skip_home)
     self._setup_pipettes()
     logger.info(
       "OpentronsOT2Simulator setup: left=%s, right=%s",
       self._left_pipette_name,
       self._right_pipette_name,
     )
-    if not skip_home:
-      await self.home()
+
+    def cleanup():
+      self.left_pipette = None
+      self.right_pipette = None
+      self.left_pipette_has_tip = False
+      self.right_pipette_has_tip = False
+      logger.info("OpentronsOT2Simulator stopped.")
+
+    stack.callback(cleanup)
 
   async def home(self):
     logger.info("Homing (simulated).")
-
-  async def stop(self):
-    self.left_pipette = None
-    self.right_pipette = None
-    self.left_pipette_has_tip = False
-    self.right_pipette_has_tip = False
-    logger.info("OpentronsOT2Simulator stopped.")
 
   def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     pipette_id = self._pipette_id_for_channel(channel)

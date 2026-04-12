@@ -16,6 +16,7 @@ from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.backend import IncubatorBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
       human_readable_device_name="Heraeus Cytomat",
     )
 
-  async def setup(self) -> Serial:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """
     1. Open serial port (9600 8E1, RTS/CTS) via the Serial wrapper.
     2. Send >200 ms break, wait 150 ms, flush buffers.
@@ -63,45 +64,42 @@ class HeraeusCytomatBackend(IncubatorBackend):
     4. Activate handling: ST 1801 → expect OK<CR><LF>
     5. Poll ready-flag: RD 1915 → wait for "1"<CR><LF>
     """
+    await super()._enter_lifespan(stack)
     try:
-      await self.io.setup()
+      await stack.enter_async_context(self.io)
     except serial.SerialException as e:
       raise RuntimeError(f"Could not open {self.io.port}: {e}")
 
     await self.io.send_break(duration=0.2)  # >100 ms required
-    await asyncio.sleep(0.15)
+    await anyio.sleep(0.15)
     await self.io.reset_input_buffer()
     await self.io.reset_output_buffer()
 
     await self.io.write(b"CR\r")
-    deadline = time.time() + self.init_timeout
-    while time.time() < deadline:
-      resp = await self.io.readline()  # reads through LF
-      if resp.strip() == b"CC":
-        break
-    else:
-      await self.io.stop()
-      raise TimeoutError(f"No CC response from PLC within {self.init_timeout} seconds")
+    try:
+      with anyio.fail_after(self.init_timeout):
+        while True:
+          resp = await self.io.readline()  # reads through LF
+          if resp.strip() == b"CC":
+            break
+    except TimeoutError:
+      raise TimeoutError(f"No CC response from PLC within {self.init_timeout} seconds") from None
 
     await self.io.write(b"ST 1801\r")
     resp = await self.io.readline()
     if resp.strip() != b"OK":
-      await self.io.stop()
       raise RuntimeError(f"Unexpected reply to ST 1801: {resp!r}")
 
-    deadline = time.time() + self.start_timeout
-    while time.time() < deadline:
-      await self.io.write(b"RD 1915\r")
-      flag = await self.io.readline()
-      if flag.strip() == b"1":
-        return self.io
-      await asyncio.sleep(self.poll_interval)
-
-    await self.io.stop()
-    raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
-
-  async def stop(self):
-    await self.io.stop()
+    try:
+      with anyio.fail_after(self.start_timeout):
+        while True:
+          await self.io.write(b"RD 1915\r")
+          flag = await self.io.readline()
+          if flag.strip() == b"1":
+            return
+          await anyio.sleep(self.poll_interval)
+    except TimeoutError:
+      raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds") from None
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
@@ -190,14 +188,15 @@ class HeraeusCytomatBackend(IncubatorBackend):
     """
     Poll the ready flag (RD 1915) until it becomes '1' or timeout.
     """
-    start = time.time()
-    while True:
-      resp = await self._send_command("RD 1915")
-      if resp == "1":
-        return
-      await asyncio.sleep(0.1)
-      if time.time() - start > timeout:
-        raise TimeoutError("Legacy Cytomat did not become ready in time")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          resp = await self._send_command("RD 1915")
+          if resp == "1":
+            return
+          await anyio.sleep(0.1)
+    except TimeoutError:
+      raise TimeoutError("Legacy Cytomat did not become ready in time") from None
 
   def serialize(self) -> dict:
     return {

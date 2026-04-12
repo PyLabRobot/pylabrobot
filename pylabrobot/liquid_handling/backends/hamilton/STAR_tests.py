@@ -6,6 +6,7 @@ import datetime
 from typing import Literal, cast
 
 from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.chatterbox import PlateReaderChatterboxBackend
@@ -185,11 +186,18 @@ class STARCommandCatcher(STARBackend):
     super().__init__()
     self.commands = []
 
-  async def setup(self) -> None:  # type: ignore
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    # Bypass STARBackend._enter_lifespan to avoid sending commands to mock machine.
     self._num_channels = 8
     self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self._core_parked = True
+    self._setup_done = True
+
+    def cleanup():
+      self.stop_finished = True
+      self._setup_done = False
+    stack.callback(cleanup)
 
   async def send_command(  # type: ignore
     self,
@@ -206,9 +214,6 @@ class STARCommandCatcher(STARBackend):
       module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs
     )
     self.commands.append(cmd)
-
-  async def stop(self):
-    self.stop_finished = True
 
 
 class TestSTARLiquidHandlerCommands(AnyioTestBase):

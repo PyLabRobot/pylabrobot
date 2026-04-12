@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -43,12 +44,14 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   ) -> Optional[dict]:
     raise NotImplementedError
 
-  async def setup(self):
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     await self.send_command(command="setup")
 
-  async def stop(self):
-    await self.send_command(command="stop")
+    async def cleanup():
+      await self.send_command(command="stop")
+
+    stack.push_shielded_async_callback(cleanup)
 
   def serialize(self) -> dict:
     return {**super().serialize(), "num_channels": self.num_channels}

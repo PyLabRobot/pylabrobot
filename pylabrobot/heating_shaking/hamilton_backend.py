@@ -6,6 +6,7 @@ from typing import Dict, Literal, Optional
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.usb import USB
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class PlateLockPosition(Enum):
@@ -77,15 +78,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     super().__init__()
     self.interface = interface
 
-  async def setup(self):
-    """
-    If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
-    """
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     await self._initialize_lock()
     await self._initialize_shaker_drive()
-
-  async def stop(self):
-    pass
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")

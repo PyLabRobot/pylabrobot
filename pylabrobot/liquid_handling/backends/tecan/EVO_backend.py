@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABCMeta, abstractmethod
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from typing import (
   Dict,
   List,
@@ -165,12 +166,9 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     resp = await self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
-  async def setup(self):
-    await super().setup()
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
 
 class EVOBackend(TecanLiquidHandler):
@@ -261,13 +259,8 @@ class EVOBackend(TecanLiquidHandler):
   def serialize(self) -> dict:
     return {**super().serialize(), **self.io.serialize()}
 
-  async def setup(self):
-    """Setup
-
-    Creates a USB connection and finds read/write interfaces.
-    """
-
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
 
     self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
     self._mca_connected = await self.setup_arm(EVOBackend.MCA)

@@ -9,6 +9,7 @@ import time
 from collections import defaultdict
 from typing import Callable, Dict, List, Optional, Tuple, TypeVar
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.sila.grpc import (
   command_execution_uuid,
   decode_command_confirmation,
@@ -401,7 +402,7 @@ class ExperimentalPicoBackend(ImagerBackend):
   ) -> _T:
     for attempt in range(2):
       try:
-        return await asyncio.to_thread(fn)
+        return await anyio.to_thread.run_sync(fn)
       except grpc.RpcError as e:
         if attempt == 0 and with_lock and "CommandRequiresLock" in decode_grpc_error(e):
           await self._relock()
@@ -476,19 +477,34 @@ class ExperimentalPicoBackend(ImagerBackend):
 
   # -- lifecycle --
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+
     if not HAS_GRPC:
       raise RuntimeError(
         f"grpcio is required for the PicoBackend. Import error: {_GRPC_IMPORT_ERROR}"
       )
-    self._channel = grpc.insecure_channel(
+    # TODO: We really shouldn't use the sync API here, even if we use thread-hopping.
+    # There is in fact grcp.aio, which would be a lot cleaner.
+    self._channel = stack.enter_context(grpc.insecure_channel(
       f"{self._host}:{self._port}",
       options=[
         ("grpc.keepalive_time_ms", 10000),
         ("grpc.max_receive_message_length", 64 * 1024 * 1024),
       ],
-    )
+    ))
     self._lock_id = "pylabrobot"
+
+    async def cleanup():
+      if self._locked:
+        try:
+          await self._unlock()
+        except (grpc.RpcError, RuntimeError) as e:
+          logger.warning("PicoBackend: unlock failed during stop: %s", e)
+      self._channel = None
+      logger.info("PicoBackend: stopped")
+
+    stack.push_shielded_async_callback(cleanup)
 
     # Try to unlock a stale lock from a previous session that didn't clean up.
     try:
@@ -517,17 +533,6 @@ class ExperimentalPicoBackend(ImagerBackend):
       await self.change_filter_cube(pos, _IMAGING_MODE_MAP[mode][1])
 
     logger.info("PicoBackend: connected to %s:%d", self._host, self._port)
-
-  async def stop(self) -> None:
-    if self._channel is not None:
-      if self._locked:
-        try:
-          await self._unlock()
-        except (grpc.RpcError, RuntimeError) as e:
-          logger.warning("PicoBackend: unlock failed during stop: %s", e)
-      self._channel.close()
-      self._channel = None
-    logger.info("PicoBackend: stopped")
 
   # -- configuration --
 

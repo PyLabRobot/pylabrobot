@@ -346,20 +346,21 @@ class CytomatBackend(IncubatorBackend):
     If the error bit is set in the overview register, the error register is read and the corresponding
     error is raised.
     """
-    start = time.time()
-    while True:
-      overview_register = await self.get_overview_register()
-      if not overview_register.busy_bit_set:
-        # only check for errors once the cytomat is done, so that the user has the chance to
-        # handle the error and proceed if desired.
-        if overview_register.error_register_set:
-          error_register = await self.get_error_register()
-          await self.reset_error_register()
-          raise error_register_map[error_register]
-        return overview_register
-      await asyncio.sleep(1)
-      if time.time() - start > timeout:
-        raise TimeoutError("Cytomat did not complete task in time")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          overview_register = await self.get_overview_register()
+          if not overview_register.busy_bit_set:
+            # only check for errors once the cytomat is done, so that the user has the chance to
+            # handle the error and proceed if desired.
+            if overview_register.error_register_set:
+              error_register = await self.get_error_register()
+              await self.reset_error_register()
+              raise error_register_map[error_register]
+            return overview_register
+          await anyio.sleep(1)
+    except TimeoutError:
+      raise TimeoutError("Cytomat did not complete task in time") from None
 
   async def init_shakers(self):
     return hex_to_binary(await self.send_command("ll", "vi", ""))

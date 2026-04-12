@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import functools
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -10,6 +11,7 @@ except ImportError:
   pass
 
 from pylabrobot.io.usb import USB
+from pylabrobot.concurrency import AsyncResource, AsyncExitStackWithShielding
 
 from .enums import DEVICE_ENDPOINTS, VENDOR_ID, SparkDevice, SparkEndpoint
 from .spark_packet_parser import PACKET_TYPE, parse_single_spark_packet
@@ -19,7 +21,7 @@ class SparkError(Exception):
   """Error returned by the Spark device in a RespError packet."""
 
 
-class SparkReaderAsync:
+class SparkReaderAsync(AsyncResource):
   def __init__(self, vid: int = VENDOR_ID) -> None:
     self.vid: int = vid
     self.devices: Dict[SparkDevice, USB] = {}
@@ -29,7 +31,7 @@ class SparkReaderAsync:
     self.lock: asyncio.Lock = asyncio.Lock()
     self.msgs: List[Any] = []
 
-  async def connect(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     logging.info(f"Scanning for devices with VID={hex(self.vid)}...")
 
     for device_type in SparkDevice:
@@ -76,8 +78,10 @@ class SparkReaderAsync:
           write_endpoint_address=endpoints["write"].value,
         )
 
-        await reader.setup(empty_buffer=False)  # type: ignore[no-untyped-call]
+        # Use stack to manage the USB resource
+        await stack.enter_async_context(reader)
         self.devices[device_type] = reader
+        stack.callback(functools.partial(self.devices.pop, device_type, None))
 
         # Discover actual endpoints from the USB descriptor, overriding the
         # hardcoded DEVICE_ENDPOINTS values for this specific hardware.
@@ -395,11 +399,3 @@ class SparkReaderAsync:
     task = asyncio.create_task(background_reader())
     return task, stop_event, results
 
-  async def close(self) -> None:
-    for device_type, reader in self.devices.items():
-      try:
-        await reader.stop()  # type: ignore[no-untyped-call]
-        logging.info(f"{device_type.name} resources released.")
-      except Exception as e:
-        logging.error(f"Error closing {device_type.name}: {e}")
-    self.devices = {}

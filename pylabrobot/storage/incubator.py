@@ -2,6 +2,7 @@ import random
 from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.machines import Machine
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.resources import (
   Coordinate,
   Plate,
@@ -59,8 +60,8 @@ class Incubator(Machine, Resource):
   def racks(self) -> List[PlateCarrier]:
     return self._racks
 
-  async def setup(self, **backend_kwargs):
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     await self.backend.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:

@@ -67,7 +67,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
             logger.info("Barcode scanner motor is ON.")
             break
           elif response.strip() == "MOTOROFF":
-          raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
+            raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
         await asyncio.sleep(self.poll_interval)
     except TimeoutError as e:
       raise BarcodeScannerError(

@@ -14,6 +14,7 @@ except ImportError as e:
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.sealing.backend import SealerBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class A4SBackend(SealerBackend):
@@ -35,13 +36,16 @@ class A4SBackend(SealerBackend):
       human_readable_device_name="A4S Sealer",
     )
 
-  async def setup(self):
-    await self.io.setup()
-    await self.system_reset()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
-  async def stop(self):
-    await self.set_heater(on=False)
-    await self.io.stop()
+    async def cleanup():
+      await self.set_heater(on=False)
+
+    stack.push_shielded_async_callback(cleanup)
+
+    await self.system_reset()
 
   async def set_heater(self, on: bool):
     """Set the heater on or off."""

@@ -47,9 +47,18 @@ Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTe
   *the whole operation* with `with anyio.fail_after`. If the timeout somehow applies to sub-parts,
   then be very careful in specifying to what they apply (and what is being done if timeouts fail).
 
+## Issues found during the refactor
+
+### Inconsistent "turn-off" behaviout of various machines.
+Most machines seem to turn off any ongoing actions and go back to some form of "parking position", but other machines don't:
+- Tecan EVO has a number of arms that one could park; currently, we don't.
+
+
 ## TODOs in the refactor
 
-- `InhecoSiLAInterface` needs doing.
+Not following a structured concurrency paradigm:
+- `InhecoSiLAInterface`
+- `SparkReaderAsync`
 
 ### References to `setup`
  - Developer docs

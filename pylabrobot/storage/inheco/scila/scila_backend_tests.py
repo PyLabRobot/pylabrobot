@@ -20,19 +20,20 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.patcher.stop()
 
   async def test_setup(self):
-    await self.backend.setup()
-    self.mock_sila_interface.setup.assert_called_once()
-    self.mock_sila_interface.send_command.assert_any_call(
-      command="Reset",
-      deviceId="MyController",
-      eventReceiverURI="http://127.0.0.1:80/",
-      simulationMode=False,
-    )
-    self.mock_sila_interface.send_command.assert_any_call("Initialize")
+    async with self.backend:
+      self.mock_sila_interface.__aenter__.assert_called_once()
+      self.mock_sila_interface.send_command.assert_any_call(
+        command="Reset",
+        deviceId="MyController",
+        eventReceiverURI="http://127.0.0.1:80/",
+        simulationMode=False,
+      )
+      self.mock_sila_interface.send_command.assert_any_call("Initialize")
 
   async def test_stop(self):
-    await self.backend.stop()
-    self.mock_sila_interface.close.assert_called_once()
+    async with self.backend:
+      pass
+    self.mock_sila_interface.__aexit__.assert_called_once()
 
   async def test_request_status(self):
     self.mock_sila_interface.send_command.return_value = {"GetStatusResponse": {"state": "standBy"}}

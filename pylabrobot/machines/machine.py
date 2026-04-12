@@ -47,6 +47,19 @@ class Machine(SerializableMixin, AsyncResource):
   def __init__(self, backend: MachineBackend):
     self.backend = backend
 
+  def __init_subclass__(cls, **kwargs):
+    super().__init_subclass__(**kwargs)
+    if "setup" in cls.__dict__:
+      raise TypeError(
+        f"Class {cls.__name__} overrides `setup`. "
+        "Use `_enter_lifespan` instead for structured concurrency."
+      )
+    if "stop" in cls.__dict__:
+      raise TypeError(
+        f"Class {cls.__name__} overrides `stop`. "
+        "Use `_enter_lifespan` instead for structured concurrency."
+      )
+
   @property
   def setup_finished(self) -> bool:
     return getattr(self, "_active_lifespan", None) is not None

@@ -1,11 +1,13 @@
 import asyncio
 import datetime
 import time
+import anyio
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAError
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 
@@ -49,12 +51,11 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
     self._current_sensors: Dict[str, float] = {}
     self._temp_update_time: float = 0
 
-  async def setup(self) -> None:
-    await self._sila_interface.setup()
-    await self._reset_and_initialize()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self._sila_interface)
 
-  async def stop(self):
-    await self._sila_interface.close()
+    await self._reset_and_initialize()
 
   async def _reset_and_initialize(self) -> None:
     try:
@@ -68,14 +69,13 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
 
   async def _wait_for_idle(self, timeout=30):
     """Wait until device state is not Busy."""
-    start = time.time()
-    while time.time() - start < timeout:
-      root = await self._sila_interface.send_command("GetStatus")
-      st = _recursive_find_key(root, "state")
-      if st and st in ["idle", "standby"]:
-        return
-      await asyncio.sleep(1)
-    raise RuntimeError("Timeout waiting for ODTC idle state")
+    with anyio.fail_after(timeout):
+      while True:
+        root = await self._sila_interface.send_command("GetStatus")
+        st = _recursive_find_key(root, "state")
+        if st and st in ["idle", "standby"]:
+          return
+        await anyio.sleep(1)
 
   # -------------------------------------------------------------------------
   # Lid

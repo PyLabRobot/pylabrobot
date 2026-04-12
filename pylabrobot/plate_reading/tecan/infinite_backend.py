@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.io.binary import Reader
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate
@@ -517,8 +518,6 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self.counts_per_mm_x = counts_per_mm_x
     self.counts_per_mm_y = counts_per_mm_y
     self.counts_per_mm_z = counts_per_mm_z
-    self._setup_lock = asyncio.Lock()
-    self._ready = False
     self._read_chunk_size = 512
     self._max_row_wait_s = 300.0
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
@@ -527,26 +526,20 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self._run_active = False
     self._active_step_loss_commands: List[str] = []
 
-  async def setup(self) -> None:
-    async with self._setup_lock:
-      if self._ready:
-        return
-      await self.io.setup()
-      await self._initialize_device()
-      for mode in self._MODE_CAPABILITY_COMMANDS:
-        if mode not in self._mode_capabilities:
-          await self._query_mode_capabilities(mode)
-      self._ready = True
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+    await self._initialize_device()
+    for mode in self._MODE_CAPABILITY_COMMANDS:
+      if mode not in self._mode_capabilities:
+        await self._query_mode_capabilities(mode)
 
-  async def stop(self) -> None:
-    async with self._setup_lock:
-      if not self._ready:
-        return
+    async def cleanup():
       await self._cleanup_protocol()
-      await self.io.stop()
       self._mode_capabilities.clear()
       self._reset_stream_state()
-      self._ready = False
+
+    stack.push_shielded_async_callback(cleanup)
 
   async def open(self) -> None:
     """Open the reader drawer."""

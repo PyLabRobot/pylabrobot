@@ -4,6 +4,7 @@ import warnings
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 try:
   import serial
@@ -77,20 +78,16 @@ class BioShake(HeaterShakerBackend):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def setup(self, skip_home: bool = False):
-    await MachineBackend.setup(self)
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, skip_home: bool = False):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     if not skip_home:
       # Reset first before homing it to ensure the device is ready for run
       await self.reset()
       # Additional seconds until next command can be send after reset
-      await asyncio.sleep(4)
+      await anyio.sleep(4)
       # Now home the device
       await self.home()
-
-  async def stop(self):
-    await MachineBackend.stop(self)
-    await self.io.stop()
 
   async def reset(self):
     # Reset the BioShake if stuck in "e" state
@@ -216,7 +213,7 @@ class BioShake(HeaterShakerBackend):
     # before the edge-locking mechanism (ELM) can operate. Without this
     # delay, subsequent setElmUnlockPos commands return 'e' (error).
     sleep_time_after_stop = 3
-    await asyncio.sleep(sleep_time_after_stop)
+    await anyio.sleep(sleep_time_after_stop)
 
   @property
   def supports_locking(self) -> bool:

@@ -4,6 +4,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 def _parse_scalar(text: Optional[str], tag: str) -> object:
@@ -39,10 +40,9 @@ class SCILABackend(MachineBackend):
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     await super()._enter_lifespan(stack)
-    await self._sila_interface.setup()
-    stack.push_async_callback(self._sila_interface.close)
+    await stack.enter_async_context(self._sila_interface)
     await self._reset_and_initialize()
 
 

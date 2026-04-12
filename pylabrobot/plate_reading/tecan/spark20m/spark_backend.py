@@ -7,6 +7,7 @@ from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 from .controls.config_control import ConfigControl
 from .controls.data_control import DataControl
@@ -48,9 +49,11 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     self.sensor_control = SensorControl(self.reader.send_command)
     self.data_control = DataControl(self.reader.send_command)
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Set up the plate reader."""
-    await self.reader.connect()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.reader)
+
     await self.config_control.init_module()
     await self.data_control.turn_all_interval_messages_off()
 
@@ -72,9 +75,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
 
     return statistics.mean(temps) / 100.0
 
-  async def stop(self) -> None:
-    """Close connections."""
-    await self.reader.close()
 
   async def open(self) -> None:
     """Move the plate carrier out."""
