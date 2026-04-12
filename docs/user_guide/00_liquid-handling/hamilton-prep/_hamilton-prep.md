@@ -7,6 +7,5 @@ Channel and CORE gripper support.
 :hidden:
 
 prep_basic_demo
-prep_v1_pipetting-debugging
 prep_calibration
 ```
