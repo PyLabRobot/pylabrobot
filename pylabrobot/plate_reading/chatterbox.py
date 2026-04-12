@@ -1,3 +1,4 @@
+import contextlib
 import time
 from typing import Dict, List, Optional
 
@@ -14,11 +15,11 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     self.dummy_absorbance: List[List[Optional[float]]] = [[0.0] * 12] * 8
     self.dummy_fluorescence: List[List[Optional[float]]] = [[0.0] * 12] * 8
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     print("Setting up the plate reader.")
+    stack.callback(lambda: print("Stopping the plate reader."))
 
-  async def stop(self) -> None:
-    print("Stopping the plate reader.")
 
   async def open(self) -> None:
     print("Opening the plate reader.")

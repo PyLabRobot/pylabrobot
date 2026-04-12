@@ -6,6 +6,7 @@ instruments via TCP communication using the Hamilton protocol.
 
 from __future__ import annotations
 
+import contextlib
 import enum
 import logging
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
@@ -954,7 +955,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     self._channel_traversal_height: float = 146.0  # Default traversal height in mm
 
-  async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, unlock_door: bool = False, force_initialize: bool = False):
     """Set up the Nimbus backend.
 
     This method:
@@ -972,7 +973,7 @@ class NimbusBackend(HamiltonTCPBackend):
       force_initialize: If True, force initialization even if already initialized
     """
     # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
-    await super().setup()
+    await super()._enter_lifespan()
 
     # Discover instrument objects
     await self._discover_instrument_objects()
@@ -1244,9 +1245,7 @@ class NimbusBackend(HamiltonTCPBackend):
       logger.error(f"Failed to unlock door: {e}")
       raise
 
-  async def stop(self):
-    """Stop the backend and close connection."""
-    await HamiltonTCPBackend.stop(self)
+
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.

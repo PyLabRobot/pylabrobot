@@ -13,10 +13,13 @@ Protocol Details:
 
 from __future__ import annotations
 
+import anyio
 import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.machines.backend import MachineBackend
@@ -71,10 +74,7 @@ class ExperimentalBioTekEL406Backend(
     self._command_lock: asyncio.Lock | None = None
     self._in_batch: bool = False
 
-  async def setup(
-    self,
-    skip_reset: bool = False,
-  ) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, skip_reset: bool = False):
     """Set up communication with the EL406.
 
     Configures the FTDI USB interface with the correct parameters:
@@ -83,25 +83,32 @@ class ExperimentalBioTekEL406Backend(
     - No flow control (disabled)
 
     If ``self.io`` is already set (e.g. injected mock for testing),
-    it is used as-is and ``setup()`` is not called on it again.
+    it is used as-is.
 
     Note: This does NOT start a batch. Use ``batch()`` or call step commands
     directly (they auto-batch).
 
     Args:
+      stack: The AsyncExitStack to register cleanups with.
       skip_reset: If True, skip the instrument reset step.
 
     Raises:
       RuntimeError: If pylibftdi is not installed or communication fails.
     """
-    self._command_lock = asyncio.Lock()
+    await super()._enter_lifespan(stack)
+
+    self._command_lock = anyio.Lock()
 
     logger.info("BioTekEL406Backend setting up")
     logger.info("  Timeout: %.1f seconds", self.timeout)
 
     if self.io is None:
       self.io = FTDI(human_readable_device_name="BioTek EL406", device_id=self._device_id)
-      await self.io.setup()
+    @stack.callback
+    def _cleanup():
+      self.io = None
+
+    await stack.enter_async_context(self.io)
 
     # Configure serial parameters
     logger.debug("Configuring serial parameters...")
@@ -118,8 +125,6 @@ class ExperimentalBioTekEL406Backend(
       await self.io.set_dtr(True)
       logger.debug("  RTS and DTR enabled")
     except Exception as e:
-      await self.io.stop()
-      self.io = None
       raise EL406CommunicationError(
         f"Failed to configure FTDI device: {e}",
         operation="configure",
@@ -146,16 +151,6 @@ class ExperimentalBioTekEL406Backend(
 
     logger.info("BioTekEL406Backend setup complete")
 
-  async def stop(self) -> None:
-    """Stop communication with the EL406.
-
-    Closes the FTDI connection. Batch cleanup is handled by the ``batch()``
-    context manager, not by ``stop()``.
-    """
-    logger.info("BioTekEL406Backend stopping")
-    if self.io is not None:
-      await self.io.stop()
-      self.io = None
 
   @asynccontextmanager
   async def batch(self, plate: Plate) -> AsyncIterator[None]:

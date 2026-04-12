@@ -1,3 +1,4 @@
+import contextlib
 try:
   import serial  # type: ignore
 
@@ -46,17 +47,14 @@ class MasterflexBackend(PumpBackend):
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def setup(self):
-    await self.io.setup()
-
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")
 
   def serialize(self):
     return {**super().serialize(), "com_port": self.com_port}
-
-  async def stop(self):
-    await self.io.stop()
 
   async def send_command(self, command: str):
     command = "\x02P02" + command + "\x0d"

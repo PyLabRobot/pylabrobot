@@ -1,6 +1,8 @@
 import abc
+import contextlib
 import warnings
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.temperature_controlling.inheco.control_box import InhecoTECControlBox
 
@@ -17,11 +19,9 @@ class InhecoTemperatureControllerBackend(TemperatureControllerBackend, metaclass
     self.index = index
     self.interface = control_box
 
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    await self.stop_temperature_control()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    stack.push_shielded_async_callback(self.stop_temperature_control)
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")

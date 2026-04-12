@@ -184,10 +184,10 @@ class FTDI(IOBase):
   async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     """Initialize the FTDI device connection with device resolution."""
     if self._dev is not None and not self._dev.closed:
-      self._dev.close()
+      await anyio.to_thread.run_sync(self._dev.close)
     try:
       # Resolve which device to connect to
-      self._device_id = self._resolve_device_serial()
+      self._device_id = await anyio.to_thread.run_sync(self._resolve_device_serial)
 
       # Create and open device
       self._dev = Device(
@@ -197,7 +197,7 @@ class FTDI(IOBase):
         vid=self._vid,
         interface_select=self._interface_select,
       )
-      self._dev.open()
+      await anyio.to_thread.run_sync(self._dev.open)
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
       raise RuntimeError(
@@ -206,11 +206,12 @@ class FTDI(IOBase):
         "Try restarting the kernel."
       ) from e
 
-    @stack.callback
-    def _cleanup():
+    async def _cleanup():
       if self._dev is not None:
-        self._dev.close()
+        await anyio.to_thread.run_sync(self._dev.close)
       self._dev = None
+
+    stack.push_async_callback(_cleanup)
 
   @property
   def device_id(self) -> str:

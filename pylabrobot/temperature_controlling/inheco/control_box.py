@@ -1,3 +1,4 @@
+import contextlib
 import time
 import typing
 
@@ -15,14 +16,13 @@ class InhecoTECControlBox:
       human_readable_device_name="Inheco Control Box", vid=vid, pid=pid, serial_number=serial_number
     )
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     """
-    If io.setup() fails, ensure that libusb drivers were installed as per docs.
+    If HID._enter_lifespan() fails, ensure that libusb drivers were installed as per docs.
     """
-    await self.io.setup()
+    await stack.enter_async_context(self.io)
 
-  async def stop(self):
-    await self.io.stop()
+
 
   @typing.no_type_check
   def _generate_packets(self, msg):

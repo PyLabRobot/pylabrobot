@@ -1,3 +1,4 @@
+import contextlib
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.plate import Plate
 from pylabrobot.storage.backend import IncubatorBackend
@@ -7,11 +8,11 @@ class IncubatorChatterboxBackend(IncubatorBackend):
   def __init__(self):
     self._dummy_temperature = 37.0
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     print("Setting up incubator backend")
+    stack.callback(lambda: print("Stopping incubator backend"))
 
-  async def stop(self):
-    print("Stopping incubator backend")
 
   async def open_door(self):
     print("Opening door")

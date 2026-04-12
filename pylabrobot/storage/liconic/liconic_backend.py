@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import re
 import time
@@ -13,6 +14,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.barcode_scanners import BarcodeScanner
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
@@ -93,7 +95,7 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     self.n2_installed: Optional[bool] = None
 
   # Function to setup serial connection with Liconic PLC
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """
     1. Open serial port (9600 8E1, RTS/CTS) via the Serial wrapper.
     2. Send >200 ms break, wait 150 ms, flush buffers.
@@ -101,42 +103,47 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     4. Activate handling: ST 1801 → expect OK<CR><LF>
     5. Poll ready-flag: RD 1915 → wait for "1"<CR><LF>
     """
+    await super()._enter_lifespan(stack)
     try:
-      await self.io.setup()
+      await stack.enter_async_context(self.io)
     except serial.SerialException as e:
       raise RuntimeError(f"Could not open {self.io.port}: {e}") from e
 
     await self.io.send_break(duration=0.2)  # >100 ms required
-    await asyncio.sleep(0.15)
+    await anyio.sleep(0.15)
     await self.io.reset_input_buffer()
     await self.io.reset_output_buffer()
 
     await self.io.write(b"CR\r")
-    deadline = time.time() + self.init_timeout
-    while time.time() < deadline:
-      resp = await self.io.readline()  # reads through LF
-      if resp.strip() == b"CC":
-        break
-    else:
-      await self.io.stop()
-      raise TimeoutError(f"No CC response from Liconic PLC within {self.init_timeout} seconds")
+    try:
+      with anyio.fail_after(self.init_timeout):
+        while True:
+          resp = await self.io.readline()  # reads through LF
+          if resp.strip() == b"CC":
+            break
+    except TimeoutError as e:
+      raise TimeoutError(
+        f"No CC response from Liconic PLC within {self.init_timeout} seconds"
+      ) from e
 
     await self.io.write(b"ST 1801\r")
     resp = await self.io.readline()
     if resp.strip() != b"OK":
-      await self.io.stop()
       raise RuntimeError(f"Unexpected reply to ST 1801: {resp!r}")
 
-    deadline = time.time() + self.start_timeout
-    while time.time() < deadline:
-      await self.io.write(b"RD 1915\r")
-      flag = await self.io.readline()
-      if flag.strip() == b"1":
-        break
-      await asyncio.sleep(self.poll_interval)
-    else:
-      await self.io.stop()
-      raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
+    try:
+      with anyio.fail_after(self.start_timeout):
+        while True:
+          await self.io.write(b"RD 1915\r")
+          flag = await self.io.readline()
+          if flag.strip() == b"1":
+            break
+          await anyio.sleep(self.poll_interval)
+    except TimeoutError as e:
+      raise TimeoutError(
+        f"PLC did not signal ready within {self.start_timeout} seconds"
+      ) from e
+
 
   def _site_to_m_n(self, site: PlateHolder) -> Tuple[int, int]:
     rack = site.parent
@@ -165,9 +172,6 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     raise ValueError(
       f"Could not parse site height and pos num from PlateCarrier model: {rack.model}"
     )
-
-  async def stop(self):
-    await self.io.stop()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)

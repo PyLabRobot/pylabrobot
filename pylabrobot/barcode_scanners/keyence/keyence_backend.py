@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import time
 
@@ -51,26 +52,27 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
       rtscts=False,
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.initialize()
 
   async def initialize(self):
     """Initialize the Keyence barcode scanner."""
-
-    deadline = time.time() + self.init_timeout
-    while time.time() < deadline:
-      response = await self.send_command("RMOTOR")
-      if response.strip() == "MOTORON":
-        logger.info("Barcode scanner motor is ON.")
-        break
-      elif response.strip() == "MOTOROFF":
-        raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
-      await asyncio.sleep(self.poll_interval)
-    else:
+    try:
+      with anyio.fail_after(self.init_timeout):
+        while True:
+          response = await self.send_command("RMOTOR")
+          if response.strip() == "MOTORON":
+            logger.info("Barcode scanner motor is ON.")
+            break
+          elif response.strip() == "MOTOROFF":
+          raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
+        await asyncio.sleep(self.poll_interval)
+    except TimeoutError as e:
       raise BarcodeScannerError(
         "Failed to initialize Keyence barcode scanner: Timeout waiting for motor to turn on."
-      )
+      ) from e
 
   async def send_command(self, command: str) -> str:
     """Send a command to the barcode scanner and return the response.
@@ -79,9 +81,6 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
     response = await self.io.read()
     return response.decode(self.serial_messaging_encoding).strip()
-
-  async def stop(self):
-    await self.io.stop()
 
   async def scan_barcode(self) -> Barcode:
     data = await self.send_command("LON")

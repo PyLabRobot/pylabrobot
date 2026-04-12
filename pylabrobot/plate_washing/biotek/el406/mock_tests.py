@@ -60,15 +60,16 @@ class EL406TestCase(AnyioTestBase):
 
     self.backend = ExperimentalBioTekEL406Backend()
     self.backend.io = MockFTDI()
-    await self.backend.setup()
+    
+    self.backend.io.set_read_buffer(b"\x06" * 500)
+    
+    await stack.enter_async_context(self.backend)
 
-    async def cleanup():
+    def _pre_cleanup():
       if self.backend.io is not None:
         self.backend.io.set_read_buffer(b"\x06" * 500)
-        await self.backend.stop()
-    stack.push_async_callback(cleanup)
+    stack.callback(_pre_cleanup)
 
-    self.backend.io.set_read_buffer(b"\x06" * 500)
 
 
 
@@ -88,11 +89,12 @@ class MockFTDI:
     single_response = b"\x06" + header
     return single_response * 200
 
-  async def setup(self):
+  async def __aenter__(self):
+    return self
+
+  async def __aexit__(self, exc_type, exc_val, exc_tb):
     pass
 
-  async def stop(self):
-    pass
 
   async def write(self, data: bytes) -> int:
     self.written_data.append(data)

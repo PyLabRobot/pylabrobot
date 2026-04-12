@@ -1,5 +1,7 @@
 import asyncio
+import contextlib
 import random
+
 import re
 import sys
 import warnings
@@ -400,15 +402,17 @@ class VantageBackend(HamiltonLiquidHandler):
     """Parse a firmware response."""
     return parse_vantage_fw_string(resp, fmt)
 
-  async def setup(
+  async def _enter_lifespan(
     self,
+    stack: contextlib.AsyncExitStack,
+    *,
     skip_loading_cover: bool = False,
     skip_core96: bool = False,
     skip_ipg: bool = False,
   ):
     """Creates a USB connection and finds read/write interfaces."""
 
-    await super().setup()
+    await super()._enter_lifespan(stack)
 
     tip_presences = await self.query_tip_presence()
     self._num_channels = len(tip_presences)
@@ -452,6 +456,7 @@ class VantageBackend(HamiltonLiquidHandler):
         await self.ipg_initialize()
       if not await self.ipg_get_parking_status():
         await self.ipg_park()
+
 
   @property
   def num_channels(self) -> int:

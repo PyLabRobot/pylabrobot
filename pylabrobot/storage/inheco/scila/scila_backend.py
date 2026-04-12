@@ -1,3 +1,4 @@
+import contextlib
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
@@ -38,12 +39,12 @@ class SCILABackend(MachineBackend):
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     await self._sila_interface.setup()
+    stack.push_async_callback(self._sila_interface.close)
     await self._reset_and_initialize()
 
-  async def stop(self) -> None:
-    await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:
     event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"

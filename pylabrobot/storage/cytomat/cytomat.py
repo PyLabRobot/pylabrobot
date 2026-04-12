@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import time
 import warnings
@@ -12,6 +13,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.storage.backend import IncubatorBackend
@@ -92,17 +94,16 @@ class CytomatBackend(IncubatorBackend):
       human_readable_device_name="Cytomat",
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.initialize()
     await self.wait_for_task_completion()
+
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
     warnings.warn("Cytomat racks need to be configured with the exe software")
-
-  async def stop(self):
-    await self.io.stop()
 
   def _assemble_command(self, command_type: str, command: str, params: str):
     carriage_return = "\r" if self.model == CytomatType.C2C_425 else "\r\n"
@@ -143,17 +144,16 @@ class CytomatBackend(IncubatorBackend):
     # which costs 1s if there is a true error, but is necessary to avoid false negatives.
     command_str = self._assemble_command(command_type=command_type, command=command, params=params)
     n_retries = 10
-    exc: Optional[BaseException] = None
-    for _ in range(n_retries):
+    for attempt in reversed(range(n_retries)):
       try:
         return await _send_command(command_str)
       except (CytomatCommandUnknownError, CytomatBusyError) as e:
-        exc = e
+        if not attempt:
+          await self.reset_error_register()
+          raise
         await asyncio.sleep(0.1)
         continue
-    assert exc is not None
-    await self.reset_error_register()
-    raise exc
+    raise RuntimeError("Internal error - this should be unreachable.")
 
   async def send_action(
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
@@ -423,11 +423,11 @@ class CytomatBackend(IncubatorBackend):
 
 
 class CytomatChatterbox(CytomatBackend):
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await IncubatorBackend._enter_lifespan(self, stack)
     await self.wait_for_task_completion()
+    stack.callback(lambda: print("closing connection to cytomat"))
 
-  async def stop(self):
-    print("closing connection to cytomat")
 
   async def send_command(self, command_type, command, params):
     print(

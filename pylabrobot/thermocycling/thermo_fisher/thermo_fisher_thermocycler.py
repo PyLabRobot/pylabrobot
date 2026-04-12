@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import logging
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io import Socket
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -890,9 +892,34 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
   # *************Methods implementing ThermocyclerBackend***********************
 
-  async def setup(
-    self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    block_idle_temp=25,
+    cover_idle_temp=105,
+    blocks_to_setup: Optional[List[int]] = None,
   ):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+
+    async def cleanup():
+      for block_id in list(self.current_runs.keys()):
+        try:
+          await self.abort_run(block_id=block_id)
+        except Exception as e:
+          self.logger.warning(f"Failed to abort run on block {block_id}: {e}")
+        try:
+          await self.deactivate_lid(block_id=block_id)
+        except Exception as e:
+          self.logger.warning(f"Failed to deactivate lid on block {block_id}: {e}")
+        try:
+          await self.deactivate_block(block_id=block_id)
+        except Exception as e:
+          self.logger.warning(f"Failed to deactivate block on block {block_id}: {e}")
+
+    stack.push_shielded_async_callback(cleanup)
+
     await self._scpi_authenticate()
     await self.power_on()
     await self._load_num_blocks_and_type()
@@ -979,14 +1006,8 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       stage_name_prefixes=stage_name_prefixes,
     )
 
-  async def stop(self):
-    for block_id in self.current_runs.keys():
-      await self.abort_run(block_id=block_id)
+  # stop method removed, logic moved to cleanup callback in _enter_lifespan
 
-      await self.deactivate_lid(block_id=block_id)
-      await self.deactivate_block(block_id=block_id)
-
-    await self.io.stop()
 
   async def get_block_status(self, *args, **kwargs):
     raise NotImplementedError

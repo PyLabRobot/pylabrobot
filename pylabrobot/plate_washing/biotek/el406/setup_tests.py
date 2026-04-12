@@ -17,20 +17,18 @@ class TestEL406BackendSetup(EL406TestCase):
     """Setup should create and configure FTDI IO wrapper."""
     backend = ExperimentalBioTekEL406Backend(timeout=0.01)
     backend.io = MockFTDI()
-    await backend.setup()
-
-    self.assertIsNotNone(backend.io)
+    async with backend:
+      self.assertIsNotNone(backend.io)
 
   async def test_stop_closes_device(self):
     """Stop should close the FTDI device."""
     backend = ExperimentalBioTekEL406Backend(timeout=0.01)
     backend.io = MockFTDI()
-    await backend.setup()
-
-    self.assertIsNotNone(backend.io)
-    await backend.stop()
+    async with backend:
+      self.assertIsNotNone(backend.io)
 
     self.assertIsNone(backend.io)
+
 
 
 class TestEL406CommunicationError(unittest.TestCase):

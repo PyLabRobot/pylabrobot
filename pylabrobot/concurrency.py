@@ -4,6 +4,7 @@ import abc
 import warnings
 import contextlib
 import typing
+import functools
 
 import anyio
 import sniffio
@@ -15,10 +16,20 @@ class MachineConnectionClosedError(Exception):
   """ Raised when a machine task is being aborted because the connection is, or has been closed."""
 
 
+class AsyncExitStackWithShielding(contextlib.AsyncExitStack):
+
+  def push_shielded_async_callback(self, callback: typing.Callable, *args):
+    @functools.wraps(callback)
+    async def shielded_callback(*args):
+      with anyio.CancelScope(shield=True):
+        await callback(*args)
+    self.push_async_callback(shielded_callback, *args)
+
+
 class _AsyncResourceBase:
   """ Implementation of `AsyncResource`, but without any `__new__` to implement ABC checking. """
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, **kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs):
     raise NotImplementedError("Subclasses must override _enter_lifespan or _lifespan.")
 
   @contextlib.asynccontextmanager
@@ -29,11 +40,11 @@ class _AsyncResourceBase:
     Alternatively, they can provide `_enter_lifespan(stack)` which gets called with an `AsyncExitStack`.
     """
     # typical implementation
-    async with contextlib.AsyncExitStack() as stack:
+    async with AsyncExitStackWithShielding() as stack:
       await self._enter_lifespan(stack, **kwargs)
       yield
-      # there shouldn't be anything here - explicit cleanup is unstructured,
-      # register your cleanup already when you enter.
+      # there shouldn't be anything here; explicit cleanup is difficult to get right
+      # in face of exceptions and cancellation; register your cleanup when you enter.
 
   async def __aenter__(self):
     """Enter the resource's lifespan.

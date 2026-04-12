@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -13,8 +14,9 @@ class HamiltonHepaFanBackend(FanBackend):
       human_readable_device_name="Hamilton HEPA Fan", device_id=device_id, vid=0x0856, pid=0xAC11
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.io.set_baudrate(9600)
     await self.io.set_line_property(8, 0, 0)  # 8N1
     await self.io.set_latency_timer(16)
@@ -142,8 +144,7 @@ class HamiltonHepaFanBackend(FanBackend):
   async def turn_off(self):
     await self.send(b"\x55\xc1\x01\x11\x00\x7b")
 
-  async def stop(self):
-    await self.io.stop()
+
 
   async def send(self, command: bytes):
     await self.io.write(command)

@@ -15,6 +15,7 @@ Features:
 """
 
 import asyncio
+import contextlib
 import logging
 import sys
 from functools import wraps
@@ -200,14 +201,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       + f"DIP={self.dip_switch_id}) at {self.io.port}>"
     )
 
-  async def setup(self, port: Optional[str] = None):
-    """
-    Detect and connect to the Inheco machine stack.
-    Discover Inheco device via VID:PID (0403:6001) and verify DIP switch ID.
-    """
-
-    # --- Establish serial connection ---
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, port: Optional[str] = None):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     self.io.dtr = False
     self.io.rts = False
 
@@ -227,17 +223,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         f"{self.dip_switch_id}). Please verify the DIP switch setting or wiring."
       )
       self.logger.error(msg, exc_info=e)
-
-      # --- Fail-safe teardown ---
-      try:
-        await self.io.stop()
-        self.logger.debug("Closed serial connection on %s", self.io.port)
-      except Exception as close_err:
-        self.logger.warning(
-          "Failed to close serial port cleanly on %s: %s",
-          self.io._port,
-          close_err,
-        )
       raise RuntimeError(msg) from e
 
     else:
@@ -271,25 +256,36 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       self.unit_composition,
     )
 
-  async def stop(self):
-    """Close serial connection & stop all active units in the stack."""
+    async def cleanup():
+      for unit_index in range(self.number_of_connected_units):
+        try:
+          temp_status = await self.is_temperature_control_enabled(stack_index=unit_index)
 
-    for unit_index in range(self.number_of_connected_units):
-      temp_status = await self.is_temperature_control_enabled(stack_index=unit_index)
+          if temp_status:
+            print(f"Stopping temperature control on unit {unit_index}...")
+            await self.stop_temperature_control(stack_index=unit_index)
+        except Exception as e:
+          self.logger.warning(f"Failed to stop temperature control on unit {unit_index}: {e}")
 
-      if temp_status:
-        print(f"Stopping temperature control on unit {unit_index}...")
-        await self.stop_temperature_control(stack_index=unit_index)
+        try:
+          shake_status = await self.is_shaking_enabled(stack_index=unit_index)
 
-      shake_status = await self.is_shaking_enabled(stack_index=unit_index)
+          if shake_status:
+            print(f"Stopping shaking on unit {unit_index}...")
+            await self.stop_shaking(stack_index=unit_index)
+        except Exception as e:
+          self.logger.warning(f"Failed to stop shaking on unit {unit_index}: {e}")
 
-      if shake_status:
-        print(f"Stopping shaking on unit {unit_index}...")
-        await self.stop_shaking(stack_index=unit_index)
+        try:
+          await self.close(stack_index=unit_index)
+        except Exception as e:
+          self.logger.warning(f"Failed to close unit {unit_index}: {e}")
 
-      await self.close(stack_index=unit_index)
+    stack.push_shielded_async_callback(cleanup)
 
-    await self.io.stop()
+
+  # stop method removed, logic moved to cleanup via AsyncExitStack
+
 
   # === Low-level I/O ===
 

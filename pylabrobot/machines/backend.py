@@ -21,6 +21,13 @@ class MachineBackend(SerializableMixin, AsyncResource):
     self._instances.add(self)
     self._stack: Optional[contextlib.AsyncExitStack] = None
 
+  def __init_subclass__(cls, **kwargs):
+    super().__init_subclass__(**kwargs)
+    if "setup" in cls.__dict__:
+      raise TypeError(f"Subclass {cls.__name__} is not allowed to override 'setup'")
+    if "stop" in cls.__dict__:
+      raise TypeError(f"Subclass {cls.__name__} is not allowed to override 'stop'")
+
   async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     pass
 

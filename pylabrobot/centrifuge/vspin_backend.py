@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import ctypes
 import json
 import logging
@@ -48,10 +49,11 @@ class Access2Backend(LoaderBackend):
     await self.io.write(command)
     return await self._read()
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     logger.debug("[loader] setup")
 
-    await self.io.setup()
+    await stack.enter_async_context(self.io)
     await self.io.set_baudrate(115384)
 
     status = await self.get_status()
@@ -71,9 +73,6 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("1105000e00440b00000000000000007041020203c7"))
     # await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
-  async def stop(self):
-    logger.debug("[loader] stop")
-    await self.io.stop()
 
   def serialize(self):
     return {"io": self.io.serialize(), "timeout": self.timeout}
@@ -187,8 +186,14 @@ class VSpinBackend(CentrifugeBackend):
     if device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+
+    async def _cleanup():
+      await self.configure_and_initialize()
+    stack.push_async_callback(_cleanup)
+
     # TODO: add functionality where if robot has been initialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
@@ -265,6 +270,7 @@ class VSpinBackend(CentrifugeBackend):
       device_id = await self.io.get_serial()
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
+
   @property
   def bucket_1_remainder(self) -> int:
     if self._bucket_1_remainder is None:
@@ -298,9 +304,7 @@ class VSpinBackend(CentrifugeBackend):
     )
     return bucket_1_position
 
-  async def stop(self):
-    await self.configure_and_initialize()
-    await self.io.stop()
+
 
   class _StatusPositionTachometer(ctypes.LittleEndianStructure):
     _pack_ = 1

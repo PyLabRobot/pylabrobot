@@ -12,13 +12,6 @@ class PowderDispenserBackend(MachineBackend, metaclass=ABCMeta):
   An abstract class for a powder dispenser backend.
   """
 
-  @abstractmethod
-  async def setup(self) -> None:
-    """Set up the powder dispenser."""
-
-  @abstractmethod
-  async def stop(self) -> None:
-    """Close all connections to the powder dispenser and make sure setup() can be called again."""
 
   @abstractmethod
   async def dispense(

@@ -1,3 +1,4 @@
+import contextlib
 from pylabrobot.shaking import ShakerBackend
 
 
@@ -6,11 +7,11 @@ class ShakerChatterboxBackend(ShakerBackend):
 
   temperature: float = 0
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     print("Setting up shaker")
+    stack.callback(lambda: print("Stopping shaker"))
 
-  async def stop(self):
-    print("Stopping shaker")
 
   async def start_shaking(self, speed: float):
     print("Shaking at speed", speed)

@@ -1,3 +1,4 @@
+import contextlib
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -49,11 +50,11 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     self._state = ThermocyclerState(num_zones=num_zones)
     self.num_zones = num_zones
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     print("Setting up thermocycler.")
+    stack.callback(lambda: print("Stopping thermocycler."))
 
-  async def stop(self):
-    print("Stopping thermocycler.")
 
   async def open_lid(self):
     print("Opening lid.")

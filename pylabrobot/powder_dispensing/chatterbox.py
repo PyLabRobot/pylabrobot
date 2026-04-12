@@ -1,3 +1,4 @@
+import contextlib
 from typing import List
 
 from pylabrobot.powder_dispensing.backend import (
@@ -10,11 +11,11 @@ from pylabrobot.powder_dispensing.backend import (
 class PowderDispenserChatterboxBackend(PowderDispenserBackend):
   """Chatter box backend for device-free testing. Prints out all operations."""
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     print("Setting up the powder dispenser.")
+    stack.callback(lambda: print("Stopping the powder dispenser."))
 
-  async def stop(self) -> None:
-    print("Stopping the powder dispenser.")
 
   async def dispense(
     self, dispense_parameters: List[PowderDispense], **backend_kwargs
