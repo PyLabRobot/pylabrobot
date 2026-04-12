@@ -25,9 +25,15 @@ class TestTypeRegistryLocalResolution(unittest.TestCase):
   def test_resolve_struct_local_1based(self):
     reg = self._registry_with_structs()
     self.assertIsNone(reg.resolve_struct(2, 0))
-    self.assertEqual(reg.resolve_struct(2, 1).name, "A")
-    self.assertEqual(reg.resolve_struct(2, 2).name, "B")
-    self.assertEqual(reg.resolve_struct(2, 3).name, "C")
+    r1 = reg.resolve_struct(2, 1)
+    assert r1 is not None
+    self.assertEqual(r1.name, "A")
+    r2 = reg.resolve_struct(2, 2)
+    assert r2 is not None
+    self.assertEqual(r2.name, "B")
+    r3 = reg.resolve_struct(2, 3)
+    assert r3 is not None
+    self.assertEqual(r3.name, "C")
 
   def test_resolve_struct_legacy_prefers_iface_1_then_other(self):
     s_alt = StructInfo(struct_id=0, name="Alt", fields={}, interface_id=2)
@@ -37,9 +43,13 @@ class TestTypeRegistryLocalResolution(unittest.TestCase):
         1: {0: StructInfo(struct_id=0, name="Primary", fields={}, interface_id=1)},
       }
     )
-    self.assertEqual(reg.resolve_struct(2, 1).name, "Primary")
+    rp = reg.resolve_struct(2, 1)
+    assert rp is not None
+    self.assertEqual(rp.name, "Primary")
     reg2 = TypeRegistry(structs={2: {0: s_alt}})
-    self.assertEqual(reg2.resolve_struct(2, 1).name, "Alt")
+    ra = reg2.resolve_struct(2, 1)
+    assert ra is not None
+    self.assertEqual(ra.name, "Alt")
 
   def test_resolve_struct_strict_ho_interface_id(self):
     s_alt = StructInfo(struct_id=0, name="Alt", fields={}, interface_id=2)
@@ -50,8 +60,12 @@ class TestTypeRegistryLocalResolution(unittest.TestCase):
         1: {0: primary},
       }
     )
-    self.assertEqual(reg.resolve_struct(2, 1, ho_interface_id=1).name, "Primary")
-    self.assertEqual(reg.resolve_struct(2, 1, ho_interface_id=2).name, "Alt")
+    p = reg.resolve_struct(2, 1, ho_interface_id=1)
+    assert p is not None
+    self.assertEqual(p.name, "Primary")
+    a = reg.resolve_struct(2, 1, ho_interface_id=2)
+    assert a is not None
+    self.assertEqual(a.name, "Alt")
 
   def test_resolve_enum_strict_ho_interface_id(self):
     e1_iface1 = EnumInfo(enum_id=0, name="OnIface1", values={})
@@ -62,8 +76,12 @@ class TestTypeRegistryLocalResolution(unittest.TestCase):
         2: {0: e1_iface2},
       }
     )
-    self.assertEqual(reg.resolve_enum(2, 1, ho_interface_id=1).name, "OnIface1")
-    self.assertEqual(reg.resolve_enum(2, 1, ho_interface_id=2).name, "OnIface2")
+    e1 = reg.resolve_enum(2, 1, ho_interface_id=1)
+    assert e1 is not None
+    self.assertEqual(e1.name, "OnIface1")
+    e2 = reg.resolve_enum(2, 1, ho_interface_id=2)
+    assert e2 is not None
+    self.assertEqual(e2.name, "OnIface2")
 
   def test_resolve_enum_local_1based(self):
     e0 = EnumInfo(enum_id=0, name="E0", values={})
@@ -74,8 +92,12 @@ class TestTypeRegistryLocalResolution(unittest.TestCase):
       },
     )
     self.assertIsNone(reg.resolve_enum(2, 0))
-    self.assertEqual(reg.resolve_enum(2, 1).name, "E0")
-    self.assertEqual(reg.resolve_enum(2, 2).name, "E1")
+    ev0 = reg.resolve_enum(2, 1)
+    assert ev0 is not None
+    self.assertEqual(ev0.name, "E0")
+    ev1 = reg.resolve_enum(2, 2)
+    assert ev1 is not None
+    self.assertEqual(ev1.name, "E1")
 
   def test_method_signature_uses_method_interface_for_local_struct(self):
     local_s = StructInfo(struct_id=0, name="Iface2Local", fields={}, interface_id=2)

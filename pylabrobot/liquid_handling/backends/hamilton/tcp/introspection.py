@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, TypeVar, Union, cast
+from typing import Any, Dict, List, Optional, Set, TypeVar, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -424,7 +424,9 @@ class MethodInfo:
     """
     iid = self.interface_id
     if self.parameter_types:
-      param_type_names = [pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types]
+      param_type_names = [
+        pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types
+      ]
       if self.parameter_labels and len(self.parameter_labels) == len(param_type_names):
         params = [
           f"{label}: {type_name}"
@@ -437,7 +439,9 @@ class MethodInfo:
       param_str = "void"
 
     if self.return_types:
-      return_type_names = [rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types]
+      return_type_names = [
+        rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types
+      ]
       return_categories = [get_introspection_type_category(rt.type_id) for rt in self.return_types]
       if any(cat == "ReturnElement" for cat in return_categories):
         if self.return_labels and len(self.return_labels) == len(return_type_names):
@@ -466,13 +470,24 @@ class MethodInfo:
     params = []
     if self.parameter_types:
       names = [pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types]
-      labels = self.parameter_labels if len(self.parameter_labels) == len(names) else [None] * len(names)
-      params = [{"name": l or f"arg{i}", "type": t} for i, (l, t) in enumerate(zip(labels, names))]
+      labels: List[Optional[str]] = (
+        list(self.parameter_labels)
+        if len(self.parameter_labels) == len(names)
+        else [None] * len(names)
+      )
+      params = [
+        {"name": label or f"arg{i}", "type": t} for i, (label, t) in enumerate(zip(labels, names))
+      ]
     returns = []
     if self.return_types:
       names = [rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types]
-      labels = self.return_labels if len(self.return_labels) == len(names) else [None] * len(names)
-      returns = [{"name": l or f"ret{i}", "type": t} for i, (l, t) in enumerate(zip(labels, names))]
+      ret_labels: List[Optional[str]] = (
+        list(self.return_labels) if len(self.return_labels) == len(names) else [None] * len(names)
+      )
+      returns = [
+        {"name": label or f"ret{i}", "type": t}
+        for i, (label, t) in enumerate(zip(ret_labels, names))
+      ]
     return {
       "name": self.name,
       "id": f"[{self.interface_id}:{self.method_id}]",
@@ -619,15 +634,14 @@ class TypeRegistry:
   def to_dict(self) -> dict:
     """Serialize to a plain dict suitable for YAML/JSON export."""
     addr = (
-      f"{self.address.module}:{self.address.node}:{self.address.object}"
-      if self.address else None
+      f"{self.address.module}:{self.address.node}:{self.address.object}" if self.address else None
     )
-    structs_out: dict = {}
-    for iid, table in sorted(self.structs.items()):
-      structs_out[iid] = [s.to_dict(self) for _, s in sorted(table.items())]
-    enums_out: dict = {}
-    for iid, table in sorted(self.enums.items()):
-      enums_out[iid] = [e.to_dict() for _, e in sorted(table.items())]
+    structs_out: Dict[int, List[dict[str, Any]]] = {}
+    for iid, struct_table in sorted(self.structs.items()):
+      structs_out[iid] = [s.to_dict(self) for _, s in sorted(struct_table.items())]
+    enums_out: Dict[int, List[dict[str, Any]]] = {}
+    for iid, enum_table in sorted(self.enums.items()):
+      enums_out[iid] = [e.to_dict() for _, e in sorted(enum_table.items())]
     return {
       "address": addr,
       "interfaces": [info.to_dict() for _, info in sorted(self.interfaces.items())],
@@ -1446,7 +1460,9 @@ class HamiltonIntrospection:
     """
     address = self._resolve_address(address)
     supported = await self.get_supported_interface0_method_ids(address)
-    registry = await self.build_type_registry(address, global_pool=global_pool, _supported=supported)
+    registry = await self.build_type_registry(
+      address, global_pool=global_pool, _supported=supported
+    )
 
     if subobject_addresses is None:
       if GET_SUBOBJECT_ADDRESS not in supported:
@@ -1944,9 +1960,7 @@ def validate_struct(
         elif intro_pt.source_id == 0 and pool is not None and introspected.interface_id is not None:
           nested_struct = pool.resolve_struct_local(introspected.interface_id, intro_pt.ref_id)
         elif (
-          intro_pt.source_id == 2
-          and registry is not None
-          and introspected.interface_id is not None
+          intro_pt.source_id == 2 and registry is not None and introspected.interface_id is not None
         ):
           nested_struct = registry.resolve_struct(
             2, intro_pt.ref_id, ho_interface_id=introspected.interface_id
@@ -2032,7 +2046,9 @@ def validate_command(
         pt.source_id, ref_id, ho_interface_id=method.interface_id
       )
     else:
-      intro_struct = registry.resolve_struct(pt.source_id, ref_id)
+      src_id = pt.source_id
+      assert src_id is not None, "struct_params filtered for source_id is not None"
+      intro_struct = registry.resolve_struct(src_id, ref_id)
     nested_cls = _get_nested_dataclass(annotation)
     if intro_struct and nested_cls:
       child_result = validate_struct(nested_cls, intro_struct, pool, registry=registry)

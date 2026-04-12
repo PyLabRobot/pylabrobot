@@ -23,12 +23,12 @@ Standalone access: ``lh.backend.client.interfaces.MLPrepRoot.MphRoot.MPH.address
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import enum
 import logging
 import math
 import random
-from typing import Awaitable, Callable, List, Literal, Optional, Tuple, Union, overload
+from dataclasses import dataclass
+from typing import Awaitable, Callable, List, Literal, Optional, Tuple, TypeVar, Union, overload
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
@@ -68,6 +68,8 @@ from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
 
 logger = logging.getLogger(__name__)
+
+_TCalibResult = TypeVar("_TCalibResult")
 
 
 def _effective_radius(resource) -> float:
@@ -404,9 +406,7 @@ class PrepBackend(LiquidHandlerBackend):
     iface1_ids = {m.method_id for m in methods if m.interface_id == 1}
     return self._V2_PIPETTING_CMD_IDS.issubset(iface1_ids)
 
-  def _resolve_command_version(
-    self, override: Optional[Literal["v1", "v2"]] = None
-  ) -> bool:
+  def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
     """Resolve whether to use v2 commands for this call. Returns True for v2.
 
     Resolution order:
@@ -452,8 +452,14 @@ class PrepBackend(LiquidHandlerBackend):
         for v in resp.channels
       )
       return present
-    except (TimeoutError, ConnectionError, ConnectionResetError, ConnectionAbortedError,
-            BrokenPipeError, OSError):
+    except (
+      TimeoutError,
+      ConnectionError,
+      ConnectionResetError,
+      ConnectionAbortedError,
+      BrokenPipeError,
+      OSError,
+    ):
       raise
     except Exception:
       return None
@@ -1461,9 +1467,7 @@ class PrepBackend(LiquidHandlerBackend):
     default_transport_air = [
       hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
     ]
-    default_z_exit_speed = [
-      hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs
-    ]
+    default_z_exit_speed = [hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
     default_prewet = [
       hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs
     ]
@@ -1523,35 +1527,40 @@ class PrepBackend(LiquidHandlerBackend):
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
 
-      kits.append(_AspirateChannelKit(
-        channel=_CHANNEL_INDEX[ch],
-        aspirate=PrepCmd.AspirateParameters.for_op(
-          loc, op,
-          prewet_volume=prewet_volume[idx],
-          blowout_volume=blowout_volumes[idx],
-        ),
-        common=PrepCmd.CommonParameters.for_op(
-          volumes[idx], radius,
-          flow_rate=flow_rates[idx],
-          z_minimum=z_minimum[idx],
-          z_final=z_final[idx],
-          z_liquid_exit_speed=z_liquid_exit_speed[idx],
-          transport_air_volume=transport_air_volume[idx],
-          settling_time=settling_time[idx],
-        ),
-        segments=ch_segments[ch],
-        no_lld=PrepCmd.NoLldParameters.for_fixed_z(
-          z_fluid[idx], z_air[idx],
-          z_bottom_search_offset=z_bottom_search_offset[idx],
-        ),
-        lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
-        p_lld=lld_defaults.p_lld,
-        c_lld=lld_defaults.c_lld,
-        monitoring=PrepCmd.AspirateMonitoringParameters.default(),
-        tadm=_tadm,
-        mix=PrepCmd.MixParameters.default(),
-        adc=PrepCmd.AdcParameters.default(),
-      ))
+      kits.append(
+        _AspirateChannelKit(
+          channel=_CHANNEL_INDEX[ch],
+          aspirate=PrepCmd.AspirateParameters.for_op(
+            loc,
+            op,
+            prewet_volume=prewet_volume[idx],
+            blowout_volume=blowout_volumes[idx],
+          ),
+          common=PrepCmd.CommonParameters.for_op(
+            volumes[idx],
+            radius,
+            flow_rate=flow_rates[idx],
+            z_minimum=z_minimum[idx],
+            z_final=z_final[idx],
+            z_liquid_exit_speed=z_liquid_exit_speed[idx],
+            transport_air_volume=transport_air_volume[idx],
+            settling_time=settling_time[idx],
+          ),
+          segments=ch_segments[ch],
+          no_lld=PrepCmd.NoLldParameters.for_fixed_z(
+            z_fluid[idx],
+            z_air[idx],
+            z_bottom_search_offset=z_bottom_search_offset[idx],
+          ),
+          lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
+          p_lld=lld_defaults.p_lld,
+          c_lld=lld_defaults.c_lld,
+          monitoring=PrepCmd.AspirateMonitoringParameters.default(),
+          tadm=_tadm,
+          mix=PrepCmd.MixParameters.default(),
+          adc=PrepCmd.AdcParameters.default(),
+        )
+      )
     return kits
 
   @staticmethod
@@ -1568,31 +1577,55 @@ class PrepBackend(LiquidHandlerBackend):
     """Assemble a v2 aspirate parameter struct from pre-resolved kit values."""
     if effective_lld and is_tadm:
       return PrepCmd.AspirateParametersLldAndTadm2(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, container_description=kit.segments,
-        common=kit.common, lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
-        mix=kit.mix, tadm=kit.tadm, adc=kit.adc,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        container_description=kit.segments,
+        common=kit.common,
+        lld=kit.lld,
+        p_lld=kit.p_lld,
+        c_lld=kit.c_lld,
+        mix=kit.mix,
+        tadm=kit.tadm,
+        adc=kit.adc,
       )
     elif effective_lld:
       return PrepCmd.AspirateParametersLldAndMonitoring2(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, container_description=kit.segments,
-        common=kit.common, lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
-        mix=kit.mix, aspirate_monitoring=kit.monitoring, adc=kit.adc,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        container_description=kit.segments,
+        common=kit.common,
+        lld=kit.lld,
+        p_lld=kit.p_lld,
+        c_lld=kit.c_lld,
+        mix=kit.mix,
+        aspirate_monitoring=kit.monitoring,
+        adc=kit.adc,
       )
     elif is_tadm:
       return PrepCmd.AspirateParametersNoLldAndTadm2(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, container_description=kit.segments,
-        common=kit.common, no_lld=kit.no_lld,
-        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        container_description=kit.segments,
+        common=kit.common,
+        no_lld=kit.no_lld,
+        mix=kit.mix,
+        adc=kit.adc,
+        tadm=kit.tadm,
       )
     else:
       return PrepCmd.AspirateParametersNoLldAndMonitoring2(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, container_description=kit.segments,
-        common=kit.common, no_lld=kit.no_lld,
-        mix=kit.mix, adc=kit.adc, aspirate_monitoring=kit.monitoring,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        container_description=kit.segments,
+        common=kit.common,
+        no_lld=kit.no_lld,
+        mix=kit.mix,
+        adc=kit.adc,
+        aspirate_monitoring=kit.monitoring,
       )
 
   def _assemble_aspirate_v1(
@@ -1610,31 +1643,51 @@ class PrepBackend(LiquidHandlerBackend):
     patched = self._patch_common_with_cone(kit.common, kit.segments)
     if effective_lld and is_tadm:
       return PrepCmd.AspirateParametersLldAndTadm(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, common=patched,
-        lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
-        mix=kit.mix, tadm=kit.tadm, adc=kit.adc,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        common=patched,
+        lld=kit.lld,
+        p_lld=kit.p_lld,
+        c_lld=kit.c_lld,
+        mix=kit.mix,
+        tadm=kit.tadm,
+        adc=kit.adc,
       )
     elif effective_lld:
       return PrepCmd.AspirateParametersLldAndMonitoring(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, common=patched,
-        lld=kit.lld, p_lld=kit.p_lld, c_lld=kit.c_lld,
-        mix=kit.mix, aspirate_monitoring=kit.monitoring, adc=kit.adc,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        common=patched,
+        lld=kit.lld,
+        p_lld=kit.p_lld,
+        c_lld=kit.c_lld,
+        mix=kit.mix,
+        aspirate_monitoring=kit.monitoring,
+        adc=kit.adc,
       )
     elif is_tadm:
       return PrepCmd.AspirateParametersNoLldAndTadm(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, common=patched,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        common=patched,
         no_lld=kit.no_lld,
-        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+        mix=kit.mix,
+        adc=kit.adc,
+        tadm=kit.tadm,
       )
     else:
       return PrepCmd.AspirateParametersNoLldAndMonitoring(
-        default_values=False, channel=kit.channel,
-        aspirate=kit.aspirate, common=patched,
+        default_values=False,
+        channel=kit.channel,
+        aspirate=kit.aspirate,
+        common=patched,
         no_lld=kit.no_lld,
-        mix=kit.mix, adc=kit.adc, aspirate_monitoring=kit.monitoring,
+        mix=kit.mix,
+        adc=kit.adc,
+        aspirate_monitoring=kit.monitoring,
       )
 
   async def _send_aspirate(
@@ -1766,15 +1819,9 @@ class PrepBackend(LiquidHandlerBackend):
     default_transport_air = [
       hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
     ]
-    default_z_exit_speed = [
-      hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs
-    ]
-    default_stop_back = [
-      hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    default_cutoff = [
-      hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs
-    ]
+    default_z_exit_speed = [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
+    default_stop_back = [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs]
+    default_cutoff = [hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs]
     settling_time = fill_in_defaults(settling_time, default_settling)
     transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air)
     z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_exit_speed)
@@ -1827,33 +1874,37 @@ class PrepBackend(LiquidHandlerBackend):
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
 
-      kits.append(_DispenseChannelKit(
-        channel=_CHANNEL_INDEX[ch],
-        dispense=PrepCmd.DispenseParameters.for_op(
-          loc,
-          stop_back_volume=stop_back_volume[idx],
-          cutoff_speed=cutoff_speed[idx],
-        ),
-        common=PrepCmd.CommonParameters.for_op(
-          volumes[idx], radius,
-          flow_rate=flow_rates[idx],
-          z_minimum=z_minimum[idx],
-          z_final=final_z[idx],
-          z_liquid_exit_speed=z_liquid_exit_speed[idx],
-          transport_air_volume=transport_air_volume[idx],
-          settling_time=settling_time[idx],
-        ),
-        segments=ch_segments[ch],
-        no_lld=PrepCmd.NoLldParameters.for_fixed_z(
-          z_fluid[idx], z_air[idx],
-          z_bottom_search_offset=z_bottom_search_offset[idx],
-        ),
-        lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
-        c_lld=lld_defaults.c_lld,
-        tadm=PrepCmd.TadmParameters.default(),
-        mix=PrepCmd.MixParameters.default(),
-        adc=PrepCmd.AdcParameters.default(),
-      ))
+      kits.append(
+        _DispenseChannelKit(
+          channel=_CHANNEL_INDEX[ch],
+          dispense=PrepCmd.DispenseParameters.for_op(
+            loc,
+            stop_back_volume=stop_back_volume[idx],
+            cutoff_speed=cutoff_speed[idx],
+          ),
+          common=PrepCmd.CommonParameters.for_op(
+            volumes[idx],
+            radius,
+            flow_rate=flow_rates[idx],
+            z_minimum=z_minimum[idx],
+            z_final=final_z[idx],
+            z_liquid_exit_speed=z_liquid_exit_speed[idx],
+            transport_air_volume=transport_air_volume[idx],
+            settling_time=settling_time[idx],
+          ),
+          segments=ch_segments[ch],
+          no_lld=PrepCmd.NoLldParameters.for_fixed_z(
+            z_fluid[idx],
+            z_air[idx],
+            z_bottom_search_offset=z_bottom_search_offset[idx],
+          ),
+          lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
+          c_lld=lld_defaults.c_lld,
+          tadm=PrepCmd.TadmParameters.default(),
+          mix=PrepCmd.MixParameters.default(),
+          adc=PrepCmd.AdcParameters.default(),
+        )
+      )
     return kits
 
   @staticmethod
@@ -1864,17 +1915,28 @@ class PrepBackend(LiquidHandlerBackend):
     """Assemble a v2 dispense parameter struct from pre-resolved kit values."""
     if effective_lld:
       return PrepCmd.DispenseParametersLld2(
-        default_values=False, channel=kit.channel,
-        dispense=kit.dispense, container_description=kit.segments,
-        common=kit.common, lld=kit.lld, c_lld=kit.c_lld,
-        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+        default_values=False,
+        channel=kit.channel,
+        dispense=kit.dispense,
+        container_description=kit.segments,
+        common=kit.common,
+        lld=kit.lld,
+        c_lld=kit.c_lld,
+        mix=kit.mix,
+        adc=kit.adc,
+        tadm=kit.tadm,
       )
     else:
       return PrepCmd.DispenseParametersNoLld2(
-        default_values=False, channel=kit.channel,
-        dispense=kit.dispense, container_description=kit.segments,
-        common=kit.common, no_lld=kit.no_lld,
-        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+        default_values=False,
+        channel=kit.channel,
+        dispense=kit.dispense,
+        container_description=kit.segments,
+        common=kit.common,
+        no_lld=kit.no_lld,
+        mix=kit.mix,
+        adc=kit.adc,
+        tadm=kit.tadm,
       )
 
   def _assemble_dispense_v1(
@@ -1886,17 +1948,26 @@ class PrepBackend(LiquidHandlerBackend):
     patched = self._patch_common_with_cone(kit.common, kit.segments)
     if effective_lld:
       return PrepCmd.DispenseParametersLld(
-        default_values=False, channel=kit.channel,
-        dispense=kit.dispense, common=patched,
-        lld=kit.lld, c_lld=kit.c_lld,
-        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+        default_values=False,
+        channel=kit.channel,
+        dispense=kit.dispense,
+        common=patched,
+        lld=kit.lld,
+        c_lld=kit.c_lld,
+        mix=kit.mix,
+        adc=kit.adc,
+        tadm=kit.tadm,
       )
     else:
       return PrepCmd.DispenseParametersNoLld(
-        default_values=False, channel=kit.channel,
-        dispense=kit.dispense, common=patched,
+        default_values=False,
+        channel=kit.channel,
+        dispense=kit.dispense,
+        common=patched,
         no_lld=kit.no_lld,
-        mix=kit.mix, adc=kit.adc, tadm=kit.tadm,
+        mix=kit.mix,
+        adc=kit.adc,
+        tadm=kit.tadm,
       )
 
   async def _send_dispense(
@@ -2018,12 +2089,22 @@ class PrepBackend(LiquidHandlerBackend):
     use_v2 = self._resolve_command_version(command_version)
 
     kits = self._resolve_aspirate_channels(
-      ops, use_channels, effective_lld,
-      z_final=z_final, z_fluid=z_fluid, z_air=z_air,
-      settling_time=settling_time, transport_air_volume=transport_air_volume,
-      z_liquid_exit_speed=z_liquid_exit_speed, prewet_volume=prewet_volume,
-      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
-      lld=lld, p_lld=p_lld, c_lld=c_lld, tadm=tadm,
+      ops,
+      use_channels,
+      effective_lld,
+      z_final=z_final,
+      z_fluid=z_fluid,
+      z_air=z_air,
+      settling_time=settling_time,
+      transport_air_volume=transport_air_volume,
+      z_liquid_exit_speed=z_liquid_exit_speed,
+      prewet_volume=prewet_volume,
+      z_minimum=z_minimum,
+      z_bottom_search_offset=z_bottom_search_offset,
+      lld=lld,
+      p_lld=p_lld,
+      c_lld=c_lld,
+      tadm=tadm,
       container_segments=container_segments,
       auto_container_geometry=auto_container_geometry,
       hamilton_liquid_classes=hamilton_liquid_classes,
@@ -2110,18 +2191,30 @@ class PrepBackend(LiquidHandlerBackend):
     """
     _DISPENSE_ALLOWED_LLD = frozenset({self.LLDMode.CAPACITIVE})
     effective_lld = self._resolve_effective_lld(
-      lld_mode, use_lld, lld, len(ops), allowed_modes=_DISPENSE_ALLOWED_LLD,
+      lld_mode,
+      use_lld,
+      lld,
+      len(ops),
+      allowed_modes=_DISPENSE_ALLOWED_LLD,
     )
     use_v2 = self._resolve_command_version(command_version)
 
     kits = self._resolve_dispense_channels(
-      ops, use_channels, effective_lld,
-      final_z=final_z, z_fluid=z_fluid, z_air=z_air,
-      settling_time=settling_time, transport_air_volume=transport_air_volume,
+      ops,
+      use_channels,
+      effective_lld,
+      final_z=final_z,
+      z_fluid=z_fluid,
+      z_air=z_air,
+      settling_time=settling_time,
+      transport_air_volume=transport_air_volume,
       z_liquid_exit_speed=z_liquid_exit_speed,
-      stop_back_volume=stop_back_volume, cutoff_speed=cutoff_speed,
-      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
-      lld=lld, c_lld=c_lld,
+      stop_back_volume=stop_back_volume,
+      cutoff_speed=cutoff_speed,
+      z_minimum=z_minimum,
+      z_bottom_search_offset=z_bottom_search_offset,
+      lld=lld,
+      c_lld=c_lld,
       container_segments=container_segments,
       auto_container_geometry=auto_container_geometry,
       hamilton_liquid_classes=hamilton_liquid_classes,
@@ -3126,9 +3219,13 @@ class CalibrationCommandReport:
 
   @property
   def changed_fields_count(self) -> int:
-    channel_changes = sum(len(cd.changes) for cd in self.diff.channel_diffs if cd.state == "changed")
-    return len(self.diff.top_level_changes) + channel_changes + sum(
-      1 for cd in self.diff.channel_diffs if cd.state in ("added", "removed")
+    channel_changes = sum(
+      len(cd.changes) for cd in self.diff.channel_diffs if cd.state == "changed"
+    )
+    return (
+      len(self.diff.top_level_changes)
+      + channel_changes
+      + sum(1 for cd in self.diff.channel_diffs if cd.state in ("added", "removed"))
     )
 
 
@@ -3206,7 +3303,11 @@ class PrepCalibrationSession:
       logger.info("Calibration session %s produced no calibration changes", report.command)
 
     if logger.isEnabledFor(logging.DEBUG):
-      logger.debug("Calibration report diff for %s:\n%s", report.command, PrepCmd.format_calibration_diff(report.diff))
+      logger.debug(
+        "Calibration report diff for %s:\n%s",
+        report.command,
+        PrepCmd.format_calibration_diff(report.diff),
+      )
 
   async def _get_calibration_values(
     self,
@@ -3218,11 +3319,11 @@ class PrepCalibrationSession:
   async def _run_with_report(
     self,
     command_name: str,
-    op: Callable[[Optional[float]], Awaitable[object]],
+    op: Callable[[Optional[float]], Awaitable[_TCalibResult]],
     *,
     channel: Optional[PrepCmd.ChannelIndex] = None,
     read_timeout: Optional[float] = None,
-  ) -> Union[object, CalibrationCommandReport]:
+  ) -> Union[_TCalibResult, CalibrationCommandReport]:
     timeout = self._effective_timeout(read_timeout)
     if not self.report_after_command:
       result = await op(timeout)
@@ -3288,7 +3389,9 @@ class PrepCalibrationSession:
 
   async def snapshot(self, *, read_timeout: Optional[float] = None) -> PrepCmd.CalibrationValues:
     self._ensure_started()
-    snapshot = await self._get_calibration_values(read_timeout=self._effective_timeout(read_timeout))
+    snapshot = await self._get_calibration_values(
+      read_timeout=self._effective_timeout(read_timeout)
+    )
     self._last_snapshot = snapshot
     return snapshot
 
@@ -3321,7 +3424,9 @@ class PrepCalibrationSession:
       float_tol=self.float_tol if float_tol is None else float_tol,
     )
 
-  async def end(self, *, save: bool = True, date_time: Optional[PrepCmd.HoiDateTime] = None) -> None:
+  async def end(
+    self, *, save: bool = True, date_time: Optional[PrepCmd.HoiDateTime] = None
+  ) -> None:
     """End the calibration session, optionally saving values."""
     if self._ended:
       return
@@ -3335,6 +3440,14 @@ class PrepCalibrationSession:
     self._ended = True
     self._started = False
     self.backend._set_calibration_session_active(False)
+
+  async def rollback(self) -> None:
+    """End the session without saving (alias for ``end(save=False)``)."""
+    await self.end(save=False)
+
+  async def commit(self) -> None:
+    """Save calibration and end the session (alias for ``end(save=True)``)."""
+    await self.end(save=True)
 
   async def reset(self, *, store: bool = False) -> None:
     """Reset calibration values during an active calibration session."""
@@ -3351,7 +3464,7 @@ class PrepCalibrationSession:
   ) -> Union[float, CalibrationCommandReport]:
     self._ensure_started()
 
-    async def _op(timeout: Optional[float]) -> object:
+    async def _op(timeout: Optional[float]) -> float:
       result = await self.backend.client.send_command(
         PrepCmd.PrepCalibrateXAxis(
           dest=await self.backend._require("calibration"),
@@ -3378,7 +3491,7 @@ class PrepCalibrationSession:
   ) -> Union[float, CalibrationCommandReport]:
     self._ensure_started()
 
-    async def _op(timeout: Optional[float]) -> object:
+    async def _op(timeout: Optional[float]) -> float:
       result = await self.backend.client.send_command(
         PrepCmd.PrepCalibrateYAxis(
           dest=await self.backend._require("calibration"),
@@ -3405,7 +3518,7 @@ class PrepCalibrationSession:
   ) -> Union[float, CalibrationCommandReport]:
     self._ensure_started()
 
-    async def _op(timeout: Optional[float]) -> object:
+    async def _op(timeout: Optional[float]) -> float:
       result = await self.backend.client.send_command(
         PrepCmd.PrepCalibrateZAxis(
           dest=await self.backend._require("calibration"),
@@ -3433,7 +3546,7 @@ class PrepCalibrationSession:
   ) -> Union[Tuple[int, ...], CalibrationCommandReport]:
     self._ensure_started()
 
-    async def _op(timeout: Optional[float]) -> object:
+    async def _op(timeout: Optional[float]) -> Tuple[int, ...]:
       channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
       assert len(tip_spots) == len(channels)
 
@@ -3479,7 +3592,7 @@ class PrepCalibrationSession:
   ) -> Union[Tuple[int, ...], CalibrationCommandReport]:
     self._ensure_started()
 
-    async def _op(timeout: Optional[float]) -> object:
+    async def _op(timeout: Optional[float]) -> Tuple[int, ...]:
       if not self.backend.has_mph:
         raise RuntimeError(
           "Instrument does not have an 8MPH head. Cannot use calibrate_squeeze_tips_mph."

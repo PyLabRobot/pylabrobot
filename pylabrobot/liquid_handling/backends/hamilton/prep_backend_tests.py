@@ -7,15 +7,15 @@ All tests mock client.send_command — no real TCP connection required.
 
 import asyncio
 import math
-from types import SimpleNamespace
 import unittest
 import unittest.mock
+from types import SimpleNamespace
 
 from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.prep_backend import (
   CalibrationCommandReport,
-  PrepCalibrationSession,
   PrepBackend,
+  PrepCalibrationSession,
   _absolute_z_from_well,
   _build_container_segments,
   _effective_radius,
@@ -59,6 +59,7 @@ _COORD_ADDR = Address(1, 1, 0x00C0)
 _DECK_CONFIG_ADDR = Address(1, 1, 0x00D0)
 _MPH_ADDR = Address(1, 1, 0x00F0)
 _SERVICE_ADDR = Address(1, 1, 0x0017)
+_CALIBRATION_ADDR = Address(1, 1, 0x00E2)
 
 _TRAVERSE_HEIGHT = 96.97
 
@@ -85,6 +86,7 @@ def _setup_backend(num_channels: int = 2, has_mph: bool = False) -> PrepBackend:
   backend._resolver._resolved["deck_config"] = _DECK_CONFIG_ADDR
   backend._resolver._resolved["mph"] = _MPH_ADDR if has_mph else None
   backend._resolver._resolved["mlprep_service"] = _SERVICE_ADDR
+  backend._resolver._resolved["calibration"] = _CALIBRATION_ADDR
   backend._supports_v2_pipetting = True
   backend.setup_finished = True
   return backend
@@ -584,7 +586,7 @@ class TestPrepBackendTipOps(unittest.IsolatedAsyncioTestCase):
     trash = Trash(name="trash", size_x=0.0, size_y=0.0, size_z=0.0)
     deck.assign_child_resource(trash, location=Coordinate(287.0, 0.0, 0.0))
     backend._deck = deck
-    backend.client.send_command = unittest.mock.AsyncMock(return_value=None)  # type: ignore[method-assign]
+    backend.client.send_command = unittest.mock.AsyncMock(return_value=None)  # type: ignore[assignment]
     tip = hamilton_96_tiprack_300uL_filter("_tmp").get_item("A1").get_tip()
     with self.assertRaises(ValueError) as ctx:
       await backend.drop_tips(
@@ -1075,7 +1077,7 @@ class TestPrepBackendConvenience(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = _setup_backend()
     self.mock_send = unittest.mock.AsyncMock(return_value=None)
-    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[assignment]
 
   async def test_park(self):
     await self.backend.park()
@@ -1201,7 +1203,7 @@ class TestPrepCalibrationModelUtilities(unittest.TestCase):
 class TestPrepCalibrationReadOnly(unittest.IsolatedAsyncioTestCase):
   async def test_read_calibration_values_outside_session(self):
     backend = _setup_backend()
-    backend.client.send_command = unittest.mock.AsyncMock(
+    backend.client.send_command = unittest.mock.AsyncMock(  # type: ignore[assignment]
       return_value=SimpleNamespace(
         independent_offset_x=1.25,
         mph_offset_x=2.5,
@@ -1220,7 +1222,7 @@ class TestPrepCalibrationReadOnly(unittest.IsolatedAsyncioTestCase):
           )
         ],
       )
-    )  # type: ignore[method-assign]
+    )
 
     values = await backend.read_calibration_values()
     self.assertAlmostEqual(values.independent_offset_x, 1.25)
@@ -1232,7 +1234,8 @@ class TestPrepCalibrationReadOnly(unittest.IsolatedAsyncioTestCase):
 class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = _setup_backend(num_channels=2, has_mph=True)
-    self.backend.client.send_command = unittest.mock.AsyncMock(side_effect=self._dispatch)  # type: ignore[method-assign]
+    self.send_command_mock = unittest.mock.AsyncMock(side_effect=self._dispatch)
+    self.backend.client.send_command = self.send_command_mock  # type: ignore[assignment]
     self._z_offset = 10.0
 
   def _calibration_result(self):
@@ -1282,6 +1285,7 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
         channel=PrepCmd.ChannelIndex.RearChannel,
       )
       self.assertIsInstance(result, CalibrationCommandReport)
+      assert isinstance(result, CalibrationCommandReport)
       self.assertEqual(len(session.history), 1)
       self.assertTrue(result.diff.has_changes)
       self.assertEqual(result.before.channel_values[0].index, int(PrepCmd.ChannelIndex.RearChannel))
@@ -1290,7 +1294,7 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
   async def test_session_commit_skips_auto_rollback(self):
     async with PrepCalibrationSession(self.backend) as session:
       await session.commit()
-    sent = [c.args[0] for c in self.backend.client.send_command.call_args_list]
+    sent = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertEqual(sum(isinstance(c, PrepCmd.PrepEndCalibration) for c in sent), 1)
     self.assertEqual(sum(isinstance(c, PrepCmd.PrepCancelCalibration) for c in sent), 0)
 
@@ -1298,13 +1302,14 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
     session = self.backend.calibration_session(report_after_command=False)
     await session.start()
     await session.end(save=False)
-    sent = [c.args[0] for c in self.backend.client.send_command.call_args_list]
+    sent = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertEqual(sum(isinstance(c, PrepCmd.PrepBeginCalibration) for c in sent), 1)
     self.assertEqual(sum(isinstance(c, PrepCmd.PrepCalibrationInitialize) for c in sent), 1)
     self.assertEqual(sum(isinstance(c, PrepCmd.PrepCancelCalibration) for c in sent), 1)
 
   async def test_calibrate_squeeze_tips_mph_uses_mph_channel(self):
     backend, _, tip_rack, _ = _setup_backend_with_deck(has_mph=True)
+
     async def _dispatch(command, **kwargs):
       if isinstance(command, PrepCmd.PrepGetCalibrationValues):
         return SimpleNamespace(
@@ -1317,7 +1322,7 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
       return None
 
     mock_send = unittest.mock.AsyncMock(side_effect=_dispatch)
-    backend.client.send_command = mock_send  # type: ignore[method-assign]
+    backend.client.send_command = mock_send  # type: ignore[assignment]
     spot = tip_rack.get_item("A1")
     async with backend.calibration_session(report_after_command=False) as session:
       positions = await session.calibrate_squeeze_tips_mph(spot)
@@ -1328,6 +1333,7 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
 
   async def test_calibrate_squeeze_tips_mph_requires_hardware(self):
     backend, _, tip_rack, _ = _setup_backend_with_deck(has_mph=False)
+
     async def _dispatch(command, **kwargs):
       if isinstance(command, PrepCmd.PrepGetCalibrationValues):
         return SimpleNamespace(
@@ -1337,7 +1343,7 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
         )
       return None
 
-    backend.client.send_command = unittest.mock.AsyncMock(side_effect=_dispatch)  # type: ignore[method-assign]
+    backend.client.send_command = unittest.mock.AsyncMock(side_effect=_dispatch)  # type: ignore[assignment]
     with self.assertRaises(RuntimeError):
       async with backend.calibration_session(report_after_command=False) as session:
         await session.calibrate_squeeze_tips_mph(tip_rack.get_item("A1"))
@@ -1346,6 +1352,7 @@ class TestPrepCalibrationSession(unittest.IsolatedAsyncioTestCase):
     backend = _setup_backend()
     self.assertFalse(hasattr(backend, "calibrate_z_axis"))
     self.assertFalse(hasattr(backend, "calibrate_squeeze_tips_mph"))
+
 
 # =============================================================================
 # V1/V2 aspirate/dispense fallback
@@ -1519,7 +1526,7 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
     backend._use_v1_aspirate_dispense = True
     backend._supports_v2_pipetting = False
     mock = unittest.mock.AsyncMock(return_value=None)
-    backend.client.send_command = mock
+    backend.client.send_command = mock  # type: ignore[assignment]
     backend._deck = self.deck
     tip = self.tip_rack.get_item("A1").get_tip()
     op = SingleChannelAspiration(

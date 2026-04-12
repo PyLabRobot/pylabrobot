@@ -9,9 +9,10 @@ Moved from prep_backend.py to separate protocol contracts from domain logic.
 
 from __future__ import annotations
 
+import datetime
+import math
 from dataclasses import dataclass, fields
 from enum import IntEnum
-import math
 from typing import Annotated, Optional, Tuple
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
@@ -139,7 +140,7 @@ class HoiDateTime:
   millisecond: U16
 
   @classmethod
-  def from_datetime(cls, dt: "datetime.datetime") -> "HoiDateTime":
+  def from_datetime(cls, dt: datetime.datetime) -> "HoiDateTime":
     """Create from a Python datetime (microseconds truncated to milliseconds)."""
     return cls(
       year=dt.year,
@@ -154,17 +155,17 @@ class HoiDateTime:
   @classmethod
   def now(cls) -> "HoiDateTime":
     """Create from the current local time."""
-    import datetime
-
     return cls.from_datetime(datetime.datetime.now())
 
-  def to_datetime(self) -> "datetime.datetime":
+  def to_datetime(self) -> datetime.datetime:
     """Convert to a Python datetime."""
-    import datetime
-
     return datetime.datetime(
-      self.year, self.month, self.day,
-      self.hour, self.minute, self.second,
+      self.year,
+      self.month,
+      self.day,
+      self.hour,
+      self.minute,
+      self.second,
       self.millisecond * 1000,
     )
 
@@ -289,7 +290,9 @@ def diff_calibration_values(
     old_value = getattr(old, field_name)
     new_value = getattr(new, field_name)
     if not _calibration_value_equal(old_value, new_value, float_tol=float_tol):
-      top_level_changes.append(CalibrationFieldChange(field=field_name, old=old_value, new=new_value))
+      top_level_changes.append(
+        CalibrationFieldChange(field=field_name, old=old_value, new=new_value)
+      )
 
   old_channels = {cv.index: cv for cv in old.channel_values}
   new_channels = {cv.index: cv for cv in new.channel_values}
@@ -365,7 +368,9 @@ def format_calibration_diff(diff: CalibrationValuesDiff) -> str:
         continue
       if channel_diff.state == "removed":
         assert channel_diff.old is not None
-        lines.append(f"  index={channel_diff.index}: removed ({channel_diff.old.to_pretty_string()})")
+        lines.append(
+          f"  index={channel_diff.index}: removed ({channel_diff.old.to_pretty_string()})"
+        )
         continue
       changed_fields = ", ".join(
         f"{change.field}: {change.old} -> {change.new}" for change in channel_diff.changes
@@ -2174,8 +2179,15 @@ class NeedleDefinition:
       z_start=0.0,
       z_stop=0.0,
       tip_definition=TipDefinition(
-        default_values=True, id=0, volume=0.0, length=0.0,
-        tip_type=0, has_filter=False, is_needle=False, is_tool=False, label="",
+        default_values=True,
+        id=0,
+        volume=0.0,
+        length=0.0,
+        tip_type=0,
+        has_filter=False,
+        is_needle=False,
+        is_tool=False,
+        label="",
       ),
       tip_mask=0,
     )
