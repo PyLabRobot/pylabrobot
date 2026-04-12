@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock
 
+from pylabrobot.testing.concurrency import AnyioTestBase
+
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.serializing_backend import (
   SerializingBackend,
@@ -22,15 +24,16 @@ class _TestSerializingBackend(SerializingBackend):
   send_command = AsyncMock()
 
 
-class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
+class TestSerializingBackend(AnyioTestBase):
   """Tests for the serializing backend"""
 
-  async def asyncSetUp(self) -> None:
+  async def _enter_lifespan(self, stack) -> None:
+    await super()._enter_lifespan(stack)
     self.backend = _TestSerializingBackend(num_channels=8)
     self.backend.send_command.reset_mock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")

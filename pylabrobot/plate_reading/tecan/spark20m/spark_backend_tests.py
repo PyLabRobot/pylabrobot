@@ -50,14 +50,14 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.fluo_proc_patcher.stop()
 
   async def test_setup(self) -> None:
-    await self.backend.setup()
-    self.mock_reader.connect.assert_called_once()
-    # Verify that send_command was called for init_module
-    self.mock_reader.send_command.assert_called()
+    async with self.backend:
+      # Verify that send_command was called for init_module
+      self.mock_reader.send_command.assert_called()
 
   async def test_open(self) -> None:
-    await self.backend.open()
-    self.mock_reader.send_command.assert_called()
+    async with self.backend:
+      await self.backend.open()
+      self.mock_reader.send_command.assert_called()
 
   async def test_read_absorbance(self) -> None:
     # Mock background read

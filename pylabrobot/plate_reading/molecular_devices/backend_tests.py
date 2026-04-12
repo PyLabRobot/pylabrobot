@@ -57,10 +57,9 @@ class TestMolecularDevicesBackend(AnyioTestBase):
     with patch.object(
       self.backend, "send_command", wraps=self.backend.send_command
     ) as wrapped_send_command:
-      await self.backend.setup()
-      self.mock_serial.__aenter__.assert_called_once()
-      wrapped_send_command.assert_called_with("!")
-      await self.backend.stop()
+      async with self.backend:
+        self.mock_serial.__aenter__.assert_called_once()
+        wrapped_send_command.assert_called_with("!")
       self.mock_serial.__aexit__.assert_called_once()
 
 

@@ -32,7 +32,11 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.mock_usb_class.return_value = mock_usb_instance
 
     async with self.reader:
-      pass
+      # Check that it's in devices
+      # Note: connect iterates all enum members. If all succeed, all are in devices.
+      # We mock success for all.
+      self.assertIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
+      self.assertEqual(self.reader.devices[SparkDevice.PLATE_TRANSPORT], mock_usb_instance)
 
     # Verify USB initialized for known devices (we iterate all SparkDevices)
     # Just check for one of them
@@ -41,16 +45,6 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     _, kwargs = self.mock_usb_class.call_args
     self.assertEqual(kwargs["read_endpoint_address"], SparkEndpoint.INTERRUPT_IN.value)
     self.assertEqual(kwargs["write_endpoint_address"], SparkEndpoint.BULK_OUT.value)
-    # Check that endpoint addresses were passed
-    _, kwargs = self.mock_usb_class.call_args
-    self.assertEqual(kwargs["read_endpoint_address"], SparkEndpoint.INTERRUPT_IN.value)
-    self.assertEqual(kwargs["write_endpoint_address"], SparkEndpoint.BULK_OUT.value)
-
-    # Check that it's in devices
-    # Note: connect iterates all enum members. If all succeed, all are in devices.
-    # We mock success for all.
-    self.assertIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
-    self.assertEqual(self.reader.devices[SparkDevice.PLATE_TRANSPORT], mock_usb_instance)
 
   async def test_connect_no_devices(self) -> None:
     # USB raising RuntimeError means device not found

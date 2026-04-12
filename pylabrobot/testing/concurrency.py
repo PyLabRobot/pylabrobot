@@ -136,3 +136,8 @@ class AnyioTestBase(_AsyncResourceBase):
       import re
       if not re.search(regex, str(ctx.exception)):
         raise AssertionError(msg or f"{regex!r} does not match {str(ctx.exception)!r}")
+
+  @contextmanager
+  def assertWarns(self, expected_warning):
+    with pytest.warns(expected_warning):
+      yield

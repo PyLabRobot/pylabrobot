@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple
 from unittest.mock import patch
 
 import pytest
+import anyio
 
 pytest.importorskip("numpy")
 pytest.importorskip("grpc")
@@ -150,6 +151,12 @@ class _MockChannel:
   def close(self):
     self.closed = True
 
+  def __enter__(self):
+    return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    self.close()
+
   def set_response(self, path: str, response: bytes):
     self.responses[path] = response
 
@@ -238,13 +245,15 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     )
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await backend.setup()
+      async with backend:
+        self.assertEqual(len(channel.calls), 4)
+        self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
+        self.assertEqual(channel.calls[1].path, f"/{_LOCK_SVC}/LockServer")
+        self.assertEqual(channel.calls[2].path, f"/{_OBJ_SVC}/Get_InstalledObjectives")
+        self.assertEqual(channel.calls[3].path, f"/{_FC_SVC}/Get_InstalledFilterCubes")
 
-    self.assertEqual(len(channel.calls), 4)
-    self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
-    self.assertEqual(channel.calls[1].path, f"/{_LOCK_SVC}/LockServer")
-    self.assertEqual(channel.calls[2].path, f"/{_OBJ_SVC}/Get_InstalledObjectives")
-    self.assertEqual(channel.calls[3].path, f"/{_FC_SVC}/Get_InstalledFilterCubes")
+    self.assertEqual(len(channel.calls), 5)
+    self.assertEqual(channel.calls[4].path, f"/{_LOCK_SVC}/UnlockServer")
 
     # Unlock request contains lock ID
     self.assertEqual(_decode_sila_string_from_request(channel.calls[0].request), "pylabrobot")
@@ -284,7 +293,8 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await backend.setup()
+      async with backend:
+        pass
 
     # Verify ChangeHardware was called with correct JSON params
     obj_change_calls = channel.get_calls(f"/{_OBJ_SVC}/ChangeHardware")

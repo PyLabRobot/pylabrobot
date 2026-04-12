@@ -9,6 +9,8 @@ import time
 from collections import defaultdict
 from typing import Callable, Dict, List, Optional, Tuple, TypeVar
 
+import anyio
+
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.sila.grpc import (
   command_execution_uuid,
