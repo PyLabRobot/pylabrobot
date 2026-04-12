@@ -1,6 +1,6 @@
-import asyncio
-import time
 from typing import Optional
+
+import anyio
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.concurrency import AsyncExitStackWithShielding
@@ -79,13 +79,15 @@ class TemperatureController(ResourceHolder, Machine):
     """
     if self.target_temperature is None:
       raise RuntimeError("Target temperature is not set.")
-    start = time.time()
-    while time.time() - start < timeout:
-      temperature = await self.get_temperature()
-      if abs(temperature - self.target_temperature) < tolerance:
-        return
-      await asyncio.sleep(1.0)
-    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          temperature = await self.get_temperature()
+          if abs(temperature - self.target_temperature) < tolerance:
+            return
+          await anyio.sleep(1.0)
+    except TimeoutError:
+      raise TimeoutError(f"Temperature did not reach target within {timeout} seconds") from None
 
   async def deactivate(self):
     """Deactivate the temperature controller. This will stop the heating or cooling, and return

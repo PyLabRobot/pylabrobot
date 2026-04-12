@@ -1,10 +1,10 @@
-import asyncio
 import contextlib
 import logging
 import re
-import time
 import warnings
 from typing import List, Optional, Tuple, Union
+
+import anyio
 
 try:
   import serial
@@ -311,36 +311,38 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     """
     Poll the plate-ready flag (RD 1914) until it is set, or timeout is reached.
     """
-    start = time.time()
-    deadline = start + timeout
-    while time.time() < deadline:
-      resp = await self._send_command("RD 1914")
-      if resp == "1":
-        return
-      await asyncio.sleep(0.1)
-    raise TimeoutError(f"Plate did not become ready within {timeout} seconds")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          resp = await self._send_command("RD 1914")
+          if resp == "1":
+            return
+          await anyio.sleep(0.1)
+    except TimeoutError:
+      raise TimeoutError(f"Plate was not ready within {timeout} seconds") from None
 
   async def _wait_ready(self, timeout: int = 60):
     """
     Poll the ready-flag (RD 1915) until it is set. If timeout is reached
     the error flag is read and if true aka "1" then the error register is read.
     """
-    start = time.time()
-    deadline = start + timeout
-    while time.time() < deadline:
-      resp = await self._send_command("RD 1915")
-      if resp == "1":
-        return
-      await asyncio.sleep(0.1)
-    err_flag = await self._send_command("RD 1814")
-    if err_flag == "1":
-      error = await self._send_command("RD DM200")
-      for member in HandlingError:
-        if error == member.value:
-          cls, msg = handler_error_map[member]
-          raise cls(msg)
-      raise RuntimeError(f"Liconic Handler in unknown error state with memory showing {error}")
-    raise TimeoutError(f"Incubator did not become ready within {timeout} seconds")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          resp = await self._send_command("RD 1915")
+          if resp == "1":
+            return
+          await anyio.sleep(0.1)
+    except TimeoutError:
+      err_flag = await self._send_command("RD 1814")
+      if err_flag == "1":
+        error = await self._send_command("RD DM200")
+        for member in HandlingError:
+          if error == member.value:
+            cls, msg = handler_error_map[member]
+            raise cls(msg)
+        raise RuntimeError(f"Liconic Handler in unknown error state with memory showing {error}")
+      raise TimeoutError(f"Incubator did not become ready within {timeout} seconds")
 
   async def set_temperature(self, temperature: float):
     """Set the temperature of the incubator in degrees Celsius. Using command WR DM890 ttttt
@@ -531,7 +533,7 @@ class ExperimentalLiconicBackend(IncubatorBackend):
 
     UNTESTED."""
     await self._send_command("ST 1911")
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
     resp = await self._send_command("RD 1812")
     if resp == "1":
       return True

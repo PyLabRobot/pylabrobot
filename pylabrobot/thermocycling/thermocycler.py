@@ -1,8 +1,8 @@
 """High-level Thermocycler resource wrapping a backend."""
 
-import anyio
-import time
 from typing import List, Optional
+
+import anyio
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
@@ -225,13 +225,15 @@ class Thermocycler(ResourceHolder, Machine):
   async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5, **backend_kwargs):
     """Wait until block temp reaches target ± tolerance for all zones."""
     targets = await self.get_block_target_temperature(**backend_kwargs)
-    start = time.time()
-    while time.time() - start < timeout:
-      currents = await self.get_block_current_temperature(**backend_kwargs)
-      if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
-        return
-      await anyio.sleep(1)
-    raise TimeoutError("Block temperature timeout.")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          currents = await self.get_block_current_temperature(**backend_kwargs)
+          if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
+            return
+          await anyio.sleep(1)
+    except TimeoutError:
+      raise TimeoutError(f"Block temperature did not reach target within {timeout} seconds") from None
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
     """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""
@@ -239,19 +241,22 @@ class Thermocycler(ResourceHolder, Machine):
       targets = await self.get_lid_target_temperature(**backend_kwargs)
     except RuntimeError:
       targets = None
-    start = time.time()
-    while time.time() - start < timeout:
-      if targets is not None:
-        currents = await self.get_lid_current_temperature(**backend_kwargs)
-        if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
-          return
-      else:
-        # If no target temperature, check status
-        status = await self.get_lid_status(**backend_kwargs)
-        if status in ["idle", "holding at target"]:
-          return
-      await anyio.sleep(1)
-    raise TimeoutError("Lid temperature timeout.")
+
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          if targets is not None:
+            currents = await self.get_lid_current_temperature(**backend_kwargs)
+            if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
+              return
+          else:
+            # If no target temperature, check status
+            status = await self.get_lid_status(**backend_kwargs)
+            if status in ["idle", "holding at target"]:
+              return
+          await anyio.sleep(1)
+    except TimeoutError:
+      raise TimeoutError(f"Lid temperature did not reach target within {timeout} seconds") from None
 
   async def is_profile_running(self, **backend_kwargs) -> bool:
     """Return True if a profile is still in progress."""

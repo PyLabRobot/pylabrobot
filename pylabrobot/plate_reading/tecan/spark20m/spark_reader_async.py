@@ -4,6 +4,8 @@ import functools
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+import anyio
+
 try:
   import usb.core
   import usb.util
@@ -317,29 +319,30 @@ class SparkReaderAsync(AsyncResource):
       elif parsed.get("type") == "RespError":
         raise SparkError(parsed)
 
-      deadline = time.monotonic() + timeout
-      while parsed.get("type") != "RespReady" and time.monotonic() < deadline:
-        try:
-          await asyncio.sleep(0.01)
-          logging.debug(f"Still busy, retrying... time left: {deadline - time.monotonic():.1f}s")
+      try:
+        with anyio.fail_after(timeout):
+          while parsed.get("type") != "RespReady":
+            try:
+              await anyio.sleep(0.01)
+              logging.debug("Still busy, retrying...")
 
-          resp = await self._read_packet_in_executor(
-            reader=reader, endpoint=None, size=512, timeout=0.02
-          )
+              resp = await self._read_packet_in_executor(
+                reader=reader, endpoint=None, size=512, timeout=0.02
+              )
 
-          if resp:
-            logging.debug(f"Read task completed ({len(resp)} bytes): {bytes(resp).hex()}")
-            parsed = parse_single_spark_packet(bytes(resp))
-            logging.debug(f"Parsed: {parsed}")
-            if parsed.get("type") == "RespMessage":
-              self.msgs.append(parsed["payload"])
-            elif parsed.get("type") == "RespError":
-              raise SparkError(parsed)
-        except SparkError:
-          raise
-        except Exception as e:
-          logging.error(f"Error in get_response retry: {e}")
-      if parsed.get("type") != "RespReady":
+              if resp:
+                logging.debug(f"Read task completed ({len(resp)} bytes): {bytes(resp).hex()}")
+                parsed = parse_single_spark_packet(bytes(resp))
+                logging.debug(f"Parsed: {parsed}")
+                if parsed.get("type") == "RespMessage":
+                  self.msgs.append(parsed["payload"])
+                elif parsed.get("type") == "RespError":
+                  raise SparkError(parsed)
+            except SparkError:
+              raise
+            except Exception as e:
+              logging.error(f"Error in get_response retry: {e}")
+      except TimeoutError:
         logging.warning('Timeout waiting for "RespReady" response')
       return parsed
 

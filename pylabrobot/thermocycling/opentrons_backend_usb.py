@@ -2,6 +2,7 @@
 # Does not require an Opentrons liquid handler to use.
 
 import asyncio
+import anyio
 from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -46,22 +47,20 @@ async def set_temperature_no_pause(
 
 async def wait_for_block_target(driver) -> None:
   """Wait for block temperature to reach target."""
-  max_attempts = 300  # 5 minutes max wait (300 * 1 second)
-  attempt = 0
-
-  while attempt < max_attempts:
-    try:
-      plate_temp = await driver.get_plate_temperature()
-      if plate_temp.target is not None and abs(plate_temp.current - plate_temp.target) < 1.0:
-        break
-    except Exception as e:
-      if "invalid thermistor" in str(e).lower() or "error" in str(e).lower():
-        raise RuntimeError(f"Thermocycler hardware error: {e}")
-      print(f"Temperature check failed (attempt {attempt + 1}), retrying: {e}")
-    attempt += 1
-    await asyncio.sleep(1.0)
-  else:
-    raise TimeoutError(f"Temperature did not reach target within {max_attempts} seconds")
+  try:
+    with anyio.fail_after(300):  # 5 minutes max wait (300 * 1 second)
+      while True:
+        try:
+          plate_temp = await driver.get_plate_temperature()
+          if plate_temp.target is not None and abs(plate_temp.current - plate_temp.target) < 1.0:
+            break
+        except Exception as e:
+          if "invalid thermistor" in str(e).lower() or "error" in str(e).lower():
+            raise RuntimeError(f"Thermocycler hardware error: {e}")
+          print(f"Temperature check failed, retrying: {e}")
+        await anyio.sleep(1.0)
+  except TimeoutError:
+    raise TimeoutError("Temperature did not reach target within 300 seconds")
 
 
 async def execute_cycle_step(

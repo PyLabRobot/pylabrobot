@@ -1,10 +1,10 @@
 import abc
-import anyio
-import asyncio
 import contextlib
 import enum
 import time
 from typing import Dict, List, Optional
+
+import anyio
 
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
@@ -64,19 +64,19 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
     if not wait_for_response:
       return None
 
-    t0 = time.time()
-    while True:
-      if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
-        raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+    try:
+      with anyio.fail_after(120):
+        while True:
+          response = await self.io.read(64, timeout=30)
+          if len(response) == 0:
+            continue
 
-      response = await self.io.read(64, timeout=30)
-      if len(response) == 0:
-        continue
-
-      # if the first 2 bytes do not match, we continue reading
-      response_report_id = Reader(response).u16()
-      if report_id == response_report_id:
-        break
+          # if the first 2 bytes do not match, we continue reading
+          response_report_id = Reader(response).u16()
+          if report_id == response_report_id:
+            break
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for response from Byonoy device") from None
     return response
 
   async def _ping_loop(self) -> None:
@@ -184,34 +184,34 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
 
     # (4) Collect chunks (report_id 0x0500)
     rows: List[float] = []
-    t0 = time.time()
 
-    while True:
-      if time.time() - t0 > 120:
-        raise TimeoutError("Measurement timeout.")
+    try:
+      with anyio.fail_after(120):
+        while True:
+          chunk = await self.io.read(64, timeout=30)
+          if len(chunk) == 0:
+            continue
 
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
+          reader = Reader(chunk)
+          report_id = reader.u16()
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+          # Only handle the measurement packets
+          if report_id == 0x0500:
+            seq = reader.u8()
+            seq_len = reader.u8()
+            _ = reader.i16()  # signal_wl_nm
+            _ = reader.i16()  # reference_wl_nm
+            _ = reader.u32()  # duration_ms
+            row = [reader.f32() for _ in range(12)]
+            _ = reader.u8()  # flags
+            _ = reader.u8()  # progress
 
-      # Only handle the measurement packets
-      if report_id == 0x0500:
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.i16()  # signal_wl_nm
-        _ = reader.i16()  # reference_wl_nm
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
+            rows.extend(row)
 
-        rows.extend(row)
-
-        if seq == seq_len - 1:
-          break
+            if seq == seq_len - 1:
+              break
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for measurement data from Byonoy device") from None
 
     return rows
 
@@ -332,33 +332,31 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
       wait_for_response=False,
     )
 
-    t0 = time.time()
-    all_rows: List[float] = []
+    try:
+      with anyio.fail_after(120):
+        while True:
+          chunk = await self.io.read(64, timeout=30)
+          if len(chunk) == 0:
+            continue
 
-    while True:
-      if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
-        raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+          reader = Reader(chunk)
+          report_id = reader.u16()
 
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
+          if report_id == 0x0600:  # REP_LUM96_MEASUREMENT_IN
+            seq = reader.u8()
+            seq_len = reader.u8()
+            _ = reader.u32()  # integration_time_us
+            _ = reader.u32()  # duration_ms
+            row = [reader.f32() for _ in range(12)]
+            _ = reader.u8()  # flags
+            _ = reader.u8()  # progress
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+            all_rows.extend(row)
 
-      if report_id == 0x0600:  # REP_LUM96_MEASUREMENT_IN
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.u32()  # integration_time_us
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
-
-        all_rows.extend(row)
-
-        if seq == seq_len - 1:
-          break
+            if seq == seq_len - 1:
+              break
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for luminescence data from Byonoy device") from None
 
     hybrid_result = all_rows[96 * 0 : 96 * 1]
     _ = all_rows[96 * 1 : 96 * 2]  # counting_result
