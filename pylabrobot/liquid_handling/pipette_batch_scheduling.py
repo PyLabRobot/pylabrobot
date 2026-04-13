@@ -40,8 +40,8 @@ class ChannelBatch:
 
 def print_batches(
   batches: List[ChannelBatch],
-  use_channels: List[int],
-  containers: List["Container"],
+  use_channels: Optional[List[int]] = None,
+  containers: Optional[List["Container"]] = None,
   label: str = "plan",
 ) -> None:
   """Print a tree view of the batch execution plan.
@@ -51,12 +51,18 @@ def print_batches(
 
   Args:
     batches: Output from ``plan_batches()``.
-    use_channels: Channel indices (parallel with *containers*).
-    containers: Container objects (parallel with *use_channels*).
+    use_channels: Channel indices (parallel with *containers*). If omitted,
+      container names are not shown next to active channels.
+    containers: Container objects (parallel with *use_channels*). If omitted,
+      container names are not shown next to active channels.
     label: Header label for the tree.
   """
 
-  ch_to_container = dict(zip(use_channels, containers))
+  ch_to_container = (
+    dict(zip(use_channels, containers))
+    if use_channels is not None and containers is not None
+    else {}
+  )
 
   x_groups: Dict[float, list] = {}
   for b in batches:

@@ -12,9 +12,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   MachineConfiguration,
   STARBackend,
 )
-from pylabrobot.liquid_handling.pipette_batch_scheduling import print_batches
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.well import Well
 
 # Type alias for nested enum (for cleaner signatures)
@@ -327,83 +325,30 @@ class STARChatterboxBackend(STARBackend):
   async def request_pip_height_last_lld(self):
     return list(range(12))
 
-  async def execute_batched(self, func, batches, min_traverse_height_during_command=None):
-    """Iterate batches and call func without physical X/Y/Z moves."""
-    results = []
-    for batch in batches:
-      results.append(await func(batch))
-    return results
-
-  async def probe_liquid_heights(
+  async def _run_lld_on_channel_batch(
     self,
+    batch,
     containers: List[Container],
-    use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
-    search_speed: float = 10.0,
-    n_replicates: int = 1,
-    move_to_z_safety_after: bool = True,
-    min_traverse_height_at_beginning_of_command: Optional[float] = None,
-    min_traverse_height_during_command: Optional[float] = None,
-    z_position_at_end_of_command: Optional[float] = None,
-    x_grouping_tolerance: Optional[float] = None,
-  ) -> List[float]:
-    """Probe liquid heights by computing from tracked container volumes.
+    tip_lengths: List[float],
+    z_cavity_bottom: List[float],
+    z_top: List[float],
+    lld_mode: LLDMode,
+    search_speed: float,
+    n_replicates: int,
+  ) -> Dict[int, List[Optional[float]]]:
+    """Simulate LLD by computing absolute heights from each container's volume tracker.
 
-    Runs the same validation, target resolution, and batch planning as the real
-    backend so that protocols developed off-hardware encounter the same errors
-    and batch structure they would on the physical instrument. Only the LLD
-    callback is replaced: instead of firmware sensing, heights are computed from
-    each container's volume tracker (0.0 for empty, otherwise
-    ``container.compute_height_from_volume()``).
-
-    Args:
-      containers: List of Container objects to probe, one per channel.
-      use_channels: Channel indices to use (0-indexed). Defaults to ``[0, ..., len(containers)-1]``.
-      resource_offsets: Passed to ``resolve_container_targets`` for auto-spreading.
-      x_grouping_tolerance: X tolerance for batch grouping (defaults to instrument setting).
-      lld_mode, search_speed, n_replicates, move_to_z_safety_after,
-        min_traverse_height_at_beginning_of_command, min_traverse_height_during_command,
-        z_position_at_end_of_command: Accepted for API compatibility but unused.
-
-    Returns:
-      Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
-
-    Raises:
-      ValueError: If ``use_channels`` is empty, contains out-of-range indices, or if
-        ``containers`` and ``use_channels`` have different lengths.
-      NoTipError: If any specified channel lacks a tip.
+    Empty containers report the cavity-bottom Z (relative height 0). Non-empty
+    containers report ``cavity_bottom + compute_height_from_volume(volume)`` so the
+    parent ``probe_liquid_heights`` can subtract ``z_cavity_bottom`` consistently.
     """
-    if use_channels is not None and len(use_channels) != len(set(use_channels)):
-      raise ValueError(
-        f"Duplicate channels in use_channels {use_channels}: each physical channel "
-        f"can only probe one container per call. To probe more containers than available "
-        f"channels, call probe_liquid_heights multiple times in sequence."
-      )
-
-    async def _mock_probe(batch):
-      heights = {}
-      for idx, ch in zip(batch.indices, batch.channels):
-        container = containers[idx]
-        volume = container.tracker.get_used_volume()
-        if volume == 0:
-          heights[ch] = 0.0
-        else:
-          heights[ch] = container.compute_height_from_volume(volume)
-      return heights
-
-    use_channels, _, batches = await self._prepare_batched(
-      containers=containers,
-      use_channels=use_channels,
-      resource_offsets=resource_offsets,
-      x_grouping_tolerance=x_grouping_tolerance,
-    )
-    print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
-    batch_results = await self.execute_batched(func=_mock_probe, batches=batches)
-
-    # Merge batch results in use_channels order
-    ch_to_height = {}
-    for batch_heights in batch_results:
-      ch_to_height.update(batch_heights)
-
-    return [ch_to_height[ch] for ch in use_channels]
+    measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
+    for local_idx, (ch, orig_idx) in enumerate(zip(batch.channels, batch.indices)):
+      container = containers[orig_idx]
+      volume = container.tracker.get_used_volume()
+      if volume == 0:
+        absolute_height = z_cavity_bottom[orig_idx]
+      else:
+        absolute_height = z_cavity_bottom[orig_idx] + container.compute_height_from_volume(volume)
+      measurements[ch] = [absolute_height] * n_replicates
+    return measurements

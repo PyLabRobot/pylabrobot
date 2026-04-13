@@ -50,6 +50,7 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   ChannelBatch,
   plan_batches,
+  print_batches,
   resolve_container_targets,
   validate_channel_selections,
 )
@@ -2062,6 +2063,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     func: Callable[[ChannelBatch], Awaitable[T]],
     batches: List[ChannelBatch],
     min_traverse_height_during_command: Optional[float] = None,
+    verbose: bool = False,
   ) -> List[T]:
     """Execute a Z-axis callback across pre-planned batches with X/Y positioning.
 
@@ -2075,10 +2077,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       batches: Pre-planned batches from ``plan_batches()``.
       min_traverse_height_during_command: Absolute Z height (mm) for inter-batch
         channel raises. ``None`` uses full Z safety.
+      verbose: If True, print the batch execution plan before running.
 
     Returns:
       List of results from each batch callback, in batch order.
     """
+    if verbose:
+      print_batches(batches, label="execute_batched plan")
     results: List[T] = []
     try:
       prev_batch: Optional[ChannelBatch] = None
@@ -2171,6 +2176,77 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return use_channels, tip_lengths, batches
 
+  async def _run_lld_on_channel_batch(
+    self,
+    batch: ChannelBatch,
+    containers: List[Container],
+    tip_lengths: List[float],
+    z_cavity_bottom: List[float],
+    z_top: List[float],
+    lld_mode: LLDMode,
+    search_speed: float,
+    n_replicates: int,
+  ) -> Dict[int, List[Optional[float]]]:
+    """Per-batch liquid level detection. Override to substitute simulated sensing.
+
+    Returns absolute heights (one list per channel, ``None`` entries for replicates
+    where no liquid was detected). The caller subtracts ``z_cavity_bottom`` to get
+    heights relative to container bottom.
+    """
+    detect_func: Callable[..., Any] = (
+      self._move_z_drive_to_liquid_surface_using_clld
+      if lld_mode == self.LLDMode.GAMMA
+      else self._search_for_surface_using_plld
+    )
+    batch_lowest_immers = [
+      z_cavity_bottom[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH for i in batch.indices
+    ]
+    batch_start_pos = [
+      z_top[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH + self.SEARCH_START_CLEARANCE_MM
+      for i in batch.indices
+    ]
+
+    measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
+
+    for _ in range(n_replicates):
+      results = await asyncio.gather(
+        *[
+          detect_func(
+            channel_idx=channel,
+            lowest_immers_pos=lip,
+            start_pos_search=sps,
+            channel_speed=search_speed,
+          )
+          for channel, lip, sps in zip(batch.channels, batch_lowest_immers, batch_start_pos)
+        ],
+        return_exceptions=True,
+      )
+
+      current_absolute_liquid_heights = await self.request_pip_height_last_lld()
+      for local_idx, (ch_idx, result) in enumerate(zip(batch.channels, results)):
+        orig_idx = batch.indices[local_idx]
+        if isinstance(result, STARFirmwareError):
+          error_msg = str(result).lower()
+          if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+            height = None
+            msg = (
+              f"Channel {ch_idx}: No liquid detected. Could be because there is "
+              f"no liquid in container {containers[orig_idx].name} or liquid level "
+              f"is too low."
+            )
+            if lld_mode == self.LLDMode.GAMMA:
+              msg += " Consider using pressure-based LLD if liquid is believed to exist."
+            logger.warning(msg)
+          else:
+            raise result
+        elif isinstance(result, Exception):
+          raise result
+        else:
+          height = current_absolute_liquid_heights[ch_idx]
+        measurements[ch_idx].append(height)
+
+    return measurements
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
@@ -2185,6 +2261,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    verbose: bool = False,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -2217,6 +2294,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         probing. None (default) uses full Z safety.
       x_grouping_tolerance: Containers within this X distance (mm) are grouped and probed
         together. Defaults to ``_x_grouping_tolerance_mm`` (0.1 mm).
+      verbose: If True, print the batch execution plan before running.
 
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
@@ -2236,70 +2314,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"channels, call probe_liquid_heights multiple times in sequence."
       )
 
+    if lld_mode not in (self.LLDMode.GAMMA, self.LLDMode.PRESSURE):
+      raise ValueError(f"Unsupported lld_mode: {lld_mode!r}")
+
     z_cavity_bottom = [
       r.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z for r in containers
     ]
     z_top = [r.get_location_wrt(self.deck, "c", "c", "t").z for r in containers]
-
-    detect_func: Callable[..., Any]
-    if lld_mode == self.LLDMode.GAMMA:
-      detect_func = self._move_z_drive_to_liquid_surface_using_clld
-    elif lld_mode == self.LLDMode.PRESSURE:
-      detect_func = self._search_for_surface_using_plld
-    else:
-      raise ValueError(f"Unsupported lld_mode: {lld_mode!r}")
-
-    async def _probe_batch_heights(
-      batch: ChannelBatch,
-    ) -> Dict[int, List[Optional[float]]]:
-      batch_lowest_immers = [
-        z_cavity_bottom[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH for i in batch.indices
-      ]
-      batch_start_pos = [
-        z_top[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH + self.SEARCH_START_CLEARANCE_MM
-        for i in batch.indices
-      ]
-
-      measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
-
-      for _ in range(n_replicates):
-        results = await asyncio.gather(
-          *[
-            detect_func(
-              channel_idx=channel,
-              lowest_immers_pos=lip,
-              start_pos_search=sps,
-              channel_speed=search_speed,
-            )
-            for channel, lip, sps in zip(batch.channels, batch_lowest_immers, batch_start_pos)
-          ],
-          return_exceptions=True,
-        )
-
-        current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for local_idx, (ch_idx, result) in enumerate(zip(batch.channels, results)):
-          orig_idx = batch.indices[local_idx]
-          if isinstance(result, STARFirmwareError):
-            error_msg = str(result).lower()
-            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
-              height = None
-              msg = (
-                f"Channel {ch_idx}: No liquid detected. Could be because there is "
-                f"no liquid in container {containers[orig_idx].name} or liquid level "
-                f"is too low."
-              )
-              if lld_mode == self.LLDMode.GAMMA:
-                msg += " Consider using pressure-based LLD if liquid is believed to exist."
-              logger.warning(msg)
-            else:
-              raise result
-          elif isinstance(result, Exception):
-            raise result
-          else:
-            height = current_absolute_liquid_heights[ch_idx]
-          measurements[ch_idx].append(height)
-
-      return measurements
 
     use_channels, tip_lengths, batches = await self._prepare_batched(
       containers=containers,
@@ -2309,9 +2330,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       min_traverse_height_at_beginning_of_command=min_traverse_height_at_beginning_of_command,
     )
     batch_results = await self.execute_batched(
-      func=_probe_batch_heights,
+      func=lambda b: self._run_lld_on_channel_batch(
+        batch=b,
+        containers=containers,
+        tip_lengths=tip_lengths,
+        z_cavity_bottom=z_cavity_bottom,
+        z_top=z_top,
+        lld_mode=lld_mode,
+        search_speed=search_speed,
+        n_replicates=n_replicates,
+      ),
       batches=batches,
       min_traverse_height_during_command=min_traverse_height_during_command,
+      verbose=verbose,
     )
 
     absolute_heights_measurements: Dict[int, List[Optional[float]]] = {}
