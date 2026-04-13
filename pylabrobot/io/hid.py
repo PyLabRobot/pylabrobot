@@ -198,7 +198,7 @@ class HIDValidator(HID):
     )
     self.cr = cr
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     next_command = HIDCommand(**self.cr.next_command())
     if (
       not next_command.module == "hid"
@@ -207,14 +207,15 @@ class HIDValidator(HID):
     ):
       raise ValidationError(f"Next line is {next_command}, expected HID open {self._unique_id}")
 
-  async def stop(self):
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "close"
-    ):
-      raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+    def _cleanup():
+      next_command = HIDCommand(**self.cr.next_command())
+      if (
+        not next_command.module == "hid"
+        and next_command.device_id == self._unique_id
+        and next_command.action == "close"
+      ):
+        raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+    stack.callback(_cleanup)
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
     next_command = HIDCommand(**self.cr.next_command())

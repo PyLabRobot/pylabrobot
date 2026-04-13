@@ -34,14 +34,16 @@ class Access2Backend(LoaderBackend):
   async def _read(self) -> bytes:
     x = b""
     r = None
-    start = time.time()
-    while r != b"" or x == b"":
-      r = await self.io.read(1)
-      x += r
-      if r == b"":
-        await anyio.sleep(0.1)
-      if x == b"" and (time.time() - start) > self.timeout:
-        raise TimeoutError("No data received within the specified timeout period")
+    with anyio.move_on_after(self.timeout) as scope:
+      while r != b"" or x == b"":
+        r = await self.io.read(1)
+        x += r
+        if r == b"":
+          await anyio.sleep(0.1)
+        if x != b"":
+          scope.deadline = float("inf")
+    if x == b"" and scope.cancel_called:
+      raise TimeoutError("No data received within the specified timeout period")
     return x
 
   async def send_command(self, command: bytes) -> bytes:
@@ -389,19 +391,22 @@ class VSpinBackend(CentrifugeBackend):
     been read so far."""
     data = b""
     end_byte_found = False
-    start_time = time.time()
 
-    while True:
-      chunk = await self.io.read(25)
-      if chunk:
-        data += chunk
-        end_byte_found = data[-1] == 0x0D
-        if len(chunk) < 25 and end_byte_found:
-          break
-      else:
-        if end_byte_found or time.time() - start_time > timeout:
-          break
-        await anyio.sleep(0.0001)
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        chunk = await self.io.read(25)
+        if chunk:
+          data += chunk
+          end_byte_found = data[-1] == 0x0D
+          if len(chunk) < 25 and end_byte_found:
+            break
+        else:
+          if end_byte_found:
+            break
+          await anyio.sleep(0.0001)
+
+    if scope.cancel_called:
+      logger.warning("timed out reading response")
 
     logger.debug("Read %s", data.hex())
     return data

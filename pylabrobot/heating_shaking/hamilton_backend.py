@@ -1,6 +1,8 @@
 import abc
 import time
 import warnings
+import contextlib
+import anyio
 from enum import Enum
 from typing import Dict, Literal, Optional
 
@@ -115,13 +117,14 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    now = time.time()
-    while True:
-      await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
-      if await self.get_is_shaking():
-        break
-      if timeout is not None and time.time() - now > timeout:
-        raise TimeoutError("Failed to start shaking within timeout")
+    async with contextlib.AsyncExitStack() as stack:
+      if timeout is not None:
+        await stack.enter_context(anyio.fail_after(timeout))
+      while True:
+        await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+        if await self.get_is_shaking():
+          break
+        await anyio.sleep(0.1)
 
   async def shake(
     self,

@@ -4,6 +4,7 @@ import math
 import struct
 import sys
 import time
+import anyio
 from typing import Dict, List, Optional, Tuple, Union
 
 from pylabrobot import utils
@@ -101,40 +102,40 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def _wait_for_ready_and_return(self, ret, timeout=150):
     """Wait for the plate reader to be ready and return the response."""
     last_status = None
-    t = time.time()
-    while time.time() - t < timeout:
-      await anyio.sleep(0.1)
+    with anyio.fail_after(timeout):
+      while True:
+        await anyio.sleep(0.1)
 
-      command_status = await self.read_command_status()
+        command_status = await self.read_command_status()
 
-      if len(command_status) != 24:
-        logger.warning(
-          "unexpected response %s. I think a command status response is always 24 bytes",
-          command_status,
-        )
-        continue
+        if len(command_status) != 24:
+          logger.warning(
+            "unexpected response %s. I think a command status response is always 24 bytes",
+            command_status,
+          )
+          continue
 
-      if command_status != last_status:
-        logger.info("status changed %s", command_status.hex())
-        last_status = command_status
-      else:
-        continue
+        if command_status != last_status:
+          logger.info("status changed %s", command_status.hex())
+          last_status = command_status
+        else:
+          continue
 
-      if command_status[2] != 0x18 or command_status[3] != 0x0C or command_status[4] != 0x01:
-        logger.warning(
-          "unexpected response %s. I think 18 0c 01 indicates a command status response",
-          command_status,
-        )
+        if command_status[2] != 0x18 or command_status[3] != 0x0C or command_status[4] != 0x01:
+          logger.warning(
+            "unexpected response %s. I think 18 0c 01 indicates a command status response",
+            command_status,
+          )
 
-      if command_status[5] not in {
-        0x25,
-        0x05,
-      }:  # 25 is busy, 05 is ready. probably.
-        logger.warning("unexpected response %s.", command_status)
+        if command_status[5] not in {
+          0x25,
+          0x05,
+        }:  # 25 is busy, 05 is ready. probably.
+          logger.warning("unexpected response %s.", command_status)
 
-      if command_status[5] == 0x05:
-        logger.debug("status is ready")
-        return ret
+        if command_status[5] == 0x05:
+          logger.debug("status is ready")
+          return ret
 
   async def read_command_status(self):
     status = await self.send(b"\x02\x00\x09\x0c\x80\x00")

@@ -503,7 +503,7 @@ class USBValidator(USB):
     )
     self.cr = cr
 
-  async def setup(self, empty_buffer=True):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, empty_buffer=True):
     pass
 
   async def write(self, data: bytes, timeout: Optional[float] = None):

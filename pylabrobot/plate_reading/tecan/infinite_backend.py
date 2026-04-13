@@ -895,19 +895,21 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     target = decoder.count + row_count
     start_count = decoder.count
     self._drain_pending_bin_events(decoder)
-    start = time.monotonic()
-    reads = 0
-    while decoder.count < target and (time.monotonic() - start) < self._max_row_wait_s:
-      chunk = await self._read_packet(self._read_chunk_size)
-      if not chunk:
-        raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
-      decoder.feed(chunk)
-      reads += 1
-    if decoder.count < target:
+    start_time = anyio.current_time()
+    try:
+      with anyio.fail_after(self._max_row_wait_s):
+        while decoder.count < target:
+          chunk = await self._read_packet(self._read_chunk_size)
+          if not chunk:
+            raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
+          decoder.feed(chunk)
+          reads += 1
+    except TimeoutError:
       got = decoder.count - start_count
+      elapsed = anyio.current_time() - start_time
       raise RuntimeError(
         f"Timed out while parsing {mode.lower()} results "
-        f"(decoded {got}/{row_count} measurements in {time.monotonic() - start:.1f}s, {reads} reads)."
+        f"(decoded {got}/{row_count} measurements in {elapsed:.1f}s, {reads} reads)."
       )
 
   def _drain_pending_bin_events(self, decoder: "_MeasurementDecoder") -> None:

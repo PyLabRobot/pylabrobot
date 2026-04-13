@@ -354,7 +354,7 @@ class SerialValidator(Serial):
     )
     self.cr = cr
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     pass
 
   async def write(self, data: bytes):
