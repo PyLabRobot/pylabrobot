@@ -71,14 +71,16 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   def __init__(
     self,
     driver: XArm6Driver,
-    mm_per_gripper_unit: float = 0.1,
-    closed_threshold_mm: float = 1.0,
+    gripper_min_mm: float = 71.0,
+    gripper_max_mm: float = 150.0,
+    closed_threshold_mm: float = 73.0,
     park_location: Optional[Coordinate] = None,
     park_rotation: Optional[Rotation] = None,
   ) -> None:
     super().__init__()
     self._driver = driver
-    self.mm_per_gripper_unit = mm_per_gripper_unit
+    self.gripper_min_mm = gripper_min_mm
+    self.gripper_max_mm = gripper_max_mm
     self.closed_threshold_mm = closed_threshold_mm
     self.park_location = park_location
     self.park_rotation = park_rotation or Rotation()
@@ -102,11 +104,13 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   # -- Conversion helpers ----------------------------------------------------
 
   def _mm_to_gripper_units(self, width_mm: float) -> int:
-    units = int(round(width_mm / self.mm_per_gripper_unit))
-    return max(0, min(self._MAX_GRIPPER_UNITS, units))
+    clamped = max(self.gripper_min_mm, min(self.gripper_max_mm, width_mm))
+    fraction = (clamped - self.gripper_min_mm) / (self.gripper_max_mm - self.gripper_min_mm)
+    return int(round(fraction * self._MAX_GRIPPER_UNITS))
 
   def _gripper_units_to_mm(self, units: int) -> float:
-    return units * self.mm_per_gripper_unit
+    fraction = units / self._MAX_GRIPPER_UNITS
+    return self.gripper_min_mm + fraction * (self.gripper_max_mm - self.gripper_min_mm)
 
   async def _set_gripper_units(self, units: int) -> None:
     await self._driver._call_sdk(
