@@ -12,14 +12,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   MachineConfiguration,
   STARBackend,
 )
-from pylabrobot.liquid_handling.pipette_batch_scheduling import (
-  plan_batches,
-  print_batches,
-  resolve_container_targets,
-  validate_channel_selections,
-)
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.well import Well
 
 # Type alias for nested enum (for cleaner signatures)
@@ -332,77 +325,30 @@ class STARChatterboxBackend(STARBackend):
   async def request_pip_height_last_lld(self):
     return list(range(12))
 
-  async def probe_liquid_heights(
+  async def _run_lld_on_channel_batch(
     self,
+    batch,
     containers: List[Container],
-    use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
-    search_speed: float = 10.0,
-    n_replicates: int = 1,
-    move_to_z_safety_after: bool = True,
-    min_traverse_height_at_beginning_of_command: Optional[float] = None,
-    min_traverse_height_during_command: Optional[float] = None,
-    z_position_at_end_of_command: Optional[float] = None,
-    x_grouping_tolerance: Optional[float] = None,
-  ) -> List[float]:
-    """Probe liquid heights by computing from tracked container volumes.
+    tip_lengths: List[float],
+    z_cavity_bottom: List[float],
+    z_top: List[float],
+    lld_mode: List[LLDMode],
+    search_speed: float,
+    n_replicates: int,
+  ) -> Dict[int, List[Optional[float]]]:
+    """Simulate LLD by computing absolute heights from each container's volume tracker.
 
-    Instead of simulating hardware LLD, this mock computes liquid heights directly from
-    each container's volume tracker using ``container.compute_height_from_volume()``.
-
-    Args:
-      containers: List of Container objects to probe, one per channel.
-      use_channels: Channel indices to use (0-indexed). Defaults to ``[0, ..., len(containers)-1]``.
-      resource_offsets: Passed to ``resolve_container_targets`` for auto-spreading.
-      All other parameters: Accepted for API compatibility but unused in mock.
-
-    Returns:
-      Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
-
-    Raises:
-      ValueError: If ``use_channels`` is empty, contains out-of-range indices, or if
-        ``containers`` and ``use_channels`` have different lengths.
-      NoTipError: If any specified channel lacks a tip.
+    Empty containers report the cavity-bottom Z (relative height 0). Non-empty
+    containers report ``cavity_bottom + compute_height_from_volume(volume)`` so the
+    parent ``probe_liquid_heights`` can subtract ``z_cavity_bottom`` consistently.
     """
-    if x_grouping_tolerance is None:
-      x_grouping_tolerance = self._x_grouping_tolerance_mm
-
-    use_channels = validate_channel_selections(
-      containers=containers,
-      num_channels=self.num_channels,
-      use_channels=use_channels,
-    )
-
-    # Validate tip presence using tip tracker
-    for ch in use_channels:
-      self.head[ch].get_tip()  # Raises NoTipError if no tip
-
-    targets = resolve_container_targets(
-      containers=containers,
-      use_channels=use_channels,
-      channel_spacings=self._channels_minimum_y_spacing,
-      wrt_resource=self.deck,
-      resource_offsets=resource_offsets,
-    )
-    batches = plan_batches(
-      use_channels=use_channels,
-      targets=targets,
-      channel_spacings=self._channels_minimum_y_spacing,
-      x_tolerance=x_grouping_tolerance,
-    )
-
-    print_batches(batches, use_channels, containers, label="probe_liquid_heights plan")
-
-    # Compute heights from volume trackers
-    heights: List[float] = []
-    for container in containers:
+    measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
+    for local_idx, (ch, orig_idx) in enumerate(zip(batch.channels, batch.indices)):
+      container = containers[orig_idx]
       volume = container.tracker.get_used_volume()
       if volume == 0:
-        heights.append(0.0)
+        absolute_height = z_cavity_bottom[orig_idx]
       else:
-        height = container.compute_height_from_volume(volume)
-        heights.append(height)
-
-    print(f"  heights: {[f'{h:.2f}' for h in heights]} mm")
-    return heights
+        absolute_height = z_cavity_bottom[orig_idx] + container.compute_height_from_volume(volume)
+      measurements[ch] = [absolute_height] * n_replicates
+    return measurements

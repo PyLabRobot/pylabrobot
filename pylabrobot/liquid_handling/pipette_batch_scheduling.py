@@ -4,7 +4,7 @@ Multi-channel liquid handlers have physical constraints (single X carriage, mini
 Y spacing, descending Y order by channel index) that limit which channels can act
 simultaneously.
 
-    targets = resolve_container_targets(containers, use_channels, channel_spacings, deck)
+    targets = resolve_container_targets(containers, use_channels, channel_spacings, wrt_resource)
     batches = plan_batches(use_channels, targets, channel_spacings, x_tolerance=0.1)
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
@@ -15,8 +15,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from pylabrobot.liquid_handling.channel_positioning import (
-  MIN_SPACING_EDGE,
-  compute_channel_offsets,
+  compute_nonconsecutive_channel_offsets,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -41,8 +40,8 @@ class ChannelBatch:
 
 def print_batches(
   batches: List[ChannelBatch],
-  use_channels: List[int],
-  containers: List["Container"],
+  use_channels: Optional[List[int]] = None,
+  containers: Optional[List["Container"]] = None,
   label: str = "plan",
 ) -> None:
   """Print a tree view of the batch execution plan.
@@ -52,12 +51,18 @@ def print_batches(
 
   Args:
     batches: Output from ``plan_batches()``.
-    use_channels: Channel indices (parallel with *containers*).
-    containers: Container objects (parallel with *use_channels*).
+    use_channels: Channel indices (parallel with *containers*). If omitted,
+      container names are not shown next to active channels.
+    containers: Container objects (parallel with *use_channels*). If omitted,
+      container names are not shown next to active channels.
     label: Header label for the tree.
   """
 
-  ch_to_container = dict(zip(use_channels, containers))
+  ch_to_container = (
+    dict(zip(use_channels, containers))
+    if use_channels is not None and containers is not None
+    else {}
+  )
 
   x_groups: Dict[float, list] = {}
   for b in batches:
@@ -90,66 +95,16 @@ def print_batches(
 # --- Spacing helpers ---
 
 
-def _effective_spacing(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
-  """Max of per-channel spacings across ch_lo..ch_hi (inclusive).
-
-  Used by ``compute_single_container_offsets`` to determine a single uniform spacing
-  for spreading channels across a wide container.
-  """
-  return max(spacings[ch_lo : ch_hi + 1])
-
-
 def _span_required(spacings: List[float], ch_lo: int, ch_hi: int) -> float:
   """Minimum total Y distance required between channels ch_lo and ch_hi.
 
-  Sums the rounded pairwise spacing for each adjacent pair in the range via
-  ``_min_spacing_between``, matching what the firmware enforces.
+  Sums the rounded pairwise spacing for each adjacent pair in the range,
+  matching what the firmware enforces.
   """
-  return sum(_min_spacing_between(spacings, ch, ch + 1) for ch in range(ch_lo, ch_hi))
-
-
-def _min_spacing_between(spacings: List[float], i: int, j: int) -> float:
-  """Minimum Y spacing between adjacent channels *i* and *j*.
-
-  Takes the larger of the two channels' spacings, then rounds up to 0.1 mm:
-  ``math.ceil(max(spacings[i], spacings[j]) * 10) / 10``.
-
-  Mirrors ``STARBackend._min_spacing_between`` (which operates on
-  ``self._channels_minimum_y_spacing`` instead of an explicit list).
-  """
-  if not abs(i - j) == 1:
-    raise ValueError(f"Channels {i} and {j} are not adjacent.")
-  return math.ceil(max(spacings[i], spacings[j]) * 10) / 10
+  return sum(math.ceil(max(spacings[ch], spacings[ch + 1]) * 10) / 10 for ch in range(ch_lo, ch_hi))
 
 
 # --- Batch partitioning ---
-
-
-@dataclass
-class _BatchAccumulator:
-  """Mutable working state for a batch being built up during partitioning."""
-
-  indices: List[int]
-  lo_ch: int
-  hi_ch: int
-  lo_y: float
-  hi_y: float
-
-
-def _channel_fits_batch(
-  batch: _BatchAccumulator, channel: int, y: float, spacings: List[float]
-) -> bool:
-  """Check whether *channel* at *y* can be added to *batch* without violating spacing.
-
-  Two checks suffice because channels are processed in ascending order, so the candidate
-  is always the new high end. The (lo → candidate) check covers the full span; the
-  (hi → candidate) check catches the local gap.
-  """
-  if batch.hi_y - y < _span_required(spacings, batch.hi_ch, channel) - 1e-9:
-    return False
-  if batch.lo_y - y < _span_required(spacings, batch.lo_ch, channel) - 1e-9:
-    return False
-  return True
 
 
 def _interpolate_phantoms(
@@ -157,149 +112,20 @@ def _interpolate_phantoms(
 ) -> Dict[int, float]:
   """Return Y positions with phantom channels filled in between non-consecutive batch members.
 
-  Each phantom is placed at its actual pairwise spacing from the previous channel,
+  Each phantom is placed using the conservative max-spacing model (via ``_span_required``),
   so non-uniform spacings are respected (e.g. a wide channel only widens its own gaps).
   """
   result = dict(y_positions)
   sorted_chs = sorted(channels)
   for k in range(len(sorted_chs) - 1):
     ch_lo, ch_hi = sorted_chs[k], sorted_chs[k + 1]
-    cumulative = 0.0
     for phantom in range(ch_lo + 1, ch_hi):
-      cumulative += _min_spacing_between(spacings, phantom - 1, phantom)
       if phantom not in result:
-        result[phantom] = result[ch_lo] - cumulative
-  return result
-
-
-def _partition_into_y_batches(
-  indices: List[int],
-  use_channels: List[int],
-  y_pos: List[float],
-  spacings: List[float],
-  x_position: float,
-) -> List[ChannelBatch]:
-  """Partition channels within an X group into minimum parallel-compatible batches.
-
-  Uses greedy first-fit: processes channels in ascending order and assigns each to
-  the first batch where it fits, or creates a new batch.
-  """
-
-  channels_by_index = sorted(indices, key=lambda i: use_channels[i])
-  batches: List[_BatchAccumulator] = []
-
-  for idx in channels_by_index:
-    channel = use_channels[idx]
-    y = y_pos[idx]
-
-    assigned = False
-    for batch in batches:
-      if channel in [use_channels[i] for i in batch.indices]:
-        continue
-      if _channel_fits_batch(batch, channel, y, spacings):
-        batch.indices.append(idx)
-        batch.hi_ch = channel
-        batch.hi_y = y
-        assigned = True
-        break
-
-    if not assigned:
-      batches.append(_BatchAccumulator(indices=[idx], lo_ch=channel, hi_ch=channel, lo_y=y, hi_y=y))
-
-  result: List[ChannelBatch] = []
-  for batch in batches:
-    batch_channels = [use_channels[i] for i in batch.indices]
-    y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in batch.indices}
-    y_positions = _interpolate_phantoms(batch_channels, y_positions, spacings)
-    result.append(
-      ChannelBatch(
-        x_position=x_position,
-        indices=batch.indices,
-        channels=batch_channels,
-        y_positions=y_positions,
-      )
-    )
-
+        result[phantom] = result[ch_lo] - _span_required(spacings, ch_lo, phantom)
   return result
 
 
 # --- Input validation and position computation ---
-
-
-# TODO: eliminate once compute_channel_offsets supports use_channels directly
-# (non-consecutive channel handling + sub-group fallback would move there).
-def compute_single_container_offsets(
-  container: Container,
-  use_channels: List[int],
-  channel_spacings: List[float],
-) -> Optional[List[Coordinate]]:
-  """Compute spread Y offsets for multiple channels targeting the same container.
-
-  Accounts for the full physical span including phantom intermediate channels.
-  When the full span doesn't fit, splits active channels into consecutive
-  sub-groups at gaps in the channel sequence and computes offsets per sub-group.
-  Each sub-group gets centered spread offsets, so plan_batches will naturally
-  batch sub-groups that can't coexist into separate Y batches.
-
-  Returns None if even a single pair of adjacent active channels can't fit.
-  """
-
-  if len(use_channels) == 0:
-    return []
-
-  ch_lo, ch_hi = min(use_channels), max(use_channels)
-  if len(channel_spacings) < ch_hi + 1:
-    raise ValueError(
-      f"channel_spacings list must have at least {ch_hi + 1} entries "
-      f"(max channel index is {ch_hi}), got {len(channel_spacings)}."
-    )
-  spacing = _effective_spacing(channel_spacings, ch_lo, ch_hi)
-
-  def _try_group(channels: List[int]) -> Optional[List[Coordinate]]:
-    """Try to fit channels into the container, returning None if too narrow."""
-    g_lo, g_hi = min(channels), max(channels)
-    num_physical = g_hi - g_lo + 1
-    min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
-    if container.get_absolute_size_y() < min_required:
-      return None
-    all_offsets = compute_channel_offsets(
-      resource=container,
-      num_channels=num_physical,
-      spread="wide",
-      channel_spacings=[spacing] * num_physical,
-    )
-    return [all_offsets[ch - g_lo] for ch in channels]
-
-  # Try the full span first (all channels including phantoms fit)
-  full = _try_group(use_channels)
-  if full is not None:
-    return full
-
-  # Full span doesn't fit. Split at gaps in the sorted channel sequence
-  # into consecutive sub-groups and compute offsets for each independently.
-  sorted_chs = sorted(use_channels)
-  groups: List[List[int]] = [[sorted_chs[0]]]
-  for i in range(1, len(sorted_chs)):
-    if sorted_chs[i] == sorted_chs[i - 1] + 1:
-      groups[-1].append(sorted_chs[i])
-    else:
-      groups.append([sorted_chs[i]])
-
-  # If there's only one consecutive group and it didn't fit above, container is too small
-  if len(groups) == 1:
-    return None
-
-  # Compute offsets per sub-group
-  ch_to_offset: Dict[int, Coordinate] = {}
-  for group in groups:
-    group_offsets = _try_group(group)
-    if group_offsets is None:
-      return None  # even a sub-group doesn't fit
-    for ch, offset in zip(group, group_offsets):
-      ch_to_offset[ch] = offset
-
-  # Return in the original use_channels order
-  return [ch_to_offset[ch] for ch in use_channels]
 
 
 def validate_channel_selections(
@@ -344,7 +170,7 @@ def resolve_container_targets(
   """Convert containers to absolute Coordinates, auto-spreading when needed.
 
   When *resource_offsets* is ``None`` and multiple channels target the same
-  container, computes spread offsets via ``compute_single_container_offsets``
+  container, computes spread offsets via ``compute_nonconsecutive_channel_offsets``
   so channels can be batched in parallel. If the container is too narrow to
   spread, channels stay at center and will be serialized by ``plan_batches``.
 
@@ -389,7 +215,7 @@ def resolve_container_targets(
       container_groups[id(containers[idx])].append(idx)
     for c_indices in container_groups.values():
       group_channels = [use_channels[i] for i in c_indices]
-      spread = compute_single_container_offsets(
+      spread = compute_nonconsecutive_channel_offsets(
         container=containers[c_indices[0]],
         use_channels=group_channels,
         channel_spacings=channel_spacings,
@@ -462,9 +288,39 @@ def plan_batches(
       current_key = x_pos[i]
     x_groups.setdefault(current_key, []).append(i)
 
+  # Within each X group, batch by Y position (greedy first-fit)
   result: List[ChannelBatch] = []
-  for _, indices in sorted(x_groups.items()):
-    group_x = x_pos[indices[0]]
-    result.extend(_partition_into_y_batches(indices, use_channels, y_pos, spacings, group_x))
+  for _, x_group_indices in sorted(x_groups.items()):
+    group_x = x_pos[x_group_indices[0]]
+    channels_by_index = sorted(x_group_indices, key=lambda i: use_channels[i])
+    y_batches: List[List[int]] = []
+
+    for idx in channels_by_index:
+      channel = use_channels[idx]
+      y = y_pos[idx]
+
+      for batch in y_batches:
+        if channel in [use_channels[i] for i in batch]:
+          continue
+        hi_ch = use_channels[batch[-1]]
+        hi_y = y_pos[batch[-1]]
+        if hi_y - y >= _span_required(spacings, hi_ch, channel) - 1e-9:
+          batch.append(idx)
+          break
+      else:
+        y_batches.append([idx])
+
+    for batch in y_batches:
+      batch_channels = [use_channels[i] for i in batch]
+      y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in batch}
+      y_positions = _interpolate_phantoms(batch_channels, y_positions, spacings)
+      result.append(
+        ChannelBatch(
+          x_position=group_x,
+          indices=batch,
+          channels=batch_channels,
+          y_positions=y_positions,
+        )
+      )
 
   return result
