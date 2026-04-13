@@ -2183,21 +2183,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip_lengths: List[float],
     z_cavity_bottom: List[float],
     z_top: List[float],
-    lld_mode: LLDMode,
+    lld_mode: List[LLDMode],
     search_speed: float,
     n_replicates: int,
   ) -> Dict[int, List[Optional[float]]]:
     """Per-batch liquid level detection. Override to substitute simulated sensing.
 
+    *lld_mode* is indexed by original container position (``batch.indices[i]``),
+    so channels within a single batch may use different detection modes concurrently.
+
     Returns absolute heights (one list per channel, ``None`` entries for replicates
     where no liquid was detected). The caller subtracts ``z_cavity_bottom`` to get
     heights relative to container bottom.
     """
-    detect_func: Callable[..., Any] = (
-      self._move_z_drive_to_liquid_surface_using_clld
-      if lld_mode == self.LLDMode.GAMMA
-      else self._search_for_surface_using_plld
-    )
+
+    def _detect_func(mode: "STARBackend.LLDMode") -> Callable[..., Any]:
+      return (
+        self._move_z_drive_to_liquid_surface_using_clld
+        if mode == self.LLDMode.GAMMA
+        else self._search_for_surface_using_plld
+      )
+
     batch_lowest_immers = [
       z_cavity_bottom[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH for i in batch.indices
     ]
@@ -2211,13 +2217,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     for _ in range(n_replicates):
       results = await asyncio.gather(
         *[
-          detect_func(
+          _detect_func(lld_mode[orig_idx])(
             channel_idx=channel,
             lowest_immers_pos=lip,
             start_pos_search=sps,
             channel_speed=search_speed,
           )
-          for channel, lip, sps in zip(batch.channels, batch_lowest_immers, batch_start_pos)
+          for channel, lip, sps, orig_idx in zip(
+            batch.channels, batch_lowest_immers, batch_start_pos, batch.indices
+          )
         ],
         return_exceptions=True,
       )
@@ -2234,7 +2242,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               f"no liquid in container {containers[orig_idx].name} or liquid level "
               f"is too low."
             )
-            if lld_mode == self.LLDMode.GAMMA:
+            if lld_mode[orig_idx] == self.LLDMode.GAMMA:
               msg += " Consider using pressure-based LLD if liquid is believed to exist."
             logger.warning(msg)
           else:
@@ -2252,7 +2260,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     containers: List[Container],
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
+    lld_mode: Union[LLDMode, List[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
     move_to_z_safety_after: bool = True,
@@ -2278,8 +2286,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       use_channels: Channel indices to use for probing (0-indexed).
       resource_offsets: Optional XYZ offsets from container centers. When not provided,
         ``resolve_container_targets`` auto-spreads channels targeting the same container.
-      lld_mode: Detection mode - GAMMA for capacitive, PRESSURE for pressure-based.
-        Defaults to GAMMA.
+      lld_mode: Detection mode. Either a single ``LLDMode`` applied to all containers
+        (deprecated, removed in v1b1) or a list of ``LLDMode``s (one per container)
+        allowing mixed GAMMA/PRESSURE within one call. ``None`` (default) applies
+        GAMMA to all containers.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
       move_to_z_safety_after: Whether to move channels to safe Z height after probing.
@@ -2314,8 +2324,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"channels, call probe_liquid_heights multiple times in sequence."
       )
 
-    if lld_mode not in (self.LLDMode.GAMMA, self.LLDMode.PRESSURE):
-      raise ValueError(f"Unsupported lld_mode: {lld_mode!r}")
+    if lld_mode is None:
+      lld_mode = [self.LLDMode.GAMMA] * len(containers)
+    elif isinstance(lld_mode, self.LLDMode):
+      warnings.warn(
+        "Passing a single LLDMode to probe_liquid_heights is deprecated and will be "
+        "removed in v1b1. Pass a list of LLDModes (one per container) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      lld_mode = [lld_mode] * len(containers)
+    elif not isinstance(lld_mode, list):
+      raise TypeError(
+        f"lld_mode must be List[LLDMode], got {type(lld_mode).__name__}"
+      )
+
+    if len(lld_mode) != len(containers):
+      raise ValueError(
+        f"lld_mode list length must match containers: got {len(lld_mode)} LLD modes "
+        f"for {len(containers)} containers."
+      )
+    for m in lld_mode:
+      if m not in (self.LLDMode.GAMMA, self.LLDMode.PRESSURE):
+        raise ValueError(f"Unsupported lld_mode: {m!r}")
 
     z_cavity_bottom = [
       r.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z for r in containers

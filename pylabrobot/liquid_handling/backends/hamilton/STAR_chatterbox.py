@@ -332,7 +332,7 @@ class STARChatterboxBackend(STARBackend):
     tip_lengths: List[float],
     z_cavity_bottom: List[float],
     z_top: List[float],
-    lld_mode: LLDMode,
+    lld_mode: List[LLDMode],
     search_speed: float,
     n_replicates: int,
   ) -> Dict[int, List[Optional[float]]]:
