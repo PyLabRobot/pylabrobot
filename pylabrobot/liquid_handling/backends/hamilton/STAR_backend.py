@@ -2335,9 +2335,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
       lld_mode = [lld_mode] * len(containers)
     elif not isinstance(lld_mode, list):
-      raise TypeError(
-        f"lld_mode must be List[LLDMode], got {type(lld_mode).__name__}"
-      )
+      raise TypeError(f"lld_mode must be List[LLDMode], got {type(lld_mode).__name__}")
 
     if len(lld_mode) != len(containers):
       raise ValueError(
