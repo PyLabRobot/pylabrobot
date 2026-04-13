@@ -3,6 +3,7 @@
 from typing import List, Optional, cast
 import contextlib
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
@@ -46,10 +47,10 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     self.opentrons_id = opentrons_id
     self._current_protocol: Optional[Protocol] = None
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Gracefully deactivate both heaters on exit."""
-    stack.push_async_callback(self.deactivate_lid)
-    stack.push_async_callback(self.deactivate_block)
+    stack.push_shielded_async_callback(self.deactivate_lid)
+    stack.push_shielded_async_callback(self.deactivate_block)
 
 
   def serialize(self) -> dict:

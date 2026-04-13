@@ -3,6 +3,7 @@ import contextlib
 import logging
 from typing import Optional, cast
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
@@ -43,7 +44,7 @@ class HID(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new HID object while capture or validation is active")
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """
     Sets up the HID device by enumerating connected devices, matching the specified
     VID, PID, and optional serial number, and opening a connection to the device.
@@ -107,7 +108,7 @@ class HID(IOBase):
       logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
       capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
 
-    stack.push_async_callback(_cleanup)
+    stack.push_shielded_async_callback(_cleanup)
 
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))

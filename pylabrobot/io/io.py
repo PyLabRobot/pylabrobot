@@ -1,12 +1,11 @@
-import contextlib
 from abc import ABC, abstractmethod
 
 from pylabrobot.serializer import SerializableMixin
-from pylabrobot.concurrency import AsyncResource
+from pylabrobot.concurrency import AsyncResource, AsyncExitStackWithShielding
 
 
 class IOBase(SerializableMixin, AsyncResource):
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     pass
 
   @abstractmethod

@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
 from typing import Optional, cast
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+
 try:
   import pylibftdi.driver
   from pylibftdi import Device, FtdiError
@@ -180,7 +182,7 @@ class FTDI(IOBase):
     device_serial_number = cast(str, usb.util.get_string(device, device.iSerialNumber))
     return device_serial_number
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Initialize the FTDI device connection with device resolution."""
     if self._dev is not None and not self._dev.closed:
       await anyio.to_thread.run_sync(self._dev.close)
@@ -210,7 +212,7 @@ class FTDI(IOBase):
         await anyio.to_thread.run_sync(self._dev.close)
       self._dev = None
 
-    stack.push_async_callback(_cleanup)
+    stack.push_shielded_async_callback(_cleanup)
 
   @property
   def device_id(self) -> str:

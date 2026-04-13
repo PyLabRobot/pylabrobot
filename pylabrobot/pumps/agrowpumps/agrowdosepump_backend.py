@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Union
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+
 
 try:
   from pymodbus.client import AsyncModbusSerialClient  # type: ignore
@@ -88,7 +90,7 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
       await self._modbus.read_holding_registers(0, 1, unit=self.address)
 
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Sets up the Modbus connection to the AgrowPumpArray and creates the
     pump mappings needed to issue commands.
     """
@@ -122,7 +124,7 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
 
     tg.start_soon(self._keep_alive_task)
 
-    stack.push_async_callback(self.halt)
+    stack.push_shielded_async_callback(self.halt)
 
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
 

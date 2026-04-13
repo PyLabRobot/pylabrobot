@@ -9,6 +9,8 @@ import time
 import warnings
 from typing import Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import CentrifugeBackend, LoaderBackend
@@ -188,13 +190,13 @@ class VSpinBackend(CentrifugeBackend):
     if device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
 
     async def _cleanup():
       await self.configure_and_initialize()
-    stack.push_async_callback(_cleanup)
+    stack.push_shielded_async_callback(_cleanup)
 
     # TODO: add functionality where if robot has been initialized before nothing needs to happen
     for _ in range(3):

@@ -4,6 +4,8 @@ import contextlib
 from abc import ABC
 from typing import Dict, List, Literal, Optional, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+
 from pylabrobot.arms.backend import (
   AccessPattern,
   HorizontalAccess,
@@ -92,11 +94,11 @@ class PreciseFlexBackend(SCARABackend, ABC):
     )
     return arr
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, skip_home: bool = False):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
     await super()._enter_lifespan(stack)
 
     await stack.enter_async_context(self.io)
-    stack.push_async_callback(self.exit)
+    stack.push_shielded_async_callback(self.exit)
 
     await self.set_response_mode("pc")
     await self.power_on_robot()
@@ -105,8 +107,8 @@ class PreciseFlexBackend(SCARABackend, ABC):
       await self.home()
 
     # push_async_callback executes in reverse order!
-    stack.push_async_callback(self.power_off_robot)
-    stack.push_async_callback(self.detach)
+    stack.push_shielded_async_callback(self.power_off_robot)
+    stack.push_shielded_async_callback(self.detach)
 
 
   async def set_speed(self, speed_percent: float):

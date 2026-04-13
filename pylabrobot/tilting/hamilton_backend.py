@@ -43,7 +43,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
       human_readable_device_name="Hamilton Tilt Module",
     )
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, initial_offset: int = 0):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, initial_offset: int = 0):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
     await self.tilt_initial_offset(initial_offset)
@@ -302,7 +302,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
 
 class HamiltonTiltModuleChatterboxBackend(HamiltonTiltModuleBackend):
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, initial_offset=0):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, initial_offset=0):
     await super()._enter_lifespan(stack, initial_offset=initial_offset)
     print(f"[tilter] setup initial offset {initial_offset}")
     stack.callback(lambda: print("[tilter] stopping"))

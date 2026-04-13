@@ -79,7 +79,7 @@ class BioShake(HeaterShakerBackend):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, skip_home: bool = False):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
     if not skip_home:

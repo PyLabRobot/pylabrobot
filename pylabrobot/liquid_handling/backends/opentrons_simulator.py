@@ -89,7 +89,7 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
       "right_pipette_name": self._right_pipette_name,
     }
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, skip_home: bool = False):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
     await super()._enter_lifespan(stack, skip_home=skip_home)
     self._setup_pipettes()
     logger.info(
