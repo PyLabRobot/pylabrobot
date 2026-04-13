@@ -32,6 +32,9 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
   ):
+    """
+    If io fails to connect, ensure that libusb drivers were installed for the HHS as per docs.
+    """
     self.io = USB(
       human_readable_device_name="Hamilton Heater Shaker Box",
       id_vendor=id_vendor,
@@ -45,15 +48,6 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     """continuously generate unique ids 0 <= x < 10000."""
     self._id += 1
     return self._id % 10000
-
-  async def Xsetup(self):
-    """
-    If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
-    """
-    await self.io.setup()
-
-  async def Xstop(self):
-    await self.io.stop()
 
   async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
