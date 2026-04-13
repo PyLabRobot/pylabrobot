@@ -729,5 +729,4 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
     self.assertEqual(cmd[3], 0x00)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

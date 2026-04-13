@@ -857,5 +857,4 @@ class TestDecodeIntermediateResponse(unittest.TestCase):
     self.assertEqual(meta["packet_index"], 2)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

@@ -243,5 +243,4 @@ class TestEL406BackendSyringeDispense(EL406TestCase):
       await self.backend.syringe_dispense(PT96, volume=50.0, syringe="A")
 
 
-if __name__ == "__main__":
-  unittest.main()
+

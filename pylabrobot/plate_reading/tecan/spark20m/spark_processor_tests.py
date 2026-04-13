@@ -364,5 +364,4 @@ class TestProcessFluorescence(unittest.TestCase):
       assert proc_row == pytest.approx(res_row)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

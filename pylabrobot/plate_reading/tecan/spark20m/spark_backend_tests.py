@@ -146,5 +146,4 @@ class TestExperimentalSparkBackend(AnyioTestBase):
     self.assertIsNone(temp)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

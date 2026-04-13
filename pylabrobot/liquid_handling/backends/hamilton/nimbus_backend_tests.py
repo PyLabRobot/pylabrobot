@@ -1189,5 +1189,4 @@ class TestNimbusTipPickupDropAllSizes(AnyioTestBase):
     tip_rack.unassign()
 
 
-if __name__ == "__main__":
-  unittest.main()
+

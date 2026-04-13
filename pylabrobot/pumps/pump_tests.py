@@ -123,5 +123,4 @@ class TestPumpArray(AnyioTestBase):
       await self.pump_array.pump_volume(speed=1, use_channels=[0], volume=-1)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

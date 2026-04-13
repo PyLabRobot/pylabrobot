@@ -266,5 +266,4 @@ class TestDiscoverSila2(AnyioTestBase):
     self.assertEqual(devices[0].sila_version, 2)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

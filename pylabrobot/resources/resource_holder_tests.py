@@ -31,5 +31,4 @@ class ResourceHolderTests(unittest.TestCase):
     self.assertIsNone(self.holder.resource)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

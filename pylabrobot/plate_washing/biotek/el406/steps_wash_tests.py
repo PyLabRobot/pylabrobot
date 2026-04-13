@@ -922,5 +922,4 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
       self.assertEqual(cmd[0], expected_prefixes[plate.name], f"Wrong prefix for {plate.name}")
 
 
-if __name__ == "__main__":
-  unittest.main()
+

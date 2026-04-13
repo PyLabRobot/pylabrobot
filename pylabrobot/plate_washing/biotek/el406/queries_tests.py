@@ -491,5 +491,4 @@ class TestGetInstrumentSettings(EL406TestCase):
       await backend.request_instrument_settings()
 
 
-if __name__ == "__main__":
-  unittest.main()
+

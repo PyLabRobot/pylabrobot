@@ -189,5 +189,4 @@ class TestAspirateCommandEncoding(unittest.TestCase):
     self.assertEqual(len(cmd), 22)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

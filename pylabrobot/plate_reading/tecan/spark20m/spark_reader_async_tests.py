@@ -361,5 +361,4 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       mock_reader._executor.shutdown()
 
 
-if __name__ == "__main__":
-  unittest.main()
+

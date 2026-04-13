@@ -233,5 +233,4 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 
 
-if __name__ == "__main__":
-  unittest.main()
+

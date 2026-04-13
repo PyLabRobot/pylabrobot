@@ -246,5 +246,4 @@ class TestShakeCommandEncoding(unittest.TestCase):
     self.assertEqual(cmd, expected)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

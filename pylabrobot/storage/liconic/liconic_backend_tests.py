@@ -411,5 +411,4 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIn("Unknown error", str(ctx.exception))
 
 
-if __name__ == "__main__":
-  unittest.main()
+

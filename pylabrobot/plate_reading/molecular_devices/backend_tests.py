@@ -1013,5 +1013,4 @@ class TestErrorHandling(AnyioTestBase):
       self.fail("MolecularDevicesError raised for a valid OK response")
 
 
-if __name__ == "__main__":
-  unittest.main()
+

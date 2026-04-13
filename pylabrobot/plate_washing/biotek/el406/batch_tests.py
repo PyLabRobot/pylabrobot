@@ -156,5 +156,4 @@ class TestStepAutoBatching(EL406TestCase):
     self.assertEqual(shake_count, 2, "Should have two SHAKE commands")
 
 
-if __name__ == "__main__":
-  unittest.main()
+

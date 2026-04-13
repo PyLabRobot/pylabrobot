@@ -983,5 +983,4 @@ class TestProtocolEnums(unittest.TestCase):
     self.assertEqual(HamiltonDataType.I32_ARRAY, 27)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

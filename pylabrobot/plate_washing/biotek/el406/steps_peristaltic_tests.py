@@ -558,5 +558,4 @@ class TestEL406BackendPeristalticPurge(EL406TestCase):
       await self.backend.peristaltic_purge(PT96, volume=1000.0)
 
 
-if __name__ == "__main__":
-  unittest.main()
+

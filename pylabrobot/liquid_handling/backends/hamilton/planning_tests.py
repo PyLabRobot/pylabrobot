@@ -125,5 +125,4 @@ class TestGroupByXBatchByXY(unittest.TestCase):
     self.assertEqual(result, {100.0: [[1, 0]]})
 
 
-if __name__ == "__main__":
-  unittest.main()
+
