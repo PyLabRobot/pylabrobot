@@ -3,7 +3,6 @@ import datetime
 import enum
 import functools
 import logging
-import math
 import re
 import sys
 import warnings
@@ -41,6 +40,11 @@ from pylabrobot.liquid_handling.backends.hamilton.base import (
 )
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
+from pylabrobot.liquid_handling.channel_positioning import (
+  MIN_SPACING_EDGE,
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
@@ -62,11 +66,6 @@ from pylabrobot.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
-)
-from pylabrobot.liquid_handling.utils import (
-  MIN_SPACING_EDGE,
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -1056,7 +1055,7 @@ def star_firmware_string_to_error(
         int(error_code_str),
         int(trace_information_str),
       )
-      if error_code == 0:  # No error
+      if error_code == 0 and trace_information == 0:
         continue
       error_class = error_code_to_exception(error_code)
     elif module_id == "I0" and error == "36":
@@ -1359,15 +1358,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._setup_done = False
 
   def _min_spacing_between(self, i: int, j: int) -> float:
-    """Return the conservative minimum Y spacing required between channels *i* and *j*.
+    """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
 
-    For adjacent channels, the constraint is the larger of the two channels' individual minimum
-    spacings, ceiling'd to 1 decimal place for safe movement.
-
-    For non-adjacent channels, the spacing is the sum of all intermediate adjacent-pair spacings.
+    Uses max() of both channels' spacings for firmware safety (conservative).
+    For adjacent channels, ceiling-rounded to 0.1mm.
+    For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
     """
     lo, hi = min(i, j), max(i, j)
     if hi - lo == 1:
+      import math
+
       spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
       return math.ceil(spacing * 10) / 10
     return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
@@ -2229,10 +2229,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
           min_ch = min(use_channels)
           offsets = [all_offsets[ch - min_ch] for ch in use_channels]
-
-          if num_channels_in_span % 2 != 0:
-            y_offset = 5.5
-            offsets = [offset + Coordinate(0, y_offset, 0) for offset in offsets]
         # else: container too small to fit all channels — fall back to center offsets.
         # Y sub-batching will serialize channels that can't coexist.
 
@@ -2343,8 +2339,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Notes:
       - All specified channels must have tips attached
       - Containers at different X positions are probed in sequential groups (single X carriage)
-      - For single containers with odd channel counts, Y-offsets are applied to avoid
-        center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
+      - For single containers with no-go zones, Y-offsets are computed to avoid
+        obstructed regions (e.g. center dividers in troughs)
     """
 
     if move_to_z_safety_after is not None:
@@ -3504,6 +3500,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ),
     )
 
+  def _is_core96_slave_timeout(self, error: STARFirmwareError) -> bool:
+    """Check if a firmware error is a slave command timeout from the CoRe 96 head.
+
+    The firmware master has an internal ~5 minute timeout for slave commands. For slow liquid
+    handling operations (e.g. large volumes at low flow rates), the master may report a timeout
+    error even though the CoRe 96 head is still working and will finish successfully.
+
+    The error looks like: C0EAid####er99/00 H002/11
+    H0 error_code=02 (HardwareError), trace_information=11 (not a standard H0 code, but the
+    master's "Slave command time out" forwarded to the H0 module).
+    """
+    h0_error = error.errors.get("CoRe 96 Head")
+    return (
+      h0_error is not None
+      and isinstance(h0_error, HardwareError)
+      and h0_error.trace_information == 11
+    )
+
+  async def _core96_wait_for_idle(self, timeout: float = 600, poll_interval: float = 5):
+    """Poll the CoRe 96 head until it finishes its current operation.
+
+    Sends the "move to Z safety" command (C0 EV). If the head is busy, the firmware rejects
+    with H0 CommandSyntaxError trace 40 ("No parallel processes permitted"). When the head
+    finishes, EV succeeds and harmlessly ensures the Z axis is at the safe position.
+    """
+    start = asyncio.get_event_loop().time()
+    while asyncio.get_event_loop().time() - start < timeout:
+      await asyncio.sleep(poll_interval)
+      try:
+        await self.send_command(module="C0", command="EV", read_timeout=10)
+        logger.info("CoRe 96 head finished (EV succeeded)")
+        return
+      except STARFirmwareError as e:
+        h0_error = e.errors.get("CoRe 96 Head")
+        if (
+          h0_error is not None
+          and isinstance(h0_error, CommandSyntaxError)
+          and h0_error.trace_information == 40
+        ):
+          logger.debug("CoRe 96 head still busy, waiting...")
+          continue
+        raise
+    raise TimeoutError("CoRe 96 head did not become idle within timeout")
+
   @_requires_head96
   async def aspirate96(
     self,
@@ -3724,43 +3764,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
 
     x_direction = 0 if position.x >= 0 else 1
-    return await self.aspirate_core_96(
-      x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
-      y_positions=round(position.y * 10),
-      aspiration_type=aspiration_type,
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-      lld_search_height=round(lld_search_height * 10),
-      liquid_surface_no_lld=round(liquid_height * 10),
-      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=round((minimum_height or position.z) * 10),
-      second_section_height=round(second_section_height * 10),
-      second_section_ratio=round(second_section_ratio * 10),
-      immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-      surface_following_distance=round(surface_following_distance * 10),
-      aspiration_volumes=round(volume * 10),
-      aspiration_speed=round(flow_rate * 10),
-      transport_air_volume=round(transport_air_volume * 10),
-      blow_out_air_volume=round(blow_out_air_volume * 10),
-      pre_wetting_volume=round(pre_wetting_volume * 10),
-      lld_mode=int(use_lld),
-      gamma_lld_sensitivity=gamma_lld_sensitivity,
-      swap_speed=round(swap_speed * 10),
-      settling_time=round(settling_time * 10),
-      mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
-      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
-      mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
-      mix_surface_following_distance=round(mix_surface_following_distance * 10),
-      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
-      channel_pattern=[True] * 12 * 8,
-      limit_curve_index=limit_curve_index,
-      tadm_algorithm=False,
-      recording_mode=0,
-    )
+    try:
+      return await self.aspirate_core_96(
+        x_position=abs(round(position.x * 10)),
+        x_direction=x_direction,
+        y_positions=round(position.y * 10),
+        aspiration_type=aspiration_type,
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+        lld_search_height=round(lld_search_height * 10),
+        liquid_surface_no_lld=round(liquid_height * 10),
+        pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
+        minimum_height=round((minimum_height or position.z) * 10),
+        second_section_height=round(second_section_height * 10),
+        second_section_ratio=round(second_section_ratio * 10),
+        immersion_depth=round(immersion_depth * 10),
+        immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
+        surface_following_distance=round(surface_following_distance * 10),
+        aspiration_volumes=round(volume * 10),
+        aspiration_speed=round(flow_rate * 10),
+        transport_air_volume=round(transport_air_volume * 10),
+        blow_out_air_volume=round(blow_out_air_volume * 10),
+        pre_wetting_volume=round(pre_wetting_volume * 10),
+        lld_mode=int(use_lld),
+        gamma_lld_sensitivity=gamma_lld_sensitivity,
+        swap_speed=round(swap_speed * 10),
+        settling_time=round(settling_time * 10),
+        mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
+        mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
+        mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
+        mix_surface_following_distance=round(mix_surface_following_distance * 10),
+        speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
+        channel_pattern=[True] * 12 * 8,
+        limit_curve_index=limit_curve_index,
+        tadm_algorithm=False,
+        recording_mode=0,
+      )
+    except STARFirmwareError as e:
+      if self._is_core96_slave_timeout(e):
+        logger.warning("Firmware slave timeout during aspirate96, polling for completion")
+        await self._core96_wait_for_idle()
+      else:
+        raise
 
   @_requires_head96
   async def dispense96(
@@ -3998,44 +4045,53 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
 
-    return await self.dispense_core_96(
-      dispensing_mode=dispense_mode,
-      x_position=abs(round(position.x * 10)),
-      x_direction=0 if position.x >= 0 else 1,
-      y_position=round(position.y * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-      lld_search_height=round(lld_search_height * 10),
-      liquid_surface_no_lld=round(liquid_height * 10),
-      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=round((minimum_height or position.z) * 10),
-      second_section_height=round(second_section_height * 10),
-      second_section_ratio=round(second_section_ratio * 10),
-      immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-      surface_following_distance=round(surface_following_distance * 10),
-      dispense_volume=round(volume * 10),
-      dispense_speed=round(flow_rate * 10),
-      transport_air_volume=round(transport_air_volume * 10),
-      blow_out_air_volume=round(blow_out_air_volume * 10),
-      lld_mode=int(use_lld),
-      gamma_lld_sensitivity=gamma_lld_sensitivity,
-      swap_speed=round(swap_speed * 10),
-      settling_time=round(settling_time * 10),
-      mixing_volume=round(dispense.mix.volume * 10) if dispense.mix is not None else 0,
-      mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
-      mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
-      mix_surface_following_distance=round(mix_surface_following_distance * 10),
-      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
-      channel_pattern=[True] * 12 * 8,
-      limit_curve_index=limit_curve_index,
-      tadm_algorithm=False,
-      recording_mode=0,
-      cut_off_speed=round(cut_off_speed * 10),
-      stop_back_volume=round(stop_back_volume * 10),
-    )
+    try:
+      return await self.dispense_core_96(
+        dispensing_mode=dispense_mode,
+        x_position=abs(round(position.x * 10)),
+        x_direction=0 if position.x >= 0 else 1,
+        y_position=round(position.y * 10),
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+        lld_search_height=round(lld_search_height * 10),
+        liquid_surface_no_lld=round(liquid_height * 10),
+        pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
+        minimum_height=round((minimum_height or position.z) * 10),
+        second_section_height=round(second_section_height * 10),
+        second_section_ratio=round(second_section_ratio * 10),
+        immersion_depth=round(immersion_depth * 10),
+        immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
+        surface_following_distance=round(surface_following_distance * 10),
+        dispense_volume=round(volume * 10),
+        dispense_speed=round(flow_rate * 10),
+        transport_air_volume=round(transport_air_volume * 10),
+        blow_out_air_volume=round(blow_out_air_volume * 10),
+        lld_mode=int(use_lld),
+        gamma_lld_sensitivity=gamma_lld_sensitivity,
+        swap_speed=round(swap_speed * 10),
+        settling_time=round(settling_time * 10),
+        mixing_volume=round(dispense.mix.volume * 10) if dispense.mix is not None else 0,
+        mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
+        mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
+        mix_surface_following_distance=round(mix_surface_following_distance * 10),
+        speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
+        channel_pattern=[True] * 12 * 8,
+        limit_curve_index=limit_curve_index,
+        tadm_algorithm=False,
+        recording_mode=0,
+        cut_off_speed=round(cut_off_speed * 10),
+        stop_back_volume=round(stop_back_volume * 10),
+      )
+    except STARFirmwareError as e:
+      if self._is_core96_slave_timeout(e):
+        logger.warning(
+          "Firmware slave command timeout during dispense96, waiting for head to finish"
+        )
+        await self._core96_wait_for_idle()
+      else:
+        raise
 
   async def iswap_move_picked_up_resource(
     self,
@@ -4561,9 +4617,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     stop disk Z position used with :meth:`move_channel_stop_disk_z` for the same
     physical height above the deck.
     """
-    # TODO: remove after 2026-09
+    # TODO: remove in v1
     warnings.warn(
-      "move_channel_z is deprecated and will be removed after 2026-09 in legacy PLR. "
+      "move_channel_z is deprecated and will be removed in v1. "
       "Use move_channel_stop_disk_z() for moves without a tip attached "
       "or move_channel_tool_z() when a tip/tool is attached.",
       DeprecationWarning,
@@ -4689,6 +4745,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # TODO: determine whether this refers to stop disk or tip bottom
     current_z = await self.request_z_pos_channel_n(channel)
     await self.move_channel_z(channel, current_z + distance)
+
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    return [self._channels_minimum_y_spacing[ch] for ch in sorted(use_channels)]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, HamiltonTip):
@@ -7966,6 +8025,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(
       module="C0",
       command="EA",
+      read_timeout=max(300, self.read_timeout),
       aa=aspiration_type,
       xs=f"{x_position:05}",
       xd=x_direction,
@@ -8240,6 +8300,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(
       module="C0",
       command="ED",
+      read_timeout=max(300, self.read_timeout),
       da=dispensing_mode,
       xs=f"{x_position:05}",
       xd=x_direction,

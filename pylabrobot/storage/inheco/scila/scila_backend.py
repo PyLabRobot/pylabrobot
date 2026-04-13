@@ -89,6 +89,14 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
 
+  async def maintenance(self) -> None:
+    """Put the SCILA into maintenance mode.
+
+    This maps to the SiLA `Maintenance` command, which opens all drawers and then powers the
+    device off.
+    """
+    await self._sila_interface.send_command("Maintenance")
+
   async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
     root = await self._sila_interface.send_command("GetDoorStatus")
     params = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])

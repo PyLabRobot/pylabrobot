@@ -10,6 +10,11 @@ class NoChannelError(Exception):
   """
 
 
+class ChannelsDoNotFitError(Exception):
+  """Raised when channels cannot be positioned within a resource's compartments while respecting
+  no-go zones and spacing constraints."""
+
+
 class ChannelizedError(Exception):
   """Raised by operations that work on multiple channels: pick_up_tips, drop_tips, aspirate, and
   dispense. Contains a key for each channel that had an error, and the error that occurred."""
