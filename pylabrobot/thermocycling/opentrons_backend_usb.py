@@ -2,9 +2,12 @@
 # Does not require an Opentrons liquid handler to use.
 
 from typing import List, Optional
+import contextlib
 
 import anyio
+import asyncio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import (
   BlockStatus,
@@ -90,15 +93,15 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     (0x0483, 0xED8D),  # STMicroelectronics bridge seen in newer units
   }
 
-  def __init__(self):
+  def __init__(self, port: Optional[str] = None):
     """Create a new USB backend."""
     super().__init__()
     if not USE_OPENTRONS_DRIVER:
       raise RuntimeError("Opentrons thermocycler driver not available") from _import_error
 
+    self.port = port
     self._driver: Optional[AbstractThermocyclerDriver] = None
     self._current_protocol: Optional[Protocol] = None
-    self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     self._total_cycle_count: Optional[int] = None
     self._current_cycle_index: Optional[int] = None
@@ -187,11 +190,10 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
     self._current_protocol = protocol
 
-  async def setup(self, port: Optional[str] = None):
-    """Setup the USB connection to the thermocycler."""
-    if self._loop is None:
-      self._loop = asyncio.get_event_loop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
 
+    port = self.port
     if port is None:
       ports = serial.tools.list_ports.comports()
       opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
@@ -207,14 +209,17 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
       else:
         port = opentrons_ports[0].device
 
-    self._driver = await ThermocyclerDriverFactory.create(port, self._loop)
+    self._driver = await ThermocyclerDriverFactory.create(port, asyncio.get_running_loop())
 
-  async def stop(self):
-    if self._driver is not None:
-      await self.deactivate_block()
-      await self.deactivate_lid()
-      await self._driver.disconnect()
+    async def _cleanup():
+      try:
+        await self.deactivate_block()
+        await self.deactivate_lid()
+      finally:
+        await self._driver.disconnect()
       self._driver = None
+
+    stack.push_shielded_async_callback(_cleanup)
 
   async def open_lid(self):
     assert self._driver is not None

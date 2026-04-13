@@ -1,5 +1,5 @@
-import asyncio
 import logging
+import anyio
 import time
 import warnings
 from typing import List, Tuple
@@ -177,7 +177,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
 
   async def wait_for_transfer_station(self, occupied: bool = False):
     while (await self.read_plate_detection_xfer()) != occupied:
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
 
   async def read_plate_detection_xfer(self) -> bool:
     """Read Plate Detection Transfer Station (RD 1813)."""

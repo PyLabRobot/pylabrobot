@@ -1,5 +1,4 @@
 import anyio
-import asyncio
 import contextlib
 import logging
 from typing import Optional, cast

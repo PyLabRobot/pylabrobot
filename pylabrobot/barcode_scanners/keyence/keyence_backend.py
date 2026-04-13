@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import contextlib
 import logging
 import time
@@ -68,7 +68,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
             break
           elif response.strip() == "MOTOROFF":
             raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
-        await asyncio.sleep(self.poll_interval)
+          await anyio.sleep(self.poll_interval)
     except TimeoutError as e:
       raise BarcodeScannerError(
         "Failed to initialize Keyence barcode scanner: Timeout waiting for motor to turn on."

@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 from typing import Optional, Union
 
 from pylabrobot.machines.machine import Machine
@@ -71,7 +71,7 @@ class Pump(Machine):
     if duration < 0:
       raise ValueError("Duration must be positive.")
     await self.run_continuously(speed=speed)
-    await asyncio.sleep(duration)
+    await anyio.sleep(duration)
     await self.run_continuously(speed=0)
 
   async def pump_volume(self, speed: Union[float, int], volume: Union[float, int]):

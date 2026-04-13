@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import contextlib
 import ssl

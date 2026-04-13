@@ -1,5 +1,4 @@
 import anyio
-import asyncio
 import atexit
 import contextlib
 import logging
@@ -591,7 +590,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       await self.send_command("Y", f"O01{relative_y_str}")
 
     self._pos_x, self._pos_y = x, y
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self._cam is None:
@@ -807,7 +806,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
           )
 
       num_tries += 1
-      await asyncio.sleep(0.3)
+      await anyio.sleep(0.3)
     raise TimeoutError("max_image_read_attempts reached")
 
   async def capture(

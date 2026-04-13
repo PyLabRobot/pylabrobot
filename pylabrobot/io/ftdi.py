@@ -1,5 +1,4 @@
 import anyio
-import asyncio
 import contextlib
 import ctypes
 import logging

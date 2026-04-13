@@ -1,7 +1,7 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
-import asyncio
 import logging
+import anyio
 import time
 import warnings
 from typing import List, Literal, Optional, Union
@@ -264,14 +264,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     await self.io.write(command.encode() + b"\r\n")
 
     raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response = await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError("Timeout while waiting for response from scale.")
-      if raw_response != b"":
-        break
+    with anyio.fail_after(timeout):
+      while True:
+        raw_response = await self.io.readline()
+        if raw_response != b"":
+          break
+        await anyio.sleep(0.001)
     logger.debug("[scale] Received response: %s", raw_response)
     response = raw_response.decode("utf-8").strip().split()
 

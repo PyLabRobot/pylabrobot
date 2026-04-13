@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
@@ -48,7 +48,7 @@ class Shaker(ResourceHolder, Machine):
     if duration is None:
       return
 
-    await asyncio.sleep(duration)
+    await anyio.sleep(duration)
     await self.backend.stop_shaking()
     if self.backend.supports_locking:
       await self.backend.unlock_plate()

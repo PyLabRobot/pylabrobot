@@ -1,4 +1,3 @@
-import asyncio
 import anyio
 import warnings
 import contextlib

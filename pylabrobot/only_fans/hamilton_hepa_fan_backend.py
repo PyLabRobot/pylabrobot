@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import contextlib
 
 from pylabrobot.io.ftdi import FTDI
@@ -148,7 +148,7 @@ class HamiltonHepaFanBackend(FanBackend):
 
   async def send(self, command: bytes):
     await self.io.write(command)
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
     await self.io.read(64)
 
 

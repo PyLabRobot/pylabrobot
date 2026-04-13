@@ -52,14 +52,14 @@ class AnyioTestBase(_AsyncResourceBase):
   def __init_subclass__(cls):
     def wrap(wrapped):
       @pytest.mark.parametrize("backend", ["asyncio", "trio"])
-      def sync_wrapper(self, backend):
+      def sync_wrapper(self, backend, *args, **kwargs):
         lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
         async def async_wrapper():
           async with self._lifespan(**lifespan_kwargs):
             if inspect.iscoroutinefunction(wrapped):
-              return await wrapped(self)
+              return await wrapped(self, *args, **kwargs)
             else:
-              return wrapped(self)
+              return wrapped(self, *args, **kwargs)
         return anyio.run(async_wrapper, backend=backend)
       sync_wrapper.original_func = wrapped
       return sync_wrapper

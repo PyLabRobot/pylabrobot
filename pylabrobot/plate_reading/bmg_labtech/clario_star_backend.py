@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 import logging
 import math
@@ -51,35 +50,32 @@ class CLARIOstarBackend(PlateReaderBackend):
     been read so far."""
 
     d = b""
-    last_read = b""
     end_byte_found = False
-    t = time.time()
 
     # Commands are terminated with 0x0d, but this value may also occur as a part of the response.
     # Therefore, we read until we read a 0x0d, but if that's the last byte we read in a full packet,
     # we keep reading for at least one more cycle. We only check the timeout if the last read was
     # unsuccessful (i.e. keep reading if we are still getting data).
-    while True:
-      last_read = await self.io.read(25)  # 25 is max length observed in pcap
-      if len(last_read) > 0:
-        d += last_read
-        end_byte_found = d[-1] == 0x0D
-        if (
-          len(last_read) < 25 and end_byte_found
-        ):  # if we read less than 25 bytes, we're at the end
-          break
-      else:
-        # If we didn't read any data, check if the last read ended in an end byte. If so, we're done
-        if end_byte_found:
-          break
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        last_read = await self.io.read(25)  # 25 is max length observed in pcap
+        if len(last_read) > 0:
+          d += last_read
+          end_byte_found = d[-1] == 0x0D
+          if (
+            len(last_read) < 25 and end_byte_found
+          ):  # if we read less than 25 bytes, we're at the end
+            break
+        else:
+          # If we didn't read any data, check if the last read ended in an end byte. If so, we're done
+          if end_byte_found:
+            break
 
-        # Check if we've timed out.
-        if time.time() - t > timeout:
-          logger.warning("timed out reading response")
-          break
+          # If we read data, we don't wait and immediately try to read more.
+          await anyio.sleep(0.0001)
 
-        # If we read data, we don't wait and immediately try to read more.
-        await asyncio.sleep(0.0001)
+    if scope.cancel_called:
+      logger.warning("timed out reading response")
 
     logger.debug("read %s", d.hex())
 
@@ -107,7 +103,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     last_status = None
     t = time.time()
     while time.time() - t < timeout:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
       command_status = await self.read_command_status()
 
@@ -227,7 +223,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
     while True:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
       command_status = await self.read_command_status()
 
@@ -259,7 +255,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
     while True:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
       command_status = await self.read_command_status()
 

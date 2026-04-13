@@ -14,7 +14,7 @@ Features:
 - Protocol-conformant parsing for EEPROM, sensor, and status commands.
 """
 
-import asyncio
+import anyio
 import contextlib
 import logging
 import sys
@@ -188,7 +188,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       InhecoIncubatorUnitType
     ] = []  # e.g. ["incubator_mp", "incubator_shaker_dwp", ...]
 
-    self._send_command_lock = asyncio.Lock()
+    self._send_command_lock: anyio.Lock | None = None
 
   @property
   def number_of_connected_units(self) -> int:
@@ -203,6 +203,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, port: Optional[str] = None):
     await super()._enter_lifespan(stack)
+    self._send_command_lock = anyio.Lock()
     await stack.enter_async_context(self.io)
     self.io.dtr = False
     self.io.rts = False
@@ -291,8 +292,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   async def _read_full_response(self, timeout: float) -> bytes:
     """Read a complete Inheco response frame asynchronously."""
-    loop = asyncio.get_event_loop()
-    start = loop.time()
     buf = bytearray()
     expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
 
@@ -300,18 +299,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # Valid frame ends with: [hdr][0x20-0x2F][0x60]
       return len(b) >= 3 and b[-1] == 0x60 and b[-3] == expected_hdr and 0x20 <= b[-2] <= 0x2F
 
-    while True:
-      chunk = await self.io.read(16)
-      if len(chunk) > 0:
-        buf.extend(chunk)
-        if has_complete_tail(buf):
-          self.logger.debug("RECV response: %s", buf.hex(" "))
-          return bytes(buf)
+    with anyio.fail_after(timeout):
+      while True:
+        chunk = await self.io.read(16)
+        if len(chunk) > 0:
+          buf.extend(chunk)
+          if has_complete_tail(buf):
+            self.logger.debug("RECV response: %s", buf.hex(" "))
+            return bytes(buf)
 
-      if loop.time() - start > timeout:
-        raise TimeoutError(f"Timed out waiting for complete response (so far: {buf.hex(' ')})")
-
-      await asyncio.sleep(0.005)
+        await anyio.sleep(0.005)
 
   # === Encoding / Decoding ===
 
@@ -427,14 +424,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   ) -> str:
     """Send a framed command and return parsed response or raise InhecoError."""
 
+    assert self._send_command_lock is not None, "Lock not initialized. Enter context first."
     async with self._send_command_lock:
       # Use global default if not overridden
       w_timeout = write_timeout or self.write_timeout
       msg = self._build_message(command, stack_index=stack_index)
       self.logger.debug("SEND command: %s (write_timeout=%s)", msg.hex(" "), w_timeout)
 
-      await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
-      await asyncio.sleep(delay)
+      with anyio.fail_after(w_timeout):
+        await self.io.write(msg)
+      await anyio.sleep(delay)
 
       response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
       if not response:
@@ -875,7 +874,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         f"Temperature control is not enabled on the machine ({stack_index}: {self.unit_composition[stack_index]})."
       )
 
-    start_time = asyncio.get_event_loop().time()
+    start_time = anyio.current_time()
     first_temp = await self.get_temperature(sensor=sensor, stack_index=stack_index)
     initial_diff = abs(first_temp - target_temp)
     bar_width = 40
@@ -896,7 +895,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         # Compute slope (°C/sec) based on direction of travel
         delta_done = abs(current_temp - first_temp)
 
-        elapsed = asyncio.get_event_loop().time() - start_time
+        elapsed = anyio.current_time() - start_time
 
         slope = delta_done / max(elapsed, 1e-6)  # °C per second
 
@@ -919,7 +918,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         return current_temp
 
       if timeout_s is not None:
-        elapsed = asyncio.get_event_loop().time() - start_time
+        elapsed = anyio.current_time() - start_time
         if elapsed > timeout_s:
           if show_progress_bar:
             sys.stdout.write("\n[ERROR] Timeout waiting for temperature.\n")
@@ -931,7 +930,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
             f"did not reach target {target_temp:.2f} °C ±{tolerance:.2f} °C."
           )
 
-      await asyncio.sleep(interval_s)
+      await anyio.sleep(interval_s)
 
   # # # Shaking Features # # #
 
@@ -1252,7 +1251,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     is_shaking = await self.is_shaking_enabled(stack_index=stack_index)
     if is_shaking:
       await self.stop_shaking(stack_index=stack_index)
-      await asyncio.sleep(0.5)  # brief pause for firmware to settle
+      await anyio.sleep(0.5)  # brief pause for firmware to settle
 
     await self.set_shaker_pattern(
       pattern=pattern,

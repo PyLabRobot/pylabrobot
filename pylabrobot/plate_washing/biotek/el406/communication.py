@@ -53,12 +53,12 @@ class EL406CommunicationMixin:
   Requires:
     self.io: FTDI IO wrapper instance
     self.timeout: Default timeout in seconds
-    self._command_lock: asyncio.Lock for command serialization
+    self._command_lock: anyio.Lock for command serialization
   """
 
   io: FTDI | None
   timeout: float
-  _command_lock: asyncio.Lock | None
+  _command_lock: anyio.Lock | None
 
   async def _write_to_device(self, data: bytes) -> None:
     """Write bytes to the FTDI device, wrapping errors.

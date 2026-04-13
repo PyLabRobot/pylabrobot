@@ -1,5 +1,5 @@
-import asyncio
 import contextlib
+import anyio
 import logging
 import time
 import warnings
@@ -151,7 +151,7 @@ class CytomatBackend(IncubatorBackend):
         if not attempt:
           await self.reset_error_register()
           raise
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
         continue
     raise RuntimeError("Internal error - this should be unreachable.")
 
@@ -201,7 +201,7 @@ class CytomatBackend(IncubatorBackend):
       try:
         resp = await self.send_command("ch", "bs", "")
       except (CytomatCommandUnknownError, CytomatBusyError):
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
         continue
       return OverviewRegisterState.from_resp(resp)
     await self.reset_error_register()
@@ -337,7 +337,7 @@ class CytomatBackend(IncubatorBackend):
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
     while (await self.get_overview_register()).transfer_station_occupied != occupied:
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60) -> OverviewRegisterState:
     """

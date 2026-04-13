@@ -1,4 +1,3 @@
-import asyncio
 from abc import ABCMeta, abstractmethod
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from typing import (
@@ -326,19 +325,19 @@ class EVOBackend(TecanLiquidHandler):
 
     # Ensure MCA is initialized before moving
     await self.send_command(EVO.MCA, command="PIA")
-    await asyncio.sleep(0.5)
+    await anyio.sleep(0.5)
 
     # Raise MCA Z-axis first to avoid collision
     await self.send_command(EVO.MCA, command="PAA", params=[None, None, 2000])  # Raise Z-axis
-    await asyncio.sleep(1)
+    await anyio.sleep(1)
 
     # Move MCA to parking position (adjust X, Y as needed)
     await self.send_command(EVO.MCA, command="PAA", params=[6000, 1000, None])
-    await asyncio.sleep(1)
+    await anyio.sleep(1)
 
     # Stop movement to prevent drifting
     await self.send_command(EVO.MCA, command="BMA", params=[0, 0, 0])
-    await asyncio.sleep(0.5)
+    await anyio.sleep(0.5)
 
   # ============== LiquidHandlerBackend methods ==============
 

@@ -1,5 +1,5 @@
-import asyncio
 import contextlib
+import anyio
 import hashlib
 import hmac
 import logging
@@ -616,19 +616,19 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     for char in morse_code:
       if char == ".":
         await self.buzzer_on()
-        await asyncio.sleep(short_beep_duration)
+        await anyio.sleep(short_beep_duration)
         await self.buzzer_off()
       elif char == "-":
         await self.buzzer_on()
-        await asyncio.sleep(long_beep_duration)
+        await anyio.sleep(long_beep_duration)
         await self.buzzer_off()
       elif char == " ":
-        await asyncio.sleep(space_duration)
-      await asyncio.sleep(short_beep_duration)  # between letters is a short unit
+        await anyio.sleep(space_duration)
+      await anyio.sleep(short_beep_duration)  # between letters is a short unit
 
   async def continue_run(self, block_id: int):
     for _ in range(3):
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
       res = await self.send_command({"cmd": f"TBC{block_id + 1}:CONTinue"})
       if self._parse_scpi_response(res)["status"] != "OK":
         raise ValueError("Failed to continue from indefinite hold")
@@ -818,7 +818,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       self.logger.error("Failed to abort protocol")
       raise ValueError("Failed to abort protocol")
     self.logger.info("Protocol aborted")
-    await asyncio.sleep(10)
+    await anyio.sleep(10)
 
   @dataclass
   class RunProgress:
@@ -872,7 +872,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
             abs(float(block_temps[i]) - target_temps[i]) < 0.5 for i in range(len(block_temps))
           ):
             break
-          await asyncio.sleep(5)
+          await anyio.sleep(5)
         self.logger.info("Infinite hold")
         return ThermoFisherThermocyclerBackend.RunProgress(
           running=False,

@@ -47,7 +47,13 @@ Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTe
   *the whole operation* with `with anyio.fail_after`. If the timeout somehow applies to sub-parts,
   then be very careful in specifying to what they apply (and what is being done if timeouts fail).
 
+## Limitations:
+ - The Opentrons thermocycler USB backend is `asyncio`-only.
+
 ## Issues found during the refactor
+
+### Unstructured start/stop behaviours that might be better off as context manager
+- `shake` and `stop_shaking` on Agilent Biotek.
 
 ### Inconsistent "turn-off" behaviout of various machines.
 Most machines seem to turn off any ongoing actions and go back to some form of "parking position", but other machines don't:
@@ -73,3 +79,6 @@ Most machines seem to turn off any ongoing actions and go back to some form of "
  - `_enter_lifspan` extra arguments other than `stack` should be *keword-only*!
  - Have a look at all `stack.push_async_callback`, especially for `cleanup()` functions - these could often in fact be sync.
  - Verify that all cleanup logic has cancellation-shielding in place where necessary.
+
+### Things to watch out for
+- We never ever catch a cancellation without re-raising. In basic `asyncio`, that might be ok, but in structured concurrency, it never is.

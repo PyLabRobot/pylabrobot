@@ -1,4 +1,3 @@
-import asyncio
 import anyio
 import datetime
 import enum
@@ -1792,14 +1791,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       A list of exact (unrounded) minimum Y spacings in mm, one per channel,
       indexed by channel number.
     """
-    return list(
-      await asyncio.gather(
-        *(
-          self.channel_request_y_minimum_spacing(channel_idx=idx)
-          for idx in range(self.num_channels)
-        )
-      )
-    )
+    results = [None] * self.num_channels
+
+    async def _worker(idx):
+      results[idx] = await self.channel_request_y_minimum_spacing(channel_idx=idx)
+
+    async with anyio.create_task_group() as tg:
+      for idx in range(self.num_channels):
+        tg.start_soon(_worker, idx)
+
+    return cast(List[float], results)
 
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
@@ -1881,11 +1882,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       and ``dispensing_cycles``.
     """
 
-    return list(
-      await asyncio.gather(
-        *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
-      )
-    )
+    results = [None] * self.num_channels
+
+    async def _worker(idx):
+      results[idx] = await self.channel_request_cycle_counts(channel_idx=idx)
+
+    async with anyio.create_task_group() as tg:
+      for idx in range(self.num_channels):
+        tg.start_soon(_worker, idx)
+
+    return cast(List[ChannelCycleCounts], results)
 
   # # # ACTION Commands # # #
 
@@ -2613,19 +2619,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"channel_idx must be between 0 and {self.num_channels - 1}, got {channels}"
         )
 
-    await asyncio.gather(
-      *[
-        self.empty_tip(
-          channel_idx=ch,
-          vol=vol,
-          flow_rate=flow_rate,
-          acceleration=acceleration,
-          current_limit=current_limit,
-          reset_dispensing_drive_after=reset_dispensing_drive_after,
+    async with anyio.create_task_group() as tg:
+      for ch in channels:
+        tg.start_soon(
+          self.empty_tip,
+          ch,
+          vol,
+          flow_rate,
+          acceleration,
+          current_limit,
+          reset_dispensing_drive_after,
         )
-        for ch in channels
-      ]
-    )
 
   # # # Channel Liquid Handling Commands # # #
 
@@ -9338,7 +9342,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
 
       # Wait before checking again
-      await asyncio.sleep(check_interval)
+      await anyio.sleep(check_interval)
 
       # Check for presence again
       detected_rails = set(await self.request_presence_of_carriers_on_deck())

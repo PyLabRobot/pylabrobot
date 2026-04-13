@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import contextlib
 import ctypes
 import json
@@ -39,7 +39,7 @@ class Access2Backend(LoaderBackend):
       r = await self.io.read(1)
       x += r
       if r == b"":
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
       if x == b"" and (time.time() - start) > self.timeout:
         raise TimeoutError("No data received within the specified timeout period")
     return x
@@ -401,7 +401,7 @@ class VSpinBackend(CentrifugeBackend):
       else:
         if end_byte_found or time.time() - start_time > timeout:
           break
-        await asyncio.sleep(0.0001)
+        await anyio.sleep(0.0001)
 
     logger.debug("Read %s", data.hex())
     return data
@@ -440,7 +440,7 @@ class VSpinBackend(CentrifugeBackend):
     await self._send_command(bytes.fromhex("aa022600062e"))  # same as unlock door
 
     # we can't tell when the door is fully open, so we just wait a bit
-    await asyncio.sleep(4)
+    await anyio.sleep(4)
 
   async def close_door(self):
     if not (await self.get_door_open()):
@@ -448,7 +448,7 @@ class VSpinBackend(CentrifugeBackend):
     # used to be:                           aa022600052d
     await self._send_command(bytes.fromhex("aa022600042c"))  # same as unlock door
     # we can't tell when the door is fully closed, so we just wait a bit
-    await asyncio.sleep(2)
+    await anyio.sleep(2)
 
   async def lock_door(self):
     if await self.get_door_open():
@@ -501,7 +501,7 @@ class VSpinBackend(CentrifugeBackend):
     while (
       abs(await self.get_position() - position) > 10
     ):  # 10 tacks tolerance (10/8000 * 360 = 0.45 degrees)
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
     await self.open_door()
 
   @staticmethod
@@ -590,7 +590,7 @@ class VSpinBackend(CentrifugeBackend):
     # 3 - wait for acceleration to the set rpm
     # we also check the position to avoid waiting forever if the speed is not reached (e.g. short spin...)
     while await self.get_tachometer() < rpm * 0.95 and await self.get_position() < final_position:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
     # 4 - once the speed is reached, compute the position at which to start deceleration
     # this is different than computed above, because above we assumed constant acceleration from 0 to rpm.
@@ -602,7 +602,7 @@ class VSpinBackend(CentrifugeBackend):
 
       # then wait until we reach that position
       while await self.get_position() < decel_start_position:
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
 
     # 5 - send deceleration command
     await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
@@ -614,7 +614,7 @@ class VSpinBackend(CentrifugeBackend):
     decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
     await self._send_command(decel_command)
 
-    await asyncio.sleep(2)
+    await anyio.sleep(2)
 
     # 6 - reset position back to 0ish
     # this part is aneeded because otherwise calling go_to_position will not work after
@@ -636,7 +636,7 @@ class VSpinBackend(CentrifugeBackend):
     start = await self.get_home_position()
     num_tries = 0
     while await self.get_home_position() == start:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
       num_tries += 1
       if num_tries % 25 == 0:
         await _reset_to_zero()

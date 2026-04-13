@@ -14,7 +14,6 @@ Protocol Details:
 from __future__ import annotations
 
 import anyio
-import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncIterator
@@ -71,7 +70,7 @@ class ExperimentalBioTekEL406Backend(
     self.timeout = timeout
     self._device_id = device_id
     self.io: FTDI | None = None
-    self._command_lock: asyncio.Lock | None = None
+    self._command_lock: anyio.Lock | None = None
     self._in_batch: bool = False
 
   async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, skip_reset: bool = False):

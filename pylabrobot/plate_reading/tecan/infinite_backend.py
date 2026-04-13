@@ -6,8 +6,8 @@ This backend targets the Infinite "M" series (e.g., Infinite 200 PRO).  The
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import anyio
 import math
 import re
 import time
@@ -1033,7 +1033,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   async def _recover_transport(self) -> None:
     try:
       await self.io.stop()
-      await asyncio.sleep(0.2)
+      await anyio.sleep(0.2)
       await self.io.setup()
     except Exception:
       logger.warning("Transport recovery failed.", exc_info=True)

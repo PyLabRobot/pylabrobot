@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.concurrency import AsyncExitStackWithShielding
@@ -34,7 +34,7 @@ class Fan(Machine):
     await self.backend.turn_on(intensity=intensity)
 
     if duration is not None:
-      await asyncio.sleep(duration)
+      await anyio.sleep(duration)
       await self.backend.turn_off()
 
   async def turn_off(self):

@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import warnings
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
@@ -44,13 +44,14 @@ class BioShake(HeaterShakerBackend):
 
       # Send the command
       await self.io.write((cmd + "\r").encode("ascii"))
-      await asyncio.sleep(delay)
+      await anyio.sleep(delay)
 
       # Read and decode the response with a timeout
       try:
-        response = await asyncio.wait_for(self.io.readline(), timeout=timeout)
+        with anyio.fail_after(timeout):
+          response = await self.io.readline()
 
-      except asyncio.TimeoutError:
+      except TimeoutError:
         raise RuntimeError(f"Timed out waiting for response to '{cmd}'")
 
       decoded = response.decode("ascii", errors="ignore").strip()
@@ -98,28 +99,18 @@ class BioShake(HeaterShakerBackend):
     # Send the command
     await self.io.write(("resetDevice\r").encode("ascii"))
 
-    start = asyncio.get_event_loop().time()
-    max_seconds = 30  # How long a reset typically last
-
-    while True:
-      # Break the loop if process takes longer than 30 seconds
-      if asyncio.get_event_loop().time() - start > max_seconds:
-        raise TimeoutError("Reset did not complete in time")
-
-      try:
-        # Wait for each line with a timeout
-        response = await asyncio.wait_for(self.io.readline(), timeout=2)
-        decoded = response.decode("ascii", errors="ignore").strip()
-        await asyncio.sleep(0.1)
-
-        if len(decoded) > 0:
-          # Stop when the final message arrives
-          if "Initialization complete" in decoded:
-            break
-
-      except asyncio.TimeoutError:
-        # Keep polling if nothing arrives within timeout
-        continue
+    try:
+      with anyio.fail_after(30):
+        while True:
+          response = await self.io.readline()
+          decoded = response.decode("ascii", errors="ignore").strip()
+          await anyio.sleep(0.1)
+          if len(decoded) > 0:
+            # Stop when the final message arrives
+            if "Initialization complete" in decoded:
+              break
+    except TimeoutError:
+      raise TimeoutError("Reset did not complete in time") from None
 
   async def home(self):
     # Initialize the BioShake into home position
