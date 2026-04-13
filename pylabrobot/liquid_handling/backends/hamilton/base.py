@@ -1,7 +1,5 @@
-import asyncio
 import datetime
 import logging
-import threading
 import time
 import warnings
 import contextlib
@@ -87,7 +85,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     self.id_ = 0
 
-    self._wakeup_reader_loop: Optional[threading.Event] = None
+    self._wakeup_reader_loop: Optional[anyio.Event] = None
     self._waiting_tasks_with_id: dict[int,HamiltonTask] = {}
     self._waiting_tasks_idless: dict[str,list[HamiltonTask]] = {}
     self._tth2tti: dict[int, int] = {}  # hash to tip type index

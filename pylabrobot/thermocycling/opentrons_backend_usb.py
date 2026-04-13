@@ -1,9 +1,9 @@
 # For direct control of the Opentrons Thermocycler to any USB port.
 # Does not require an Opentrons liquid handler to use.
 
-import asyncio
-import anyio
 from typing import List, Optional
+
+import anyio
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import (

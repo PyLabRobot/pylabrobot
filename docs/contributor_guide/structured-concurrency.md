@@ -56,10 +56,6 @@ Most machines seem to turn off any ongoing actions and go back to some form of "
 
 ## TODOs in the refactor
 
-Not following a structured concurrency paradigm:
-- `InhecoSiLAInterface`
-- `SparkReaderAsync`
-
 ### References to `setup`
  - Developer docs
  - Many error messages
