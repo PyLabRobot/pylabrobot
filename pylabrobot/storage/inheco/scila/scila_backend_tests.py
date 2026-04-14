@@ -121,6 +121,10 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.backend.close(5)
 
+  async def test_maintenance(self):
+    await self.backend.maintenance()
+    self.mock_sila_interface.send_command.assert_called_with("Maintenance")
+
   async def test_request_drawer_status(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
       "<Response>"

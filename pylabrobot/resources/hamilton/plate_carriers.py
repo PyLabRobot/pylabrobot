@@ -475,6 +475,7 @@ def PLT_CAR_L5AC_P_A00(name: str) -> PlateCarrier:
       resource_size_x=126.8,
       resource_size_y=85.8,
       name_prefix=name,
+      pedestal_size_z=-4.74,
     ),
     model="PLT_CAR_L5AC_P_A00",
   )
