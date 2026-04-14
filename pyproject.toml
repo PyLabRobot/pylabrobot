@@ -25,6 +25,7 @@ all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,si
 test = [
   "pytest",
   "pytest-timeout",
+  "trio",
 ]
 dev = [
   "PyLabRobot[all,test]",
