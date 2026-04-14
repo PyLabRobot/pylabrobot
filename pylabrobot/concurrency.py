@@ -3,14 +3,17 @@ import sys
 import abc
 import warnings
 import contextlib
-import typing
+import dataclasses
 import functools
+import typing
+
+if sys.version_info >= (3, 10):
+  from typing import TypeAlias, Any
+else:
+  from typing_extensions import TypeAlias, Any
 
 import anyio
 import sniffio
-
-MachineID: typing.TypeAlias = typing.Any
-
 
 class MachineConnectionClosedError(Exception):
   """ Raised when a machine task is being aborted because the connection is, or has been closed."""
@@ -26,6 +29,16 @@ class AsyncExitStackWithShielding(contextlib.AsyncExitStack):
     self.push_async_callback(shielded_callback, *args)
 
 
+@dataclasses.dataclass(frozen=True)
+class _LifespanLifecycleTag:
+  """ Tags used to represent the lifecycle of a lifespan,
+  for accurate double-entry checking. """
+  name: str
+
+LifespanEntering = _LifespanLifecycleTag("entering")
+LifespanExiting = _LifespanLifecycleTag("exiting")
+AnonymousLifespan = _LifespanLifecycleTag("anonymous")
+
 class _AsyncResourceBase:
   """ Implementation of `AsyncResource`, but without any `__new__` to implement ABC checking. """
 
@@ -39,12 +52,27 @@ class _AsyncResourceBase:
     Subclasses should override this method to provide their own lifespan.
     Alternatively, they can provide `_enter_lifespan(stack)` which gets called with an `AsyncExitStack`.
     """
-    # typical implementation
-    async with AsyncExitStackWithShielding() as stack:
-      await self._enter_lifespan(stack, **kwargs)
-      yield
-      # there shouldn't be anything here; explicit cleanup is difficult to get right
-      # in face of exceptions and cancellation; register your cleanup when you enter.
+    # double-entry checking, using _active_lifespan as signalling mechanism.
+    # this double-entry checking here isn't strictly necessary, since usually,
+    # we always enter through __aenter__.
+    active_lifespan = getattr(self, "_active_lifespan", None)
+    if active_lifespan is None:
+      # This is a direct call to _lifespan, not going through __aenter__.
+      # we don't have access to the context manager, so we just store a tag.
+      self._active_lifespan = AnonymousLifespan
+    elif active_lifespan is not LifespanEntering:
+      raise RuntimeError(f"lifespan of {type(self).__name__} is already entered")
+
+    # main implementation
+    try:
+      async with AsyncExitStackWithShielding() as stack:
+        await self._enter_lifespan(stack, **kwargs)
+        yield self
+        # there shouldn't be anything here; explicit cleanup is difficult to get right
+        # in face of exceptions and cancellation; register your cleanup when you enter.
+    finally:
+      if self._active_lifespan is AnonymousLifespan:
+        self._active_lifespan = None
 
   async def __aenter__(self):
     """Enter the resource's lifespan.
@@ -54,9 +82,15 @@ class _AsyncResourceBase:
     """
     if getattr(self, "_active_lifespan", None) is not None:
       raise RuntimeError(f"lifespan of {type(self).__name__} is already entered")
-    active_lifespan = self._lifespan()
-    await active_lifespan.__aenter__()
-    self._active_lifespan = active_lifespan
+
+    try:
+      self._active_lifespan = LifespanEntering
+      active_lifespan = self._lifespan()
+      await active_lifespan.__aenter__()
+      self._active_lifespan = active_lifespan
+    except:
+      self._active_lifespan = None
+      raise
     return self
 
 
@@ -64,8 +98,12 @@ class _AsyncResourceBase:
     """Exit the resource's context.
     This method should never be overriden.
     """
-    ret = await self._active_lifespan.__aexit__(exc_type, exc_val, exc_tb)
-    self._active_lifespan = None
+    try:
+      active_lifespan = self._active_lifespan
+      self._active_lifespan = LifespanExiting
+      ret = await active_lifespan.__aexit__(exc_type, exc_val, exc_tb)
+    finally:
+      self._active_lifespan = None
     return ret
 
 
@@ -88,6 +126,9 @@ class AsyncResource(_AsyncResourceBase, abc.ABC):
     # Non-throwing base class implementation, so that derived classes can
     # call super()._enter_lifespan() without knowing how many classes are in the chain.
     pass
+
+
+MachineID: TypeAlias = Any
 
 
 class GlobalManager:
@@ -142,7 +183,7 @@ class GlobalManager:
       self._pending.discard(obj)
 
 
-  async def manage_context(self, obj: any):
+  async def manage_context(self, obj: Any):
     """Schedules an object's async context manager into the global task group."""
 
     stop_event = self._stop_events.get(obj)

@@ -8,13 +8,13 @@ import anyio
 
 from pylabrobot.concurrency import _AsyncResourceBase
 
-# Note: pytest doesn't like classes with __new__, so we use _AsyncResourceBase instead of AsyncResource
 def lifespan_kwargs(**kwargs):
   def decorator(func):
     func._lifespan_kwargs = kwargs
     return func
   return decorator
 
+# Note: pytest doesn't like classes with __new__, so we use _AsyncResourceBase instead of AsyncResource
 class AnyioTestBase(_AsyncResourceBase):
   """ A test base class enabling structured concurrency.
 
