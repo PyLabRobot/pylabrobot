@@ -1,11 +1,26 @@
-"""Pipette orchestration: resolve container positions and partition into executable batches.
+"""Plan the fewest X/Y moves that position each channel at its target.
 
-Multi-channel liquid handlers have physical constraints (single X carriage, minimum
-Y spacing, descending Y order by channel index) that limit which channels can act
-simultaneously.
+Multi-channel heads share one X carriage, enforce minimum pairwise Y spacing, strictly
+descending Y by channel index, and per-container geometry (including no-go zones).
+Given a list of (channel, target container) assignments, this module groups them into batches
+where each batch is a set of channels whose targets can all be reached in one X/Y move.
+A Z-axis operation (e.g. LLD probe, aspirate, dispense, ...) is then supplied as a callback
+by the caller.
 
-    targets = resolve_container_targets(containers, use_channels, channel_spacings, wrt_resource)
-    batches = plan_batches(use_channels, targets, channel_spacings, x_tolerance=0.1)
+This is formally a Minimum Exact Cover problem (equivalently, Set Partitioning in OR terminology,
+or minimum hypergraph coloring in graph theory): pairwise constraints alone reduce to
+graph coloring; container fit with no-go zones is k-ary, making it hypergraph coloring.
+Hence the enumerate-then-partition pipeline rather than 2-ary graph coloring. Intended
+for n <= ~16 channels; planning is O(2^n * n^2) in the worst case, with the branch-and-
+bound partition solver typically fast on the structured instances this module sees.
+
+    batches = plan_batches(
+      use_channels=[0, 1, 2, 5, 6, 7],
+      containers=[w0, w1, w2, w5, w6, w7],
+      channel_spacings=backend._channels_minimum_y_spacing,
+      wrt_resource=backend.deck,
+      x_tolerance=0.1,
+    )
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
 
@@ -217,7 +232,9 @@ def is_valid_batch(
       if len(cjobs) == 1 and not getattr(c, "no_go_zones", ()):
         continue  # single channel, no no-go zones — center is fine.
       offsets = compute_nonconsecutive_channel_offsets(
-        c, [use_channels[j] for j in cjobs], channel_spacings,
+        c,
+        [use_channels[j] for j in cjobs],
+        channel_spacings,
       )
       if offsets is None:
         return None
@@ -283,8 +300,13 @@ def enumerate_valid_batches(
   def backtrack(start: int, current: List[int]):
     if current:
       resolved = is_valid_batch(
-        current, use_channels, containers, channel_spacings, wrt_resource,
-        x_tolerance, resource_offsets,
+        current,
+        use_channels,
+        containers,
+        channel_spacings,
+        wrt_resource,
+        x_tolerance,
+        resource_offsets,
       )
       if resolved is None:
         return
@@ -388,7 +410,12 @@ def plan_batches(
     )
 
   valid = enumerate_valid_batches(
-    use_channels, containers, channel_spacings, wrt_resource, x_tolerance, resource_offsets,
+    use_channels,
+    containers,
+    channel_spacings,
+    wrt_resource,
+    x_tolerance,
+    resource_offsets,
   )
 
   # Every job must appear in at least one valid batch, else no partition exists.
