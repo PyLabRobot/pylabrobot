@@ -148,7 +148,7 @@ class KX2Driver(Driver):
 
   # --- drive init (called by KX2ArmBackend._on_setup after setup()) --------
 
-  async def connect_part_two(self) -> None:
+  async def _connect_part_two(self) -> None:
     """Configure PDO mapping + Elmo DS402 parameters after the CAN bus is up.
 
     Mirrors the legacy driver: unmap TPDO1, map TPDO3 (StatusWord, triggered
@@ -161,7 +161,7 @@ class KX2Driver(Driver):
     assert self._network is not None
 
     for node_id in self.node_id_list:
-      await self.can_tpdo_unmap(TPDO.TPDO1, node_id)
+      await self._can_tpdo_unmap(TPDO.TPDO1, node_id)
       await self._tpdo_map(
         TPDO.TPDO3, node_id, [TPDOMappedObject.StatusWord], TPDOTrigger.MotionComplete
       )
@@ -170,22 +170,22 @@ class KX2Driver(Driver):
       )
 
     for axis in MOTION_AXES:
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         int(axis), 24768, 0, "-1", ElmoObjectDataType.INTEGER16
       )
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         int(axis), 24772, 2, "16", ElmoObjectDataType.UNSIGNED32
       )
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         int(axis), 24772, 3, "0", ElmoObjectDataType.UNSIGNED8
       )
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         int(axis), 24772, 5, "8", ElmoObjectDataType.UNSIGNED8
       )
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         int(axis), 24770, 2, "-3", ElmoObjectDataType.INTEGER8
       )
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         int(axis), 24669, 0, "1", ElmoObjectDataType.INTEGER16
       )
 
@@ -207,7 +207,7 @@ class KX2Driver(Driver):
       self._network.subscribe(tpdo3_cob, self._make_tpdo3_callback(nid))
 
     self._pvt_mode = True
-    await self.pvt_select_mode(False)
+    await self._pvt_select_mode(False)
 
   def _make_tpdo3_callback(self, node_id: int):
     def _cb(cob_id: int, data: bytes, timestamp: float) -> None:
@@ -226,7 +226,7 @@ class KX2Driver(Driver):
 
   # --- PDO configuration (pure SDO writes; no library-PDO machinery) ------
 
-  async def can_tpdo_unmap(self, tpdo: TPDO, node_id: int) -> None:
+  async def _can_tpdo_unmap(self, tpdo: TPDO, node_id: int) -> None:
     cob_type_int = {
       TPDO.TPDO1: COBType.TPDO1.value,
       TPDO.TPDO3: COBType.TPDO3.value,
@@ -235,8 +235,8 @@ class KX2Driver(Driver):
     node_id &= 0x7F
     num1 = ((cob_type_int & 0x01) << 7) | node_id
     num2 = (cob_type_int >> 1) & 0x07
-    await self.can_sdo_download(node_id, 0x18, tpdo.value - 1, 1, [num1, num2, 0, 0xC0])
-    await self.can_sdo_download(node_id, 0x1A, tpdo.value - 1, 0, [0, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x18, tpdo.value - 1, 1, [num1, num2, 0, 0xC0])
+    await self._can_sdo_download(node_id, 0x1A, tpdo.value - 1, 0, [0, 0, 0, 0])
 
   async def _rpdo_map(
     self,
@@ -252,22 +252,22 @@ class KX2Driver(Driver):
     cob_id_11 = ((int(cob_type) & 0x0F) << 7) | (node_id & 0x7F)
 
     # Disable PDO (bit 31 set)
-    await self.can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(0x80000000 | cob_id_11))
+    await self._can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(0x80000000 | cob_id_11))
     # Clear mapping count
-    await self.can_sdo_download(node_id, 0x16, rpdo_idx, 0, [0, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x16, rpdo_idx, 0, [0, 0, 0, 0])
     # Transmission type
-    await self.can_sdo_download(
+    await self._can_sdo_download(
       node_id, 0x14, rpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
     )
     # Mapped objects
     for i, mo in enumerate(mapped_objects):
-      await self.can_sdo_download(node_id, 0x16, rpdo_idx, i + 1, _u32_le(int(mo)))
+      await self._can_sdo_download(node_id, 0x16, rpdo_idx, i + 1, _u32_le(int(mo)))
     # Mapping count
-    await self.can_sdo_download(
+    await self._can_sdo_download(
       node_id, 0x16, rpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
     )
     # Re-enable (clear bit 31)
-    await self.can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(cob_id_11))
+    await self._can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(cob_id_11))
 
   async def _tpdo_map(
     self,
@@ -287,32 +287,32 @@ class KX2Driver(Driver):
     event_mask = 1 << int(event_trigger)
 
     # Disable TPDO (bit 30 + 31)
-    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(0xC0000000 | cob_id_11))
+    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(0xC0000000 | cob_id_11))
     # Clear mapping count
-    await self.can_sdo_download(node_id, 0x1A, tpdo_idx, 0, [0, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x1A, tpdo_idx, 0, [0, 0, 0, 0])
     # Transmission type
-    await self.can_sdo_download(
+    await self._can_sdo_download(
       node_id, 0x18, tpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
     )
     # Inhibit / delay 100us
-    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 3, [delay_100_us & 0xFF, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 3, [delay_100_us & 0xFF, 0, 0, 0])
     # Event timer (ms)
-    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 5, [event_timer_ms & 0xFF, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 5, [event_timer_ms & 0xFF, 0, 0, 0])
     # Vendor event mask at 0x2F20:<tpdo_num>
-    await self.can_sdo_download(node_id, 0x2F, 0x20, int(tpdo) & 0xFF, _u32_le(event_mask))
+    await self._can_sdo_download(node_id, 0x2F, 0x20, int(tpdo) & 0xFF, _u32_le(event_mask))
     # Mapped objects
     for i, mo in enumerate(mapped_objects):
-      await self.can_sdo_download(node_id, 0x1A, tpdo_idx, i + 1, _u32_le(int(mo)))
+      await self._can_sdo_download(node_id, 0x1A, tpdo_idx, i + 1, _u32_le(int(mo)))
     # Mapping count
-    await self.can_sdo_download(
+    await self._can_sdo_download(
       node_id, 0x1A, tpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
     )
     # Re-enable (clear bits 30 + 31)
-    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(cob_id_11))
+    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(cob_id_11))
 
   # --- SDO -----------------------------------------------------------------
 
-  async def can_sdo_upload(
+  async def _can_sdo_upload(
     self,
     node_id: int,
     object_byte0: int,
@@ -325,7 +325,7 @@ class KX2Driver(Driver):
     # transfers + abort codes); run off the event loop.
     return await asyncio.to_thread(node.sdo.upload, index, sub_index)
 
-  async def can_sdo_download(
+  async def _can_sdo_download(
     self,
     node_id: int,
     object_byte0: int,
@@ -337,7 +337,7 @@ class KX2Driver(Driver):
     node = self._nodes[node_id]
     await asyncio.to_thread(node.sdo.download, index, sub_index, bytes(data_byte))
 
-  async def can_sdo_upload_elmo_object(
+  async def _can_sdo_upload_elmo_object(
     self,
     node_id: int,
     elmo_object_int: int,
@@ -346,7 +346,7 @@ class KX2Driver(Driver):
   ) -> str:
     obj_byte0 = elmo_object_int >> 8
     obj_byte1 = elmo_object_int & 0xFF
-    data_bytes = await self.can_sdo_upload(node_id, obj_byte0, obj_byte1, sub_index)
+    data_bytes = await self._can_sdo_upload(node_id, obj_byte0, obj_byte1, sub_index)
 
     if len(data_bytes) == 0:
       return ""
@@ -368,7 +368,7 @@ class KX2Driver(Driver):
       return "".join(chr(b) for b in data_bytes)
     raise CanError(f"Unsupported data type for SDO Read conversion: {data_type.name}")
 
-  async def can_sdo_download_elmo_object(
+  async def _can_sdo_download_elmo_object(
     self,
     node_id: int,
     elmo_object_int: int,
@@ -399,7 +399,7 @@ class KX2Driver(Driver):
 
     obj_byte0 = elmo_object_int >> 8
     obj_byte1 = elmo_object_int & 0xFF
-    await self.can_sdo_download(node_id, obj_byte0, obj_byte1, sub_index, data_bytes)
+    await self._can_sdo_download(node_id, obj_byte0, obj_byte1, sub_index, data_bytes)
 
   # --- Elmo binary interpreter (vendor protocol on TPDO2/RPDO2) ------------
 
@@ -584,20 +584,20 @@ class KX2Driver(Driver):
 
   # --- raw CANopen sends (SYNC + RPDO1 controlword) -----------------------
 
-  async def can_sync(self) -> None:
+  async def _can_sync(self) -> None:
     if self._network is None:
-      raise CanError("can_sync called before setup()")
+      raise CanError("_can_sync called before setup()")
     # SYNC object (0x080), no data.
     self._network.send_message(0x80, b"")
 
-  async def control_word_set(self, node_id: int, value: int, sync: bool = True) -> None:
+  async def _control_word_set(self, node_id: int, value: int, sync: bool = True) -> None:
     if self._network is None:
-      raise CanError("control_word_set called before setup()")
+      raise CanError("_control_word_set called before setup()")
     val_bytes = value.to_bytes(2, byteorder="little")
     # RPDO1 COB-ID = (4 << 7) | node_id = 0x200 + node_id
     self._network.send_message(0x200 + node_id, val_bytes)
     if sync:
-      await self.can_sync()
+      await self._can_sync()
 
   # --- DS402 / motor control ----------------------------------------------
 
@@ -613,7 +613,7 @@ class KX2Driver(Driver):
     val = await self.binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
     return int(round(float(val)))
 
-  async def motor_set_move_direction(
+  async def _motor_set_move_direction(
     self, node_id: int, direction: JointMoveDirection
   ) -> None:
     val_str = "1"
@@ -623,11 +623,11 @@ class KX2Driver(Driver):
       val_str = "129"
     elif direction == JointMoveDirection.ShortestWay:
       val_str = "193"
-    await self.can_sdo_download_elmo_object(
+    await self._can_sdo_download_elmo_object(
       node_id, 24818, 0, val_str, ElmoObjectDataType.UNSIGNED16
     )
 
-  async def motor_set_homed_status(self, axis: KX2Axis, status: HomeStatus) -> None:
+  async def _motor_set_homed_status(self, axis: KX2Axis, status: HomeStatus) -> None:
     val = "0"
     if status == HomeStatus.Homed:
       val = "1"
@@ -643,7 +643,7 @@ class KX2Driver(Driver):
       return HomeStatus.InitializedWithoutHoming
     return HomeStatus.NotHomed
 
-  async def motor_reset_encoder_position(self, axis: KX2Axis, position: float) -> None:
+  async def _motor_reset_encoder_position(self, axis: KX2Axis, position: float) -> None:
     await self.binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "0")
     await self.binary_interpreter(int(axis), "HM", 3, CmdType.ValSet, "0")
     await self.binary_interpreter(int(axis), "HM", 4, CmdType.ValSet, "0")
@@ -714,7 +714,7 @@ class KX2Driver(Driver):
       return f"Unknown fault code: {val} (0x{val:08X})"
     return "  ".join(faults)
 
-  async def motor_enable(self, axis: KX2Axis, state: bool) -> None:
+  async def _motor_enable(self, axis: KX2Axis, state: bool) -> None:
     if not isinstance(axis, KX2Axis):
       raise TypeError(f"axis must be KX2Axis, got {type(axis).__name__}")
 
@@ -733,7 +733,7 @@ class KX2Driver(Driver):
         # provided one, but `network.send_message` is synchronous so we insert
         # our own small delay.
         for cw in (0, 128, 6, 7, 15):
-          await self.control_word_set(node_id=int(axis), value=cw)
+          await self._control_word_set(node_id=int(axis), value=cw)
           await asyncio.sleep(0.01)
       await asyncio.sleep(0.1)
       left = await self.binary_interpreter(
@@ -751,9 +751,9 @@ class KX2Driver(Driver):
           pass
       else:
         # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
-        await self.control_word_set(node_id=int(axis), value=7)
+        await self._control_word_set(node_id=int(axis), value=7)
         await asyncio.sleep(0.01)
-        await self.control_word_set(node_id=int(axis), value=6)
+        await self._control_word_set(node_id=int(axis), value=6)
       await asyncio.sleep(0.1)
       left = await self.binary_interpreter(
         node_id=int(axis), cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
@@ -763,24 +763,24 @@ class KX2Driver(Driver):
 
   # --- motion primitives --------------------------------------------------
 
-  async def pvt_select_mode(self, enable: bool) -> None:
+  async def _pvt_select_mode(self, enable: bool) -> None:
     """Enable/disable PVT mode on all motion axes via standard SDO writes."""
     if enable:
       if not self._pvt_mode:
         for axis in MOTION_AXES:
           # 0x60C4 sub 6 = 0 (disable interpolation buffer)
-          await self.can_sdo_download(int(axis), 0x60, 0xC4, 0x06, [0])
+          await self._can_sdo_download(int(axis), 0x60, 0xC4, 0x06, [0])
           # 0x6060 = 7 (interpolated position mode)
-          await self.can_sdo_download(int(axis), 0x60, 0x60, 0x00, [7])
+          await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [7])
         self._pvt_mode = True
       else:
         for axis in MOTION_AXES:
-          await self.can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
+          await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
     else:
       if self._pvt_mode:
         for axis in MOTION_AXES:
           # 0x6060 = 1 (profile position mode)
-          await self.can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
+          await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
         self._pvt_mode = False
 
   async def _wait_for_moves_done(self, timeout: float) -> None:
@@ -803,38 +803,38 @@ class KX2Driver(Driver):
     relative_bit = 0x40 if relative else 0
     for i, nid in enumerate(axes):
       last = i == (len(axes) - 1)
-      await self.control_word_set(int(nid), 47 + relative_bit, sync=last)
+      await self._control_word_set(int(nid), 47 + relative_bit, sync=last)
     for i, nid in enumerate(axes):
       last = i == (len(axes) - 1)
-      await self.control_word_set(int(nid), 47 + 0x10 + relative_bit, sync=last)
+      await self._control_word_set(int(nid), 47 + 0x10 + relative_bit, sync=last)
 
-  async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
-    await self.pvt_select_mode(False)
+  async def _motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
+    await self._pvt_select_mode(False)
 
     for move in plan.moves:
-      await self.motor_set_move_direction(move.axis.value, move.direction)
+      await self._motor_set_move_direction(move.axis.value, move.direction)
       # 0x607A = Target Position (24698 decimal)
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         move.axis.value, 24698, 0, str(int(move.position)), ElmoObjectDataType.INTEGER32,
       )
       # 0x6081 = Profile Velocity (24705 decimal)
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         move.axis.value, 24705, 0, str(int(move.velocity)), ElmoObjectDataType.UNSIGNED32,
       )
       acc = max(int(move.acceleration), 100)
       # 0x6083 = Profile Acceleration (24707 decimal)
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         move.axis.value, 24707, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
       )
       # 0x6084 = Profile Deceleration (24708 decimal)
-      await self.can_sdo_download_elmo_object(
+      await self._can_sdo_download_elmo_object(
         move.axis.value, 24708, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
       )
 
     await self._motors_move_start([move.axis for move in plan.moves])
     await self._wait_for_moves_done(timeout=plan.move_time + 2)
 
-  async def user_program_run(
+  async def _user_program_run(
     self,
     axis: KX2Axis,
     user_function: str,
@@ -872,7 +872,7 @@ class KX2Driver(Driver):
     await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="1")
 
     cmd = f"XQ##{user_function}{arg_str}"
-    logger.debug("user_program_run: %s", cmd)
+    logger.debug("_user_program_run: %s", cmd)
     await self.os_interpreter(node_id, cmd, query=False)
 
     last_line_completed = 0
@@ -904,7 +904,7 @@ class KX2Driver(Driver):
 
     return 0
 
-  async def motor_hard_stop_search(
+  async def _motor_hard_stop_search(
     self,
     axis: KX2Axis,
     srch_vel: int,
@@ -922,7 +922,7 @@ class KX2Driver(Driver):
 
     try:
       params = [str(int(hs_pe)), str(int(timeout * 1000))]
-      last_line = await self.user_program_run(axis, "Home", params, int(timeout), True)
+      last_line = await self._user_program_run(axis, "Home", params, int(timeout), True)
       if last_line in [1, 2, 3]:
         raise RuntimeError(f"Homing Script Error {34 + last_line}")
 
@@ -937,7 +937,7 @@ class KX2Driver(Driver):
       await asyncio.sleep(0.3)
       await self.binary_interpreter(int(axis), "ER", 3, CmdType.ValSet, str(int(max_pe)))
 
-  async def motor_index_search(
+  async def _motor_index_search(
     self,
     axis: KX2Axis,
     srch_vel: int,
@@ -976,7 +976,7 @@ class KX2Driver(Driver):
     captured_position = int(float(cap))
     return one_revolution, captured_position
 
-  async def home_motor(
+  async def _home_motor(
     self,
     axis: KX2Axis,
     hs_offset: int,
@@ -995,16 +995,16 @@ class KX2Driver(Driver):
       raise RuntimeError("Error 43")
 
     try:
-      await self.motor_hard_stop_search(axis, srch_vel, srch_acc, max_pe, hs_pe, timeout)
+      await self._motor_hard_stop_search(axis, srch_vel, srch_acc, max_pe, hs_pe, timeout)
     except Exception as e:
       fault = await self.motor_get_fault(axis)
       if fault is not None:
         raise RuntimeError(fault)
       raise e
 
-    await self.motor_enable(axis=axis, state=True)
+    await self._motor_enable(axis=axis, state=True)
 
-    await self.motors_move_absolute_execute(
+    await self._motors_move_absolute_execute(
       plan=MotorsMovePlan(
         moves=[
           MotorMoveParam(
@@ -1020,9 +1020,9 @@ class KX2Driver(Driver):
     )
 
     is_positive = hs_offset > 0
-    await self.motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
+    await self._motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
 
-    await self.motors_move_absolute_execute(
+    await self._motors_move_absolute_execute(
       plan=MotorsMovePlan(
         moves=[
           MotorMoveParam(
@@ -1036,8 +1036,8 @@ class KX2Driver(Driver):
         ]
       )
     )
-    await self.motor_reset_encoder_position(axis, home_pos)
-    await self.motor_set_homed_status(axis, HomeStatus.Homed)
+    await self._motor_reset_encoder_position(axis, home_pos)
+    await self._motor_set_homed_status(axis, HomeStatus.Homed)
 
   # --- I/O -----------------------------------------------------------------
 
