@@ -564,13 +564,20 @@ class KX2CanopenDriver(Driver):
     # 0x1023:1 = OSCommand.Command. ASCII-encoded; library segments if >4 bytes.
     await asyncio.to_thread(node.sdo.download, 0x1023, 1, cmd.encode("ascii"))
 
-    # 0x1023:2 = OSCommand.Status (U8). Nonzero indicates an error.
+    # 0x1023:2 = OSCommand.Status (U8). This is the CiA-301 OS-command lifecycle
+    # byte, not an error flag:
+    #   0x00 no reply yet / no error   0x01 command is being executed
+    #   0x02 completed, no reply       0x03 completed with reply
+    #   0xFF no command
+    # For async `XQ##` dispatches the drive returns 0x01 immediately, which is
+    # expected — the caller (e.g. `user_program_run`) polls PS/UI afterward for
+    # completion. SDO abort codes surface as `SdoAbortedError` from the upload
+    # itself; we don't need to inspect the byte. Log at debug for diagnostics.
     status_bytes = await asyncio.to_thread(node.sdo.upload, 0x1023, 2)
-    status = int.from_bytes(status_bytes[:1], "little")
-    if status != 0:
-      raise CanError(
-        f"OS Interpreter command '{cmd}' returned status {status} from node {node_id}"
-      )
+    logger.debug(
+      "os_interpreter node=%d cmd=%r status=0x%02X",
+      node_id, cmd, int.from_bytes(status_bytes[:1], "little"),
+    )
 
     if not query:
       return ""
