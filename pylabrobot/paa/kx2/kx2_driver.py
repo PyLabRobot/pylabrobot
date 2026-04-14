@@ -1,12 +1,8 @@
-"""canopen-library-backed KX2 driver.
+"""Low-level CAN transport + CANopen/DS402 drive primitives for the PAA KX2.
 
-Parallel implementation of :class:`KX2Driver` (the hand-rolled CAN transport in
-``kx2_backend.py``). Built side-by-side so the legacy driver stays working
-during development. When this class passes the hello-world notebook end-to-end
-on real hardware, `kx2.py` will be switched over and the legacy driver deleted.
-
-Public method surface intentionally mirrors ``KX2Driver`` so ``KX2ArmBackend``
-can be pointed at either without any other code changes.
+Uses the `canopen` library (python-can bus + CANopen SDO/PDO/NMT/EMCY).
+Paired with :class:`KX2ArmBackend` in ``kx2_backend.py`` via the standard
+``Device`` + ``Driver`` + capability-backend split.
 """
 
 from __future__ import annotations
@@ -55,13 +51,13 @@ _GROUP_NODE_ID = 10
 logger = logging.getLogger(__name__)
 
 
-class KX2CanopenDriver(Driver):
-  """KX2 driver built on the `canopen` library.
+class KX2Driver(Driver):
+  """CANopen-library-backed KX2 drive transport.
 
   Uses `canopen.Network` for bus ownership + NMT, `node.sdo` for SDO traffic,
-  `node.tpdo`/`node.rpdo` for PDO mapping, and `network.send_message` /
-  `network.subscribe` for the vendor-specific Elmo binary interpreter
-  (non-standard, on TPDO2/RPDO2).
+  raw SDO writes to 0x14xx/0x16xx/0x18xx/0x1Axx for PDO mapping, and
+  `network.send_message` / `network.subscribe` for the vendor-specific Elmo
+  binary interpreter (non-standard, rides on TPDO2/RPDO2 COB-IDs).
   """
 
   def __init__(
