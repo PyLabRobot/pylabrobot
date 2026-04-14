@@ -20,7 +20,7 @@ instead, all cleanup is registered with the `stack`.
 
 For historical reasons and to support certain interactive use-cases,
 we still expose a `setup`/`stop` API in subclasses of `Machine`.
-Note however that, with this API, you give away control over the scope of the async work: For example, there is no way to reliably catch all errors in background tasks, or to handle cancellation of tasks consistenly. Do not use that in production scripts.
+Note however that, with this API, you give away control over the scope of the async work: For example, there is no way to reliably catch all errors in background tasks, or to handle cancellation of tasks consistently. Do not use that in production scripts.
 
 ## Testing
 
@@ -42,7 +42,7 @@ Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTe
 
 ## Notes from the refactor:
 - Timeout semantics may have changed slightly. Usually, that's the case because previous
-  timeout semantics are often confusing or ill specififed (because without structured concurrency,
+  timeout semantics are often confusing or ill specified (because without structured concurrency,
   it's very hard to implement good timeout semantics). We tried to stay as close as possible to the previous semantics. That said, going forward, one `timeout` arguments should always be a trigger to take a step back and think about semantics: Is it supposed to be a timeout on the full operation? Then, *don't* put a `timeout` argument at all! Users are better served by wrapping
   *the whole operation* with `with anyio.fail_after`. If the timeout somehow applies to sub-parts,
   then be very careful in specifying to what they apply (and what is being done if timeouts fail).
@@ -71,12 +71,12 @@ Most machines seem to turn off any ongoing actions and go back to some form of "
  - Async tests now *require* pytest - let's remove all calls to `unittest.main()`
 
 ### Check for other signs that are frowned upon with structured concurrency:
- - Anthing involving `time.time()` or `time.monotonic()` - should at least be `anyio.current_time()`, but often is a sign for a busy-loop or manual timeout handling.
+ - Anything involving `time.time()` or `time.monotonic()` - should at least be `anyio.current_time()`, but often is a sign for a busy-loop or manual timeout handling.
  - Check for use of `threading`.
  - Check for use of `asyncio` - avoid raw `asyncio` APIs, should all be converted to `anyio` or something else that is loop-agnostic.
 
 ### Verification checks for changes already made
- - `_enter_lifspan` extra arguments other than `stack` should be *keword-only*!
+ - `_enter_lifespan` extra arguments other than `stack` should be *keyword-only*!
  - Have a look at all `stack.push_async_callback`, especially for `cleanup()` functions - these could often in fact be sync.
  - Verify that all cleanup logic has cancellation-shielding in place where necessary.
 

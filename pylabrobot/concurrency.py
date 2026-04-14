@@ -77,7 +77,7 @@ class _AsyncResourceBase:
   async def __aenter__(self):
     """Enter the resource's lifespan.
     This method should not be overridden by subclasses;
-    separate `__aenter__` and `__aexit__` calls are difficult to implement correcty,
+    separate `__aenter__` and `__aexit__` calls are difficult to implement correctly,
     implement `_lifespan` or `_enter_lifespan` instead.
     """
     if getattr(self, "_active_lifespan", None) is not None:
@@ -96,7 +96,7 @@ class _AsyncResourceBase:
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
     """Exit the resource's context.
-    This method should never be overriden.
+    This method should never be overridden.
     """
     try:
       active_lifespan = self._active_lifespan
