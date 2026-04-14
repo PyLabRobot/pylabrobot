@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+import time
 from typing import Dict, List, Optional, Tuple, Union
 
 import canopen
@@ -540,7 +541,38 @@ class KX2CanopenDriver(Driver):
     *,
     query: bool = False,
   ) -> str:
-    raise NotImplementedError
+    """Run an OS interpreter command via standard CiA-301 OS Command objects.
+
+    Uses 0x1024 (OS Command Mode) + 0x1023 (OSCommand record) — the library
+    handles the expedited vs. segmented SDO choice and toggle-bit dance
+    automatically, replacing ~260 lines of hand-rolled segmented SDO in the
+    legacy driver.
+    """
+    if node_id not in self._nodes:
+      raise CanError(f"os_interpreter: unknown node {node_id}")
+    node = self._nodes[node_id]
+
+    # 0x1024:0 = OS Command Mode. Elmo/legacy code sets this to 0 ("evaluate
+    # immediately") before each command.
+    await asyncio.to_thread(node.sdo.download, 0x1024, 0, bytes([0]))
+
+    # 0x1023:1 = OSCommand.Command. ASCII-encoded; library segments if >4 bytes.
+    await asyncio.to_thread(node.sdo.download, 0x1023, 1, cmd.encode("ascii"))
+
+    # 0x1023:2 = OSCommand.Status (U8). Nonzero indicates an error.
+    status_bytes = await asyncio.to_thread(node.sdo.upload, 0x1023, 2)
+    status = int.from_bytes(status_bytes[:1], "little")
+    if status != 0:
+      raise CanError(
+        f"OS Interpreter command '{cmd}' returned status {status} from node {node_id}"
+      )
+
+    if not query:
+      return ""
+
+    # 0x1023:3 = OSCommand.Reply (DOMAIN / string). Library handles segmented.
+    reply = await asyncio.to_thread(node.sdo.upload, 0x1023, 3)
+    return reply.decode("ascii", errors="replace").rstrip("\x00").rstrip()
 
   # --- raw CANopen sends (SYNC + RPDO1 controlword) -----------------------
 
@@ -786,6 +818,148 @@ class KX2CanopenDriver(Driver):
     await self._motors_move_start([move.axis for move in plan.moves])
     await self._wait_for_moves_done(timeout=plan.move_time + 2)
 
+  async def user_program_run(
+    self,
+    axis: KX2Axis,
+    user_function: str,
+    params=None,
+    timeout_sec: int = 0,
+    wait_until_done: bool = False,
+  ) -> int:
+    if not isinstance(axis, int):
+      raise ValueError("axis must be int")
+    if axis < 0 or axis > 255:
+      raise ValueError("axis must be in [0, 255]")
+    node_id = int(axis)
+
+    ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+    if ps == -2:
+      raise CanError(f"Axis {axis}: controller reported PS=-2 (not ready / unavailable)")
+
+    if ps != -1:
+      await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="0")
+      t0 = time.monotonic()
+      while (time.monotonic() - t0) < 3.0:
+        ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+        if ps == -1:
+          break
+        await asyncio.sleep(0.01)
+      else:
+        raise CanError(f"Axis {axis}: did not reach idle state (PS=-1) within 3s (last PS={ps})")
+
+    arg_str = ""
+    if params:
+      parts = [str(p) for p in params]
+      if parts:
+        arg_str = f"({','.join(parts)})"
+
+    await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="1")
+
+    cmd = f"XQ##{user_function}{arg_str}"
+    logger.debug("user_program_run: %s", cmd)
+    await self.os_interpreter(node_id, cmd, query=False)
+
+    last_line_completed = 0
+    if wait_until_done:
+      t0 = time.monotonic()
+      ps = 1
+      ui1 = 1
+      while ps == 1 and ui1 == 1 and (time.monotonic() - t0) < float(timeout_sec):
+        ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+        ui1 = int(await self.binary_interpreter(node_id, "UI", 1, CmdType.ValQuery))
+        await asyncio.sleep(0.01)
+
+      expr_raw = await self.binary_interpreter(node_id, "UI", 2, CmdType.ValQuery)
+      try:
+        last_line_completed = int(str(expr_raw).strip())
+      except Exception:
+        last_line_completed = 0
+
+      if ui1 != 0:
+        raise CanError(
+          f"Axis {axis}: user program ended with UI[1]={ui1} (expected 0), "
+          f"last_line={last_line_completed}"
+        )
+      if ps == 1 and ui1 == 1:
+        raise CanError(
+          f"Axis {axis}: timeout waiting for '{user_function}' after {timeout_sec}s, "
+          f"last_line={last_line_completed}"
+        )
+
+    return 0
+
+  async def motor_hard_stop_search(
+    self,
+    axis: KX2Axis,
+    srch_vel: int,
+    srch_acc: int,
+    max_pe: int,
+    hs_pe: int,
+    timeout: float,
+  ) -> None:
+    await self.binary_interpreter(int(axis), "ER", 3, CmdType.ValSet, str(max_pe * 10))
+    await self.binary_interpreter(int(axis), "AC", 0, CmdType.ValSet, str(srch_acc))
+    await self.binary_interpreter(int(axis), "DC", 0, CmdType.ValSet, str(srch_acc))
+    for i in [3, 4, 5, 2]:
+      await self.binary_interpreter(int(axis), "HM", i, CmdType.ValSet, "0")
+    await self.binary_interpreter(int(axis), "JV", 0, CmdType.ValSet, str(srch_vel))
+
+    try:
+      params = [str(int(hs_pe)), str(int(timeout * 1000))]
+      last_line = await self.user_program_run(axis, "Home", params, int(timeout), True)
+      if last_line in [1, 2, 3]:
+        raise RuntimeError(f"Homing Script Error {34 + last_line}")
+
+      curr_pos = await self.motor_get_current_position(int(axis))
+      await self.binary_interpreter(int(axis), "PA", 0, CmdType.ValSet, str(curr_pos))
+      await self.binary_interpreter(int(axis), "SP", 0, CmdType.ValSet, str(srch_vel))
+      await self.binary_interpreter(int(axis), "AC", 0, CmdType.ValSet, str(srch_acc))
+      await self.binary_interpreter(int(axis), "DC", 0, CmdType.ValSet, str(srch_acc))
+    finally:
+      await asyncio.sleep(0.3)
+      await self.binary_interpreter(int(axis), "BG", 0, CmdType.Execute, value="0")
+      await asyncio.sleep(0.3)
+      await self.binary_interpreter(int(axis), "ER", 3, CmdType.ValSet, str(int(max_pe)))
+
+  async def motor_index_search(
+    self,
+    axis: KX2Axis,
+    srch_vel: int,
+    srch_acc: int,
+    positive_direction: bool,
+    timeout: float,
+  ) -> Tuple[int, int]:
+    assert self._loop is not None
+    await self.binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "0")
+
+    rev = await self.binary_interpreter(int(axis), "CA", 18, CmdType.ValQuery)
+    one_revolution = int(float(rev))
+    if not positive_direction:
+      one_revolution *= -1
+
+    await self.binary_interpreter(int(axis), "PR", 1, CmdType.ValSet, str(one_revolution))
+    await self.binary_interpreter(int(axis), "SP", 0, CmdType.ValSet, str(srch_vel))
+    await self.binary_interpreter(int(axis), "AC", 0, CmdType.ValSet, str(srch_acc))
+    await self.binary_interpreter(int(axis), "DC", 0, CmdType.ValSet, str(srch_acc))
+
+    await self.binary_interpreter(int(axis), "HM", 3, CmdType.ValSet, "3")  # index only
+    await self.binary_interpreter(int(axis), "HM", 4, CmdType.ValSet, "0")
+    await self.binary_interpreter(int(axis), "HM", 5, CmdType.ValSet, "0")
+    await self.binary_interpreter(int(axis), "HM", 2, CmdType.ValSet, "0")
+    await self.binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "1")  # arm
+
+    self._waiting_moves = {axis: self._loop.create_future()}
+    await self.binary_interpreter(int(axis), "BG", 0, CmdType.Execute)
+    await self._wait_for_moves_done(timeout)
+
+    left = await self.binary_interpreter(int(axis), "HM", 1, CmdType.ValQuery)
+    if left != 0:
+      raise RuntimeError("Homing Failure: Failed to finish index pulse search.")
+
+    cap = await self.binary_interpreter(int(axis), "HM", 7, CmdType.ValQuery)
+    captured_position = int(float(cap))
+    return one_revolution, captured_position
+
   async def home_motor(
     self,
     axis: KX2Axis,
@@ -800,7 +974,54 @@ class KX2CanopenDriver(Driver):
     offset_acc: int,
     timeout: float,
   ) -> None:
-    raise NotImplementedError("home_motor: pending os_interpreter + hard-stop/index search port")
+    left = await self.binary_interpreter(int(axis), "CA", 41, CmdType.ValQuery)
+    if left == 24:
+      raise RuntimeError("Error 43")
+
+    try:
+      await self.motor_hard_stop_search(axis, srch_vel, srch_acc, max_pe, hs_pe, timeout)
+    except Exception as e:
+      fault = await self.motor_get_fault(axis)
+      if fault is not None:
+        raise RuntimeError(fault)
+      raise e
+
+    await self.motor_enable(axis=axis, state=True)
+
+    await self.motors_move_absolute_execute(
+      plan=MotorsMovePlan(
+        moves=[
+          MotorMoveParam(
+            axis=KX2Axis(axis),
+            position=hs_offset,
+            velocity=offset_vel,
+            acceleration=offset_acc,
+            relative=False,
+            direction=JointMoveDirection.ShortestWay,
+          )
+        ],
+      )
+    )
+
+    is_positive = hs_offset > 0
+    await self.motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
+
+    await self.motors_move_absolute_execute(
+      plan=MotorsMovePlan(
+        moves=[
+          MotorMoveParam(
+            axis=KX2Axis(axis),
+            position=ind_offset,
+            velocity=offset_vel,
+            acceleration=offset_acc,
+            relative=False,
+            direction=JointMoveDirection.ShortestWay,
+          )
+        ]
+      )
+    )
+    await self.motor_reset_encoder_position(axis, home_pos)
+    await self.motor_set_homed_status(axis, HomeStatus.Homed)
 
   # --- I/O -----------------------------------------------------------------
 
