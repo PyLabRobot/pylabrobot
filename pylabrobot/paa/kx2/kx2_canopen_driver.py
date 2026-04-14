@@ -133,7 +133,12 @@ class KX2CanopenDriver(Driver):
       )
 
     for nid in self.node_id_list:
-      self._nodes[nid] = network.add_node(nid, canopen.ObjectDictionary())
+      node = network.add_node(nid, canopen.ObjectDictionary())
+      # canopen's default SDO response timeout is 0.3s, which is tight for
+      # drives that queue vendor objects (Elmo 0x20xx/0x30xx). Match the 1s
+      # the legacy driver used for its own futures.
+      node.sdo.RESPONSE_TIMEOUT = 1.0
+      self._nodes[nid] = node
       # Elmo binary-interpreter response subscription.
       network.subscribe(_BI_RESPONSE_COB_BASE + nid, self._make_bi_callback(nid))
 
