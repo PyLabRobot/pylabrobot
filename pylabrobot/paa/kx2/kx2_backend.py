@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import math
 import struct
 import time
@@ -19,6 +20,8 @@ from pylabrobot.capabilities.arms.standard import GripperLocation as GripperPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.resources import Coordinate, Rotation
+
+logger = logging.getLogger(__name__)
 
 
 class KX2Axis(IntEnum):
@@ -539,16 +542,14 @@ class KX2Driver(Driver):
           message.fut.set_result(None)
       except Exception as e:
         error_msg = f"CAN Write Error: {e}"
-        print(f"CAN Write Error: {e}")
+        logger.error(error_msg)
         if message.fut and not message.fut.done():
           message.fut.set_exception(CanError(error_msg))
 
   async def _process_emcy_message(self, node_id: int, message: can.Message) -> None:
-    print("EMCY received!!")
-
     data = message.data
     if not data or len(data) < 8:
-      print(f"EMCY malformed: expected 8 bytes, got {0 if not data else len(data)}")
+      logger.warning("EMCY malformed: expected 8 bytes, got %d", 0 if not data else len(data))
       return
 
     def u16_le(i: int) -> int:
@@ -702,12 +703,13 @@ class KX2Driver(Driver):
       event.cemr_description = desc
       event.cemr_emcy_msg = emcy
       event.cemr_disable_motors = disable_motors
-      print(event)
+      logger.debug("EMCY event: %s", event)
 
-    print(emcy)
-    print(
-      f"EMCY node={node_id} desc='{desc}' disable_motors={disable_motors} suppress_event={suppress_event}"
+    logger.info(
+      "EMCY node=%d desc=%r disable_motors=%s suppress_event=%s",
+      node_id, desc, disable_motors, suppress_event,
     )
+    logger.debug("EMCY payload: %s", emcy)
 
   async def _process_tpdo_message(self, node_id: int, message: can.Message, response_type: int):
     tpdo_index = {0: TPDO.TPDO1, 4: TPDO.TPDO3, 6: TPDO.TPDO4}[response_type - 3]
@@ -739,8 +741,6 @@ class KX2Driver(Driver):
         )
         num2 += 4
       if num4_ is None:
-        # print("Failed to read TPDO mapped object value, probably fine....")
-        # raise CanError("Failed to read TPDO mapped object value.")
         continue
       num4 = num4_
 
@@ -811,7 +811,9 @@ class KX2Driver(Driver):
               fut = self._waiting_moves[KX2Axis(node_id)]
               if not fut.done():
                 fut.set_result(None)
-              print(f"Digital input {index4} enabled motor move done for node {node_id}")
+              logger.debug(
+                "Digital input %d enabled motor move done for node %d", index4, node_id
+              )
 
           self.input_state[node_idx] = num6
 
@@ -1002,7 +1004,7 @@ class KX2Driver(Driver):
       try:
         message = await asyncio.to_thread(self.can_device.recv, timeout=1.0)
       except Exception as e:
-        print(f"CAN Read Error: {e}")
+        logger.error("CAN Read Error: %s", e)
         raise CanError(f"CAN Read Error: {e}")
 
       if message is None:  # timeout
@@ -1013,7 +1015,7 @@ class KX2Driver(Driver):
         node_id = message.arbitration_id & 0x7F
 
         if response_type == 0:
-          print("NMT message received, ignoring")
+          logger.debug("NMT message received, ignoring")
         elif response_type == 1:
           await self._process_emcy_message(node_id=node_id, message=message)
         elif response_type in {3, 7, 9}:
@@ -1027,9 +1029,11 @@ class KX2Driver(Driver):
         elif response_type == 14:
           await self._process_motor_drive_restarted(node_id=node_id, message=message)
         else:
-          print(f"Unknown CAN message type received: {response_type}")
-      except Exception as e:
-        print(f"Error processing CAN message (arb_id={message.arbitration_id:#x}): {e}")
+          logger.warning("Unknown CAN message type received: %s", response_type)
+      except Exception:
+        logger.exception(
+          "Error processing CAN message (arb_id=%#x)", message.arbitration_id
+        )
 
   async def can_write(
     self,
@@ -1252,7 +1256,7 @@ class KX2Driver(Driver):
     await self.disconnect()
 
   async def _raise_an_event(self, event_data: EventData):
-    print(f"Raising event: {event_data}")
+    logger.info("Raising event: %s", event_data)
 
     # TODO: on move error / emergency, we should set the indicator light and disable motors
 
@@ -2619,10 +2623,8 @@ class KX2Driver(Driver):
     arg_str = ""
     if params:
       parts = [str(p) for p in params]
-      print(parts)
       if parts:
         arg_str = f"({','.join(parts)})"
-      print(arg_str)
 
     # Arm UI[1]=1 then execute XQ
     await self.binary_interpreter(
@@ -2635,7 +2637,7 @@ class KX2Driver(Driver):
     )
 
     cmd = f"XQ##{user_function}{arg_str}"
-    print(cmd)
+    logger.debug("user_program_run: %s", cmd)
     await self.os_interpreter(node_id, cmd, query=False)
 
     last_line_completed = 0
@@ -3047,7 +3049,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       try:
         await self.driver.motor_enable(axis=axis, state=True)
       except Exception as e:
-        print(f"Error enabling motor on axis {axis}: {e}")
+        logger.warning("Error enabling motor on axis %s: %s", axis, e)
 
     await self.servo_gripper_initialize()
 
@@ -3055,7 +3057,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     try:
       await self.driver.motor_enable(axis=KX2Axis.SERVO_GRIPPER, state=True)
     except Exception as e:
-      print(f"Error enabling servo gripper motor on node {KX2Axis.SERVO_GRIPPER}: {e}")
+      logger.warning(
+        "Error enabling servo gripper motor on node %s: %s", KX2Axis.SERVO_GRIPPER, e
+      )
 
     await self.servo_gripper_home()
 
@@ -3144,7 +3148,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         motor_command="MS",
         index=1,
       )
-      print(f"Servo Gripper Motor Status: {motor_status}")
+      logger.debug("Servo gripper motor status: %s", motor_status)
 
       if motor_status in {0, 1}:
         max_force_percentage = await self.get_servo_gripper_max_force()
@@ -3323,8 +3327,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     # Pass 2: per-axis parameters
     for axis in nodes:
-      print()
-      print("axis", axis)
+      logger.debug("Reading parameters for axis %s", axis)
 
       # UI[5..10] digital inputs
       for ui_idx in range(5, 11):
@@ -3561,8 +3564,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     r = int(r)
     num2 = not (r & 0x4000 == 0x4000)
     num3 = not (r & 0x8000 == 0x8000)
-    if not r == 8438016:
-      print("!!! not the same")
+    if r != 8438016:
+      logger.warning("get_estop_state: SR register unexpected value %d (expected 8438016)", r)
     return num2 == False and num3 == False
 
   async def motor_send_command(
@@ -3576,16 +3579,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     low_priority: bool = False,
   ) -> str:
     if isinstance(node_id, KX2Axis):
-      print("node_id not int:", node_id, type(node_id))
       node_id = int(node_id)
-    print(
-      "motor send command",
-      node_id,
-      motor_command,
-      index,
-      value,
-      val_type == ValType.Float,
-      f"({val_type})",
+    logger.debug(
+      "motor_send_command node=%d cmd=%s[%d] value=%r val_type=%s",
+      node_id, motor_command, index, value, val_type,
     )
 
     cmd_u = motor_command.upper()
@@ -3684,7 +3681,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       return self.convert_elbow_angle_to_position(elbow_angle_deg=raw / c)
     else:
       if c == 0:
-        print("node", axis, "has conversion factor of 0")
+        logger.warning("Axis %s has conversion factor of 0", axis)
         return 0
       else:
         return raw / c
@@ -3921,7 +3918,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     cmd_vel_pct: float,
     cmd_accel_pct: float,
   ) -> None:
-    print("cmd", cmd_pos)
+    logger.debug("motors_move_joint cmd_pos=%s", cmd_pos)
     plan = await self.calculate_move_abs_all_axes(
       cmd_pos=cmd_pos,
       cmd_vel_pct=cmd_vel_pct,
