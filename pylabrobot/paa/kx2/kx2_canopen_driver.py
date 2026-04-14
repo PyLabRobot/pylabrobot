@@ -22,6 +22,7 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.paa.kx2.kx2_backend import (
   MOTION_AXES,
+  COBType,
   CanError,
   CmdType,
   ElmoObjectDataType,
@@ -30,8 +31,18 @@ from pylabrobot.paa.kx2.kx2_backend import (
   KX2Axis,
   MotorMoveParam,
   MotorsMovePlan,
+  PDOTransmissionType,
+  RPDO,
+  RPDOMappedObject,
+  TPDO,
+  TPDOMappedObject,
+  TPDOTrigger,
   ValType,
 )
+
+
+def _u32_le(value: int) -> List[int]:
+  return list((value & 0xFFFFFFFF).to_bytes(4, byteorder="little", signed=False))
 
 # Vendor-specific Elmo binary interpreter rides on PDO2 COB-IDs (non-standard).
 # Request: RPDO2 = (6 << 7) | node_id  = 0x300 + node_id
@@ -136,7 +147,166 @@ class KX2CanopenDriver(Driver):
   # --- drive init (called by KX2ArmBackend._on_setup after setup()) --------
 
   async def connect_part_two(self) -> None:
-    raise NotImplementedError
+    """Configure PDO mapping + Elmo DS402 parameters after the CAN bus is up.
+
+    Mirrors the legacy driver: unmap TPDO1, map TPDO3 (StatusWord, triggered
+    on MotionComplete) and TPDO4 (DigitalInputs, triggered on edge). Then
+    program Elmo vendor objects that set interpolation config, and finally
+    map RPDO1 (ControlWord) and RPDO3 (interpolated target position+velocity)
+    per motion axis. Subscribe to each node's TPDO3 cob_id so move-done
+    completes `_waiting_moves` futures.
+    """
+    assert self._network is not None
+
+    for node_id in self.node_id_list:
+      await self.can_tpdo_unmap(TPDO.TPDO1, node_id)
+      await self._tpdo_map(
+        TPDO.TPDO3, node_id, [TPDOMappedObject.StatusWord], TPDOTrigger.MotionComplete
+      )
+      await self._tpdo_map(
+        TPDO.TPDO4, node_id, [TPDOMappedObject.DigitalInputs], TPDOTrigger.DigitalInputEvent
+      )
+
+    for axis in MOTION_AXES:
+      await self.can_sdo_download_elmo_object(
+        int(axis), 24768, 0, "-1", ElmoObjectDataType.INTEGER16
+      )
+      await self.can_sdo_download_elmo_object(
+        int(axis), 24772, 2, "16", ElmoObjectDataType.UNSIGNED32
+      )
+      await self.can_sdo_download_elmo_object(
+        int(axis), 24772, 3, "0", ElmoObjectDataType.UNSIGNED8
+      )
+      await self.can_sdo_download_elmo_object(
+        int(axis), 24772, 5, "8", ElmoObjectDataType.UNSIGNED8
+      )
+      await self.can_sdo_download_elmo_object(
+        int(axis), 24770, 2, "-3", ElmoObjectDataType.INTEGER8
+      )
+      await self.can_sdo_download_elmo_object(
+        int(axis), 24669, 0, "1", ElmoObjectDataType.INTEGER16
+      )
+
+    for axis in MOTION_AXES:
+      await self._rpdo_map(
+        RPDO.RPDO1, int(axis), [RPDOMappedObject.ControlWord],
+        PDOTransmissionType.SynchronousCyclic,
+      )
+      await self._rpdo_map(
+        RPDO.RPDO3, int(axis),
+        [RPDOMappedObject.TargetPositionIP, RPDOMappedObject.TargetVelocityIP],
+        PDOTransmissionType.EventDrivenDev,
+      )
+
+    # TPDO3 subscription: StatusWord frames arrive on MotionComplete trigger,
+    # so any TPDO3 on an axis with a pending waiting_move completes it.
+    for nid in self.node_id_list:
+      tpdo3_cob = ((int(COBType.TPDO3) & 0x0F) << 7) | (nid & 0x7F)
+      self._network.subscribe(tpdo3_cob, self._make_tpdo3_callback(nid))
+
+    self._pvt_mode = True
+    await self.pvt_select_mode(False)
+
+  def _make_tpdo3_callback(self, node_id: int):
+    def _cb(cob_id: int, data: bytes, timestamp: float) -> None:
+      if self._loop is None:
+        return
+      self._loop.call_soon_threadsafe(self._dispatch_tpdo3, node_id)
+    return _cb
+
+  def _dispatch_tpdo3(self, node_id: int) -> None:
+    axis = KX2Axis(node_id) if node_id in {a.value for a in KX2Axis} else None
+    if axis is None:
+      return
+    fut = self._waiting_moves.get(axis)
+    if fut is not None and not fut.done():
+      fut.set_result(None)
+
+  # --- PDO configuration (pure SDO writes; no library-PDO machinery) ------
+
+  async def can_tpdo_unmap(self, tpdo: TPDO, node_id: int) -> None:
+    cob_type_int = {
+      TPDO.TPDO1: COBType.TPDO1.value,
+      TPDO.TPDO3: COBType.TPDO3.value,
+      TPDO.TPDO4: COBType.TPDO4.value,
+    }[tpdo]
+    node_id &= 0x7F
+    num1 = ((cob_type_int & 0x01) << 7) | node_id
+    num2 = (cob_type_int >> 1) & 0x07
+    await self.can_sdo_download(node_id, 0x18, tpdo.value - 1, 1, [num1, num2, 0, 0xC0])
+    await self.can_sdo_download(node_id, 0x1A, tpdo.value - 1, 0, [0, 0, 0, 0])
+
+  async def _rpdo_map(
+    self,
+    rpdo: RPDO,
+    node_id: int,
+    mapped_objects: List[RPDOMappedObject],
+    transmission_type: PDOTransmissionType,
+  ) -> None:
+    rpdo_idx = (int(rpdo) - 1) & 0xFF
+    cob_type = {
+      RPDO.RPDO1: COBType.RPDO1, RPDO.RPDO3: COBType.RPDO3, RPDO.RPDO4: COBType.RPDO4,
+    }[rpdo]
+    cob_id_11 = ((int(cob_type) & 0x0F) << 7) | (node_id & 0x7F)
+
+    # Disable PDO (bit 31 set)
+    await self.can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(0x80000000 | cob_id_11))
+    # Clear mapping count
+    await self.can_sdo_download(node_id, 0x16, rpdo_idx, 0, [0, 0, 0, 0])
+    # Transmission type
+    await self.can_sdo_download(
+      node_id, 0x14, rpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
+    )
+    # Mapped objects
+    for i, mo in enumerate(mapped_objects):
+      await self.can_sdo_download(node_id, 0x16, rpdo_idx, i + 1, _u32_le(int(mo)))
+    # Mapping count
+    await self.can_sdo_download(
+      node_id, 0x16, rpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
+    )
+    # Re-enable (clear bit 31)
+    await self.can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(cob_id_11))
+
+  async def _tpdo_map(
+    self,
+    tpdo: TPDO,
+    node_id: int,
+    mapped_objects: List[TPDOMappedObject],
+    event_trigger: TPDOTrigger,
+    event_timer_ms: int = 0,
+    delay_100_us: int = 0,
+    transmission_type: PDOTransmissionType = PDOTransmissionType.EventDrivenDev,
+  ) -> None:
+    tpdo_idx = (int(tpdo) - 1) & 0xFF
+    cob_type = {
+      TPDO.TPDO1: COBType.TPDO1, TPDO.TPDO3: COBType.TPDO3, TPDO.TPDO4: COBType.TPDO4,
+    }[tpdo]
+    cob_id_11 = ((int(cob_type) & 0x0F) << 7) | (node_id & 0x7F)
+    event_mask = 1 << int(event_trigger)
+
+    # Disable TPDO (bit 30 + 31)
+    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(0xC0000000 | cob_id_11))
+    # Clear mapping count
+    await self.can_sdo_download(node_id, 0x1A, tpdo_idx, 0, [0, 0, 0, 0])
+    # Transmission type
+    await self.can_sdo_download(
+      node_id, 0x18, tpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
+    )
+    # Inhibit / delay 100us
+    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 3, [delay_100_us & 0xFF, 0, 0, 0])
+    # Event timer (ms)
+    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 5, [event_timer_ms & 0xFF, 0, 0, 0])
+    # Vendor event mask at 0x2F20:<tpdo_num>
+    await self.can_sdo_download(node_id, 0x2F, 0x20, int(tpdo) & 0xFF, _u32_le(event_mask))
+    # Mapped objects
+    for i, mo in enumerate(mapped_objects):
+      await self.can_sdo_download(node_id, 0x1A, tpdo_idx, i + 1, _u32_le(int(mo)))
+    # Mapping count
+    await self.can_sdo_download(
+      node_id, 0x1A, tpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
+    )
+    # Re-enable (clear bits 30 + 31)
+    await self.can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(cob_id_11))
 
   # --- SDO -----------------------------------------------------------------
 
