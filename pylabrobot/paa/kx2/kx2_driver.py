@@ -727,8 +727,14 @@ class KX2Driver(Driver):
       if use_bi:
         await self.binary_interpreter(axis, "MO", 0, CmdType.ValSet, "1")
       else:
+        # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
+        # The drive needs ≥1 CANopen cycle between transitions to update its
+        # state machine; without a gap the legacy driver's queue serialization
+        # provided one, but `network.send_message` is synchronous so we insert
+        # our own small delay.
         for cw in (0, 128, 6, 7, 15):
           await self.control_word_set(node_id=int(axis), value=cw)
+          await asyncio.sleep(0.01)
       await asyncio.sleep(0.1)
       left = await self.binary_interpreter(
         node_id=int(axis), cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
@@ -744,7 +750,9 @@ class KX2Driver(Driver):
         except Exception:
           pass
       else:
+        # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
         await self.control_word_set(node_id=int(axis), value=7)
+        await asyncio.sleep(0.01)
         await self.control_word_set(node_id=int(axis), value=6)
       await asyncio.sleep(0.1)
       left = await self.binary_interpreter(
