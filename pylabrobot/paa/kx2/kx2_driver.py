@@ -432,7 +432,7 @@ class KX2Driver(Driver):
     if fut is not None and not fut.done():
       fut.set_result(value_str)
 
-  async def binary_interpreter(
+  async def _binary_interpreter(
     self,
     node_id: int,
     cmd: str,
@@ -535,7 +535,7 @@ class KX2Driver(Driver):
         )
     return float(value) if is_float else int(float(value))
 
-  async def os_interpreter(
+  async def _os_interpreter(
     self,
     node_id: int,
     cmd: str,
@@ -1041,16 +1041,16 @@ class KX2Driver(Driver):
 
   # --- I/O -----------------------------------------------------------------
 
-  async def read_input(self, node_id: int, input_num: int) -> bool:
+  async def _read_input(self, node_id: int, input_num: int) -> bool:
     left = await self.binary_interpreter(node_id, "IB", input_num, CmdType.ValQuery)
     return left == 1
 
-  async def read_output(self, node_id: int, output_num: int) -> bool:
+  async def _read_output(self, node_id: int, output_num: int) -> bool:
     expression = await self.binary_interpreter(node_id, "OP", 0, CmdType.ValQuery)
     val = int(expression)
     mask = 1 << (output_num - 1)
     return (val & mask) == mask
 
-  async def set_output(self, node_id: int, output_num: int, state: bool) -> Union[str, float]:
+  async def _set_output(self, node_id: int, output_num: int, state: bool) -> Union[str, float]:
     val = "1" if state else "0"
     return await self.binary_interpreter(node_id, "OB", output_num, CmdType.ValSet, val)
