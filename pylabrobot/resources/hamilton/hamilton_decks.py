@@ -13,7 +13,7 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 _RAILS_WIDTH = 22.5  # space between rails (mm)
@@ -89,15 +89,14 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       if z_top > Z_MOVEMENT_LIMIT:
         logger.warning(
-          "Resource '%s' is very high on the deck: %s mm. Be careful when " "traversing the deck.",
+          "Resource '%s' is very high on the deck: %s mm. Be careful when traversing the deck.",
           resource.name,
           z_top,
         )
 
       if z_top > Z_GRAB_LIMIT:
         logger.warning(
-          "Resource '%s' is very high on the deck: %s mm. Be careful when "
-          "grabbing this resource.",
+          "Resource '%s' is very high on the deck: %s mm. Be careful when grabbing this resource.",
           resource.name,
           z_top,
         )
@@ -208,8 +207,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
             ]
           ):
             raise ValueError(
-              f"Location {resource_location} is already occupied by resource "
-              f"'{og_resource.name}'."
+              f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
             )
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)

@@ -6,6 +6,8 @@ It includes attributes for the barcode data, symbology, and its position on the 
 from dataclasses import dataclass
 from typing import Literal
 
+from pylabrobot.serializer import SerializableMixin
+
 BarcodePosition = Literal["right", "front", "left", "back", "bottom", "top"]
 
 Barcode1DSymbology = Literal[
@@ -22,7 +24,7 @@ Barcode1DSymbology = Literal[
 
 
 @dataclass
-class Barcode:
+class Barcode(SerializableMixin):
   data: str
   symbology: str
   position_on_resource: BarcodePosition
@@ -33,14 +35,6 @@ class Barcode:
       "symbology": self.symbology,
       "position_on_resource": self.position_on_resource,
     }
-
-  @staticmethod
-  def deserialize(data: dict) -> "Barcode":
-    return Barcode(
-      data=data["data"],
-      symbology=data["symbology"],
-      position_on_resource=data["position_on_resource"],
-    )
 
   def __str__(self) -> str:
     return f'Barcode(data="{self.data}", symbology="{self.symbology}", position_on_resource="{self.position_on_resource}")'

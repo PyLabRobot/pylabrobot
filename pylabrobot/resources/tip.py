@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from pylabrobot.resources.volume_tracker import VolumeTracker
+from pylabrobot.serializer import SerializableMixin
 
 
 @dataclass
-class Tip:
+class Tip(SerializableMixin):
   """A single tip.
 
   Attributes:

@@ -2,11 +2,11 @@
 
 These instructions describe how to install PyLabRobot.
 
-Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons and Tecans, see {ref}`below <using-the-firmware-interface>`.
+Note that there are additional installation steps for using the USB interface to Hamiltons and Tecans, see {ref}`below <using-the-usb-interface>`.
 
 ## Installing PyLabRobot
 
-It is highly recommended that you install PyLabRobot in a virtual environment.
+It is highly recommended that you install PyLabRobot in a virtual environment rather than using system python.
 
 Here's how to create a virtual environment using `venv`:
 
@@ -17,9 +17,54 @@ python -m venv env
 source env/bin/activate  # on Windows: .\env\Scripts\activate
 ```
 
+### From PyPI
+
+This is the recommended way to install PyLabRobot. It is the easiest and most stable way to get started.
+
+The following will install PyLabRobot:
+
+```bash
+pip install pylabrobot
+```
+
+If you want to use PLR on physical hardware, you need install the additional dependencies for those. See the example below for how to install the dependencies for the USB interface:
+
+```bash
+pip install "pylabrobot[usb]"
+```
+
+You can install multiple dependencies at once by separating them with a comma:
+
+```bash
+pip install "pylabrobot[serial,usb]"
+```
+
+Different machines use different communication modes. Replace `[usb]` with one of the following items to install the desired dependencies. Find specific information for the machines you are using on their respective documentation pages.
+
+| Group | Packages | When you need it |
+|-------|----------|-----------------|
+| `serial` | pyserial | Serial devices: e.g. BioShake, Cytomat, Inheco (serial mode), Hamilton Tilt Module, Cole Parmer Masterflex, A4S Sealer, XPeel Peeler |
+| `usb` | pyusb, libusb-package | USB devices: e.g. Hamilton STAR/STARlet, Tecan EVO (firmware) |
+| `ftdi` | pylibftdi, pyusb | FTDI devices: e.g. BioTek Synergy H1 plate reader |
+| `hid` | hid | HID devices: e.g. Inheco Incubator/Shaker (HID mode) |
+| `modbus` | pymodbus | Modbus devices: e.g. Agrow Pump Array |
+| `opentrons` | opentrons-http-api-client | e.g. Opentrons backend |
+| `cytation-microscopy` | numpy (1.26), opencv-python | Cytation imager |
+| `sila` | zeroconf, grpcio | SiLA devices |
+| `pico` | opencv-python, numpy, sila | ImageXpress Pico microscope |
+| `dev` | All of the above + testing/linting tools | Development |
+
+Or install all dependencies:
+
+```bash
+pip install 'pylabrobot[all]'
+```
+
+Cytation microscopy is not included in the `all` group because it requires an older version of numpy. If you want to use Cytation imaging features, install those dependencies separately through `pip install "pylabrobot[cytation-microscopy]"`.
+
 ### From source
 
-Alternatively, you can install PyLabRobot from source. This is particularly useful if you want to contribute to the project.
+You can install PyLabRobot from source. This is particularly useful if you want to contribute to the project or if you want to use the latest features that haven't been released on PyPI yet.
 
 ```bash
 git clone https://github.com/pylabrobot/pylabrobot.git
@@ -27,62 +72,19 @@ cd pylabrobot
 pip install -e ".[dev]"
 ```
 
+This will install PyLabRobot in editable mode, which means that any changes you make to the source code will be reflected in your environment without needing to reinstall. It will also install all the dependencies needed for development, testing and building documentation. See above for more information on the different dependency groups.
+
 See [CONTRIBUTING.md](/contributor_guide/contributing) for specific instructions on testing, documentation and development.
+(using-the-usb-interface)=
 
-### Using pip (often outdated NOT recommended)
-
-> The PyPI package is often out of date. Please install from source (see above).
-
-The following will install PyLabRobot and the essential dependencies:
-
-```bash
-pip install pylabrobot
-```
-
-If you want to build documentation or run tests, you need install the additional
-dependencies. Also using pip:
-
-```bash
-pip install "pylabrobot[docs]"
-pip install "pylabrobot[testing]"
-```
-
-There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.
-
-- `fw`: Needed for firmware control over Hamilton robots.
-- `http`: Needed for the HTTP backend.
-- `websockets`: Needed for the WebSocket backend.
-- `simulation`: Needed for the simulation backend.
-- `opentrons`: Needed for the Opentrons backend.
-- `server`: Needed for LH server, an HTTP front end to LH.
-- `agrow`: Needed for the AgrowPumpArray backend.
-- `plate_reading`: Needed to interact with the CLARIO Star plate reader.
-- `inheco`: Needed for the Inheco backend.
-- `dev`: Everything you need for development.
-- `all`: Everything. May not be available on all platforms.
-
-To install multiple dependencies, separate them with a comma:
-
-```bash
-pip install 'pylabrobot[fw,server]'
-```
-
-Or install all dependencies at once:
-
-```bash
-pip install 'pylabrobot[all]'
-```
-
-(using-the-firmware-interface)=
-
-## Using the firmware interface with Hamilton or Tecan robots
+## Using the USB interface
 
 If you want to use the firmware version of the Hamilton or Tecan interfaces, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
 
-Reminder: when you are using the firmware version, make sure to install the firmware dependencies as follows:
+First, install the USB dependencies:
 
 ```bash
-pip install pylabrobot[fw]
+pip install pylabrobot[usb]
 ```
 
 ### On Linux
@@ -131,7 +133,7 @@ People have reported issues with not being able to find the machine on macOS 15 
 
 #### Uninstalling
 
-_These instructions only apply if you are using VENUS on your computer!_
+_These instructions only apply if you are using VENUS or another vendor software on your computer!_
 
 If you ever wish to switch back from firmware command to use `pyhamilton` or plain VENUS, you have to replace the updated driver with the original Hamilton or Tecan one.
 
@@ -173,8 +175,9 @@ If you are still having trouble, please reach out on [discuss.pylabrobot.org](ht
 
 In order to use imaging on the Cytation, you need to:
 
-1. Install python 3.10
-2. Download Spinnaker SDK and install (including Python) [https://www.teledynevisionsolutions.com/products/spinnaker-sdk/](https://www.teledynevisionsolutions.com/products/spinnaker-sdk/)
-3. Install numpy==1.26 (this is an older version)
+1. Install the Aravis system library:
+   - macOS: `brew install aravis`
+   - Linux: `sudo apt-get install libaravis-dev gobject-introspection`
+2. Install the cytation-microscopy dependencies: `pip install "pylabrobot[cytation-microscopy]"` (this pulls in PyGObject, numpy, and opencv-python)
 
-If you just want to do plate reading, heating, shaknig, etc. you don't need to follow these specific steps.
+If you just want to do plate reading, heating, shaking, etc. you don't need to follow these specific steps.

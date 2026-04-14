@@ -1,5 +1,11 @@
 # Sealers
 
+## Installation
+
+```bash
+pip install pylabrobot[serial]
+```
+
 In automated wet lab workflows, **microplate sealers** are essential for preserving sample integrity.
 They prevent **evaporation**, **cross-contamination**, and **spillage**, especially during heating, shaking, storage, or robotic transport.
 
@@ -49,5 +55,4 @@ They do **not** use heat, making them faster and simpler for certain workflows.
 :maxdepth: 1
 :hidden:
 
-Azenta a4S <a4s>
 ```

@@ -1,6 +1,6 @@
 import enum
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
@@ -49,6 +49,8 @@ class Well(Container):
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE,
+    height_volume_data: Optional[Dict[float, float]] = None,
+    no_go_zones=None,
   ):
     """Create a new well.
 
@@ -66,6 +68,8 @@ class Well(Container):
         bottom
       cross_section_type: Type of the cross section of the well. If not specified, the well will be
         seen as a cylinder.
+      height_volume_data: Optional dict mapping height (mm) to volume (uL). See
+        :class:`Container` for details.
     """
 
     if isinstance(bottom_type, str):
@@ -95,6 +99,8 @@ class Well(Container):
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
       material_z_thickness=material_z_thickness,
+      height_volume_data=height_volume_data,
+      no_go_zones=no_go_zones,
     )
     self.bottom_type = bottom_type
     self.cross_section_type = cross_section_type

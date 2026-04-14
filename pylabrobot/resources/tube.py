@@ -2,7 +2,7 @@
 
 import enum
 import warnings
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
@@ -37,6 +37,8 @@ class Tube(Container):
     bottom_type: Union[TubeBottomType, str] = TubeBottomType.UNKNOWN,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
+    height_volume_data: Optional[Dict[float, float]] = None,
+    no_go_zones=None,
   ):
     """Create a new tube.
 
@@ -48,6 +50,8 @@ class Tube(Container):
       material_z_thickness: Tube base to cavity base.
       max_volume: Maximum volume of the tube.
       category: Category of the tube.
+      height_volume_data: Optional dict mapping height (mm) to volume (uL). See
+        :class:`Container` for details.
     """
     if isinstance(bottom_type, str):
       bottom_type = TubeBottomType(bottom_type)
@@ -63,6 +67,8 @@ class Tube(Container):
       model=model,
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
+      height_volume_data=height_volume_data,
+      no_go_zones=no_go_zones,
     )
     self.tracker.register_callback(self._state_updated)
 

@@ -1,0 +1,690 @@
+[
+  {
+    "vendor": "Hamilton",
+    "name": "STAR(let)",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/00_liquid-handling/hamilton-star/_hamilton-star.html",
+    "oem": "https://www.hamiltoncompany.com/microlab-star"
+  },
+  {
+    "vendor": "Hamilton",
+    "name": "Vantage",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/00_liquid-handling/hamilton-vantage/_hamilton-vantage.html",
+    "oem": "https://www.hamiltoncompany.com/microlab-vantage"
+  },
+  {
+    "vendor": "Hamilton",
+    "name": "Prep",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.hamiltoncompany.com/microlab-prep"
+  },
+  {
+    "vendor": "Hamilton",
+    "name": "Nimbus",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.hamiltoncompany.com/microlab-nimbus"
+  },
+  {
+    "vendor": "Tecan",
+    "name": "Freedom EVO",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "Basic",
+    "docs": "/user_guide/00_liquid-handling/tecan-evo/_tecan-evo.html",
+    "oem": "https://lifesciences.tecan.com/freedom-evo-platform"
+  },
+  {
+    "vendor": "Opentrons",
+    "name": "OT-2",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/00_liquid-handling/opentrons-ot2/_opentrons-ot2.html",
+    "oem": "https://opentrons.com/products/ot-2-robot"
+  },
+  {
+    "vendor": "Cole Parmer",
+    "name": "Masterflex L/S",
+    "capabilities": [
+      "pumping"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html",
+    "oem": "https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf"
+  },
+  {
+    "vendor": "Agrowtek",
+    "name": "Pump Array",
+    "capabilities": [
+      "pumping"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.agrowtek.com/index.php/products/dosing_systems/dosing-pumps/agrowdose-adi-digital-persitaltic-dosing-pumps-detail"
+  },
+  {
+    "vendor": "Agilent (BioTek)",
+    "name": "EL406",
+    "capabilities": [
+      "plate washing"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/00_liquid-handling/plate-washing/biotek-el406.html",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-el406-washer-dispenser-795212"
+  },
+  {
+    "vendor": "Brooks",
+    "name": "PreciseFlex PF400",
+    "capabilities": [
+      "arm"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html",
+    "oem": "https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/"
+  },
+  {
+    "vendor": "Brooks",
+    "name": "PreciseFlex PF3400",
+    "capabilities": [
+      "arm"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html",
+    "oem": "https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/"
+  },
+  {
+    "vendor": "PAA",
+    "name": "KX2",
+    "capabilities": [
+      "arm"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": null
+  },
+  {
+    "vendor": "Hamilton",
+    "name": "HEPA Fan",
+    "capabilities": [
+      "air filtration"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/fans/fans.html",
+    "oem": null
+  },
+  {
+    "vendor": "Inheco",
+    "name": "Thermoshake RM",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/inheco.html",
+    "oem": "https://www.inheco.com/thermoshake-classic.html"
+  },
+  {
+    "vendor": "Inheco",
+    "name": "Thermoshake",
+    "capabilities": [
+      "heating",
+      "cooling",
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/inheco.html",
+    "oem": "https://www.inheco.com/thermoshake.html"
+  },
+  {
+    "vendor": "Inheco",
+    "name": "Thermoshake AC",
+    "capabilities": [
+      "heating",
+      "cooling",
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/inheco.html",
+    "oem": "https://www.inheco.com/thermoshake-ac.html"
+  },
+  {
+    "vendor": "Opentrons",
+    "name": "Heater Shaker",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://opentrons.com/products/heater-shaker-module"
+  },
+  {
+    "vendor": "Hamilton",
+    "name": "Heater Shaker",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/hamilton.html",
+    "oem": "https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake 3000",
+    "capabilities": [
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake 3000 elm",
+    "capabilities": [
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake 3000 elm DWP",
+    "capabilities": [
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake Q1",
+    "capabilities": [
+      "heating",
+      "cooling",
+      "shaking"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake D30 elm",
+    "capabilities": [
+      "shaking"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake 5000 elm",
+    "capabilities": [
+      "shaking"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake 3000-T",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake 3000-T elm",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake D30-T elm",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "BioShake Q2",
+    "capabilities": [
+      "heating",
+      "cooling",
+      "shaking"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "Heatplate",
+    "capabilities": [
+      "heating"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "QInstruments",
+    "name": "ColdPlate",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.qinstruments.com/automation/"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat 6000",
+    "capabilities": [
+      "heating",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": "https://assets.thermofisher.com/TFS-Assets/CMD/brochures/br-90468-cytomat-2-c-lin-br90468-en.pdf"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat 6002",
+    "capabilities": [
+      "heating",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": "https://www.thermofisher.com/order/catalog/product/50075279"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat 2 C_50",
+    "capabilities": [
+      "heating",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": null
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat 2 C425",
+    "capabilities": [
+      "heating",
+      "cooling",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": "https://www.thermofisher.com/order/catalog/product/51033032"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat 2 C450 Shake",
+    "capabilities": [
+      "heating",
+      "shaking",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": "https://www.thermofisher.com/order/catalog/product/51033035"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat 5C",
+    "capabilities": [
+      "heating",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": "https://www.thermofisher.com/order/catalog/product/51031526"
+  },
+  {
+    "vendor": "Thermo/Liconic",
+    "name": "Heraeus Cytomat",
+    "capabilities": [
+      "heating",
+      "storage"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
+    "oem": null
+  },
+  {
+    "vendor": "Inheco",
+    "name": "Incubator Shaker",
+    "capabilities": [
+      "heating",
+      "shaking",
+      "storage"
+    ],
+    "status": "Mostly",
+    "docs": null,
+    "oem": "https://www.inheco.com/incubator-shaker.html"
+  },
+  {
+    "vendor": "Inheco",
+    "name": "SCILA",
+    "capabilities": [
+      "heating",
+      "shaking",
+      "storage"
+    ],
+    "status": "Mostly",
+    "docs": null,
+    "oem": "https://www.inheco.com/scila.html"
+  },
+  {
+    "vendor": "Azenta",
+    "name": "XPeel",
+    "capabilities": [
+      "peeling"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel"
+  },
+  {
+    "vendor": "Azenta",
+    "name": "a4S",
+    "capabilities": [
+      "sealing"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/sealers/a4s.html",
+    "oem": "https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s"
+  },
+  {
+    "vendor": "Opentrons",
+    "name": "Thermocycler",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://opentrons.com/products/thermocycler-module-1"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "ATC",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "ProFlex",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html"
+  },
+  {
+    "vendor": "Inheco",
+    "name": "ODTC",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.inheco.com/odtc.html"
+  },
+  {
+    "vendor": "Opentrons",
+    "name": "Temperature Module",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/01_material-handling/temperature.html",
+    "oem": "https://opentrons.com/products/temperature-module-gen2"
+  },
+  {
+    "vendor": "Inheco",
+    "name": "CPAC",
+    "capabilities": [
+      "heating",
+      "cooling"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.inheco.com/cpac.html"
+  },
+  {
+    "vendor": "Hamilton",
+    "name": "Tilt Module",
+    "capabilities": [
+      "tilting"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/tilting.html",
+    "oem": "https://www.hamiltoncompany.com/other-robotics/188061"
+  },
+  {
+    "vendor": "Agilent",
+    "name": "VSpin",
+    "capabilities": [
+      "centrifuging"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/01_material-handling/centrifuge/agilent_vspin.html",
+    "oem": "https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge"
+  },
+  {
+    "vendor": "Agilent",
+    "name": "VSpin Access2 Loader",
+    "capabilities": [
+      "centrifuging"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/01_material-handling/centrifuge/agilent_vspin.html#loader",
+    "oem": "https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge"
+  },
+  {
+    "vendor": "BMG Labtech",
+    "name": "CLARIOstar Plus",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/bmg-clariostar.html",
+    "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
+  },
+  {
+    "vendor": "Agilent (BioTek)",
+    "name": "Cytation 1",
+    "capabilities": [
+      "microscopy"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/cytation.html",
+    "oem": "https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-1-cell-imaging-multimode-reader-1623200"
+  },
+  {
+    "vendor": "Agilent (BioTek)",
+    "name": "Cytation 5",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence",
+      "microscopy"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/cytation.html",
+    "oem": "https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202"
+  },
+  {
+    "vendor": "Agilent (BioTek)",
+    "name": "Synergy H1",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/synergyh1.html",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-h1-multimode-reader-1623193"
+  },
+  {
+    "vendor": "Byonoy",
+    "name": "Absorbance 96 Automate",
+    "capabilities": [
+      "absorbance"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/byonoy/absorbance.html",
+    "oem": "https://byonoy.com/absorbance-96-automate/"
+  },
+  {
+    "vendor": "Byonoy",
+    "name": "Luminescence 96",
+    "capabilities": [
+      "luminescence"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/byonoy/luminescence.html",
+    "oem": "https://byonoy.com/luminescence-96/"
+  },
+  {
+    "vendor": "Byonoy",
+    "name": "Luminescence 96 Automate",
+    "capabilities": [
+      "luminescence"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/plate-reading/byonoy/luminescence.html",
+    "oem": "https://byonoy.com/luminescence-96-automate/"
+  },
+  {
+    "vendor": "Molecular Devices",
+    "name": "SpectraMax M5e",
+    "capabilities": [
+      "absorbance",
+      "fluorescence"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers"
+  },
+  {
+    "vendor": "Molecular Devices",
+    "name": "SpectraMax 384plus",
+    "capabilities": [
+      "absorbance"
+    ],
+    "status": "Full",
+    "docs": null,
+    "oem": "https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers"
+  },
+  {
+    "vendor": "Molecular Devices",
+    "name": "ImageXpress Pico",
+    "capabilities": [
+      "microscopy"
+    ],
+    "status": "Basic",
+    "docs": "/user_guide/02_analytical/plate-reading/pico.html",
+    "oem": "https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico"
+  },
+  {
+    "vendor": "Tecan",
+    "name": "Infinite 200 PRO",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/02_analytical/plate-reading/tecan-infinite.html",
+    "oem": "https://lifesciences.tecan.com/infinite-200-pro"
+  },
+  {
+    "vendor": "Beckman Coulter",
+    "name": "CytoFLEX S",
+    "capabilities": [
+      "flow cytometry"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.beckman.com/flow-cytometry/research-flow-cytometers/cytoflex-s"
+  },
+  {
+    "vendor": "Thermo Fisher",
+    "name": "QuantStudio 5",
+    "capabilities": [
+      "qPCR"
+    ],
+    "status": "WIP",
+    "docs": null,
+    "oem": "https://www.thermofisher.com/order/catalog/product/A34322"
+  },
+  {
+    "vendor": "Mettler Toledo",
+    "name": "WXS205SDU",
+    "capabilities": [
+      "weighing"
+    ],
+    "status": "Full",
+    "docs": "/user_guide/02_analytical/scales.html#mettler-toledo-wxs205sdu",
+    "oem": "https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html"
+  }
+]

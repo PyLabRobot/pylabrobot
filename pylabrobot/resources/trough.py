@@ -1,5 +1,5 @@
 import enum
-from typing import Callable, Optional, Union
+from typing import Callable, Dict, Optional, Union
 
 from .container import Container
 
@@ -30,6 +30,8 @@ class Trough(Container):
     bottom_type: Union[TroughBottomType, str] = TroughBottomType.UNKNOWN,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
+    height_volume_data: Optional[Dict[float, float]] = None,
+    no_go_zones=None,
   ):
     if isinstance(bottom_type, str):
       bottom_type = TroughBottomType(bottom_type)
@@ -45,6 +47,15 @@ class Trough(Container):
       model=model,
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
+      height_volume_data=height_volume_data,
+      no_go_zones=no_go_zones,
     )
     self.through_base_to_container_base = through_base_to_container_base
     self.bottom_type = bottom_type
+
+  def serialize(self) -> dict:
+    data = super().serialize()
+    data["bottom_type"] = self.bottom_type.value
+    if self.through_base_to_container_base != 0:
+      data["through_base_to_container_base"] = self.through_base_to_container_base
+    return data

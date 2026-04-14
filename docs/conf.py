@@ -18,6 +18,11 @@ sys.path.insert(0, os.path.abspath(".."))
 # Allow importing local Sphinx extensions (e.g., pylabrobot_cards)
 sys.path.append(os.path.abspath("./_exts"))
 
+# Read version from version.txt
+with open(os.path.join(os.path.dirname(__file__), "..", "pylabrobot", "version.txt"), encoding="utf-8") as f:
+  version = f.read().strip()
+release = os.environ.get("DOCS_VERSION", version)
+
 # -- Project information -----------------------------------------------------
 
 project = "PyLabRobot"
@@ -42,6 +47,7 @@ extensions = [
   "IPython.sphinxext.ipython_console_highlighting",
   "sphinx_reredirects",
   "sphinx_sitemap",
+  "plr_devices",
 ]
 
 intersphinx_mapping = {
@@ -106,8 +112,13 @@ html_theme_options = {
   "use_edit_page_button": True,
   "navbar_start": ["navbar-logo"],
   "navbar_center": ["navbar-nav"],
-  "navbar_end": ["theme-switcher", "navbar-icon-links"],
+  "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
   "navbar_persistent": ["search-button"],
+  "switcher": {
+    "json_url": "https://docs.pylabrobot.org/dev/_static/switcher.json",
+    "version_match": os.environ.get("DOCS_VERSION", version),
+  },
+  "show_version_warning_banner": True,
   "icon_links": [
     {
       "name": "X",
@@ -182,6 +193,10 @@ redirects = {
   "tilting.html": "user_guide/tilting.html",
   "heating-shaking.html": "user_guide/heating_shaking.html",
   "fans.html": "user_guide/fans.html",
+}
+
+html_sidebars = {
+  "api/**": ["search-field"],
 }
 
 html_baseurl = "https://docs.pylabrobot.org/"

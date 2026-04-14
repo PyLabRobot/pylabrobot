@@ -1,12 +1,10 @@
-from dataclasses import dataclass
-from typing import Iterable
+import warnings
 
-from pylabrobot.resources import Coordinate, Rotation
+warnings.warn(
+  "Importing from pylabrobot.arms.standard is deprecated. "
+  "Use pylabrobot.capabilities.arms.standard instead.",
+  DeprecationWarning,
+  stacklevel=2,
+)
 
-JointCoords = Iterable[float]
-
-
-@dataclass
-class GripperPose:
-  location: Coordinate
-  rotation: Rotation
+from pylabrobot.capabilities.arms.standard import *  # noqa: F401,F403,E402

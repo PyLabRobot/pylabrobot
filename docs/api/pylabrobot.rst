@@ -3,24 +3,45 @@
 API
 ===
 
+Core
+----
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    device.Device
+
+
 Subpackages
 -----------
 
 .. toctree::
     :maxdepth: 1
 
+    pylabrobot.capabilities
+    pylabrobot.arms
     pylabrobot.config
-    pylabrobot.centrifuge
-    pylabrobot.machine
-    pylabrobot.heating_shaking
-    pylabrobot.liquid_handling
-    pylabrobot.plate_reading
-    pylabrobot.pumps
-    pylabrobot.only_fans
     pylabrobot.resources
-    pylabrobot.scales
-    pylabrobot.shaking
-    pylabrobot.temperature_controlling
-    pylabrobot.thermocycling
-    pylabrobot.tilting
     pylabrobot.utils
+
+Manufacturers
+-------------
+
+.. toctree::
+    :maxdepth: 1
+
+    pylabrobot.agilent
+    pylabrobot.azenta
+    pylabrobot.bmg_labtech
+    pylabrobot.brooks
+    pylabrobot.byonoy
+    pylabrobot.hamilton
+    pylabrobot.inheco
+    pylabrobot.liconic
+    pylabrobot.mettler_toledo
+    pylabrobot.molecular_devices
+    pylabrobot.opentrons
+    pylabrobot.qinstruments
+    pylabrobot.thermo_fisher

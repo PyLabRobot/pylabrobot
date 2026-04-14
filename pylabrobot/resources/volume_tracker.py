@@ -8,6 +8,7 @@ from pylabrobot.resources.errors import (
   TooLittleVolumeError,
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.serializer import SerializableMixin
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False  # type: ignore
@@ -25,14 +26,16 @@ def does_volume_tracking() -> bool:
 def no_volume_tracking():
   old_value = this.volume_tracking_enabled
   this.volume_tracking_enabled = False  # type: ignore
-  yield
-  this.volume_tracking_enabled = old_value  # type: ignore
+  try:
+    yield
+  finally:
+    this.volume_tracking_enabled = old_value  # type: ignore
 
 
 VolumeTrackerCallback = Callable[[], None]
 
 
-class VolumeTracker:
+class VolumeTracker(SerializableMixin):
   """A volume tracker tracks operations that change the volume in a container and raises errors
   if the volume operations are invalid."""
 
@@ -138,7 +141,8 @@ class VolumeTracker:
 
   def commit(self) -> None:
     """Commit the pending operations."""
-    assert not self.is_disabled, f"Volume tracker {self.thing} is disabled. Call `enable()`."
+    if self.is_disabled:
+      raise RuntimeError(f"Volume tracker {self.thing} is disabled. Call `enable()`.")
     self.volume = self.pending_volume
 
     if self._callback is not None:
@@ -146,7 +150,8 @@ class VolumeTracker:
 
   def rollback(self) -> None:
     """Rollback the pending operations."""
-    assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
+    if self.is_disabled:
+      raise RuntimeError("Volume tracker is disabled. Call `enable()`.")
     self.pending_volume = self.volume
 
   def serialize(self) -> dict:
