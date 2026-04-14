@@ -1,7 +1,7 @@
 """Tests for pipette_batch_scheduling module."""
 
 import unittest
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List
 from unittest.mock import MagicMock, patch
 
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
@@ -17,8 +17,9 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
 
-def _mock_container(cx: float, cy: float, size_y: float = 3.0,
-                    name: str = "well", no_go_zones: Iterable = ()) -> Container:
+def _mock_container(
+  cx: float, cy: float, size_y: float = 3.0, name: str = "well", no_go_zones: Iterable = ()
+) -> Container:
   """Build a mock Container at (cx, cy).
 
   Default ``size_y=3.0`` mm is below ``2 * MIN_SPACING_EDGE = 4mm`` so
@@ -83,7 +84,7 @@ class TestIsValidBatch(unittest.TestCase):
     c = _mock_container(100.0, 200.0)
     self.assertEqual(is_valid_batch([], [0], [c], self.S, DECK, x_tolerance=0.1), {})
     result = is_valid_batch([0], [0], [c], self.S, DECK, x_tolerance=0.1)
-    self.assertIsNotNone(result)
+    assert result is not None
     self.assertAlmostEqual(result[0].x, 100.0)
     self.assertAlmostEqual(result[0].y, 200.0)
 
@@ -116,20 +117,22 @@ class TestIsValidBatch(unittest.TestCase):
     cs = _containers([100.0, 100.0], [244.9, 200.0])  # 44.9mm — short
     self.assertIsNone(is_valid_batch([0, 1], [0, 3], cs, sp, DECK, x_tolerance=0.1))
 
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling."
-         "compute_nonconsecutive_channel_offsets")
+  @patch(
+    "pylabrobot.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
+  )
   def test_container_fit_failure_rejects_batch(self, mock_offsets):
     mock_offsets.return_value = None
     c = _mock_container(100.0, 200.0, size_y=3.0)
     self.assertIsNone(is_valid_batch([0, 1], [0, 1], [c, c], self.S, DECK, x_tolerance=0.1))
 
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling."
-         "compute_nonconsecutive_channel_offsets")
+  @patch(
+    "pylabrobot.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
+  )
   def test_container_fit_sets_spread_positions(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     c = _mock_container(100.0, 200.0, size_y=50.0)
     resolved = is_valid_batch([0, 1], [0, 1], [c, c], self.S, DECK, x_tolerance=0.1)
-    self.assertIsNotNone(resolved)
+    assert resolved is not None
     self.assertAlmostEqual(resolved[0].y, 204.5)
     self.assertAlmostEqual(resolved[1].y, 195.5)
 
@@ -138,9 +141,15 @@ class TestIsValidBatch(unittest.TestCase):
     c = _mock_container(100.0, 200.0)
     offsets = [Coordinate(0, 10.0, 0), Coordinate(0, -10.0, 0)]
     resolved = is_valid_batch(
-      [0, 1], [0, 1], [c, c], self.S, DECK, x_tolerance=0.1, resource_offsets=offsets,
+      [0, 1],
+      [0, 1],
+      [c, c],
+      self.S,
+      DECK,
+      x_tolerance=0.1,
+      resource_offsets=offsets,
     )
-    self.assertIsNotNone(resolved)
+    assert resolved is not None
     self.assertAlmostEqual(resolved[0].y, 210.0)
     self.assertAlmostEqual(resolved[1].y, 190.0)
 
@@ -162,8 +171,12 @@ class TestEnumerateValidBatches(unittest.TestCase):
     cs = _containers([100.0] * 3, [218.0, 209.0, 200.0])
     batches = enumerate_valid_batches([0, 1, 2], cs, self.S, DECK, x_tolerance=0.1)
     expected = {
-      frozenset([0]), frozenset([1]), frozenset([2]),
-      frozenset([0, 1]), frozenset([1, 2]), frozenset([0, 2]),
+      frozenset([0]),
+      frozenset([1]),
+      frozenset([2]),
+      frozenset([0, 1]),
+      frozenset([1, 2]),
+      frozenset([0, 2]),
       frozenset([0, 1, 2]),
     }
     self.assertEqual(set(_index_sets(batches)), expected)
@@ -206,8 +219,9 @@ class TestMinimumExactCover(unittest.TestCase):
   def test_greedy_largest_first_beaten_by_branch_and_bound(self):
     # Greedy takes {0,1,2,3} first, then {4},{5} → 3 batches.
     # Optimum is {0,1,2} + {3,4,5} = 2 batches.
-    batches = [_stub_batch(ix) for ix in
-               ([0, 1, 2, 3], [0, 1, 2], [3, 4, 5], [0], [1], [2], [3], [4], [5])]
+    batches = [
+      _stub_batch(ix) for ix in ([0, 1, 2, 3], [0, 1, 2], [3, 4, 5], [0], [1], [2], [3], [4], [5])
+    ]
     cover = minimum_exact_cover(6, batches)
     self.assertEqual(len(cover), 2)
     self.assertEqual(frozenset().union(*_index_sets(cover)), frozenset(range(6)))
@@ -219,29 +233,35 @@ class TestPlanBatches(unittest.TestCase):
   S = [9.0] * 8
 
   def test_spacing_boundary(self):
-    batches = plan_batches([0, 1], _containers([100.0] * 2, [209.0, 200.0]),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 1], _containers([100.0] * 2, [209.0, 200.0]), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 1)
-    batches = plan_batches([0, 1], _containers([100.0] * 2, [208.9, 200.0]),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 1], _containers([100.0] * 2, [208.9, 200.0]), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 2)
 
   def test_same_y_serializes(self):
-    batches = plan_batches([0, 1, 2], _containers([100.0] * 3, [200.0] * 3),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 1, 2], _containers([100.0] * 3, [200.0] * 3), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 3)
 
   def test_x_tolerance_boundary(self):
-    batches = plan_batches([0, 1], _containers([100.0, 100.05], [270.0, 261.0]),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 1], _containers([100.0, 100.05], [270.0, 261.0]), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 1)
-    batches = plan_batches([0, 1], _containers([100.0, 100.2], [270.0, 270.0]),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 1], _containers([100.0, 100.2], [270.0, 270.0]), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 2)
 
   def test_x_groups_sorted_ascending(self):
-    batches = plan_batches([0, 1, 2], _containers([300.0, 100.0, 200.0], [270.0] * 3),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 1, 2], _containers([300.0, 100.0, 200.0], [270.0] * 3), self.S, DECK, x_tolerance=0.1
+    )
     xs = [b.x_position for b in batches]
     self.assertEqual(xs, sorted(xs))
 
@@ -254,13 +274,15 @@ class TestPlanBatches(unittest.TestCase):
       plan_batches([0, 1], _containers([100.0], [200.0]), self.S, DECK, x_tolerance=0.1)
 
   def test_duplicate_channels_serialized(self):
-    batches = plan_batches([0, 0], _containers([100.0] * 2, [200.0] * 2),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 0], _containers([100.0] * 2, [200.0] * 2), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 2)
 
   def test_duplicate_channels_three_ops(self):
-    batches = plan_batches([0, 0, 0], _containers([100.0] * 3, [200.0] * 3),
-                           self.S, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 0, 0], _containers([100.0] * 3, [200.0] * 3), self.S, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 3)
 
   def test_phantoms_interpolated_at_spacing(self):
@@ -268,7 +290,9 @@ class TestPlanBatches(unittest.TestCase):
     batches = plan_batches(
       [0, 1, 2, 5, 6, 7],
       _containers([100.0] * 6, [300.0, 291.0, 282.0, 255.0, 246.0, 237.0]),
-      [9.0] * 8, DECK, x_tolerance=0.1,
+      [9.0] * 8,
+      DECK,
+      x_tolerance=0.1,
     )
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
@@ -279,16 +303,22 @@ class TestPlanBatches(unittest.TestCase):
 
   def test_phantoms_only_within_batch(self):
     # Two separate batches — no phantoms bridging them.
-    batches = plan_batches([0, 3], _containers([100.0] * 2, [200.0, 250.0]),
-                           [9.0] * 4, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 3], _containers([100.0] * 2, [200.0, 250.0]), [9.0] * 4, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 2)
     for batch in batches:
       self.assertEqual(len(batch.y_positions), 1)
 
   def test_indices_map_back_correctly(self):
     use_channels = [3, 7, 0]
-    batches = plan_batches(use_channels, _containers([100.0] * 3, [261.0, 237.0, 270.0]),
-                           [9.0] * 8, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      use_channels,
+      _containers([100.0] * 3, [261.0, 237.0, 270.0]),
+      [9.0] * 8,
+      DECK,
+      x_tolerance=0.1,
+    )
     all_indices = [idx for b in batches for idx in b.indices]
     self.assertEqual(sorted(all_indices), [0, 1, 2])
     for batch in batches:
@@ -298,25 +328,29 @@ class TestPlanBatches(unittest.TestCase):
   def test_mixed_spacing_boundary(self):
     # 1mL (ch0,1) + 5mL (ch2,3): 18mm required between ch1 and ch2.
     sp = [8.98, 8.98, 17.96, 17.96]
-    batches = plan_batches([1, 2], _containers([100.0] * 2, [217.9, 200.0]),
-                           sp, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [1, 2], _containers([100.0] * 2, [217.9, 200.0]), sp, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 2)
-    batches = plan_batches([1, 2], _containers([100.0] * 2, [218.0, 200.0]),
-                           sp, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [1, 2], _containers([100.0] * 2, [218.0, 200.0]), sp, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 1)
 
   def test_mixed_phantoms_use_pairwise_spacing(self):
     sp = [8.98, 8.98, 17.96, 17.96]
-    batches = plan_batches([0, 3], _containers([100.0] * 2, [245.0, 200.0]),
-                           sp, DECK, x_tolerance=0.1)
+    batches = plan_batches(
+      [0, 3], _containers([100.0] * 2, [245.0, 200.0]), sp, DECK, x_tolerance=0.1
+    )
     self.assertEqual(len(batches), 1)
     y = batches[0].y_positions
     # ch0→ch1: 9.0, ch1→ch2: 18.0
     self.assertAlmostEqual(y[1], 245.0 - 9.0)
     self.assertAlmostEqual(y[2], 245.0 - 9.0 - 18.0)
 
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling."
-         "compute_nonconsecutive_channel_offsets")
+  @patch(
+    "pylabrobot.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
+  )
   def test_auto_spread_same_container(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     trough = _mock_container(100.0, 200.0, size_y=50.0, name="trough")
@@ -339,13 +373,13 @@ class TestPlanBatchesNoGoZones(unittest.TestCase):
 
   S = [9.0] * 8
 
-  @patch("pylabrobot.liquid_handling.pipette_batch_scheduling."
-         "compute_nonconsecutive_channel_offsets")
+  @patch(
+    "pylabrobot.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
+  )
   def test_fits_pair_but_not_triple_in_container(self, mock_offsets):
     # Container fits any adjacent pair but not three channels at once.
     def fake_offsets(container, channels, spacings):
-      if len(channels) <= 2 and channels == sorted(channels) \
-          and channels[-1] - channels[0] <= 1:
+      if len(channels) <= 2 and channels == sorted(channels) and channels[-1] - channels[0] <= 1:
         return [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)][: len(channels)]
       return None
 
