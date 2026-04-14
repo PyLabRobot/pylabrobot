@@ -148,7 +148,7 @@ class KX2Driver(Driver):
 
   # --- drive init (called by KX2ArmBackend._on_setup after setup()) --------
 
-  async def _connect_part_two(self) -> None:
+  async def connect_part_two(self) -> None:
     """Configure PDO mapping + Elmo DS402 parameters after the CAN bus is up.
 
     Mirrors the legacy driver: unmap TPDO1, map TPDO3 (StatusWord, triggered
@@ -794,7 +794,7 @@ class KX2Driver(Driver):
       return f"Unknown fault code: {val} (0x{val:08X})"
     return "  ".join(faults)
 
-  async def _motor_enable(self, axis: KX2Axis, state: bool) -> None:
+  async def motor_enable(self, axis: KX2Axis, state: bool) -> None:
     if not isinstance(axis, KX2Axis):
       raise TypeError(f"axis must be KX2Axis, got {type(axis).__name__}")
 
@@ -888,7 +888,7 @@ class KX2Driver(Driver):
       last = i == (len(axes) - 1)
       await self._control_word_set(int(nid), 47 + 0x10 + relative_bit, sync=last)
 
-  async def _motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
+  async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
     await self._pvt_select_mode(False)
 
     for move in plan.moves:
@@ -1056,7 +1056,7 @@ class KX2Driver(Driver):
     captured_position = int(float(cap))
     return one_revolution, captured_position
 
-  async def _home_motor(
+  async def home_motor(
     self,
     axis: KX2Axis,
     hs_offset: int,
@@ -1082,9 +1082,9 @@ class KX2Driver(Driver):
         raise RuntimeError(fault)
       raise e
 
-    await self._motor_enable(axis=axis, state=True)
+    await self.motor_enable(axis=axis, state=True)
 
-    await self._motors_move_absolute_execute(
+    await self.motors_move_absolute_execute(
       plan=MotorsMovePlan(
         moves=[
           MotorMoveParam(
@@ -1102,7 +1102,7 @@ class KX2Driver(Driver):
     is_positive = hs_offset > 0
     await self._motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
 
-    await self._motors_move_absolute_execute(
+    await self.motors_move_absolute_execute(
       plan=MotorsMovePlan(
         moves=[
           MotorMoveParam(
@@ -1121,7 +1121,7 @@ class KX2Driver(Driver):
 
   # --- I/O -----------------------------------------------------------------
 
-  async def _read_input(self, node_id: int, input_num: int) -> bool:
+  async def read_input(self, node_id: int, input_num: int) -> bool:
     left = await self._binary_interpreter(node_id, "IB", input_num, CmdType.ValQuery)
     return left == 1
 

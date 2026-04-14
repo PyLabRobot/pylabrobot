@@ -226,7 +226,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     # Device.setup(). Now read per-drive parameters, finish CANopen mapping,
     # enable motion axes, and initialize the servo gripper.
     await self.drive_get_parameters(self.driver.node_id_list)
-    await self.driver._connect_part_two()
+    await self.driver.connect_part_two()
 
     await asyncio.sleep(2)
 
@@ -236,7 +236,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     for axis in MOTION_AXES:
       try:
-        await self.driver._motor_enable(axis=axis, state=True)
+        await self.driver.motor_enable(axis=axis, state=True)
       except Exception as e:
         logger.warning("Error enabling motor on axis %s: %s", axis, e)
 
@@ -244,7 +244,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def servo_gripper_initialize(self):
     try:
-      await self.driver._motor_enable(axis=KX2Axis.SERVO_GRIPPER, state=True)
+      await self.driver.motor_enable(axis=KX2Axis.SERVO_GRIPPER, state=True)
     except Exception as e:
       logger.warning(
         "Error enabling servo gripper motor on node %s: %s", KX2Axis.SERVO_GRIPPER, e
@@ -271,7 +271,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       val_type=ValType.Float,
     )
 
-    await self.driver._home_motor(
+    await self.driver.home_motor(
       axis=KX2Axis.SERVO_GRIPPER,
       hs_offset=self.servo_gripper_home_hard_stop_offset,
       ind_offset=self.servo_gripper_home_index_offset,
@@ -780,7 +780,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         return raw / c
 
   async def read_input(self, axis: int, input_num: int) -> bool:
-    return await self.driver._read_input(node_id=axis, input_num=0x10 + input_num)
+    return await self.driver.read_input(node_id=axis, input_num=0x10 + input_num)
 
   @staticmethod
   def _wrap_to_range(x: float, lo: float, hi: float) -> float:
@@ -1021,7 +1021,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if plan is None:  # if every axis is skipped, exit
       return
 
-    await self.driver._motors_move_absolute_execute(plan)
+    await self.driver.motors_move_absolute_execute(plan)
 
   def convert_cartesian_to_joint_position(self, pose: GripperPose) -> Dict["KX2Axis", float]:
     if pose.rotation.x != 0 or pose.rotation.y != 0:
@@ -1289,8 +1289,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     # KX2 frees all motion axes at once; free_axes is accepted for API parity.
     del free_axes
     for axis in MOTION_AXES:
-      await self.driver._motor_enable(axis=axis, state=False)
+      await self.driver.motor_enable(axis=axis, state=False)
 
   async def stop_freedrive_mode(self, backend_params: Optional[BackendParams] = None) -> None:
     for axis in MOTION_AXES:
-      await self.driver._motor_enable(axis=axis, state=True)
+      await self.driver.motor_enable(axis=axis, state=True)
