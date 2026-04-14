@@ -108,6 +108,7 @@ if "plr_cards.js" not in html_js_files:
 
 html_theme_options = {
   "show_nav_level": 1,
+  "header_links_before_dropdown": 4,
   "use_edit_page_button": True,
   "navbar_start": ["navbar-logo"],
   "navbar_center": ["navbar-nav"],
