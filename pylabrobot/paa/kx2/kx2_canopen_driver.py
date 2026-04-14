@@ -119,7 +119,11 @@ class KX2CanopenDriver(Driver):
     object_byte1: int,
     sub_index: int,
   ) -> bytes:
-    raise NotImplementedError
+    index = (object_byte0 << 8) | object_byte1
+    node = self._nodes[node_id]
+    # node.sdo.upload is blocking I/O (library handles expedited + segmented
+    # transfers + abort codes); run off the event loop.
+    return await asyncio.to_thread(node.sdo.upload, index, sub_index)
 
   async def can_sdo_download(
     self,
@@ -129,7 +133,9 @@ class KX2CanopenDriver(Driver):
     sub_index: int,
     data_byte: List[int],
   ) -> None:
-    raise NotImplementedError
+    index = (object_byte0 << 8) | object_byte1
+    node = self._nodes[node_id]
+    await asyncio.to_thread(node.sdo.download, index, sub_index, bytes(data_byte))
 
   async def can_sdo_upload_elmo_object(
     self,
@@ -137,8 +143,30 @@ class KX2CanopenDriver(Driver):
     elmo_object_int: int,
     sub_index: int,
     data_type: ElmoObjectDataType,
-  ) -> Union[str, int, float]:
-    raise NotImplementedError
+  ) -> str:
+    obj_byte0 = elmo_object_int >> 8
+    obj_byte1 = elmo_object_int & 0xFF
+    data_bytes = await self.can_sdo_upload(node_id, obj_byte0, obj_byte1, sub_index)
+
+    if len(data_bytes) == 0:
+      return ""
+    if data_type == ElmoObjectDataType.UNSIGNED8:
+      return str(int.from_bytes(data_bytes[:1], "little", signed=False))
+    if data_type == ElmoObjectDataType.UNSIGNED16:
+      return str(int.from_bytes(data_bytes[:2], "little", signed=False))
+    if data_type == ElmoObjectDataType.UNSIGNED32:
+      return str(int.from_bytes(data_bytes[:4], "little", signed=False))
+    if data_type == ElmoObjectDataType.UNSIGNED64:
+      return str(int.from_bytes(data_bytes[:8], "little", signed=False))
+    if data_type == ElmoObjectDataType.INTEGER16:
+      return str(int.from_bytes(data_bytes[:2], "little", signed=True))
+    if data_type == ElmoObjectDataType.INTEGER32:
+      return str(int.from_bytes(data_bytes[:4], "little", signed=True))
+    if data_type == ElmoObjectDataType.INTEGER64:
+      return str(int.from_bytes(data_bytes[:8], "little", signed=True))
+    if data_type == ElmoObjectDataType.STR:
+      return "".join(chr(b) for b in data_bytes)
+    raise CanError(f"Unsupported data type for SDO Read conversion: {data_type.name}")
 
   async def can_sdo_download_elmo_object(
     self,
@@ -148,7 +176,30 @@ class KX2CanopenDriver(Driver):
     data: str,
     data_type: ElmoObjectDataType,
   ) -> None:
-    raise NotImplementedError
+    if data_type == ElmoObjectDataType.UNSIGNED8:
+      data_bytes = list(int(data).to_bytes(1, "little"))
+    elif data_type == ElmoObjectDataType.UNSIGNED16:
+      data_bytes = list(int(data).to_bytes(2, "little"))
+    elif data_type == ElmoObjectDataType.UNSIGNED32:
+      data_bytes = list(int(float(data)).to_bytes(4, "little"))
+    elif data_type == ElmoObjectDataType.UNSIGNED64:
+      data_bytes = list(int(data).to_bytes(8, "little"))
+    elif data_type == ElmoObjectDataType.INTEGER8:
+      data_bytes = list(int(data).to_bytes(1, "little", signed=True))
+    elif data_type == ElmoObjectDataType.INTEGER16:
+      data_bytes = list(int(data).to_bytes(2, "little", signed=True))
+    elif data_type == ElmoObjectDataType.INTEGER32:
+      data_bytes = list(int(float(data)).to_bytes(4, "little", signed=True))
+    elif data_type == ElmoObjectDataType.INTEGER64:
+      data_bytes = list(int(data).to_bytes(8, "little", signed=True))
+    elif data_type == ElmoObjectDataType.STR:
+      data_bytes = [ord(c) for c in data]
+    else:
+      raise CanError(f"Unsupported data type for SDO Write: {data_type.name}")
+
+    obj_byte0 = elmo_object_int >> 8
+    obj_byte1 = elmo_object_int & 0xFF
+    await self.can_sdo_download(node_id, obj_byte0, obj_byte1, sub_index, data_bytes)
 
   # --- Elmo binary interpreter (vendor protocol on TPDO2/RPDO2) ------------
 
