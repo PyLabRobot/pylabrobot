@@ -21,6 +21,16 @@ class PlateAccessState:
   destination_plate_position: Optional[int] = None
   raw: Dict[str, Any] = field(default_factory=dict)
 
+  @property
+  def active_access_paths(self) -> tuple[str, ...]:
+    """Names of access paths currently known to be open."""
+    active: list[str] = []
+    if self.source_access_open is True:
+      active.append("source")
+    if self.destination_access_open is True:
+      active.append("destination")
+    return tuple(active)
+
 
 class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for plate access operations."""
@@ -38,7 +48,7 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     """Poll the current access state."""
 
   @abstractmethod
-  async def open_source_plate(self) -> None:
+  async def open_source_plate(self, timeout: Optional[float] = None) -> None:
     """Present the source-side plate access path."""
 
   @abstractmethod
@@ -47,11 +57,12 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     plate_type: Optional[str] = None,
     barcode_location: Optional[str] = None,
     barcode: str = "",
+    timeout: Optional[float] = None,
   ) -> None:
     """Retract the source-side access path."""
 
   @abstractmethod
-  async def open_destination_plate(self) -> None:
+  async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
     """Present the destination-side plate access path."""
 
   @abstractmethod
@@ -60,9 +71,10 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     plate_type: Optional[str] = None,
     barcode_location: Optional[str] = None,
     barcode: str = "",
+    timeout: Optional[float] = None,
   ) -> None:
     """Retract the destination-side access path."""
 
   @abstractmethod
-  async def close_door(self) -> None:
+  async def close_door(self, timeout: Optional[float] = None) -> None:
     """Close the machine door."""

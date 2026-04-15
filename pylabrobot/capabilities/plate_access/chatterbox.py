@@ -18,6 +18,8 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
       destination_access_closed=True,
       door_open=False,
       door_closed=True,
+      source_plate_position=0,
+      destination_plate_position=0,
     )
 
   async def lock(self, app: Optional[str] = None, owner: Optional[str] = None) -> None:
@@ -32,10 +34,11 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     logger.info("Returning chatterbox access state.")
     return self._state
 
-  async def open_source_plate(self) -> None:
+  async def open_source_plate(self, timeout: Optional[float] = None) -> None:
     logger.info("Opening source-side access.")
     self._state.source_access_open = True
     self._state.source_access_closed = False
+    self._state.source_plate_position = -1
     self._state.door_open = True
     self._state.door_closed = False
 
@@ -44,20 +47,24 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     plate_type: Optional[str] = None,
     barcode_location: Optional[str] = None,
     barcode: str = "",
+    timeout: Optional[float] = None,
   ) -> None:
     logger.info(
-      "Closing source-side access with plate_type=%s barcode_location=%s barcode=%s.",
+      "Closing source-side access with plate_type=%s barcode_location=%s barcode=%s timeout=%s.",
       plate_type,
       barcode_location,
       barcode,
+      timeout,
     )
     self._state.source_access_open = False
     self._state.source_access_closed = True
+    self._state.source_plate_position = 0
 
-  async def open_destination_plate(self) -> None:
+  async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
     logger.info("Opening destination-side access.")
     self._state.destination_access_open = True
     self._state.destination_access_closed = False
+    self._state.destination_plate_position = -1
     self._state.door_open = True
     self._state.door_closed = False
 
@@ -66,17 +73,20 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     plate_type: Optional[str] = None,
     barcode_location: Optional[str] = None,
     barcode: str = "",
+    timeout: Optional[float] = None,
   ) -> None:
     logger.info(
-      "Closing destination-side access with plate_type=%s barcode_location=%s barcode=%s.",
+      "Closing destination-side access with plate_type=%s barcode_location=%s barcode=%s timeout=%s.",
       plate_type,
       barcode_location,
       barcode,
+      timeout,
     )
     self._state.destination_access_open = False
     self._state.destination_access_closed = True
+    self._state.destination_plate_position = 0
 
-  async def close_door(self) -> None:
+  async def close_door(self, timeout: Optional[float] = None) -> None:
     logger.info("Closing plate access door.")
     self._state.door_open = False
     self._state.door_closed = True
