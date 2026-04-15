@@ -51,7 +51,6 @@ from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   ChannelBatch,
   plan_batches,
   print_batches,
-  resolve_container_targets,
   validate_channel_selections,
 )
 from pylabrobot.liquid_handling.standard import (
@@ -2159,19 +2158,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       await self.move_all_channels_in_z_safety()
 
-    # Resolve targets, plan batches
-    targets = resolve_container_targets(
-      containers=containers,
-      use_channels=use_channels,
-      channel_spacings=self._channels_minimum_y_spacing,
-      wrt_resource=self.deck,
-      resource_offsets=resource_offsets,
-    )
+    # Plan batches directly from containers (per-batch spread, no-go-zone aware).
     batches = plan_batches(
       use_channels=use_channels,
-      targets=targets,
+      containers=containers,
       channel_spacings=self._channels_minimum_y_spacing,
+      wrt_resource=self.deck,
       x_tolerance=x_grouping_tolerance,
+      resource_offsets=resource_offsets,
     )
 
     return use_channels, tip_lengths, batches
@@ -2277,15 +2271,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     container positions and sensing the liquid surface. Heights are measured from the bottom
     of each container's cavity.
 
-    Uses ``resolve_container_targets`` for position computation and auto-spreading,
-    ``plan_batches`` for X/Y partitioning, then ``execute_batched`` to iterate
-    batches with Z safety.
+    Uses ``plan_batches`` for X/Y partitioning with per-batch container spread
+    (respecting no-go zones), then ``execute_batched`` to iterate batches with
+    Z safety.
 
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use for probing (0-indexed).
       resource_offsets: Optional XYZ offsets from container centers. When not provided,
-        ``resolve_container_targets`` auto-spreads channels targeting the same container.
+        ``plan_batches`` auto-spreads channels targeting the same container.
       lld_mode: Detection mode. Either a single ``LLDMode`` applied to all containers
         (deprecated, removed in v1b1) or a list of ``LLDMode``s (one per container)
         allowing mixed GAMMA/PRESSURE within one call. ``None`` (default) applies

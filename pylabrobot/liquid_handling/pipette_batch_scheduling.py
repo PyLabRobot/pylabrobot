@@ -1,18 +1,33 @@
-"""Pipette orchestration: resolve container positions and partition into executable batches.
+"""Plan the fewest X/Y moves that position each channel at its target.
 
-Multi-channel liquid handlers have physical constraints (single X carriage, minimum
-Y spacing, descending Y order by channel index) that limit which channels can act
-simultaneously.
+Multi-channel heads share one X carriage, enforce minimum pairwise Y spacing, strictly
+descending Y by channel index, and per-container geometry (including no-go zones).
+Given a list of (channel, target container) assignments, this module groups them into batches
+where each batch is a set of channels whose targets can all be reached in one X/Y move.
+A Z-axis operation (e.g. LLD probe, aspirate, dispense, ...) is then supplied as a callback
+by the caller.
 
-    targets = resolve_container_targets(containers, use_channels, channel_spacings, wrt_resource)
-    batches = plan_batches(use_channels, targets, channel_spacings, x_tolerance=0.1)
+This is formally a Minimum Exact Cover problem (equivalently, Set Partitioning in OR terminology,
+or minimum hypergraph coloring in graph theory): pairwise constraints alone reduce to
+graph coloring; container fit with no-go zones is k-ary, making it hypergraph coloring.
+Hence the enumerate-then-partition pipeline rather than 2-ary graph coloring. Intended
+for n <= ~16 channels; planning is O(2^n * n^2) in the worst case, with the branch-and-
+bound partition solver typically fast on the structured instances this module sees.
+
+    batches = plan_batches(
+      use_channels=[0, 1, 2, 5, 6, 7],
+      containers=[w0, w1, w2, w5, w6, w7],
+      channel_spacings=backend._channels_minimum_y_spacing,
+      wrt_resource=backend.deck,
+      x_tolerance=0.1,
+    )
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
 
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Collection, Dict, FrozenSet, List, Optional, Tuple
 
 from pylabrobot.liquid_handling.channel_positioning import (
   compute_nonconsecutive_channel_offsets,
@@ -160,112 +175,233 @@ def validate_channel_selections(
   return use_channels
 
 
-def resolve_container_targets(
-  containers: List[Container],
+# --- Validity predicate & enumeration ---
+
+
+def is_valid_batch(
+  job_indices: Collection[int],
   use_channels: List[int],
+  containers: List[Container],
   channel_spacings: List[float],
   wrt_resource: Resource,
+  x_tolerance: float,
   resource_offsets: Optional[List[Coordinate]] = None,
-) -> List[Coordinate]:
-  """Convert containers to absolute Coordinates, auto-spreading when needed.
+) -> Optional[Dict[int, Coordinate]]:
+  """Validate a candidate batch against all physical constraints, cheapest first.
 
-  When *resource_offsets* is ``None`` and multiple channels target the same
-  container, computes spread offsets via ``compute_nonconsecutive_channel_offsets``
-  so channels can be batched in parallel. If the container is too narrow to
-  spread, channels stay at center and will be serialized by ``plan_batches``.
-
-  When *resource_offsets* is provided, uses those offsets directly (no
-  auto-spreading).
-
-  Args:
-    containers: Container objects, one per entry in *use_channels*.
-    use_channels: Channel indices being used.
-    channel_spacings: Minimum Y spacing per channel (mm), one entry per
-      channel on the instrument.
-    wrt_resource: Reference resource for computing positions. All containers
-      must be descendants of this resource.
-    resource_offsets: Optional XYZ offsets from container centers.
+  Checks, in order:
+    1. Unique channels — O(k), prunes most candidates instantly.
+    2. Same X — O(k), uses container centers (X isn't shifted by auto-spread).
+    3. Container fit — per container, calls
+       :func:`compute_nonconsecutive_channel_offsets` to see if the channels
+       targeting it can coexist (respecting no-go zones). Skipped when
+       *resource_offsets* is provided. This is the expensive check.
+    4. Y spacing between adjacent channels — O(k) on resolved positions.
 
   Returns:
-    List of Coordinates (parallel to *use_channels* / *containers*) with
-    absolute X/Y positions ready for ``plan_batches``.
+    Dict mapping each job index to its resolved absolute Coordinate if the
+    batch is valid; ``None`` otherwise.
   """
-  if resource_offsets is not None:
-    if len(resource_offsets) != len(containers):
-      raise ValueError(
-        f"resource_offsets length must match containers, "
-        f"got {len(resource_offsets)} and {len(containers)}."
-      )
-    offsets = resource_offsets
-  else:
-    offsets = [Coordinate.zero()] * len(containers)
+  jobs = list(job_indices)
+  if not jobs:
+    return {}
 
-  x_pos: List[float] = []
-  y_pos: List[float] = []
-  for container, offset in zip(containers, offsets):
-    loc = container.get_location_wrt(wrt_resource, x="c", y="c", z="b")
-    x_pos.append(loc.x + offset.x)
-    y_pos.append(loc.y + offset.y)
+  # 1. Unique channels.
+  if len({use_channels[j] for j in jobs}) != len(jobs):
+    return None
 
-  # Auto-spread: when multiple channels target the same container and no
-  # explicit offsets were given, compute spread offsets so they can be batched.
+  centers = [containers[j].get_location_wrt(wrt_resource, x="c", y="c", z="b") for j in jobs]
+
+  # 2. Same X (container center + any user X offset; auto-spread only moves Y).
+  if len(jobs) > 1:
+    xs = [
+      centers[k].x + (resource_offsets[jobs[k]].x if resource_offsets is not None else 0.0)
+      for k in range(len(jobs))
+    ]
+    if max(xs) - min(xs) > x_tolerance:
+      return None
+
+  # 3. Container fit → per-channel Y offset (skipped when user supplies offsets).
+  y_offsets: Dict[int, float] = {j: 0.0 for j in jobs}
   if resource_offsets is None:
-    container_groups: Dict[int, List[int]] = defaultdict(list)
-    for idx in range(len(containers)):
-      container_groups[id(containers[idx])].append(idx)
-    for c_indices in container_groups.values():
-      group_channels = [use_channels[i] for i in c_indices]
-      spread = compute_nonconsecutive_channel_offsets(
-        container=containers[c_indices[0]],
-        use_channels=group_channels,
-        channel_spacings=channel_spacings,
+    by_container: Dict[int, List[int]] = defaultdict(list)
+    for j in jobs:
+      by_container[id(containers[j])].append(j)
+    for cjobs in by_container.values():
+      c = containers[cjobs[0]]
+      if len(cjobs) == 1 and not getattr(c, "no_go_zones", ()):
+        continue  # single channel, no no-go zones — center is fine.
+      offsets = compute_nonconsecutive_channel_offsets(
+        c,
+        [use_channels[j] for j in cjobs],
+        channel_spacings,
       )
-      if spread is not None:
-        for i, idx_val in enumerate(c_indices):
-          y_pos[idx_val] += spread[i].y
+      if offsets is None:
+        return None
+      for j, off in zip(cjobs, offsets):
+        y_offsets[j] = off.y
 
-  return [Coordinate(x, y, 0) for x, y in zip(x_pos, y_pos)]
+  # Resolve absolute targets.
+  targets: Dict[int, Coordinate] = {}
+  for k, j in enumerate(jobs):
+    ox = resource_offsets[j].x if resource_offsets is not None else 0.0
+    oy = resource_offsets[j].y if resource_offsets is not None else y_offsets[j]
+    targets[j] = Coordinate(centers[k].x + ox, centers[k].y + oy, 0.0)
+
+  if len(jobs) == 1:
+    return targets
+
+  # 4. Y spacing between adjacent channels.
+  jobs_sorted = sorted(jobs, key=lambda j: use_channels[j])
+  for lo, hi in zip(jobs_sorted, jobs_sorted[1:]):
+    required = _span_required(channel_spacings, use_channels[lo], use_channels[hi])
+    if targets[lo].y - targets[hi].y < required - 1e-9:
+      return None
+
+  return targets
 
 
-# --- Public API ---
+def _build_channel_batch(
+  job_indices: Collection[int],
+  resolved: Dict[int, Coordinate],
+  use_channels: List[int],
+  channel_spacings: List[float],
+) -> ChannelBatch:
+  """Assemble a :class:`ChannelBatch` from validated job indices and resolved positions."""
+  indices = sorted(job_indices, key=lambda i: use_channels[i])
+  channels = [use_channels[i] for i in indices]
+  y_positions: Dict[int, float] = {use_channels[i]: resolved[i].y for i in indices}
+  y_positions = _interpolate_phantoms(channels, y_positions, channel_spacings)
+  x_position = sum(resolved[i].x for i in indices) / len(indices)
+  return ChannelBatch(
+    x_position=x_position,
+    indices=indices,
+    channels=channels,
+    y_positions=y_positions,
+  )
+
+
+def enumerate_valid_batches(
+  use_channels: List[int],
+  containers: List[Container],
+  channel_spacings: List[float],
+  wrt_resource: Resource,
+  x_tolerance: float,
+  resource_offsets: Optional[List[Coordinate]] = None,
+) -> List[ChannelBatch]:
+  """Enumerate every valid batch by backtracking, returning ChannelBatch objects.
+
+  Jobs are visited in channel-ascending order; an invalid candidate prunes its subtree.
+  """
+  n = len(use_channels)
+  order = sorted(range(n), key=lambda i: use_channels[i])
+  result: List[ChannelBatch] = []
+
+  def backtrack(start: int, current: List[int]):
+    if current:
+      resolved = is_valid_batch(
+        current,
+        use_channels,
+        containers,
+        channel_spacings,
+        wrt_resource,
+        x_tolerance,
+        resource_offsets,
+      )
+      if resolved is None:
+        return
+      result.append(_build_channel_batch(current, resolved, use_channels, channel_spacings))
+    for pos in range(start, n):
+      backtrack(pos + 1, current + [order[pos]])
+
+  backtrack(0, [])
+  return result
+
+
+def minimum_exact_cover(
+  n_jobs: int,
+  batches: List[ChannelBatch],
+) -> List[ChannelBatch]:
+  """Pick the fewest batches that partition ``{0..n_jobs-1}`` (branch-and-bound).
+
+  Returned list is a subset of *batches*. Assumes every job appears in at
+  least one batch (caller's responsibility) so a partition always exists.
+  """
+  if n_jobs == 0:
+    return []
+
+  by_min: Dict[int, List[Tuple[FrozenSet[int], ChannelBatch]]] = defaultdict(list)
+  for b in batches:
+    js = frozenset(b.indices)
+    by_min[min(js)].append((js, b))
+  # Try larger batches first at each pivot — finds a tight bound sooner.
+  for bucket in by_min.values():
+    bucket.sort(key=lambda js_b: len(js_b[0]), reverse=True)
+
+  all_jobs = frozenset(range(n_jobs))
+  best: List[List[ChannelBatch]] = [batches[: n_jobs + 1]]  # sentinel: unreachable length
+
+  def recurse(remaining: FrozenSet[int], current: List[ChannelBatch]):
+    if not remaining:
+      if len(current) < len(best[0]):
+        best[0] = list(current)
+      return
+    if len(current) + 1 >= len(best[0]):
+      return
+    pivot = min(remaining)
+    for js, b in by_min[pivot]:
+      if js.issubset(remaining):
+        current.append(b)
+        recurse(remaining - js, current)
+        current.pop()
+
+  recurse(all_jobs, [])
+  return best[0]
 
 
 def plan_batches(
   use_channels: List[int],
-  targets: List[Coordinate],
+  containers: List[Container],
   channel_spacings: List[float],
+  wrt_resource: Resource,
   x_tolerance: float,
+  resource_offsets: Optional[List[Coordinate]] = None,
 ) -> List[ChannelBatch]:
-  """Partition channel–target pairs into executable batches.
+  """Container-aware, optimal batch planning (respects no-go zones).
 
-  Groups by X position (within *x_tolerance*), then within each X group partitions
-  into Y sub-batches respecting per-channel minimum spacing. Computes phantom channel
-  positions for intermediate channels between non-consecutive batch members.
-
-  Use ``resolve_container_targets`` to convert Container objects to Coordinates
-  before calling this function.
+  Decides the per-container spread *per candidate batch* by asking
+  :func:`compute_nonconsecutive_channel_offsets` whether the channels
+  targeting each container physically coexist in it given its geometry and
+  no-go zones. Pairs that behavior with minimum exact-cover partition
+  (:func:`minimum_exact_cover`) so the returned plan uses the fewest batches.
 
   Args:
-    use_channels: Channel indices being used (e.g. [0, 1, 2, 5, 6, 7]).
-    targets: Coordinate objects with absolute X/Y positions. One per entry
-      in *use_channels*.
-    channel_spacings: Minimum Y spacing per channel (mm), one entry per
-      channel on the instrument.
-    x_tolerance: Positions within this tolerance share an X group.
+    use_channels: Channel indices being used (parallel to *containers*).
+    containers: Target Container objects, one per channel.
+    channel_spacings: Per-channel minimum Y spacing (mm).
+    wrt_resource: Reference resource for computing absolute positions.
+    x_tolerance: Positions within this tolerance share a batch (pairwise).
+    resource_offsets: Optional explicit XYZ offsets from container centers.
+      When provided, auto-spread and no-go-zone checks are skipped (user is
+      authoritative).
 
   Returns:
     Flat list of ChannelBatch sorted by ascending X position.
   """
-
   if x_tolerance <= 0:
     raise ValueError(f"x_tolerance must be > 0, got {x_tolerance}.")
-  if len(use_channels) != len(targets):
+  if len(use_channels) != len(containers):
     raise ValueError(
-      f"use_channels and targets must have the same length, "
-      f"got {len(use_channels)} and {len(targets)}."
+      f"use_channels and containers must have the same length, "
+      f"got {len(use_channels)} and {len(containers)}."
     )
   if len(use_channels) == 0:
     raise ValueError("use_channels must not be empty.")
+  if resource_offsets is not None and len(resource_offsets) != len(use_channels):
+    raise ValueError(
+      f"resource_offsets length must match use_channels, "
+      f"got {len(resource_offsets)} and {len(use_channels)}."
+    )
   max_ch = max(use_channels)
   if len(channel_spacings) < max_ch + 1:
     raise ValueError(
@@ -273,54 +409,25 @@ def plan_batches(
       f"(max channel index is {max_ch}), got {len(channel_spacings)}."
     )
 
-  x_pos = [c.x for c in targets]
-  y_pos = [c.y for c in targets]
-  spacings = list(channel_spacings)
+  valid = enumerate_valid_batches(
+    use_channels,
+    containers,
+    channel_spacings,
+    wrt_resource,
+    x_tolerance,
+    resource_offsets,
+  )
 
-  # Group indices by X position. Sorts by X then merges adjacent positions
-  # within tolerance into the same group, so positions like 99.99 and 100.01
-  # (0.02mm apart) are never split across groups.
-  sorted_by_x = sorted(range(len(x_pos)), key=lambda i: x_pos[i])
-  x_groups: Dict[float, List[int]] = {}
-  current_key: Optional[float] = None
-  for i in sorted_by_x:
-    if current_key is None or abs(x_pos[i] - current_key) > x_tolerance:
-      current_key = x_pos[i]
-    x_groups.setdefault(current_key, []).append(i)
+  # Every job must appear in at least one valid batch, else no partition exists.
+  covered = set().union(*(b.indices for b in valid)) if valid else set()
+  missing = set(range(len(use_channels))) - covered
+  if missing:
+    raise ValueError(
+      f"No valid batch contains job(s) {sorted(missing)} "
+      f"(channel(s) {[use_channels[j] for j in sorted(missing)]}); "
+      f"container(s) cannot accommodate them."
+    )
 
-  # Within each X group, batch by Y position (greedy first-fit)
-  result: List[ChannelBatch] = []
-  for _, x_group_indices in sorted(x_groups.items()):
-    group_x = x_pos[x_group_indices[0]]
-    channels_by_index = sorted(x_group_indices, key=lambda i: use_channels[i])
-    y_batches: List[List[int]] = []
-
-    for idx in channels_by_index:
-      channel = use_channels[idx]
-      y = y_pos[idx]
-
-      for batch in y_batches:
-        if channel in [use_channels[i] for i in batch]:
-          continue
-        hi_ch = use_channels[batch[-1]]
-        hi_y = y_pos[batch[-1]]
-        if hi_y - y >= _span_required(spacings, hi_ch, channel) - 1e-9:
-          batch.append(idx)
-          break
-      else:
-        y_batches.append([idx])
-
-    for batch in y_batches:
-      batch_channels = [use_channels[i] for i in batch]
-      y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in batch}
-      y_positions = _interpolate_phantoms(batch_channels, y_positions, spacings)
-      result.append(
-        ChannelBatch(
-          x_position=group_x,
-          indices=batch,
-          channels=batch_channels,
-          y_positions=y_positions,
-        )
-      )
-
-  return result
+  partition = minimum_exact_cover(len(use_channels), valid)
+  partition.sort(key=lambda b: b.x_position)
+  return partition
