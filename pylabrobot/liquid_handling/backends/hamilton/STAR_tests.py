@@ -1,5 +1,6 @@
 # mypy: disable-error-code="attr-defined,method-assign"
 
+import datetime
 import unittest
 import unittest.mock
 from typing import Literal, cast
@@ -32,6 +33,7 @@ from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL
 
 from .STAR_backend import (
   CommandSyntaxError,
+  Head96Information,
   HamiltonNoTipError,
   HardwareError,
   STARBackend,
@@ -269,6 +271,18 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
     set_tip_tracking(enabled=False)
+
+  def _set_core96_firmware_year(self, year: int) -> None:
+    self.STAR._head96_information = Head96Information(
+      fw_version=datetime.date(year, 1, 1),
+      supports_clot_monitoring_clld=False,
+      stop_disc_type="core_i",
+      instrument_type="legacy",
+      head_type="96 head II",
+    )
+
+  def _set_pip_firmware_year(self, year: int) -> None:
+    self.STAR._pip_firmware_version = datetime.date(year, 1, 1)
 
   async def test_core_read_barcode_success(self):
     """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
@@ -688,6 +702,24 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_core_96_tip_pickup_skips_dispensing_drive_move_on_old_firmware(self):
+    self._set_core96_firmware_year(2009)
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call("C0TTid0001tt01tf1tl0519tv03600tg2tu0"),
+        _any_write_and_read_command_call("C0EPid0002xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+      ]
+    )
+    self.assertFalse(
+      any(
+        "H0DQ" in call.kwargs["cmd"]
+        for call in self.STAR._write_and_read_command.call_args_list  # type: ignore
+      )
+    )
+
   async def test_tip_tracking_pick_up96(self):
     set_tip_tracking(enabled=True)
     await self.lh.pick_up_tips96(self.tip_rack)
@@ -731,6 +763,24 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_core_96_aspirate_old_firmware_omits_extended_params(self):
+    self._set_core96_firmware_year(2009)
+
+    await self.lh.pick_up_tips96(self.tip_rack2)  # pick up high volume tips
+    self.STAR._write_and_read_command.reset_mock()
+
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
+
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0EAid0003aa0xs02983xd0yh1457zh2450ze2450lz1999zt1866zm1866zv0032zq06180iw000ix0fh000af01083ag2500vt050bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000mj000hs1200"
+        ),
+      ]
+    )
+
   async def test_core_96_dispense(self):
     await self.lh.pick_up_tips96(self.tip_rack2)  # pick up high volume tips
     if self.plate.lid is not None:
@@ -746,6 +796,26 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       [
         _any_write_and_read_command_call(
           "C0EDid0005da3xs02983xd0yh1457zm1866zv0032zq06180lz1999zt1866pp0100iw000ix0fh000zh2450ze2450df01083dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh00hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
+        ),
+      ]
+    )
+
+  async def test_core_96_dispense_old_firmware_omits_extended_params(self):
+    self._set_core96_firmware_year(2009)
+
+    await self.lh.pick_up_tips96(self.tip_rack2)  # pick up high volume tips
+    if self.plate.lid is not None:
+      self.plate.lid.unassign()
+    await self.lh.aspirate96(self.plate, 100, blow_out=True)
+    self.STAR._write_and_read_command.reset_mock()
+
+    with no_volume_tracking():
+      await self.lh.dispense96(self.plate, 100, blow_out=True)
+
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0EDid0004da3xs02983xd0yh1457zm1866zv0032zq06180lz1999zt1866iw000ix0fh000zh2450ze2450df01083dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh00hv00000hc00hp000mj000hs1200"
         ),
       ]
     )
@@ -1014,6 +1084,87 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         )
       ]
     )
+
+  async def test_pick_up_tips_omits_pickup_method_for_old_pip_firmware(self):
+    self._set_pip_firmware_year(2009)
+
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+
+    sent = self.STAR._write_and_read_command.call_args_list[-1].kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0TP"))
+    self.assertNotIn("td", sent)
+
+  async def test_discard_tips_omits_discarding_method_for_old_pip_firmware(self):
+    self._set_pip_firmware_year(2009)
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    self.STAR._write_and_read_command.side_effect = [
+      "C0TRid0003kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    ]
+    self.STAR._write_and_read_command.reset_mock()
+
+    await self.lh.discard_tips()
+
+    sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0TR"))
+    self.assertNotIn("ti", sent)
+
+  async def test_initialize_pipetting_channels_omits_discarding_method_for_old_pip_firmware(self):
+    self._set_pip_firmware_year(2009)
+
+    await self.STAR.initialize_pipetting_channels(
+      x_positions=[8000],
+      y_positions=[3427, 3337, 3247, 3157, 3067, 2977, 2887, 2797],
+      begin_of_tip_deposit_process=2450,
+      end_of_tip_deposit_process=1870,
+      z_position_at_end_of_a_command=2450,
+      tip_pattern=[True] * 8,
+      tip_type=1,
+      discarding_method=0,
+    )
+
+    sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0DI"))
+    self.assertNotIn("ti", sent)
+
+  async def test_aspirate_pip_omits_tadm_fields_for_old_pip_firmware(self):
+    self._set_pip_firmware_year(2009)
+
+    await self.STAR.aspirate_pip(
+      aspiration_type=[0],
+      tip_pattern=[True],
+      x_positions=[8000],
+      y_positions=[3427],
+      aspiration_volumes=[100],
+      limit_curve_index=[0],
+      tadm_algorithm=False,
+      recording_mode=0,
+    )
+
+    sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0AS"))
+    self.assertNotIn("gi", sent)
+    self.assertNotIn("gj", sent)
+    self.assertNotIn("gk", sent)
+
+  async def test_dispense_pip_omits_tadm_fields_for_old_pip_firmware(self):
+    self._set_pip_firmware_year(2009)
+
+    await self.STAR.dispense_pip(
+      tip_pattern=[True],
+      dispensing_mode=[0],
+      x_positions=[8000],
+      y_positions=[3427],
+      dispense_volumes=[100],
+      limit_curve_index=[0],
+      tadm_algorithm=False,
+      recording_mode=0,
+    )
+
+    sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0DS"))
+    self.assertNotIn("gi", sent)
+    self.assertNotIn("gj", sent)
+    self.assertNotIn("gk", sent)
 
   async def test_portrait_tip_rack_handling(self):
     deck = STARLetDeck()

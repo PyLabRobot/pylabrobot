@@ -1672,6 +1672,33 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
     return datetime.date(int(year_match.group(1)), 1, 1)
 
+  def _core96_has_old_firmware(self) -> bool:
+    """Return whether the installed CoRe96 firmware predates 2010 compatibility changes."""
+
+    head96_information = getattr(self, "_head96_information", None)
+    return head96_information is not None and head96_information.fw_version.year < 2010
+
+  def _pip_has_old_firmware(self) -> bool:
+    """Return whether the installed PIP firmware predates 2010 compatibility changes."""
+
+    pip_firmware_version = getattr(self, "_pip_firmware_version", None)
+    return pip_firmware_version is not None and pip_firmware_version.year < 2010
+
+  def _pip_supports_extended_tip_handling_command_params(self) -> bool:
+    """Return whether PIP tip-handling commands support newer optional parameters."""
+
+    return not self._pip_has_old_firmware()
+
+  def _pip_supports_extended_liquid_command_params(self) -> bool:
+    """Return whether PIP liquid commands support newer optional parameters."""
+
+    return not self._pip_has_old_firmware()
+
+  def _core96_supports_extended_liquid_command_params(self) -> bool:
+    """Return whether CoRe96 `EA`/`ED` support the newer optional parameter set."""
+
+    return not self._core96_has_old_firmware()
+
   async def setup(
     self,
     skip_instrument_initialization=False,
@@ -1696,6 +1723,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._machine_conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
     self._head96_information: Optional[Head96Information] = None
+    self._pip_firmware_version: Optional[datetime.date] = None
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1714,6 +1742,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
+
+    pip_fw_response = await self.request_firmware_version()
+    pip_fw_match = re.search(r"rf(?P<fw_version>.+)$", pip_fw_response)
+    if pip_fw_match is None:
+      raise ValueError(f"Could not parse PIP firmware version from response: '{pip_fw_response}'")
+    self._pip_firmware_version = self._parse_firmware_version_datetime(
+      pip_fw_match.group("fw_version").strip()
+    )
 
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
@@ -3457,7 +3493,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
-    if tip_pickup_method == "from_rack":
+    if tip_pickup_method == "from_rack" and self._core96_supports_extended_liquid_command_params():
       # the STAR will not automatically move the dispensing drive down if it is still up
       # so we need to move it down here
       # see https://github.com/PyLabRobot/pylabrobot/pull/835
@@ -5837,7 +5873,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= tip_type <= 99, "tip must be between 0 and 99"
     assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="DI",
       read_timeout=120,
@@ -5848,8 +5884,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       te=f"{z_position_at_end_of_a_command:04}",
       tm=[f"{tm:01}" for tm in tip_pattern],
       tt=f"{tip_type:02}",
-      ti=discarding_method,
     )
+    if self._pip_supports_extended_tip_handling_command_params():
+      command_kwargs["ti"] = discarding_method
+    return await self.send_command(**command_kwargs)
 
   # -------------- 3.5.2 Tip handling commands using PIP --------------
 
@@ -5894,7 +5932,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     )
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="TP",
       tip_pattern=tip_pattern,
@@ -5906,8 +5944,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
       th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      td=pickup_method.value,
     )
+    if self._pip_supports_extended_tip_handling_command_params():
+      command_kwargs["td"] = pickup_method.value
+    return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
   async def discard_tip(
@@ -5959,7 +5999,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "z_position_at_end_of_a_command must be between 0 and 3600"
     )
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="TR",
       tip_pattern=tip_pattern,
@@ -5971,8 +6011,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
       te=z_position_at_end_of_a_command,
-      ti=discarding_method.value,
     )
+    if self._pip_supports_extended_tip_handling_command_params():
+      command_kwargs["ti"] = discarding_method.value
+    return await self.send_command(**command_kwargs)
 
   # TODO:(command:TW) Tip Pick-up for DC wash procedure
 
@@ -6218,7 +6260,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
@@ -6256,9 +6298,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
-      gi=[f"{gi:03}" for gi in limit_curve_index],
-      gj=tadm_algorithm,
-      gk=recording_mode,
       lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
       ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
       sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
@@ -6266,6 +6305,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
       io=[f"{io:04}" for io in cup_upper_edge],
     )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
+      command_kwargs["gj"] = tadm_algorithm
+      command_kwargs["gk"] = recording_mode
+    return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
   async def dispense_pip(
@@ -6450,7 +6494,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
@@ -6488,10 +6532,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
-      gi=[f"{gi:03}" for gi in limit_curve_index],
-      gj=tadm_algorithm,  #
-      gk=recording_mode,  #
     )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
+      command_kwargs["gj"] = tadm_algorithm
+      command_kwargs["gk"] = recording_mode
+    return await self.send_command(**command_kwargs)
 
   # TODO:(command:DA) Simultaneous aspiration & dispensation of liquid
 
@@ -8050,7 +8096,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="EA",
       read_timeout=max(300, self.read_timeout),
@@ -8062,32 +8108,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{min_z_endpos:04}",
       lz=f"{lld_search_height:04}",
       zt=f"{liquid_surface_no_lld:04}",
-      pp=f"{pull_out_distance_transport_air:04}",
-      zm=f"{minimum_height:04}",
-      zv=f"{second_section_height:04}",
-      zq=f"{second_section_ratio:05}",
-      iw=f"{immersion_depth:03}",
-      ix=immersion_depth_direction,
-      fh=f"{surface_following_distance:03}",
-      af=f"{aspiration_volumes:05}",
-      ag=f"{aspiration_speed:04}",
-      vt=f"{transport_air_volume:03}",
-      bv=f"{blow_out_air_volume:05}",
-      wv=f"{pre_wetting_volume:05}",
-      cm=lld_mode,
-      cs=gamma_lld_sensitivity,
-      bs=f"{swap_speed:04}",
-      wh=f"{settling_time:02}",
-      hv=f"{mix_volume:05}",
-      hc=f"{mix_cycles:02}",
-      hp=f"{mix_position_from_liquid_surface:03}",
-      mj=f"{mix_surface_following_distance:03}",
-      hs=f"{speed_of_mix:04}",
-      cw=channel_pattern_hex,
-      cr=f"{limit_curve_index:03}",
-      cj=tadm_algorithm,
-      cx=recording_mode,
     )
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["pp"] = f"{pull_out_distance_transport_air:04}"
+    command_kwargs["zm"] = f"{minimum_height:04}"
+    command_kwargs["zv"] = f"{second_section_height:04}"
+    command_kwargs["zq"] = f"{second_section_ratio:05}"
+    command_kwargs["iw"] = f"{immersion_depth:03}"
+    command_kwargs["ix"] = immersion_depth_direction
+    command_kwargs["fh"] = f"{surface_following_distance:03}"
+    command_kwargs["af"] = f"{aspiration_volumes:05}"
+    command_kwargs["ag"] = f"{aspiration_speed:04}"
+    command_kwargs["vt"] = f"{transport_air_volume:03}"
+    command_kwargs["bv"] = f"{blow_out_air_volume:05}"
+    command_kwargs["wv"] = f"{pre_wetting_volume:05}"
+    command_kwargs["cm"] = lld_mode
+    command_kwargs["cs"] = gamma_lld_sensitivity
+    command_kwargs["bs"] = f"{swap_speed:04}"
+    command_kwargs["wh"] = f"{settling_time:02}"
+    command_kwargs["hv"] = f"{mix_volume:05}"
+    command_kwargs["hc"] = f"{mix_cycles:02}"
+    command_kwargs["hp"] = f"{mix_position_from_liquid_surface:03}"
+    command_kwargs["mj"] = f"{mix_surface_following_distance:03}"
+    command_kwargs["hs"] = f"{speed_of_mix:04}"
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["cw"] = channel_pattern_hex
+      command_kwargs["cr"] = f"{limit_curve_index:03}"
+      command_kwargs["cj"] = tadm_algorithm
+      command_kwargs["cx"] = recording_mode
+
+    return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
   @_requires_head96
@@ -8325,7 +8375,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    return await self.send_command(
+    command_kwargs = dict(
       module="C0",
       command="ED",
       read_timeout=max(300, self.read_timeout),
@@ -8338,33 +8388,37 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zq=f"{second_section_ratio:05}",
       lz=f"{lld_search_height:04}",
       zt=f"{liquid_surface_no_lld:04}",
-      pp=f"{pull_out_distance_transport_air:04}",
-      iw=f"{immersion_depth:03}",
-      ix=immersion_depth_direction,
-      fh=f"{surface_following_distance:03}",
-      zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      ze=f"{min_z_endpos:04}",
-      df=f"{dispense_volume:05}",
-      dg=f"{dispense_speed:04}",
-      es=f"{cut_off_speed:04}",
-      ev=f"{stop_back_volume:03}",
-      vt=f"{transport_air_volume:03}",
-      bv=f"{blow_out_air_volume:05}",
-      cm=lld_mode,
-      cs=gamma_lld_sensitivity,
-      ej=f"{side_touch_off_distance:02}",
-      bs=f"{swap_speed:04}",
-      wh=f"{settling_time:02}",
-      hv=f"{mixing_volume:05}",
-      hc=f"{mixing_cycles:02}",
-      hp=f"{mix_position_from_liquid_surface:03}",
-      mj=f"{mix_surface_following_distance:03}",
-      hs=f"{speed_of_mixing:04}",
-      cw=channel_pattern_hex,
-      cr=f"{limit_curve_index:03}",
-      cj=tadm_algorithm,
-      cx=recording_mode,
     )
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["pp"] = f"{pull_out_distance_transport_air:04}"
+    command_kwargs["iw"] = f"{immersion_depth:03}"
+    command_kwargs["ix"] = immersion_depth_direction
+    command_kwargs["fh"] = f"{surface_following_distance:03}"
+    command_kwargs["zh"] = f"{minimum_traverse_height_at_beginning_of_a_command:04}"
+    command_kwargs["ze"] = f"{min_z_endpos:04}"
+    command_kwargs["df"] = f"{dispense_volume:05}"
+    command_kwargs["dg"] = f"{dispense_speed:04}"
+    command_kwargs["es"] = f"{cut_off_speed:04}"
+    command_kwargs["ev"] = f"{stop_back_volume:03}"
+    command_kwargs["vt"] = f"{transport_air_volume:03}"
+    command_kwargs["bv"] = f"{blow_out_air_volume:05}"
+    command_kwargs["cm"] = lld_mode
+    command_kwargs["cs"] = gamma_lld_sensitivity
+    command_kwargs["ej"] = f"{side_touch_off_distance:02}"
+    command_kwargs["bs"] = f"{swap_speed:04}"
+    command_kwargs["wh"] = f"{settling_time:02}"
+    command_kwargs["hv"] = f"{mixing_volume:05}"
+    command_kwargs["hc"] = f"{mixing_cycles:02}"
+    command_kwargs["hp"] = f"{mix_position_from_liquid_surface:03}"
+    command_kwargs["mj"] = f"{mix_surface_following_distance:03}"
+    command_kwargs["hs"] = f"{speed_of_mixing:04}"
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["cw"] = channel_pattern_hex
+      command_kwargs["cr"] = f"{limit_curve_index:03}"
+      command_kwargs["cj"] = tadm_algorithm
+      command_kwargs["cx"] = recording_mode
+
+    return await self.send_command(**command_kwargs)
 
   # -------------- 3.10.4 Adjustment & movement commands --------------
 
