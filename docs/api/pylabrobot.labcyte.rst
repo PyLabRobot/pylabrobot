@@ -15,7 +15,14 @@ Echo
 
     Echo
     EchoDriver
+    EchoPlateMap
     EchoInstrumentInfo
+    EchoSurveyParams
+    EchoSurveyWell
+    EchoSurveyData
+    EchoSurveyRunResult
+    EchoDryPlateMode
+    EchoDryPlateParams
     EchoPlateAccessBackend
     EchoError
     EchoProtocolError

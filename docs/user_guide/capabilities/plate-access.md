@@ -18,11 +18,11 @@ Capability methods:
 - `lock(app=None, owner=None)`
 - `unlock()`
 - `get_access_state()`
-- `open_source_plate()`
-- `close_source_plate(plate_type=None, barcode_location=None, barcode="")`
-- `open_destination_plate()`
-- `close_destination_plate(plate_type=None, barcode_location=None, barcode="")`
-- `close_door()`
+- `open_source_plate(timeout=30.0, poll_interval=0.1) -> PlateAccessState`
+- `close_source_plate(plate_type=None, barcode_location=None, barcode="", timeout=30.0, poll_interval=0.1) -> PlateAccessState`
+- `open_destination_plate(timeout=30.0, poll_interval=0.1) -> PlateAccessState`
+- `close_destination_plate(plate_type=None, barcode_location=None, barcode="", timeout=30.0, poll_interval=0.1) -> PlateAccessState`
+- `close_door(timeout=30.0, poll_interval=0.1) -> PlateAccessState`
 
 `get_access_state()` returns a `PlateAccessState` with normalized fields for:
 
@@ -50,12 +50,14 @@ async def main():
       baseline = await echo.get_access_state()
       print("baseline:", baseline)
 
-      await echo.open_source_plate()
-      opened = await echo.get_access_state()
+      opened = await echo.open_source_plate(timeout=2.0)
       print("opened:", opened)
 
-      await echo.close_source_plate()
-      await echo.close_door()
+      retracted = await echo.close_source_plate(timeout=2.0)
+      print("retracted:", retracted)
+
+      closed = await echo.close_door(timeout=2.0)
+      print("closed:", closed)
     finally:
       await echo.unlock()
 
