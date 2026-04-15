@@ -9,13 +9,16 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
+_btx_96_wellplate_125ul_Fb_2mm_height_volume_data = {
+  0.0: 0.0,
+  10.0: 160.0,  # measured brim volume at approximately 10 mm liquid height
+}
+
 
 def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
   """BTX 96-well disposable electroporation plate, 2 mm gap.
 
   - BTX part no.: 45-0450 / 45-0450-M
-  - External dimensions: 127.8 x 85.5 x 15.9 mm
-  - Well pitch: 9.0 mm x 9.0 mm
   - Bottom type: flat
   - Nominal / manufacturer max-use volume: 125 uL
   - Recommended working volume: 50-100 uL
@@ -38,6 +41,7 @@ def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
     "material_z_thickness": 0.8,  # inferred from side profile measurements
     "cross_section_type": CrossSectionType.RECTANGLE,
     "max_volume": 160,  # measured brim volume; BTX nominal volume is 125 uL
+    "height_volume_data": _btx_96_wellplate_125ul_Fb_2mm_height_volume_data,
   }
 
   return Plate(
@@ -54,8 +58,8 @@ def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
       dx=13.3,  # measured manually
       dy=7.0,  # measured manually
       dz=4.0,  # measured manually
-      item_dx=9.0,  # from BTX spec / standard 96-well pitch
-      item_dy=9.0,  # from BTX spec / standard 96-well pitch
+      item_dx=9.0,
+      item_dy=9.0,
       **well_kwargs,
     ),
   )
