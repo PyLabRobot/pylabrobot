@@ -20,6 +20,7 @@ from pylabrobot.liquid_handling.backends.hamilton.prep_backend import (
   _build_container_segments,
   _effective_radius,
 )
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_star_liquid_class
 from pylabrobot.liquid_handling.standard import (
@@ -651,25 +652,27 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     await self.backend.aspirate(
       [self._make_asp()],
       use_channels=[0],
-      monitoring_mode=PrepCmd.MonitoringMode.TADM,
+      tadm=PrepCmd.TadmParameters.default(),
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateTadmV2)), 1)
 
   async def test_aspirate_lld_mode(self):
-    await self.backend.aspirate([self._make_asp()], use_channels=[0], use_lld=True)
+    await self.backend.aspirate(
+      [self._make_asp()], use_channels=[0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE]
+    )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldV2)), 1)
 
   async def test_aspirate_lld_tadm_mode(self):
     await self.backend.aspirate(
       [self._make_asp()],
       use_channels=[0],
-      use_lld=True,
-      monitoring_mode=PrepCmd.MonitoringMode.TADM,
+      lld_mode=[PrepBackend.LLDMode.CAPACITIVE],
+      tadm=PrepCmd.TadmParameters.default(),
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldTadmV2)), 1)
 
   async def test_aspirate_implicit_lld_via_lld_param(self):
-    """Passing lld= activates LLD path without use_lld=True."""
+    """Passing lld= activates LLD path without explicit lld_mode."""
     custom_lld = PrepCmd.LldParameters(
       default_values=False,
       search_start_position=90.0,
@@ -693,7 +696,7 @@ class TestPrepBackendAspirate(unittest.IsolatedAsyncioTestCase):
     self.plate.get_item("A1")
     op = self._make_asp()
     _, _, top_of_well_z, _ = _absolute_z_from_well(op)
-    await self.backend.aspirate([op], use_channels=[0], use_lld=True)
+    await self.backend.aspirate([op], use_channels=[0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
     cmd = _get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldV2)[0]
     lld = cmd.aspirate_parameters[0].lld
     self.assertAlmostEqual(lld.search_start_position, top_of_well_z, places=3)
@@ -849,7 +852,9 @@ class TestPrepBackendDispense(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseNoLldV2)), 1)
 
   async def test_dispense_lld_mode(self):
-    await self.backend.dispense([self._make_disp()], use_channels=[0], use_lld=True)
+    await self.backend.dispense(
+      [self._make_disp()], use_channels=[0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE]
+    )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseWithLldV2)), 1)
 
   async def test_dispense_volume_corrected(self):
@@ -1457,14 +1462,15 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
     await self.backend.aspirate(
       [self._make_asp()],
       use_channels=[0],
-      monitoring_mode=PrepCmd.MonitoringMode.TADM,
+      tadm=PrepCmd.TadmParameters.default(),
       command_version="v1",
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateTadm)), 1)
 
   async def test_aspirate_v1_with_lld(self):
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0], use_lld=True, command_version="v1"
+      [self._make_asp()], use_channels=[0],
+      lld_mode=[PrepBackend.LLDMode.CAPACITIVE], command_version="v1"
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLld)), 1)
 
@@ -1472,8 +1478,8 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
     await self.backend.aspirate(
       [self._make_asp()],
       use_channels=[0],
-      use_lld=True,
-      monitoring_mode=PrepCmd.MonitoringMode.TADM,
+      lld_mode=[PrepBackend.LLDMode.CAPACITIVE],
+      tadm=PrepCmd.TadmParameters.default(),
       command_version="v1",
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLldTadm)), 1)
@@ -1487,7 +1493,8 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_v1_with_lld(self):
     await self.backend.dispense(
-      [self._make_disp()], use_channels=[0], use_lld=True, command_version="v1"
+      [self._make_disp()], use_channels=[0],
+      lld_mode=[PrepBackend.LLDMode.CAPACITIVE], command_version="v1"
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseWithLld)), 1)
 
@@ -1552,6 +1559,87 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
     self.backend._supports_v2_pipetting = False
     with self.assertRaises(ValueError):
       await self.backend.aspirate([self._make_asp()], use_channels=[0], command_version="v2")
+
+
+class TestPrepSharedTraversal(unittest.IsolatedAsyncioTestCase):
+  async def test_discover_channel_drives_uses_shared_tree(self):
+    backend = _setup_backend(num_channels=2)
+    nodes = [
+      (
+        "MLPrepRoot",
+        Address(1, 1, 10),
+        ObjectInfo("MLPrepRoot", "1.0", 0, 3, Address(1, 1, 10)),
+      ),
+      (
+        "MLPrepRoot.MLPrepCpu",
+        Address(1, 1, 11),
+        ObjectInfo("MLPrepCpu", "1.0", 0, 0, Address(1, 1, 11)),
+      ),
+      (
+        "MLPrepRoot.PipettorRoot.ModuleInformation",
+        Address(1, 1, 12),
+        ObjectInfo("ModuleInformation", "1.0", 0, 0, Address(1, 1, 12)),
+      ),
+      (
+        "MLPrepRoot.Channel Root",
+        Address(1, 2, 20),
+        ObjectInfo("Channel Root", "1.0", 0, 0, Address(1, 2, 20)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel",
+        Address(1, 2, 21),
+        ObjectInfo("Channel", "1.0", 0, 0, Address(1, 2, 21)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel.Squeeze.SDrive",
+        Address(1, 2, 22),
+        ObjectInfo("SDrive", "1.0", 0, 0, Address(1, 2, 22)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel.ZAxis.ZDrive",
+        Address(1, 2, 23),
+        ObjectInfo("ZDrive", "1.0", 0, 0, Address(1, 2, 23)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.NodeInformation",
+        Address(1, 2, 24),
+        ObjectInfo("NodeInformation", "1.0", 0, 0, Address(1, 2, 24)),
+      ),
+    ]
+    backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
+
+    await backend._discover_channel_drives()
+
+    self.assertEqual(backend._mlprep_cpu_addr, Address(1, 1, 11))
+    self.assertEqual(backend._module_info_addr, Address(1, 1, 12))
+    self.assertEqual(backend._channel_sleeve_sensor_addrs, [Address(1, 2, 22)])
+    self.assertEqual(backend._channel_zdrive_addrs, [Address(1, 2, 23)])
+    self.assertEqual(backend._channel_node_info_addrs, [Address(1, 2, 24)])
+    backend.client.build_firmware_tree.assert_awaited_once()  # type: ignore[attr-defined]
+
+  async def test_print_firmware_tree_uses_shared_tree(self):
+    backend = _setup_backend(num_channels=2)
+    nodes = [
+      (
+        "MLPrepRoot",
+        Address(1, 1, 10),
+        ObjectInfo("MLPrepRoot", "1.0", 2, 1, Address(1, 1, 10)),
+      ),
+      (
+        "MLPrepRoot.Child",
+        Address(1, 1, 11),
+        ObjectInfo("Child", "1.0", 0, 0, Address(1, 1, 11)),
+      ),
+    ]
+    backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
+
+    with unittest.mock.patch("builtins.print") as print_mock:
+      await backend.print_firmware_tree()
+
+    backend.client.build_firmware_tree.assert_awaited_once()  # type: ignore[attr-defined]
+    printed = print_mock.call_args.args[0]
+    self.assertIn("MLPrepRoot @ 1:1:10", printed)
+    self.assertIn("Child @ 1:1:11", printed)
 
 
 if __name__ == "__main__":

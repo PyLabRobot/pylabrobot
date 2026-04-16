@@ -14,9 +14,13 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandMessage,
   CommandResponse,
   HoiParams,
+  interpret_hoi_success_payload,
+  log_hoi_result_entries,
+  split_hoi_params_after_warning_prefix,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import HcResultEntry
 
 
 class HamiltonCommand:
@@ -151,28 +155,70 @@ class HamiltonCommand:
     # Build final packet
     return msg.build(source, sequence, harp_response_required=response_required)
 
-  def interpret_response(self, response: CommandResponse) -> Any:
-    """Interpret success response (command layer auto-decode).
+  def _channel_index_for_entry(
+    self, entry_index: int, entry: HcResultEntry
+  ) -> Optional[int]:
+    """Map a ``HcResultEntry`` to a 0-indexed PLR channel, or ``None`` to skip.
 
-    If the command class defines a nested Response dataclass with wire-type
-    annotations, decode via parse_into_struct and return a Response instance.
-    Otherwise fall back to parse_response_parameters (dict or None).
-
-    Args:
-      response: CommandResponse from network
-
-    Returns:
-      Command.Response instance, dict, or None
+    Default: the entry's position in the HoiResult — firmware populates arrays
+    in active-channel order. ``NimbusCommand`` / ``PrepCommand`` override this
+    to translate the active-channel ordinal into the caller's 0-indexed channel
+    via ``channels_involved`` bitmask or per-channel struct-array reflection.
     """
-    cls = type(self)
-    if hasattr(cls, "Response") and response.hoi.params:
-      from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
-        HoiParamsParser,
-        parse_into_struct,
-      )
+    return entry_index
 
-      return parse_into_struct(HoiParamsParser(response.hoi.params), cls.Response)
-    return self.parse_response_parameters(response.hoi.params)
+  def interpret_response(self, response: CommandResponse) -> Any:
+    """Pure decoder for a success response — never raises on channel errors.
+
+    For ``STATUS_WARNING`` / ``COMMAND_WARNING`` frames, strips the leading
+    summary + formatted-string prefix (per ``SystemController.SendAndReceive``)
+    and logs entries parsed via ``HoiDecoder2.GetHcResults``. For plain
+    ``STATUS_RESPONSE`` / ``COMMAND_RESPONSE`` frames, decodes the Response
+    dataclass directly — the firmware emits exactly the fields declared in
+    the interface yaml, with no HoiResult trailer. HoiResult only rides on
+    warning (prefix) or exception (separate payload, handled in
+    ``send_command``) frames.
+
+    Fatal (non-success, non-warning) entries from a warning frame surface
+    through ``fatal_entries_by_channel`` and are lifted into a
+    ``ChannelizedError`` by the backend — this decoder stays pure.
+    """
+    eff, _prefix = self._strip_warning_prefix(response)
+    return interpret_hoi_success_payload(self, eff)
+
+  def fatal_entries_by_channel(
+    self, response: CommandResponse
+  ) -> dict[int, HcResultEntry]:
+    """Return fatal entries keyed by 0-indexed PLR channel.
+
+    Only non-success, non-warning entries from a warning-frame prefix are
+    included; warnings remain log-only. Exception frames are handled
+    separately in ``send_command`` via ``parse_hamilton_error_entry``.
+
+    ``entry_index`` passed to ``_channel_index_for_entry`` is the position of
+    the entry in the *original* entries list (i.e. active-channel ordinal),
+    not among fatal entries only — so bitmask / struct-array overrides can
+    map ordinal → channel correctly even when earlier channels warned.
+    """
+    _eff, prefix_entries = self._strip_warning_prefix(response)
+    per_channel: dict[int, HcResultEntry] = {}
+    for i, entry in enumerate(prefix_entries):
+      if entry.is_success:
+        continue
+      ch = self._channel_index_for_entry(i, entry)
+      if ch is None:
+        continue
+      per_channel[ch] = entry
+    return per_channel
+
+  def _strip_warning_prefix(
+    self, response: CommandResponse
+  ) -> tuple[bytes, list[HcResultEntry]]:
+    """Strip the warning-frame HoiResult prefix, if present. Logs entries."""
+    raw = response.hoi.params
+    eff, prefix_entries = split_hoi_params_after_warning_prefix(response.hoi.action_code, raw)
+    log_hoi_result_entries(type(self).__name__, prefix_entries, source="HOI prefix")
+    return eff, prefix_entries
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> Optional[dict]:
@@ -187,3 +233,19 @@ class HamiltonCommand:
       Dictionary with parsed response data, or None if no data to extract
     """
     return None
+
+
+def hamilton_error_for_entry(entry: HcResultEntry, description: str) -> Exception:
+  """Wrap an ``HcResultEntry`` in a ``RuntimeError`` using a pre-resolved description.
+
+  ``description`` is sourced from the device itself via Interface 0 method 5
+  (``EnumInfo``) — see ``HamiltonTCPClient._describe_entry``. The returned
+  exception has ``.entry`` attached so callers can dispatch on
+  ``entry.result`` / ``entry.interface_id`` / ``entry.address``.
+  """
+  err = RuntimeError(
+    f"{description} (HcResult=0x{entry.result:04X}) "
+    f"at {entry.address} iface={entry.interface_id} action={entry.action_id}"
+  )
+  err.entry = entry  # type: ignore[attr-defined]
+  return err

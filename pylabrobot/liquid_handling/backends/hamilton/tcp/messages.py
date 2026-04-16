@@ -14,9 +14,10 @@ response parsers (CommandResponse, InitResponse, RegistrationResponse).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
-from typing import Any, List, cast, get_args, get_origin, get_type_hints
+from typing import Any, List, Optional, cast, get_args, get_origin, get_type_hints
 
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
@@ -28,14 +29,18 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   HarpTransportableProtocol,
+  Hoi2Action,
   RegistrationOptionType,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   HamiltonDataType,
+  HcResultEntry,
   decode_fragment,
 )
 
 PADDED_FLAG = 0x01
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # HOI PARAMETER ENCODING - DataFragment wrapping for HOI protocol
@@ -193,6 +198,22 @@ class HoiParamsParser:
   def has_remaining(self) -> bool:
     return self._offset < len(self._data)
 
+  def remaining(self) -> bytes:
+    """Unconsumed payload bytes (from current cursor to end)."""
+    return self._data[self._offset :]
+
+  def skip_next(self) -> None:
+    """Advance past one DataFragment without decoding the payload."""
+    if self._offset + 4 > len(self._data):
+      raise ValueError(f"Insufficient data at offset {self._offset}")
+    length = int.from_bytes(self._data[self._offset + 2 : self._offset + 4], "little")
+    payload_end = self._offset + 4 + length
+    if payload_end > len(self._data):
+      raise ValueError(
+        f"DataFragment data extends beyond buffer: need {payload_end}, have {len(self._data)}"
+      )
+    self._offset = payload_end
+
   def parse_all(self) -> list[tuple[int, Any]]:
     results = []
     while self.has_remaining():
@@ -265,6 +286,68 @@ def inspect_hoi_params(params: bytes) -> List[dict]:
   return out
 
 
+_ERROR_ENTRY_RE = None  # lazy-compiled below
+
+
+def parse_hamilton_error_entries(params: bytes) -> List[HcResultEntry]:
+  """Extract every ``HcResultEntry`` from HOI exception params.
+
+  Hamilton ``COMMAND_EXCEPTION`` / ``STATUS_EXCEPTION`` responses can carry
+  one ``HcResultEntry`` per affected channel, serialized as STRING fragments
+  of the form ``0xMMMM.0xNNNN.0xOOOO:0xII,0xCCCC,0xRRRR`` (address,
+  interface_id, method_id, hc_result). On a two-channel tip-pickup where both
+  channels fail, the firmware emits two such strings — returning only the
+  first one (as the old ``parse_hamilton_error_entry`` did) silently dropped
+  the second channel's error.
+
+  This walks every fragment and uses ``re.finditer`` within each STRING so
+  multi-entry fragments are also covered. Returns entries in wire order — the
+  backend uses ``_channel_index_for_entry(i, entry)`` on each to map to a PLR
+  channel, matching the warning-frame prefix's ordinal semantics.
+  """
+  import re
+
+  global _ERROR_ENTRY_RE
+  if _ERROR_ENTRY_RE is None:
+    _ERROR_ENTRY_RE = re.compile(
+      r"0x([0-9a-fA-F]+)\.0x([0-9a-fA-F]+)\.0x([0-9a-fA-F]+)"
+      r":0x([0-9a-fA-F]+),0x([0-9a-fA-F]+)(?:,0x([0-9a-fA-F]+))?"
+    )
+
+  out: List[HcResultEntry] = []
+  if not params:
+    return out
+  offset = 0
+  while offset + 4 <= len(params):
+    type_id = params[offset]
+    length = int.from_bytes(params[offset + 2 : offset + 4], "little")
+    payload_end = offset + 4 + length
+    if payload_end > len(params):
+      return out
+    data = params[offset + 4 : payload_end]
+    if type_id == HamiltonDataType.STRING:
+      text = data.decode("utf-8", errors="replace").rstrip("\x00").strip()
+      for m in _ERROR_ENTRY_RE.finditer(text):
+        out.append(
+          HcResultEntry(
+            module_id=int(m.group(1), 16),
+            node_id=int(m.group(2), 16),
+            object_id=int(m.group(3), 16),
+            interface_id=int(m.group(4), 16),
+            action_id=int(m.group(5), 16),
+            result=int(m.group(6), 16) if m.group(6) else 0,
+          )
+        )
+    offset = payload_end
+  return out
+
+
+def parse_hamilton_error_entry(params: bytes) -> Optional[HcResultEntry]:
+  """Back-compat shim: returns the first entry from :func:`parse_hamilton_error_entries`."""
+  entries = parse_hamilton_error_entries(params)
+  return entries[0] if entries else None
+
+
 def parse_hamilton_error_params(params: bytes) -> str:
   """Extract a human-readable message from HOI exception params.
 
@@ -320,6 +403,125 @@ def _parse_hamilton_error_fragments(params: bytes) -> List[str]:
       out.append(f"type_{type_id}=<{length} bytes>")
     offset = payload_end
   return out
+
+
+def _parse_get_hc_results_string(text: str) -> list[HcResultEntry]:
+  """Parse the semicolon-separated warning string from ``HoiDecoder2.GetHcResults`` (fragment 1).
+
+  Each segment is ``0xMMMM.0xMMMM.0xMMMM:0xII,0xAAAA,0xRRRR`` (HarpAddress.ToString + iface, action, result).
+  Malformed segments are skipped, matching the C# try/except behavior.
+  """
+  entries: list[HcResultEntry] = []
+  for segment in text.split(";"):
+    segment = segment.strip()
+    if not segment:
+      continue
+    try:
+      addr_part, rest = segment.split(":", 1)
+      addr_part = addr_part.replace("0x", "").replace("0X", "")
+      rest = rest.replace("0x", "").replace("0X", "")
+      mod_s, node_s, obj_s = addr_part.split(".", 2)
+      module_id = int(mod_s, 16)
+      node_id = int(node_s, 16)
+      object_id = int(obj_s, 16)
+      fields = [x.strip() for x in rest.split(",")]
+      if len(fields) < 3:
+        continue
+      interface_id = int(fields[0], 16)
+      action_id = int(fields[1], 16)
+      result = int(fields[2], 16)
+      entries.append(
+        HcResultEntry(
+          module_id=module_id,
+          node_id=node_id,
+          object_id=object_id,
+          interface_id=interface_id,
+          action_id=action_id,
+          result=result,
+        )
+      )
+    except (ValueError, IndexError):
+      continue
+  return entries
+
+
+def hoi_action_code_base(action_byte: int) -> int:
+  """Lower 4 bits of HOI action field (response-required bit is 0x10)."""
+  return action_byte & 0x0F
+
+
+def split_hoi_params_after_warning_prefix(
+  action_code: int, params: bytes
+) -> tuple[bytes, list[HcResultEntry]]:
+  """If action is StatusWarning/CommandWarning, drop the first two fragments and parse the string aggregate.
+
+  Mirrors ``SystemController.SendAndReceive``: out-parameters start at fragment index 2; fragment 1 holds
+  the formatted warning list consumed by ``HoiResult(HoiPacket2)`` / ``GetHcResults``.
+  """
+  if not params:
+    return params, []
+  base = hoi_action_code_base(action_code)
+  if base not in (Hoi2Action.STATUS_WARNING, Hoi2Action.COMMAND_WARNING):
+    return params, []
+
+  parser = HoiParamsParser(params)
+  if not parser.has_remaining():
+    return params, []
+  try:
+    _tid0, _v0 = parser.parse_next()
+    if not parser.has_remaining():
+      return params, []
+    _tid1, v1 = parser.parse_next()
+  except ValueError:
+    return params, []
+
+  rest = parser.remaining()
+  prefix_entries: list[HcResultEntry] = []
+  if isinstance(v1, str):
+    prefix_entries = _parse_get_hc_results_string(v1)
+  elif isinstance(v1, (bytes, bytearray)):
+    prefix_entries = _parse_get_hc_results_string(
+      bytes(v1).decode("utf-8", errors="replace")
+    )
+  return rest, prefix_entries
+
+
+def log_hoi_result_entries(command_name: str, entries: list[HcResultEntry], *, source: str) -> None:
+  """Log non-success ``HcResultEntry`` rows (0x0000 skipped)."""
+  for entry in entries:
+    if entry.result == 0:
+      continue
+    logger.warning(
+      "%s %s channel result at %d:%d:%d iface=%d action=%d: 0x%04X (%s)",
+      command_name,
+      source,
+      entry.module_id,
+      entry.node_id,
+      entry.object_id,
+      entry.interface_id,
+      entry.action_id,
+      entry.result,
+      "warning" if entry.is_warning else "error",
+    )
+
+
+def interpret_hoi_success_payload(command: Any, params_bytes: bytes) -> Any:
+  """Decode command ``Response`` from HOI params.
+
+  Used for CommandResponse / StatusResponse payloads after exception and
+  warning-prefix handling. Success frames carry only the fields declared in
+  the Response dataclass — no HoiResult trailer (see firmware yaml dumps and
+  ``HoiDecoder2.cs``; HoiResult only rides on warning-prefix or exception
+  frames).
+  """
+  cls = type(command)
+  if not params_bytes:
+    return None
+
+  if hasattr(cls, "Response"):
+    return parse_into_struct(HoiParamsParser(params_bytes), cls.Response)
+
+  return command.parse_response_parameters(params_bytes)
 
 
 def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:

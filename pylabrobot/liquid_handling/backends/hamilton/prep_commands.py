@@ -27,6 +27,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U16,
   U32,
   EnumArray,
+  HcResultEntry,
   I16Array,
   PaddedBool,
   PaddedU8,
@@ -70,13 +71,6 @@ class TadmRecordingModes(IntEnum):
   NoRecording = 0
   Errors = 1
   All = 2
-
-
-class MonitoringMode(IntEnum):
-  """Selects aspirate monitoring vs TADM for pipetting commands."""
-
-  MONITORING = 0  # AspirateMonitoringParameters (default, matches v1 behavior)
-  TADM = 1  # TadmParameters
 
 
 # =============================================================================
@@ -1252,6 +1246,32 @@ class PrepCommand(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return HoiParams.from_struct(self)
 
+  def _channel_index_for_entry(
+    self, entry_index: int, entry: HcResultEntry
+  ) -> Optional[int]:
+    """Map HoiResult entry → 0-indexed channel via the first per-channel struct-array field.
+
+    Prep commands carry a ``StructArray`` of per-channel parameters whose
+    elements have a ``channel`` attribute (e.g. ``aspirate_parameters[i].channel``).
+    Entry N maps to the ``channel`` of element N. Commands without such a field
+    (``PrepGetPositions``, ``PrepIsParked``, …) fall back to the entry index.
+    """
+    for f in fields(self):
+      value = getattr(self, f.name, None)
+      if not isinstance(value, list) or not value:
+        continue
+      if entry_index >= len(value):
+        continue
+      elem = value[entry_index]
+      channel = getattr(elem, "channel", None)
+      if channel is None:
+        continue
+      try:
+        return int(channel)
+      except (TypeError, ValueError):
+        continue
+    return entry_index
+
 
 # =============================================================================
 # Pipettor / ChannelCoordinator command classes
@@ -1704,18 +1724,14 @@ class PrepInitialize(PrepCommand):
 
 @dataclass
 class PrepGetIsInitialized(PrepCommand):
-  """Query whether MLPrep is initialized.
+  """Query whether MLPrep is initialized. Firmware yaml: [1:2] GetIsInitialized(void) -> value: bool."""
 
-  From introspection (MLPrepRoot.MLPrep): iface=1 id=2 GetIsInitialized(()) -> value: I64.
-  Sent as STATUS_REQUEST (0); response is STATUS_RESPONSE (1) with one I64.
-  """
-
-  command_id = 2  # GetIsInitialized per introspection_output/MLPrepRoot_MLPrep.txt
-  action_code = 0  # STATUS_REQUEST (query methods use 0, like Nimbus IsInitialized)
+  command_id = 2
+  action_code = 0  # STATUS_REQUEST
 
   @dataclass(frozen=True)
   class Response:
-    value: I64
+    value: PaddedBool
 
 
 @dataclass
@@ -1860,26 +1876,26 @@ class PrepMethodAbort(PrepCommand):
 
 @dataclass
 class PrepIsParked(PrepCommand):
-  """Query parked status (cmd=34, dest=MLPrep). Introspection: IsParked(()) -> parked: I64."""
+  """Query parked status (cmd=34, dest=MLPrep). Firmware yaml: IsParked(void) -> parked: bool."""
 
   command_id = 34
   action_code = 0  # STATUS_REQUEST
 
   @dataclass(frozen=True)
   class Response:
-    value: I64
+    value: PaddedBool
 
 
 @dataclass
 class PrepIsSpread(PrepCommand):
-  """Query spread status (cmd=35, dest=MLPrep). Introspection: IsSpread(()) -> parked: I64."""
+  """Query spread status (cmd=35, dest=MLPrep). Firmware yaml: IsSpread(void) -> parked: bool."""
 
   command_id = 35
   action_code = 0  # STATUS_REQUEST
 
   @dataclass(frozen=True)
   class Response:
-    value: I64
+    value: PaddedBool
 
 
 # -----------------------------------------------------------------------------
@@ -1969,24 +1985,24 @@ class _PrepStatusQuery(PrepCommand):
 
 @dataclass
 class PrepGetIsEnclosurePresent(_PrepStatusQuery):
-  """GetIsEnclosurePresent (cmd=21, dest=MLPrep). Returns I64 as bool."""
+  """GetIsEnclosurePresent (cmd=21, dest=MLPrep). Firmware yaml: -> value: bool."""
 
   command_id = 21
 
   @dataclass(frozen=True)
   class Response:
-    value: I64
+    value: PaddedBool
 
 
 @dataclass
 class PrepGetSafeSpeedsEnabled(_PrepStatusQuery):
-  """GetSafeSpeedsEnabled (cmd=28, dest=MLPrep). Returns I64 as bool."""
+  """GetSafeSpeedsEnabled (cmd=28, dest=MLPrep). Firmware yaml: -> value: bool."""
 
   command_id = 28
 
   @dataclass(frozen=True)
   class Response:
-    value: I64
+    value: PaddedBool
 
 
 @dataclass

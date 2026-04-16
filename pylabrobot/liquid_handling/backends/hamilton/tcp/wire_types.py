@@ -13,6 +13,7 @@ HoiParamsParser delegate to this layer exclusively.
 from __future__ import annotations
 
 import struct as _struct
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -208,6 +209,35 @@ class CountedFlatArray(WireType):
 
   def encode_into(self, value, params: HoiParams) -> HoiParams:
     raise NotImplementedError("CountedFlatArray is decode-only (introspection protocol)")
+
+
+@dataclass(frozen=True)
+class HcResultEntry:
+  """One channel's entry in a multi-channel ``NetworkType::HoiResult``.
+
+  Source: ``decompiled/.../NetworkDefinedType.cs`` (6 parallel arrays) +
+  ``HcResultEx.cs`` (bit layout). ``result`` is the raw u16 HcResult code;
+  the high bit (0x8000) flags a warning, bits 8-11 encode error category.
+  """
+
+  module_id: int
+  node_id: int
+  object_id: int
+  interface_id: int
+  action_id: int
+  result: int
+
+  @property
+  def is_warning(self) -> bool:
+    return bool(self.result & 0x8000)
+
+  @property
+  def is_success(self) -> bool:
+    return self.result == 0 or self.is_warning
+
+  @property
+  def address(self) -> tuple[int, int, int]:
+    return (self.module_id, self.node_id, self.object_id)
 
 
 class StringType(WireType):

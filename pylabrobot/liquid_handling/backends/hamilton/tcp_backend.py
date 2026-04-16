@@ -24,14 +24,21 @@ Backends may construct the client with host/port (using this module's defaults)
 or accept a pre-built client from the caller (dependency injection) so TCP
 options stay in one place.
 
-Error handling: By default (detailed_errors=True), command failures include
-Layer A (HC_RESULT enum description) and Layer B (async method signature /
-parameter diagnosis). Set detailed_errors=False to skip Layer B.
+Error handling: ``COMMAND_EXCEPTION`` / ``STATUS_EXCEPTION`` responses are
+parsed into an ``HcResultEntry`` and raised as a ``ChannelizedError`` keyed
+by the command's resolved PLR channel — same shape as the warning-path
+``fatal_entries_by_channel`` flow. Message text resolution in
+``_describe_entry`` walks: (1) the module-scoped static ``error_codes``
+table passed by the backend (e.g. ``NIMBUS_ERROR_CODES``, keyed by
+``(module, node, object, action, code)`` — mirrors the device's own
+``HOIErrorLookup.AddErrorData`` registrations); (2) the universal
+``HC_RESULT_PROTOCOL`` table (from ``HcResult.cs``); (3) the runtime
+``EnumInfo`` cache hydrated on first miss per ``(address, interface_id)``;
+(4) hex fallback. Prep ships an empty module table pending a DLL.
 
 Key classes
 -----------
 - ObjectRegistry: maps dot-path strings to Address (e.g. "MLPrepRoot.MphRoot.MPH")
-- RegistryProxy: dot-syntax accessor (client.interfaces.MLPrepRoot.MphRoot.MPH.address)
 """
 
 from __future__ import annotations
@@ -39,18 +46,23 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
-from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import (
+  HamiltonCommand,
+  hamilton_error_for_entry,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.error_tables import (
+  HC_RESULT_PROTOCOL,
+)
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
   GET_SUBOBJECT_ADDRESS,
   GlobalTypePool,
   HamiltonIntrospection,
   ObjectInfo,
   TypeRegistry,
-  describe_hc_result,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
@@ -58,8 +70,11 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
+  parse_hamilton_error_entries,
   parse_hamilton_error_params,
 )
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import HcResultEntry
+from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   Hoi2Action,
@@ -72,11 +87,12 @@ logger = logging.getLogger(__name__)
 
 
 class ObjectRegistry:
-  """Maps object paths to addresses. Depth-1 eager by default; lazy resolution beyond."""
+  """Object graph cache keyed by both path and address."""
 
   def __init__(self, transport: "HamiltonTCPClient"):
     self._transport = transport
     self._objects: Dict[str, ObjectInfo] = {}
+    self._address_to_path: Dict[Address, str] = {}
     self._root_addresses: List[Address] = []
 
   def set_root_addresses(self, addresses: List[Address]) -> None:
@@ -87,16 +103,10 @@ class ObjectRegistry:
 
   def register(self, path: str, obj: ObjectInfo) -> None:
     self._objects[path] = obj
+    self._address_to_path[obj.address] = path
 
   def has(self, path: str) -> bool:
     return path in self._objects
-
-  def find_path_ending_with(self, suffix: str) -> Optional[str]:
-    """Return a registered path whose last component equals suffix (e.g. 'Pipette' or 'DoorLock')."""
-    for path in self._objects:
-      if path == suffix or path.endswith("." + suffix):
-        return path
-    return None
 
   def address(self, path: str) -> Address:
     obj = self._objects.get(path)
@@ -110,14 +120,7 @@ class ObjectRegistry:
 
   def find_path_by_address(self, address: Address) -> Optional[str]:
     """Return the registered object path for this address, or None if not in registry."""
-    for path, obj in self._objects.items():
-      if (
-        obj.address.module == address.module
-        and obj.address.node == address.node
-        and obj.address.object == address.object
-      ):
-        return path
-    return None
+    return self._address_to_path.get(address)
 
   async def resolve(self, path: str) -> Address:
     """Resolve a dot-path to an Address, lazy-resolving and registering as needed.
@@ -148,7 +151,7 @@ class ObjectRegistry:
 
     parent_addr = await self.resolve(parent_path)
     parent_info = self._objects[parent_path]
-    supported = await introspection.get_supported_interface0_method_ids(parent_info.address)
+    supported = await self._transport.get_supported_interface0_method_ids(parent_info.address)
     if GET_SUBOBJECT_ADDRESS not in supported:
       raise KeyError(
         f"Object at path '{parent_path}' does not support GetSubobjectAddress "
@@ -164,83 +167,6 @@ class ObjectRegistry:
       if sub_info.name == child_name:
         return sub_info.address
     raise KeyError(f"Child '{child_name}' not found under '{parent_path}'")
-
-
-class RegistryProxy:
-  """Chainable dot-syntax accessor over ObjectRegistry.
-
-  Routing: .address for required paths (KeyError if missing). Optional paths: .is_available
-  or a firmware probe, per interface. Depth-2+ paths: await .resolve() once before .address.
-  .info for metadata; __dir__ for tab-completion.
-  """
-
-  def __init__(self, registry: "ObjectRegistry", path: str = ""):
-    object.__setattr__(self, "_registry", registry)
-    object.__setattr__(self, "_path", path)
-
-  def __getattr__(self, name: str) -> "RegistryProxy":
-    current = object.__getattribute__(self, "_path")
-    new_path = name if not current else f"{current}.{name}"
-    return RegistryProxy(object.__getattribute__(self, "_registry"), new_path)
-
-  def __getitem__(self, name: str) -> "RegistryProxy":
-    """Support backend.interfaces['RootName'] or backend.interfaces['Root.Child']."""
-    current = object.__getattribute__(self, "_path")
-    if not current:
-      new_path = name
-    elif "." in name:
-      new_path = name
-    else:
-      new_path = f"{current}.{name}"
-    return RegistryProxy(object.__getattribute__(self, "_registry"), new_path)
-
-  def __dir__(self):
-    current = object.__getattribute__(self, "_path")
-    registry = object.__getattribute__(self, "_registry")
-    prefix = f"{current}." if current else ""
-    children = set()
-    for key in registry._objects:
-      if key.startswith(prefix):
-        segment = key[len(prefix) :].split(".")[0]
-        if segment:
-          children.add(segment)
-    return list(children)
-
-  async def resolve(self) -> "RegistryProxy":
-    """Lazily resolve this path (depth-2+). Must be awaited once before .address is accessible."""
-    path = object.__getattribute__(self, "_path")
-    registry = object.__getattribute__(self, "_registry")
-    await registry.resolve(path)
-    return self
-
-  @property
-  def address(self) -> Address:
-    """Wire-level destination for this path. Use for required interfaces; KeyError if not discovered."""
-    path = object.__getattribute__(self, "_path")
-    registry = object.__getattribute__(self, "_registry")
-    return cast(Address, registry.address(path))
-
-  @property
-  def info(self) -> ObjectInfo:
-    path = object.__getattribute__(self, "_path")
-    registry = object.__getattribute__(self, "_registry")
-    obj = registry._objects.get(path)
-    if obj is None:
-      raise KeyError(f"'{path}' not in registry. Call await .resolve() first.")
-    return cast(ObjectInfo, obj)
-
-  @property
-  def is_available(self) -> bool:
-    """True if this path was discovered and is present in the registry."""
-    path = object.__getattribute__(self, "_path")
-    registry = object.__getattribute__(self, "_registry")
-    return path in registry._objects
-
-  def __repr__(self) -> str:
-    path = object.__getattribute__(self, "_path")
-    registry = object.__getattribute__(self, "_registry")
-    registered = path in registry._objects
-    return f"<RegistryProxy '{path}' {'registered' if registered else 'unresolved'}>"
 
 
 @dataclass
@@ -282,8 +208,7 @@ class HamiltonInterfaceResolver:
     if name in self._resolved:
       return self._resolved[name]
     try:
-      await self.client.interfaces[spec.path].resolve()
-      addr = self.client.interfaces[spec.path].address
+      addr = await self.client.resolve_path(spec.path)
       self._resolved[name] = addr
       logger.debug("Resolved %s → %s (%s)", name, addr, spec.path)
       return addr
@@ -309,8 +234,7 @@ class HamiltonInterfaceResolver:
       assert addr is not None
       return addr
     try:
-      await self.client.interfaces[spec.path].resolve()
-      addr = cast(Address, self.client.interfaces[spec.path].address)
+      addr = await self.client.resolve_path(spec.path)
       self._resolved[name] = addr
       logger.debug("Resolved %s → %s (%s)", name, addr, spec.path)
       return addr
@@ -383,9 +307,7 @@ class HamiltonTCPClient:
   Handles connection, Protocol 7/3, discovery, object registry, and command
   execution. Use standalone for discovery notebooks or assign to
   self.client in PrepBackend/NimbusBackend. Does not implement liquid-handling.
-  interfaces (RegistryProxy): .address for required paths; .is_available or
-  firmware probe for optional; await .resolve() for depth-2+ paths.
-  detailed_errors=True (default) enables full diagnosis on command failure.
+  Addresses are resolved through ``resolve_path`` / ``resolve_target``.
   Connection timeout is configurable; when the connection drops, the next
   send_command (with ensure_connection=True) reconnects and retries once.
   Backends use composition and optional dependency injection: they may build
@@ -401,8 +323,8 @@ class HamiltonTCPClient:
     write_timeout: float = 30.0,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
-    detailed_errors: bool = True,
     connection_timeout: int = 600,
+    error_codes: Optional[Dict[tuple[int, int, int, int, int], str]] = None,
   ):
     """Initialize the Hamilton TCP client.
 
@@ -417,6 +339,11 @@ class HamiltonTCPClient:
         may close the connection. Default 300 (5 min). If the connection drops,
         the next send_command (with ensure_connection=True) reconnects and
         retries that command once.
+      error_codes: Module-scoped HcResult text table keyed by
+        ``(module_id, node_id, object_id, action_id, code)``. Backends pass
+        the table shipped for their module (``NIMBUS_ERROR_CODES``,
+        ``PREP_ERROR_CODES``, ...). Consulted before the protocol-level
+        ``HC_RESULT_PROTOCOL`` table and the runtime ``EnumInfo`` cache.
     """
     self.io = Socket(
       human_readable_device_name="Hamilton Liquid Handler",
@@ -429,7 +356,6 @@ class HamiltonTCPClient:
     self._reconnect_attempts = 0
     self.auto_reconnect = auto_reconnect
     self.max_reconnect_attempts = max_reconnect_attempts
-    self.detailed_errors = detailed_errors
     self._connection_timeout = connection_timeout
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
@@ -438,11 +364,117 @@ class HamiltonTCPClient:
     self._type_registries: Dict[Address, TypeRegistry] = {}
     self._introspection_cache: Dict[str, tuple[GlobalTypePool, TypeRegistry]] = {}
     self._global_object_addresses: list[Address] = []
+    self._supported_interface0_method_ids: Dict[Address, Set[int]] = {}
+    # Hoi2Action.EVENT subscribers (P2-10). Called synchronously from the read
+    # path when an async EVENT frame arrives — keep callbacks fast and non-blocking.
+    self._event_handlers: list[Callable[[CommandResponse], None]] = []
+    # Lazy enum + interface-name caches, hydrated on first error for a given
+    # (address, interface_id) via Interface 0 methods 4 (InterfaceDescriptors)
+    # and 5 (EnumInfo). Enum cache maps (addr, iface) -> {enum_name: {value: description}}.
+    self._enum_cache: Dict[tuple[Address, int], Dict[str, Dict[int, str]]] = {}
+    self._interface_name_cache: Dict[tuple[Address, int], Optional[str]] = {}
+    self._error_codes: Dict[tuple[int, int, int, int, int], str] = error_codes or {}
 
-  @property
-  def interfaces(self) -> RegistryProxy:
-    """Dot-syntax access to the discovered object registry."""
-    return RegistryProxy(self._registry)
+  def on_event(self, callback: Callable[[CommandResponse], None]) -> Callable[[], None]:
+    """Register a callback for Hoi2Action.EVENT frames (P2-10).
+
+    Returns an unsubscribe function. Callbacks fire on every EVENT frame
+    surfaced during ``send_command`` / ``_read_one_message``; exceptions raised
+    inside a callback are logged and swallowed so a single bad subscriber
+    cannot poison the read loop.
+    """
+    self._event_handlers.append(callback)
+
+    def _unsubscribe() -> None:
+      try:
+        self._event_handlers.remove(callback)
+      except ValueError:
+        pass
+
+    return _unsubscribe
+
+  def _dispatch_event(self, response_message: CommandResponse) -> None:
+    """Fan out an EVENT frame to all registered subscribers."""
+    for handler in list(self._event_handlers):
+      try:
+        handler(response_message)
+      except Exception as exc:
+        logger.exception("Event handler %r raised: %s", handler, exc)
+
+  async def resolve_path(self, path: str) -> Address:
+    """Resolve a dot-path to an Address using the object graph."""
+    return await self._registry.resolve(path)
+
+  async def resolve_target(
+    self,
+    target: Union[Address, str],
+    aliases: Optional[Dict[str, str]] = None,
+  ) -> Address:
+    """Resolve `Address | alias | path` to an Address."""
+    if isinstance(target, Address):
+      return target
+    resolved = aliases.get(target, target) if aliases is not None else target
+    return await self.resolve_path(resolved)
+
+  async def get_supported_interface0_method_ids(self, address: Address) -> Set[int]:
+    """Return cached supported Interface-0 methods for an address."""
+    if address in self._supported_interface0_method_ids:
+      return set(self._supported_interface0_method_ids[address])
+
+    introspection = HamiltonIntrospection(self)
+    obj = await introspection.get_object(address)
+    supported: Set[int] = set()
+    for i in range(obj.method_count):
+      try:
+        method = await introspection.get_method(address, i)
+      except Exception as e:
+        logger.debug("get_method(%s, %d) failed: %s", address, i, e)
+        continue
+      if method.interface_id == 0:
+        supported.add(method.method_id)
+    self._supported_interface0_method_ids[address] = supported
+    return set(supported)
+
+  async def build_firmware_tree(self) -> list[tuple[str, Address, ObjectInfo]]:
+    """Return a DFS-ordered list of (path, address, object_info) for all reachable objects."""
+    roots = self._registry.get_root_addresses()
+    if not roots:
+      return []
+
+    introspection = HamiltonIntrospection(self)
+    out: list[tuple[str, Address, ObjectInfo]] = []
+
+    async def walk(addr: Address, path: str) -> None:
+      obj = self._registry._objects.get(path)
+      if obj is None:
+        obj = await introspection.get_object(addr)
+        obj.children = {}
+        self._registry.register(path, obj)
+      out.append((path, addr, obj))
+      supported = await self.get_supported_interface0_method_ids(addr)
+      if GET_SUBOBJECT_ADDRESS not in supported:
+        return
+      for i in range(obj.subobject_count):
+        try:
+          child_addr = await introspection.get_subobject_address(addr, i)
+          child_info = await introspection.get_object(child_addr)
+          child_info.children = {}
+          child_path = f"{path}.{child_info.name}"
+          obj.children[child_info.name] = child_info
+          self._registry.register(child_path, child_info)
+          await walk(child_addr, child_path)
+        except Exception as e:
+          logger.debug("Failed walking child index %d for %s: %s", i, addr, e)
+
+    for root_addr in roots:
+      root_path = self._registry.path(root_addr)
+      if root_path is None:
+        root_obj = await introspection.get_object(root_addr)
+        root_obj.children = {}
+        root_path = root_obj.name
+        self._registry.register(root_path, root_obj)
+      await walk(root_addr, root_path)
+    return out
 
   def discovered_root_name(self) -> str:
     """Return the root interface name (e.g. NimbusCORE, MLPrepRoot).
@@ -615,7 +647,13 @@ class HamiltonTCPClient:
 
       if harp_protocol == 2:
         # HARP Protocol 2: HOI2
-        return CommandResponse.from_bytes(complete_data)
+        resp = CommandResponse.from_bytes(complete_data)
+        # Fan out EVENT frames to subscribers regardless of caller context.
+        # COMMAND_ACK is still returned to the caller (send_command loops past
+        # it); only truly fire-and-forget frames short-circuit here (P2-10).
+        if resp.hoi.action_code == Hoi2Action.EVENT and self._event_handlers:
+          self._dispatch_event(resp)
+        return resp
       if harp_protocol == 3:
         # HARP Protocol 3: Registration2
         return RegistrationResponse.from_bytes(complete_data)
@@ -626,6 +664,7 @@ class HamiltonTCPClient:
     return CommandResponse.from_bytes(complete_data)
 
   async def setup(self):
+    self._supported_interface0_method_ids.clear()
     """Initialize Hamilton connection and discover objects.
 
     Hamilton uses strict request-response protocol:
@@ -669,6 +708,93 @@ class HamiltonTCPClient:
       self.client_address,
       root_name,
     )
+
+  async def _describe_entry(self, entry: HcResultEntry) -> tuple[Optional[str], str]:
+    """Resolve an ``HcResultEntry`` to ``(interface_name, hc_result_description)``.
+
+    Resolution order for the description:
+
+    1. Module-scoped ``error_codes`` table (passed by the backend;
+       e.g. ``NIMBUS_ERROR_CODES``). Keyed by
+       ``(module_id, node_id, object_id, action_id, code)`` to match the
+       ``AddErrorData(harpAddress, actionId, code, text)`` registrations
+       baked into each module's firmware.
+    2. Protocol-level ``HC_RESULT_PROTOCOL`` (from ``HcResult.cs``) — the
+       named universal codes (0–1069); covers things like ``GenericTimeOut``,
+       ``ConnectionFailed``, etc.
+    3. Runtime ``EnumInfo`` cache (Interface 0 method 5). Harmless to keep
+       wired in case firmware ever exposes ``HcResult`` via ``EnumInfo`` —
+       today's firmware doesn't, so this leg is a no-op in practice.
+    4. ``"HC_RESULT=0x{code:04X}"`` hex fallback.
+
+    Interface name comes from ``InterfaceDescriptors`` (Interface 0 method 4),
+    cached per ``(address, interface_id)`` on first error.
+    """
+    addr = Address(entry.module_id, entry.node_id, entry.object_id)
+    key = (addr, entry.interface_id)
+    iface_name = await self._resolve_interface_name(addr, entry.interface_id)
+
+    desc = self._error_codes.get(
+      (entry.module_id, entry.node_id, entry.object_id, entry.action_id, entry.result)
+    )
+    if desc is None:
+      desc = HC_RESULT_PROTOCOL.get(entry.result)
+    if desc is None:
+      desc = self._lookup_hc_result_description(key, entry.result)
+    if desc is None:
+      await self._hydrate_enum_cache(addr, entry.interface_id)
+      desc = self._lookup_hc_result_description(key, entry.result)
+    if desc is None:
+      desc = f"HC_RESULT=0x{entry.result:04X}"
+    return iface_name, desc
+
+  def _lookup_hc_result_description(
+    self, key: tuple[Address, int], code: int
+  ) -> Optional[str]:
+    """Return the cached HcResult text for ``code`` on ``(addr, iface)``, or ``None``."""
+    table = self._enum_cache.get(key)
+    if table is None:
+      return None
+    return table.get("HcResult", {}).get(code)
+
+  async def _resolve_interface_name(
+    self, addr: Address, interface_id: int
+  ) -> Optional[str]:
+    """Return the cached interface name for ``(addr, interface_id)``, hydrating on miss."""
+    key = (addr, interface_id)
+    if key in self._interface_name_cache:
+      return self._interface_name_cache[key]
+    try:
+      infos = await HamiltonIntrospection(self).get_interfaces(addr)
+    except Exception as exc:
+      logger.debug("GetInterfaces failed for %s: %s", addr, exc)
+      self._interface_name_cache[key] = None
+      return None
+    for info in infos:
+      self._interface_name_cache[(addr, info.interface_id)] = info.name
+    self._interface_name_cache.setdefault(key, None)
+    return self._interface_name_cache[key]
+
+  async def _hydrate_enum_cache(self, addr: Address, interface_id: int) -> None:
+    """Fill ``self._enum_cache[(addr, interface_id)]`` via a single ``GetEnums`` call.
+
+    Stores an empty dict on failure so subsequent errors don't retry the call.
+    Inverts each ``EnumInfo.values`` ``{name: value}`` into ``{value: name}`` for
+    O(1) lookup at the error site.
+    """
+    key = (addr, interface_id)
+    if key in self._enum_cache:
+      return
+    try:
+      enums = await HamiltonIntrospection(self).get_enums(addr, interface_id)
+    except Exception as exc:
+      logger.debug("GetEnums failed for %s iface=%d: %s", addr, interface_id, exc)
+      self._enum_cache[key] = {}
+      return
+    self._enum_cache[key] = {
+      enum.name: {int(value): name for name, value in enum.values.items()}
+      for enum in enums
+    }
 
   async def _initialize_connection(self):
     """Initialize connection using Protocol 7 (ConnectionPacket).
@@ -981,41 +1107,92 @@ class HamiltonTCPClient:
         logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
 
         await self.write(message)
-        response_message = await self._read_one_message(timeout=read_timeout)
-        assert isinstance(response_message, CommandResponse)
 
-        action = Hoi2Action(response_message.hoi.action_code)
+        # Loop until we receive a terminal action frame for this command
+        # (success / warning / exception). Non-terminal frames — COMMAND_ACK
+        # (6) and EVENT (9) — are logged / dispatched and skipped. See
+        # Hoi2Action enum in HoiPacket2Constants.cs (P2-9).
+        while True:
+          response_message = await self._read_one_message(timeout=read_timeout)
+          assert isinstance(response_message, CommandResponse)
+          action = Hoi2Action(response_message.hoi.action_code)
+          if action is Hoi2Action.COMMAND_ACK:
+            logger.debug(
+              "%s COMMAND_ACK from %s; awaiting terminal response",
+              command.__class__.__name__,
+              response_message.harp.src,
+            )
+            continue
+          if action is Hoi2Action.EVENT:
+            # Already dispatched to subscribers inside _read_one_message;
+            # just skip past the frame and keep waiting for the terminal
+            # response to this command.
+            logger.debug(
+              "%s EVENT from %s; skipping past to await terminal response",
+              command.__class__.__name__,
+              response_message.harp.src,
+            )
+            continue
+          break
+
         if action in (
           Hoi2Action.STATUS_EXCEPTION,
           Hoi2Action.COMMAND_EXCEPTION,
           Hoi2Action.INVALID_ACTION_RESPONSE,
         ):
-          parsed = parse_hamilton_error_params(response_message.hoi.params)
-          # Layer A: always append HC_RESULT enum description (synchronous, no round-trips)
-          parsed_addr = HamiltonIntrospection.parse_error_address(parsed)
-          hc_suffix = f" [{describe_hc_result(parsed_addr[3])}]" if parsed_addr else ""
-          enriched_msg = f"Hamilton error {action.name} (action={action:#x}): {parsed}{hc_suffix}"
-          if raise_on_error:
-            logger.error(enriched_msg)
-            if not self.detailed_errors:
+          entries = parse_hamilton_error_entries(response_message.hoi.params)
+          if not entries:
+            raw = parse_hamilton_error_params(response_message.hoi.params)
+            enriched_msg = f"Hamilton error {action.name} (action={action:#x}): {raw}"
+            if raise_on_error:
+              logger.error(enriched_msg)
               raise RuntimeError(enriched_msg)
-            # Layer B: async TypeRegistry diagnosis (method signature, expected params)
-            # Use the address from the error response so we resolve the method on the object that threw
-            intro = HamiltonIntrospection(self)
-            error_addr = parsed_addr[0] if parsed_addr else command.dest_address
-            if error_addr not in self._type_registries:
-              try:
-                self._type_registries[error_addr] = await intro.build_type_registry(error_addr)
-              except Exception:
-                raise RuntimeError(enriched_msg)
-            diagnostic = await intro.diagnose_error(enriched_msg, self._type_registries[error_addr])
-            raise RuntimeError(diagnostic)
-          logger.debug(enriched_msg)
+            logger.debug(enriched_msg)
+            return None
+
+          # Multi-channel exceptions carry one entry per affected channel.
+          # Map each to its 0-indexed PLR channel via the same hook the
+          # warning path uses (ordinal within the entries list). Collisions
+          # on the same channel keep the first entry — wire order matches
+          # channel ordering, so collisions shouldn't happen in practice.
+          per_channel: Dict[int, Exception] = {}
+          for idx, entry in enumerate(entries):
+            _iface_name, desc = await self._describe_entry(entry)
+            err = hamilton_error_for_entry(entry, desc)
+            channel = command._channel_index_for_entry(idx, entry)
+            if channel is None:
+              channel = idx
+            per_channel.setdefault(channel, err)
+
+          if raise_on_error:
+            channel_summary = ", ".join(
+              f"ch{ch}: {per_channel[ch]}" for ch in sorted(per_channel)
+            )
+            logger.error(
+              "Hamilton %s (action=%#x) on %d channel(s): %s",
+              action.name, action, len(per_channel), channel_summary,
+            )
+            raise ChannelizedError(
+              errors=per_channel, raw_response=response_message.hoi.params
+            )
+          logger.debug(
+            "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
+            action.name, action, len(entries),
+          )
           return None
 
         if return_raw:
           return (response_message.hoi.params,)
-        return command.interpret_response(response_message)
+
+        result = command.interpret_response(response_message)
+        fatal = command.fatal_entries_by_channel(response_message)
+        if fatal:
+          per_channel: Dict[int, Exception] = {}
+          for ch, e in fatal.items():
+            _iface_name, desc = await self._describe_entry(e)
+            per_channel[ch] = hamilton_error_for_entry(e, desc)
+          raise ChannelizedError(errors=per_channel)
+        return result
 
       except connection_errors as e:
         last_error = e
@@ -1075,6 +1252,7 @@ class HamiltonTCPClient:
   def clear_introspection_cache(self) -> None:
     """Clear cached introspection results (from ``introspect(cache=True)``)."""
     self._introspection_cache.clear()
+    self._supported_interface0_method_ids.clear()
 
   async def stop(self):
     """Close connection."""

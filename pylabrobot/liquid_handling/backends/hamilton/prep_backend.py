@@ -4,7 +4,7 @@ Three-layer design:
 
 - **HamiltonTCPClient** (``self.client``): Transport and introspection.
   All device communication goes through ``self.client.send_command()``.
-  Address resolution: ``self.client.interfaces.<path>.address``.
+  Address resolution: ``await self.client.resolve_target(path_or_alias_or_address)``.
   The backend composes the client via dependency injection: callers pass host
   (and optionally port) for default TCP settings, or pass a pre-configured
   HamiltonTCPClient for full control.
@@ -16,7 +16,7 @@ Three-layer design:
 - **PrepBackend methods**: Domain logic and defaults.
   Single source of truth for Prep-specific parameter defaults.
 
-Standalone access: ``lh.backend.client.interfaces.MLPrepRoot.MphRoot.MPH.address``,
+Standalone access: ``await lh.backend.client.resolve_path("MLPrepRoot.MphRoot.MPH")``,
 ``HamiltonIntrospection(lh.backend.client)``.
 """
 
@@ -28,11 +28,14 @@ import logging
 import math
 import random
 from dataclasses import dataclass
-from typing import Awaitable, Callable, List, Literal, Optional, Tuple, TypeVar, Union, overload
+from typing import Awaitable, Callable, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union, overload
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
+from pylabrobot.liquid_handling.backends.hamilton.tcp.error_tables import (
+  PREP_ERROR_CODES,
+)
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
   HamiltonInterfaceResolver,
@@ -184,11 +187,19 @@ def _segments_to_cone_geometry(
   return (tube_radius, cone_height, cone_bottom_radius)
 
 
-def _absolute_z_from_well(op, z_air_margin_mm: float = 2.0):
+class _WellGeometry(NamedTuple):
+  """Absolute Z positions derived from well geometry."""
+
+  well_bottom: float
+  liquid_surface: float
+  top_of_well: float
+  z_air: float
+
+
+def _absolute_z_from_well(op, z_air_margin_mm: float = 2.0) -> _WellGeometry:
   """Compute absolute Z values from well geometry for aspirate/dispense (STAR-aligned).
 
-  Returns (well_bottom_z, liquid_surface_z, top_of_well_z, z_air_z). The resource
-  must have get_size_z() (e.g. a well/container); otherwise raises ValueError.
+  The resource must have get_size_z() (e.g. a well/container); otherwise raises ValueError.
   """
   loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
   well_bottom_z = loc.z + op.offset.z
@@ -202,7 +213,7 @@ def _absolute_z_from_well(op, z_air_margin_mm: float = 2.0):
   size_z = op.resource.get_size_z()
   top_of_well_z = loc.z + size_z
   z_air_z = top_of_well_z + z_air_margin_mm
-  return (well_bottom_z, liquid_surface_z, top_of_well_z, z_air_z)
+  return _WellGeometry(well_bottom_z, liquid_surface_z, top_of_well_z, z_air_z)
 
 
 # =============================================================================
@@ -269,6 +280,29 @@ class _DispenseChannelKit:
   tadm: PrepCmd.TadmParameters
   mix: PrepCmd.MixParameters
   adc: PrepCmd.AdcParameters
+
+
+@dataclass(frozen=True)
+class _ChannelContext:
+  """Shared resolved state for aspirate/dispense channel resolution.
+
+  Computed once by ``_resolve_channel_context``; operation-specific resolve
+  methods add their own parameters on top.
+  """
+
+  n: int
+  hlcs: List[Optional[HamiltonLiquidClass]]
+  disable_volume_correction: List[bool]
+  ch_to_idx: dict[int, int]
+  indexed_ops: dict[int, object]
+  volumes: List[float]
+  well_geometry: List[_WellGeometry]
+  z_minimum: List[float]
+  z_fluid: List[float]
+  z_air: List[float]
+  z_final: List[float]
+  z_bottom_search_offset: List[float]
+  ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]]
 
 
 class PrepBackend(LiquidHandlerBackend):
@@ -360,7 +394,7 @@ class PrepBackend(LiquidHandlerBackend):
         raise TypeError("Provide either host or client, not both")
       self.client = client
     elif host is not None:
-      self.client = HamiltonTCPClient(host=host, port=port)
+      self.client = HamiltonTCPClient(host=host, port=port, error_codes=PREP_ERROR_CODES)
     else:
       raise TypeError("Provide either host or client")
     self._config: Optional[PrepCmd.InstrumentConfig] = None
@@ -461,7 +495,8 @@ class PrepBackend(LiquidHandlerBackend):
       OSError,
     ):
       raise
-    except Exception:
+    except Exception as e:
+      logger.warning("Failed to query present channels: %s", e)
       return None
 
   async def setup(self, smart: bool = True, force_initialize: bool = False):
@@ -571,77 +606,38 @@ class PrepBackend(LiquidHandlerBackend):
 
     All lookups are by object name, not hardcoded object IDs.
     """
-    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import HamiltonIntrospection
-
     self._channel_sleeve_sensor_addrs = []
     self._channel_zdrive_addrs = []
     self._channel_node_info_addrs = []
     self._mlprep_cpu_addr = None
     self._module_info_addr = None
 
-    intro = HamiltonIntrospection(self.client)
-    root_addrs = self.client._registry.get_root_addresses()
-    if not root_addrs:
+    nodes = await self.client.build_firmware_tree()
+    if not nodes:
       return
 
-    root_addr = root_addrs[0]
-    root_info = await intro.get_object(root_addr)
+    indexed: dict[str, Address] = {path: addr for path, addr, _ in nodes}
+    self._module_info_addr = indexed.get("MLPrepRoot.PipettorRoot.ModuleInformation")
+    if self._module_info_addr is not None:
+      logger.debug("Discovered ModuleInformation at %s", self._module_info_addr)
 
-    async def find_child_by_name(parent_addr, parent_info, name):
-      """Find a direct child object by name. Returns (address, info) or (None, None)."""
-      for i in range(parent_info.subobject_count):
-        try:
-          child_addr = await intro.get_subobject_address(parent_addr, i)
-          child_info = await intro.get_object(child_addr)
-          if child_info.name == name:
-            return child_addr, child_info
-        except Exception:
-          continue
-      return None, None
-
-    for i in range(root_info.subobject_count):
-      try:
-        sub_addr = await intro.get_subobject_address(root_addr, i)
-        sub_info = await intro.get_object(sub_addr)
-      except Exception:
-        continue
-
-      # MLPrepCpu — controller firmware version info
-      if sub_info.name == "MLPrepCpu":
+    for path, sub_addr, sub_info in nodes:
+      parts = path.split(".")
+      if len(parts) == 2 and parts[-1] == "MLPrepCpu":
         self._mlprep_cpu_addr = sub_addr
         logger.debug("Discovered MLPrepCpu at %s", sub_addr)
         continue
-
-      # PipettorRoot → ModuleInformation
-      if sub_info.name == "PipettorRoot":
-        mod_addr, _ = await find_child_by_name(sub_addr, sub_info, "ModuleInformation")
-        if mod_addr is not None:
-          self._module_info_addr = mod_addr
-          logger.debug("Discovered ModuleInformation at %s", mod_addr)
+      if len(parts) != 2 or parts[-1] != "Channel Root":
         continue
 
-      if sub_info.name != "Channel Root":
-        continue
-
-      # Channel Root → Channel → Squeeze → SDrive
-      channel_addr, channel_info = await find_child_by_name(sub_addr, sub_info, "Channel")
-      if channel_addr is None:
+      channel_path = f"{path}.Channel"
+      if channel_path not in indexed:
         logger.warning("Channel Root on node %d has no 'Channel' child, skipping", sub_addr.node)
         continue
 
-      squeeze_addr, squeeze_info = await find_child_by_name(channel_addr, channel_info, "Squeeze")
-      sdrive_addr = None
-      if squeeze_addr is not None and squeeze_info is not None:
-        sdrive_addr, _ = await find_child_by_name(squeeze_addr, squeeze_info, "SDrive")
-
-      # Channel Root → Channel → ZAxis → ZDrive
-      zaxis_addr, zaxis_info = await find_child_by_name(channel_addr, channel_info, "ZAxis")
-      zdrive_addr = None
-      if zaxis_addr is not None and zaxis_info is not None:
-        zdrive_addr, _ = await find_child_by_name(zaxis_addr, zaxis_info, "ZDrive")
-
-      # Channel Root → NodeInformation
-      node_info_addr, _ = await find_child_by_name(sub_addr, sub_info, "NodeInformation")
+      sdrive_addr = indexed.get(f"{channel_path}.Squeeze.SDrive")
+      zdrive_addr = indexed.get(f"{channel_path}.ZAxis.ZDrive")
+      node_info_addr = indexed.get(f"{path}.NodeInformation")
 
       if sdrive_addr is not None:
         self._channel_sleeve_sensor_addrs.append(sdrive_addr)
@@ -835,9 +831,10 @@ class PrepBackend(LiquidHandlerBackend):
   async def is_initialized(self) -> bool:
     """Query whether MLPrep reports as initialized (GetIsInitialized, cmd=2).
 
-    Uses MLPrep method from introspection: GetIsInitialized(()) -> value: I64.
-    Requires MLPrep to be discovered (e.g. after self.client.setup() and
-    _discover_prep_objects()). Call before or after PrepCmd.PrepInitialize to test.
+    Uses MLPrep method from introspection (iface=1, id=2). Wire response is a
+    single ``PaddedBool`` fragment — the introspection descriptor's I64 is the
+    .NET abstract type, not the wire encoding. Requires MLPrep to be discovered
+    (e.g. after self.client.setup() and _discover_prep_objects()).
     """
     result = await self.client.send_command(
       PrepCmd.PrepGetIsInitialized(dest=await self._require("mlprep"))
@@ -1066,7 +1063,7 @@ class PrepBackend(LiquidHandlerBackend):
     ops: List[Drop],
     use_channels: List[int],
     final_z: Optional[float] = None,
-    seek_speed: float = 30.0,
+    seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
     drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
@@ -1293,6 +1290,12 @@ class PrepBackend(LiquidHandlerBackend):
     is removed and its geometry information is folded into the v1 cone model
     fields of CommonParameters.
     """
+    if len(segments) > 1:
+      logger.warning(
+        "v1 command selected: collapsing %d container segments into single cone approximation. "
+        "Liquid following accuracy may be reduced for complex container geometries.",
+        len(segments),
+      )
     tube_r, cone_h, cone_br = _segments_to_cone_geometry(segments, common.tube_radius)
     return PrepCmd.CommonParameters(
       default_values=common.default_values,
@@ -1317,7 +1320,6 @@ class PrepBackend(LiquidHandlerBackend):
   def _resolve_effective_lld(
     self,
     lld_mode: Optional[List[LLDMode]],
-    use_lld: bool,
     lld: Optional[PrepCmd.LldParameters],
     n: int,
     *,
@@ -1327,7 +1329,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     Validates ``lld_mode`` length, rejects disallowed modes (e.g. PRESSURE for
     dispense), enforces all-or-nothing across channels, and returns a single bool.
-    Falls back to ``use_lld`` / ``lld`` presence when ``lld_mode`` is None.
+    Falls back to ``lld`` presence when ``lld_mode`` is None.
     """
     if lld_mode is not None:
       if len(lld_mode) != n:
@@ -1347,7 +1349,7 @@ class PrepBackend(LiquidHandlerBackend):
           "Split into separate calls for channels with different LLD modes."
         )
       return all(lld_on)
-    return use_lld or (lld is not None)
+    return lld is not None
 
   @staticmethod
   def _default_lld_params(
@@ -1399,6 +1401,107 @@ class PrepBackend(LiquidHandlerBackend):
     return lld or PrepCmd.LldParameters.default()
 
   # ---------------------------------------------------------------------------
+  # Shared channel resolution
+  # ---------------------------------------------------------------------------
+
+  def _resolve_channel_context(
+    self,
+    ops,
+    use_channels: List[int],
+    *,
+    z_final: Optional[List[float]] = None,
+    z_fluid: Optional[List[float]] = None,
+    z_air: Optional[List[float]] = None,
+    z_minimum: Optional[List[float]] = None,
+    z_bottom_search_offset: Optional[List[float]] = None,
+    container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
+    auto_container_geometry: bool = False,
+    hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
+  ) -> _ChannelContext:
+    """Resolve shared per-channel state for aspirate or dispense.
+
+    Validates inputs, resolves HLCs, computes volume corrections, well geometry,
+    z-parameter defaults, and container segments. Operation-specific defaults
+    (settling_time, flow_rate, etc.) are left to the caller.
+    """
+    if len(ops) != len(use_channels):
+      raise ValueError(f"len(ops) must equal len(use_channels): {len(ops)} != {len(use_channels)}")
+    if use_channels and max(use_channels) >= self.num_channels:
+      raise ValueError(
+        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
+      )
+
+    n = len(ops)
+    hlcs: List[Optional[HamiltonLiquidClass]]
+    if hamilton_liquid_classes is not None:
+      if len(hamilton_liquid_classes) != n:
+        raise ValueError(
+          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
+        )
+      hlcs = list(hamilton_liquid_classes)
+    else:
+      hlcs = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=Liquid.WATER,
+          jet=False,
+          blow_out=False,
+        )
+        for op in ops
+      ]
+    dvc = disable_volume_correction if disable_volume_correction is not None else [False] * n
+    if len(dvc) != n:
+      raise ValueError(
+        f"disable_volume_correction length must match len(ops): {len(dvc)} != {n}"
+      )
+    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
+    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
+
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, dvc)
+    ]
+
+    well_geometry = [_absolute_z_from_well(op) for op in ops]
+    raw_traverse = self._resolve_traverse_height(None)
+    z_minimum = fill_in_defaults(z_minimum, [g.well_bottom for g in well_geometry])
+    z_fluid = fill_in_defaults(z_fluid, [g.liquid_surface for g in well_geometry])
+    z_air = fill_in_defaults(z_air, [g.z_air for g in well_geometry])
+    z_final = fill_in_defaults(z_final, [
+      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
+    ])
+    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, [2.0] * n)
+
+    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
+    for i, ch in enumerate(use_channels):
+      if container_segments is not None and i < len(container_segments):
+        ch_segments[ch] = container_segments[i]
+      elif auto_container_geometry:
+        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
+      else:
+        ch_segments[ch] = []
+
+    return _ChannelContext(
+      n=n,
+      hlcs=hlcs,
+      disable_volume_correction=dvc,
+      ch_to_idx=ch_to_idx,
+      indexed_ops=indexed_ops,
+      volumes=volumes,
+      well_geometry=well_geometry,
+      z_minimum=z_minimum,
+      z_fluid=z_fluid,
+      z_air=z_air,
+      z_final=z_final,
+      z_bottom_search_offset=z_bottom_search_offset,
+      ch_segments=ch_segments,
+    )
+
+  # ---------------------------------------------------------------------------
   # Aspirate: resolve, assemble, send
   # ---------------------------------------------------------------------------
 
@@ -1427,59 +1530,29 @@ class PrepBackend(LiquidHandlerBackend):
     disable_volume_correction: Optional[List[bool]] = None,
   ) -> list[_AspirateChannelKit]:
     """Resolve all per-channel values for aspirate (pure computation, no I/O)."""
-    assert len(ops) == len(use_channels)
-    if use_channels:
-      assert max(use_channels) < self.num_channels, (
-        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
-      )
-
-    n = len(ops)
-    hlcs: List[Optional[HamiltonLiquidClass]]
-    if hamilton_liquid_classes is not None:
-      if len(hamilton_liquid_classes) != n:
-        raise ValueError(
-          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
-        )
-      hlcs = list(hamilton_liquid_classes)
-    else:
-      hlcs = [
-        get_star_liquid_class(
-          tip_volume=op.tip.maximal_volume,
-          is_core=False,
-          is_tip=True,
-          has_filter=op.tip.has_filter,
-          liquid=Liquid.WATER,
-          jet=False,
-          blow_out=False,
-        )
-        for op in ops
-      ]
-    disable_volume_correction = (
-      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    ctx = self._resolve_channel_context(
+      ops, use_channels,
+      z_final=z_final, z_fluid=z_fluid, z_air=z_air,
+      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
+      container_segments=container_segments, auto_container_geometry=auto_container_geometry,
+      hamilton_liquid_classes=hamilton_liquid_classes,
+      disable_volume_correction=disable_volume_correction,
     )
-    if len(disable_volume_correction) != n:
-      raise ValueError(
-        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
-      )
-    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
 
-    default_settling = [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs]
-    default_transport_air = [
+    # Aspirate-specific HLC defaults
+    hlcs = ctx.hlcs
+    settling_time = fill_in_defaults(settling_time, [
+      hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs
+    ])
+    transport_air_volume = fill_in_defaults(transport_air_volume, [
       hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    default_z_exit_speed = [hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
-    default_prewet = [
+    ])
+    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, [
+      hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs
+    ])
+    prewet_volume = fill_in_defaults(prewet_volume, [
       hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    settling_time = fill_in_defaults(settling_time, default_settling)
-    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air)
-    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_exit_speed)
-    prewet_volume = fill_in_defaults(prewet_volume, default_prewet)
-
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
+    ])
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hlcs)
@@ -1489,41 +1562,15 @@ class PrepBackend(LiquidHandlerBackend):
       for op, hlc in zip(ops, hlcs)
     ]
 
-    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
-
-    well_geometry = [_absolute_z_from_well(op) for op in ops]
-    default_z_minimum = [g[0] for g in well_geometry]
-    default_z_fluid = [g[1] for g in well_geometry]
-    default_z_air = [g[3] for g in well_geometry]
-    raw_traverse = self._resolve_traverse_height(None)
-    default_z_final = [
-      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
-    ]
-    default_z_bso = [2.0] * n
-    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
-    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
-    z_air = fill_in_defaults(z_air, default_z_air)
-    z_final = fill_in_defaults(z_final, default_z_final)
-    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bso)
-
-    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
-    for i, ch in enumerate(use_channels):
-      if container_segments is not None and i < len(container_segments):
-        ch_segments[ch] = container_segments[i]
-      elif auto_container_geometry:
-        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
-      else:
-        ch_segments[ch] = []
-
     lld_defaults = self._default_lld_params(effective_lld, p_lld, c_lld)
     _tadm = tadm or PrepCmd.TadmParameters.default()
 
     kits: list[_AspirateChannelKit] = []
     for ch in range(self.num_channels):
-      if ch not in indexed_ops:
+      if ch not in ctx.indexed_ops:
         continue
-      idx = ch_to_idx[ch]
-      op = indexed_ops[ch]
+      idx = ctx.ch_to_idx[ch]
+      op = ctx.indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
 
@@ -1537,22 +1584,22 @@ class PrepBackend(LiquidHandlerBackend):
             blowout_volume=blowout_volumes[idx],
           ),
           common=PrepCmd.CommonParameters.for_op(
-            volumes[idx],
+            ctx.volumes[idx],
             radius,
             flow_rate=flow_rates[idx],
-            z_minimum=z_minimum[idx],
-            z_final=z_final[idx],
+            z_minimum=ctx.z_minimum[idx],
+            z_final=ctx.z_final[idx],
             z_liquid_exit_speed=z_liquid_exit_speed[idx],
             transport_air_volume=transport_air_volume[idx],
             settling_time=settling_time[idx],
           ),
-          segments=ch_segments[ch],
+          segments=ctx.ch_segments[ch],
           no_lld=PrepCmd.NoLldParameters.for_fixed_z(
-            z_fluid[idx],
-            z_air[idx],
-            z_bottom_search_offset=z_bottom_search_offset[idx],
+            ctx.z_fluid[idx],
+            ctx.z_air[idx],
+            z_bottom_search_offset=ctx.z_bottom_search_offset[idx],
           ),
-          lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
+          lld=self._lld_for_well(effective_lld, lld, ctx.well_geometry[idx].top_of_well),
           p_lld=lld_defaults.p_lld,
           c_lld=lld_defaults.c_lld,
           monitoring=PrepCmd.AspirateMonitoringParameters.default(),
@@ -1690,6 +1737,18 @@ class PrepBackend(LiquidHandlerBackend):
         aspirate_monitoring=kit.monitoring,
       )
 
+  # Command dispatch tables: (effective_lld, is_tadm, use_v2) → command class
+  _ASPIRATE_CMD = {
+    (True,  True,  True):  PrepCmd.PrepAspirateWithLldTadmV2,
+    (True,  True,  False): PrepCmd.PrepAspirateWithLldTadm,
+    (True,  False, True):  PrepCmd.PrepAspirateWithLldV2,
+    (True,  False, False): PrepCmd.PrepAspirateWithLld,
+    (False, True,  True):  PrepCmd.PrepAspirateTadmV2,
+    (False, True,  False): PrepCmd.PrepAspirateTadm,
+    (False, False, True):  PrepCmd.PrepAspirateNoLldMonitoringV2,
+    (False, False, False): PrepCmd.PrepAspirateNoLldMonitoring,
+  }
+
   async def _send_aspirate(
     self,
     kits: list[_AspirateChannelKit],
@@ -1700,56 +1759,13 @@ class PrepBackend(LiquidHandlerBackend):
   ) -> None:
     """Assemble the correct param types and send the aspirate command."""
     dest = await self._require("pipettor")
-    rt = read_timeout if effective_lld else None
-
-    if effective_lld and is_tadm:
-      if use_v2:
-        params_lt2 = [self._assemble_aspirate_v2(k, True, True) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateWithLldTadmV2(dest=dest, aspirate_parameters=params_lt2),  # type: ignore[arg-type]
-          read_timeout=rt,
-        )
-      else:
-        params_lt1 = [self._assemble_aspirate_v1(k, True, True) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateWithLldTadm(dest=dest, aspirate_parameters=params_lt1),  # type: ignore[arg-type]
-          read_timeout=rt,
-        )
-    elif effective_lld:
-      if use_v2:
-        params_lm2 = [self._assemble_aspirate_v2(k, True, False) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateWithLldV2(dest=dest, aspirate_parameters=params_lm2),  # type: ignore[arg-type]
-          read_timeout=rt,
-        )
-      else:
-        params_lm1 = [self._assemble_aspirate_v1(k, True, False) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateWithLld(dest=dest, aspirate_parameters=params_lm1),  # type: ignore[arg-type]
-          read_timeout=rt,
-        )
-    elif is_tadm:
-      if use_v2:
-        params_nt2 = [self._assemble_aspirate_v2(k, False, True) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateTadmV2(dest=dest, aspirate_parameters=params_nt2),  # type: ignore[arg-type]
-        )
-      else:
-        params_nt1 = [self._assemble_aspirate_v1(k, False, True) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateTadm(dest=dest, aspirate_parameters=params_nt1),  # type: ignore[arg-type]
-        )
-    else:
-      if use_v2:
-        params_nm2 = [self._assemble_aspirate_v2(k, False, False) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateNoLldMonitoringV2(dest=dest, aspirate_parameters=params_nm2),  # type: ignore[arg-type]
-        )
-      else:
-        params_nm1 = [self._assemble_aspirate_v1(k, False, False) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepAspirateNoLldMonitoring(dest=dest, aspirate_parameters=params_nm1),  # type: ignore[arg-type]
-        )
+    cmd_cls = self._ASPIRATE_CMD[(effective_lld, is_tadm, use_v2)]
+    assembler = self._assemble_aspirate_v2 if use_v2 else self._assemble_aspirate_v1
+    params = [assembler(k, effective_lld, is_tadm) for k in kits]
+    await self.client.send_command(
+      cmd_cls(dest=dest, aspirate_parameters=params),  # type: ignore[arg-type]
+      read_timeout=read_timeout if effective_lld else None,
+    )
 
   # ---------------------------------------------------------------------------
   # Dispense: resolve, assemble, send
@@ -1761,7 +1777,7 @@ class PrepBackend(LiquidHandlerBackend):
     use_channels: List[int],
     effective_lld: bool,
     *,
-    final_z: Optional[List[float]] = None,
+    z_final: Optional[List[float]] = None,
     z_fluid: Optional[List[float]] = None,
     z_air: Optional[List[float]] = None,
     settling_time: Optional[List[float]] = None,
@@ -1779,98 +1795,45 @@ class PrepBackend(LiquidHandlerBackend):
     disable_volume_correction: Optional[List[bool]] = None,
   ) -> list[_DispenseChannelKit]:
     """Resolve all per-channel values for dispense (pure computation, no I/O)."""
-    assert len(ops) == len(use_channels)
-    if use_channels:
-      assert max(use_channels) < self.num_channels, (
-        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
-      )
-
-    n = len(ops)
-    hlcs: List[Optional[HamiltonLiquidClass]]
-    if hamilton_liquid_classes is not None:
-      if len(hamilton_liquid_classes) != n:
-        raise ValueError(
-          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
-        )
-      hlcs = list(hamilton_liquid_classes)
-    else:
-      hlcs = [
-        get_star_liquid_class(
-          tip_volume=op.tip.maximal_volume,
-          is_core=False,
-          is_tip=True,
-          has_filter=op.tip.has_filter,
-          liquid=Liquid.WATER,
-          jet=False,
-          blow_out=False,
-        )
-        for op in ops
-      ]
-    disable_volume_correction = (
-      disable_volume_correction if disable_volume_correction is not None else [False] * n
+    ctx = self._resolve_channel_context(
+      ops, use_channels,
+      z_final=z_final, z_fluid=z_fluid, z_air=z_air,
+      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
+      container_segments=container_segments, auto_container_geometry=auto_container_geometry,
+      hamilton_liquid_classes=hamilton_liquid_classes,
+      disable_volume_correction=disable_volume_correction,
     )
-    if len(disable_volume_correction) != n:
-      raise ValueError(
-        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
-      )
-    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
 
-    default_settling = [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs]
-    default_transport_air = [
+    # Dispense-specific HLC defaults
+    hlcs = ctx.hlcs
+    settling_time = fill_in_defaults(settling_time, [
+      hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs
+    ])
+    transport_air_volume = fill_in_defaults(transport_air_volume, [
       hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
-    ]
-    default_z_exit_speed = [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
-    default_stop_back = [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs]
-    default_cutoff = [hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs]
-    settling_time = fill_in_defaults(settling_time, default_settling)
-    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air)
-    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_exit_speed)
-    stop_back_volume = fill_in_defaults(stop_back_volume, default_stop_back)
-    cutoff_speed = fill_in_defaults(cutoff_speed, default_cutoff)
-
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
-      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
-    ]
+    ])
+    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, [
+      hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs
+    ])
+    stop_back_volume = fill_in_defaults(stop_back_volume, [
+      hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs
+    ])
+    cutoff_speed = fill_in_defaults(cutoff_speed, [
+      hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs
+    ])
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hlcs)
     ]
 
-    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
-
-    well_geometry = [_absolute_z_from_well(op) for op in ops]
-    default_z_minimum = [g[0] for g in well_geometry]
-    default_z_fluid = [g[1] for g in well_geometry]
-    default_z_air = [g[3] for g in well_geometry]
-    raw_traverse = self._resolve_traverse_height(None)
-    default_final_z = [
-      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
-    ]
-    default_z_bso = [2.0] * n
-    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
-    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
-    z_air = fill_in_defaults(z_air, default_z_air)
-    final_z = fill_in_defaults(final_z, default_final_z)
-    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bso)
-
-    ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
-    for i, ch in enumerate(use_channels):
-      if container_segments is not None and i < len(container_segments):
-        ch_segments[ch] = container_segments[i]
-      elif auto_container_geometry:
-        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
-      else:
-        ch_segments[ch] = []
-
     lld_defaults = self._default_lld_params(effective_lld, c_lld=c_lld)
 
     kits: list[_DispenseChannelKit] = []
     for ch in range(self.num_channels):
-      if ch not in indexed_ops:
+      if ch not in ctx.indexed_ops:
         continue
-      idx = ch_to_idx[ch]
-      op = indexed_ops[ch]
+      idx = ctx.ch_to_idx[ch]
+      op = ctx.indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
 
@@ -1883,22 +1846,22 @@ class PrepBackend(LiquidHandlerBackend):
             cutoff_speed=cutoff_speed[idx],
           ),
           common=PrepCmd.CommonParameters.for_op(
-            volumes[idx],
+            ctx.volumes[idx],
             radius,
             flow_rate=flow_rates[idx],
-            z_minimum=z_minimum[idx],
-            z_final=final_z[idx],
+            z_minimum=ctx.z_minimum[idx],
+            z_final=ctx.z_final[idx],
             z_liquid_exit_speed=z_liquid_exit_speed[idx],
             transport_air_volume=transport_air_volume[idx],
             settling_time=settling_time[idx],
           ),
-          segments=ch_segments[ch],
+          segments=ctx.ch_segments[ch],
           no_lld=PrepCmd.NoLldParameters.for_fixed_z(
-            z_fluid[idx],
-            z_air[idx],
-            z_bottom_search_offset=z_bottom_search_offset[idx],
+            ctx.z_fluid[idx],
+            ctx.z_air[idx],
+            z_bottom_search_offset=ctx.z_bottom_search_offset[idx],
           ),
-          lld=self._lld_for_well(effective_lld, lld, well_geometry[idx][2]),
+          lld=self._lld_for_well(effective_lld, lld, ctx.well_geometry[idx].top_of_well),
           c_lld=lld_defaults.c_lld,
           tadm=PrepCmd.TadmParameters.default(),
           mix=PrepCmd.MixParameters.default(),
@@ -1970,37 +1933,30 @@ class PrepBackend(LiquidHandlerBackend):
         tadm=kit.tadm,
       )
 
+  # Command dispatch table: (effective_lld, use_v2) → command class
+  _DISPENSE_CMD = {
+    (True,  True):  PrepCmd.PrepDispenseWithLldV2,
+    (True,  False): PrepCmd.PrepDispenseWithLld,
+    (False, True):  PrepCmd.PrepDispenseNoLldV2,
+    (False, False): PrepCmd.PrepDispenseNoLld,
+  }
+
   async def _send_dispense(
     self,
     kits: list[_DispenseChannelKit],
     effective_lld: bool,
     use_v2: bool,
+    read_timeout: Optional[float] = None,
   ) -> None:
     """Assemble the correct param types and send the dispense command."""
     dest = await self._require("pipettor")
-
-    if effective_lld:
-      if use_v2:
-        params_l2 = [self._assemble_dispense_v2(k, True) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepDispenseWithLldV2(dest=dest, dispense_parameters=params_l2),  # type: ignore[arg-type]
-        )
-      else:
-        params_l1 = [self._assemble_dispense_v1(k, True) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepDispenseWithLld(dest=dest, dispense_parameters=params_l1),  # type: ignore[arg-type]
-        )
-    else:
-      if use_v2:
-        params_n2 = [self._assemble_dispense_v2(k, False) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepDispenseNoLldV2(dest=dest, dispense_parameters=params_n2),  # type: ignore[arg-type]
-        )
-      else:
-        params_n1 = [self._assemble_dispense_v1(k, False) for k in kits]
-        await self.client.send_command(
-          PrepCmd.PrepDispenseNoLld(dest=dest, dispense_parameters=params_n1),  # type: ignore[arg-type]
-        )
+    cmd_cls = self._DISPENSE_CMD[(effective_lld, use_v2)]
+    assembler = self._assemble_dispense_v2 if use_v2 else self._assemble_dispense_v1
+    params = [assembler(k, effective_lld) for k in kits]
+    await self.client.send_command(
+      cmd_cls(dest=dest, dispense_parameters=params),  # type: ignore[arg-type]
+      read_timeout=read_timeout if effective_lld else None,
+    )
 
   # ---------------------------------------------------------------------------
   # Public aspirate / dispense orchestrators
@@ -2019,9 +1975,7 @@ class PrepBackend(LiquidHandlerBackend):
     prewet_volume: Optional[List[float]] = None,
     z_minimum: Optional[List[float]] = None,
     z_bottom_search_offset: Optional[List[float]] = None,
-    monitoring_mode: PrepCmd.MonitoringMode = PrepCmd.MonitoringMode.MONITORING,
     lld_mode: Optional[List[LLDMode]] = None,
-    use_lld: bool = False,
     lld: Optional[PrepCmd.LldParameters] = None,
     p_lld: Optional[PrepCmd.PLldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
@@ -2038,7 +1992,7 @@ class PrepBackend(LiquidHandlerBackend):
     """Aspirate, dispatching to the appropriate command variant and version.
 
     Selects the command variant based on ``lld_mode`` (LLD on/off) and
-    ``monitoring_mode`` (Monitoring vs TADM).  Z/geometry parameters (z_final,
+    ``tadm`` presence (Monitoring vs TADM).  Z/geometry parameters (z_final,
     z_fluid, z_air, z_minimum, z_bottom_search_offset): None = use defaults for all
     channels (derived from well geometry, STAR-aligned). Otherwise pass a list of
     length len(ops) with one value per channel (no None in list). For per-channel
@@ -2059,14 +2013,13 @@ class PrepBackend(LiquidHandlerBackend):
       prewet_volume: Pre-wet volume (µL) per channel. None = defaults for all; else list of len(ops).
       z_minimum: Minimum Z (well floor) per channel. None = defaults for all; else list of len(ops).
       z_bottom_search_offset: Bottom search offset (mm) per channel. None = defaults for all; else list of len(ops).
-      monitoring_mode: Select TADM or Monitoring (default: Monitoring).
       lld_mode: Per-channel LLD mode list. Any non-OFF mode activates the LLD
         command variant. All channels must use the same category (all LLD or all OFF).
-      use_lld: Enable LLD aspirate variant. Deprecated — use ``lld_mode`` instead.
       lld: LLD seek parameters. When None and LLD active, built from labware geometry.
       p_lld: Pressure LLD parameters (LLD variants only).
       c_lld: Capacitive LLD parameters (LLD variants only).
-      tadm: TADM parameters (TADM variants only). Firmware defaults when None.
+      tadm: TADM parameters. When provided, selects the TADM command variant
+        (otherwise Monitoring is used). Mirrors ``lld`` parameter inference.
       container_segments: Per-channel SegmentDescriptor lists for liquid following.
       auto_container_geometry: Build container segments from well geometry.
       hamilton_liquid_classes: Per-op Hamilton liquid classes. None = auto from tip/liquid.
@@ -2081,11 +2034,11 @@ class PrepBackend(LiquidHandlerBackend):
 
       await backend.aspirate(ops, [0], z_final=[95.0], settling_time=[2.0])
       await backend.aspirate(ops, [0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
-      await backend.aspirate(ops, [0], monitoring_mode=PrepCmd.MonitoringMode.TADM)
+      await backend.aspirate(ops, [0], tadm=PrepCmd.TadmParameters.default())
       await backend.aspirate(ops, [0], command_version="v1")
     """
-    effective_lld = self._resolve_effective_lld(lld_mode, use_lld, lld, len(ops))
-    is_tadm = monitoring_mode == PrepCmd.MonitoringMode.TADM
+    effective_lld = self._resolve_effective_lld(lld_mode, lld, len(ops))
+    is_tadm = tadm is not None
     use_v2 = self._resolve_command_version(command_version)
 
     kits = self._resolve_aspirate_channels(
@@ -2127,7 +2080,7 @@ class PrepBackend(LiquidHandlerBackend):
     self,
     ops: List[SingleChannelDispense],
     use_channels: List[int],
-    final_z: Optional[List[float]] = None,
+    z_final: Optional[List[float]] = None,
     z_fluid: Optional[List[float]] = None,
     z_air: Optional[List[float]] = None,
     settling_time: Optional[List[float]] = None,
@@ -2138,18 +2091,24 @@ class PrepBackend(LiquidHandlerBackend):
     z_minimum: Optional[List[float]] = None,
     z_bottom_search_offset: Optional[List[float]] = None,
     lld_mode: Optional[List[LLDMode]] = None,
-    use_lld: bool = False,
     lld: Optional[PrepCmd.LldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
     container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
     auto_container_geometry: bool = False,  # TODO: Doesn't work with no LLD
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
+    read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
   ):
     """Dispense, dispatching to the appropriate command variant and version.
 
-    Z/geometry parameters (final_z, z_fluid, z_air, z_minimum, z_bottom_search_offset):
+    The Prep firmware has 2 dispense commands (NoLld, Lld) — unlike aspirate which
+    splits into 4 (NoLld+Monitoring, NoLld+Tadm, Lld+Monitoring, Lld+Tadm). Both
+    dispense structs always carry a TADM field (sent with ``default_values=True``
+    when not explicitly configured), so TADM is always available on dispense
+    regardless of whether ``tadm=`` is passed.
+
+    Z/geometry parameters (z_final, z_fluid, z_air, z_minimum, z_bottom_search_offset):
     None = use defaults for all channels (derived from well geometry, STAR-aligned).
     Otherwise pass a list of length len(ops) with one value per channel (no None in list).
     For per-channel defaults, build the list from liquid class or constants.
@@ -2160,7 +2119,8 @@ class PrepBackend(LiquidHandlerBackend):
     with one value per channel (no None in list).
 
     Args:
-      final_z: Z after the move per channel. None = defaults for all; else list of len(ops), no None in list.
+      z_final: Z after the move (retract height) per channel. None = defaults for all;
+        else list of len(ops), no None in list.
       z_fluid: Liquid surface Z when not using LLD, per channel. None = defaults for all; else list of len(ops).
       z_air: Z in air (above liquid), per channel. None = defaults for all; else list of len(ops).
       settling_time: Settling time (s) per channel. None = defaults for all; else list of len(ops).
@@ -2172,27 +2132,27 @@ class PrepBackend(LiquidHandlerBackend):
       z_bottom_search_offset: Bottom search offset (mm) per channel. None = defaults for all; else list of len(ops).
       lld_mode: Per-channel LLD mode list. Only CAPACITIVE or OFF supported for
         dispense (pressure LLD is physically impossible during dispense).
-      use_lld: Enable LLD dispense variant. Deprecated — use ``lld_mode`` instead.
       lld: LLD seek parameters. When None and LLD active, built from labware geometry.
       c_lld: Capacitive LLD parameters (LLD variant only).
       container_segments: Per-channel SegmentDescriptor lists for liquid following.
       auto_container_geometry: Build container segments from well geometry.
       hamilton_liquid_classes: Per-op Hamilton liquid classes. None = auto from tip/liquid.
       disable_volume_correction: Per-op flag to skip volume correction.
+      read_timeout: Override read timeout (seconds) for this command. When None,
+        auto-calculated from LLD seek distance/speed + 5s buffer.
       command_version: Override per-call: "v1" (cmd 5-6) or "v2" (cmd 42-43).
         None uses the version determined at setup. V1 converts container_description
         frustum segments into the cone model in CommonParameters.
 
     Example::
 
-      await backend.dispense(ops, [0], final_z=[95.0], settling_time=[0.5])
+      await backend.dispense(ops, [0], z_final=[95.0], settling_time=[0.5])
       await backend.dispense(ops, [0], lld_mode=[PrepBackend.LLDMode.CAPACITIVE])
       await backend.dispense(ops, [0], command_version="v1")
     """
     _DISPENSE_ALLOWED_LLD = frozenset({self.LLDMode.CAPACITIVE})
     effective_lld = self._resolve_effective_lld(
       lld_mode,
-      use_lld,
       lld,
       len(ops),
       allowed_modes=_DISPENSE_ALLOWED_LLD,
@@ -2203,7 +2163,7 @@ class PrepBackend(LiquidHandlerBackend):
       ops,
       use_channels,
       effective_lld,
-      final_z=final_z,
+      z_final=z_final,
       z_fluid=z_fluid,
       z_air=z_air,
       settling_time=settling_time,
@@ -2221,7 +2181,17 @@ class PrepBackend(LiquidHandlerBackend):
       disable_volume_correction=disable_volume_correction,
     )
 
-    await self._send_dispense(kits, effective_lld, use_v2)
+    # Auto-calculate LLD read timeout from seek distance/speed.
+    lld_read_timeout = read_timeout
+    if lld_read_timeout is None and effective_lld and kits:
+      kit0_lld = kits[0].lld
+      if kit0_lld.channel_speed > 0:
+        min_z_min = min(k.common.z_minimum for k in kits)
+        seek_distance = kit0_lld.search_start_position - min_z_min
+        if seek_distance > 0:
+          lld_read_timeout = seek_distance / kit0_lld.channel_speed + 5.0
+
+    await self._send_dispense(kits, effective_lld, use_v2, lld_read_timeout)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("pick_up_tips96 is not supported on the Prep")
@@ -2529,8 +2499,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     # GetChannelBounds is on PipettorService (child of Pipettor), not MLPrepService
     try:
-      await self.client.interfaces["MLPrepRoot.PipettorRoot.Pipettor.PipettorService"].resolve()
-      pip_svc = self.client.interfaces["MLPrepRoot.PipettorRoot.Pipettor.PipettorService"].address
+      pip_svc = await self.client.resolve_path("MLPrepRoot.PipettorRoot.Pipettor.PipettorService")
     except KeyError:
       return []
 
@@ -2906,8 +2875,9 @@ class PrepBackend(LiquidHandlerBackend):
     within deck_bounds (min_z=18.03, max_z=167.5).
 
     Findings from testing:
-    - cLLD DOES work through the aspirate path (aspirate with use_lld=True and
-      default_values=False on both LldParameters and CLldParameters).
+    - cLLD DOES work through the aspirate path (aspirate with
+      lld_mode=[LLDMode.CAPACITIVE] and default_values=False on both
+      LldParameters and CLldParameters).
     - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
     - The aspirate-based approach is a workaround, not a proper standalone probe.
 
@@ -2946,67 +2916,38 @@ class PrepBackend(LiquidHandlerBackend):
     Each object shows its name, address, firmware version, method count, and child count.
     Useful for diagnostics and understanding the instrument's firmware topology.
     """
-    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import HamiltonIntrospection
-
-    intro = HamiltonIntrospection(self.client)
-    root_addrs = self.client._registry.get_root_addresses()
-    if not root_addrs:
+    nodes = await self.client.build_firmware_tree()
+    if not nodes:
       print("(no root objects discovered)")
       return
 
     lines: list[str] = []
+    children: dict[str, list[str]] = {}
+    by_path: dict[str, tuple[Address, object]] = {}
+    for path, addr, obj in nodes:
+      by_path[path] = (addr, obj)
+      parent = ".".join(path.split(".")[:-1])
+      children.setdefault(parent, []).append(path)
+    for child_list in children.values():
+      child_list.sort()
 
-    async def walk(addr, prefix="", is_last=True):
-      try:
-        obj = await intro.get_object(addr)
-      except Exception:
-        lines.append(f"{prefix}{'└── ' if is_last else '├── '}? @ {addr} (failed to query)")
-        return
-
+    async def render(path: str, prefix: str, is_last: bool) -> None:
+      addr, obj = by_path[path]
       connector = "└── " if is_last else "├── "
-      version_str = f", version={obj.version}" if obj.version else ""
+      version = getattr(obj, "version", "")
+      version_str = f", version={version}" if version else ""
       lines.append(
-        f"{prefix}{connector}{obj.name} @ {addr} "
-        f"(methods={obj.method_count}, children={obj.subobject_count}{version_str})"
+        f"{prefix}{connector}{getattr(obj, 'name')} @ {addr} "
+        f"(methods={getattr(obj, 'method_count')}, children={getattr(obj, 'subobject_count')}{version_str})"
       )
-
       child_prefix = prefix + ("    " if is_last else "│   ")
-      children_found = []
-      for i in range(obj.subobject_count):
-        try:
-          child_addr = await intro.get_subobject_address(addr, i)
-          child_obj = await intro.get_object(child_addr)
-          children_found.append((child_addr, child_obj))
-        except Exception:
-          continue
+      direct_children = children.get(path, [])
+      for idx, child_path in enumerate(direct_children):
+        await render(child_path, child_prefix, is_last=(idx == len(direct_children) - 1))
 
-      for idx, (child_addr, _) in enumerate(children_found):
-        await walk(child_addr, child_prefix, is_last=(idx == len(children_found) - 1))
-
-    for root_idx, root_addr in enumerate(root_addrs):
-      try:
-        root_obj = await intro.get_object(root_addr)
-      except Exception:
-        lines.append(f"? @ {root_addr} (failed to query)")
-        continue
-
-      version_str = f", version={root_obj.version}" if root_obj.version else ""
-      lines.append(
-        f"{root_obj.name} @ {root_addr} "
-        f"(methods={root_obj.method_count}, children={root_obj.subobject_count}{version_str})"
-      )
-
-      children_found = []
-      for i in range(root_obj.subobject_count):
-        try:
-          child_addr = await intro.get_subobject_address(root_addr, i)
-          child_obj = await intro.get_object(child_addr)
-          children_found.append((child_addr, child_obj))
-        except Exception:
-          continue
-
-      for idx, (child_addr, _) in enumerate(children_found):
-        await walk(child_addr, "", is_last=(idx == len(children_found) - 1))
+    roots = sorted(path for path in by_path if "." not in path)
+    for idx, root_path in enumerate(roots):
+      await render(root_path, "", is_last=(idx == len(roots) - 1))
 
     print("\n".join(lines))
 

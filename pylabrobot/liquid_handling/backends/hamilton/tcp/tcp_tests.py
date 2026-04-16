@@ -20,7 +20,9 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
+  _parse_get_hc_results_string,
   parse_into_struct,
+  split_hoi_params_after_warning_prefix,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   Address,
@@ -53,9 +55,11 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   CountedFlatArray,
   F32Array,
   HamiltonDataType,
+  HcResultEntry,
   I32Array,
   Str,
   StrArray,
+  U8Array,
   U16Array,
   decode_fragment,
 )
@@ -1077,6 +1081,457 @@ class TestInterpretResponseAutoDecode(unittest.TestCase):
     self.assertEqual(result, {"value": 100})
 
 
+class TestHoiResultDecode(unittest.TestCase):
+  """Multi-channel HcResult decode via warning-frame prefix.
+
+  Per ``HoiDecoder2.cs`` + firmware yaml dumps, HoiResult only rides on
+  warning (STATUS_WARNING / COMMAND_WARNING) or exception frames — never
+  as a trailer on CommandResponse / StatusResponse. The prefix format
+  is two leading fragments: a summary and a semicolon-separated string
+  ``0xM.0xN.0xO:0xI,0xA,0xR;...`` parsed by
+  ``_parse_get_hc_results_string`` (see ``messages.py``).
+  """
+
+  @staticmethod
+  def _format_entry(entry: HcResultEntry) -> str:
+    return (
+      f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
+      f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}"
+    )
+
+  @classmethod
+  def _format_entries_string(cls, entries) -> str:
+    return ";".join(cls._format_entry(e) for e in entries)
+
+  @classmethod
+  def _build_warning_params(cls, entries, trailing_params: bytes = b"") -> bytes:
+    """Build a warning-frame HOI param blob: summary frag + entries string + payload."""
+    summary = HoiParams().add(len(entries), U16).build()
+    entries_str = cls._format_entries_string(entries)
+    entries_frag = HoiParams().add(entries_str, Str).build()
+    return summary + entries_frag + trailing_params
+
+  @staticmethod
+  def _wrap_response(params: bytes, action_code: int = Hoi2Action.COMMAND_RESPONSE) -> CommandResponse:
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=action_code,
+      action_id=0,
+      params=params,
+    )
+    harp = HarpPacket(
+      src=Address(0, 0, 0),
+      dst=Address(0, 0, 0),
+      seq=0,
+      protocol=2,
+      action_code=4,
+      payload=hoi.pack(),
+    )
+    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+  def test_warning_prefix_empty(self):
+    """Empty entries string → no HcResultEntry emitted."""
+    params = self._build_warning_params([])
+    rest, entries = split_hoi_params_after_warning_prefix(
+      Hoi2Action.COMMAND_WARNING, params
+    )
+    self.assertEqual(entries, [])
+
+  def test_warning_prefix_single_entry(self):
+    """Single warning entry round-trips through the string formatter + parser."""
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x8001)
+    params = self._build_warning_params([entry])
+    rest, parsed = split_hoi_params_after_warning_prefix(
+      Hoi2Action.COMMAND_WARNING, params
+    )
+    self.assertEqual(len(parsed), 1)
+    got = parsed[0]
+    self.assertEqual(got.address, (1, 1, 257))
+    self.assertEqual(got.result, 0x8001)
+    self.assertTrue(got.is_warning)
+    self.assertTrue(got.is_success)
+
+  def test_warning_prefix_mixed(self):
+    """Multi-channel warning/error mix parses in-order."""
+    entries = [
+      HcResultEntry(1, 1, 257, 1, 6, 0x0000),
+      HcResultEntry(1, 1, 257, 1, 6, 0x8100),
+      HcResultEntry(1, 1, 257, 1, 6, 0x0F08),
+    ]
+    params = self._build_warning_params(entries)
+    _rest, parsed = split_hoi_params_after_warning_prefix(
+      Hoi2Action.COMMAND_WARNING, params
+    )
+    self.assertEqual([w.result for w in parsed], [0x0000, 0x8100, 0x0F08])
+    self.assertEqual([w.is_warning for w in parsed], [False, True, False])
+    self.assertEqual([w.is_success for w in parsed], [True, True, False])
+
+  def test_non_warning_frame_passes_through_unchanged(self):
+    """A plain CommandResponse frame doesn't have a HoiResult prefix — leave params untouched."""
+    payload = HoiParams().add(True, Bool).build()
+    rest, entries = split_hoi_params_after_warning_prefix(
+      Hoi2Action.COMMAND_RESPONSE, payload
+    )
+    self.assertEqual(rest, payload)
+    self.assertEqual(entries, [])
+
+  def test_exception_payload_parse(self):
+    """Exception frames carry a STRING fragment with one address:iface,action,result."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
+      parse_hamilton_error_entry,
+    )
+
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    payload = HoiParams().add(self._format_entry(entry), Str).build()
+    got = parse_hamilton_error_entry(payload)
+    self.assertIsNotNone(got)
+    self.assertEqual(got.address, (1, 1, 257))
+    self.assertEqual(got.interface_id, 1)
+    self.assertEqual(got.action_id, 6)
+    self.assertEqual(got.result, 0x0F08)
+
+  def test_exception_payload_parse_multi_entry(self):
+    """Multi-channel exception frames carry one entry per failed channel.
+
+    Two STRING fragments and a single fragment containing two entries both
+    round-trip through ``parse_hamilton_error_entries`` in wire order.
+    """
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
+      parse_hamilton_error_entries,
+    )
+
+    e1 = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    e2 = HcResultEntry(1, 1, 257, 1, 6, 0x0F09)
+
+    # Case A: two separate STRING fragments — one per channel.
+    payload_two_strs = (
+      HoiParams().add(self._format_entry(e1), Str).add(self._format_entry(e2), Str).build()
+    )
+    got = parse_hamilton_error_entries(payload_two_strs)
+    self.assertEqual(len(got), 2)
+    self.assertEqual(got[0].result, 0x0F08)
+    self.assertEqual(got[1].result, 0x0F09)
+
+    # Case B: a single STRING fragment holding two entries (semicolon-separated).
+    combined = f"{self._format_entry(e1)}; {self._format_entry(e2)}"
+    payload_one_str = HoiParams().add(combined, Str).build()
+    got = parse_hamilton_error_entries(payload_one_str)
+    self.assertEqual(len(got), 2)
+    self.assertEqual(got[0].result, 0x0F08)
+    self.assertEqual(got[1].result, 0x0F09)
+
+  @staticmethod
+  def _run_and_lift(cmd, response, descriptions=None):
+    """Mirror ``HamiltonTCPClient.send_command``'s decode-then-raise flow.
+
+    ``descriptions`` optionally stubs the runtime EnumInfo lookup:
+    ``{(address, interface_id): {hc_result_code: text}}``. Any miss falls
+    back to the same ``HC_RESULT=0x{code:04X}`` string the backend emits
+    when ``GetEnums`` hasn't populated the cache.
+    """
+    from pylabrobot.liquid_handling.errors import ChannelizedError
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import (
+      hamilton_error_for_entry,
+    )
+
+    table = descriptions or {}
+    result = cmd.interpret_response(response)
+    fatal = cmd.fatal_entries_by_channel(response)
+    if fatal:
+      per_channel = {}
+      for ch, e in fatal.items():
+        addr = Address(e.module_id, e.node_id, e.object_id)
+        desc = table.get((addr, e.interface_id), {}).get(e.result, f"HC_RESULT=0x{e.result:04X}")
+        per_channel[ch] = hamilton_error_for_entry(e, desc)
+      raise ChannelizedError(errors=per_channel)
+    return result
+
+  def test_channelized_error_raised_on_fatal_entries(self):
+    """A warning-frame prefix with a fatal entry lifts to ChannelizedError."""
+    from pylabrobot.liquid_handling.errors import ChannelizedError
+
+    class _Cmd(HamiltonCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 4
+
+      def __init__(self):
+        super().__init__(Address(1, 1, 257))
+
+    entries = [
+      HcResultEntry(1, 1, 257, 1, 4, 0x8001),  # warning
+      HcResultEntry(1, 1, 257, 1, 4, 0x0F08),  # error
+    ]
+    params = self._build_warning_params(entries)
+    response = self._wrap_response(params, action_code=Hoi2Action.COMMAND_WARNING)
+
+    with self.assertRaises(ChannelizedError) as cm:
+      self._run_and_lift(_Cmd(), response)
+    err = cm.exception
+    self.assertEqual(set(err.errors.keys()), {1})
+    raised = err.errors[1]
+    self.assertIsInstance(raised, RuntimeError)
+    self.assertEqual(getattr(raised, "entry").result, 0x0F08)
+
+  def test_warnings_only_do_not_raise(self):
+    """All-warnings prefix logs but does not raise."""
+
+    class _Cmd(HamiltonCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 4
+
+      def __init__(self):
+        super().__init__(Address(1, 1, 257))
+
+    entries = [
+      HcResultEntry(1, 1, 257, 1, 4, 0x8001),
+      HcResultEntry(1, 1, 257, 1, 4, 0x8010),
+    ]
+    params = self._build_warning_params(entries)
+    response = self._wrap_response(params, action_code=Hoi2Action.COMMAND_WARNING)
+    self._run_and_lift(_Cmd(), response)
+
+  def test_nimbus_bitmask_channel_mapping(self):
+    """NimbusCommand maps entries via ``channels_involved`` bitmask bit positions."""
+    from pylabrobot.liquid_handling.errors import ChannelizedError
+    from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import PickupTips
+
+    # Active channels 1, 2, 4 -> mask 0b00010110 = 0x16
+    cmd = PickupTips(
+      dest=Address(1, 1, 257),
+      channels_involved=[0x16],
+      x_positions=[0, 0, 0],
+      y_positions=[0, 0, 0],
+      minimum_traverse_height_at_beginning_of_a_command=0,
+      begin_tip_pick_up_process=[0, 0, 0],
+      end_tip_pick_up_process=[0, 0, 0],
+      tip_types=[0, 0, 0],
+    )
+    entries = [
+      HcResultEntry(1, 1, 257, 1, 4, 0x0F08),  # first active channel = bit 1
+      HcResultEntry(1, 1, 257, 1, 4, 0x0F08),  # second active channel = bit 2
+    ]
+    params = self._build_warning_params(entries)
+    response = self._wrap_response(params, action_code=Hoi2Action.COMMAND_WARNING)
+    with self.assertRaises(ChannelizedError) as cm:
+      self._run_and_lift(cmd, response)
+    self.assertEqual(set(cm.exception.errors.keys()), {1, 2})
+
+  def test_prep_struct_array_channel_mapping(self):
+    """PrepCommand maps entries via the per-channel struct-array ``channel`` field."""
+    from pylabrobot.liquid_handling.errors import ChannelizedError
+    from pylabrobot.liquid_handling.backends.hamilton.prep_commands import (
+      PrepCommand,
+    )
+
+    @dataclass
+    class _Elem:
+      channel: int = 0
+
+    @dataclass
+    class _Cmd(PrepCommand):
+      command_id = 99
+      params: list = None  # type: ignore[assignment]
+
+    cmd = _Cmd(dest=Address(1, 1, 257), params=[_Elem(channel=3), _Elem(channel=5)])
+    entries = [
+      HcResultEntry(1, 1, 257, 1, 99, 0x0F08),
+      HcResultEntry(1, 1, 257, 1, 99, 0x0F08),
+    ]
+    params = self._build_warning_params(entries)
+    response = self._wrap_response(params, action_code=Hoi2Action.COMMAND_WARNING)
+    with self.assertRaises(ChannelizedError) as cm:
+      self._run_and_lift(cmd, response)
+    self.assertEqual(set(cm.exception.errors.keys()), {3, 5})
+
+  def test_fatal_entries_by_channel_returns_empty_when_all_warnings(self):
+    """Pure-decode contract: no fatal entries for a warnings-only payload."""
+
+    class _Cmd(HamiltonCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 4
+
+      def __init__(self):
+        super().__init__(Address(1, 1, 257))
+
+    entries = [
+      HcResultEntry(1, 1, 257, 1, 4, 0x8001),
+      HcResultEntry(1, 1, 257, 1, 4, 0x8010),
+    ]
+    params = self._build_warning_params(entries)
+    response = self._wrap_response(params, action_code=Hoi2Action.COMMAND_WARNING)
+    cmd = _Cmd()
+    self.assertEqual(cmd.fatal_entries_by_channel(response), {})
+    cmd.interpret_response(response)
+
+class TestEnumCacheResolver(unittest.TestCase):
+  """``HamiltonTCPClient._describe_entry`` resolves text from static + runtime sources.
+
+  Resolution order under test: (1) module-scoped static ``error_codes`` table,
+  (2) protocol-level ``HC_RESULT_PROTOCOL``, (3) runtime ``EnumInfo`` cache,
+  (4) hex fallback.
+  """
+
+  def _make_client(self, error_codes=None):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+
+    return HamiltonTCPClient(host="127.0.0.1", port=0, error_codes=error_codes)
+
+  def test_module_table_wins_over_protocol_and_enum_cache(self):
+    import asyncio
+
+    # Same code appears in all three sources; module table (highest priority)
+    # should win.
+    addr = Address(1, 1, 257)
+    codes = {(1, 1, 257, 1, 13): "Nimbus-specific timeout text"}
+    client = self._make_client(error_codes=codes)
+    client._enum_cache[(addr, 1)] = {"HcResult": {13: "enum-cache text"}}
+    client._interface_name_cache[(addr, 1)] = "INimbusCorePipette"
+
+    entry = HcResultEntry(1, 1, 257, 1, 1, 13)
+    _iface, desc = asyncio.run(client._describe_entry(entry))
+    self.assertEqual(desc, "Nimbus-specific timeout text")
+
+  def test_protocol_table_covers_universal_codes(self):
+    """A code in ``HC_RESULT_PROTOCOL`` resolves without any runtime lookup."""
+    import asyncio
+
+    # No module entry, no enum cache — protocol-level should pick up code 13.
+    client = self._make_client(error_codes={})
+    addr = Address(1, 1, 257)
+    client._interface_name_cache[(addr, 1)] = "SomeInterface"
+
+    entry = HcResultEntry(1, 1, 257, 1, 1, 13)
+    _iface, desc = asyncio.run(client._describe_entry(entry))
+    self.assertEqual(desc, "GenericTimeOut")
+
+  def test_empty_prep_table_falls_through_to_hex(self):
+    """Prep-shaped error (code 0x0F08 outside protocol range) with empty table → hex."""
+    import asyncio
+
+    client = self._make_client(error_codes={})
+    addr = Address(1, 238, 256)
+    # Seed empty enum cache so hydration is a no-op, not a socket call.
+    client._enum_cache[(addr, 1)] = {}
+    client._interface_name_cache[(addr, 1)] = None
+
+    entry = HcResultEntry(1, 238, 256, 1, 1, 0x0F08)
+    _iface, desc = asyncio.run(client._describe_entry(entry))
+    self.assertEqual(desc, "HC_RESULT=0x0F08")
+
+  def test_cache_hit_returns_firmware_text(self):
+    import asyncio
+
+    client = self._make_client()
+    addr = Address(1, 238, 256)
+    client._enum_cache[(addr, 1)] = {"HcResult": {0x0F08: "TipAlreadyInstalled"}}
+    client._interface_name_cache[(addr, 1)] = "INimbusCorePipette"
+
+    entry = HcResultEntry(1, 238, 256, 1, 1, 0x0F08)
+    iface, desc = asyncio.run(client._describe_entry(entry))
+    self.assertEqual(iface, "INimbusCorePipette")
+    self.assertEqual(desc, "TipAlreadyInstalled")
+
+  def test_cache_miss_falls_back_to_hex(self):
+    """When enum hydration fails, description falls back to a hex rendering."""
+    import asyncio
+
+    client = self._make_client()
+    addr = Address(1, 238, 256)
+    # Seed an empty cache to simulate a failed hydration — no retry, just fallback.
+    client._enum_cache[(addr, 1)] = {}
+    client._interface_name_cache[(addr, 1)] = None
+
+    entry = HcResultEntry(1, 238, 256, 1, 1, 0x0F08)
+    iface, desc = asyncio.run(client._describe_entry(entry))
+    self.assertIsNone(iface)
+    self.assertEqual(desc, "HC_RESULT=0x0F08")
+
+
+class TestExceptionFrameChannelizedError(unittest.TestCase):
+  """``COMMAND_EXCEPTION`` / ``STATUS_EXCEPTION`` surface as ``ChannelizedError``.
+
+  The backend maps the exception's single entry to a channel via
+  ``command._channel_index_for_entry(0, entry)`` — same hook the warning
+  path uses — and raises ``ChannelizedError({channel: RuntimeError(...)})``.
+  """
+
+  def test_nimbus_exception_routes_to_bitmask_channel(self):
+    """A single exception entry keyed by channels_involved[0] bit 1 → channel 1."""
+    import asyncio
+    from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import PickupTips
+    from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+    from pylabrobot.liquid_handling.errors import ChannelizedError
+
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    addr = Address(1, 238, 256)
+    client._enum_cache[(addr, 1)] = {"HcResult": {0x0F08: "TipAlreadyInstalled"}}
+    client._interface_name_cache[(addr, 1)] = "INimbusCorePipette"
+
+    # Active channels bit 1 only → mask = 0x02; one entry maps to channel 1.
+    cmd = PickupTips(
+      dest=addr,
+      channels_involved=[0x02],
+      x_positions=[0],
+      y_positions=[0],
+      minimum_traverse_height_at_beginning_of_a_command=0,
+      begin_tip_pick_up_process=[0],
+      end_tip_pick_up_process=[0],
+      tip_types=[0],
+    )
+
+    entry = HcResultEntry(1, 238, 256, 1, 1, 0x0F08)
+
+    async def _run():
+      _iface, desc = await client._describe_entry(entry)
+      from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import (
+        hamilton_error_for_entry,
+      )
+      err = hamilton_error_for_entry(entry, desc)
+      channel = cmd._channel_index_for_entry(0, entry)
+      raise ChannelizedError(errors={channel: err})
+
+    with self.assertRaises(ChannelizedError) as cm:
+      asyncio.run(_run())
+    self.assertEqual(set(cm.exception.errors.keys()), {1})
+    raised = cm.exception.errors[1]
+    self.assertIn("TipAlreadyInstalled", str(raised))
+    self.assertEqual(getattr(raised, "entry").result, 0x0F08)
+
+
+class TestHoiWarningPrefix(unittest.TestCase):
+  """STATUS_WARNING / COMMAND_WARNING: skip first two fragments (SystemController parity)."""
+
+  def test_normal_action_returns_unchanged_params(self):
+    payload = HoiParams().add(True, Bool).build()
+    rest, entries = split_hoi_params_after_warning_prefix(Hoi2Action.COMMAND_RESPONSE, payload)
+    self.assertEqual(rest, payload)
+    self.assertEqual(entries, [])
+
+  def test_parse_get_hc_results_string_roundtrip(self):
+    s = "0x0001.0x0001.0x0100:0x01,0x0006,0x8001"
+    entries = _parse_get_hc_results_string(s)
+    self.assertEqual(len(entries), 1)
+    e = entries[0]
+    self.assertEqual((e.module_id, e.node_id, e.object_id), (1, 1, 0x100))
+    self.assertEqual(e.interface_id, 1)
+    self.assertEqual(e.action_id, 6)
+    self.assertEqual(e.result, 0x8001)
+
+  def test_command_warning_strips_prefix_fragments(self):
+    summary = HoiParams().add(0x8001, U16).build()
+    warn_str = "0x0001.0x0001.0x0100:0x01,0x0006,0x8001"
+    warn_frag = HoiParams().add(warn_str, Str).build()
+    tail = HoiParams().add(42, I32).build()
+    full = summary + warn_frag + tail
+    rest, entries = split_hoi_params_after_warning_prefix(Hoi2Action.COMMAND_WARNING, full)
+    self.assertEqual(rest, tail)
+    self.assertEqual(len(entries), 1)
+    self.assertEqual(entries[0].result, 0x8001)
+
+
 class TestProtocolEnums(unittest.TestCase):
   """Tests for protocol enum values."""
 
@@ -1439,6 +1894,65 @@ class TestInterface0Capability(unittest.IsolatedAsyncioTestCase):
     self.assertIn("GetSubobjectAddress", str(ctx.exception))
     self.assertIn("interface 0, method 3", str(ctx.exception))
     self.assertIn("Child", str(ctx.exception))
+
+  async def test_resolve_target_parity_alias_path_address(self):
+    """Alias/path/address resolution should return the same Address."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
+    from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    addr = Address(1, 1, 48896)
+    client._registry.register(
+      "Root.Child",
+      ObjectInfo(
+        name="Child",
+        version="1.0",
+        method_count=0,
+        subobject_count=0,
+        address=addr,
+      ),
+    )
+
+    by_path = await client.resolve_target("Root.Child")
+    by_alias = await client.resolve_target("pipettor_service", aliases={"pipettor_service": "Root.Child"})
+    by_addr = await client.resolve_target(addr)
+    self.assertEqual(by_path, addr)
+    self.assertEqual(by_alias, addr)
+    self.assertEqual(by_addr, addr)
+
+  async def test_capability_cache_reuses_first_probe(self):
+    """First capability probe populates cache; subsequent calls hit cache."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetMethodCommand
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetObjectCommand
+    from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    addr = Address(1, 1, 100)
+    get_object_response = GetObjectCommand.Response(
+      name="Obj",
+      version="1.0",
+      method_count=2,
+      subobject_count=0,
+    )
+    get_method_responses = [
+      {"interface_id": 0, "method_id": 1, "call_type": 0, "name": "GetObject"},
+      {"interface_id": 1, "method_id": 99, "call_type": 0, "name": "DoThing"},
+    ]
+
+    async def mock_send(cmd, **kwargs):
+      if isinstance(cmd, GetObjectCommand):
+        return get_object_response
+      if isinstance(cmd, GetMethodCommand):
+        return get_method_responses[cmd.method_index]
+      return None
+
+    client.send_command = AsyncMock(side_effect=mock_send)
+    first = await client.get_supported_interface0_method_ids(addr)
+    second = await client.get_supported_interface0_method_ids(addr)
+
+    self.assertEqual(first, {1})
+    self.assertEqual(second, {1})
+    self.assertEqual(client.send_command.await_count, 3)
 
 
 if __name__ == "__main__":

@@ -13,9 +13,6 @@ Canonical usage::
     registry = await intro.build_type_registry("MLPrepRoot.MphRoot.MPH")
     registry.print_summary()
 
-    # Diagnose a COMMAND_EXCEPTION:
-    print(await intro.diagnose_error(str(e), registry))
-
     # Resolve a method signature:
     sig = await intro.resolve_signature("MLPrepRoot.MphRoot.MPH", 1, 9, registry)
 """
@@ -90,137 +87,157 @@ def resolve_type_id(type_id: int) -> str:
 
 
 # ============================================================================
-# INTROSPECTION TYPE MAPPING
+# INTROSPECTION TYPE MAPPING (2D table from HoiObject.mHoiParamTypes)
 # ============================================================================
 # Introspection type IDs are separate from HamiltonDataType wire encoding types.
-# These are used for method signature display/metadata, not binary encoding.
+# Rows = .NET / firmware scalar or array kinds; columns = In, Out, InOut, RetVal
+# (HoiParameterType.Direction). Source: SysCon/HoiObject.cs mHoiParamTypes[31,4].
 
-# Type ID ranges for categorization:
-# - Argument types: Method parameters (input)
-# - ReturnElement types: Multiple return values (struct fields)
-# - ReturnValue types: Single return value
+_HOI_DOTNET_TYPE_ROWS: tuple[str, ...] = (
+  "i8",
+  "i16",
+  "i32",
+  "u8",
+  "u16",
+  "u32",
+  "str",
+  "bool",
+  "i8[]",
+  "i16[]",
+  "i32[]",
+  "u8[]",
+  "u16[]",
+  "u32[]",
+  "bool[]",
+  "HcResult",
+  "struct",
+  "struct[]",
+  "str[]",
+  "enum",
+  "enum[]",
+  "i64",
+  "u64",
+  "f32",
+  "f64",
+  "i64[]",
+  "u64[]",
+  "f32[]",
+  "f64[]",
+  "HoiResult",
+  "padding",
+)
 
-_INTROSPECTION_TYPE_NAMES: dict[int, str] = {
-  # Void (0) - used for empty/placeholder parameters
-  0: "void",
-  # Argument types (1-8, 33, 41, 45, 49, 53, 61, 66, 82, 102)
-  1: "i8",
-  2: "u8",
-  3: "i16",
-  4: "u16",
-  5: "i32",
-  6: "u32",
-  7: "str",
-  8: "bytes",
-  33: "bool",
-  41: "List[i16]",
-  45: "List[u16]",
-  49: "List[i32]",
-  53: "List[u32]",
-  57: "struct",  # Complex type: (57, source_id, ref_id) → single struct
-  61: "List[struct]",  # Complex type: (61, source_id, ref_id) → list of structs
-  63: "struct",  # Return element: struct ref in a return list (e.g. MoveYAbsolute return)
-  66: "List[bool]",
-  77: "List[str]",
-  82: "List[enum]",  # Complex type, needs source_id + enum_id
-  102: "f32",
-  113: "List[f32]",  # Inferred from CalibrateZTipHeight(tipHeights) context; not protocol-confirmed
-  # ReturnElement types (18-24, 35, 43, 47, 51, 55, 68, 76)
-  18: "u8",
-  19: "i16",
-  20: "u16",
-  21: "i32",
-  22: "u32",
-  23: "str",
-  24: "bytes",
-  35: "bool",
-  43: "List[i16]",
-  47: "List[u16]",
-  51: "List[i32]",
-  55: "List[u32]",
-  68: "List[bool]",
-  76: "List[str]",
-  # ReturnValue types (25-32, 36, 44, 48, 52, 56, 69, 81, 85, 104, 105)
-  25: "i8",
-  26: "u8",
-  27: "i16",
-  28: "u16",
-  29: "i32",
-  30: "u32",
-  31: "str",
-  32: "bytes",
-  36: "bool",
-  44: "List[i16]",
-  48: "List[u16]",
-  52: "List[i32]",
-  56: "List[u32]",
-  69: "List[bool]",
-  81: "enum",  # Complex type, needs source_id + enum_id
-  85: "enum",  # Complex type, needs source_id + enum_id
-  104: "f32",
-  105: "f32",
-  # Complex types (60, 64, 78) - these need source_id + id
-  60: "struct",  # ReturnValue, needs source_id + struct_id
-  64: "struct",  # ReturnValue, needs source_id + struct_id
-  78: "enum",  # Argument, needs source_id + enum_id
+_HOI_PARAM_DIRECTION: tuple[str, ...] = ("In", "Out", "InOut", "RetVal")
+
+# type_ids per row [In, Out, InOut, RetVal] — ord() of each C# string cell (row 30 unused).
+_HOI_PARAM_TYPE_GRID: tuple[tuple[int, int, int, int], ...] = (
+  (1, 17, 9, 25),
+  (3, 19, 11, 27),
+  (5, 21, 13, 29),
+  (2, 18, 10, 26),
+  (4, 20, 12, 28),
+  (6, 22, 14, 30),
+  (7, 23, 15, 31),
+  (33, 35, 34, 36),
+  (37, 39, 38, 40),
+  (41, 43, 42, 44),
+  (49, 51, 50, 52),
+  (8, 24, 16, 32),
+  (45, 47, 46, 48),
+  (53, 55, 54, 56),
+  (66, 68, 67, 69),
+  (70, 72, 71, 73),
+  (57, 59, 58, 60),
+  (61, 63, 62, 64),
+  (74, 76, 75, 77),
+  (78, 80, 79, 81),
+  (82, 84, 83, 85),
+  (86, 88, 87, 89),
+  (90, 92, 91, 93),
+  (94, 96, 95, 97),
+  (98, 100, 99, 101),
+  (102, 104, 103, 105),
+  (106, 108, 107, 109),
+  (110, 112, 111, 113),
+  (114, 116, 115, 117),
+  (118, 120, 119, 121),
+  (0, 0, 0, 0),
+)
+
+_ROW_DISPLAY: dict[str, str] = {
+  "i8": "i8",
+  "i16": "i16",
+  "i32": "i32",
+  "u8": "u8",
+  "u16": "u16",
+  "u32": "u32",
+  "str": "str",
+  "bool": "bool",
+  "i8[]": "List[i8]",
+  "i16[]": "List[i16]",
+  "i32[]": "List[i32]",
+  "u8[]": "bytes",
+  "u16[]": "List[u16]",
+  "u32[]": "List[u32]",
+  "bool[]": "List[bool]",
+  "HcResult": "HcResult",
+  "struct": "struct",
+  "struct[]": "List[struct]",
+  "str[]": "List[str]",
+  "enum": "enum",
+  "enum[]": "List[enum]",
+  "i64": "i64",
+  "u64": "u64",
+  "f32": "f32",
+  "f64": "f64",
+  "i64[]": "List[i64]",
+  "u64[]": "List[u64]",
+  "f32[]": "List[f32]",
+  "f64[]": "List[f64]",
+  "HoiResult": "HoiResult",
+  "padding": "padding",
 }
 
-# Type ID sets for categorization
-# 78 = enum (Argument); 60, 64 = struct (ReturnValue) — see _INTROSPECTION_TYPE_NAMES comments
-_ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 78, 82, 102, 113}
-_RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 63, 68, 76}
-_RETURN_VALUE_TYPE_IDS = {
-  25,
-  26,
-  27,
-  28,
-  29,
-  30,
-  31,
-  32,
-  36,
-  44,
-  48,
-  52,
-  56,
-  60,
-  64,
-  69,
-  81,
-  85,
-  104,
-  105,
-}
 
-# Complex type sentinels: byte values that begin a 3-byte triple [type_id, source_id, ref_id].
-# The two contexts (method parameterTypes vs struct structureElementTypes) use different sentinels.
-_COMPLEX_METHOD_TYPE_IDS = {57, 60, 61, 63, 64, 78, 81, 82, 85}  # GetMethod parameterTypes triples
+def _build_introspection_maps() -> tuple[dict[int, str], set[int], set[int], set[int], set[int]]:
+  names: dict[int, str] = {0: "void"}
+  arg_ids: set[int] = set()
+  ret_el_ids: set[int] = set()
+  ret_val_ids: set[int] = set()
+  complex_method_ids: set[int] = set()
+  complex_rows = frozenset({15, 16, 17, 18, 19, 20, 29})
+
+  for ri, row in enumerate(_HOI_PARAM_TYPE_GRID):
+    base_key = _HOI_DOTNET_TYPE_ROWS[ri]
+    for ci, tid in enumerate(row):
+      if tid == 0:
+        continue
+      d = _HOI_PARAM_DIRECTION[ci]
+      disp = _ROW_DISPLAY.get(base_key, base_key)
+      names[tid] = f"{disp} [{d}]"
+      if ci in (0, 2):
+        arg_ids.add(tid)
+      elif ci == 1:
+        ret_el_ids.add(tid)
+      elif ci == 3:
+        ret_val_ids.add(tid)
+      if ri in complex_rows:
+        complex_method_ids.add(tid)
+
+  return names, arg_ids, ret_el_ids, ret_val_ids, complex_method_ids
+
+
+_INTROSPECTION_TYPE_NAMES, _ARGUMENT_TYPE_IDS, _RETURN_ELEMENT_TYPE_IDS, _RETURN_VALUE_TYPE_IDS, _COMPLEX_METHOD_TYPE_IDS = (
+  _build_introspection_maps()
+)
+
+# Empirical / device-specific id observed in the wild (not in HoiObject 31×4 grid).
+_INTROSPECTION_TYPE_NAMES[113] = "List[f32] [In] (empirical)"
+_ARGUMENT_TYPE_IDS.add(113)
+
 _COMPLEX_STRUCT_TYPE_IDS = {30, 31, 32, 35}  # STRUCTURE=30, STRUCT_ARRAY=31, ENUM=32, ENUM_ARRAY=35
 # Backward-compat alias (used by ParameterType.is_complex for method parameters)
 _COMPLEX_TYPE_IDS = _COMPLEX_METHOD_TYPE_IDS
-
-# HC_RESULT codes returned in COMMAND_EXCEPTION / STATUS_EXCEPTION (extend as observed)
-_HC_RESULT_DESCRIPTIONS: Dict[int, str] = {
-  0x0000: "success",
-  0x0005: "invalid parameter / not supported",
-  0x0006: "unknown command",
-  0x0E01: "door unlocked / safety interlock (command not allowed while door open)",
-  0x0200: "hardware error",
-  0x020A: "hardware not ready / axis error",
-  # Empirically identified — require further validation:
-  0x0011: "parameter value out of valid range [empirical, needs validation]",
-  0x0F03: "drive initialization failed (reference/homing run failure) [empirical, needs validation]",
-  0x0F04: "X position out of allowed movement range [empirical, needs validation]",
-  0x0F05: "Y position out of allowed movement range [empirical, needs validation]",
-  0x0F06: "Z position out of allowed movement range [empirical, needs validation]",
-  0x0F08: "tip pickup failed (tip not detected at expected position) [empirical, needs validation]",
-}
-
-
-def describe_hc_result(code: int) -> str:
-  """Return human-readable description for an HC_RESULT code from device errors."""
-  return _HC_RESULT_DESCRIPTIONS.get(code, f"HC_RESULT=0x{code:04X} (unknown)")
-
 
 def get_introspection_type_category(type_id: int) -> str:
   """Get category for introspection type ID.
@@ -940,12 +957,10 @@ class GetMethodCommand(HamiltonCommand):
         if label:
           return_labels.append(label)
       else:
-        logger.warning(
-          "Unknown introspection type category for type_id=%d; treating as parameter", pt.type_id
+        raise ValueError(
+          f"Unknown introspection type_id={pt.type_id} ({resolve_introspection_type_name(pt.type_id)}); "
+          "not in HoiObject mHoiParamTypes grid — update _HOI_PARAM_TYPE_GRID or add an override."
         )
-        parameter_types.append(pt)
-        if label:
-          parameter_labels.append(label)
 
     return {
       "interface_id": interface_id,
@@ -1102,10 +1117,10 @@ class HamiltonIntrospection:
     """
     self.backend = backend
 
-  def _resolve_address(self, addr_or_path: Union[Address, str]) -> Address:
-    """Resolve dot-path string to Address using the backend's registry, or return Address as-is."""
+  async def _resolve_target_address(self, addr_or_path: Union[Address, str]) -> Address:
+    """Resolve Address or dot-path through the backend resolver consistently."""
     if isinstance(addr_or_path, str):
-      return cast(Address, self.backend._registry.address(addr_or_path))
+      return cast(Address, await self.backend.resolve_path(addr_or_path))
     return addr_or_path
 
   async def get_supported_interface0_method_ids(self, address: Address) -> Set[int]:
@@ -1116,6 +1131,12 @@ class HamiltonIntrospection:
     Used to guard calls so we never send an Interface 0 command the object
     did not advertise.
     """
+    cached = getattr(self.backend, "get_supported_interface0_method_ids", None)
+    cache_store = getattr(self.backend, "_supported_interface0_method_ids", None)
+    has_capability_cache = isinstance(cache_store, dict)
+    if cached is not None and has_capability_cache:
+      return cast(Set[int], await cached(address))
+
     obj = await self.get_object(address)
     supported: Set[int] = set()
     for i in range(obj.method_count):
@@ -1407,7 +1428,7 @@ class HamiltonIntrospection:
     Returns:
       TypeRegistry with all type information for this object
     """
-    address = self._resolve_address(address)
+    address = await self._resolve_target_address(address)
     registry = TypeRegistry(address=address, global_pool=global_pool)
     if _supported is None:
       _supported = await self.get_supported_interface0_method_ids(address)
@@ -1458,7 +1479,7 @@ class HamiltonIntrospection:
     Returns:
       TypeRegistry that can resolve types from both parent and children.
     """
-    address = self._resolve_address(address)
+    address = await self._resolve_target_address(address)
     supported = await self.get_supported_interface0_method_ids(address)
     registry = await self.build_type_registry(
       address, global_pool=global_pool, _supported=supported
@@ -1566,7 +1587,7 @@ class HamiltonIntrospection:
       cached = registry.get_method(interface_id, method_id)
       if cached is not None:
         return cached
-    address = self._resolve_address(address)
+    address = await self._resolve_target_address(address)
     methods = await self.get_all_methods(address)
     for m in methods:
       if m.interface_id == interface_id and m.method_id == method_id:
@@ -1594,165 +1615,11 @@ class HamiltonIntrospection:
     Returns:
       Human-readable signature string, or a descriptive error string.
     """
-    address = self._resolve_address(address)
-    method = await self.get_method_by_id(address, interface_id, method_id)
+    address = await self._resolve_target_address(address)
+    method = await self.get_method_by_id(address, interface_id, method_id, registry=registry)
     if method is None:
       return f"<method not found: iface={interface_id} id={method_id} at {address}>"
     return method.get_signature_string(registry)
-
-  async def resolve_error(
-    self,
-    address: Union[Address, str],
-    interface_id: int,
-    method_id: int,
-    registry: Optional[TypeRegistry] = None,
-    error_text: str = "",
-    hc_result: Optional[int] = None,
-  ) -> str:
-    """Build an informative error diagnostic from a COMMAND_EXCEPTION.
-
-    Resolves the object path, method signature, and expected parameters
-    so the user can see exactly what the firmware expected. When
-    hc_result is provided, appends a human-readable device error line
-    via describe_hc_result().
-
-    Example::
-
-      info = await intro.resolve_error(addr, 1, 9, mph_registry, hc_result=0x0005)
-      print(info)
-      # Error on MLPrepRoot.MphRoot.MPH (57345:1:4352)
-      #   Method [1:9] PickupTips(tipParameters: PickupTipParameters, ...)
-      #   Expected params: tipParameters, finalZ, tipDefinition, ...
-      #   Device error: invalid parameter / not supported (HC_RESULT=0x0005)
-
-    Args:
-      address: Object address or dot-path from the error.
-      interface_id: Interface ID from the error.
-      method_id: Method/command ID from the error.
-      registry: Optional TypeRegistry for resolving struct/enum names.
-      error_text: Raw error string (used when hc_result not provided).
-      hc_result: HC_RESULT code from the device (e.g. 0x0005); if set, shown via describe_hc_result().
-
-    Returns:
-      Multi-line diagnostic string.
-    """
-    address = self._resolve_address(address)
-    lines: list[str] = []
-
-    path = self.backend._registry.path(address) if hasattr(self.backend, "_registry") else None
-    if path:
-      lines.append(f"Error on {path} ({address})")
-    else:
-      lines.append(f"Error on {address}")
-
-    method = await self.get_method_by_id(address, interface_id, method_id)
-    if method:
-      sig = method.get_signature_string(registry)
-      lines.append(f"  Method [{interface_id}:{method_id}] {sig}")
-      if method.parameter_labels:
-        lines.append(f"  Expected params: {', '.join(method.parameter_labels)}")
-      for pt in method.parameter_types:
-        if pt.is_complex:
-          resolved = pt.resolve_name(registry, ho_interface_id=method.interface_id)
-          lines.append(f"  Param type {pt.type_id}: {resolved}")
-    else:
-      lines.append(f"  Method [{interface_id}:{method_id}] <not found>")
-
-    if hc_result is not None:
-      lines.append(f"  Device error: {describe_hc_result(hc_result)}")
-    if error_text:
-      lines.append(f"  Device said: {error_text}")
-
-    return "\n".join(lines)
-
-  @staticmethod
-  def parse_error_u8_array_message(error_string: str) -> Optional[str]:
-    """Extract the decoded U8_ARRAY device message from a Hamilton error string.
-
-    The parsed error string may contain ``U8_ARRAY=...`` (or ``U8_ARRAY="..."``)
-    with the instrument's human-readable message. Returns that value or None.
-    """
-    import re
-
-    # Match U8_ARRAY= then either quoted content or rest until "; " or " [" or end
-    m = re.search(r"U8_ARRAY=(?:\"([^\"]*)\"|([^;[\]]*?)(?:\s*;\s*|\s*\[|$))", error_string)
-    if not m:
-      return None
-    return (m.group(1) or m.group(2) or "").strip() or None
-
-  @staticmethod
-  def parse_error_address(
-    error_string: str,
-  ) -> Optional[tuple[Address, int, int, int]]:
-    """Extract (address, interface_id, method_id, hc_result) from a COMMAND_EXCEPTION string.
-
-    The Hamilton error string format includes the address as
-    ``0xMMMM.0xNNNN.0xOOOO:0xII,0xCCCC,0xRRRR`` where the first part is
-    the 3-part object address and II/CCCC/RRRR encode interface, command, and HC_RESULT.
-
-    Example::
-
-      result = HamiltonIntrospection.parse_error_address(
-        "0x0001.0x0001.0x1100:0x01,0x0009,0x020A"
-      )
-      if result:
-        addr, iface_id, method_id, hc_result = result
-
-    Returns:
-      (Address, interface_id, method_id, hc_result) or None if parsing fails.
-    """
-    import re
-
-    m = re.search(
-      r"0x([0-9a-fA-F]+)\.0x([0-9a-fA-F]+)\.0x([0-9a-fA-F]+)"
-      r":0x([0-9a-fA-F]+),0x([0-9a-fA-F]+)(?:,0x([0-9a-fA-F]+))?",
-      error_string,
-    )
-    if not m:
-      return None
-    module_id = int(m.group(1), 16)
-    node_id = int(m.group(2), 16)
-    object_id = int(m.group(3), 16)
-    interface_id = int(m.group(4), 16)
-    method_id = int(m.group(5), 16)
-    hc_result = int(m.group(6), 16) if m.group(6) else 0
-    return Address(module_id, node_id, object_id), interface_id, method_id, hc_result
-
-  async def diagnose_error(
-    self,
-    error_string: str,
-    registry: Optional[TypeRegistry] = None,
-  ) -> str:
-    """One-liner: parse a COMMAND_EXCEPTION string and return a full diagnostic.
-
-    Combines parse_error_address() + resolve_error() into a single call.
-    Pass the raw error text (e.g. from a RuntimeError message) and get
-    back a human-readable diagnostic.
-
-    Example::
-
-      try:
-        await backend.send_command(cmd)
-      except RuntimeError as e:
-        print(await intro.diagnose_error(str(e), mph_registry))
-
-    Returns:
-      Multi-line diagnostic string, or the original error if parsing fails.
-    """
-    parsed = self.parse_error_address(error_string)
-    if parsed is None:
-      return f"Could not parse error address from: {error_string}"
-    address, interface_id, method_id, hc_result = parsed
-    error_text = self.parse_error_u8_array_message(error_string) or ""
-    return await self.resolve_error(
-      address,
-      interface_id,
-      method_id,
-      registry=registry,
-      hc_result=hc_result,
-      error_text=error_text,
-    )
-
 
 # ============================================================================
 # STRUCT / COMMAND VALIDATION

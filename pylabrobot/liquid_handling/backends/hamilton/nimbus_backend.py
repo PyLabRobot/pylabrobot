@@ -3,8 +3,8 @@
 NimbusBackend composes HamiltonTCPClient as self.client for TCP and introspection.
 Callers may pass host and optionally port for default TCP settings, or inject a
 pre-configured client (dependency injection).
-Interfaces: self.client.interfaces.<Path>.address for routing. Optional presence
-via .is_available or firmware probe (DoorLock uses .is_available).
+Interfaces resolve via shared target/path resolution on the client.
+Optional presence checks use backend-level resolver state.
 """
 
 from __future__ import annotations
@@ -17,6 +17,9 @@ from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union, overlo
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.error_tables import (
+  NIMBUS_ERROR_CODES,
+)
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
@@ -25,6 +28,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U16,
   Bool,
   BoolArray,
+  HcResultEntry,
   I16Array,
   I32Array,
   U16Array,
@@ -160,6 +164,15 @@ class NimbusCommand(HamiltonCommand):
   """Base for Nimbus commands. Subclasses are dataclasses with dest + Annotated payload fields.
 
   build_parameters() -> HoiParams.from_struct(self); dest is skipped (no Annotated).
+
+  Success responses carry only the fields declared in the interface yaml — no
+  HoiResult trailer. Per-channel warnings arrive on ``STATUS_WARNING`` /
+  ``COMMAND_WARNING`` frames as a prefix, and per-channel errors arrive on
+  ``COMMAND_EXCEPTION`` / ``STATUS_EXCEPTION`` frames; both paths are handled
+  by ``HamiltonCommand.interpret_response`` and the ``send_command`` exception
+  decoder respectively. ``_channel_index_for_entry`` is still overridden here
+  so warning/exception entries can be routed to 0-indexed PLR channels via
+  the ``channels_involved`` bitmask.
   """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -171,6 +184,31 @@ class NimbusCommand(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     return HoiParams.from_struct(self)
+
+  def _channel_index_for_entry(
+    self, entry_index: int, entry: HcResultEntry
+  ) -> Optional[int]:
+    """Map HoiResult entry → 0-indexed channel via the ``channels_involved`` bitmask.
+
+    Nimbus firmware populates HoiResult entries in active-channel order, so
+    entry_index N corresponds to the N-th set bit of ``channels_involved[0]``.
+    Commands without a ``channels_involved`` field (``IsDoorLocked``, ``Park``,
+    ``Initialize`` …) fall back to the default entry-index mapping.
+    """
+    mask_field = getattr(self, "channels_involved", None)
+    if not mask_field:
+      return entry_index
+    try:
+      mask = int(mask_field[0])
+    except (TypeError, IndexError, ValueError):
+      return entry_index
+    seen = 0
+    for bit in range(mask.bit_length()):
+      if mask & (1 << bit):
+        if seen == entry_index:
+          return bit
+        seen += 1
+    return entry_index
 
 
 @dataclass
@@ -483,7 +521,7 @@ class NimbusBackend(LiquidHandlerBackend):
         raise TypeError("Provide either host or client, not both")
       self.client = client
     elif host is not None:
-      self.client = HamiltonTCPClient(host=host, port=port)
+      self.client = HamiltonTCPClient(host=host, port=port, error_codes=NIMBUS_ERROR_CODES)
     else:
       raise TypeError("Provide either host or client")
 
@@ -509,7 +547,7 @@ class NimbusBackend(LiquidHandlerBackend):
   async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
     """Set up the Nimbus backend.
 
-    Interfaces: self.client.interfaces.<path>.address for required paths; optional via _has_interface(name).
+    Interfaces resolve through the shared client resolver; optional via _has_interface(name).
 
     This method:
     1. Establishes TCP connection and performs protocol initialization
