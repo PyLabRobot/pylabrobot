@@ -259,20 +259,30 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
 # # # # # # # # # # thermo_AB_96_wellplate_300ul_Vb_MicroAmp # # # # # # # # # #
 
 
+# Calibration data: measured height (mm) → known volume (uL)
+_microamp_height_to_volume = {
+  0.0: 0.0,
+  1.69: 4.0,
+  2.29: 8.0,
+  3.89: 20.0,
+  5.79: 40.0,
+  8.49: 70.0,
+  10.59: 120.0,
+  12.69: 170.0,
+  14.79: 220.0,
+  16.59: 260.0,
+  17.89: 290.0,
+}
+_microamp_volume_to_height = {v: k for k, v in _microamp_height_to_volume.items()}
+
+
 def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_mm: float) -> float:
   if height_mm > (23.24 - 0.74) * 1.05:
     raise ValueError(
       f"Height {height_mm} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
-  # Reverse fit: height → volume, 5th-degree polynomial via numeric inversion
-  return max(
-    -6.7862
-    + 2.7847 * height_mm
-    - 0.17352 * height_mm**2
-    + 0.006029 * height_mm**3
-    - 9.971e-5 * height_mm**4
-    + 6.451e-7 * height_mm**5,
-    0,
+  return round(
+    interpolate_1d(height_mm, _microamp_height_to_volume, bounds_handling="extrapolate"), 3
   )
 
 
@@ -281,22 +291,9 @@ def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_
     raise ValueError(
       f"Volume {volume_ul} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
-  # Polynomial coefficients: degree 5 fit from volume → height
-  return max(
-    1.0796
-    + 0.1570 * volume_ul
-    - 0.00099828 * volume_ul**2
-    + 3.4541e-6 * volume_ul**3
-    - 3.5805e-9 * volume_ul**4
-    - 1.8018e-12 * volume_ul**5,
-    0,
+  return round(
+    interpolate_1d(volume_ul, _microamp_volume_to_height, bounds_handling="extrapolate"), 3
   )
-
-
-# results_measurement_fitting_dict = {
-#  'Volume (ul)': [4, 8, 20, 40, 70, 120, 170, 220, 260, 290],
-#  'Observed Height (mm)': [1.69, 2.29, 3.89, 5.79, 8.49, 10.59, 12.69, 14.79, 16.59, 17.89]
-# }
 
 
 def thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name: str) -> Lid:
