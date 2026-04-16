@@ -13,6 +13,7 @@ from pylabrobot.resources.well import (
   Well,
   WellBottomType,
 )
+from pylabrobot.utils.interpolation import interpolate_1d
 
 # Please conform with the 'manufacturer-first, then brands' naming principle:
 
@@ -121,40 +122,39 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
 # # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate # # # # # # # # # #
 
 
+# Calibration data: measured height (mm) → known volume (uL)
+_enduraplate_height_to_volume = {
+  0.0: 0.0,
+  0.17: 4.0,
+  0.77: 8.0,
+  2.27: 20.0,
+  6.57: 70.0,
+  9.17: 120.0,
+  11.17: 170.0,
+  13.17: 220.0,
+  15.17: 260.0,
+}
+_enduraplate_volume_to_height = {v: k for k, v in _enduraplate_height_to_volume.items()}
+
+
 def _compute_volume_from_height_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
   h: float,
-):
-  if h > 21.1:
-    raise ValueError(f"Height {h} is too large for" + "ThermoScientific_96_wellplate_1200ul_Rd")
-  return max(
-    0.9617 + 10.2590 * h - 1.3069 * h**2 + 0.26799 * h**3 - 0.01003 * h**4,
-    0,
-  )
+) -> float:
+  if h > 20.1 * 1.05:
+    raise ValueError(f"Height {h} is too large for Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate")
+  return round(interpolate_1d(h, _enduraplate_height_to_volume, bounds_handling="extrapolate"), 3)
 
 
 def _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
   liquid_volume: float,
-):
+) -> float:
   if liquid_volume > 315:  # 5% tolerance
     raise ValueError(
-      f"Volume {liquid_volume} is too large for" + "ThermoScientific_96_wellplate_1200ul_Rd"
+      f"Volume {liquid_volume} is too large for Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate"
     )
-  return max(
-    -0.1823
-    + 0.1327 * liquid_volume
-    - 0.000637 * liquid_volume**2
-    + 1.6577e-6 * liquid_volume**3
-    - 1.1487e-9 * liquid_volume**4,
-    0,
+  return round(
+    interpolate_1d(liquid_volume, _enduraplate_volume_to_height, bounds_handling="extrapolate"), 3
   )
-
-
-# results_measurement_fitting_dict = {
-#     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
-#     "Observed Height (mm)": [0, 0.17, 0.77, 2.27, 6.57, 9.17, 11.17, 13.17, 15.17],
-#     "Predicted Height (mm)": [0, 0.338, 0.839, 2.230, 6.526, 9.195, 11.152, 13.141, 15.145],
-#     "Relative Deviation (%)": [0, 99.07, 9.01, -1.76, -0.66, 0.27, -0.16, -0.22, -0.17]
-# }
 
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
