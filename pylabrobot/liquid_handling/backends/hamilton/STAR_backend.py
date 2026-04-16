@@ -1699,6 +1699,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return not self._core96_has_old_firmware()
 
+  def _normalize_extended_configuration_y_bounds(self) -> None:
+    """Normalize impossible PIP Y bounds reported by some STAR/STARlet firmware revisions.
+
+    Legacy STARlet firmware has been observed to return the PIP Y bounds reversed in the
+    extended-configuration response and, on some revisions, to report an implausibly small maximum
+    Y position. Newer instruments should already report a sane interval, so normalize only when the
+    parsed values are clearly impossible.
+    """
+
+    if (
+      self._extended_conf.pip_maximal_y_position < self._extended_conf.left_arm_min_y_position
+      or self._extended_conf.pip_maximal_y_position < 100.0
+    ):
+      default_bounds = ExtendedConfiguration()
+      logger.warning(
+        "Normalizing invalid PIP Y bounds reported by firmware: max_y=%s, min_y=%s, pip_fw=%s",
+        self._extended_conf.pip_maximal_y_position,
+        self._extended_conf.left_arm_min_y_position,
+        getattr(self, "_pip_firmware_version", None),
+      )
+      self._extended_conf.pip_maximal_y_position = default_bounds.pip_maximal_y_position
+      self._extended_conf.left_arm_min_y_position = default_bounds.left_arm_min_y_position
+
+  def _pip_y_bounds(self) -> Tuple[float, float]:
+    """Return normalized PIP Y bounds as (min_y, max_y)."""
+
+    min_y = self.extended_conf.left_arm_min_y_position
+    max_y = self.extended_conf.pip_maximal_y_position
+    return (min(min_y, max_y), max(min_y, max_y))
+
   async def setup(
     self,
     skip_instrument_initialization=False,
@@ -1750,6 +1780,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._pip_firmware_version = self._parse_firmware_version_datetime(
       pip_fw_match.group("fw_version").strip()
     )
+    self._normalize_extended_configuration_y_bounds()
 
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
@@ -1877,12 +1908,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # frontmost channel can go to y=6, every channel behind it constrains its min Y
     spacings = self._channels_minimum_y_spacing
-    min_y_pos = self.extended_conf.left_arm_min_y_position + sum(spacings[channel_idx + 1 :])
+    lower_y_bound, upper_y_bound = self._pip_y_bounds()
+    min_y_pos = lower_y_bound + sum(spacings[channel_idx + 1 :])
     if position.y < min_y_pos:
       return False
 
     # backmost channel max Y from config, every channel in front constrains its max Y
-    max_y_pos = self.extended_conf.pip_maximal_y_position - sum(spacings[:channel_idx])
+    max_y_pos = upper_y_bound - sum(spacings[:channel_idx])
     if position.y > max_y_pos:
       return False
 
@@ -4639,7 +4671,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      max_y_pos = self.extended_conf.pip_maximal_y_position
+      _, max_y_pos = self._pip_y_bounds()
       if y > max_y_pos:
         raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm")
 
@@ -4652,9 +4684,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
     else:
       # STAR machines do not allow channels y < minimum
-      if y < self.extended_conf.left_arm_min_y_position:
+      min_y_pos, _ = self._pip_y_bounds()
+      if y < min_y_pos:
         raise ValueError(
-          f"channel {channel} y-target must be >= {self.extended_conf.left_arm_min_y_position} mm"
+          f"channel {channel} y-target must be >= {min_y_pos} mm"
         )
 
     await self.position_single_pipetting_channel_in_y_direction(
@@ -6298,6 +6331,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
+    )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
+      command_kwargs["gj"] = tadm_algorithm
+      command_kwargs["gk"] = recording_mode
+    command_kwargs.update(
       lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
       ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
       sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
@@ -6305,10 +6344,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
       io=[f"{io:04}" for io in cup_upper_edge],
     )
-    if self._pip_supports_extended_liquid_command_params():
-      command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
-      command_kwargs["gj"] = tadm_algorithm
-      command_kwargs["gk"] = recording_mode
     return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
@@ -10750,13 +10785,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       adj_upper_y = await self.request_y_pos_channel_n(channel_idx - 1)
       max_safe_upper_y_pos = adj_upper_y - self._min_spacing_between(channel_idx, channel_idx - 1)
     else:
-      max_safe_upper_y_pos = self.extended_conf.pip_maximal_y_position
+      _, max_safe_upper_y_pos = self._pip_y_bounds()
 
     if channel_idx < (self.num_channels - 1):
       adj_lower_y = await self.request_y_pos_channel_n(channel_idx + 1)
       max_safe_lower_y_pos = adj_lower_y + self._min_spacing_between(channel_idx, channel_idx + 1)
     else:
-      max_safe_lower_y_pos = self.extended_conf.left_arm_min_y_position
+      max_safe_lower_y_pos, _ = self._pip_y_bounds()
 
     # Enable safe start and end positions
     if start_pos_search:
@@ -10837,7 +10872,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_idx, channel_idx + 1
         )
       else:
-        min_y = self.extended_conf.left_arm_min_y_position
+        min_y, _ = self._pip_y_bounds()
 
       max_safe_dist = detected_material_y_pos - min_y
       move_target = detected_material_y_pos - min(post_detection_dist, max_safe_dist)
@@ -10848,7 +10883,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_idx, channel_idx - 1
         )
       else:
-        max_y = self.extended_conf.pip_maximal_y_position
+        _, max_y = self._pip_y_bounds()
 
       max_safe_dist = max_y - detected_material_y_pos
       move_target = detected_material_y_pos + min(post_detection_dist, max_safe_dist)

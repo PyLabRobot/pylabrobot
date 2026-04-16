@@ -3,6 +3,7 @@
 import datetime
 import unittest
 import unittest.mock
+from dataclasses import replace
 from typing import Literal, cast
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -168,6 +169,36 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
     self.star.io.read.side_effect = lambda: b"this is plaintext"
     with self.assertRaises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
+
+
+class TestSTARConfigurationNormalization(unittest.TestCase):
+  def test_inverted_y_bounds_are_swapped(self):
+    star = STARBackend()
+    star._pip_firmware_version = datetime.date(2024, 1, 1)
+    star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      pip_maximal_y_position=6.0,
+      left_arm_min_y_position=22.0,
+    )
+
+    star._normalize_extended_configuration_y_bounds()
+
+    self.assertEqual(star.extended_conf.pip_maximal_y_position, 606.5)
+    self.assertEqual(star.extended_conf.left_arm_min_y_position, 6.0)
+
+  def test_valid_y_bounds_are_kept(self):
+    star = STARBackend()
+    star._pip_firmware_version = datetime.date(2009, 1, 1)
+    star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      pip_maximal_y_position=606.5,
+      left_arm_min_y_position=6.0,
+    )
+
+    star._normalize_extended_configuration_y_bounds()
+
+    self.assertEqual(star.extended_conf.pip_maximal_y_position, 606.5)
+    self.assertEqual(star.extended_conf.left_arm_min_y_position, 6.0)
 
 
 class STARCommandCatcher(STARBackend):
@@ -1724,6 +1755,23 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
 
     backend._channels_minimum_y_spacing = [18.0] * 4
     self.assertFalse(backend.can_reach_position(3, Coordinate(100, 574, 100)))
+
+  async def test_can_reach_position_normalizes_inverted_y_bounds(self):
+    """Inverted raw Y limits should not make ordinary 8-channel STARlet positions unreachable."""
+
+    backend = STARBackend()
+    backend._num_channels = 8
+    backend._channels_minimum_y_spacing = [8.98] * 8
+    backend._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      pip_maximal_y_position=6.0,
+      left_arm_min_y_position=22.0,
+    )
+
+    backend._normalize_extended_configuration_y_bounds()
+
+    self.assertTrue(backend.can_reach_position(0, Coordinate(100, 337.8, 100)))
+    self.assertTrue(backend.can_reach_position(7, Coordinate(100, 274.8, 100)))
 
   # -- position_channels_in_y_direction: validation rejects tight positions -------
 
