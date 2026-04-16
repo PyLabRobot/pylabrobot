@@ -66,9 +66,11 @@ class VantageChatterboxDriver(VantageDriver):
     self.x_arm = VantageXArm(driver=self)
     self.loading_cover = VantageLoadingCover(driver=self) if not skip_loading_cover else None
 
-    # Skip _on_setup() on subsystems: send_command returns None in chatterbox mode,
-    # which would cause status-query methods (e.g. query_tip_presence) to crash.
-    # Subsystems are already in a usable state since all firmware commands are no-ops.
+    # _on_setup() is deliberately not called on the subsystems here. Real-driver
+    # hooks issue status-query firmware commands (e.g. query_tip_presence) that
+    # would fail because chatterbox's send_command returns None instead of a
+    # parsed response dict. All firmware commands through this driver are
+    # logged-and-dropped, so the subsystems never need real initialization.
 
   async def stop(self):
     """Stop the chatterbox driver and clear subsystem state.

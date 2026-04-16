@@ -264,12 +264,31 @@ class VantageBackend(HamiltonLiquidHandler):
       skip_ipg=skip_ipg,
     )
 
+    # The driver no longer initializes capability-owned backends in its
+    # ``_subsystems`` loop — that is the ``Vantage`` device's job. Drive their
+    # lifecycle explicitly here so the legacy wrapper path still initializes
+    # the hardware.
+    assert self.driver.pip is not None
+    await self.driver.pip._on_setup()
+    if self.driver.head96 is not None:
+      await self.driver.head96._on_setup()
+    if self.driver.ipg is not None:
+      await self.driver.ipg._on_setup()
+
     # Sync legacy state from driver.
     self.id_ = 0
     self._num_channels = self.driver.num_channels
     self._setup_done = True
 
   async def stop(self):
+    # Tear down capability-owned backends in reverse setup order before the
+    # driver closes the USB connection and nulls its subsystem attributes.
+    if self.driver.ipg is not None:
+      await self.driver.ipg._on_stop()
+    if self.driver.head96 is not None:
+      await self.driver.head96._on_stop()
+    if self.driver.pip is not None:
+      await self.driver.pip._on_stop()
     await self.driver.stop()
     self._setup_done = False
 
@@ -401,8 +420,6 @@ class VantageBackend(HamiltonLiquidHandler):
       )
       for op in ops
     ]
-    # TODO_DA_5, mix_position_in_z_direction_from_liquid_surface,
-    # surface_following_distance_during_mixing have no BackendParams equivalent; dropped.
     await self._vantage_pip.aspirate(
       new_ops,
       use_channels,
@@ -432,6 +449,11 @@ class VantageBackend(HamiltonLiquidHandler):
         aspirate_position_above_z_touch_off=aspirate_position_above_z_touch_off,
         swap_speed=swap_speed,
         settling_time=settling_time,
+        mix_position_in_z_direction_from_liquid_surface=(
+          mix_position_in_z_direction_from_liquid_surface
+        ),
+        surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+        TODO_DA_5=TODO_DA_5,
         capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off,
         pressure_mad_supervision_on_off=pressure_mad_supervision_on_off,
         tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -502,8 +524,6 @@ class VantageBackend(HamiltonLiquidHandler):
       )
       for op in ops
     ]
-    # TODO_DD_2, mix_position_in_z_direction_from_liquid_surface,
-    # surface_following_distance_during_mixing have no BackendParams equivalent; dropped.
     await self._vantage_pip.dispense(
       new_ops,
       use_channels,
@@ -534,6 +554,11 @@ class VantageBackend(HamiltonLiquidHandler):
         pressure_lld_sensitivity=pressure_lld_sensitivity,
         swap_speed=swap_speed,
         settling_time=settling_time,
+        mix_position_in_z_direction_from_liquid_surface=(
+          mix_position_in_z_direction_from_liquid_surface
+        ),
+        surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+        TODO_DD_2=TODO_DD_2,
         tadm_algorithm_on_off=tadm_algorithm_on_off,
         limit_curve_index=limit_curve_index,
         recording_mode=recording_mode,
@@ -667,6 +692,10 @@ class VantageBackend(HamiltonLiquidHandler):
         lld_sensitivity=lld_sensitivity,
         swap_speed=swap_speed,
         settling_time=settling_time,
+        mix_position_in_z_direction_from_liquid_surface=(
+          mix_position_in_z_direction_from_liquid_surface
+        ),
+        surface_following_distance_during_mixing=surface_following_distance_during_mixing,
         limit_curve_index=limit_curve_index,
         tadm_channel_pattern=tadm_channel_pattern,
         tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -769,6 +798,10 @@ class VantageBackend(HamiltonLiquidHandler):
         side_touch_off_distance=side_touch_off_distance,
         swap_speed=swap_speed,
         settling_time=settling_time,
+        mix_position_in_z_direction_from_liquid_surface=(
+          mix_position_in_z_direction_from_liquid_surface
+        ),
+        surface_following_distance_during_mixing=surface_following_distance_during_mixing,
         limit_curve_index=limit_curve_index,
         tadm_channel_pattern=tadm_channel_pattern,
         tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -1020,121 +1053,215 @@ class VantageBackend(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """Deprecated: use ``VantagePIPBackend._pip_aspirate``."""
+    """Deprecated: use VantagePIPBackend.aspirate()."""
 
+    n = self.num_channels
     if type_of_aspiration is None:
-      type_of_aspiration = [0] * self.num_channels
+      type_of_aspiration = [0] * n
     if tip_pattern is None:
-      tip_pattern = [False] * self.num_channels
+      tip_pattern = [False] * n
     if minimal_traverse_height_at_begin_of_command is None:
-      minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
+      minimal_traverse_height_at_begin_of_command = [3600] * n
     if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
+      minimal_height_at_command_end = [3600] * n
     if lld_search_height is None:
-      lld_search_height = [0] * self.num_channels
+      lld_search_height = [0] * n
     if clot_detection_height is None:
-      clot_detection_height = [60] * self.num_channels
+      clot_detection_height = [60] * n
     if liquid_surface_at_function_without_lld is None:
-      liquid_surface_at_function_without_lld = [3600] * self.num_channels
+      liquid_surface_at_function_without_lld = [3600] * n
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
-      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
+      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * n
     if tube_2nd_section_height_measured_from_zm is None:
-      tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
+      tube_2nd_section_height_measured_from_zm = [0] * n
     if tube_2nd_section_ratio is None:
-      tube_2nd_section_ratio = [0] * self.num_channels
+      tube_2nd_section_ratio = [0] * n
     if minimum_height is None:
-      minimum_height = [3600] * self.num_channels
+      minimum_height = [3600] * n
     if immersion_depth is None:
-      immersion_depth = [0] * self.num_channels
+      immersion_depth = [0] * n
     if surface_following_distance is None:
-      surface_following_distance = [0] * self.num_channels
+      surface_following_distance = [0] * n
     if aspiration_volume is None:
-      aspiration_volume = [0] * self.num_channels
+      aspiration_volume = [0] * n
     if aspiration_speed is None:
-      aspiration_speed = [500] * self.num_channels
+      aspiration_speed = [500] * n
     if transport_air_volume is None:
-      transport_air_volume = [0] * self.num_channels
+      transport_air_volume = [0] * n
     if blow_out_air_volume is None:
-      blow_out_air_volume = [0] * self.num_channels
+      blow_out_air_volume = [0] * n
     if pre_wetting_volume is None:
-      pre_wetting_volume = [0] * self.num_channels
+      pre_wetting_volume = [0] * n
     if lld_mode is None:
-      lld_mode = [1] * self.num_channels
+      lld_mode = [1] * n
     if lld_sensitivity is None:
-      lld_sensitivity = [1] * self.num_channels
+      lld_sensitivity = [1] * n
     if pressure_lld_sensitivity is None:
-      pressure_lld_sensitivity = [1] * self.num_channels
+      pressure_lld_sensitivity = [1] * n
     if aspirate_position_above_z_touch_off is None:
-      aspirate_position_above_z_touch_off = [5] * self.num_channels
+      aspirate_position_above_z_touch_off = [5] * n
     if swap_speed is None:
-      swap_speed = [100] * self.num_channels
+      swap_speed = [100] * n
     if settling_time is None:
-      settling_time = [5] * self.num_channels
+      settling_time = [5] * n
     if mix_volume is None:
-      mix_volume = [0] * self.num_channels
+      mix_volume = [0] * n
     if mix_cycles is None:
-      mix_cycles = [0] * self.num_channels
+      mix_cycles = [0] * n
     if mix_position_in_z_direction_from_liquid_surface is None:
-      mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
+      mix_position_in_z_direction_from_liquid_surface = [250] * n
     if mix_speed is None:
-      mix_speed = [500] * self.num_channels
+      mix_speed = [500] * n
     if surface_following_distance_during_mixing is None:
-      surface_following_distance_during_mixing = [0] * self.num_channels
+      surface_following_distance_during_mixing = [0] * n
     if TODO_DA_5 is None:
-      TODO_DA_5 = [0] * self.num_channels
+      TODO_DA_5 = [0] * n
     if capacitive_mad_supervision_on_off is None:
-      capacitive_mad_supervision_on_off = [0] * self.num_channels
+      capacitive_mad_supervision_on_off = [0] * n
     if pressure_mad_supervision_on_off is None:
-      pressure_mad_supervision_on_off = [0] * self.num_channels
+      pressure_mad_supervision_on_off = [0] * n
     if limit_curve_index is None:
-      limit_curve_index = [0] * self.num_channels
+      limit_curve_index = [0] * n
 
-    return await self._vantage_pip._pip_aspirate(
-      x_position=x_position,
-      y_position=y_position,
-      type_of_aspiration=type_of_aspiration,
-      tip_pattern=tip_pattern,
-      minimal_traverse_height_at_begin_of_command=[
-        v / 10 for v in minimal_traverse_height_at_begin_of_command
-      ],
-      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
-      lld_search_height=[v / 10 for v in lld_search_height],
-      clot_detection_height=[v / 10 for v in clot_detection_height],
-      liquid_surface_at_function_without_lld=[
-        v / 10 for v in liquid_surface_at_function_without_lld
-      ],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=[
-        v / 10 for v in pull_out_distance_to_take_transport_air_in_function_without_lld
-      ],
-      tube_2nd_section_height_measured_from_zm=[
-        v / 10 for v in tube_2nd_section_height_measured_from_zm
-      ],
-      tube_2nd_section_ratio=tube_2nd_section_ratio,
-      minimum_height=[v / 10 for v in minimum_height],
-      immersion_depth=[v / 10 for v in immersion_depth],
-      surface_following_distance=[v / 10 for v in surface_following_distance],
-      aspiration_volume=[v / 100 for v in aspiration_volume],
-      aspiration_speed=[v / 10 for v in aspiration_speed],
-      transport_air_volume=[v / 10 for v in transport_air_volume],
-      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
-      pre_wetting_volume=[v / 10 for v in pre_wetting_volume],
-      lld_mode=lld_mode,
-      lld_sensitivity=lld_sensitivity,
-      pressure_lld_sensitivity=pressure_lld_sensitivity,
-      aspirate_position_above_z_touch_off=[v / 10 for v in aspirate_position_above_z_touch_off],
-      swap_speed=[v / 10 for v in swap_speed],
-      settling_time=[v / 10 for v in settling_time],
-      mix_volume=[v / 10 for v in mix_volume],
-      mix_cycles=mix_cycles,
-      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
-      mix_speed=[v / 10 for v in mix_speed],
-      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
-      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off,
-      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off,
-      tadm_algorithm_on_off=tadm_algorithm_on_off,
-      limit_curve_index=limit_curve_index,
-      recording_mode=recording_mode,
-      TODO_DA_5=TODO_DA_5,
+    assert all(0 <= x <= 2 for x in type_of_aspiration), (
+      "type_of_aspiration must be between 0 and 2"
+    )
+    assert all(0 <= x <= 50000 for x in x_position), (
+      "x_position must be between 0 and 50000"
+    )
+    assert all(0 <= x <= 6500 for x in y_position), (
+      "y_position must be between 0 and 6500"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command), (
+      "minimal_traverse_height_at_begin_of_command must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_height_at_command_end), (
+      "minimal_height_at_command_end must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in lld_search_height), (
+      "lld_search_height must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 500 for x in clot_detection_height), (
+      "clot_detection_height must be between 0 and 500"
+    )
+    assert all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld), (
+      "liquid_surface_at_function_without_lld must be between 0 and 3600"
+    )
+    assert all(
+      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ), "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3600"
+    assert all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm), (
+      "tube_2nd_section_height_measured_from_zm must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 10000 for x in tube_2nd_section_ratio), (
+      "tube_2nd_section_ratio must be between 0 and 10000"
+    )
+    assert all(0 <= x <= 3600 for x in minimum_height), (
+      "minimum_height must be between 0 and 3600"
+    )
+    assert all(-3600 <= x <= 3600 for x in immersion_depth), (
+      "immersion_depth must be between -3600 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in surface_following_distance), (
+      "surface_following_distance must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 125000 for x in aspiration_volume), (
+      "aspiration_volume must be between 0 and 125000"
+    )
+    assert all(10 <= x <= 10000 for x in aspiration_speed), (
+      "aspiration_speed must be between 10 and 10000"
+    )
+    assert all(0 <= x <= 500 for x in transport_air_volume), (
+      "transport_air_volume must be between 0 and 500"
+    )
+    assert all(0 <= x <= 125000 for x in blow_out_air_volume), (
+      "blow_out_air_volume must be between 0 and 125000"
+    )
+    assert all(0 <= x <= 999 for x in pre_wetting_volume), (
+      "pre_wetting_volume must be between 0 and 999"
+    )
+    assert all(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
+    assert all(1 <= x <= 4 for x in lld_sensitivity), (
+      "lld_sensitivity must be between 1 and 4"
+    )
+    assert all(1 <= x <= 4 for x in pressure_lld_sensitivity), (
+      "pressure_lld_sensitivity must be between 1 and 4"
+    )
+    assert all(0 <= x <= 100 for x in aspirate_position_above_z_touch_off), (
+      "aspirate_position_above_z_touch_off must be between 0 and 100"
+    )
+    assert all(3 <= x <= 1600 for x in swap_speed), (
+      "swap_speed must be between 3 and 1600"
+    )
+    assert all(0 <= x <= 99 for x in settling_time), (
+      "settling_time must be between 0 and 99"
+    )
+    assert all(0 <= x <= 125000 for x in mix_volume), (
+      "mix_volume must be between 0 and 125000"
+    )
+    assert all(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
+    assert all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface), (
+      "mix_position_in_z_direction_from_liquid_surface must be between 0 and 900"
+    )
+    assert all(10 <= x <= 10000 for x in mix_speed), (
+      "mix_speed must be between 10 and 10000"
+    )
+    assert all(0 <= x <= 3600 for x in surface_following_distance_during_mixing), (
+      "surface_following_distance_during_mixing must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 1 for x in TODO_DA_5), "TODO_DA_5 must be between 0 and 1"
+    assert all(0 <= x <= 1 for x in capacitive_mad_supervision_on_off), (
+      "capacitive_mad_supervision_on_off must be between 0 and 1"
+    )
+    assert all(0 <= x <= 1 for x in pressure_mad_supervision_on_off), (
+      "pressure_mad_supervision_on_off must be between 0 and 1"
+    )
+    assert 0 <= tadm_algorithm_on_off <= 1, "tadm_algorithm_on_off must be between 0 and 1"
+    assert all(0 <= x <= 999 for x in limit_curve_index), (
+      "limit_curve_index must be between 0 and 999"
+    )
+    assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
+
+    return await self.send_command(
+      module="A1PM",
+      command="DA",
+      at=type_of_aspiration,
+      tm=tip_pattern,
+      xp=x_position,
+      yp=y_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      lp=lld_search_height,
+      ch=clot_detection_height,
+      zl=liquid_surface_at_function_without_lld,
+      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
+      zu=tube_2nd_section_height_measured_from_zm,
+      zr=tube_2nd_section_ratio,
+      zx=minimum_height,
+      ip=immersion_depth,
+      fp=surface_following_distance,
+      av=aspiration_volume,
+      as_=aspiration_speed,
+      ta=transport_air_volume,
+      ba=blow_out_air_volume,
+      oa=pre_wetting_volume,
+      lm=lld_mode,
+      ll=lld_sensitivity,
+      lv=pressure_lld_sensitivity,
+      zo=aspirate_position_above_z_touch_off,
+      de=swap_speed,
+      wt=settling_time,
+      mv=mix_volume,
+      mc=mix_cycles,
+      mp=mix_position_in_z_direction_from_liquid_surface,
+      ms=mix_speed,
+      mh=surface_following_distance_during_mixing,
+      la=TODO_DA_5,
+      lb=capacitive_mad_supervision_on_off,
+      lc=pressure_mad_supervision_on_off,
+      gj=tadm_algorithm_on_off,
+      gi=limit_curve_index,
+      gk=recording_mode,
     )
 
   async def pip_dispense(
@@ -1176,116 +1303,207 @@ class VantageBackend(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """Deprecated: use ``VantagePIPBackend._pip_dispense``."""
+    """Deprecated: use VantagePIPBackend.dispense()."""
 
+    n = self.num_channels
     if type_of_dispensing_mode is None:
-      type_of_dispensing_mode = [0] * self.num_channels
+      type_of_dispensing_mode = [0] * n
     if tip_pattern is None:
-      tip_pattern = [False] * self.num_channels
+      tip_pattern = [False] * n
     if minimum_height is None:
-      minimum_height = [3600] * self.num_channels
+      minimum_height = [3600] * n
     if lld_search_height is None:
-      lld_search_height = [0] * self.num_channels
+      lld_search_height = [0] * n
     if liquid_surface_at_function_without_lld is None:
-      liquid_surface_at_function_without_lld = [3600] * self.num_channels
+      liquid_surface_at_function_without_lld = [3600] * n
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
-      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
+      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * n
     if immersion_depth is None:
-      immersion_depth = [0] * self.num_channels
+      immersion_depth = [0] * n
     if surface_following_distance is None:
-      surface_following_distance = [0] * self.num_channels
+      surface_following_distance = [0] * n
     if tube_2nd_section_height_measured_from_zm is None:
-      tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
+      tube_2nd_section_height_measured_from_zm = [0] * n
     if tube_2nd_section_ratio is None:
-      tube_2nd_section_ratio = [0] * self.num_channels
+      tube_2nd_section_ratio = [0] * n
     if minimal_traverse_height_at_begin_of_command is None:
-      minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
+      minimal_traverse_height_at_begin_of_command = [3600] * n
     if minimal_height_at_command_end is None:
-      minimal_height_at_command_end = [3600] * self.num_channels
+      minimal_height_at_command_end = [3600] * n
     if dispense_volume is None:
-      dispense_volume = [0] * self.num_channels
+      dispense_volume = [0] * n
     if dispense_speed is None:
-      dispense_speed = [500] * self.num_channels
+      dispense_speed = [500] * n
     if cut_off_speed is None:
-      cut_off_speed = [250] * self.num_channels
+      cut_off_speed = [250] * n
     if stop_back_volume is None:
-      stop_back_volume = [0] * self.num_channels
+      stop_back_volume = [0] * n
     if transport_air_volume is None:
-      transport_air_volume = [0] * self.num_channels
+      transport_air_volume = [0] * n
     if blow_out_air_volume is None:
-      blow_out_air_volume = [0] * self.num_channels
+      blow_out_air_volume = [0] * n
     if lld_mode is None:
-      lld_mode = [1] * self.num_channels
+      lld_mode = [1] * n
     if dispense_position_above_z_touch_off is None:
-      dispense_position_above_z_touch_off = [5] * self.num_channels
+      dispense_position_above_z_touch_off = [5] * n
     if lld_sensitivity is None:
-      lld_sensitivity = [1] * self.num_channels
+      lld_sensitivity = [1] * n
     if pressure_lld_sensitivity is None:
-      pressure_lld_sensitivity = [1] * self.num_channels
+      pressure_lld_sensitivity = [1] * n
     if swap_speed is None:
-      swap_speed = [100] * self.num_channels
+      swap_speed = [100] * n
     if settling_time is None:
-      settling_time = [5] * self.num_channels
+      settling_time = [5] * n
     if mix_volume is None:
-      mix_volume = [0] * self.num_channels
+      mix_volume = [0] * n
     if mix_cycles is None:
-      mix_cycles = [0] * self.num_channels
+      mix_cycles = [0] * n
     if mix_position_in_z_direction_from_liquid_surface is None:
-      mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
+      mix_position_in_z_direction_from_liquid_surface = [250] * n
     if mix_speed is None:
-      mix_speed = [500] * self.num_channels
+      mix_speed = [500] * n
     if surface_following_distance_during_mixing is None:
-      surface_following_distance_during_mixing = [0] * self.num_channels
+      surface_following_distance_during_mixing = [0] * n
     if TODO_DD_2 is None:
-      TODO_DD_2 = [0] * self.num_channels
+      TODO_DD_2 = [0] * n
     if limit_curve_index is None:
-      limit_curve_index = [0] * self.num_channels
+      limit_curve_index = [0] * n
 
-    return await self._vantage_pip._pip_dispense(
-      x_position=x_position,
-      y_position=y_position,
-      tip_pattern=tip_pattern,
-      type_of_dispensing_mode=type_of_dispensing_mode,
-      minimum_height=[v / 10 for v in minimum_height],
-      lld_search_height=[v / 10 for v in lld_search_height],
-      liquid_surface_at_function_without_lld=[
-        v / 10 for v in liquid_surface_at_function_without_lld
-      ],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=[
-        v / 10 for v in pull_out_distance_to_take_transport_air_in_function_without_lld
-      ],
-      immersion_depth=[v / 10 for v in immersion_depth],
-      surface_following_distance=[v / 10 for v in surface_following_distance],
-      tube_2nd_section_height_measured_from_zm=[
-        v / 10 for v in tube_2nd_section_height_measured_from_zm
-      ],
-      tube_2nd_section_ratio=tube_2nd_section_ratio,
-      minimal_traverse_height_at_begin_of_command=[
-        v / 10 for v in minimal_traverse_height_at_begin_of_command
-      ],
-      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
-      dispense_volume=[v / 100 for v in dispense_volume],
-      dispense_speed=[v / 10 for v in dispense_speed],
-      cut_off_speed=[v / 10 for v in cut_off_speed],
-      stop_back_volume=[v / 10 for v in stop_back_volume],
-      transport_air_volume=[v / 10 for v in transport_air_volume],
-      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
-      lld_mode=lld_mode,
-      side_touch_off_distance=side_touch_off_distance / 10,
-      dispense_position_above_z_touch_off=[v / 10 for v in dispense_position_above_z_touch_off],
-      lld_sensitivity=lld_sensitivity,
-      pressure_lld_sensitivity=pressure_lld_sensitivity,
-      swap_speed=[v / 10 for v in swap_speed],
-      settling_time=[v / 10 for v in settling_time],
-      mix_volume=[v / 10 for v in mix_volume],
-      mix_cycles=mix_cycles,
-      mix_position_in_z_direction_from_liquid_surface=mix_position_in_z_direction_from_liquid_surface,
-      mix_speed=[v / 10 for v in mix_speed],
-      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
-      tadm_algorithm_on_off=tadm_algorithm_on_off,
-      limit_curve_index=limit_curve_index,
-      recording_mode=recording_mode,
-      TODO_DD_2=TODO_DD_2,
+    assert all(0 <= x <= 4 for x in type_of_dispensing_mode), (
+      "type_of_dispensing_mode must be between 0 and 4"
+    )
+    assert all(0 <= x <= 50000 for x in x_position), (
+      "x_position must be between 0 and 50000"
+    )
+    assert all(0 <= x <= 6500 for x in y_position), (
+      "y_position must be between 0 and 6500"
+    )
+    assert all(0 <= x <= 3600 for x in minimum_height), (
+      "minimum_height must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in lld_search_height), (
+      "lld_search_height must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld), (
+      "liquid_surface_at_function_without_lld must be between 0 and 3600"
+    )
+    assert all(
+      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ), "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3600"
+    assert all(-3600 <= x <= 3600 for x in immersion_depth), (
+      "immersion_depth must be between -3600 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in surface_following_distance), (
+      "surface_following_distance must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm), (
+      "tube_2nd_section_height_measured_from_zm must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 10000 for x in tube_2nd_section_ratio), (
+      "tube_2nd_section_ratio must be between 0 and 10000"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command), (
+      "minimal_traverse_height_at_begin_of_command must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_height_at_command_end), (
+      "minimal_height_at_command_end must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 125000 for x in dispense_volume), (
+      "dispense_volume must be between 0 and 125000"
+    )
+    assert all(10 <= x <= 10000 for x in dispense_speed), (
+      "dispense_speed must be between 10 and 10000"
+    )
+    assert all(10 <= x <= 10000 for x in cut_off_speed), (
+      "cut_off_speed must be between 10 and 10000"
+    )
+    assert all(0 <= x <= 180 for x in stop_back_volume), (
+      "stop_back_volume must be between 0 and 180"
+    )
+    assert all(0 <= x <= 500 for x in transport_air_volume), (
+      "transport_air_volume must be between 0 and 500"
+    )
+    assert all(0 <= x <= 125000 for x in blow_out_air_volume), (
+      "blow_out_air_volume must be between 0 and 125000"
+    )
+    assert all(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
+    assert 0 <= side_touch_off_distance <= 45, (
+      "side_touch_off_distance must be between 0 and 45"
+    )
+    assert all(0 <= x <= 100 for x in dispense_position_above_z_touch_off), (
+      "dispense_position_above_z_touch_off must be between 0 and 100"
+    )
+    assert all(1 <= x <= 4 for x in lld_sensitivity), (
+      "lld_sensitivity must be between 1 and 4"
+    )
+    assert all(1 <= x <= 4 for x in pressure_lld_sensitivity), (
+      "pressure_lld_sensitivity must be between 1 and 4"
+    )
+    assert all(3 <= x <= 1600 for x in swap_speed), (
+      "swap_speed must be between 3 and 1600"
+    )
+    assert all(0 <= x <= 99 for x in settling_time), (
+      "settling_time must be between 0 and 99"
+    )
+    assert all(0 <= x <= 125000 for x in mix_volume), (
+      "mix_volume must be between 0 and 125000"
+    )
+    assert all(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
+    assert all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface), (
+      "mix_position_in_z_direction_from_liquid_surface must be between 0 and 900"
+    )
+    assert all(10 <= x <= 10000 for x in mix_speed), (
+      "mix_speed must be between 10 and 10000"
+    )
+    assert all(0 <= x <= 3600 for x in surface_following_distance_during_mixing), (
+      "surface_following_distance_during_mixing must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 1 for x in TODO_DD_2), "TODO_DD_2 must be between 0 and 1"
+    assert 0 <= tadm_algorithm_on_off <= 1, "tadm_algorithm_on_off must be between 0 and 1"
+    assert all(0 <= x <= 999 for x in limit_curve_index), (
+      "limit_curve_index must be between 0 and 999"
+    )
+    assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
+
+    return await self.send_command(
+      module="A1PM",
+      command="DD",
+      dm=type_of_dispensing_mode,
+      tm=tip_pattern,
+      xp=x_position,
+      yp=y_position,
+      zx=minimum_height,
+      lp=lld_search_height,
+      zl=liquid_surface_at_function_without_lld,
+      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
+      ip=immersion_depth,
+      fp=surface_following_distance,
+      zu=tube_2nd_section_height_measured_from_zm,
+      zr=tube_2nd_section_ratio,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      dv=dispense_volume,
+      ds=dispense_speed,
+      ss=cut_off_speed,
+      rv=stop_back_volume,
+      ta=transport_air_volume,
+      ba=blow_out_air_volume,
+      lm=lld_mode,
+      dj=side_touch_off_distance,
+      zo=dispense_position_above_z_touch_off,
+      ll=lld_sensitivity,
+      lv=pressure_lld_sensitivity,
+      de=swap_speed,
+      wt=settling_time,
+      mv=mix_volume,
+      mc=mix_cycles,
+      mp=mix_position_in_z_direction_from_liquid_surface,
+      ms=mix_speed,
+      mh=surface_following_distance_during_mixing,
+      la=TODO_DD_2,
+      gj=tadm_algorithm_on_off,
+      gi=limit_curve_index,
+      gk=recording_mode,
     )
 
   async def simultaneous_aspiration_dispensation_of_liquid(
@@ -1711,7 +1929,7 @@ class VantageBackend(HamiltonLiquidHandler):
     blow_out_air_volume: Optional[List[int]] = None,
     tip_handling_method: Optional[List[int]] = None,
   ):
-    """Deprecated: use ``VantagePIPBackend._pip_tip_pick_up``."""
+    """Deprecated: use VantagePIPBackend.pick_up_tips/drop_tips."""
 
     if tip_pattern is None:
       tip_pattern = [False] * self.num_channels
@@ -1730,19 +1948,42 @@ class VantageBackend(HamiltonLiquidHandler):
     if tip_handling_method is None:
       tip_handling_method = [0] * self.num_channels
 
-    return await self._vantage_pip._pip_tip_pick_up(
-      x_position=x_position,
-      y_position=y_position,
-      tip_pattern=tip_pattern,
-      tip_type=tip_type,
-      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position],
-      end_z_deposit_position=[v / 10 for v in end_z_deposit_position],
-      minimal_traverse_height_at_begin_of_command=[
-        v / 10 for v in minimal_traverse_height_at_begin_of_command
-      ],
-      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
-      tip_handling_method=tip_handling_method,
-      blow_out_air_volume=[v / 100 for v in blow_out_air_volume],
+    assert all(0 <= x <= 50000 for x in x_position), "x_position must be between 0 and 50000"
+    assert all(0 <= x <= 6500 for x in y_position), "y_position must be between 0 and 6500"
+    assert all(0 <= x <= 1 for x in tip_pattern), "tip_pattern must be between 0 and 1"
+    assert all(0 <= x <= 199 for x in tip_type), "tip_type must be between 0 and 199"
+    assert all(0 <= x <= 3600 for x in begin_z_deposit_position), (
+      "begin_z_deposit_position must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in end_z_deposit_position), (
+      "end_z_deposit_position must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command), (
+      "minimal_traverse_height_at_begin_of_command must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_height_at_command_end), (
+      "minimal_height_at_command_end must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 125000 for x in blow_out_air_volume), (
+      "blow_out_air_volume must be between 0 and 125000"
+    )
+    assert all(0 <= x <= 9 for x in tip_handling_method), (
+      "tip_handling_method must be between 0 and 9"
+    )
+
+    return await self.send_command(
+      module="A1PM",
+      command="TP",
+      xp=x_position,
+      yp=y_position,
+      tm=tip_pattern,
+      tt=tip_type,
+      tp=begin_z_deposit_position,
+      tz=end_z_deposit_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      ba=blow_out_air_volume,
+      td=tip_handling_method,
     )
 
   async def pip_tip_discard(
@@ -1757,7 +1998,7 @@ class VantageBackend(HamiltonLiquidHandler):
     TODO_TR_2: int = 0,
     tip_handling_method: Optional[List[int]] = None,
   ):
-    """Deprecated: use ``VantagePIPBackend._pip_tip_discard``."""
+    """Deprecated: use VantagePIPBackend.pick_up_tips/drop_tips."""
 
     if begin_z_deposit_position is None:
       begin_z_deposit_position = [0] * self.num_channels
@@ -1772,18 +2013,38 @@ class VantageBackend(HamiltonLiquidHandler):
     if tip_handling_method is None:
       tip_handling_method = [0] * self.num_channels
 
-    return await self._vantage_pip._pip_tip_discard(
-      x_position=x_position,
-      y_position=y_position,
-      tip_pattern=tip_pattern,
-      begin_z_deposit_position=[v / 10 for v in begin_z_deposit_position],
-      end_z_deposit_position=[v / 10 for v in end_z_deposit_position],
-      minimal_traverse_height_at_begin_of_command=[
-        v / 10 for v in minimal_traverse_height_at_begin_of_command
-      ],
-      minimal_height_at_command_end=[v / 10 for v in minimal_height_at_command_end],
-      tip_handling_method=tip_handling_method,
-      TODO_TR_2=TODO_TR_2,
+    assert all(0 <= x <= 50000 for x in x_position), "x_position must be between 0 and 50000"
+    assert all(0 <= x <= 6500 for x in y_position), "y_position must be between 0 and 6500"
+    assert all(0 <= x <= 3600 for x in begin_z_deposit_position), (
+      "begin_z_deposit_position must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in end_z_deposit_position), (
+      "end_z_deposit_position must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command), (
+      "minimal_traverse_height_at_begin_of_command must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 3600 for x in minimal_height_at_command_end), (
+      "minimal_height_at_command_end must be between 0 and 3600"
+    )
+    assert all(0 <= x <= 1 for x in tip_pattern), "tip_pattern must be between 0 and 1"
+    assert -1000 <= TODO_TR_2 <= 1000, "TODO_TR_2 must be between -1000 and 1000"
+    assert all(0 <= x <= 9 for x in tip_handling_method), (
+      "tip_handling_method must be between 0 and 9"
+    )
+
+    return await self.send_command(
+      module="A1PM",
+      command="TR",
+      xp=x_position,
+      yp=y_position,
+      tp=begin_z_deposit_position,
+      tz=end_z_deposit_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      tm=tip_pattern,
+      ts=TODO_TR_2,
+      td=tip_handling_method,
     )
 
   async def search_for_teach_in_signal_in_x_direction(

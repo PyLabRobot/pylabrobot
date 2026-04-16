@@ -249,14 +249,14 @@ class VantageDriver(HamiltonLiquidHandler):
 
   @property
   def _subsystems(self) -> List[Any]:
-    """All active subsystems, for lifecycle management."""
+    """Non-capability subsystems owned directly by the driver.
+
+    ``pip``, ``head96``, and ``ipg`` are intentionally excluded: their lifecycle
+    (``_on_setup`` / ``_on_stop``) is driven by the capability frontends on the
+    :class:`Vantage` device. Including them here would initialize each backend
+    twice — once from :meth:`setup` and once from ``Vantage.setup()``.
+    """
     subs: List[Any] = []
-    if self.pip is not None:
-      subs.append(self.pip)
-    if self.head96 is not None:
-      subs.append(self.head96)
-    if self.ipg is not None:
-      subs.append(self.ipg)
     if self.x_arm is not None:
       subs.append(self.x_arm)
     if self.loading_cover is not None:

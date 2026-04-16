@@ -26,7 +26,7 @@ class Vantage(Device):
     from pylabrobot.resources.hamilton.vantage_decks import VantageDeck
     from pylabrobot.hamilton.liquid_handlers.vantage import Vantage
 
-    deck = VantageDeck()
+    deck = VantageDeck(size=1.3)
     vantage = Vantage(deck=deck)
     await vantage.setup()
 
@@ -59,13 +59,27 @@ class Vantage(Device):
     self.head96: Optional[Head96] = None  # set in setup() if installed
     self.ipg: Optional[OrientableArm] = None  # set in setup() if installed
 
-  async def setup(self):
+  async def setup(
+    self,
+    skip_loading_cover: bool = False,
+    skip_core96: bool = False,
+    skip_ipg: bool = False,
+  ):
     """Initialize the Vantage hardware and wire up capability frontends.
 
     Calls :meth:`VantageDriver.setup` to discover and initialize hardware, then
     creates PIP, Head96, and IPG frontend capabilities as appropriate.
+
+    Args:
+      skip_loading_cover: If True, skip loading cover initialization.
+      skip_core96: If True, skip Core 96-head initialization.
+      skip_ipg: If True, skip IPG (Integrated Plate Gripper) initialization.
     """
-    await self.driver.setup()
+    await self.driver.setup(
+      skip_loading_cover=skip_loading_cover,
+      skip_core96=skip_core96,
+      skip_ipg=skip_ipg,
+    )
 
     # PIP is always present.
     assert self.driver.pip is not None
@@ -89,11 +103,11 @@ class Vantage(Device):
   async def stop(self):
     """Stop the Vantage device and tear down all capabilities.
 
-    Stops all capability frontends in reverse order, then stops the driver.
-    Safe to call if setup was never completed (returns immediately).
+    Tears down each capability frontend that was added during :meth:`setup`
+    in reverse order, then stops the driver. Runs unconditionally so that a
+    ``setup()`` that raised partway through still releases the USB connection
+    and any backends that finished their own ``_on_setup``.
     """
-    if not self._setup_finished:
-      return
     for cap in reversed(self._capabilities):
       await cap._on_stop()
     await self.driver.stop()
@@ -120,6 +134,10 @@ class Vantage(Device):
       front_channel: The front (higher-numbered) PIP channel to mount the gripper on.
         The back channel is ``front_channel - 1``. Default 7 (channels 6+7).
       traversal_height: Minimum Z clearance in mm for safe lateral movement. Default 245.0.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend — CoRe gripper tool
+        pickup firmware command has not been reverse-engineered.
     """
     raise NotImplementedError(
       "CoRe gripper tool pickup on Vantage has not been reverse-engineered yet. "

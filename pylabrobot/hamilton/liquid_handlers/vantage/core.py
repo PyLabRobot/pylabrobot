@@ -223,18 +223,40 @@ class VantageCoreGripper(GripperArmBackend):
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
+    """Close the CoRe gripper to the specified width.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend — gripping happens
+        implicitly inside pick_up_at_location (A1PM:DG), not via a standalone command.
+    """
     raise NotImplementedError(
       "close_gripper is not supported for VantageCoreGripper. "
       "Gripping happens inside pick_up_at_location."
     )
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    """Return whether the CoRe gripper is currently closed.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend.
+    """
     raise NotImplementedError("is_gripper_closed is not implemented for VantageCoreGripper.")
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Halt the CoRe gripper mid-motion.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend.
+    """
     raise NotImplementedError("halt is not implemented for VantageCoreGripper.")
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Park the CoRe gripper (return tools to rack).
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend — tool return is
+        handled by the Vantage.core_grippers() context manager exit, not a direct call.
+    """
     raise NotImplementedError(
       "park is not supported for VantageCoreGripper. "
       "Tool return is handled by the Vantage.core_grippers() context manager."
@@ -243,6 +265,11 @@ class VantageCoreGripper(GripperArmBackend):
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
+    """Return the current CoRe gripper location from firmware state.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend.
+    """
     raise NotImplementedError("request_gripper_location is not implemented for VantageCoreGripper.")
 
   # -- Firmware commands (A1PM) ----------------------------------------------

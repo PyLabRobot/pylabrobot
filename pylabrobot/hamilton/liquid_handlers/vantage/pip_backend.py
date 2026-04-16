@@ -409,6 +409,9 @@ class VantagePIPBackend(PIPBackend):
     aspirate_position_above_z_touch_off: Optional[List[float]] = None
     swap_speed: Optional[List[float]] = None
     settling_time: Optional[List[float]] = None
+    mix_position_in_z_direction_from_liquid_surface: Optional[List[float]] = None
+    surface_following_distance_during_mixing: Optional[List[float]] = None
+    TODO_DA_5: Optional[List[int]] = None
     capacitive_mad_supervision_on_off: Optional[List[int]] = None
     pressure_mad_supervision_on_off: Optional[List[int]] = None
     tadm_algorithm_on_off: int = 0
@@ -514,6 +517,9 @@ class VantagePIPBackend(PIPBackend):
     pressure_lld_sensitivity: Optional[List[int]] = None
     swap_speed: Optional[List[float]] = None
     settling_time: Optional[List[float]] = None
+    mix_position_in_z_direction_from_liquid_surface: Optional[List[float]] = None
+    surface_following_distance_during_mixing: Optional[List[float]] = None
+    TODO_DD_2: Optional[List[int]] = None
     tadm_algorithm_on_off: int = 0
     limit_curve_index: Optional[List[int]] = None
     recording_mode: int = 0
@@ -564,18 +570,48 @@ class VantagePIPBackend(PIPBackend):
     mth = backend_params.minimal_traverse_height_at_begin_of_command
     mhe = backend_params.minimal_height_at_command_end
 
+    begin_z_deposit_position = [max_z + max_total_tip_length] * len(ops)
+    end_z_deposit_position = [max_z + max_tip_length] * len(ops)
+    minimal_traverse_height_at_begin_of_command = mth if mth is not None else [th] * len(ops)
+    minimal_height_at_command_end = mhe if mhe is not None else [th] * len(ops)
+    tip_handling_method = [1] * len(ops)
+    blow_out_air_volume = [0] * len(ops)
+
+    if not all(0 <= x <= 50000 for x in x_positions):
+      raise ValueError("x_position must be in range 0 to 50000")
+    if not all(0 <= x <= 6500 for x in y_positions):
+      raise ValueError("y_position must be in range 0 to 6500")
+    if not all(0 <= x <= 1 for x in tip_pattern):
+      raise ValueError("tip_pattern must be in range 0 to 1")
+    if not all(0 <= x <= 199 for x in ttti):
+      raise ValueError("tip_type must be in range 0 to 199")
+    if not all(0 <= x <= 360.0 for x in begin_z_deposit_position):
+      raise ValueError("begin_z_deposit_position must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in end_z_deposit_position):
+      raise ValueError("end_z_deposit_position must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_traverse_height_at_begin_of_command):
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_height_at_command_end):
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 360.0")
+    if not all(0 <= x <= 1250.0 for x in blow_out_air_volume):
+      raise ValueError("blow_out_air_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 9 for x in tip_handling_method):
+      raise ValueError("tip_handling_method must be in range 0 to 9")
+
     try:
-      await self._pip_tip_pick_up(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=tip_pattern,
-        tip_type=ttti,
-        begin_z_deposit_position=[max_z + max_total_tip_length] * len(ops),
-        end_z_deposit_position=[max_z + max_tip_length] * len(ops),
-        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
-        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
-        tip_handling_method=[1] * len(ops),
-        blow_out_air_volume=[0] * len(ops),
+      await self.driver.send_command(
+        module="A1PM",
+        command="TP",
+        xp=x_positions,
+        yp=y_positions,
+        tm=tip_pattern,
+        tt=ttti,
+        tp=[round(z * 10) for z in begin_z_deposit_position],
+        tz=[round(z * 10) for z in end_z_deposit_position],
+        th=[round(h * 10) for h in minimal_traverse_height_at_begin_of_command],
+        te=[round(h * 10) for h in minimal_height_at_command_end],
+        ba=[round(v * 100) for v in blow_out_air_volume],
+        td=tip_handling_method,
       )
     except VantageFirmwareError as e:
       plr_error = convert_vantage_firmware_error_to_plr_error(e)
@@ -611,16 +647,45 @@ class VantagePIPBackend(PIPBackend):
     mth = backend_params.minimal_traverse_height_at_begin_of_command
     mhe = backend_params.minimal_height_at_command_end
 
+    begin_z_deposit_position = [max_z + 10] * len(ops)
+    end_z_deposit_position = [max_z] * len(ops)
+    minimal_traverse_height_at_begin_of_command = mth if mth is not None else [th] * len(ops)
+    minimal_height_at_command_end = mhe if mhe is not None else [th] * len(ops)
+    tip_handling_method = [0] * len(ops)
+    TODO_TR_2 = 0
+
+    if not all(0 <= x <= 50000 for x in x_positions):
+      raise ValueError("x_position must be in range 0 to 50000")
+    if not all(0 <= x <= 6500 for x in y_positions):
+      raise ValueError("y_position must be in range 0 to 6500")
+    if not all(0 <= x <= 360.0 for x in begin_z_deposit_position):
+      raise ValueError("begin_z_deposit_position must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in end_z_deposit_position):
+      raise ValueError("end_z_deposit_position must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_traverse_height_at_begin_of_command):
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_height_at_command_end):
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 360.0")
+    if not all(0 <= x <= 1 for x in channels_involved):
+      raise ValueError("tip_pattern must be in range 0 to 1")
+    if not -1000 <= TODO_TR_2 <= 1000:
+      raise ValueError("TODO_TR_2 must be in range -1000 to 1000")
+    if not all(0 <= x <= 9 for x in tip_handling_method):
+      raise ValueError("tip_handling_method must be in range 0 to 9")
+
     try:
-      await self._pip_tip_discard(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=channels_involved,
-        begin_z_deposit_position=[max_z + 10] * len(ops),
-        end_z_deposit_position=[max_z] * len(ops),
-        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
-        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
-        tip_handling_method=[0] * len(ops),
+      await self.driver.send_command(
+        module="A1PM",
+        command="TR",
+        xp=x_positions,
+        yp=y_positions,
+        tp=[round(z * 10) for z in begin_z_deposit_position],
+        tz=[round(z * 10) for z in end_z_deposit_position],
+        th=[round(h * 10) for h in minimal_traverse_height_at_begin_of_command],
+        te=[round(h * 10) for h in minimal_height_at_command_end],
+        tm=channels_involved,
+        ts=TODO_TR_2,
+        td=tip_handling_method,
       )
     except VantageFirmwareError as e:
       plr_error = convert_vantage_firmware_error_to_plr_error(e)
@@ -707,60 +772,179 @@ class VantagePIPBackend(PIPBackend):
     mth = backend_params.minimal_traverse_height_at_begin_of_command
     mhe = backend_params.minimal_height_at_command_end
 
+    # Flatten all aspirate parameters into local names for guards + send_command.
+    type_of_aspiration = backend_params.type_of_aspiration or [0] * len(ops)
+    minimal_traverse_height_at_begin_of_command = mth if mth is not None else [th] * len(ops)
+    minimal_height_at_command_end = mhe if mhe is not None else [th] * len(ops)
+    clot_detection_height = list(backend_params.clot_detection_height or [0] * len(ops))
+    pull_out_distance_to_take_transport_air_in_function_without_lld = list(
+      backend_params.pull_out_distance_to_take_transport_air_in_function_without_lld
+      or [10.9] * len(ops)
+    )
+    tube_2nd_section_height_measured_from_zm = list(
+      backend_params.tube_2nd_section_height_measured_from_zm or [0] * len(ops)
+    )
+    tube_2nd_section_ratio = list(backend_params.tube_2nd_section_ratio or [0] * len(ops))
+    minimum_height = list(backend_params.minimum_height or well_bottoms)
+    immersion_depth = list(backend_params.immersion_depth or [0] * len(ops))
+    surface_following_distance = list(backend_params.surface_following_distance or [0] * len(ops))
+    transport_air_volume = list(
+      backend_params.transport_air_volume
+      or [hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
+    )
+    pre_wetting_volume = list(backend_params.pre_wetting_volume or [0] * len(ops))
+    lld_mode = backend_params.lld_mode or [0] * len(ops)
+    lld_sensitivity = backend_params.lld_sensitivity or [4] * len(ops)
+    pressure_lld_sensitivity = backend_params.pressure_lld_sensitivity or [4] * len(ops)
+    aspirate_position_above_z_touch_off = list(
+      backend_params.aspirate_position_above_z_touch_off or [0.5] * len(ops)
+    )
+    swap_speed = list(backend_params.swap_speed or [2] * len(ops))
+    settling_time = list(backend_params.settling_time or [1] * len(ops))
+    mix_volume = [op.mix.volume if op.mix is not None else 0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
+    mix_position_in_z_direction_from_liquid_surface = (
+      list(backend_params.mix_position_in_z_direction_from_liquid_surface)
+      if backend_params.mix_position_in_z_direction_from_liquid_surface is not None
+      else [0] * len(ops)
+    )
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 250 for op in ops]
+    surface_following_distance_during_mixing = (
+      list(backend_params.surface_following_distance_during_mixing)
+      if backend_params.surface_following_distance_during_mixing is not None
+      else [0] * len(ops)
+    )
+    TODO_DA_5 = backend_params.TODO_DA_5
+    capacitive_mad_supervision_on_off = (
+      backend_params.capacitive_mad_supervision_on_off or [0] * len(ops)
+    )
+    pressure_mad_supervision_on_off = (
+      backend_params.pressure_mad_supervision_on_off or [0] * len(ops)
+    )
+    tadm_algorithm_on_off = backend_params.tadm_algorithm_on_off
+    limit_curve_index = backend_params.limit_curve_index or [0] * len(ops)
+    recording_mode = backend_params.recording_mode
+
+    if not all(0 <= x <= 2 for x in type_of_aspiration):
+      raise ValueError("type_of_aspiration must be in range 0 to 2")
+    if not all(0 <= x <= 1 for x in channels_involved):
+      raise ValueError("tip_pattern must be in range 0 to 1")
+    if not all(0 <= x <= 50000 for x in x_positions):
+      raise ValueError("x_position must be in range 0 to 50000")
+    if not all(0 <= x <= 6500 for x in y_positions):
+      raise ValueError("y_position must be in range 0 to 6500")
+    if not all(0 <= x <= 360.0 for x in minimal_traverse_height_at_begin_of_command):
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_height_at_command_end):
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in lld_search_heights):
+      raise ValueError("lld_search_height must be in range 0 to 360.0")
+    if not all(0 <= x <= 50.0 for x in clot_detection_height):
+      raise ValueError("clot_detection_height must be in range 0 to 50.0")
+    if not all(0 <= x <= 360.0 for x in liquid_surfaces_no_lld):
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 360.0")
+    if not all(
+      0 <= x <= 360.0 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ):
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 360.0"
+      )
+    if not all(0 <= x <= 360.0 for x in tube_2nd_section_height_measured_from_zm):
+      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 360.0")
+    if not all(0 <= x <= 10000 for x in tube_2nd_section_ratio):
+      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
+    if not all(0 <= x <= 360.0 for x in minimum_height):
+      raise ValueError("minimum_height must be in range 0 to 360.0")
+    if not all(-360.0 <= x <= 360.0 for x in immersion_depth):
+      raise ValueError("immersion_depth must be in range -360.0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in surface_following_distance):
+      raise ValueError("surface_following_distance must be in range 0 to 360.0")
+    if not all(0 <= x <= 1250.0 for x in volumes):
+      raise ValueError("aspiration_volume must be in range 0 to 1250.0")
+    if not all(1.0 <= x <= 1000.0 for x in flow_rates):
+      raise ValueError("aspiration_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 50.0 for x in transport_air_volume):
+      raise ValueError("transport_air_volume must be in range 0 to 50.0")
+    if not all(0 <= x <= 1250.0 for x in blow_out_air_volumes):
+      raise ValueError("blow_out_air_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 99.9 for x in pre_wetting_volume):
+      raise ValueError("pre_wetting_volume must be in range 0 to 99.9")
+    if not all(0 <= x <= 4 for x in lld_mode):
+      raise ValueError("lld_mode must be in range 0 to 4")
+    if not all(1 <= x <= 4 for x in lld_sensitivity):
+      raise ValueError("lld_sensitivity must be in range 1 to 4")
+    if not all(1 <= x <= 4 for x in pressure_lld_sensitivity):
+      raise ValueError("pressure_lld_sensitivity must be in range 1 to 4")
+    if not all(0 <= x <= 10.0 for x in aspirate_position_above_z_touch_off):
+      raise ValueError("aspirate_position_above_z_touch_off must be in range 0 to 10.0")
+    if not all(0.3 <= x <= 160.0 for x in swap_speed):
+      raise ValueError("swap_speed must be in range 0.3 to 160.0")
+    if not all(0 <= x <= 9.9 for x in settling_time):
+      raise ValueError("settling_time must be in range 0 to 9.9")
+    if not all(0 <= x <= 1250.0 for x in mix_volume):
+      raise ValueError("mix_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 99 for x in mix_cycles):
+      raise ValueError("mix_cycles must be in range 0 to 99")
+    if not all(0 <= x <= 90.0 for x in mix_position_in_z_direction_from_liquid_surface):
+      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 90.0")
+    if not all(1.0 <= x <= 1000.0 for x in mix_speed):
+      raise ValueError("mix_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 360.0 for x in surface_following_distance_during_mixing):
+      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 360.0")
+    if TODO_DA_5 is not None and not all(0 <= x <= 1 for x in TODO_DA_5):
+      raise ValueError("TODO_DA_5 must be in range 0 to 1")
+    if not all(0 <= x <= 1 for x in capacitive_mad_supervision_on_off):
+      raise ValueError("capacitive_mad_supervision_on_off must be in range 0 to 1")
+    if not all(0 <= x <= 1 for x in pressure_mad_supervision_on_off):
+      raise ValueError("pressure_mad_supervision_on_off must be in range 0 to 1")
+    if not 0 <= tadm_algorithm_on_off <= 1:
+      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
+    if not all(0 <= x <= 999 for x in limit_curve_index):
+      raise ValueError("limit_curve_index must be in range 0 to 999")
+    if not 0 <= recording_mode <= 2:
+      raise ValueError("recording_mode must be in range 0 to 2")
+
     try:
-      await self._pip_aspirate(
-        x_position=x_positions,
-        y_position=y_positions,
-        type_of_aspiration=backend_params.type_of_aspiration or [0] * len(ops),
-        tip_pattern=channels_involved,
-        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
-        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
-        lld_search_height=lld_search_heights,
-        clot_detection_height=list(backend_params.clot_detection_height or [0] * len(ops)),
-        liquid_surface_at_function_without_lld=liquid_surfaces_no_lld,
-        pull_out_distance_to_take_transport_air_in_function_without_lld=list(
-          backend_params.pull_out_distance_to_take_transport_air_in_function_without_lld
-          or [10.9] * len(ops)
-        ),
-        tube_2nd_section_height_measured_from_zm=list(
-          backend_params.tube_2nd_section_height_measured_from_zm or [0] * len(ops)
-        ),
-        tube_2nd_section_ratio=list(backend_params.tube_2nd_section_ratio or [0] * len(ops)),
-        minimum_height=list(backend_params.minimum_height or well_bottoms),
-        immersion_depth=list(backend_params.immersion_depth or [0] * len(ops)),
-        surface_following_distance=list(
-          backend_params.surface_following_distance or [0] * len(ops)
-        ),
-        aspiration_volume=volumes,
-        aspiration_speed=flow_rates,
-        transport_air_volume=list(
-          backend_params.transport_air_volume
-          or [hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
-        ),
-        blow_out_air_volume=blow_out_air_volumes,
-        pre_wetting_volume=list(backend_params.pre_wetting_volume or [0] * len(ops)),
-        lld_mode=backend_params.lld_mode or [0] * len(ops),
-        lld_sensitivity=backend_params.lld_sensitivity or [4] * len(ops),
-        pressure_lld_sensitivity=backend_params.pressure_lld_sensitivity or [4] * len(ops),
-        aspirate_position_above_z_touch_off=list(
-          backend_params.aspirate_position_above_z_touch_off or [0.5] * len(ops)
-        ),
-        swap_speed=list(backend_params.swap_speed or [2] * len(ops)),
-        settling_time=list(backend_params.settling_time or [1] * len(ops)),
-        mix_volume=[op.mix.volume if op.mix is not None else 0 for op in ops],
-        mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
-        mix_position_in_z_direction_from_liquid_surface=[0] * len(ops),
-        mix_speed=[op.mix.flow_rate if op.mix is not None else 250 for op in ops],
-        surface_following_distance_during_mixing=[0] * len(ops),
-        capacitive_mad_supervision_on_off=(
-          backend_params.capacitive_mad_supervision_on_off or [0] * len(ops)
-        ),
-        pressure_mad_supervision_on_off=(
-          backend_params.pressure_mad_supervision_on_off or [0] * len(ops)
-        ),
-        tadm_algorithm_on_off=backend_params.tadm_algorithm_on_off,
-        limit_curve_index=backend_params.limit_curve_index or [0] * len(ops),
-        recording_mode=backend_params.recording_mode,
+      await self.driver.send_command(
+        module="A1PM",
+        command="DA",
+        at=type_of_aspiration,
+        tm=channels_involved,
+        xp=x_positions,
+        yp=y_positions,
+        th=[round(v * 10) for v in minimal_traverse_height_at_begin_of_command],
+        te=[round(v * 10) for v in minimal_height_at_command_end],
+        lp=[round(v * 10) for v in lld_search_heights],
+        ch=[round(v * 10) for v in clot_detection_height],
+        zl=[round(v * 10) for v in liquid_surfaces_no_lld],
+        po=[round(v * 10) for v in pull_out_distance_to_take_transport_air_in_function_without_lld],
+        zu=[round(v * 10) for v in tube_2nd_section_height_measured_from_zm],
+        zr=[round(v) for v in tube_2nd_section_ratio],
+        zx=[round(v * 10) for v in minimum_height],
+        ip=[round(v * 10) for v in immersion_depth],
+        fp=[round(v * 10) for v in surface_following_distance],
+        av=[round(v * 100) for v in volumes],
+        as_=[round(v * 10) for v in flow_rates],
+        ta=[round(v * 10) for v in transport_air_volume],
+        ba=[round(v * 100) for v in blow_out_air_volumes],
+        oa=[round(v * 10) for v in pre_wetting_volume],
+        lm=lld_mode,
+        ll=lld_sensitivity,
+        lv=pressure_lld_sensitivity,
+        zo=[round(v * 10) for v in aspirate_position_above_z_touch_off],
+        de=[round(v * 10) for v in swap_speed],
+        wt=[round(v * 10) for v in settling_time],
+        mv=[round(v * 10) for v in mix_volume],
+        mc=mix_cycles,
+        mp=[round(v * 10) for v in mix_position_in_z_direction_from_liquid_surface],
+        ms=[round(v * 10) for v in mix_speed],
+        mh=[round(v * 10) for v in surface_following_distance_during_mixing],
+        la=TODO_DA_5 if TODO_DA_5 is not None else [0] * len(type_of_aspiration),
+        lb=capacitive_mad_supervision_on_off,
+        lc=pressure_mad_supervision_on_off,
+        gj=tadm_algorithm_on_off,
+        gi=limit_curve_index,
+        gk=recording_mode,
       )
     except VantageFirmwareError as e:
       plr_error = convert_vantage_firmware_error_to_plr_error(e)
@@ -841,55 +1025,170 @@ class VantagePIPBackend(PIPBackend):
     mth = backend_params.minimal_traverse_height_at_begin_of_command
     mhe = backend_params.minimal_height_at_command_end
 
+    # Flatten all dispense parameters into local names for guards + send_command.
+    minimum_height = list(backend_params.minimum_height or well_bottoms)
+    pull_out_distance_to_take_transport_air_in_function_without_lld = list(
+      backend_params.pull_out_distance_to_take_transport_air_in_function_without_lld
+      or [5.0] * len(ops)
+    )
+    immersion_depth = list(backend_params.immersion_depth or [0] * len(ops))
+    surface_following_distance = list(backend_params.surface_following_distance or [2.1] * len(ops))
+    tube_2nd_section_height_measured_from_zm = list(
+      backend_params.tube_2nd_section_height_measured_from_zm or [0] * len(ops)
+    )
+    tube_2nd_section_ratio = list(backend_params.tube_2nd_section_ratio or [0] * len(ops))
+    minimal_traverse_height_at_begin_of_command = mth if mth is not None else [th] * len(ops)
+    minimal_height_at_command_end = mhe if mhe is not None else [th] * len(ops)
+    cut_off_speed = list(backend_params.cut_off_speed or [250] * len(ops))
+    stop_back_volume = list(backend_params.stop_back_volume or [0] * len(ops))
+    transport_air_volume = list(
+      backend_params.transport_air_volume
+      or [hlc.dispense_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
+    )
+    lld_mode = backend_params.lld_mode or [0] * len(ops)
+    side_touch_off_distance = backend_params.side_touch_off_distance
+    dispense_position_above_z_touch_off = list(
+      backend_params.dispense_position_above_z_touch_off or [0.5] * len(ops)
+    )
+    lld_sensitivity = backend_params.lld_sensitivity or [1] * len(ops)
+    pressure_lld_sensitivity = backend_params.pressure_lld_sensitivity or [1] * len(ops)
+    swap_speed = list(backend_params.swap_speed or [1] * len(ops))
+    settling_time = list(backend_params.settling_time or [0] * len(ops))
+    mix_volume = [op.mix.volume if op.mix is not None else 0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
+    mix_position_in_z_direction_from_liquid_surface = (
+      list(backend_params.mix_position_in_z_direction_from_liquid_surface)
+      if backend_params.mix_position_in_z_direction_from_liquid_surface is not None
+      else [0] * len(ops)
+    )
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 1 for op in ops]
+    surface_following_distance_during_mixing = (
+      list(backend_params.surface_following_distance_during_mixing)
+      if backend_params.surface_following_distance_during_mixing is not None
+      else [0] * len(ops)
+    )
+    TODO_DD_2 = backend_params.TODO_DD_2
+    tadm_algorithm_on_off = backend_params.tadm_algorithm_on_off
+    limit_curve_index = backend_params.limit_curve_index or [0] * len(ops)
+    recording_mode = backend_params.recording_mode
+
+    if not all(0 <= x <= 4 for x in type_of_dispensing_mode):
+      raise ValueError("type_of_dispensing_mode must be in range 0 to 4")
+    if not all(0 <= x <= 1 for x in channels_involved):
+      raise ValueError("tip_pattern must be in range 0 to 1")
+    if not all(0 <= x <= 50000 for x in x_positions):
+      raise ValueError("x_position must be in range 0 to 50000")
+    if not all(0 <= x <= 6500 for x in y_positions):
+      raise ValueError("y_position must be in range 0 to 6500")
+    if not all(0 <= x <= 360.0 for x in minimum_height):
+      raise ValueError("minimum_height must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in lld_search_heights):
+      raise ValueError("lld_search_height must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in liquid_surfaces_no_lld):
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 360.0")
+    if not all(
+      0 <= x <= 360.0 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ):
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 360.0"
+      )
+    if not all(-360.0 <= x <= 360.0 for x in immersion_depth):
+      raise ValueError("immersion_depth must be in range -360.0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in surface_following_distance):
+      raise ValueError("surface_following_distance must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in tube_2nd_section_height_measured_from_zm):
+      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 360.0")
+    if not all(0 <= x <= 10000 for x in tube_2nd_section_ratio):
+      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
+    if not all(0 <= x <= 360.0 for x in minimal_traverse_height_at_begin_of_command):
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_height_at_command_end):
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 360.0")
+    if not all(0 <= x <= 1250.0 for x in volumes):
+      raise ValueError("dispense_volume must be in range 0 to 1250.0")
+    if not all(1.0 <= x <= 1000.0 for x in flow_rates):
+      raise ValueError("dispense_speed must be in range 1.0 to 1000.0")
+    if not all(1.0 <= x <= 1000.0 for x in cut_off_speed):
+      raise ValueError("cut_off_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 18.0 for x in stop_back_volume):
+      raise ValueError("stop_back_volume must be in range 0 to 18.0")
+    if not all(0 <= x <= 50.0 for x in transport_air_volume):
+      raise ValueError("transport_air_volume must be in range 0 to 50.0")
+    if not all(0 <= x <= 1250.0 for x in blow_out_air_volumes):
+      raise ValueError("blow_out_air_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 4 for x in lld_mode):
+      raise ValueError("lld_mode must be in range 0 to 4")
+    if not 0 <= side_touch_off_distance <= 4.5:
+      raise ValueError("side_touch_off_distance must be in range 0 to 4.5")
+    if not all(0 <= x <= 10.0 for x in dispense_position_above_z_touch_off):
+      raise ValueError("dispense_position_above_z_touch_off must be in range 0 to 10.0")
+    if not all(1 <= x <= 4 for x in lld_sensitivity):
+      raise ValueError("lld_sensitivity must be in range 1 to 4")
+    if not all(1 <= x <= 4 for x in pressure_lld_sensitivity):
+      raise ValueError("pressure_lld_sensitivity must be in range 1 to 4")
+    if not all(0.3 <= x <= 160.0 for x in swap_speed):
+      raise ValueError("swap_speed must be in range 0.3 to 160.0")
+    if not all(0 <= x <= 9.9 for x in settling_time):
+      raise ValueError("settling_time must be in range 0 to 9.9")
+    if not all(0 <= x <= 1250.0 for x in mix_volume):
+      raise ValueError("mix_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 99 for x in mix_cycles):
+      raise ValueError("mix_cycles must be in range 0 to 99")
+    if not all(0 <= x <= 90.0 for x in mix_position_in_z_direction_from_liquid_surface):
+      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 90.0")
+    if not all(1.0 <= x <= 1000.0 for x in mix_speed):
+      raise ValueError("mix_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 360.0 for x in surface_following_distance_during_mixing):
+      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 360.0")
+    if TODO_DD_2 is not None and not all(0 <= x <= 1 for x in TODO_DD_2):
+      raise ValueError("TODO_DD_2 must be in range 0 to 1")
+    if not 0 <= tadm_algorithm_on_off <= 1:
+      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
+    if not all(0 <= x <= 999 for x in limit_curve_index):
+      raise ValueError("limit_curve_index must be in range 0 to 999")
+    if not 0 <= recording_mode <= 2:
+      raise ValueError("recording_mode must be in range 0 to 2")
+
     try:
-      await self._pip_dispense(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=channels_involved,
-        type_of_dispensing_mode=type_of_dispensing_mode,
-        minimum_height=list(backend_params.minimum_height or well_bottoms),
-        lld_search_height=lld_search_heights,
-        liquid_surface_at_function_without_lld=liquid_surfaces_no_lld,
-        pull_out_distance_to_take_transport_air_in_function_without_lld=list(
-          backend_params.pull_out_distance_to_take_transport_air_in_function_without_lld
-          or [5.0] * len(ops)
-        ),
-        immersion_depth=list(backend_params.immersion_depth or [0] * len(ops)),
-        surface_following_distance=list(
-          backend_params.surface_following_distance or [2.1] * len(ops)
-        ),
-        tube_2nd_section_height_measured_from_zm=list(
-          backend_params.tube_2nd_section_height_measured_from_zm or [0] * len(ops)
-        ),
-        tube_2nd_section_ratio=list(backend_params.tube_2nd_section_ratio or [0] * len(ops)),
-        minimal_traverse_height_at_begin_of_command=mth if mth is not None else [th] * len(ops),
-        minimal_height_at_command_end=mhe if mhe is not None else [th] * len(ops),
-        dispense_volume=volumes,
-        dispense_speed=flow_rates,
-        cut_off_speed=list(backend_params.cut_off_speed or [250] * len(ops)),
-        stop_back_volume=list(backend_params.stop_back_volume or [0] * len(ops)),
-        transport_air_volume=list(
-          backend_params.transport_air_volume
-          or [hlc.dispense_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
-        ),
-        blow_out_air_volume=blow_out_air_volumes,
-        lld_mode=backend_params.lld_mode or [0] * len(ops),
-        side_touch_off_distance=backend_params.side_touch_off_distance,
-        dispense_position_above_z_touch_off=list(
-          backend_params.dispense_position_above_z_touch_off or [0.5] * len(ops)
-        ),
-        lld_sensitivity=backend_params.lld_sensitivity or [1] * len(ops),
-        pressure_lld_sensitivity=backend_params.pressure_lld_sensitivity or [1] * len(ops),
-        swap_speed=list(backend_params.swap_speed or [1] * len(ops)),
-        settling_time=list(backend_params.settling_time or [0] * len(ops)),
-        mix_volume=[op.mix.volume if op.mix is not None else 0 for op in ops],
-        mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
-        mix_position_in_z_direction_from_liquid_surface=[0] * len(ops),
-        mix_speed=[op.mix.flow_rate if op.mix is not None else 1 for op in ops],
-        surface_following_distance_during_mixing=[0] * len(ops),
-        tadm_algorithm_on_off=backend_params.tadm_algorithm_on_off,
-        limit_curve_index=backend_params.limit_curve_index or [0] * len(ops),
-        recording_mode=backend_params.recording_mode,
+      await self.driver.send_command(
+        module="A1PM",
+        command="DD",
+        dm=type_of_dispensing_mode,
+        tm=channels_involved,
+        xp=x_positions,
+        yp=y_positions,
+        zx=[round(v * 10) for v in minimum_height],
+        lp=[round(v * 10) for v in lld_search_heights],
+        zl=[round(v * 10) for v in liquid_surfaces_no_lld],
+        po=[round(v * 10) for v in pull_out_distance_to_take_transport_air_in_function_without_lld],
+        ip=[round(v * 10) for v in immersion_depth],
+        fp=[round(v * 10) for v in surface_following_distance],
+        zu=[round(v * 10) for v in tube_2nd_section_height_measured_from_zm],
+        zr=[round(v) for v in tube_2nd_section_ratio],
+        th=[round(v * 10) for v in minimal_traverse_height_at_begin_of_command],
+        te=[round(v * 10) for v in minimal_height_at_command_end],
+        dv=[f"{round(v * 100):04}" for v in volumes],
+        ds=[round(v * 10) for v in flow_rates],
+        ss=[round(v * 10) for v in cut_off_speed],
+        rv=[round(v * 10) for v in stop_back_volume],
+        ta=[round(v * 10) for v in transport_air_volume],
+        ba=[round(v * 100) for v in blow_out_air_volumes],
+        lm=lld_mode,
+        dj=round(side_touch_off_distance * 10),
+        zo=[round(v * 10) for v in dispense_position_above_z_touch_off],
+        ll=lld_sensitivity,
+        lv=pressure_lld_sensitivity,
+        de=[round(v * 10) for v in swap_speed],
+        wt=[round(v * 10) for v in settling_time],
+        mv=[round(v * 10) for v in mix_volume],
+        mc=mix_cycles,
+        mp=[round(v * 10) for v in mix_position_in_z_direction_from_liquid_surface],
+        ms=[round(v * 10) for v in mix_speed],
+        mh=[round(v * 10) for v in surface_following_distance_during_mixing],
+        la=TODO_DD_2 if TODO_DD_2 is not None else [0] * len(type_of_dispensing_mode),
+        gj=tadm_algorithm_on_off,
+        gi=limit_curve_index,
+        gk=recording_mode,
       )
     except VantageFirmwareError as e:
       plr_error = convert_vantage_firmware_error_to_plr_error(e)
@@ -907,383 +1206,6 @@ class VantagePIPBackend(PIPBackend):
     return [bool(p) for p in presences]
 
   # -- firmware commands (A1PM) ----------------------------------------------
-
-  async def _pip_tip_pick_up(
-    self,
-    x_position: List[int],
-    y_position: List[int],
-    tip_pattern: List[bool],
-    tip_type: List[int],
-    begin_z_deposit_position: List[float],
-    end_z_deposit_position: List[float],
-    minimal_traverse_height_at_begin_of_command: List[float],
-    minimal_height_at_command_end: List[float],
-    tip_handling_method: List[int],
-    blow_out_air_volume: List[float],
-  ):
-    """Tip pick up (A1PM:TP).
-
-    Args:
-      x_position: X positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      y_position: Y positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      begin_z_deposit_position: Begin Z deposit position in mm.
-      end_z_deposit_position: End Z deposit position in mm.
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command in mm.
-      minimal_height_at_command_end: Minimal height at command end in mm.
-      blow_out_air_volume: Blow out air volume in uL.
-    """
-    # Convert from PLR standard units to firmware units right before send_command.
-    fw_begin_z = [round(z * 10) for z in begin_z_deposit_position]
-    fw_end_z = [round(z * 10) for z in end_z_deposit_position]
-    fw_th = [round(h * 10) for h in minimal_traverse_height_at_begin_of_command]
-    fw_te = [round(h * 10) for h in minimal_height_at_command_end]
-    fw_ba = [round(v * 100) for v in blow_out_air_volume]
-
-    await self.driver.send_command(
-      module="A1PM",
-      command="TP",
-      xp=x_position,
-      yp=y_position,
-      tm=tip_pattern,
-      tt=tip_type,
-      tp=fw_begin_z,
-      tz=fw_end_z,
-      th=fw_th,
-      te=fw_te,
-      ba=fw_ba,
-      td=tip_handling_method,
-    )
-
-  async def _pip_tip_discard(
-    self,
-    x_position: List[int],
-    y_position: List[int],
-    tip_pattern: List[bool],
-    begin_z_deposit_position: List[float],
-    end_z_deposit_position: List[float],
-    minimal_traverse_height_at_begin_of_command: List[float],
-    minimal_height_at_command_end: List[float],
-    tip_handling_method: List[int],
-    TODO_TR_2: int = 0,
-  ):
-    """Tip discard (A1PM:TR).
-
-    Args:
-      x_position: X positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      y_position: Y positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      begin_z_deposit_position: Begin Z deposit position in mm.
-      end_z_deposit_position: End Z deposit position in mm.
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command in mm.
-      minimal_height_at_command_end: Minimal height at command end in mm.
-      TODO_TR_2: Unknown firmware parameter (maps to firmware key ``ts``).
-    """
-    # Convert from PLR standard units to firmware units right before send_command.
-    fw_begin_z = [round(z * 10) for z in begin_z_deposit_position]
-    fw_end_z = [round(z * 10) for z in end_z_deposit_position]
-    fw_th = [round(h * 10) for h in minimal_traverse_height_at_begin_of_command]
-    fw_te = [round(h * 10) for h in minimal_height_at_command_end]
-
-    await self.driver.send_command(
-      module="A1PM",
-      command="TR",
-      xp=x_position,
-      yp=y_position,
-      tp=fw_begin_z,
-      tz=fw_end_z,
-      th=fw_th,
-      te=fw_te,
-      tm=tip_pattern,
-      ts=TODO_TR_2,
-      td=tip_handling_method,
-    )
-
-  async def _pip_aspirate(
-    self,
-    x_position: List[int],
-    y_position: List[int],
-    type_of_aspiration: List[int],
-    tip_pattern: List[bool],
-    minimal_traverse_height_at_begin_of_command: List[float],
-    minimal_height_at_command_end: List[float],
-    lld_search_height: List[float],
-    clot_detection_height: List[float],
-    liquid_surface_at_function_without_lld: List[float],
-    pull_out_distance_to_take_transport_air_in_function_without_lld: List[float],
-    tube_2nd_section_height_measured_from_zm: List[float],
-    tube_2nd_section_ratio: List[float],
-    minimum_height: List[float],
-    immersion_depth: List[float],
-    surface_following_distance: List[float],
-    aspiration_volume: List[float],
-    aspiration_speed: List[float],
-    transport_air_volume: List[float],
-    blow_out_air_volume: List[float],
-    pre_wetting_volume: List[float],
-    lld_mode: List[int],
-    lld_sensitivity: List[int],
-    pressure_lld_sensitivity: List[int],
-    aspirate_position_above_z_touch_off: List[float],
-    swap_speed: List[float],
-    settling_time: List[float],
-    mix_volume: List[float],
-    mix_cycles: List[int],
-    mix_position_in_z_direction_from_liquid_surface: List[int],
-    mix_speed: List[float],
-    surface_following_distance_during_mixing: List[int],
-    capacitive_mad_supervision_on_off: List[int],
-    pressure_mad_supervision_on_off: List[int],
-    tadm_algorithm_on_off: int = 0,
-    limit_curve_index: Optional[List[int]] = None,
-    recording_mode: int = 0,
-    TODO_DA_5: Optional[List[int]] = None,
-  ):
-    """Aspiration of liquid (A1PM:DA).
-
-    All distances are in mm, volumes in uL, speeds in uL/s, times in seconds.
-    Conversion to firmware units (0.1mm, 0.01uL, 0.1uL/s, 0.1s) happens internally.
-
-    Args:
-      x_position: X positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      y_position: Y positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      minimal_traverse_height_at_begin_of_command: mm.
-      minimal_height_at_command_end: mm.
-      lld_search_height: mm.
-      clot_detection_height: mm.
-      liquid_surface_at_function_without_lld: mm.
-      pull_out_distance_to_take_transport_air_in_function_without_lld: mm.
-      tube_2nd_section_height_measured_from_zm: mm.
-      tube_2nd_section_ratio: ratio (multiplied by 10 for firmware).
-      minimum_height: mm.
-      immersion_depth: mm.
-      surface_following_distance: mm.
-      aspiration_volume: uL.
-      aspiration_speed: uL/s.
-      transport_air_volume: uL.
-      blow_out_air_volume: uL.
-      pre_wetting_volume: uL.
-      aspirate_position_above_z_touch_off: mm.
-      swap_speed: mm/s.
-      settling_time: seconds.
-      mix_volume: uL.
-      mix_speed: uL/s.
-      TODO_DA_5: Unknown firmware parameter (maps to firmware key ``la``). Defaults to all zeros.
-    """
-    # Convert from PLR standard units to firmware units right before send_command.
-    # Distances: mm -> 0.1mm (x10)
-    fw_th = [round(v * 10) for v in minimal_traverse_height_at_begin_of_command]
-    fw_te = [round(v * 10) for v in minimal_height_at_command_end]
-    fw_lp = [round(v * 10) for v in lld_search_height]
-    fw_ch = [round(v * 10) for v in clot_detection_height]
-    fw_zl = [round(v * 10) for v in liquid_surface_at_function_without_lld]
-    fw_po = [round(v * 10) for v in pull_out_distance_to_take_transport_air_in_function_without_lld]
-    fw_zu = [round(v * 10) for v in tube_2nd_section_height_measured_from_zm]
-    fw_zx = [round(v * 10) for v in minimum_height]
-    fw_ip = [round(v * 10) for v in immersion_depth]
-    fw_fp = [round(v * 10) for v in surface_following_distance]
-    fw_zo = [round(v * 10) for v in aspirate_position_above_z_touch_off]
-    # tube_2nd_section_ratio: dimensionless, already in firmware units
-    fw_zr = [round(v) for v in tube_2nd_section_ratio]
-    # Volumes: uL -> 0.01uL (x100) for aspiration_volume and blow_out_air_volume
-    fw_av = [round(v * 100) for v in aspiration_volume]
-    fw_ba = [round(v * 100) for v in blow_out_air_volume]
-    # Volumes: uL -> 0.1uL (x10) for pre_wetting_volume and mix_volume
-    fw_oa = [round(v * 10) for v in pre_wetting_volume]
-    fw_mv = [round(v * 10) for v in mix_volume]
-    # Transport air volume: uL -> 0.1uL (x10)
-    fw_ta = [round(v * 10) for v in transport_air_volume]
-    # Speeds: uL/s -> 0.1uL/s (x10)
-    fw_as = [round(v * 10) for v in aspiration_speed]
-    fw_ms = [round(v * 10) for v in mix_speed]
-    # swap_speed: mm/s -> 0.1mm/s (x10)
-    fw_de = [round(v * 10) for v in swap_speed]
-    # settling_time: s -> 0.1s (x10)
-    fw_wt = [round(v * 10) for v in settling_time]
-
-    await self.driver.send_command(
-      module="A1PM",
-      command="DA",
-      at=type_of_aspiration,
-      tm=tip_pattern,
-      xp=x_position,
-      yp=y_position,
-      th=fw_th,
-      te=fw_te,
-      lp=fw_lp,
-      ch=fw_ch,
-      zl=fw_zl,
-      po=fw_po,
-      zu=fw_zu,
-      zr=fw_zr,
-      zx=fw_zx,
-      ip=fw_ip,
-      fp=fw_fp,
-      av=fw_av,
-      as_=fw_as,
-      ta=fw_ta,
-      ba=fw_ba,
-      oa=fw_oa,
-      lm=lld_mode,
-      ll=lld_sensitivity,
-      lv=pressure_lld_sensitivity,
-      zo=fw_zo,
-      de=fw_de,
-      wt=fw_wt,
-      mv=fw_mv,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      ms=fw_ms,
-      mh=surface_following_distance_during_mixing,
-      la=TODO_DA_5 if TODO_DA_5 is not None else [0] * len(type_of_aspiration),
-      lb=capacitive_mad_supervision_on_off,
-      lc=pressure_mad_supervision_on_off,
-      gj=tadm_algorithm_on_off,
-      gi=limit_curve_index or [0] * len(type_of_aspiration),
-      gk=recording_mode,
-    )
-
-  async def _pip_dispense(
-    self,
-    x_position: List[int],
-    y_position: List[int],
-    tip_pattern: List[bool],
-    type_of_dispensing_mode: List[int],
-    minimum_height: List[float],
-    lld_search_height: List[float],
-    liquid_surface_at_function_without_lld: List[float],
-    pull_out_distance_to_take_transport_air_in_function_without_lld: List[float],
-    immersion_depth: List[float],
-    surface_following_distance: List[float],
-    tube_2nd_section_height_measured_from_zm: List[float],
-    tube_2nd_section_ratio: List[float],
-    minimal_traverse_height_at_begin_of_command: List[float],
-    minimal_height_at_command_end: List[float],
-    dispense_volume: List[float],
-    dispense_speed: List[float],
-    cut_off_speed: List[float],
-    stop_back_volume: List[float],
-    transport_air_volume: List[float],
-    blow_out_air_volume: List[float],
-    lld_mode: List[int],
-    side_touch_off_distance: float,
-    dispense_position_above_z_touch_off: List[float],
-    lld_sensitivity: List[int],
-    pressure_lld_sensitivity: List[int],
-    swap_speed: List[float],
-    settling_time: List[float],
-    mix_volume: List[float],
-    mix_cycles: List[int],
-    mix_position_in_z_direction_from_liquid_surface: List[int],
-    mix_speed: List[float],
-    surface_following_distance_during_mixing: List[int],
-    tadm_algorithm_on_off: int = 0,
-    limit_curve_index: Optional[List[int]] = None,
-    recording_mode: int = 0,
-    TODO_DD_2: Optional[List[int]] = None,
-  ):
-    """Dispensing of liquid (A1PM:DD).
-
-    All distances are in mm, volumes in uL, speeds in uL/s, times in seconds.
-    Conversion to firmware units (0.1mm, 0.01uL, 0.1uL/s, 0.1s) happens internally.
-
-    Args:
-      x_position: X positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      y_position: Y positions in 0.1mm (firmware units, from _ops_to_fw_positions).
-      minimum_height: mm.
-      lld_search_height: mm.
-      liquid_surface_at_function_without_lld: mm.
-      pull_out_distance_to_take_transport_air_in_function_without_lld: mm.
-      immersion_depth: mm.
-      surface_following_distance: mm.
-      tube_2nd_section_height_measured_from_zm: mm.
-      tube_2nd_section_ratio: ratio (multiplied by 10 for firmware).
-      minimal_traverse_height_at_begin_of_command: mm.
-      minimal_height_at_command_end: mm.
-      dispense_volume: uL.
-      dispense_speed: uL/s.
-      cut_off_speed: uL/s.
-      stop_back_volume: uL.
-      transport_air_volume: uL.
-      blow_out_air_volume: uL.
-      side_touch_off_distance: mm.
-      dispense_position_above_z_touch_off: mm.
-      swap_speed: mm/s.
-      settling_time: seconds.
-      mix_volume: uL.
-      mix_speed: uL/s.
-      TODO_DD_2: Unknown firmware parameter (maps to firmware key ``la``). Defaults to all zeros.
-    """
-    # Convert from PLR standard units to firmware units right before send_command.
-    # Distances: mm -> 0.1mm (x10)
-    fw_zx = [round(v * 10) for v in minimum_height]
-    fw_lp = [round(v * 10) for v in lld_search_height]
-    fw_zl = [round(v * 10) for v in liquid_surface_at_function_without_lld]
-    fw_po = [round(v * 10) for v in pull_out_distance_to_take_transport_air_in_function_without_lld]
-    fw_ip = [round(v * 10) for v in immersion_depth]
-    fw_fp = [round(v * 10) for v in surface_following_distance]
-    fw_zu = [round(v * 10) for v in tube_2nd_section_height_measured_from_zm]
-    fw_th = [round(v * 10) for v in minimal_traverse_height_at_begin_of_command]
-    fw_te = [round(v * 10) for v in minimal_height_at_command_end]
-    fw_zo = [round(v * 10) for v in dispense_position_above_z_touch_off]
-    fw_dj = round(side_touch_off_distance * 10)
-    # tube_2nd_section_ratio: dimensionless, already in firmware units
-    fw_zr = [round(v) for v in tube_2nd_section_ratio]
-    # Volumes: uL -> 0.01uL (x100) for dispense_volume and blow_out_air_volume
-    fw_dv = [round(v * 100) for v in dispense_volume]
-    fw_ba = [round(v * 100) for v in blow_out_air_volume]
-    # Volumes: uL -> 0.1uL (x10) for stop_back_volume and mix_volume
-    fw_rv = [round(v * 10) for v in stop_back_volume]
-    fw_mv = [round(v * 10) for v in mix_volume]
-    # Transport air volume: uL -> 0.1uL (x10)
-    fw_ta = [round(v * 10) for v in transport_air_volume]
-    # Speeds: uL/s -> 0.1uL/s (x10)
-    fw_ds = [round(v * 10) for v in dispense_speed]
-    fw_ss = [round(v * 10) for v in cut_off_speed]
-    fw_ms = [round(v * 10) for v in mix_speed]
-    # swap_speed: mm/s -> 0.1mm/s (x10)
-    fw_de = [round(v * 10) for v in swap_speed]
-    # settling_time: s -> 0.1s (x10)
-    fw_wt = [round(v * 10) for v in settling_time]
-
-    await self.driver.send_command(
-      module="A1PM",
-      command="DD",
-      dm=type_of_dispensing_mode,
-      tm=tip_pattern,
-      xp=x_position,
-      yp=y_position,
-      zx=fw_zx,
-      lp=fw_lp,
-      zl=fw_zl,
-      po=fw_po,
-      ip=fw_ip,
-      fp=fw_fp,
-      zu=fw_zu,
-      zr=fw_zr,
-      th=fw_th,
-      te=fw_te,
-      dv=[f"{vol:04}" for vol in fw_dv],
-      ds=fw_ds,
-      ss=fw_ss,
-      rv=fw_rv,
-      ta=fw_ta,
-      ba=fw_ba,
-      lm=lld_mode,
-      dj=fw_dj,
-      zo=fw_zo,
-      ll=lld_sensitivity,
-      lv=pressure_lld_sensitivity,
-      de=fw_de,
-      wt=fw_wt,
-      mv=fw_mv,
-      mc=mix_cycles,
-      mp=mix_position_in_z_direction_from_liquid_surface,
-      ms=fw_ms,
-      mh=surface_following_distance_during_mixing,
-      la=TODO_DD_2 if TODO_DD_2 is not None else [0] * len(type_of_dispensing_mode),
-      gj=tadm_algorithm_on_off,
-      gi=limit_curve_index or [0] * len(type_of_dispensing_mode),
-      gk=recording_mode,
-    )
 
   # -- positioning / query commands (A1PM) -----------------------------------
 
@@ -1765,43 +1687,98 @@ class VantagePIPBackend(PIPBackend):
     if limit_curve_index is None:
       limit_curve_index = [0] * n
 
-    # Convert from PLR standard units to firmware units.
-    # Distances: mm -> 0.1mm (x10)
-    fw_th = [round(v * 10) for v in minimal_traverse_height_at_begin_of_command]
-    fw_te = [round(v * 10) for v in minimal_height_at_command_end]
-    fw_lp = [round(v * 10) for v in lld_search_height]
-    fw_ch = [round(v * 10) for v in clot_detection_height]
-    fw_zl = [round(v * 10) for v in liquid_surface_at_function_without_lld]
-    fw_po = [round(v * 10) for v in pull_out_distance_to_take_transport_air_in_function_without_lld]
-    fw_zx = [round(v * 10) for v in minimum_height]
-    fw_ip = [round(v * 10) for v in immersion_depth]
-    fw_fp = [round(v * 10) for v in surface_following_distance]
-    fw_zu = [round(v * 10) for v in tube_2nd_section_height_measured_from_zm]
-    fw_zo = [round(v * 10) for v in aspirate_position_above_z_touch_off]
-    fw_mp = [round(v * 10) for v in mix_position_in_z_direction_from_liquid_surface]
-    fw_mh = [round(v * 10) for v in surface_following_distance_during_mixing]
-    # Volumes: uL -> 0.01uL (x100)
-    fw_av = [round(v * 100) for v in aspiration_volume]
-    fw_ar = [round(v * 100) for v in TODO_DM_3]
-    fw_dv = [round(v * 100) for v in dispense_volume]
-    fw_ba = [round(v * 100) for v in blow_out_air_volume]
-    # Speeds: uL/s -> 0.1uL/s (x10)
-    fw_as = [round(v * 10) for v in aspiration_speed]
-    fw_ds = [round(v * 10) for v in dispense_speed]
-    fw_ss = [round(v * 10) for v in cut_off_speed]
-    fw_ms = [round(v * 10) for v in mix_speed]
-    # stop_back_volume: uL -> 0.1uL (x10)
-    fw_rv = [round(v * 10) for v in stop_back_volume]
-    # transport_air_volume: uL -> 0.1uL (x10)
-    fw_ta = [round(v * 10) for v in transport_air_volume]
-    # pre_wetting_volume: uL -> 0.1uL (x10)
-    fw_oa = [round(v * 10) for v in pre_wetting_volume]
-    # mix_volume: uL -> 0.1uL (x10)
-    fw_mv = [round(v * 10) for v in mix_volume]
-    # swap_speed: mm/s -> 0.1mm/s (x10)
-    fw_de = [round(v * 10) for v in swap_speed]
-    # settling_time: s -> 0.1s (x10)
-    fw_wt = [round(v * 10) for v in settling_time]
+    if not all(0 <= x <= 2 for x in type_of_aspiration):
+      raise ValueError("type_of_aspiration must be in range 0 to 2")
+    if not all(0 <= x <= 4 for x in type_of_dispensing_mode):
+      raise ValueError("type_of_dispensing_mode must be in range 0 to 4")
+    if not all(0 <= x <= 1 for x in tip_pattern):
+      raise ValueError("tip_pattern must be in range 0 to 1")
+    if not all(0 <= x <= 1 for x in TODO_DM_1):
+      raise ValueError("TODO_DM_1 must be in range 0 to 1")
+    if not all(0 <= x <= 50000 for x in x_position):
+      raise ValueError("x_position must be in range 0 to 50000")
+    if not all(0 <= x <= 6500 for x in y_position):
+      raise ValueError("y_position must be in range 0 to 6500")
+    if not all(0 <= x <= 360.0 for x in minimal_traverse_height_at_begin_of_command):
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_height_at_command_end):
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in lld_search_height):
+      raise ValueError("lld_search_height must be in range 0 to 360.0")
+    if not all(0 <= x <= 50.0 for x in clot_detection_height):
+      raise ValueError("clot_detection_height must be in range 0 to 50.0")
+    if not all(0 <= x <= 360.0 for x in liquid_surface_at_function_without_lld):
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 360.0")
+    if not all(
+      0 <= x <= 360.0 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ):
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in range 0 to 360.0"
+      )
+    if not all(0 <= x <= 360.0 for x in minimum_height):
+      raise ValueError("minimum_height must be in range 0 to 360.0")
+    if not all(-360.0 <= x <= 360.0 for x in immersion_depth):
+      raise ValueError("immersion_depth must be in range -360.0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in surface_following_distance):
+      raise ValueError("surface_following_distance must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in tube_2nd_section_height_measured_from_zm):
+      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 360.0")
+    if not all(0 <= x <= 10000 for x in tube_2nd_section_ratio):
+      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
+    if not all(0 <= x <= 1250.0 for x in aspiration_volume):
+      raise ValueError("aspiration_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 1250.0 for x in TODO_DM_3):
+      raise ValueError("TODO_DM_3 must be in range 0 to 1250.0")
+    if not all(1.0 <= x <= 1000.0 for x in aspiration_speed):
+      raise ValueError("aspiration_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 1250.0 for x in dispense_volume):
+      raise ValueError("dispense_volume must be in range 0 to 1250.0")
+    if not all(1.0 <= x <= 1000.0 for x in dispense_speed):
+      raise ValueError("dispense_speed must be in range 1.0 to 1000.0")
+    if not all(1.0 <= x <= 1000.0 for x in cut_off_speed):
+      raise ValueError("cut_off_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 18.0 for x in stop_back_volume):
+      raise ValueError("stop_back_volume must be in range 0 to 18.0")
+    if not all(0 <= x <= 50.0 for x in transport_air_volume):
+      raise ValueError("transport_air_volume must be in range 0 to 50.0")
+    if not all(0 <= x <= 1250.0 for x in blow_out_air_volume):
+      raise ValueError("blow_out_air_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 99.9 for x in pre_wetting_volume):
+      raise ValueError("pre_wetting_volume must be in range 0 to 99.9")
+    if not all(0 <= x <= 4 for x in lld_mode):
+      raise ValueError("lld_mode must be in range 0 to 4")
+    if not all(0 <= x <= 10.0 for x in aspirate_position_above_z_touch_off):
+      raise ValueError("aspirate_position_above_z_touch_off must be in range 0 to 10.0")
+    if not all(1 <= x <= 4 for x in lld_sensitivity):
+      raise ValueError("lld_sensitivity must be in range 1 to 4")
+    if not all(1 <= x <= 4 for x in pressure_lld_sensitivity):
+      raise ValueError("pressure_lld_sensitivity must be in range 1 to 4")
+    if not all(0.3 <= x <= 160.0 for x in swap_speed):
+      raise ValueError("swap_speed must be in range 0.3 to 160.0")
+    if not all(0 <= x <= 9.9 for x in settling_time):
+      raise ValueError("settling_time must be in range 0 to 9.9")
+    if not all(0 <= x <= 1250.0 for x in mix_volume):
+      raise ValueError("mix_volume must be in range 0 to 1250.0")
+    if not all(0 <= x <= 99 for x in mix_cycles):
+      raise ValueError("mix_cycles must be in range 0 to 99")
+    if not all(0 <= x <= 90.0 for x in mix_position_in_z_direction_from_liquid_surface):
+      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 90.0")
+    if not all(1.0 <= x <= 1000.0 for x in mix_speed):
+      raise ValueError("mix_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 360.0 for x in surface_following_distance_during_mixing):
+      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 360.0")
+    if not all(0 <= x <= 1 for x in TODO_DM_5):
+      raise ValueError("TODO_DM_5 must be in range 0 to 1")
+    if not all(0 <= x <= 1 for x in capacitive_mad_supervision_on_off):
+      raise ValueError("capacitive_mad_supervision_on_off must be in range 0 to 1")
+    if not all(0 <= x <= 1 for x in pressure_mad_supervision_on_off):
+      raise ValueError("pressure_mad_supervision_on_off must be in range 0 to 1")
+    if not 0 <= tadm_algorithm_on_off <= 1:
+      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
+    if not all(0 <= x <= 999 for x in limit_curve_index):
+      raise ValueError("limit_curve_index must be in range 0 to 999")
+    if not 0 <= recording_mode <= 2:
+      raise ValueError("recording_mode must be in range 0 to 2")
 
     return await self.driver.send_command(
       module="A1PM",
@@ -1812,38 +1789,38 @@ class VantagePIPBackend(PIPBackend):
       dd=TODO_DM_1,
       xp=x_position,
       yp=y_position,
-      th=fw_th,
-      te=fw_te,
-      lp=fw_lp,
-      ch=fw_ch,
-      zl=fw_zl,
-      po=fw_po,
-      zx=fw_zx,
-      ip=fw_ip,
-      fp=fw_fp,
-      zu=fw_zu,
+      th=[round(v * 10) for v in minimal_traverse_height_at_begin_of_command],
+      te=[round(v * 10) for v in minimal_height_at_command_end],
+      lp=[round(v * 10) for v in lld_search_height],
+      ch=[round(v * 10) for v in clot_detection_height],
+      zl=[round(v * 10) for v in liquid_surface_at_function_without_lld],
+      po=[round(v * 10) for v in pull_out_distance_to_take_transport_air_in_function_without_lld],
+      zx=[round(v * 10) for v in minimum_height],
+      ip=[round(v * 10) for v in immersion_depth],
+      fp=[round(v * 10) for v in surface_following_distance],
+      zu=[round(v * 10) for v in tube_2nd_section_height_measured_from_zm],
       zr=tube_2nd_section_ratio,
-      av=fw_av,
-      ar=fw_ar,
-      as_=fw_as,
-      dv=fw_dv,
-      ds=fw_ds,
-      ss=fw_ss,
-      rv=fw_rv,
-      ta=fw_ta,
-      ba=fw_ba,
-      oa=fw_oa,
+      av=[round(v * 100) for v in aspiration_volume],
+      ar=[round(v * 100) for v in TODO_DM_3],
+      as_=[round(v * 10) for v in aspiration_speed],
+      dv=[round(v * 100) for v in dispense_volume],
+      ds=[round(v * 10) for v in dispense_speed],
+      ss=[round(v * 10) for v in cut_off_speed],
+      rv=[round(v * 10) for v in stop_back_volume],
+      ta=[round(v * 10) for v in transport_air_volume],
+      ba=[round(v * 100) for v in blow_out_air_volume],
+      oa=[round(v * 10) for v in pre_wetting_volume],
       lm=lld_mode,
-      zo=fw_zo,
+      zo=[round(v * 10) for v in aspirate_position_above_z_touch_off],
       ll=lld_sensitivity,
       lv=pressure_lld_sensitivity,
-      de=fw_de,
-      wt=fw_wt,
-      mv=fw_mv,
+      de=[round(v * 10) for v in swap_speed],
+      wt=[round(v * 10) for v in settling_time],
+      mv=[round(v * 10) for v in mix_volume],
       mc=mix_cycles,
-      mp=fw_mp,
-      ms=fw_ms,
-      mh=fw_mh,
+      mp=[round(v * 10) for v in mix_position_in_z_direction_from_liquid_surface],
+      ms=[round(v * 10) for v in mix_speed],
+      mh=[round(v * 10) for v in surface_following_distance_during_mixing],
       la=TODO_DM_5,
       lb=capacitive_mad_supervision_on_off,
       lc=pressure_mad_supervision_on_off,
@@ -1921,6 +1898,45 @@ class VantagePIPBackend(PIPBackend):
       transport_air_volume = [0.0] * n
     if limit_curve_index is None:
       limit_curve_index = [0] * n
+
+    if not all(0 <= x <= 1 for x in tip_pattern):
+      raise ValueError("tip_pattern must be in range 0 to 1")
+    if not -5000 <= first_shoot_x_pos <= 5000:
+      raise ValueError("first_shoot_x_pos must be in range -5000 to 5000")
+    if not -5000 <= dispense_on_fly_pos_command_end <= 5000:
+      raise ValueError("dispense_on_fly_pos_command_end must be in range -5000 to 5000")
+    if not 0 <= x_acceleration_distance_before_first_shoot <= 90:
+      raise ValueError("x_acceleration_distance_before_first_shoot must be in range 0 to 90")
+    if not 0.01 <= space_between_shoots <= 25.0:
+      raise ValueError("space_between_shoots must be in range 0.01 to 25.0")
+    if not 2.0 <= x_speed <= 2500.0:
+      raise ValueError("x_speed must be in range 2.0 to 2500.0")
+    if not 1 <= number_of_shoots <= 48:
+      raise ValueError("number_of_shoots must be in range 1 to 48")
+    if not all(0 <= x <= 360.0 for x in minimal_traverse_height_at_begin_of_command):
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 360.0")
+    if not all(0 <= x <= 360.0 for x in minimal_height_at_command_end):
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 360.0")
+    if not all(0 <= x <= 650.0 for x in y_position):
+      raise ValueError("y_position must be in range 0 to 650.0")
+    if not all(0 <= x <= 360.0 for x in liquid_surface_at_function_without_lld):
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 360.0")
+    if not all(0 <= x <= 1250.0 for x in dispense_volume):
+      raise ValueError("dispense_volume must be in range 0 to 1250.0")
+    if not all(1.0 <= x <= 1000.0 for x in dispense_speed):
+      raise ValueError("dispense_speed must be in range 1.0 to 1000.0")
+    if not all(1.0 <= x <= 1000.0 for x in cut_off_speed):
+      raise ValueError("cut_off_speed must be in range 1.0 to 1000.0")
+    if not all(0 <= x <= 18.0 for x in stop_back_volume):
+      raise ValueError("stop_back_volume must be in range 0 to 18.0")
+    if not all(0 <= x <= 50.0 for x in transport_air_volume):
+      raise ValueError("transport_air_volume must be in range 0 to 50.0")
+    if not 0 <= tadm_algorithm_on_off <= 1:
+      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
+    if not all(0 <= x <= 999 for x in limit_curve_index):
+      raise ValueError("limit_curve_index must be in range 0 to 999")
+    if not 0 <= recording_mode <= 2:
+      raise ValueError("recording_mode must be in range 0 to 2")
 
     return await self.driver.send_command(
       module="A1PM",

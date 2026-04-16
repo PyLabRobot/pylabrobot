@@ -200,6 +200,8 @@ class VantageHead96Backend(Head96Backend):
     lld_sensitivity: int = 4
     swap_speed: Optional[float] = None
     settling_time: Optional[float] = None
+    mix_position_in_z_direction_from_liquid_surface: float = 0.0
+    surface_following_distance_during_mixing: float = 0.0
     limit_curve_index: int = 0
     tadm_channel_pattern: Optional[List[bool]] = None
     tadm_algorithm_on_off: int = 0
@@ -288,6 +290,8 @@ class VantageHead96Backend(Head96Backend):
     side_touch_off_distance: float = 0
     swap_speed: Optional[float] = None
     settling_time: Optional[float] = None
+    mix_position_in_z_direction_from_liquid_surface: float = 0.0
+    surface_following_distance_during_mixing: float = 0.0
     limit_curve_index: int = 0
     tadm_channel_pattern: Optional[List[bool]] = None
     tadm_algorithm_on_off: int = 0
@@ -544,8 +548,12 @@ class VantageHead96Backend(Head96Backend):
         settling_time=settling_time,
         mix_volume=aspiration.mix.volume if aspiration.mix is not None else 0,
         mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
-        mix_position_in_z_direction_from_liquid_surface=0,
-        surface_following_distance_during_mixing=0,
+        mix_position_in_z_direction_from_liquid_surface=round(
+          backend_params.mix_position_in_z_direction_from_liquid_surface * 10
+        ),
+        surface_following_distance_during_mixing=round(
+          backend_params.surface_following_distance_during_mixing * 10
+        ),
         mix_speed=aspiration.mix.flow_rate if aspiration.mix is not None else 2.0,
         limit_curve_index=backend_params.limit_curve_index,
         tadm_channel_pattern=backend_params.tadm_channel_pattern,
@@ -709,8 +717,12 @@ class VantageHead96Backend(Head96Backend):
         settling_time=settling_time,
         mix_volume=dispense.mix.volume if dispense.mix is not None else 0,
         mix_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
-        mix_position_in_z_direction_from_liquid_surface=0,
-        surface_following_distance_during_mixing=0,
+        mix_position_in_z_direction_from_liquid_surface=round(
+          backend_params.mix_position_in_z_direction_from_liquid_surface * 10
+        ),
+        surface_following_distance_during_mixing=round(
+          backend_params.surface_following_distance_during_mixing * 10
+        ),
         mix_speed=dispense.mix.flow_rate if dispense.mix is not None else 1.0,
         limit_curve_index=backend_params.limit_curve_index,
         tadm_channel_pattern=backend_params.tadm_channel_pattern,

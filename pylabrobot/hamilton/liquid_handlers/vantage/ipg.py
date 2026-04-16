@@ -60,7 +60,8 @@ class IPGBackend(OrientableGripperArmBackend):
     """Vantage IPG-specific parameters for gripping a plate.
 
     Args:
-      grip_strength: Grip strength (0-160). Default 100.
+      grip_strength: Grip strength (0-160). Default 81 — the raw firmware default
+        of 100 risks crushing thin-skirted, PCR, and magnetic-rack labware.
       plate_width_tolerance: Plate width tolerance [mm]. Default 2.0.
       acceleration_index: Acceleration index (0-4). Default 4.
       z_clearance_height: Z clearance height [mm]. Default 5.0.
@@ -68,7 +69,7 @@ class IPGBackend(OrientableGripperArmBackend):
       minimal_height_at_command_end: Minimum Z height at command end [mm]. Default 360.0.
     """
 
-    grip_strength: int = 100
+    grip_strength: int = 81
     plate_width_tolerance: float = 2.0
     acceleration_index: int = 4
     z_clearance_height: float = 5.0
@@ -81,7 +82,8 @@ class IPGBackend(OrientableGripperArmBackend):
 
     Args:
       z_clearance_height: Z clearance height [mm]. Default 5.0.
-      press_on_distance: Press-on distance [mm]. Default 0.5.
+      press_on_distance: Accepted for API compatibility but not forwarded to the
+        firmware — see ``put_plate``. Default 0.5.
       hotel_depth: Hotel depth [mm] (0 = stack mode). Default 0.
       minimal_height_at_command_end: Minimum Z height at command end [mm]. Default 360.0.
     """
@@ -158,6 +160,11 @@ class IPGBackend(OrientableGripperArmBackend):
     )
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Halt the IPG mid-motion.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend.
+    """
     raise NotImplementedError("halt is not implemented for the Vantage IPG.")
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -168,6 +175,11 @@ class IPGBackend(OrientableGripperArmBackend):
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
+    """Return the current gripper location from firmware state.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend.
+    """
     raise NotImplementedError(
       "request_gripper_location is not yet implemented for the Vantage IPG."
     )
@@ -182,9 +194,20 @@ class IPGBackend(OrientableGripperArmBackend):
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
+    """Close the IPG to the specified width.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend — the IPG closes
+        implicitly during pick_up_at_location (A1RM:DG), not via a standalone command.
+    """
     raise NotImplementedError("close_gripper is not implemented for the Vantage IPG.")
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    """Return whether the IPG gripper is currently closed.
+
+    Raises:
+      NotImplementedError: Not yet ported from legacy Vantage backend.
+    """
     raise NotImplementedError("is_gripper_closed is not implemented for the Vantage IPG.")
 
   # -- Initialization and status ---------------------------------------------
@@ -230,7 +253,7 @@ class IPGBackend(OrientableGripperArmBackend):
     x_position: float,
     y_position: float,
     z_position: float,
-    grip_strength: int = 100,
+    grip_strength: int = 81,
     open_gripper_position: float = 86.0,
     plate_width: float = 80.0,
     plate_width_tolerance: float = 2.0,
@@ -289,10 +312,12 @@ class IPGBackend(OrientableGripperArmBackend):
       z_position: Z position [mm].
       open_gripper_position: Open gripper position [mm].
       z_clearance_height: Z clearance height [mm].
-      press_on_distance: Press-on distance [mm].
+      press_on_distance: Accepted for API compatibility but not forwarded to the
+        firmware — the ``zi`` parameter is uncharacterised on real hardware.
       hotel_depth: Hotel depth [mm] (0 = stack).
       minimal_height_at_command_end: Minimal height at command end [mm].
     """
+    del press_on_distance
     await self.driver.send_command(
       module="A1RM",
       command="DR",
@@ -301,7 +326,6 @@ class IPGBackend(OrientableGripperArmBackend):
       zp=round(z_position * 10),
       yo=round(open_gripper_position * 10),
       zc=round(z_clearance_height * 10),
-      zi=round(press_on_distance * 10),
       hd=round(hotel_depth * 10),
       te=round(minimal_height_at_command_end * 10),
     )
