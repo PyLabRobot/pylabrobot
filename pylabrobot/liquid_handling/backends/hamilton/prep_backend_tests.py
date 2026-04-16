@@ -1469,8 +1469,10 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate_v1_with_lld(self):
     await self.backend.aspirate(
-      [self._make_asp()], use_channels=[0],
-      lld_mode=[PrepBackend.LLDMode.CAPACITIVE], command_version="v1"
+      [self._make_asp()],
+      use_channels=[0],
+      lld_mode=[PrepBackend.LLDMode.CAPACITIVE],
+      command_version="v1",
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepAspirateWithLld)), 1)
 
@@ -1493,8 +1495,10 @@ class TestV1CommandDispatch(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_v1_with_lld(self):
     await self.backend.dispense(
-      [self._make_disp()], use_channels=[0],
-      lld_mode=[PrepBackend.LLDMode.CAPACITIVE], command_version="v1"
+      [self._make_disp()],
+      use_channels=[0],
+      lld_mode=[PrepBackend.LLDMode.CAPACITIVE],
+      command_version="v1",
     )
     self.assertEqual(len(_get_commands(self.mock_send, PrepCmd.PrepDispenseWithLld)), 1)
 
@@ -1646,7 +1650,9 @@ class TestPrepSharedTraversal(unittest.IsolatedAsyncioTestCase):
 
   async def test_discover_channel_drives_refresh_forces_rebuild(self):
     backend = _setup_backend(num_channels=2)
-    nodes = [("MLPrepRoot", Address(1, 1, 10), ObjectInfo("MLPrepRoot", "1.0", 0, 0, Address(1, 1, 10)))]
+    nodes = [
+      ("MLPrepRoot", Address(1, 1, 10), ObjectInfo("MLPrepRoot", "1.0", 0, 0, Address(1, 1, 10)))
+    ]
     backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
     await backend.discover_channel_drives()
     await backend.discover_channel_drives(refresh=True)

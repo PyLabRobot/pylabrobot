@@ -227,9 +227,13 @@ def _build_introspection_maps() -> tuple[dict[int, str], set[int], set[int], set
   return names, arg_ids, ret_el_ids, ret_val_ids, complex_method_ids
 
 
-_INTROSPECTION_TYPE_NAMES, _ARGUMENT_TYPE_IDS, _RETURN_ELEMENT_TYPE_IDS, _RETURN_VALUE_TYPE_IDS, _COMPLEX_METHOD_TYPE_IDS = (
-  _build_introspection_maps()
-)
+(
+  _INTROSPECTION_TYPE_NAMES,
+  _ARGUMENT_TYPE_IDS,
+  _RETURN_ELEMENT_TYPE_IDS,
+  _RETURN_VALUE_TYPE_IDS,
+  _COMPLEX_METHOD_TYPE_IDS,
+) = _build_introspection_maps()
 
 # Empirical / device-specific id observed in the wild (not in HoiObject 31×4 grid).
 _INTROSPECTION_TYPE_NAMES[113] = "List[f32] [In] (empirical)"
@@ -238,6 +242,7 @@ _ARGUMENT_TYPE_IDS.add(113)
 _COMPLEX_STRUCT_TYPE_IDS = {30, 31, 32, 35}  # STRUCTURE=30, STRUCT_ARRAY=31, ENUM=32, ENUM_ARRAY=35
 # Backward-compat alias (used by ParameterType.is_complex for method parameters)
 _COMPLEX_TYPE_IDS = _COMPLEX_METHOD_TYPE_IDS
+
 
 def get_introspection_type_category(type_id: int) -> str:
   """Get category for introspection type ID.
@@ -1654,6 +1659,7 @@ class HamiltonIntrospection:
     if method is None:
       return f"<method not found: iface={interface_id} id={method_id} at {address}>"
     return method.get_signature_string(registry)
+
 
 # ============================================================================
 # STRUCT / COMMAND VALIDATION

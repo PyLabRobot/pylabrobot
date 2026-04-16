@@ -1112,7 +1112,9 @@ class TestHoiResultDecode(unittest.TestCase):
     return summary + entries_frag + trailing_params
 
   @staticmethod
-  def _wrap_response(params: bytes, action_code: int = Hoi2Action.COMMAND_RESPONSE) -> CommandResponse:
+  def _wrap_response(
+    params: bytes, action_code: int = Hoi2Action.COMMAND_RESPONSE
+  ) -> CommandResponse:
     hoi = HoiPacket(
       interface_id=1,
       action_code=action_code,
@@ -1132,18 +1134,14 @@ class TestHoiResultDecode(unittest.TestCase):
   def test_warning_prefix_empty(self):
     """Empty entries string → no HcResultEntry emitted."""
     params = self._build_warning_params([])
-    rest, entries = split_hoi_params_after_warning_prefix(
-      Hoi2Action.COMMAND_WARNING, params
-    )
+    rest, entries = split_hoi_params_after_warning_prefix(Hoi2Action.COMMAND_WARNING, params)
     self.assertEqual(entries, [])
 
   def test_warning_prefix_single_entry(self):
     """Single warning entry round-trips through the string formatter + parser."""
     entry = HcResultEntry(1, 1, 257, 1, 6, 0x8001)
     params = self._build_warning_params([entry])
-    rest, parsed = split_hoi_params_after_warning_prefix(
-      Hoi2Action.COMMAND_WARNING, params
-    )
+    rest, parsed = split_hoi_params_after_warning_prefix(Hoi2Action.COMMAND_WARNING, params)
     self.assertEqual(len(parsed), 1)
     got = parsed[0]
     self.assertEqual(got.address, (1, 1, 257))
@@ -1159,9 +1157,7 @@ class TestHoiResultDecode(unittest.TestCase):
       HcResultEntry(1, 1, 257, 1, 6, 0x0F08),
     ]
     params = self._build_warning_params(entries)
-    _rest, parsed = split_hoi_params_after_warning_prefix(
-      Hoi2Action.COMMAND_WARNING, params
-    )
+    _rest, parsed = split_hoi_params_after_warning_prefix(Hoi2Action.COMMAND_WARNING, params)
     self.assertEqual([w.result for w in parsed], [0x0000, 0x8100, 0x0F08])
     self.assertEqual([w.is_warning for w in parsed], [False, True, False])
     self.assertEqual([w.is_success for w in parsed], [True, True, False])
@@ -1169,9 +1165,7 @@ class TestHoiResultDecode(unittest.TestCase):
   def test_non_warning_frame_passes_through_unchanged(self):
     """A plain CommandResponse frame doesn't have a HoiResult prefix — leave params untouched."""
     payload = HoiParams().add(True, Bool).build()
-    rest, entries = split_hoi_params_after_warning_prefix(
-      Hoi2Action.COMMAND_RESPONSE, payload
-    )
+    rest, entries = split_hoi_params_after_warning_prefix(Hoi2Action.COMMAND_RESPONSE, payload)
     self.assertEqual(rest, payload)
     self.assertEqual(entries, [])
 
@@ -1185,6 +1179,7 @@ class TestHoiResultDecode(unittest.TestCase):
     payload = HoiParams().add(self._format_entry(entry), Str).build()
     got = parse_hamilton_error_entry(payload)
     self.assertIsNotNone(got)
+    assert got is not None
     self.assertEqual(got.address, (1, 1, 257))
     self.assertEqual(got.interface_id, 1)
     self.assertEqual(got.action_id, 6)
@@ -1229,10 +1224,10 @@ class TestHoiResultDecode(unittest.TestCase):
     back to the same ``HC_RESULT=0x{code:04X}`` string the backend emits
     when ``GetEnums`` hasn't populated the cache.
     """
-    from pylabrobot.liquid_handling.errors import ChannelizedError
     from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import (
       hamilton_error_for_entry,
     )
+    from pylabrobot.liquid_handling.errors import ChannelizedError
 
     table = descriptions or {}
     result = cmd.interpret_response(response)
@@ -1294,8 +1289,8 @@ class TestHoiResultDecode(unittest.TestCase):
 
   def test_nimbus_bitmask_channel_mapping(self):
     """NimbusCommand maps entries via ``channels_involved`` bitmask bit positions."""
-    from pylabrobot.liquid_handling.errors import ChannelizedError
     from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import PickupTips
+    from pylabrobot.liquid_handling.errors import ChannelizedError
 
     # Active channels 1, 2, 4 -> mask 0b00010110 = 0x16
     cmd = PickupTips(
@@ -1320,10 +1315,10 @@ class TestHoiResultDecode(unittest.TestCase):
 
   def test_prep_struct_array_channel_mapping(self):
     """PrepCommand maps entries via the per-channel struct-array ``channel`` field."""
-    from pylabrobot.liquid_handling.errors import ChannelizedError
     from pylabrobot.liquid_handling.backends.hamilton.prep_commands import (
       PrepCommand,
     )
+    from pylabrobot.liquid_handling.errors import ChannelizedError
 
     @dataclass
     class _Elem:
@@ -1365,6 +1360,7 @@ class TestHoiResultDecode(unittest.TestCase):
     cmd = _Cmd()
     self.assertEqual(cmd.fatal_entries_by_channel(response), {})
     cmd.interpret_response(response)
+
 
 class TestEnumCacheResolver(unittest.TestCase):
   """``HamiltonTCPClient._describe_entry`` resolves text from static + runtime sources.
@@ -1450,8 +1446,10 @@ class TestEnumCacheResolver(unittest.TestCase):
     self.assertEqual(desc, "HC_RESULT=0x0F08")
 
   def test_lookup_method_descriptor_from_cached_registry(self):
-    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import MethodInfo
-    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import TypeRegistry
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      MethodInfo,
+      TypeRegistry,
+    )
 
     client = self._make_client()
     addr = Address(1, 1, 257)
@@ -1487,6 +1485,7 @@ class TestExceptionFrameChannelizedError(unittest.TestCase):
   def test_nimbus_exception_routes_to_bitmask_channel(self):
     """A single exception entry keyed by channels_involved[0] bit 1 → channel 1."""
     import asyncio
+
     from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import PickupTips
     from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
     from pylabrobot.liquid_handling.errors import ChannelizedError
@@ -1515,8 +1514,10 @@ class TestExceptionFrameChannelizedError(unittest.TestCase):
       from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import (
         hamilton_error_for_entry,
       )
+
       err = hamilton_error_for_entry(entry, desc)
       channel = cmd._channel_index_for_entry(0, entry)
+      assert channel is not None
       raise ChannelizedError(errors={channel: err})
 
     with self.assertRaises(ChannelizedError) as cm:
@@ -1940,7 +1941,9 @@ class TestInterface0Capability(unittest.IsolatedAsyncioTestCase):
     )
 
     by_path = await client.resolve_target("Root.Child")
-    by_alias = await client.resolve_target("pipettor_service", aliases={"pipettor_service": "Root.Child"})
+    by_alias = await client.resolve_target(
+      "pipettor_service", aliases={"pipettor_service": "Root.Child"}
+    )
     by_addr = await client.resolve_target(addr)
     self.assertEqual(by_path, addr)
     self.assertEqual(by_alias, addr)
@@ -1948,8 +1951,10 @@ class TestInterface0Capability(unittest.IsolatedAsyncioTestCase):
 
   async def test_capability_cache_reuses_first_probe(self):
     """First capability probe populates cache; subsequent calls hit cache."""
-    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetMethodCommand
-    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetObjectCommand
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      GetMethodCommand,
+      GetObjectCommand,
+    )
     from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
@@ -1972,7 +1977,7 @@ class TestInterface0Capability(unittest.IsolatedAsyncioTestCase):
         return get_method_responses[cmd.method_index]
       return None
 
-    client.send_command = AsyncMock(side_effect=mock_send)
+    client.send_command = AsyncMock(side_effect=mock_send)  # type: ignore[method-assign]
     first = await client.get_supported_interface0_method_ids(addr)
     second = await client.get_supported_interface0_method_ids(addr)
 

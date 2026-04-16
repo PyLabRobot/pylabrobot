@@ -74,8 +74,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   parse_hamilton_error_entries,
   parse_hamilton_error_params,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import HcResultEntry
-from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   Hoi2Action,
@@ -83,6 +81,8 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   RegistrationActionCode,
   RegistrationOptionType,
 )
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import HcResultEntry
+from pylabrobot.liquid_handling.errors import ChannelizedError
 
 logger = logging.getLogger(__name__)
 
@@ -786,22 +786,17 @@ class HamiltonTCPClient:
     if descriptor is None:
       return f"{path_part}, addr={addr}, iface={entry.interface_id}, action={entry.action_id}"
     return (
-      f"{path_part}, addr={addr}, method={descriptor.id_string} "
-      f"{descriptor.signature_string()}"
+      f"{path_part}, addr={addr}, method={descriptor.id_string} {descriptor.signature_string()}"
     )
 
-  def _lookup_hc_result_description(
-    self, key: tuple[Address, int], code: int
-  ) -> Optional[str]:
+  def _lookup_hc_result_description(self, key: tuple[Address, int], code: int) -> Optional[str]:
     """Return the cached HcResult text for ``code`` on ``(addr, iface)``, or ``None``."""
     table = self._enum_cache.get(key)
     if table is None:
       return None
     return table.get("HcResult", {}).get(code)
 
-  async def _resolve_interface_name(
-    self, addr: Address, interface_id: int
-  ) -> Optional[str]:
+  async def _resolve_interface_name(self, addr: Address, interface_id: int) -> Optional[str]:
     """Return the cached interface name for ``(addr, interface_id)``, hydrating on miss."""
     key = (addr, interface_id)
     if key in self._interface_name_cache:
@@ -834,8 +829,7 @@ class HamiltonTCPClient:
       self._enum_cache[key] = {}
       return
     self._enum_cache[key] = {
-      enum.name: {int(value): name for name, value in enum.values.items()}
-      for enum in enums
+      enum.name: {int(value): name for name, value in enum.values.items()} for enum in enums
     }
 
   async def _initialize_connection(self):
@@ -1220,14 +1214,17 @@ class HamiltonTCPClient:
             )
             logger.error(
               "Hamilton %s (action=%#x) on %d channel(s): %s",
-              action.name, action, len(per_channel), channel_summary,
+              action.name,
+              action,
+              len(per_channel),
+              channel_summary,
             )
-            raise ChannelizedError(
-              errors=per_channel, raw_response=response_message.hoi.params
-            )
+            raise ChannelizedError(errors=per_channel, raw_response=response_message.hoi.params)
           logger.debug(
             "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
-            action.name, action, len(entries),
+            action.name,
+            action,
+            len(entries),
           )
           return None
 
@@ -1237,24 +1234,24 @@ class HamiltonTCPClient:
         result = command.interpret_response(response_message)
         fatal = command.fatal_entries_by_channel(response_message)
         if fatal:
-          per_channel: Dict[int, Exception] = {}
-          context_by_channel: Dict[int, Optional[str]] = {}
+          fatal_per_channel: Dict[int, Exception] = {}
+          fatal_context_by_channel: Dict[int, Optional[str]] = {}
           for ch, e in fatal.items():
             _iface_name, desc = await self._describe_entry(e)
-            per_channel[ch] = hamilton_error_for_entry(e, desc)
-            context_by_channel[ch] = self._format_entry_context(e)
+            fatal_per_channel[ch] = hamilton_error_for_entry(e, desc)
+            fatal_context_by_channel[ch] = self._format_entry_context(e)
           logger.error(
             "Hamilton command fatal entries: %s",
             ", ".join(
               (
-                f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
-                if context_by_channel.get(ch)
-                else f"ch{ch}: {per_channel[ch]}"
+                f"ch{ch}: {fatal_per_channel[ch]} ({fatal_context_by_channel[ch]})"
+                if fatal_context_by_channel.get(ch)
+                else f"ch{ch}: {fatal_per_channel[ch]}"
               )
-              for ch in sorted(per_channel)
+              for ch in sorted(fatal_per_channel)
             ),
           )
-          raise ChannelizedError(errors=per_channel)
+          raise ChannelizedError(errors=fatal_per_channel)
         return result
 
       except connection_errors as e:

@@ -28,7 +28,19 @@ import logging
 import math
 import random
 from dataclasses import dataclass
-from typing import Awaitable, Callable, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union, overload
+from typing import (
+  Awaitable,
+  Callable,
+  Generic,
+  List,
+  Literal,
+  NamedTuple,
+  Optional,
+  Tuple,
+  TypeVar,
+  Union,
+  overload,
+)
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
@@ -73,6 +85,7 @@ from pylabrobot.resources.well import CrossSectionType, Well
 logger = logging.getLogger(__name__)
 
 _TCalibResult = TypeVar("_TCalibResult")
+_ChannelOpT = TypeVar("_ChannelOpT", SingleChannelAspiration, SingleChannelDispense)
 
 
 def _effective_radius(resource) -> float:
@@ -283,7 +296,7 @@ class _DispenseChannelKit:
 
 
 @dataclass(frozen=True)
-class _ChannelContext:
+class _ChannelContext(Generic[_ChannelOpT]):
   """Shared resolved state for aspirate/dispense channel resolution.
 
   Computed once by ``_resolve_channel_context``; operation-specific resolve
@@ -294,7 +307,7 @@ class _ChannelContext:
   hlcs: List[Optional[HamiltonLiquidClass]]
   disable_volume_correction: List[bool]
   ch_to_idx: dict[int, int]
-  indexed_ops: dict[int, object]
+  indexed_ops: dict[int, _ChannelOpT]
   volumes: List[float]
   well_geometry: List[_WellGeometry]
   z_minimum: List[float]
@@ -698,9 +711,7 @@ class PrepBackend(LiquidHandlerBackend):
         node_info_addr,
       )
 
-    logger.info(
-      "Discovered %d pipettor channel drive pairs", len(sleeve_sensor_addrs)
-    )
+    logger.info("Discovered %d pipettor channel drive pairs", len(sleeve_sensor_addrs))
     self._channel_drive_map = ChannelDriveMap(
       sleeve_sensor_addrs=sleeve_sensor_addrs,
       zdrive_addrs=zdrive_addrs,
@@ -1450,7 +1461,7 @@ class PrepBackend(LiquidHandlerBackend):
 
   def _resolve_channel_context(
     self,
-    ops,
+    ops: List[_ChannelOpT],
     use_channels: List[int],
     *,
     z_final: Optional[List[float]] = None,
@@ -1462,7 +1473,7 @@ class PrepBackend(LiquidHandlerBackend):
     auto_container_geometry: bool = False,
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
-  ) -> _ChannelContext:
+  ) -> _ChannelContext[_ChannelOpT]:
     """Resolve shared per-channel state for aspirate or dispense.
 
     Validates inputs, resolves HLCs, computes volume corrections, well geometry,
@@ -1472,9 +1483,7 @@ class PrepBackend(LiquidHandlerBackend):
     if len(ops) != len(use_channels):
       raise ValueError(f"len(ops) must equal len(use_channels): {len(ops)} != {len(use_channels)}")
     if use_channels and max(use_channels) >= self.num_channels:
-      raise ValueError(
-        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
-      )
+      raise ValueError(f"use_channels index out of range (valid: 0..{self.num_channels - 1})")
 
     n = len(ops)
     hlcs: List[Optional[HamiltonLiquidClass]]
@@ -1499,9 +1508,7 @@ class PrepBackend(LiquidHandlerBackend):
       ]
     dvc = disable_volume_correction if disable_volume_correction is not None else [False] * n
     if len(dvc) != n:
-      raise ValueError(
-        f"disable_volume_correction length must match len(ops): {len(dvc)} != {n}"
-      )
+      raise ValueError(f"disable_volume_correction length must match len(ops): {len(dvc)} != {n}")
     ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
 
@@ -1515,9 +1522,9 @@ class PrepBackend(LiquidHandlerBackend):
     z_minimum = fill_in_defaults(z_minimum, [g.well_bottom for g in well_geometry])
     z_fluid = fill_in_defaults(z_fluid, [g.liquid_surface for g in well_geometry])
     z_air = fill_in_defaults(z_air, [g.z_air for g in well_geometry])
-    z_final = fill_in_defaults(z_final, [
-      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
-    ])
+    z_final = fill_in_defaults(
+      z_final, [raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops]
+    )
     z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, [2.0] * n)
 
     ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]] = {}
@@ -1575,28 +1582,35 @@ class PrepBackend(LiquidHandlerBackend):
   ) -> list[_AspirateChannelKit]:
     """Resolve all per-channel values for aspirate (pure computation, no I/O)."""
     ctx = self._resolve_channel_context(
-      ops, use_channels,
-      z_final=z_final, z_fluid=z_fluid, z_air=z_air,
-      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
-      container_segments=container_segments, auto_container_geometry=auto_container_geometry,
+      ops,
+      use_channels,
+      z_final=z_final,
+      z_fluid=z_fluid,
+      z_air=z_air,
+      z_minimum=z_minimum,
+      z_bottom_search_offset=z_bottom_search_offset,
+      container_segments=container_segments,
+      auto_container_geometry=auto_container_geometry,
       hamilton_liquid_classes=hamilton_liquid_classes,
       disable_volume_correction=disable_volume_correction,
     )
 
     # Aspirate-specific HLC defaults
     hlcs = ctx.hlcs
-    settling_time = fill_in_defaults(settling_time, [
-      hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs
-    ])
-    transport_air_volume = fill_in_defaults(transport_air_volume, [
-      hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
-    ])
-    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, [
-      hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs
-    ])
-    prewet_volume = fill_in_defaults(prewet_volume, [
-      hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs
-    ])
+    settling_time = fill_in_defaults(
+      settling_time, [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs]
+    )
+    transport_air_volume = fill_in_defaults(
+      transport_air_volume,
+      [hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
+    z_liquid_exit_speed = fill_in_defaults(
+      z_liquid_exit_speed, [hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
+    )
+    prewet_volume = fill_in_defaults(
+      prewet_volume,
+      [hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hlcs)
@@ -1783,13 +1797,13 @@ class PrepBackend(LiquidHandlerBackend):
 
   # Command dispatch tables: (effective_lld, is_tadm, use_v2) → command class
   _ASPIRATE_CMD = {
-    (True,  True,  True):  PrepCmd.PrepAspirateWithLldTadmV2,
-    (True,  True,  False): PrepCmd.PrepAspirateWithLldTadm,
-    (True,  False, True):  PrepCmd.PrepAspirateWithLldV2,
-    (True,  False, False): PrepCmd.PrepAspirateWithLld,
-    (False, True,  True):  PrepCmd.PrepAspirateTadmV2,
-    (False, True,  False): PrepCmd.PrepAspirateTadm,
-    (False, False, True):  PrepCmd.PrepAspirateNoLldMonitoringV2,
+    (True, True, True): PrepCmd.PrepAspirateWithLldTadmV2,
+    (True, True, False): PrepCmd.PrepAspirateWithLldTadm,
+    (True, False, True): PrepCmd.PrepAspirateWithLldV2,
+    (True, False, False): PrepCmd.PrepAspirateWithLld,
+    (False, True, True): PrepCmd.PrepAspirateTadmV2,
+    (False, True, False): PrepCmd.PrepAspirateTadm,
+    (False, False, True): PrepCmd.PrepAspirateNoLldMonitoringV2,
     (False, False, False): PrepCmd.PrepAspirateNoLldMonitoring,
   }
 
@@ -1840,31 +1854,37 @@ class PrepBackend(LiquidHandlerBackend):
   ) -> list[_DispenseChannelKit]:
     """Resolve all per-channel values for dispense (pure computation, no I/O)."""
     ctx = self._resolve_channel_context(
-      ops, use_channels,
-      z_final=z_final, z_fluid=z_fluid, z_air=z_air,
-      z_minimum=z_minimum, z_bottom_search_offset=z_bottom_search_offset,
-      container_segments=container_segments, auto_container_geometry=auto_container_geometry,
+      ops,
+      use_channels,
+      z_final=z_final,
+      z_fluid=z_fluid,
+      z_air=z_air,
+      z_minimum=z_minimum,
+      z_bottom_search_offset=z_bottom_search_offset,
+      container_segments=container_segments,
+      auto_container_geometry=auto_container_geometry,
       hamilton_liquid_classes=hamilton_liquid_classes,
       disable_volume_correction=disable_volume_correction,
     )
 
     # Dispense-specific HLC defaults
     hlcs = ctx.hlcs
-    settling_time = fill_in_defaults(settling_time, [
-      hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs
-    ])
-    transport_air_volume = fill_in_defaults(transport_air_volume, [
-      hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs
-    ])
-    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, [
-      hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs
-    ])
-    stop_back_volume = fill_in_defaults(stop_back_volume, [
-      hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs
-    ])
-    cutoff_speed = fill_in_defaults(cutoff_speed, [
-      hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs
-    ])
+    settling_time = fill_in_defaults(
+      settling_time, [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs]
+    )
+    transport_air_volume = fill_in_defaults(
+      transport_air_volume,
+      [hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
+    z_liquid_exit_speed = fill_in_defaults(
+      z_liquid_exit_speed, [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
+    )
+    stop_back_volume = fill_in_defaults(
+      stop_back_volume, [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs]
+    )
+    cutoff_speed = fill_in_defaults(
+      cutoff_speed, [hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs]
+    )
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hlcs)
@@ -1979,9 +1999,9 @@ class PrepBackend(LiquidHandlerBackend):
 
   # Command dispatch table: (effective_lld, use_v2) → command class
   _DISPENSE_CMD = {
-    (True,  True):  PrepCmd.PrepDispenseWithLldV2,
-    (True,  False): PrepCmd.PrepDispenseWithLld,
-    (False, True):  PrepCmd.PrepDispenseNoLldV2,
+    (True, True): PrepCmd.PrepDispenseWithLldV2,
+    (True, False): PrepCmd.PrepDispenseWithLld,
+    (False, True): PrepCmd.PrepDispenseNoLldV2,
     (False, False): PrepCmd.PrepDispenseNoLld,
   }
 
