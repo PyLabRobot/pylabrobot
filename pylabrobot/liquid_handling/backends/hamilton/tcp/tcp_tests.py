@@ -4,6 +4,7 @@ This module tests the packet structures, message builders, parameter encoding,
 and command classes in the Hamilton TCP protocol stack.
 """
 
+import asyncio
 import struct
 import unittest
 from dataclasses import dataclass
@@ -59,10 +60,22 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   I32Array,
   Str,
   StrArray,
-  U8Array,
   U16Array,
   decode_fragment,
 )
+
+
+def _ensure_event_loop() -> None:
+  """Ensure a current event loop exists (Python 3.9 compatibility)."""
+  try:
+    asyncio.get_running_loop()
+  except RuntimeError:
+    try:
+      loop = asyncio.get_event_loop_policy().get_event_loop()
+      if loop.is_closed():
+        raise RuntimeError
+    except RuntimeError:
+      asyncio.set_event_loop(asyncio.new_event_loop())
 
 
 class TestVersionByte(unittest.TestCase):
@@ -1084,7 +1097,7 @@ class TestInterpretResponseAutoDecode(unittest.TestCase):
 class TestHoiResultDecode(unittest.TestCase):
   """Multi-channel HcResult decode via warning-frame prefix.
 
-  Per ``HoiDecoder2.cs`` + firmware yaml dumps, HoiResult only rides on
+  Per protocol decoder behavior + firmware yaml dumps, HoiResult only rides on
   warning (STATUS_WARNING / COMMAND_WARNING) or exception frames — never
   as a trailer on CommandResponse / StatusResponse. The prefix format
   is two leading fragments: a summary and a semicolon-separated string
@@ -1373,6 +1386,7 @@ class TestEnumCacheResolver(unittest.TestCase):
   def _make_client(self, error_codes=None):
     from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 
+    _ensure_event_loop()
     return HamiltonTCPClient(host="127.0.0.1", port=0, error_codes=error_codes)
 
   def test_module_table_wins_over_protocol_and_enum_cache(self):
@@ -1490,6 +1504,7 @@ class TestExceptionFrameChannelizedError(unittest.TestCase):
     from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
     from pylabrobot.liquid_handling.errors import ChannelizedError
 
+    _ensure_event_loop()
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
     addr = Address(1, 238, 256)
     client._enum_cache[(addr, 1)] = {"HcResult": {0x0F08: "TipAlreadyInstalled"}}

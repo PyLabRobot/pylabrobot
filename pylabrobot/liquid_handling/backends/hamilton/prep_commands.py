@@ -23,7 +23,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   F32,
   I8,
   I16,
-  I64,
   U16,
   U32,
   EnumArray,
@@ -1246,9 +1245,7 @@ class PrepCommand(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return HoiParams.from_struct(self)
 
-  def _channel_index_for_entry(
-    self, entry_index: int, entry: HcResultEntry
-  ) -> Optional[int]:
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
     """Map HoiResult entry → 0-indexed channel via the first per-channel struct-array field.
 
     Prep commands carry a ``StructArray`` of per-channel parameters whose

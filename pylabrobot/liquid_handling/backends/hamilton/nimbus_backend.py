@@ -185,9 +185,7 @@ class NimbusCommand(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return HoiParams.from_struct(self)
 
-  def _channel_index_for_entry(
-    self, entry_index: int, entry: HcResultEntry
-  ) -> Optional[int]:
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
     """Map HoiResult entry → 0-indexed channel via the ``channels_involved`` bitmask.
 
     Nimbus firmware populates HoiResult entries in active-channel order, so

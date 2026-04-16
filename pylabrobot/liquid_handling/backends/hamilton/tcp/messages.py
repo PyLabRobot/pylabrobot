@@ -480,9 +480,7 @@ def split_hoi_params_after_warning_prefix(
   if isinstance(v1, str):
     prefix_entries = _parse_get_hc_results_string(v1)
   elif isinstance(v1, (bytes, bytearray)):
-    prefix_entries = _parse_get_hc_results_string(
-      bytes(v1).decode("utf-8", errors="replace")
-    )
+    prefix_entries = _parse_get_hc_results_string(bytes(v1).decode("utf-8", errors="replace"))
   return rest, prefix_entries
 
 
@@ -511,7 +509,7 @@ def interpret_hoi_success_payload(command: Any, params_bytes: bytes) -> Any:
   Used for CommandResponse / StatusResponse payloads after exception and
   warning-prefix handling. Success frames carry only the fields declared in
   the Response dataclass — no HoiResult trailer (see firmware yaml dumps and
-  ``HoiDecoder2.cs``; HoiResult only rides on warning-prefix or exception
+  protocol decoder behavior; HoiResult only rides on warning-prefix or exception
   frames).
   """
   cls = type(command)

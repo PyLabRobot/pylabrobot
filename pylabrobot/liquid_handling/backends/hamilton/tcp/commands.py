@@ -155,9 +155,7 @@ class HamiltonCommand:
     # Build final packet
     return msg.build(source, sequence, harp_response_required=response_required)
 
-  def _channel_index_for_entry(
-    self, entry_index: int, entry: HcResultEntry
-  ) -> Optional[int]:
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
     """Map a ``HcResultEntry`` to a 0-indexed PLR channel, or ``None`` to skip.
 
     Default: the entry's position in the HoiResult — firmware populates arrays
@@ -186,9 +184,7 @@ class HamiltonCommand:
     eff, _prefix = self._strip_warning_prefix(response)
     return interpret_hoi_success_payload(self, eff)
 
-  def fatal_entries_by_channel(
-    self, response: CommandResponse
-  ) -> dict[int, HcResultEntry]:
+  def fatal_entries_by_channel(self, response: CommandResponse) -> dict[int, HcResultEntry]:
     """Return fatal entries keyed by 0-indexed PLR channel.
 
     Only non-success, non-warning entries from a warning-frame prefix are
@@ -211,9 +207,7 @@ class HamiltonCommand:
       per_channel[ch] = entry
     return per_channel
 
-  def _strip_warning_prefix(
-    self, response: CommandResponse
-  ) -> tuple[bytes, list[HcResultEntry]]:
+  def _strip_warning_prefix(self, response: CommandResponse) -> tuple[bytes, list[HcResultEntry]]:
     """Strip the warning-frame HoiResult prefix, if present. Logs entries."""
     raw = response.hoi.params
     eff, prefix_entries = split_hoi_params_after_warning_prefix(response.hoi.action_code, raw)

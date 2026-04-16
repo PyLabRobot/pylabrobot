@@ -32,9 +32,9 @@ by the command's resolved PLR channel — same shape as the warning-path
 table passed by the backend (e.g. ``NIMBUS_ERROR_CODES``, keyed by
 ``(module, node, object, action, code)`` — mirrors the device's own
 ``HOIErrorLookup.AddErrorData`` registrations); (2) the universal
-``HC_RESULT_PROTOCOL`` table (from ``HcResult.cs``); (3) the runtime
+``HC_RESULT_PROTOCOL`` table (protocol reference); (3) the runtime
 ``EnumInfo`` cache hydrated on first miss per ``(address, interface_id)``;
-(4) hex fallback. Prep ships an empty module table pending a DLL.
+(4) hex fallback. Prep ships an empty module table pending a Prep reference table.
 
 Key classes
 -----------
@@ -720,7 +720,7 @@ class HamiltonTCPClient:
        ``(module_id, node_id, object_id, action_id, code)`` to match the
        ``AddErrorData(harpAddress, actionId, code, text)`` registrations
        baked into each module's firmware.
-    2. Protocol-level ``HC_RESULT_PROTOCOL`` (from ``HcResult.cs``) — the
+    2. Protocol-level ``HC_RESULT_PROTOCOL`` (protocol reference) — the
        named universal codes (0–1069); covers things like ``GenericTimeOut``,
        ``ConnectionFailed``, etc.
     3. Runtime ``EnumInfo`` cache (Interface 0 method 5). Harmless to keep
@@ -1148,7 +1148,7 @@ class HamiltonTCPClient:
         # Loop until we receive a terminal action frame for this command
         # (success / warning / exception). Non-terminal frames — COMMAND_ACK
         # (6) and EVENT (9) — are logged / dispatched and skipped. See
-        # Hoi2Action enum in HoiPacket2Constants.cs (P2-9).
+        # Hoi2Action enum from the protocol constants table (P2-9).
         while True:
           response_message = await self._read_one_message(timeout=read_timeout)
           assert isinstance(response_message, CommandResponse)

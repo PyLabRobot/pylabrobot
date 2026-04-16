@@ -215,8 +215,8 @@ class CountedFlatArray(WireType):
 class HcResultEntry:
   """One channel's entry in a multi-channel ``NetworkType::HoiResult``.
 
-  Source: ``decompiled/.../NetworkDefinedType.cs`` (6 parallel arrays) +
-  ``HcResultEx.cs`` (bit layout). ``result`` is the raw u16 HcResult code;
+  Source: vendor protocol reference (6 parallel arrays + HcResultEx bit layout).
+  ``result`` is the raw u16 HcResult code;
   the high bit (0x8000) flags a warning, bits 8-11 encode error category.
   """
 

@@ -90,8 +90,8 @@ def resolve_type_id(type_id: int) -> str:
 # INTROSPECTION TYPE MAPPING (2D table from HoiObject.mHoiParamTypes)
 # ============================================================================
 # Introspection type IDs are separate from HamiltonDataType wire encoding types.
-# Rows = .NET / firmware scalar or array kinds; columns = In, Out, InOut, RetVal
-# (HoiParameterType.Direction). Source: SysCon/HoiObject.cs mHoiParamTypes[31,4].
+# Rows = firmware scalar or array kinds; columns = In, Out, InOut, RetVal
+# (HoiParameterType.Direction). Source: vendor protocol reference mHoiParamTypes[31,4].
 
 _HOI_DOTNET_TYPE_ROWS: tuple[str, ...] = (
   "i8",
