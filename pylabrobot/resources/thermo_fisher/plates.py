@@ -282,7 +282,7 @@ def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_
     raise ValueError(
       f"Height {height_mm} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
-  return round(interpolate_1d(height_mm, _microamp_height_to_volume, bounds_handling="clip"), 3)
+  return round(interpolate_1d(height_mm, _microamp_height_to_volume, bounds_handling="extrapolate"), 3)
 
 
 def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_ul: float) -> float:
@@ -290,7 +290,7 @@ def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_
     raise ValueError(
       f"Volume {volume_ul} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
-  return round(interpolate_1d(volume_ul, _microamp_volume_to_height, bounds_handling="clip"), 3)
+  return round(interpolate_1d(volume_ul, _microamp_volume_to_height, bounds_handling="extrapolate"), 3)
 
 
 def thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name: str) -> Lid:
