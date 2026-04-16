@@ -1449,6 +1449,32 @@ class TestEnumCacheResolver(unittest.TestCase):
     self.assertIsNone(iface)
     self.assertEqual(desc, "HC_RESULT=0x0F08")
 
+  def test_lookup_method_descriptor_from_cached_registry(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import MethodInfo
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import TypeRegistry
+
+    client = self._make_client()
+    addr = Address(1, 1, 257)
+    reg = TypeRegistry(address=addr)
+    reg.methods = [
+      MethodInfo(interface_id=1, call_type=0, method_id=9, name="PickupTips"),
+    ]
+    client._type_registries[addr] = reg
+
+    descriptor = client._lookup_method_descriptor(addr, interface_id=1, action_id=9)
+    assert descriptor is not None
+    self.assertEqual(descriptor.id_string, "[1:9]")
+    self.assertEqual(descriptor.name, "PickupTips")
+
+  def test_format_entry_context_falls_back_without_descriptor(self):
+    client = self._make_client()
+    entry = HcResultEntry(1, 1, 257, 1, 9, 13)
+    context = client._format_entry_context(entry)
+    assert context is not None
+    self.assertIn("addr=1:1:257", context)
+    self.assertIn("iface=1", context)
+    self.assertIn("action=9", context)
+
 
 class TestExceptionFrameChannelizedError(unittest.TestCase):
   """``COMMAND_EXCEPTION`` / ``STATUS_EXCEPTION`` surface as ``ChannelizedError``.
@@ -1953,6 +1979,71 @@ class TestInterface0Capability(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(first, {1})
     self.assertEqual(second, {1})
     self.assertEqual(client.send_command.await_count, 3)
+
+  def test_method_descriptor_signature_dict_parity(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      MethodInfo,
+      ParameterType,
+    )
+
+    method = MethodInfo(
+      interface_id=1,
+      call_type=0,
+      method_id=42,
+      name="Calibrate",
+      parameter_types=[ParameterType(40), ParameterType(23)],
+      parameter_labels=["distance", "enabled"],
+      return_types=[ParameterType(40)],
+      return_labels=["offset"],
+    )
+    signature = method.get_signature_string()
+    dumped = method.to_dict()
+    self.assertEqual(dumped["signature"], signature)
+    self.assertEqual(dumped["params"][0]["name"], "distance")
+    self.assertEqual(dumped["params"][1]["name"], "enabled")
+    self.assertEqual(dumped["returns"][0]["name"], "offset")
+    self.assertIn("distance:", signature)
+    self.assertIn("offset:", signature)
+
+  def test_method_descriptor_multireturn_is_record_not_void(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      MethodInfo,
+      ParameterType,
+    )
+
+    method = MethodInfo(
+      interface_id=1,
+      call_type=0,
+      method_id=7,
+      name="ReadTwo",
+      return_types=[ParameterType(40), ParameterType(23)],
+      return_labels=["reading", "ok"],
+    )
+    signature = method.get_signature_string()
+    self.assertIn("-> {", signature)
+    self.assertIn("reading:", signature)
+    self.assertIn("ok:", signature)
+    self.assertNotIn("-> void", signature)
+
+  def test_method_descriptor_signature_strips_direction_markers(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      MethodDescriptor,
+      MethodFieldDescriptor,
+    )
+
+    descriptor = MethodDescriptor(
+      interface_id=1,
+      method_id=88,
+      name="Echo",
+      params=[MethodFieldDescriptor(name="payload", type_name="List[i8] [In]")],
+      returns=[MethodFieldDescriptor(name="value", type_name="List[i8] [RetVal]")],
+      return_shape="scalar",
+    )
+    signature = descriptor.signature_string()
+    self.assertIn("payload: List[i8]", signature)
+    self.assertIn("value: List[i8]", signature)
+    self.assertNotIn("[In]", signature)
+    self.assertNotIn("[RetVal]", signature)
 
 
 if __name__ == "__main__":

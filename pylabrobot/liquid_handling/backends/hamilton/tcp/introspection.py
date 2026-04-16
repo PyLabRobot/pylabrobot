@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, TypeVar, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Set, TypeVar, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -421,6 +421,71 @@ def _parse_type_ids(raw: str | bytes | None) -> List[ParameterType]:
 
 
 @dataclass
+class MethodFieldDescriptor:
+  """Canonical representation of one method parameter/return field."""
+
+  name: str
+  type_name: str
+
+
+@dataclass
+class MethodDescriptor:
+  """Canonical normalized representation of a method signature."""
+
+  interface_id: int
+  method_id: int
+  name: str
+  params: list[MethodFieldDescriptor] = field(default_factory=list)
+  returns: list[MethodFieldDescriptor] = field(default_factory=list)
+  return_shape: Literal["void", "scalar", "record"] = "void"
+
+  @property
+  def id_string(self) -> str:
+    return f"[{self.interface_id}:{self.method_id}]"
+
+  @staticmethod
+  def _signature_type_name(type_name: str) -> str:
+    """Strip direction markers for human-readable signatures."""
+    cleaned = type_name
+    for marker in ("In", "Out", "RetVal"):
+      cleaned = cleaned.replace(f" [{marker}]", "")
+    return cleaned.strip()
+
+  def signature_string(self) -> str:
+    """Render the canonical method descriptor as a signature string."""
+    if self.params:
+      param_str = ", ".join(
+        f"{p.name}: {self._signature_type_name(p.type_name)}" for p in self.params
+      )
+    else:
+      param_str = "void"
+
+    if self.return_shape == "void" or not self.returns:
+      return_str = "void"
+    elif self.return_shape == "scalar" and len(self.returns) == 1:
+      ret = self.returns[0]
+      ret_type = self._signature_type_name(ret.type_name)
+      return_str = f"{ret.name}: {ret_type}" if ret.name != "ret0" else ret_type
+    else:
+      return_str = (
+        "{ "
+        + ", ".join(f"{r.name}: {self._signature_type_name(r.type_name)}" for r in self.returns)
+        + " }"
+      )
+
+    return f"{self.id_string} {self.name}({param_str}) -> {return_str}"
+
+  def to_dict(self) -> dict:
+    return {
+      "name": self.name,
+      "id": self.id_string,
+      "signature": self.signature_string(),
+      "params": [{"name": p.name, "type": p.type_name} for p in self.params],
+      "returns": [{"name": r.name, "type": r.type_name} for r in self.returns],
+    }
+
+
+@dataclass
 class MethodInfo:
   """Method signature from introspection."""
 
@@ -433,85 +498,54 @@ class MethodInfo:
   return_types: list[ParameterType] = field(default_factory=list)
   return_labels: list[str] = field(default_factory=list)
 
+  def describe(self, registry: Optional["TypeRegistry"] = None) -> MethodDescriptor:
+    """Return the canonical normalized method descriptor used by all serializers."""
+    iid = self.interface_id
+    params: list[MethodFieldDescriptor] = []
+    if self.parameter_types:
+      param_type_names = [
+        pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types
+      ]
+      for i, type_name in enumerate(param_type_names):
+        label = self.parameter_labels[i] if i < len(self.parameter_labels) else None
+        params.append(MethodFieldDescriptor(name=label or f"arg{i}", type_name=type_name))
+
+    returns: list[MethodFieldDescriptor] = []
+    return_shape: Literal["void", "scalar", "record"] = "void"
+    if self.return_types:
+      return_type_names = [
+        rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types
+      ]
+      return_categories = [get_introspection_type_category(rt.type_id) for rt in self.return_types]
+      for i, type_name in enumerate(return_type_names):
+        label = self.return_labels[i] if i < len(self.return_labels) else None
+        returns.append(MethodFieldDescriptor(name=label or f"ret{i}", type_name=type_name))
+      if len(returns) == 1 and not any(cat == "ReturnElement" for cat in return_categories):
+        return_shape = "scalar"
+      elif len(returns) > 0:
+        # Includes ReturnElement records and explicit multi-return methods.
+        return_shape = "record"
+
+    return MethodDescriptor(
+      interface_id=self.interface_id,
+      method_id=self.method_id,
+      name=self.name,
+      params=params,
+      returns=returns,
+      return_shape=return_shape,
+    )
+
   def get_signature_string(self, registry: Optional["TypeRegistry"] = None) -> str:
     """Get method signature as a readable string.
 
     If a TypeRegistry is provided, struct/enum references are resolved to
     their names (e.g. PickupTipParameters instead of struct(iface=1, id=57)).
     """
-    iid = self.interface_id
-    if self.parameter_types:
-      param_type_names = [
-        pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types
-      ]
-      if self.parameter_labels and len(self.parameter_labels) == len(param_type_names):
-        params = [
-          f"{label}: {type_name}"
-          for label, type_name in zip(self.parameter_labels, param_type_names)
-        ]
-        param_str = ", ".join(params)
-      else:
-        param_str = ", ".join(param_type_names)
-    else:
-      param_str = "void"
-
-    if self.return_types:
-      return_type_names = [
-        rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types
-      ]
-      return_categories = [get_introspection_type_category(rt.type_id) for rt in self.return_types]
-      if any(cat == "ReturnElement" for cat in return_categories):
-        if self.return_labels and len(self.return_labels) == len(return_type_names):
-          returns = [
-            f"{label}: {type_name}"
-            for label, type_name in zip(self.return_labels, return_type_names)
-          ]
-          return_str = f"{{ {', '.join(returns)} }}"
-        else:
-          return_str = f"{{ {', '.join(return_type_names)} }}"
-      elif len(return_type_names) == 1:
-        if self.return_labels and len(self.return_labels) == 1:
-          return_str = f"{self.return_labels[0]}: {return_type_names[0]}"
-        else:
-          return_str = return_type_names[0]
-      else:
-        return_str = "void"
-    else:
-      return_str = "void"
-
-    return f"[{self.interface_id}:{self.method_id}] {self.name}({param_str}) -> {return_str}"
+    return self.describe(registry).signature_string()
 
   def to_dict(self, registry: Optional["TypeRegistry"] = None) -> dict:
     """Serialize to a plain dict suitable for YAML/JSON export."""
-    iid = self.interface_id
-    params = []
-    if self.parameter_types:
-      names = [pt.resolve_name(registry, ho_interface_id=iid) for pt in self.parameter_types]
-      labels: List[Optional[str]] = (
-        list(self.parameter_labels)
-        if len(self.parameter_labels) == len(names)
-        else [None] * len(names)
-      )
-      params = [
-        {"name": label or f"arg{i}", "type": t} for i, (label, t) in enumerate(zip(labels, names))
-      ]
-    returns = []
-    if self.return_types:
-      names = [rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types]
-      ret_labels: List[Optional[str]] = (
-        list(self.return_labels) if len(self.return_labels) == len(names) else [None] * len(names)
-      )
-      returns = [
-        {"name": label or f"ret{i}", "type": t}
-        for i, (label, t) in enumerate(zip(ret_labels, names))
-      ]
-    return {
-      "name": self.name,
-      "id": f"[{self.interface_id}:{self.method_id}]",
-      "signature": self.get_signature_string(registry),
-      "params": params,
-      "returns": returns,
-    }
+    return self.describe(registry).to_dict()
 
 
 _TLocal = TypeVar("_TLocal")

@@ -61,6 +61,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
   GET_SUBOBJECT_ADDRESS,
   GlobalTypePool,
   HamiltonIntrospection,
+  MethodDescriptor,
   ObjectInfo,
   TypeRegistry,
 )
@@ -748,6 +749,47 @@ class HamiltonTCPClient:
       desc = f"HC_RESULT=0x{entry.result:04X}"
     return iface_name, desc
 
+  def _lookup_method_descriptor(
+    self, addr: Address, interface_id: int, action_id: int
+  ) -> Optional[MethodDescriptor]:
+    """Resolve canonical method descriptor for (addr, interface_id, action_id), if cached."""
+    try:
+      reg = self._type_registries.get(addr)
+      if reg is None:
+        path = self._registry.path(addr)
+        if path:
+          cached = self._introspection_cache.get(path)
+          if cached is not None:
+            _, reg = cached
+      if reg is None:
+        return None
+      method = reg.get_method(interface_id, action_id)
+      if method is None:
+        return None
+      return method.describe(reg)
+    except Exception as exc:
+      logger.debug(
+        "Method descriptor lookup failed for %s iface=%d action=%d: %s",
+        addr,
+        interface_id,
+        action_id,
+        exc,
+      )
+      return None
+
+  def _format_entry_context(self, entry: HcResultEntry) -> Optional[str]:
+    """Return additive diagnostic context for one HC result entry."""
+    addr = Address(entry.module_id, entry.node_id, entry.object_id)
+    path = self._registry.path(addr)
+    path_part = f"path={path}" if path else "path=?"
+    descriptor = self._lookup_method_descriptor(addr, entry.interface_id, entry.action_id)
+    if descriptor is None:
+      return f"{path_part}, addr={addr}, iface={entry.interface_id}, action={entry.action_id}"
+    return (
+      f"{path_part}, addr={addr}, method={descriptor.id_string} "
+      f"{descriptor.signature_string()}"
+    )
+
   def _lookup_hc_result_description(
     self, key: tuple[Address, int], code: int
   ) -> Optional[str]:
@@ -1079,6 +1121,7 @@ class HamiltonTCPClient:
         is disabled, or if reconnection fails.
       RuntimeError: If the Hamilton firmware returns an error action code and
         raise_on_error is True.
+
     """
     connection_errors = (
       BrokenPipeError,
@@ -1156,6 +1199,7 @@ class HamiltonTCPClient:
           # on the same channel keep the first entry — wire order matches
           # channel ordering, so collisions shouldn't happen in practice.
           per_channel: Dict[int, Exception] = {}
+          context_by_channel: Dict[int, Optional[str]] = {}
           for idx, entry in enumerate(entries):
             _iface_name, desc = await self._describe_entry(entry)
             err = hamilton_error_for_entry(entry, desc)
@@ -1163,10 +1207,16 @@ class HamiltonTCPClient:
             if channel is None:
               channel = idx
             per_channel.setdefault(channel, err)
+            context_by_channel.setdefault(channel, self._format_entry_context(entry))
 
           if raise_on_error:
             channel_summary = ", ".join(
-              f"ch{ch}: {per_channel[ch]}" for ch in sorted(per_channel)
+              (
+                f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
+                if context_by_channel.get(ch)
+                else f"ch{ch}: {per_channel[ch]}"
+              )
+              for ch in sorted(per_channel)
             )
             logger.error(
               "Hamilton %s (action=%#x) on %d channel(s): %s",
@@ -1188,9 +1238,22 @@ class HamiltonTCPClient:
         fatal = command.fatal_entries_by_channel(response_message)
         if fatal:
           per_channel: Dict[int, Exception] = {}
+          context_by_channel: Dict[int, Optional[str]] = {}
           for ch, e in fatal.items():
             _iface_name, desc = await self._describe_entry(e)
             per_channel[ch] = hamilton_error_for_entry(e, desc)
+            context_by_channel[ch] = self._format_entry_context(e)
+          logger.error(
+            "Hamilton command fatal entries: %s",
+            ", ".join(
+              (
+                f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
+                if context_by_channel.get(ch)
+                else f"ch{ch}: {per_channel[ch]}"
+              )
+              for ch in sorted(per_channel)
+            ),
+          )
           raise ChannelizedError(errors=per_channel)
         return result
 

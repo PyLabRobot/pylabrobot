@@ -1608,13 +1608,102 @@ class TestPrepSharedTraversal(unittest.IsolatedAsyncioTestCase):
     ]
     backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
 
-    await backend._discover_channel_drives()
+    drive_map = await backend.discover_channel_drives(refresh=True)
 
-    self.assertEqual(backend._mlprep_cpu_addr, Address(1, 1, 11))
-    self.assertEqual(backend._module_info_addr, Address(1, 1, 12))
-    self.assertEqual(backend._channel_sleeve_sensor_addrs, [Address(1, 2, 22)])
-    self.assertEqual(backend._channel_zdrive_addrs, [Address(1, 2, 23)])
-    self.assertEqual(backend._channel_node_info_addrs, [Address(1, 2, 24)])
+    self.assertEqual(drive_map.mlprep_cpu_addr, Address(1, 1, 11))
+    self.assertEqual(drive_map.module_info_addr, Address(1, 1, 12))
+    self.assertEqual(drive_map.sleeve_sensor_addrs, [Address(1, 2, 22)])
+    self.assertEqual(drive_map.zdrive_addrs, [Address(1, 2, 23)])
+    self.assertEqual(drive_map.node_info_addrs, [Address(1, 2, 24)])
+    self.assertEqual(drive_map.num_channels_discovered, 1)
+    backend.client.build_firmware_tree.assert_awaited_once()  # type: ignore[attr-defined]
+
+  async def test_discover_channel_drives_idempotent_without_refresh(self):
+    backend = _setup_backend(num_channels=2)
+    nodes = [
+      ("MLPrepRoot", Address(1, 1, 10), ObjectInfo("MLPrepRoot", "1.0", 0, 1, Address(1, 1, 10))),
+      (
+        "MLPrepRoot.Channel Root",
+        Address(1, 2, 20),
+        ObjectInfo("Channel Root", "1.0", 0, 0, Address(1, 2, 20)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel",
+        Address(1, 2, 21),
+        ObjectInfo("Channel", "1.0", 0, 0, Address(1, 2, 21)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel.Squeeze.SDrive",
+        Address(1, 2, 22),
+        ObjectInfo("SDrive", "1.0", 0, 0, Address(1, 2, 22)),
+      ),
+    ]
+    backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
+    first = await backend.discover_channel_drives()
+    second = await backend.discover_channel_drives()
+    self.assertIs(first, second)
+    backend.client.build_firmware_tree.assert_awaited_once()  # type: ignore[attr-defined]
+
+  async def test_discover_channel_drives_refresh_forces_rebuild(self):
+    backend = _setup_backend(num_channels=2)
+    nodes = [("MLPrepRoot", Address(1, 1, 10), ObjectInfo("MLPrepRoot", "1.0", 0, 0, Address(1, 1, 10)))]
+    backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
+    await backend.discover_channel_drives()
+    await backend.discover_channel_drives(refresh=True)
+    self.assertEqual(backend.client.build_firmware_tree.await_count, 2)  # type: ignore[attr-defined]
+
+  async def test_setup_does_not_trigger_channel_drive_discovery(self):
+    backend = PrepBackend(host="192.168.100.102", port=2000)
+    backend.client.setup = unittest.mock.AsyncMock()  # type: ignore[assignment]
+    backend.client.discovered_root_name = unittest.mock.Mock(return_value="MLPrepRoot")  # type: ignore[assignment]
+    backend._resolver.run_setup_loop = unittest.mock.AsyncMock()  # type: ignore[assignment]
+    backend.is_initialized = unittest.mock.AsyncMock(return_value=True)  # type: ignore[assignment]
+    backend._get_hardware_config = unittest.mock.AsyncMock(  # type: ignore[assignment]
+      return_value=PrepCmd.InstrumentConfig(
+        deck_bounds=PrepCmd.DeckBounds(0.0, 300.0, 0.0, 320.0, 0.0, 100.0),
+        has_enclosure=False,
+        safe_speeds_enabled=False,
+        deck_sites=(),
+        waste_sites=(),
+        default_traverse_height=_TRAVERSE_HEIGHT,
+        num_channels=2,
+        has_mph=False,
+      )
+    )
+    backend.request_channel_bounds = unittest.mock.AsyncMock(return_value=[])  # type: ignore[assignment]
+    backend._probe_v2_support = unittest.mock.AsyncMock(return_value=True)  # type: ignore[assignment]
+    backend.discover_channel_drives = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+
+    await backend.setup()
+
+    backend.discover_channel_drives.assert_not_called()  # type: ignore[attr-defined]
+
+  async def test_lazy_consumer_triggers_first_discovery_only(self):
+    backend = _setup_backend(num_channels=2)
+    nodes = [
+      ("MLPrepRoot", Address(1, 1, 10), ObjectInfo("MLPrepRoot", "1.0", 0, 1, Address(1, 1, 10))),
+      (
+        "MLPrepRoot.Channel Root",
+        Address(1, 2, 20),
+        ObjectInfo("Channel Root", "1.0", 0, 0, Address(1, 2, 20)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel",
+        Address(1, 2, 21),
+        ObjectInfo("Channel", "1.0", 0, 0, Address(1, 2, 21)),
+      ),
+      (
+        "MLPrepRoot.Channel Root.Channel.Squeeze.SDrive",
+        Address(1, 2, 22),
+        ObjectInfo("SDrive", "1.0", 0, 0, Address(1, 2, 22)),
+      ),
+    ]
+    backend.client.build_firmware_tree = unittest.mock.AsyncMock(return_value=nodes)  # type: ignore[assignment]
+    backend.client.send_command = unittest.mock.AsyncMock(return_value=(b"\x00" * 8,))  # type: ignore[assignment]
+
+    await backend.sense_tip_presence()
+    await backend.sense_tip_presence()
+
     backend.client.build_firmware_tree.assert_awaited_once()  # type: ignore[attr-defined]
 
   async def test_print_firmware_tree_uses_shared_tree(self):

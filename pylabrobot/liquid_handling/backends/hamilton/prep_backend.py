@@ -305,6 +305,32 @@ class _ChannelContext:
   ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]]
 
 
+@dataclass(frozen=True)
+class ChannelDriveMap:
+  """Cached channel-drive topology discovered from the firmware tree."""
+
+  sleeve_sensor_addrs: list[Address]
+  zdrive_addrs: list[Address]
+  node_info_addrs: list[Address]
+  mlprep_cpu_addr: Optional[Address]
+  module_info_addr: Optional[Address]
+
+  @property
+  def num_channels_discovered(self) -> int:
+    return len(self.sleeve_sensor_addrs)
+
+  def to_dict(self) -> dict[str, object]:
+    """Serialize for logs/notebooks that prefer plain dicts."""
+    return {
+      "num_channels_discovered": self.num_channels_discovered,
+      "sleeve_sensor_addrs": list(self.sleeve_sensor_addrs),
+      "zdrive_addrs": list(self.zdrive_addrs),
+      "node_info_addrs": list(self.node_info_addrs),
+      "mlprep_cpu_addr": self.mlprep_cpu_addr,
+      "module_info_addr": self.module_info_addr,
+    }
+
+
 class PrepBackend(LiquidHandlerBackend):
   """Backend for Hamilton Prep instruments using the shared TCP stack.
 
@@ -403,11 +429,7 @@ class PrepBackend(LiquidHandlerBackend):
     self._num_channels: Optional[int] = None
     self._has_mph: Optional[bool] = None
     self._gripper_tool_on: bool = False
-    self._channel_sleeve_sensor_addrs: list[Address] = []
-    self._channel_zdrive_addrs: list[Address] = []
-    self._channel_node_info_addrs: list[Address] = []
-    self._mlprep_cpu_addr: Optional[Address] = None
-    self._module_info_addr: Optional[Address] = None
+    self._channel_drive_map: Optional[ChannelDriveMap] = None
     self._channel_bounds: list[dict] = []
     self._calibration_session_active: bool = False
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
@@ -559,9 +581,6 @@ class PrepBackend(LiquidHandlerBackend):
       self._config.has_mph,
     )
 
-    # Discover per-channel drive addresses from the object tree (after init).
-    await self._discover_channel_drives()
-
     # Cache per-channel movement bounds from firmware
     try:
       self._channel_bounds = await self.request_channel_bounds()
@@ -592,39 +611,56 @@ class PrepBackend(LiquidHandlerBackend):
 
     self.setup_finished = True
 
-  async def _discover_channel_drives(self) -> None:
-    """Walk the MLPrepRoot object tree to discover per-channel and module addresses by name.
+  async def discover_channel_drives(self, *, refresh: bool = False) -> ChannelDriveMap:
+    """Discover and cache detailed per-channel drive addresses from the object tree.
 
-    Channel drives (per pipettor channel, skipping "MPH Channel Root"):
-      MLPrepRoot → "Channel Root" → "Channel" → "Squeeze" → "SDrive" (sleeve sensor)
-      MLPrepRoot → "Channel Root" → "Channel" → "ZAxis" → "ZDrive"
-      MLPrepRoot → "Channel Root" → "NodeInformation"
+    This is an advanced/diagnostic operation and is intentionally not part of the
+    default setup flow to keep startup latency low.
 
-    Module-level objects (for firmware version queries):
-      MLPrepRoot → "MLPrepCpu"
-      MLPrepRoot → "PipettorRoot" → "ModuleInformation"
+    Args:
+      refresh: Force re-discovery even if a cache already exists.
 
-    All lookups are by object name, not hardcoded object IDs.
+    Returns:
+      A typed snapshot of discovered addresses and counts.
     """
-    self._channel_sleeve_sensor_addrs = []
-    self._channel_zdrive_addrs = []
-    self._channel_node_info_addrs = []
-    self._mlprep_cpu_addr = None
-    self._module_info_addr = None
+    if not refresh and self._channel_drive_map is not None:
+      return self._channel_drive_map
+
+    # Walk the MLPrepRoot object tree to discover per-channel and module addresses by name.
+    # Channel drives (per pipettor channel, skipping "MPH Channel Root"):
+    #   MLPrepRoot -> "Channel Root" -> "Channel" -> "Squeeze" -> "SDrive" (sleeve sensor)
+    #   MLPrepRoot -> "Channel Root" -> "Channel" -> "ZAxis" -> "ZDrive"
+    #   MLPrepRoot -> "Channel Root" -> "NodeInformation"
+    # Module-level objects (for firmware version queries):
+    #   MLPrepRoot -> "MLPrepCpu"
+    #   MLPrepRoot -> "PipettorRoot" -> "ModuleInformation"
+    # All lookups are by object name, not hardcoded object IDs.
+    sleeve_sensor_addrs: list[Address] = []
+    zdrive_addrs: list[Address] = []
+    node_info_addrs: list[Address] = []
+    mlprep_cpu_addr: Optional[Address] = None
+    module_info_addr: Optional[Address] = None
 
     nodes = await self.client.build_firmware_tree()
     if not nodes:
-      return
+      self._channel_drive_map = ChannelDriveMap(
+        sleeve_sensor_addrs=[],
+        zdrive_addrs=[],
+        node_info_addrs=[],
+        mlprep_cpu_addr=None,
+        module_info_addr=None,
+      )
+      return self._channel_drive_map
 
     indexed: dict[str, Address] = {path: addr for path, addr, _ in nodes}
-    self._module_info_addr = indexed.get("MLPrepRoot.PipettorRoot.ModuleInformation")
-    if self._module_info_addr is not None:
-      logger.debug("Discovered ModuleInformation at %s", self._module_info_addr)
+    module_info_addr = indexed.get("MLPrepRoot.PipettorRoot.ModuleInformation")
+    if module_info_addr is not None:
+      logger.debug("Discovered ModuleInformation at %s", module_info_addr)
 
     for path, sub_addr, sub_info in nodes:
       parts = path.split(".")
       if len(parts) == 2 and parts[-1] == "MLPrepCpu":
-        self._mlprep_cpu_addr = sub_addr
+        mlprep_cpu_addr = sub_addr
         logger.debug("Discovered MLPrepCpu at %s", sub_addr)
         continue
       if len(parts) != 2 or parts[-1] != "Channel Root":
@@ -640,17 +676,17 @@ class PrepBackend(LiquidHandlerBackend):
       node_info_addr = indexed.get(f"{path}.NodeInformation")
 
       if sdrive_addr is not None:
-        self._channel_sleeve_sensor_addrs.append(sdrive_addr)
+        sleeve_sensor_addrs.append(sdrive_addr)
       else:
         logger.warning("Channel Root on node %d: could not find Squeeze.SDrive", sub_addr.node)
 
       if zdrive_addr is not None:
-        self._channel_zdrive_addrs.append(zdrive_addr)
+        zdrive_addrs.append(zdrive_addr)
       else:
         logger.warning("Channel Root on node %d: could not find ZAxis.ZDrive", sub_addr.node)
 
       if node_info_addr is not None:
-        self._channel_node_info_addrs.append(node_info_addr)
+        node_info_addrs.append(node_info_addr)
       else:
         logger.warning("Channel Root on node %d: could not find NodeInformation", sub_addr.node)
 
@@ -663,8 +699,16 @@ class PrepBackend(LiquidHandlerBackend):
       )
 
     logger.info(
-      "Discovered %d pipettor channel drive pairs", len(self._channel_sleeve_sensor_addrs)
+      "Discovered %d pipettor channel drive pairs", len(sleeve_sensor_addrs)
     )
+    self._channel_drive_map = ChannelDriveMap(
+      sleeve_sensor_addrs=sleeve_sensor_addrs,
+      zdrive_addrs=zdrive_addrs,
+      node_info_addrs=node_info_addrs,
+      mlprep_cpu_addr=mlprep_cpu_addr,
+      module_info_addr=module_info_addr,
+    )
+    return self._channel_drive_map
 
   async def _run_initialize(self, smart: bool):
     """Send PrepCmd.PrepInitialize to MLPrep (shared by setup)."""
@@ -2418,24 +2462,27 @@ class PrepBackend(LiquidHandlerBackend):
 
     Analogous to STARBackend.request_firmware_version().
     """
-    if self._mlprep_cpu_addr is None:
+    drive_map = await self.discover_channel_drives()
+    if drive_map.mlprep_cpu_addr is None:
       return None
-    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=8)
+    return await self._query_firmware_string(drive_map.mlprep_cpu_addr, cmd_id=8)
 
   async def request_device_serial_number(self) -> Optional[str]:
     """Request the instrument serial number.
 
     Analogous to STARBackend.request_device_serial_number().
     """
-    if self._mlprep_cpu_addr is None:
+    drive_map = await self.discover_channel_drives()
+    if drive_map.mlprep_cpu_addr is None:
       return None
-    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=9)
+    return await self._query_firmware_string(drive_map.mlprep_cpu_addr, cmd_id=9)
 
   async def request_bootloader_version(self) -> Optional[str]:
     """Request the instrument bootloader version string."""
-    if self._mlprep_cpu_addr is None:
+    drive_map = await self.discover_channel_drives()
+    if drive_map.mlprep_cpu_addr is None:
       return None
-    return await self._query_firmware_string(self._mlprep_cpu_addr, cmd_id=2, iface_id=2)
+    return await self._query_firmware_string(drive_map.mlprep_cpu_addr, cmd_id=2, iface_id=2)
 
   async def request_pip_channel_version(self, channel: int) -> Optional[str]:
     """Request the firmware version string for a pipettor channel.
@@ -2445,10 +2492,11 @@ class PrepBackend(LiquidHandlerBackend):
 
     Analogous to STARBackend.request_pip_channel_version().
     """
-    if channel >= len(self._channel_node_info_addrs):
+    drive_map = await self.discover_channel_drives()
+    if channel >= len(drive_map.node_info_addrs):
       return None
     return await self._query_firmware_string(
-      self._channel_node_info_addrs[channel], cmd_id=8, iface_id=1
+      drive_map.node_info_addrs[channel], cmd_id=8, iface_id=1
     )
 
   async def request_pip_channel_serial_number(self, channel: int) -> Optional[str]:
@@ -2457,23 +2505,26 @@ class PrepBackend(LiquidHandlerBackend):
     Args:
       channel: Channel index (0=rearmost).
     """
-    if channel >= len(self._channel_node_info_addrs):
+    drive_map = await self.discover_channel_drives()
+    if channel >= len(drive_map.node_info_addrs):
       return None
     return await self._query_firmware_string(
-      self._channel_node_info_addrs[channel], cmd_id=9, iface_id=1
+      drive_map.node_info_addrs[channel], cmd_id=9, iface_id=1
     )
 
   async def request_module_version(self) -> Optional[str]:
     """Request the pipettor module version string (from PipettorRoot.ModuleInformation)."""
-    if self._module_info_addr is None:
+    drive_map = await self.discover_channel_drives()
+    if drive_map.module_info_addr is None:
       return None
-    return await self._query_firmware_string(self._module_info_addr, cmd_id=8)
+    return await self._query_firmware_string(drive_map.module_info_addr, cmd_id=8)
 
   async def request_module_part_number(self) -> Optional[str]:
     """Request the firmware part number (from PipettorRoot.ModuleInformation)."""
-    if self._module_info_addr is None:
+    drive_map = await self.discover_channel_drives()
+    if drive_map.module_info_addr is None:
       return None
-    return await self._query_firmware_string(self._module_info_addr, cmd_id=5)
+    return await self._query_firmware_string(drive_map.module_info_addr, cmd_id=5)
 
   # ---------------------------------------------------------------------------
   # Channel position queries
@@ -2803,20 +2854,21 @@ class PrepBackend(LiquidHandlerBackend):
     at object_id 514, but it reads the sleeve displacement sensor independently of
     the squeeze motor state.
 
-    Channel addresses are discovered from the object tree at setup time
-    (stored in ``_channel_sleeve_sensor_addrs``), so this works regardless of the
-    node IDs assigned by the firmware on a given instrument.
+    Channel addresses are discovered lazily from the object tree and cached in
+    ``ChannelDriveMap``, so this works regardless of the node IDs
+    assigned by the firmware on a given instrument.
 
     Returns:
       List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
     import struct as _struct
 
-    if not self._channel_sleeve_sensor_addrs:
-      raise RuntimeError("No channel sleeve sensor addresses discovered. Call setup() first.")
+    drive_map = await self.discover_channel_drives()
+    if not drive_map.sleeve_sensor_addrs:
+      raise RuntimeError("No channel sleeve sensor addresses discovered.")
 
     results: list[bool] = []
-    for addr in self._channel_sleeve_sensor_addrs:
+    for addr in drive_map.sleeve_sensor_addrs:
       Cmd = type(
         "_GetTipPresent",
         (PrepCmd._PrepStatusQuery,),
