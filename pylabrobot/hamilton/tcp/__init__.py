@@ -2,7 +2,7 @@
 
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.hamilton.tcp.introspection import HamiltonIntrospection, MethodInfo, ObjectInfo
+from pylabrobot.hamilton.tcp.introspection import MethodInfo, ObjectInfo
 from pylabrobot.hamilton.tcp.messages import (
   CommandMessage,
   CommandResponse,
@@ -43,7 +43,6 @@ __all__ = [
   "HamiltonCommand",
   "HamiltonTCPClient",
   "HamiltonDataType",
-  "HamiltonIntrospection",
   "HamiltonProtocol",
   "HarpPacket",
   "HarpTransportableProtocol",

@@ -1,27 +1,45 @@
 """Hamilton TCP Introspection API.
 
-Wraps HamiltonTCPClient to provide dynamic discovery of instrument capabilities
-via Interface 0 methods (GetObject, GetMethod, GetStructs, GetEnums,
-GetInterfaces, GetSubobjectAddress).
+Wraps a session backend (:class:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient`)
+to provide dynamic discovery via Interface 0 methods (GetObject, GetMethod,
+GetStructs, GetEnums, GetInterfaces, GetSubobjectAddress).
 
-Canonical usage::
+**Canonical usage:** use :attr:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient.introspection`
+(do not construct :class:`HamiltonIntrospection` from application code).
 
-    intro = HamiltonIntrospection(client)                    # standalone
-    intro = HamiltonIntrospection(lh.backend.client)         # from LiquidHandler
+**Runtime defaults (lazy, cache-friendly):**
 
-    # Build a cached registry for one object (uses InterfaceDescriptors):
-    registry = await intro.build_type_registry("MLPrepRoot.MphRoot.MPH")
-    registry.print_summary()
+- :meth:`~HamiltonIntrospection.ensure_method_table` /
+  :meth:`~HamiltonIntrospection.methods_for_interface` — scan GetMethod once per object.
+- :meth:`~HamiltonIntrospection.ensure_structs_enums` — fetch GetStructs/GetEnums per
+  HO interface when needed (e.g. for signature resolution).
+- :meth:`~HamiltonIntrospection.ensure_global_type_pool` — build
+  :class:`GlobalTypePool` once per session for ``source_id=1`` refs.
+- :meth:`~HamiltonIntrospection.resolve_signature` — resolves a method string without
+  a pre-built :class:`TypeRegistry` (unless you pass one).
 
-    # Resolve a method signature:
-    sig = await intro.resolve_signature("MLPrepRoot.MphRoot.MPH", 1, 9, registry)
+**Export / parity / codegen (eager composed dumps):**
+
+- :meth:`~HamiltonIntrospection.build_type_registry` — full structs/enums per
+  interface (same wire as composing :meth:`~HamiltonIntrospection.ensure_structs_enums`
+  for each iface).
+- :meth:`~HamiltonIntrospection.build_global_type_pool` — full global walk (does not
+  use the session singleton; use :meth:`~HamiltonIntrospection.ensure_global_type_pool`
+  for lazy ``source_id=1`` resolution).
+
+Example (typical notebook)::
+
+    client = HamiltonTCPClient(host=..., port=...)
+    await client.setup()
+    intro = client.introspection
+    sig = await intro.resolve_signature("MLPrepRoot.MphRoot.MPH", 1, 9)
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Set, TypeVar, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Set, Tuple, Union, cast
 
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.hamilton.tcp.messages import (
@@ -46,6 +64,49 @@ from pylabrobot.hamilton.tcp.wire_types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class HamiltonTCPIntrospectionBackend(Protocol):
+  """Structural type for objects passed to :class:`HamiltonIntrospection`.
+
+  **Production:** :class:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient` implements this
+  Protocol (transport, registry, session caches, ``send_command``).
+
+  **Tests:** provide a minimal object with the same methods/properties so introspection can be
+  exercised without a socket—see ``tcp_tests`` (e.g. fake ``Backend`` with registry roots and
+  patched ``HamiltonIntrospection`` methods). This is a typing contract only; there is no separate
+  runtime "backend" class besides the client.
+  """
+
+  @property
+  def registry(self) -> Any: ...
+
+  def get_root_object_addresses(self) -> list[Address]: ...
+
+  @property
+  def global_object_addresses(self) -> Sequence[Address]: ...
+
+  async def send_command(
+    self,
+    command: HamiltonCommand,
+    *,
+    ensure_connection: bool = True,
+    return_raw: bool = False,
+    raise_on_error: bool = True,
+    read_timeout: Optional[float] = None,
+  ) -> Any: ...
+
+  async def resolve_path(self, path: str) -> Address: ...
+
+
+async def _subobject_address_and_info(
+  intro: "HamiltonIntrospection", parent_addr: Address, index: int
+) -> Tuple[Address, ObjectInfo]:
+  """Resolve one subobject index to ``(address, ObjectInfo)`` (shared resolve/tree path)."""
+  sub_addr = await intro.get_subobject_address(parent_addr, index)
+  sub_info = await intro.get_object(sub_addr)
+  return sub_addr, sub_info
+
 
 # Connection/transport errors that should propagate immediately rather than
 # being swallowed by introspection catch blocks. A dead connection would
@@ -81,7 +142,7 @@ def resolve_type_id(type_id: int) -> str:
       Human-readable type name
   """
   try:
-    return HamiltonDataType(type_id).name
+    return cast(str, HamiltonDataType(type_id).name)
   except ValueError:
     return f"UNKNOWN_TYPE_{type_id}"
 
@@ -93,110 +154,63 @@ def resolve_type_id(type_id: int) -> str:
 # Rows = firmware scalar or array kinds; columns = In, Out, InOut, RetVal
 # (HoiParameterType.Direction). Source: vendor protocol reference mHoiParamTypes[31,4].
 
-_HOI_DOTNET_TYPE_ROWS: tuple[str, ...] = (
-  "i8",
-  "i16",
-  "i32",
-  "u8",
-  "u16",
-  "u32",
-  "str",
-  "bool",
-  "i8[]",
-  "i16[]",
-  "i32[]",
-  "u8[]",
-  "u16[]",
-  "u32[]",
-  "bool[]",
-  "HcResult",
-  "struct",
-  "struct[]",
-  "str[]",
-  "enum",
-  "enum[]",
-  "i64",
-  "u64",
-  "f32",
-  "f64",
-  "i64[]",
-  "u64[]",
-  "f32[]",
-  "f64[]",
-  "HoiResult",
-  "padding",
+
+@dataclass(frozen=True)
+class _HoiTypeRow:
+  """One row in vendor mHoiParamTypes[31,4] with readable display metadata."""
+
+  dotnet_name: str
+  display_name: str
+  ids: tuple[int, int, int, int]  # [In, Out, InOut, RetVal]
+
+
+_HOI_TYPE_ROWS: tuple[_HoiTypeRow, ...] = (
+  _HoiTypeRow("i8", "i8", (1, 17, 9, 25)),
+  _HoiTypeRow("i16", "i16", (3, 19, 11, 27)),
+  _HoiTypeRow("i32", "i32", (5, 21, 13, 29)),
+  _HoiTypeRow("u8", "u8", (2, 18, 10, 26)),
+  _HoiTypeRow("u16", "u16", (4, 20, 12, 28)),
+  _HoiTypeRow("u32", "u32", (6, 22, 14, 30)),
+  _HoiTypeRow("str", "str", (7, 23, 15, 31)),
+  _HoiTypeRow("bool", "bool", (33, 35, 34, 36)),
+  _HoiTypeRow("i8[]", "List[i8]", (37, 39, 38, 40)),
+  _HoiTypeRow("i16[]", "List[i16]", (41, 43, 42, 44)),
+  _HoiTypeRow("i32[]", "List[i32]", (49, 51, 50, 52)),
+  _HoiTypeRow("u8[]", "bytes", (8, 24, 16, 32)),
+  _HoiTypeRow("u16[]", "List[u16]", (45, 47, 46, 48)),
+  _HoiTypeRow("u32[]", "List[u32]", (53, 55, 54, 56)),
+  _HoiTypeRow("bool[]", "List[bool]", (66, 68, 67, 69)),
+  _HoiTypeRow("HcResult", "HcResult", (70, 72, 71, 73)),
+  _HoiTypeRow("struct", "struct", (57, 59, 58, 60)),
+  _HoiTypeRow("struct[]", "List[struct]", (61, 63, 62, 64)),
+  _HoiTypeRow("str[]", "List[str]", (74, 76, 75, 77)),
+  _HoiTypeRow("enum", "enum", (78, 80, 79, 81)),
+  _HoiTypeRow("enum[]", "List[enum]", (82, 84, 83, 85)),
+  _HoiTypeRow("i64", "i64", (86, 88, 87, 89)),
+  _HoiTypeRow("u64", "u64", (90, 92, 91, 93)),
+  _HoiTypeRow("f32", "f32", (94, 96, 95, 97)),
+  _HoiTypeRow("f64", "f64", (98, 100, 99, 101)),
+  _HoiTypeRow("i64[]", "List[i64]", (102, 104, 103, 105)),
+  _HoiTypeRow("u64[]", "List[u64]", (106, 108, 107, 109)),
+  _HoiTypeRow("f32[]", "List[f32]", (110, 112, 111, 113)),
+  _HoiTypeRow("f64[]", "List[f64]", (114, 116, 115, 117)),
+  _HoiTypeRow("HoiResult", "HoiResult", (118, 120, 119, 121)),
+  _HoiTypeRow("padding", "padding", (0, 0, 0, 0)),
+)
+
+_COMPLEX_METHOD_ROW_NAMES = frozenset(
+  {
+    "HcResult",
+    "struct",
+    "struct[]",
+    "str[]",
+    "enum",
+    "enum[]",
+    "HoiResult",
+  }
 )
 
 _HOI_PARAM_DIRECTION: tuple[str, ...] = ("In", "Out", "InOut", "RetVal")
-
-# type_ids per row [In, Out, InOut, RetVal] — ord() of each C# string cell (row 30 unused).
-_HOI_PARAM_TYPE_GRID: tuple[tuple[int, int, int, int], ...] = (
-  (1, 17, 9, 25),
-  (3, 19, 11, 27),
-  (5, 21, 13, 29),
-  (2, 18, 10, 26),
-  (4, 20, 12, 28),
-  (6, 22, 14, 30),
-  (7, 23, 15, 31),
-  (33, 35, 34, 36),
-  (37, 39, 38, 40),
-  (41, 43, 42, 44),
-  (49, 51, 50, 52),
-  (8, 24, 16, 32),
-  (45, 47, 46, 48),
-  (53, 55, 54, 56),
-  (66, 68, 67, 69),
-  (70, 72, 71, 73),
-  (57, 59, 58, 60),
-  (61, 63, 62, 64),
-  (74, 76, 75, 77),
-  (78, 80, 79, 81),
-  (82, 84, 83, 85),
-  (86, 88, 87, 89),
-  (90, 92, 91, 93),
-  (94, 96, 95, 97),
-  (98, 100, 99, 101),
-  (102, 104, 103, 105),
-  (106, 108, 107, 109),
-  (110, 112, 111, 113),
-  (114, 116, 115, 117),
-  (118, 120, 119, 121),
-  (0, 0, 0, 0),
-)
-
-_ROW_DISPLAY: dict[str, str] = {
-  "i8": "i8",
-  "i16": "i16",
-  "i32": "i32",
-  "u8": "u8",
-  "u16": "u16",
-  "u32": "u32",
-  "str": "str",
-  "bool": "bool",
-  "i8[]": "List[i8]",
-  "i16[]": "List[i16]",
-  "i32[]": "List[i32]",
-  "u8[]": "bytes",
-  "u16[]": "List[u16]",
-  "u32[]": "List[u32]",
-  "bool[]": "List[bool]",
-  "HcResult": "HcResult",
-  "struct": "struct",
-  "struct[]": "List[struct]",
-  "str[]": "List[str]",
-  "enum": "enum",
-  "enum[]": "List[enum]",
-  "i64": "i64",
-  "u64": "u64",
-  "f32": "f32",
-  "f64": "f64",
-  "i64[]": "List[i64]",
-  "u64[]": "List[u64]",
-  "f32[]": "List[f32]",
-  "f64[]": "List[f64]",
-  "HoiResult": "HoiResult",
-  "padding": "padding",
-}
 
 
 def _build_introspection_maps() -> tuple[dict[int, str], set[int], set[int], set[int], set[int]]:
@@ -205,15 +219,12 @@ def _build_introspection_maps() -> tuple[dict[int, str], set[int], set[int], set
   ret_el_ids: set[int] = set()
   ret_val_ids: set[int] = set()
   complex_method_ids: set[int] = set()
-  complex_rows = frozenset({15, 16, 17, 18, 19, 20, 29})
-
-  for ri, row in enumerate(_HOI_PARAM_TYPE_GRID):
-    base_key = _HOI_DOTNET_TYPE_ROWS[ri]
-    for ci, tid in enumerate(row):
+  for row in _HOI_TYPE_ROWS:
+    for ci, tid in enumerate(row.ids):
       if tid == 0:
         continue
       d = _HOI_PARAM_DIRECTION[ci]
-      disp = _ROW_DISPLAY.get(base_key, base_key)
+      disp = row.display_name
       names[tid] = f"{disp} [{d}]"
       if ci in (0, 2):
         arg_ids.add(tid)
@@ -221,7 +232,7 @@ def _build_introspection_maps() -> tuple[dict[int, str], set[int], set[int], set
         ret_el_ids.add(tid)
       elif ci == 3:
         ret_val_ids.add(tid)
-      if ri in complex_rows:
+      if row.dotnet_name in _COMPLEX_METHOD_ROW_NAMES:
         complex_method_ids.add(tid)
 
   return names, arg_ids, ret_el_ids, ret_val_ids, complex_method_ids
@@ -235,13 +246,15 @@ def _build_introspection_maps() -> tuple[dict[int, str], set[int], set[int], set
   _COMPLEX_METHOD_TYPE_IDS,
 ) = _build_introspection_maps()
 
-# Empirical / device-specific id observed in the wild (not in HoiObject 31×4 grid).
+# Empirical device behavior: type_id=113 appears as Argument on some firmware,
+# despite the static grid column implying RetVal.
 _INTROSPECTION_TYPE_NAMES[113] = "List[f32] [In] (empirical)"
 _ARGUMENT_TYPE_IDS.add(113)
 
 _COMPLEX_STRUCT_TYPE_IDS = {30, 31, 32, 35}  # STRUCTURE=30, STRUCT_ARRAY=31, ENUM=32, ENUM_ARRAY=35
-# Backward-compat alias (used by ParameterType.is_complex for method parameters)
-_COMPLEX_TYPE_IDS = _COMPLEX_METHOD_TYPE_IDS
+_STRUCT_REF_TYPE_IDS = frozenset({30, 31, 57, 60, 61, 63, 64})
+_ENUM_REF_TYPE_IDS = frozenset({32, 35, 78, 81, 82, 85})
+_ALL_COMPLEX_TYPE_IDS = frozenset(_COMPLEX_METHOD_TYPE_IDS | _COMPLEX_STRUCT_TYPE_IDS)
 
 
 def get_introspection_type_category(type_id: int) -> str:
@@ -325,7 +338,10 @@ class ObjectRegistry:
     parent_path = ".".join(parts[:-1])
     child_name = parts[-1]
 
-    introspection = HamiltonIntrospection(transport)
+    introspection_obj = getattr(transport, "introspection", None)
+    if introspection_obj is None:
+      raise TypeError("ObjectRegistry.resolve requires transport.introspection")
+    introspection = cast("HamiltonIntrospection", introspection_obj)
     if not parent_path:
       if not self._root_addresses:
         raise KeyError("No root addresses; run discovery first")
@@ -339,7 +355,7 @@ class ObjectRegistry:
 
     parent_addr = await self.resolve(parent_path, transport)
     parent_info = self._objects[parent_path]
-    supported = await transport.get_supported_interface0_method_ids(parent_addr)
+    supported = await introspection.get_supported_interface0_method_ids(parent_addr)
     if GET_SUBOBJECT_ADDRESS not in supported:
       raise KeyError(
         f"Object at path '{parent_path}' does not support GetSubobjectAddress "
@@ -347,8 +363,7 @@ class ObjectRegistry:
       )
 
     for i in range(parent_info.subobject_count):
-      sub_addr = await introspection.get_subobject_address(parent_addr, i)
-      sub_info = await introspection.get_object(sub_addr)
+      sub_addr, sub_info = await _subobject_address_and_info(introspection, parent_addr, i)
       sub_info.children = {}
       child_path = f"{parent_path}.{sub_info.name}"
       parent_info.children[sub_info.name] = sub_info
@@ -369,7 +384,9 @@ class FirmwareTreeNode:
   supported_interface0_methods: Set[int] = field(default_factory=set)
   children: List["FirmwareTreeNode"] = field(default_factory=list)
 
-  def format_lines(self, prefix: str = "", is_last: bool = True, is_root: bool = False) -> List[str]:
+  def format_lines(
+    self, prefix: str = "", is_last: bool = True, is_root: bool = False
+  ) -> List[str]:
     # Most objects expose the full Interface-0 contract (1..6). Hide it in
     # default rendering to keep large trees readable; only show deviations.
     full_i0_contract = {1, 2, 3, 4, 5, 6}
@@ -435,17 +452,17 @@ class ParameterType:
   @property
   def is_complex(self) -> bool:
     """True if this is a 3-byte complex reference (method param or struct field)."""
-    return self.type_id in (_COMPLEX_METHOD_TYPE_IDS | _COMPLEX_STRUCT_TYPE_IDS)
+    return self.type_id in _ALL_COMPLEX_TYPE_IDS
 
   @property
   def is_struct_ref(self) -> bool:
     """True if this is a struct reference (type 30 in struct context, 57/61 in method context)."""
-    return self.type_id in {30, 31, 57, 60, 61, 63, 64}
+    return self.type_id in _STRUCT_REF_TYPE_IDS
 
   @property
   def is_enum_ref(self) -> bool:
     """True if this is an enum reference (type 32 in struct context, 78/81/82/85 in method)."""
-    return self.type_id in {32, 35, 78, 81, 82, 85}
+    return self.type_id in _ENUM_REF_TYPE_IDS
 
   def resolve_name(
     self,
@@ -456,7 +473,7 @@ class ParameterType:
 
     For source_id=2 (local) refs, pass ``ho_interface_id`` (the HOI interface id
     of the method or struct owning this type) so resolution uses that interface's
-    table only. If omitted, registry falls back to multi-interface heuristics.
+    table only.
     """
     base = resolve_introspection_type_name(self.type_id)
     if not self.is_complex or self.source_id is None or self.ref_id is None:
@@ -674,35 +691,6 @@ class MethodInfo:
     return self.describe(registry).to_dict()
 
 
-_TLocal = TypeVar("_TLocal")
-
-
-def _lookup_local_table_entry(
-  tables: Dict[int, Dict[int, _TLocal]],
-  ref_id: int,
-) -> Optional[_TLocal]:
-  """Resolve source_id=2 (local) refs when HOI interface id is unknown.
-
-  ref_id is 1-based; struct/enum_id in tables is 0-based. Tables are keyed by HOI
-  interface id from InterfaceDescriptors (e.g. 1 for API, 0 for introspection), not
-  by the literal ``2`` in the wire triple. Prefers interface 1 when present, then
-  scans other non-zero keys — unsafe if two interfaces reuse the same local index
-  with different meanings. Prefer ``TypeRegistry.resolve_*(..., ho_interface_id=…)``.
-  """
-  idx = ref_id - 1
-  if idx < 0:
-    return None
-  if 1 in tables:
-    hit = tables[1].get(idx)
-    if hit is not None:
-      return hit
-  for iid in sorted(k for k in tables if k != 0 and k != 1):
-    hit = tables[iid].get(idx)
-    if hit is not None:
-      return hit
-  return None
-
-
 @dataclass
 class TypeRegistry:
   """Resolved type information for one object.
@@ -727,14 +715,17 @@ class TypeRegistry:
   vs. this registry should be validated on hardware — do not assume the same 1-based rule
   as source_id=2 locals.
 
-  For source_id=2, pass ``ho_interface_id`` on ``resolve_struct`` / ``resolve_enum`` whenever
-  the owning method or struct's interface is known (strict table lookup). Omitting it uses
-  a legacy multi-interface fallback that may be ambiguous if two interfaces share a local index.
+  For source_id=2, pass ``ho_interface_id`` on ``resolve_struct`` / ``resolve_enum`` so
+  lookup is strict to the owning interface's local table.
 
-  Example:
+  Example (full export registry)::
+
     registry = await intro.build_type_registry(mph_addr)
     method = registry.get_method(interface_id=1, method_id=9)
     print(method.get_signature_string(registry))  # PickupTips(tipParameters: PickupTipParameters, ...)
+
+  For notebooks and runtime tooling, prefer :meth:`~HamiltonIntrospection.resolve_signature`
+  (lazy types) instead of building a full registry first.
   """
 
   address: Optional[Address] = None
@@ -755,9 +746,8 @@ class TypeRegistry:
 
     source_id=1: Global pool (1-based ref_id; see GlobalTypePool.resolve_struct).
     source_id=2: Local structs (1-based ref_id -> 0-based struct_id in
-      ``self.structs[ho_interface_id]``). Pass ``ho_interface_id`` for strict,
-      interface-scoped resolution; if omitted, uses multi-interface fallback
-      (see _lookup_local_table_entry).
+      ``self.structs[ho_interface_id]``). ``ho_interface_id`` is required for
+      deterministic interface-scoped resolution.
     """
     if source_id == 1 and self.global_pool is not None:
       return self.global_pool.resolve_struct(ref_id)
@@ -765,9 +755,9 @@ class TypeRegistry:
       idx = ref_id - 1
       if idx < 0:
         return None
-      if ho_interface_id is not None:
-        return self.structs.get(ho_interface_id, {}).get(idx)
-      return _lookup_local_table_entry(self.structs, ref_id)
+      if ho_interface_id is None:
+        return None
+      return self.structs.get(ho_interface_id, {}).get(idx)
     if source_id == 3:
       return _NETWORK_STRUCTS.get(ref_id)
     logger.warning("resolve_struct: unhandled source_id=%d ref_id=%d", source_id, ref_id)
@@ -783,8 +773,8 @@ class TypeRegistry:
     """Look up an enum by source_id and ref_id.
 
     source_id=1: Global pool (1-based ref_id).
-    source_id=2: Local enums (same rules as resolve_struct). Pass ``ho_interface_id``
-      for strict resolution; if omitted, multi-interface fallback applies.
+    source_id=2: Local enums (same rules as resolve_struct). ``ho_interface_id`` is
+      required for strict interface-scoped resolution.
     """
     if source_id == 1 and self.global_pool is not None:
       return self.global_pool.resolve_enum(ref_id)
@@ -792,9 +782,9 @@ class TypeRegistry:
       idx = ref_id - 1
       if idx < 0:
         return None
-      if ho_interface_id is not None:
-        return self.enums.get(ho_interface_id, {}).get(idx)
-      return _lookup_local_table_entry(self.enums, ref_id)
+      if ho_interface_id is None:
+        return None
+      return self.enums.get(ho_interface_id, {}).get(idx)
     return self.enums.get(source_id, {}).get(ref_id)
 
   def get_method(self, interface_id: int, method_id: int) -> Optional[MethodInfo]:
@@ -1119,7 +1109,7 @@ class GetMethodCommand(HamiltonCommand):
       else:
         raise ValueError(
           f"Unknown introspection type_id={pt.type_id} ({resolve_introspection_type_name(pt.type_id)}); "
-          "not in HoiObject mHoiParamTypes grid — update _HOI_PARAM_TYPE_GRID or add an override."
+          "not in HoiObject mHoiParamTypes grid — update _HOI_TYPE_ROWS or add an override."
         )
 
     return {
@@ -1267,15 +1257,264 @@ class HamiltonIntrospection:
   Uses the object's method table (GetMethod) to determine which Interface 0
   methods are supported and only calls those. Interfaces are per-object;
   there is no aggregation from children.
+
+  Prefer :attr:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient.introspection`
+  over constructing this class directly.
   """
 
-  def __init__(self, backend):
+  def __init__(self, backend: HamiltonTCPIntrospectionBackend):
     """Initialize introspection API.
 
     Args:
-      backend: TCPBackend instance
+      backend: Session implementing :class:`HamiltonTCPIntrospectionBackend`
     """
     self.backend = backend
+    # Session caches (invalidated when the client drops the introspection facet, e.g. reconnect).
+    self._method_table_by_address: Dict[Address, List[MethodInfo]] = {}
+    self._structs_by_addr_iface: Dict[Tuple[Address, int], Dict[int, StructInfo]] = {}
+    self._enums_by_addr_iface: Dict[Tuple[Address, int], Dict[int, EnumInfo]] = {}
+    self._iface_types_loaded: Set[Tuple[Address, int]] = set()
+    self._interfaces_by_address: Dict[Address, List[InterfaceInfo]] = {}
+    self._hc_result_text_by_addr_iface: Dict[Tuple[Address, int], Dict[int, str]] = {}
+    self._supported_i0_by_address: Dict[Address, Set[int]] = {}
+    self._global_type_pool_singleton: Optional[GlobalTypePool] = None
+    self._firmware_tree_cache: Optional[FirmwareTree] = None
+
+  def clear_session_caches(self) -> None:
+    """Drop cached method tables, per-interface structs/enums, and the global type pool."""
+    self._method_table_by_address.clear()
+    self._structs_by_addr_iface.clear()
+    self._enums_by_addr_iface.clear()
+    self._iface_types_loaded.clear()
+    self._interfaces_by_address.clear()
+    self._hc_result_text_by_addr_iface.clear()
+    self._supported_i0_by_address.clear()
+    self._global_type_pool_singleton = None
+    self._firmware_tree_cache = None
+
+  def _attach_iface_types_to_registry(
+    self, registry: TypeRegistry, addr: Address, iface_id: int
+  ) -> None:
+    """Copy cached structs/enums for (addr, iface_id) into *registry*."""
+    key = (addr, iface_id)
+    if key in self._structs_by_addr_iface:
+      registry.structs[iface_id] = dict(self._structs_by_addr_iface[key])
+    if key in self._enums_by_addr_iface:
+      registry.enums[iface_id] = dict(self._enums_by_addr_iface[key])
+
+  async def _ensure_parameter_types_for_signature(
+    self,
+    addr: Address,
+    method: MethodInfo,
+    registry: TypeRegistry,
+  ) -> None:
+    """Load structs/enums needed to resolve *method* signatures (recursive struct walk)."""
+    seen_structs: Set[Tuple[int, int]] = set()
+    max_nodes = 256
+
+    async def walk(types: List[ParameterType], ho_iface: int) -> None:
+      for pt in types:
+        if not pt.is_complex or pt.source_id is None or pt.ref_id is None:
+          continue
+        if pt.source_id in (1, 3):
+          continue
+        if pt.source_id != 2:
+          continue
+        if pt.is_enum_ref:
+          await self.ensure_structs_enums(addr, ho_iface)
+          self._attach_iface_types_to_registry(registry, addr, ho_iface)
+          continue
+        if pt.is_struct_ref:
+          await self.ensure_structs_enums(addr, ho_iface)
+          self._attach_iface_types_to_registry(registry, addr, ho_iface)
+          st = registry.resolve_struct(2, pt.ref_id, ho_interface_id=ho_iface)
+          if st is None:
+            continue
+          field_iface = st.interface_id if st.interface_id is not None else ho_iface
+          sig = (field_iface, st.struct_id)
+          if sig in seen_structs:
+            continue
+          if len(seen_structs) >= max_nodes:
+            logger.warning(
+              "signature struct walk exceeded %d nodes for %s.%s",
+              max_nodes,
+              method.name,
+              st.name,
+            )
+            return
+          seen_structs.add(sig)
+          await walk(list(st.fields.values()), field_iface)
+
+    await walk(method.parameter_types, method.interface_id)
+    await walk(method.return_types, method.interface_id)
+
+  async def _build_minimal_registry_for_signature(
+    self, addr: Address, method: MethodInfo
+  ) -> TypeRegistry:
+    """TypeRegistry with global pool + lazily filled local tables for *method*."""
+    pool = await self.ensure_global_type_pool()
+    registry = TypeRegistry(address=addr, global_pool=pool)
+    await self._ensure_parameter_types_for_signature(addr, method, registry)
+    return registry
+
+  async def _build_global_type_pool_impl(self, global_addresses: List[Address]) -> GlobalTypePool:
+    """Walk global objects and build a :class:`GlobalTypePool` (full firmware-scale pass)."""
+    pool = GlobalTypePool()
+
+    for addr in global_addresses:
+      try:
+        supported = await self.get_supported_interface0_method_ids(addr)
+        if GET_INTERFACES not in supported:
+          continue
+
+        interfaces = await self.get_interfaces(addr, _supported=supported)
+        for iface in interfaces:
+          if GET_STRUCTS in supported:
+            structs = await self.get_structs(addr, iface.interface_id)
+            pool.structs.extend(structs)
+            pool.interface_structs[iface.interface_id] = {s.struct_id: s for s in structs}
+          if GET_ENUMS in supported:
+            enums = await self.get_enums(addr, iface.interface_id)
+            pool.enums.extend(enums)
+      except _TRANSIENT_ERRORS:
+        raise
+      except Exception as e:
+        logger.warning("build_global_type_pool failed for %s: %s", addr, e)
+
+    logger.info(
+      "Global type pool built: %d structs, %d enums from %d global objects",
+      len(pool.structs),
+      len(pool.enums),
+      len(global_addresses),
+    )
+    return pool
+
+  async def ensure_method_table(
+    self,
+    address: Union[Address, str],
+    *,
+    _supported: Optional[Set[int]] = None,
+    _object_info: Optional[ObjectInfo] = None,
+  ) -> List[MethodInfo]:
+    """Scan Interface 0 GetMethod for *address* once and cache the full ``MethodInfo`` table.
+
+    Pass ``_object_info`` / ``_supported`` when the caller already has them to avoid redundant
+    Interface-0 queries on the cold path.
+    """
+    addr = await self._resolve_target_address(address)
+    cached = self._method_table_by_address.get(addr)
+    if cached is not None:
+      return cached
+    cached_supported = self._supported_i0_by_address.get(addr)
+    if cached_supported is not None and GET_METHOD not in cached_supported:
+      self._method_table_by_address[addr] = []
+      return []
+    if _supported is not None and GET_METHOD not in _supported:
+      self._supported_i0_by_address[addr] = set(_supported)
+      self._method_table_by_address[addr] = []
+      return []
+    if _object_info is None:
+      _object_info = await self.get_object(addr)
+    methods: List[MethodInfo] = []
+    for i in range(_object_info.method_count):
+      try:
+        method = await self.get_method(addr, i)
+        methods.append(method)
+      except _TRANSIENT_ERRORS:
+        raise
+      except Exception as e:
+        logger.warning("Failed to get method %d for %s: %s", i, addr, e)
+    self._method_table_by_address[addr] = methods
+    self._supported_i0_by_address[addr] = {m.method_id for m in methods if m.interface_id == 0}
+    return methods
+
+  async def methods_for_interface(
+    self, address: Union[Address, str], interface_id: int
+  ) -> List[MethodInfo]:
+    """Return methods for *interface_id* using the cached method table when warm."""
+    addr = await self._resolve_target_address(address)
+    table = await self.ensure_method_table(addr)
+    return [m for m in table if m.interface_id == interface_id]
+
+  async def ensure_structs_enums(self, address: Union[Address, str], interface_id: int) -> None:
+    """Run GetStructs/GetEnums for one HO interface and cache under ``(address, interface_id)``."""
+    addr = await self._resolve_target_address(address)
+    key = (addr, interface_id)
+    if key in self._iface_types_loaded:
+      return
+    supported = await self.get_supported_interface0_method_ids(addr)
+    structs_map: Dict[int, StructInfo] = {}
+    enums_map: Dict[int, EnumInfo] = {}
+    if GET_STRUCTS in supported:
+      structs = await self.get_structs(addr, interface_id)
+      structs_map = {s.struct_id: s for s in structs}
+    if GET_ENUMS in supported:
+      enums = await self.get_enums(addr, interface_id)
+      enums_map = {e.enum_id: e for e in enums}
+    self._structs_by_addr_iface[key] = structs_map
+    self._enums_by_addr_iface[key] = enums_map
+    hc_result = next((e for e in enums_map.values() if e.name == "HcResult"), None)
+    if hc_result is not None:
+      self._hc_result_text_by_addr_iface[key] = {int(v): n for n, v in hc_result.values.items()}
+    else:
+      self._hc_result_text_by_addr_iface[key] = {}
+    self._iface_types_loaded.add(key)
+
+  async def get_interface_name(
+    self, address: Union[Address, str], interface_id: int
+  ) -> Optional[str]:
+    """Return interface name for ``(address, interface_id)`` using session cache."""
+    addr = await self._resolve_target_address(address)
+    infos = self._interfaces_by_address.get(addr)
+    if infos is None:
+      infos = await self.get_interfaces(addr)
+      self._interfaces_by_address[addr] = infos
+    for info in infos:
+      if info.interface_id == interface_id:
+        return info.name
+    return None
+
+  async def get_hc_result_text(
+    self, address: Union[Address, str], interface_id: int, code: int
+  ) -> Optional[str]:
+    """Resolve HcResult enum text for one interface using cached enums."""
+    addr = await self._resolve_target_address(address)
+    key = (addr, interface_id)
+    if key not in self._iface_types_loaded:
+      await self.ensure_structs_enums(addr, interface_id)
+    return self._hc_result_text_by_addr_iface.get(key, {}).get(code)
+
+  async def ensure_global_type_pool(
+    self, global_addresses: Optional[Sequence[Address]] = None
+  ) -> GlobalTypePool:
+    """Return the session-global :class:`GlobalTypePool` (``source_id=1``), building once."""
+    if self._global_type_pool_singleton is not None:
+      return self._global_type_pool_singleton
+    addrs = (
+      list(global_addresses)
+      if global_addresses is not None
+      else list(self.backend.global_object_addresses)
+    )
+    self._global_type_pool_singleton = await self._build_global_type_pool_impl(addrs)
+    return self._global_type_pool_singleton
+
+  async def signature_lines_for_interface(
+    self,
+    address: Union[Address, str],
+    interface_id: int,
+    *,
+    max_methods: int = 50,
+  ) -> List[str]:
+    """Resolved signature strings for up to *max_methods* methods on *interface_id* (lazy types)."""
+    addr = await self._resolve_target_address(address)
+    methods = [m for m in await self.ensure_method_table(addr) if m.interface_id == interface_id][
+      :max_methods
+    ]
+    lines: List[str] = []
+    for m in methods:
+      reg = await self._build_minimal_registry_for_signature(addr, m)
+      lines.append(m.get_signature_string(reg))
+    return lines
 
   async def _resolve_target_address(self, addr_or_path: Union[Address, str]) -> Address:
     """Resolve Address or dot-path through the backend resolver consistently."""
@@ -1285,12 +1524,7 @@ class HamiltonIntrospection:
 
   async def _build_firmware_tree(self) -> FirmwareTree:
     """Build a DFS firmware tree from discovered root addresses."""
-    roots = list(getattr(self.backend, "_discovered_objects", {}).get("root", []))
-    if not roots:
-      registry = getattr(self.backend, "_registry", None)
-      if registry is not None and hasattr(registry, "get_root_addresses"):
-        roots = list(registry.get_root_addresses())
-
+    roots = self.backend.get_root_object_addresses()
     tree = FirmwareTree()
     if not roots:
       return tree
@@ -1313,9 +1547,7 @@ class HamiltonIntrospection:
         supported_interface0_methods=supported,
       )
 
-      registry = getattr(self.backend, "_registry", None)
-      if registry is not None and hasattr(registry, "register"):
-        registry.register(path, obj)
+      self.backend.registry.register(path, obj)
 
       # Keep this guard even though Interface-0 method 3 (GetSubobjectAddress)
       # appears ubiquitous in current PREP captures. If this remains stable
@@ -1325,8 +1557,7 @@ class HamiltonIntrospection:
 
       for i in range(obj.subobject_count):
         try:
-          sub_addr = await self.get_subobject_address(addr, i)
-          sub_obj = await self.get_object(sub_addr)
+          sub_addr, sub_obj = await _subobject_address_and_info(self, addr, i)
           obj.children[sub_obj.name] = sub_obj
           child_path = f"{path}.{sub_obj.name}"
           child = await walk(sub_addr, child_path)
@@ -1346,20 +1577,11 @@ class HamiltonIntrospection:
 
   async def get_firmware_tree(self, refresh: bool = False) -> FirmwareTree:
     """Return cached firmware tree, or build and cache it when missing."""
-    if not refresh:
-      cached = getattr(self.backend, "_firmware_tree_cache", None)
-      if isinstance(cached, FirmwareTree):
-        return cached
+    if not refresh and self._firmware_tree_cache is not None:
+      return self._firmware_tree_cache
 
-    tree = await self._build_firmware_tree()
-    setattr(self.backend, "_firmware_tree_cache", tree)
-    return tree
-
-  async def print_firmware_tree(self, refresh: bool = False) -> FirmwareTree:
-    """Print firmware tree text and return the tree object."""
-    tree = await self.get_firmware_tree(refresh=refresh)
-    print(tree)
-    return tree
+    self._firmware_tree_cache = await self._build_firmware_tree()
+    return self._firmware_tree_cache
 
   async def get_supported_interface0_method_ids(self, address: Address) -> Set[int]:
     """Return the set of Interface 0 method IDs this object supports.
@@ -1369,24 +1591,17 @@ class HamiltonIntrospection:
     Used to guard calls so we never send an Interface 0 command the object
     did not advertise.
     """
-    cached = getattr(self.backend, "get_supported_interface0_method_ids", None)
-    cache_store = getattr(self.backend, "_supported_interface0_method_ids", None)
-    has_capability_cache = isinstance(cache_store, dict)
-    if cached is not None and has_capability_cache:
-      return cast(Set[int], await cached(address))
+    cached = self._supported_i0_by_address.get(address)
+    if cached is not None:
+      return set(cached)
 
-    obj = await self.get_object(address)
-    supported: Set[int] = set()
-    for i in range(obj.method_count):
-      try:
-        method = await self.get_method(address, i)
-        if method.interface_id == 0:
-          supported.add(method.method_id)
-      except _TRANSIENT_ERRORS:
-        raise
-      except Exception as e:
-        logger.debug("get_method(%s, %d) failed: %s", address, i, e)
-    return supported
+    methods = self._method_table_by_address.get(address)
+    if methods is None:
+      obj = await self.get_object(address)
+      methods = await self.ensure_method_table(address, _object_info=obj)
+    supported = {m.method_id for m in methods if m.interface_id == 0}
+    self._supported_i0_by_address[address] = set(supported)
+    return set(supported)
 
   async def get_object(self, address: Address) -> ObjectInfo:
     """Get object metadata.
@@ -1486,7 +1701,7 @@ class HamiltonIntrospection:
 
     ids = list(response.interface_ids)
     names = list(response.interface_names)
-    return [
+    infos = [
       InterfaceInfo(
         interface_id=int(ids[i]),
         name=names[i] if i < len(names) else f"Interface_{ids[i]}",
@@ -1494,6 +1709,8 @@ class HamiltonIntrospection:
       )
       for i in range(len(ids))
     ]
+    self._interfaces_by_address[address] = infos
+    return infos
 
   async def get_enums(self, address: Address, interface_id: int) -> List[EnumInfo]:
     """Get enum definitions.
@@ -1601,48 +1818,6 @@ class HamiltonIntrospection:
       name_offset += cnt
     return result
 
-  async def get_all_methods(
-    self,
-    address: Address,
-    *,
-    _supported: Optional[Set[int]] = None,
-    _object_info: Optional[ObjectInfo] = None,
-  ) -> List[MethodInfo]:
-    """Get all methods for an object.
-
-    Returns [] if the object does not support GetMethod (interface 0, method 2).
-
-    Args:
-      address: Object address
-      _supported: Pre-computed supported Interface 0 method IDs (internal).
-      _object_info: Pre-fetched ObjectInfo (internal; avoids redundant GetObject).
-
-    Returns:
-      List of all method signatures
-    """
-    if _object_info is None:
-      _object_info = await self.get_object(address)
-    if _supported is None:
-      _supported = await self.get_supported_interface0_method_ids(address)
-    if GET_METHOD not in _supported:
-      logger.debug(
-        "Object at %s does not support GetMethod (interface 0, method 2); returning []",
-        address,
-      )
-      return []
-
-    methods = []
-    for i in range(_object_info.method_count):
-      try:
-        method = await self.get_method(address, i)
-        methods.append(method)
-      except _TRANSIENT_ERRORS:
-        raise
-      except Exception as e:
-        logger.warning(f"Failed to get method {i} for {address}: {e}")
-
-    return methods
-
   async def build_type_registry(
     self,
     address: Union[Address, str],
@@ -1679,19 +1854,14 @@ class HamiltonIntrospection:
       interfaces = []
 
     if GET_METHOD in _supported:
-      registry.methods = await self.get_all_methods(address, _supported=_supported)
+      registry.methods = await self.ensure_method_table(address)
     else:
       registry.methods = []
 
     for iface in interfaces:
-      if GET_STRUCTS in _supported:
-        structs = await self.get_structs(address, iface.interface_id)
-        if structs:
-          registry.structs[iface.interface_id] = {s.struct_id: s for s in structs}
-      if GET_ENUMS in _supported:
-        enums = await self.get_enums(address, iface.interface_id)
-        if enums:
-          registry.enums[iface.interface_id] = {e.enum_id: e for e in enums}
+      if GET_STRUCTS in _supported or GET_ENUMS in _supported:
+        await self.ensure_structs_enums(address, iface.interface_id)
+        self._attach_iface_types_to_registry(registry, address, iface.interface_id)
 
     return registry
 
@@ -1756,48 +1926,20 @@ class HamiltonIntrospection:
     self,
     global_addresses: List[Address],
   ) -> GlobalTypePool:
-    """Build the global type pool from global objects.
+    """Build a fresh global type pool from *global_addresses* (full walk; not the session singleton).
 
-    This mirrors piglet's approach: walk each global object, iterate its
-    interfaces, and collect all structs/enums in sequential encounter order.
-    The resulting flat pool is used for source_id=1 lookups (1-based indexing).
+    Mirrors piglet: walk each global object, iterate interfaces, collect structs/enums in
+    encounter order for ``source_id=1`` lookups. For lazy signature resolution on a live
+    session, use :meth:`ensure_global_type_pool` so the pool is built once and reused.
 
     Args:
       global_addresses: List of global object addresses
-        (from HamiltonTCPClient._global_object_addresses).
+        (from :attr:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient.global_object_addresses`).
 
     Returns:
       GlobalTypePool with all global structs and enums.
     """
-    pool = GlobalTypePool()
-
-    for addr in global_addresses:
-      try:
-        supported = await self.get_supported_interface0_method_ids(addr)
-        if GET_INTERFACES not in supported:
-          continue
-
-        interfaces = await self.get_interfaces(addr, _supported=supported)
-        for iface in interfaces:
-          if GET_STRUCTS in supported:
-            structs = await self.get_structs(addr, iface.interface_id)
-            pool.structs.extend(structs)
-            pool.interface_structs[iface.interface_id] = {s.struct_id: s for s in structs}
-          if GET_ENUMS in supported:
-            enums = await self.get_enums(addr, iface.interface_id)
-            pool.enums.extend(enums)
-      except _TRANSIENT_ERRORS:
-        raise
-      except Exception as e:
-        logger.warning("build_global_type_pool failed for %s: %s", addr, e)
-
-    logger.info(
-      "Global type pool built: %d structs, %d enums from %d global objects",
-      len(pool.structs),
-      len(pool.enums),
-      len(global_addresses),
-    )
-    return pool
+    return await self._build_global_type_pool_impl(global_addresses)
 
   async def get_method_by_id(
     self,
@@ -1826,7 +1968,7 @@ class HamiltonIntrospection:
       if cached is not None:
         return cached
     address = await self._resolve_target_address(address)
-    methods = await self.get_all_methods(address)
+    methods = await self.ensure_method_table(address)
     for m in methods:
       if m.interface_id == interface_id and m.method_id == method_id:
         return m
@@ -1839,14 +1981,15 @@ class HamiltonIntrospection:
     method_id: int,
     registry: Optional[TypeRegistry] = None,
   ) -> str:
-    """One-liner: return a fully resolved method signature string.
+    """Return a fully resolved method signature string.
 
-    Looks up the method and resolves struct/enum references using the
-    provided TypeRegistry (or falls back to unresolved names).
+    When *registry* is omitted, loads only the
+    method table, global pool, and structs/enums needed for this signature (no full
+    :meth:`build_type_registry`). Pass an explicit *registry* for export/golden parity.
 
     Example::
 
-      sig = await intro.resolve_signature("MLPrepRoot.MphRoot.MPH", 1, 9, mph_registry)
+      sig = await intro.resolve_signature("MLPrepRoot.MphRoot.MPH", 1, 9)
       print(sig)
       # PickupTips(tipParameters: PickupTipParameters, finalZ: f32, ...) -> ...
 
@@ -1854,312 +1997,17 @@ class HamiltonIntrospection:
       Human-readable signature string, or a descriptive error string.
     """
     address = await self._resolve_target_address(address)
-    method = await self.get_method_by_id(address, interface_id, method_id, registry=registry)
+    if registry is not None:
+      method = await self.get_method_by_id(address, interface_id, method_id, registry=registry)
+      if method is None:
+        return f"<method not found: iface={interface_id} id={method_id} at {address}>"
+      return method.get_signature_string(registry)
+    methods = await self.ensure_method_table(address)
+    method = next(
+      (m for m in methods if m.interface_id == interface_id and m.method_id == method_id),
+      None,
+    )
     if method is None:
       return f"<method not found: iface={interface_id} id={method_id} at {address}>"
-    return method.get_signature_string(registry)
-
-
-# ============================================================================
-# STRUCT / COMMAND VALIDATION
-# ============================================================================
-
-
-def _normalize_name(name: str) -> str:
-  """Normalize a name for comparison (remove underscores, make lowercase).
-
-  Allows Pythonic `snake_case` (e.g. `z_liquid_exit_speed`) to match
-  Hamilton's arbitrary PascalCase (`ZLiquidExitSpeed` or `Zliquidexitspeed`).
-  """
-  return name.replace("_", "").lower()
-
-
-def _get_wire_type_id(annotation) -> Optional[int]:
-  """Extract HamiltonDataType type_id from an Annotated type alias.
-
-  Works for all our wire types: F32, PaddedBool, U32, WEnum, Str,
-  Annotated[X, Struct()], Annotated[list[X], StructArray()], etc.
-
-  Returns None if the annotation doesn't carry a WireType.
-  """
-  # Handle typing.Annotated
-  metadata = getattr(annotation, "__metadata__", None)
-  if metadata:
-    for m in metadata:
-      if hasattr(m, "type_id"):
-        return cast(int, m.type_id)
-  return None
-
-
-def _get_nested_dataclass(annotation):
-  """For Annotated[SomeDataclass, Struct()], return SomeDataclass. Else None."""
-  args = getattr(annotation, "__args__", None)
-  if not args:
-    return None
-  base_type = args[0]
-  # For Annotated[list[X], StructArray()], dig into the list's inner type
-  inner_args = getattr(base_type, "__args__", None)
-  if inner_args:
-    base_type = inner_args[0]
-  import dataclasses
-
-  if dataclasses.is_dataclass(base_type):
-    return base_type
-  return None
-
-
-@dataclass
-class FieldMismatch:
-  """One field-level mismatch between hand-crafted and introspected definitions."""
-
-  field_name: str
-  issue: str  # e.g. "missing", "extra", "type mismatch", "order mismatch"
-  expected: str = ""
-  actual: str = ""
-
-  def __str__(self):
-    s = f"  {self.field_name}: {self.issue}"
-    if self.expected or self.actual:
-      s += f" (expected={self.expected}, actual={self.actual})"
-    return s
-
-
-@dataclass
-class ValidationResult:
-  """Result of comparing a hand-crafted dataclass against introspection."""
-
-  name: str
-  passed: bool = False
-  mismatches: List[FieldMismatch] = field(default_factory=list)
-  children: List["ValidationResult"] = field(default_factory=list)
-
-  def __str__(self):
-    icon = "✅" if self.passed else "❌"
-    lines = [f"{icon} {self.name}"]
-    for m in self.mismatches:
-      lines.append(str(m))
-    for child in self.children:
-      for line in str(child).split("\n"):
-        lines.append(f"    {line}")
-    return "\n".join(lines)
-
-
-def validate_struct(
-  dataclass_cls,
-  introspected: StructInfo,
-  pool: Optional[GlobalTypePool] = None,
-  registry: Optional["TypeRegistry"] = None,
-) -> ValidationResult:
-  """Compare a hand-crafted dataclass against an introspected StructInfo.
-
-  Checks field count, field names (snake_case → PascalCase), field types
-  (extracts type_id from Annotated metadata), and field order. For nested
-  structs (Annotated[X, Struct()]), recursively validates the child struct
-  when a GlobalTypePool and/or TypeRegistry can resolve the nested ref
-  (global, same-interface, or local source_id=2 with registry + interface id).
-
-  Args:
-    dataclass_cls: The hand-crafted dataclass class (not an instance).
-    introspected: The introspected StructInfo from the device.
-    pool: Optional GlobalTypePool for nested global (1) and same-interface (0) refs.
-    registry: Optional TypeRegistry for nested local (source_id=2) refs.
-
-  Returns:
-    ValidationResult with pass/fail and detailed mismatches.
-  """
-  import dataclasses as dc
-  import typing
-
-  result = ValidationResult(name=dataclass_cls.__name__)
-  mismatches = result.mismatches
-
-  # Get hand-crafted fields
-  hints = typing.get_type_hints(dataclass_cls, include_extras=True)
-  hand_fields = list(dc.fields(dataclass_cls))
-  hand_names = [f.name for f in hand_fields]
-  hand_norm = [_normalize_name(n) for n in hand_names]
-
-  # Get introspected fields
-  intro_names = list(introspected.fields.keys())
-  intro_norm = [_normalize_name(n) for n in intro_names]
-  intro_types = list(introspected.fields.values())
-
-  # 1. Field count
-  if len(hand_names) != len(intro_names):
-    mismatches.append(
-      FieldMismatch(
-        field_name="(count)",
-        issue="field count mismatch",
-        expected=str(len(intro_names)),
-        actual=str(len(hand_names)),
-      )
-    )
-
-  # 2. Field names (order-aware)
-  for i, (hn_norm, in_norm) in enumerate(zip(hand_norm, intro_norm)):
-    if hn_norm != in_norm:
-      mismatches.append(
-        FieldMismatch(
-          field_name=hand_names[i],
-          issue=f"name mismatch at position {i}",
-          expected=intro_names[i],
-          actual=hand_names[i],
-        )
-      )
-
-  # 3. Extra / missing fields
-  hand_set = set(hand_norm)
-  intro_set = set(intro_norm)
-
-  # For error reporting, we want the original casing, so we build reverse maps
-  hand_map = {hn_norm: h for hn_norm, h in zip(hand_norm, hand_names)}
-  intro_map = {in_norm: i for in_norm, i in zip(intro_norm, intro_names)}
-
-  for missing_norm in intro_set - hand_set:
-    original_intro = intro_map[missing_norm]
-    mismatches.append(FieldMismatch(field_name=original_intro, issue="missing in hand-crafted"))
-  for extra_norm in hand_set - intro_set:
-    original_hand = hand_map[extra_norm]
-    mismatches.append(
-      FieldMismatch(field_name=original_hand, issue="extra in hand-crafted (not in introspection)")
-    )
-
-  # 4. Field types (where names match)
-  for i, (hand_name, intro_name) in enumerate(zip(hand_names, intro_names)):
-    if _normalize_name(hand_name) != _normalize_name(intro_name):
-      continue  # Already reported as name mismatch
-    annotation = hints.get(hand_name)
-    if annotation is None:
-      continue
-    hand_type_id = _get_wire_type_id(annotation)
-    intro_pt = intro_types[i]
-    if hand_type_id is not None and hand_type_id != intro_pt.type_id:
-      try:
-        from pylabrobot.hamilton.tcp.wire_types import HamiltonDataType
-
-        expected_name = HamiltonDataType(intro_pt.type_id).name
-        actual_name = HamiltonDataType(hand_type_id).name
-      except ValueError:
-        expected_name = str(intro_pt.type_id)
-        actual_name = str(hand_type_id)
-      mismatches.append(
-        FieldMismatch(
-          field_name=hand_name,
-          issue="type mismatch",
-          expected=expected_name,
-          actual=actual_name,
-        )
-      )
-
-    # 5. Recursive validation for nested structs
-    if (
-      intro_pt.is_complex
-      and intro_pt.source_id is not None
-      and intro_pt.ref_id is not None
-      and intro_pt.type_id == 30
-    ):  # STRUCTURE
-      nested_cls = _get_nested_dataclass(annotation)
-      if nested_cls:
-        nested_struct: Optional[StructInfo] = None
-        if intro_pt.source_id == 1 and pool is not None:
-          nested_struct = pool.resolve_struct(intro_pt.ref_id)
-        elif intro_pt.source_id == 0 and pool is not None and introspected.interface_id is not None:
-          nested_struct = pool.resolve_struct_local(introspected.interface_id, intro_pt.ref_id)
-        elif (
-          intro_pt.source_id == 2 and registry is not None and introspected.interface_id is not None
-        ):
-          nested_struct = registry.resolve_struct(
-            2, intro_pt.ref_id, ho_interface_id=introspected.interface_id
-          )
-        if nested_struct:
-          child_result = validate_struct(nested_cls, nested_struct, pool, registry=registry)
-          result.children.append(child_result)
-
-  result.passed = len(mismatches) == 0 and all(c.passed for c in result.children)
-  return result
-
-
-def validate_command(
-  command_cls,
-  registry: TypeRegistry,
-  pool: GlobalTypePool,
-  interface_id: int = 1,
-) -> ValidationResult:
-  """Compare a PrepCommand against its introspected method signature.
-
-  Matches the command's command_id to the introspected method_id on the given
-  interface. Validates that the command's struct parameters match the method's
-  expected struct types.
-
-  Args:
-    command_cls: The PrepCommand subclass.
-    registry: TypeRegistry with the object's methods.
-    pool: GlobalTypePool for resolving struct refs.
-    interface_id: Interface ID to look up the method on (default 1 = Pipettor).
-
-  Returns:
-    ValidationResult with pass/fail and details.
-  """
-  import dataclasses as dc
-  import typing
-
-  cmd_id = getattr(command_cls, "command_id", None)
-  result = ValidationResult(name=f"{command_cls.__name__} (cmd={cmd_id})")
-
-  if cmd_id is None:
-    result.mismatches.append(FieldMismatch(field_name="(class)", issue="no command_id attribute"))
-    result.passed = False
-    return result
-
-  # Find matching introspected method
-  method = registry.get_method(interface_id, cmd_id)
-  if method is None:
-    result.mismatches.append(
-      FieldMismatch(
-        field_name="(method)", issue=f"no introspected method for [{interface_id}:{cmd_id}]"
-      )
-    )
-    result.passed = False
-    return result
-
-  result.name = f"{command_cls.__name__} ↔ {method.name} [{interface_id}:{cmd_id}]"
-
-  # Get command's payload fields (exclude 'dest' and class-level attrs)
-  hints = typing.get_type_hints(command_cls, include_extras=True)
-  payload_fields = [f for f in dc.fields(command_cls) if f.name != "dest"]
-
-  # Match struct payload fields to introspected parameter types positionally
-  struct_fields = [
-    (pf, hints.get(pf.name))
-    for pf in payload_fields
-    if _get_nested_dataclass(hints.get(pf.name)) is not None
-  ]
-  struct_params = [
-    pt
-    for pt in method.parameter_types
-    if pt.is_complex and pt.source_id is not None and pt.ref_id is not None
-  ]
-
-  for (pf, annotation), pt in zip(struct_fields, struct_params):
-    ref_id = pt.ref_id
-    assert ref_id is not None, "struct_params filtered for ref_id is not None"
-    if pt.source_id == 0:
-      # Same-interface ref: needs correct HOI interface id for GlobalTypePool.resolve_struct_local
-      # vs. registry — validate on hardware before wiring method-level validation here.
-      intro_struct = None
-    elif pt.source_id == 2:
-      intro_struct = registry.resolve_struct(
-        pt.source_id, ref_id, ho_interface_id=method.interface_id
-      )
-    else:
-      src_id = pt.source_id
-      assert src_id is not None, "struct_params filtered for source_id is not None"
-      intro_struct = registry.resolve_struct(src_id, ref_id)
-    nested_cls = _get_nested_dataclass(annotation)
-    if intro_struct and nested_cls:
-      child_result = validate_struct(nested_cls, intro_struct, pool, registry=registry)
-      child_result.name = f"{pf.name} → {intro_struct.name} (ref={pt.ref_id})"
-      result.children.append(child_result)
-
-  result.passed = all(c.passed for c in result.children) and len(result.mismatches) == 0
-  return result
+    reg = await self._build_minimal_registry_for_signature(address, method)
+    return method.get_signature_string(reg)

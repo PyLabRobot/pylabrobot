@@ -13,11 +13,24 @@ import struct
 import unittest
 import asyncio
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, cast
+from unittest.mock import AsyncMock
 
+import pylabrobot.hamilton.tcp.introspection as introspection_mod
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.hamilton.tcp.introspection import HamiltonIntrospection, ObjectInfo, ObjectRegistry
+from pylabrobot.hamilton.tcp.introspection import (
+  EnumInfo,
+  GlobalTypePool,
+  HamiltonIntrospection,
+  InterfaceInfo,
+  MethodInfo,
+  ObjectInfo,
+  ObjectRegistry,
+  ParameterType,
+  StructInfo,
+  TypeRegistry,
+)
 from pylabrobot.hamilton.tcp.messages import (
   CommandMessage,
   CommandResponse,
@@ -97,12 +110,12 @@ class TestVersionByte(unittest.TestCase):
 
 class TestPacketWireShape(unittest.TestCase):
   def test_ip_packet_roundtrip(self):
-    original = IpPacket(protocol=6, payload=b"\xAA\xBB", options=b"\x10\x20")
+    original = IpPacket(protocol=6, payload=b"\xaa\xbb", options=b"\x10\x20")
     packed = original.pack()
     unpacked = IpPacket.unpack(packed)
     self.assertEqual(unpacked.protocol, 6)
     self.assertEqual(unpacked.options, b"\x10\x20")
-    self.assertEqual(unpacked.payload, b"\xAA\xBB")
+    self.assertEqual(unpacked.payload, b"\xaa\xbb")
 
   def test_harp_action_bit_and_roundtrip(self):
     original = HarpPacket(
@@ -254,7 +267,9 @@ class TestHamiltonCommandBehavior(unittest.TestCase):
 
     cmd = Cmd(Address(0, 0, 0))
     params = HoiParams().add(42, I64).build()
-    hoi = HoiPacket(interface_id=1, action_code=Hoi2Action.COMMAND_RESPONSE, action_id=0, params=params)
+    hoi = HoiPacket(
+      interface_id=1, action_code=Hoi2Action.COMMAND_RESPONSE, action_id=0, params=params
+    )
     harp = HarpPacket(
       src=Address(0, 0, 0),
       dst=Address(0, 0, 0),
@@ -284,7 +299,9 @@ class TestTransportApiAlignment(unittest.TestCase):
       return Address(1, 1, 999)
 
     client.resolve_path = _fake_resolve_path  # type: ignore[method-assign]
-    got = asyncio.run(client.resolve_target("pipettor_service", aliases={"pipettor_service": "Root.Child"}))
+    got = asyncio.run(
+      client.resolve_target("pipettor_service", aliases={"pipettor_service": "Root.Child"})
+    )
     self.assertEqual(got, Address(1, 1, 999))
 
   def test_send_command_return_raw_returns_hoi_payload_tuple(self):
@@ -297,9 +314,12 @@ class TestTransportApiAlignment(unittest.TestCase):
       async def write(self, data: bytes, timeout=None):  # type: ignore[override]
         del data, timeout
 
-      async def _read_one_message(self):  # type: ignore[override]
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
         payload = HoiParams().add(123, I32).build()
-        hoi = HoiPacket(interface_id=0, action_code=Hoi2Action.COMMAND_RESPONSE, action_id=1, params=payload)
+        hoi = HoiPacket(
+          interface_id=0, action_code=Hoi2Action.COMMAND_RESPONSE, action_id=1, params=payload
+        )
         harp = HarpPacket(
           src=Address(1, 1, 257),
           dst=Address(2, 1, 65535),
@@ -323,6 +343,34 @@ class TestTransportApiAlignment(unittest.TestCase):
         self._registry = ObjectRegistry()
         self._registry.set_root_addresses([Address(1, 1, 100)])
         self._discovered_objects = {"root": [Address(1, 1, 100)]}
+        self._fw_cache = None
+        self._global_object_addresses = ()
+
+      @property
+      def registry(self):
+        return self._registry
+
+      @property
+      def global_object_addresses(self):
+        return self._global_object_addresses
+
+      def get_root_object_addresses(self):
+        return self._registry.get_root_addresses() or list(self._discovered_objects.get("root", []))
+
+      def get_firmware_tree_cache(self):
+        return self._fw_cache
+
+      def set_firmware_tree_cache(self, tree):
+        self._fw_cache = tree
+
+      async def send_command(self, *a, **k):
+        raise RuntimeError("unused in this test")
+
+      async def resolve_path(self, path: str):
+        raise RuntimeError("unused")
+
+      async def get_supported_interface0_method_ids(self, address: Address):
+        raise RuntimeError("unused")
 
     backend = Backend()
     intro = HamiltonIntrospection(backend)
@@ -344,9 +392,9 @@ class TestTransportApiAlignment(unittest.TestCase):
       self.assertEqual(idx, 0)
       return child
 
-    intro.get_object = fake_get_object  # type: ignore[method-assign]
-    intro.get_supported_interface0_method_ids = fake_get_supported  # type: ignore[method-assign]
-    intro.get_subobject_address = fake_get_subobject_address  # type: ignore[method-assign]
+    intro.get_object = fake_get_object  # type: ignore[method-assign, assignment]
+    intro.get_supported_interface0_method_ids = fake_get_supported  # type: ignore[method-assign, assignment]
+    intro.get_subobject_address = fake_get_subobject_address  # type: ignore[method-assign, assignment]
 
     t1 = asyncio.run(intro.get_firmware_tree())
     t2 = asyncio.run(intro.get_firmware_tree())
@@ -362,6 +410,36 @@ class TestTransportApiAlignment(unittest.TestCase):
     self.assertGreaterEqual(counts["sub"], 2)
 
 
+class TestHcResultHelperUsesIntrospection(unittest.IsolatedAsyncioTestCase):
+  async def test_describe_entry_routes_to_introspection(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0xF08)
+    client.introspection.get_interface_name = AsyncMock(return_value="ITest")  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(  # type: ignore[method-assign]
+      return_value="Simulated"
+    )
+
+    iface_name, desc = await client._hc_result_text.describe_entry(entry)
+    self.assertEqual(iface_name, "ITest")
+    self.assertEqual(desc, "Simulated")
+
+  async def test_format_entry_context_uses_method_lookup_from_introspection(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    addr = Address(1, 1, 257)
+    client.registry.register(
+      "Root.Channel",
+      ObjectInfo(name="Channel", version="", method_count=0, subobject_count=0, address=addr),
+    )
+    method = MethodInfo(interface_id=1, call_type=0, method_id=6, name="DoThing")
+    client.introspection.get_method_by_id = AsyncMock(return_value=method)  # type: ignore[method-assign]
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0xF08)
+
+    context = await client._hc_result_text.format_entry_context(entry)
+    assert context is not None
+    self.assertIn("path=Root.Channel", context)
+    self.assertIn("DoThing(void) -> void", context)
+
+
 class TestWarningAndExceptionSemantics(unittest.TestCase):
   @staticmethod
   def _format_entry(entry: HcResultEntry) -> str:
@@ -374,7 +452,7 @@ class TestWarningAndExceptionSemantics(unittest.TestCase):
   def _build_warning_params(cls, entries: list[HcResultEntry], tail: bytes = b"") -> bytes:
     summary = HoiParams().add(len(entries), U16).build()
     entries_frag = HoiParams().add(";".join(cls._format_entry(e) for e in entries), Str).build()
-    return summary + entries_frag + tail
+    return cast(bytes, summary + entries_frag + tail)
 
   def test_non_warning_action_does_not_strip(self):
     payload = HoiParams().add(True, Bool).build()
@@ -430,6 +508,199 @@ class TestCountedFlatArrayDecode(unittest.TestCase):
   def test_i16_array_roundtrip_decode_fragment(self):
     payload = struct.pack("<hhh", 1, 2, 3)
     self.assertEqual(decode_fragment(HamiltonDataType.I16_ARRAY, payload), [1, 2, 3])
+
+
+class TestIntrospectionTypeGridInvariants(unittest.TestCase):
+  """Canonical integrity guard for HOI type table edits."""
+
+  def test_grid_dimensions_match_protocol(self):
+    rows = introspection_mod._HOI_TYPE_ROWS
+    self.assertEqual(len(rows), 31)
+    self.assertTrue(all(len(row.ids) == 4 for row in rows))
+
+  def test_only_padding_row_has_zero_ids(self):
+    rows = introspection_mod._HOI_TYPE_ROWS
+    for idx, row in enumerate(rows):
+      if idx == len(rows) - 1:
+        self.assertEqual(row.ids, (0, 0, 0, 0))
+      else:
+        self.assertTrue(all(tid != 0 for tid in row.ids), msg=f"unexpected zero at row {idx}")
+
+  def test_nonzero_ids_are_unique(self):
+    all_nonzero = [tid for row in introspection_mod._HOI_TYPE_ROWS for tid in row.ids if tid != 0]
+    self.assertEqual(len(all_nonzero), len(set(all_nonzero)))
+
+  def test_special_name_and_category_overrides(self):
+    self.assertEqual(introspection_mod.resolve_introspection_type_name(0), "void")
+    self.assertEqual(
+      introspection_mod.resolve_introspection_type_name(113),
+      "List[f32] [In] (empirical)",
+    )
+    self.assertEqual(introspection_mod.get_introspection_type_category(113), "Argument")
+
+  def test_grid_categories_match_directions_with_empirical_exception(self):
+    empirical_argument_ids = {113}
+    for row in introspection_mod._HOI_TYPE_ROWS:
+      in_id, out_id, inout_id, retval_id = row.ids
+      if row.ids == (0, 0, 0, 0):
+        continue
+      for tid in (in_id, out_id, inout_id, retval_id):
+        if tid == 0:
+          continue
+        self.assertNotEqual(introspection_mod.get_introspection_type_category(tid), "Unknown")
+
+      self.assertEqual(introspection_mod.get_introspection_type_category(in_id), "Argument")
+      self.assertEqual(introspection_mod.get_introspection_type_category(inout_id), "Argument")
+      self.assertEqual(introspection_mod.get_introspection_type_category(out_id), "ReturnElement")
+      if retval_id in empirical_argument_ids:
+        self.assertEqual(introspection_mod.get_introspection_type_category(retval_id), "Argument")
+      else:
+        self.assertEqual(
+          introspection_mod.get_introspection_type_category(retval_id), "ReturnValue"
+        )
+
+
+class _MinimalIntroBackend:
+  """Protocol-shaped stub for :class:`HamiltonIntrospection` unit tests."""
+
+  def __init__(self) -> None:
+    self._registry = ObjectRegistry()
+
+  @property
+  def registry(self):
+    return self._registry
+
+  @property
+  def global_object_addresses(self):
+    return ()
+
+  def get_root_object_addresses(self):
+    return []
+
+  def get_firmware_tree_cache(self):
+    return None
+
+  def set_firmware_tree_cache(self, tree):
+    del tree
+
+  async def send_command(self, *a, **k):
+    raise AssertionError("send_command should be patched out in introspection cache tests")
+
+  async def resolve_path(self, path: str):
+    del path
+    raise AssertionError("unused")
+
+  async def get_supported_interface0_method_ids(self, address):
+    del address
+    return set()
+
+
+class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.addr = Address(1, 1, 99)
+    self.backend = _MinimalIntroBackend()
+    self.intro = HamiltonIntrospection(self.backend)
+
+  async def test_second_ensure_method_table_skips_get_method(self):
+    info = ObjectInfo(name="O", version="", method_count=2, subobject_count=0, address=self.addr)
+    self.intro.get_object = AsyncMock(return_value=info)  # type: ignore[method-assign]
+    self.intro.get_supported_interface0_method_ids = AsyncMock(  # type: ignore[method-assign]
+      return_value={1, 2, 4, 5, 6}
+    )
+    gm = AsyncMock(
+      side_effect=[
+        MethodInfo(1, 0, 0, "a", [], [], [], []),
+        MethodInfo(1, 0, 1, "b", [], [], [], []),
+      ]
+    )
+    self.intro.get_method = gm  # type: ignore[method-assign]
+    r1 = await self.intro.ensure_method_table(self.addr)
+    self.assertEqual(len(r1), 2)
+    self.assertEqual(gm.call_count, 2)
+    r2 = await self.intro.methods_for_interface(self.addr, 1)
+    self.assertEqual(len(r2), 2)
+    self.assertEqual(gm.call_count, 2)
+    r3 = await self.intro.ensure_method_table(self.addr)
+    self.assertIs(r1, r3)
+
+  async def test_lazy_signature_loads_only_referenced_iface(self):
+    st = StructInfo(struct_id=0, name="TipParams", fields={}, interface_id=1)
+    pt = ParameterType(57, source_id=2, ref_id=1)
+    m = MethodInfo(1, 0, 3, "Foo", [pt], ["p"], [], [])
+    info = ObjectInfo(name="O", version="", method_count=1, subobject_count=0, address=self.addr)
+    self.intro.get_object = AsyncMock(return_value=info)  # type: ignore[method-assign]
+    self.intro.get_supported_interface0_method_ids = AsyncMock(  # type: ignore[method-assign]
+      return_value={1, 2, 4, 5, 6}
+    )
+    self.intro.get_method = AsyncMock(return_value=m)  # type: ignore[method-assign]
+    self.intro.ensure_global_type_pool = AsyncMock(  # type: ignore[method-assign]
+      return_value=GlobalTypePool()
+    )
+    touched: list[int] = []
+
+    async def fake_ensure(addr, iface_id):
+      touched.append(iface_id)
+      key = (addr, iface_id)
+      self.intro._structs_by_addr_iface[key] = {0: st}
+      self.intro._enums_by_addr_iface[key] = {}
+      self.intro._iface_types_loaded.add(key)
+
+    self.intro.ensure_structs_enums = fake_ensure  # type: ignore[method-assign]
+
+    sig = await self.intro.resolve_signature(self.addr, 1, 3)
+    self.assertIn("TipParams", sig)
+    self.assertEqual(touched, [1])
+
+  async def test_lazy_signature_matches_full_registry_for_local_struct(self):
+    st = StructInfo(struct_id=0, name="TipParams", fields={}, interface_id=1)
+    pt = ParameterType(57, source_id=2, ref_id=1)
+    m = MethodInfo(1, 0, 3, "Foo", [pt], ["p"], [], [])
+    info = ObjectInfo(name="O", version="", method_count=1, subobject_count=0, address=self.addr)
+    self.intro.get_object = AsyncMock(return_value=info)  # type: ignore[method-assign]
+    self.intro.get_supported_interface0_method_ids = AsyncMock(  # type: ignore[method-assign]
+      return_value={1, 2, 4, 5, 6}
+    )
+    self.intro.get_method = AsyncMock(return_value=m)  # type: ignore[method-assign]
+    self.intro.get_structs = AsyncMock(return_value=[st])  # type: ignore[method-assign]
+    self.intro.get_enums = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    self.intro.ensure_global_type_pool = AsyncMock(  # type: ignore[method-assign]
+      return_value=GlobalTypePool()
+    )
+
+    lazy_sig = await self.intro.resolve_signature(self.addr, 1, 3)
+
+    full = TypeRegistry(address=self.addr, global_pool=GlobalTypePool())
+    full.methods = [m]
+    full.structs[1] = {0: st}
+    full_sig = m.get_signature_string(full)
+    self.assertEqual(lazy_sig, full_sig)
+
+  async def test_interface_name_and_hc_result_text_use_introspection_session_cache(self):
+    self.intro.get_interfaces = AsyncMock(  # type: ignore[method-assign]
+      return_value=[InterfaceInfo(interface_id=1, name="ITest", version="")]
+    )
+    name1 = await self.intro.get_interface_name(self.addr, 1)
+    name2 = await self.intro.get_interface_name(self.addr, 1)
+    self.assertEqual(name1, "ITest")
+    self.assertEqual(name2, "ITest")
+    self.assertEqual(self.intro.get_interfaces.call_count, 1)
+
+    self.intro.get_supported_interface0_method_ids = AsyncMock(return_value={5, 6})  # type: ignore[method-assign]
+    self.intro.get_structs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    self.intro.get_enums = AsyncMock(  # type: ignore[method-assign]
+      return_value=[
+        EnumInfo(
+          enum_id=0,
+          name="HcResult",
+          values={"OK": 0, "SomethingFailed": 0xF08},
+        )
+      ]
+    )
+    text1 = await self.intro.get_hc_result_text(self.addr, 1, 0xF08)
+    text2 = await self.intro.get_hc_result_text(self.addr, 1, 0xF08)
+    self.assertEqual(text1, "SomethingFailed")
+    self.assertEqual(text2, "SomethingFailed")
+    self.assertEqual(self.intro.get_enums.call_count, 1)
 
 
 if __name__ == "__main__":
