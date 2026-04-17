@@ -64,6 +64,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
 | Agilent (BioTek) | EL406 | Mostly | [PLR](00_liquid-handling/plate-washing/biotek-el406.ipynb) / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-el406-washer-dispenser-795212) |
+| Agilent (BioTek) | EL405 | Mostly | [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-elx405-select-deep-well-microplate-washer-1623186) |
 
 ### Bulk Dispensers
 
