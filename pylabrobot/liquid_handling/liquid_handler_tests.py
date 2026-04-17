@@ -29,6 +29,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  VWR_1_trough_195000uL_Ub,
   nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
