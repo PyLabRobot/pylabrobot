@@ -29,6 +29,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  VWR_1_trough_195000uL_Ub,
   nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
@@ -1353,6 +1354,24 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     ops = self.backend.aspirate.call_args.kwargs["ops"]
     offsets = [op.offset.y for op in ops]
     self.assertEqual(offsets, [0.0] * 8)
+
+  async def test_old_pip_firmware_spreads_single_trough_resource(self):
+    """Legacy PIP firmware should still spread channels across a single trough container."""
+    self.backend._pip_has_old_firmware = lambda: True
+
+    trough = VWR_1_trough_195000uL_Ub(name="vwr_trough")
+    self.deck.assign_child_resource(trough, location=Coordinate(200, 100, 0))
+    trough.tracker.set_volume(50_000)
+
+    tips = [self.tip_rack.get_item(f"{chr(65 + i)}1").get_tip() for i in range(8)]
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+
+    await self.lh.aspirate(trough, vols=[100] * 8, use_channels=list(range(8)))
+
+    ops = self.backend.aspirate.call_args.kwargs["ops"]
+    offsets = [op.offset.y for op in ops]
+    self.assertNotEqual(offsets, [0.0] * 8)
+    self.assertEqual(offsets, sorted(offsets, reverse=True))
 
   async def test_modern_firmware_still_rejects_too_small_single_resource(self):
     """Modern spacing logic should still reject resources that cannot fit the channels."""
