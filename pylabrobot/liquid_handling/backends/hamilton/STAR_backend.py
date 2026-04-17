@@ -1441,7 +1441,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @property
   def num_arms(self) -> int:
-    return 1 if self.extended_conf.left_x_drive.iswap_installed else 0
+    has_iswap = self.extended_conf.left_x_drive.iswap_installed
+    has_core_grippers = self._deck is not None and self._deck.has_resource("core_grippers")
+    return 1 if (has_iswap or has_core_grippers) else 0
 
   @property
   def head96_installed(self) -> Optional[bool]:
