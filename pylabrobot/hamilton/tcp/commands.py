@@ -1,6 +1,6 @@
 """Command layer for Hamilton TCP.
 
-HamiltonCommand base: build_parameters() returns HoiParams; interpret_response()
+TCPCommand base: build_parameters() returns HoiParams; interpret_response()
 auto-decodes success responses via nested Response dataclasses (wire-type
 annotations and parse_into_struct). Wire → HoiParams → Packets → Messages → Commands.
 """
@@ -23,17 +23,17 @@ from pylabrobot.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.hamilton.tcp.wire_types import HcResultEntry
 
 
-class HamiltonCommand:
-  """Base class for Hamilton commands using new simplified architecture.
+class TCPCommand:
+  """Base class for Hamilton TCP commands.
 
-  This replaces the old HamiltonCommand from tcp_codec.py with a cleaner design:
+  This replaces the old command base from tcp_codec.py with a cleaner design:
   - Explicitly uses CommandMessage for building packets
   - build_parameters() returns HoiParams object (not bytes)
   - Uses Address instead of ObjectAddress
   - Cleaner separation of concerns
 
   Example:
-      class MyCommand(HamiltonCommand):
+      class MyCommand(TCPCommand):
           protocol = HamiltonProtocol.OBJECT_DISCOVERY
           interface_id = 0
           command_id = 42
@@ -63,7 +63,7 @@ class HamiltonCommand:
   ip_protocol: int = 6  # Default: OBJECT_DISCOVERY
 
   def __init__(self, dest: Address):
-    """Initialize Hamilton command.
+    """Initialize TCP command.
 
     Args:
       dest: Destination address for this command

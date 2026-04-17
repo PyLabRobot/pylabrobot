@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union, cast
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
 from pylabrobot.device import Driver
-from pylabrobot.hamilton.tcp.commands import HamiltonCommand, hamilton_error_for_entry
+from pylabrobot.hamilton.tcp.commands import TCPCommand, hamilton_error_for_entry
 from pylabrobot.hamilton.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.tcp.messages import (
   CommandResponse,
@@ -496,7 +496,7 @@ class HamiltonTCPClient(Driver):
 
   async def send_command(
     self,
-    command: HamiltonCommand,
+    command: TCPCommand,
     ensure_connection: bool = True,
     return_raw: bool = False,
     raise_on_error: bool = True,

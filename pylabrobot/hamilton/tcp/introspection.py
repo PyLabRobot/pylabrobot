@@ -41,7 +41,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Set, Tuple, Union, cast
 
-from pylabrobot.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.messages import (
   PADDED_FLAG,
   HoiParams,
@@ -88,7 +88,7 @@ class HamiltonTCPIntrospectionBackend(Protocol):
 
   async def send_command(
     self,
-    command: HamiltonCommand,
+    command: TCPCommand,
     *,
     ensure_connection: bool = True,
     return_raw: bool = False,
@@ -1019,7 +1019,7 @@ def _resolve_struct_field_type(
 # ============================================================================
 
 
-class GetObjectCommand(HamiltonCommand):
+class GetObjectCommand(TCPCommand):
   """Get object metadata (command_id=1)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1038,7 +1038,7 @@ class GetObjectCommand(HamiltonCommand):
     subobject_count: U16
 
 
-class GetMethodCommand(HamiltonCommand):
+class GetMethodCommand(TCPCommand):
   """Get method signature (command_id=2)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1124,7 +1124,7 @@ class GetMethodCommand(HamiltonCommand):
     }
 
 
-class GetSubobjectAddressCommand(HamiltonCommand):
+class GetSubobjectAddressCommand(TCPCommand):
   """Get subobject address (command_id=3)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1147,7 +1147,7 @@ class GetSubobjectAddressCommand(HamiltonCommand):
     object_id: U16
 
 
-class GetInterfacesCommand(HamiltonCommand):
+class GetInterfacesCommand(TCPCommand):
   """Get available interfaces (command_id=4).
 
   Firmware signature: InterfaceDescriptors(()) -> interfaceIds: I8_ARRAY, interfaceDescriptors: STRING_ARRAY
@@ -1168,7 +1168,7 @@ class GetInterfacesCommand(HamiltonCommand):
     interface_names: StrArray
 
 
-class GetEnumsCommand(HamiltonCommand):
+class GetEnumsCommand(TCPCommand):
   """Get enum definitions (command_id=5).
 
   Firmware signature: EnumInfo(interfaceId) -> enumerationNames: STRING_ARRAY,
@@ -1198,7 +1198,7 @@ class GetEnumsCommand(HamiltonCommand):
     value_names: StrArray
 
 
-class GetStructsCommand(HamiltonCommand):
+class GetStructsCommand(TCPCommand):
   """Get struct definitions (command_id=6)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY

@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock
 
 import pylabrobot.hamilton.tcp.introspection as introspection_mod
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
-from pylabrobot.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.introspection import (
   EnumInfo,
   GlobalTypePool,
@@ -245,9 +245,9 @@ class TestMessageBuildersAndParsers(unittest.TestCase):
     self.assertEqual(packet[2], 7)
 
 
-class TestHamiltonCommandBehavior(unittest.TestCase):
+class TestTCPCommandBehavior(unittest.TestCase):
   def test_build_requires_source_address(self):
-    class Cmd(HamiltonCommand):
+    class Cmd(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 0
       command_id = 1
@@ -256,7 +256,7 @@ class TestHamiltonCommandBehavior(unittest.TestCase):
       Cmd(Address(1, 1, 257)).build()
 
   def test_interpret_response_auto_decodes_nested_response(self):
-    class Cmd(HamiltonCommand):
+    class Cmd(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
       command_id = 0
@@ -305,7 +305,7 @@ class TestTransportApiAlignment(unittest.TestCase):
     self.assertEqual(got, Address(1, 1, 999))
 
   def test_send_command_return_raw_returns_hoi_payload_tuple(self):
-    class Cmd(HamiltonCommand):
+    class Cmd(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 0
       command_id = 1

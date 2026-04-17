@@ -1,7 +1,7 @@
 """Canonical v1 Hamilton TCP namespace."""
 
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
-from pylabrobot.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.introspection import MethodInfo, ObjectInfo
 from pylabrobot.hamilton.tcp.messages import (
   CommandMessage,
@@ -40,7 +40,7 @@ __all__ = [
   "ConnectionPacket",
   "HAMILTON_PROTOCOL_VERSION_MAJOR",
   "HAMILTON_PROTOCOL_VERSION_MINOR",
-  "HamiltonCommand",
+  "TCPCommand",
   "HamiltonTCPClient",
   "HamiltonDataType",
   "HamiltonProtocol",

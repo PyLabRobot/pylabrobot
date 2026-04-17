@@ -15,11 +15,12 @@ from dataclasses import dataclass, fields
 from enum import IntEnum
 from typing import Annotated, Optional, Tuple
 
-from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams
-from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
-from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+from pylabrobot.hamilton.tcp.commands import TCPCommand
+from pylabrobot.hamilton.tcp.messages import HoiParams
+from pylabrobot.hamilton.tcp.packets import Address
+from pylabrobot.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.hamilton.tcp.wire_types import (
+  Enum as WEnum,
   F32,
   I8,
   I16,
@@ -36,10 +37,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U8Array,
   U32Array,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
-  Enum as WEnum,
-)
-from pylabrobot.liquid_handling.standard import SingleChannelAspiration
+from pylabrobot.capabilities.liquid_handling.standard import Aspiration
 
 # =============================================================================
 # Enums (mirrored from Prep protocol spec)
@@ -477,7 +475,7 @@ class AspirateParameters:
   def for_op(
     cls,
     loc,
-    op: SingleChannelAspiration,
+    op: Aspiration,
     prewet_volume: float = 0.0,
     blowout_volume: Optional[float] = None,
   ) -> AspirateParameters:
@@ -1225,7 +1223,7 @@ class DispenseParametersLld2:
 
 
 @dataclass
-class PrepCommand(HamiltonCommand):
+class PrepCommand(TCPCommand):
   """Base for all Prep instrument commands.
 
   Subclasses are dataclasses with ``dest: Address`` (inherited) plus any
