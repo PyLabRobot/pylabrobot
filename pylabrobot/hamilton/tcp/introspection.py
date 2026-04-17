@@ -430,6 +430,23 @@ class FirmwareTree:
     return self.format()
 
 
+def flatten_firmware_tree(tree: FirmwareTree) -> List[Tuple[str, Address, ObjectInfo]]:
+  """Preorder flattening of :class:`FirmwareTree` for path-keyed lookups.
+
+  Returns ``(dot_path, address, object_info)`` for each node (roots first, DFS).
+  """
+  out: List[Tuple[str, Address, ObjectInfo]] = []
+
+  def walk(node: FirmwareTreeNode) -> None:
+    out.append((node.path, node.address, node.object_info))
+    for child in node.children:
+      walk(child)
+
+  for root in tree.roots:
+    walk(root)
+  return out
+
+
 @dataclass
 class ParameterType:
   """A resolved type reference used for both method parameters and struct fields.

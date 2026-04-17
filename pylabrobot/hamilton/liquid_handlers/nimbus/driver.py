@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional, Set, Tuple
+from typing import Dict, Mapping, Optional, Set, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
+from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.packets import Address
 
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
@@ -23,11 +24,34 @@ from .pip_backend import NimbusPIPBackend
 logger = logging.getLogger(__name__)
 
 
+def nimbus_interface_specs_for_root(root_name: str) -> Dict[str, InterfacePathSpec]:
+  """Dot-paths under the instrument root (same mechanism as :class:`PrepDriver`)."""
+  return {
+    "nimbus_core": InterfacePathSpec(root_name, True, True),
+    "pipette": InterfacePathSpec(f"{root_name}.Pipette", True, True),
+    "door_lock": InterfacePathSpec(f"{root_name}.DoorLock", False, False),
+  }
+
+
 @dataclass(frozen=True)
-class InterfaceSpec:
-  object_name: str
-  required: bool
-  raise_when_missing: bool = True
+class NimbusResolvedInterfaces:
+  """Concrete Nimbus firmware handles after :meth:`NimbusDriver.setup`."""
+
+  nimbus_core: Address
+  pipette: Address
+  door_lock: Optional[Address]
+
+  @staticmethod
+  def from_resolution_map(m: Mapping[str, Optional[Address]]) -> NimbusResolvedInterfaces:
+    nc = m.get("nimbus_core")
+    pip = m.get("pipette")
+    if nc is None or pip is None:
+      raise RuntimeError("internal: missing required Nimbus interfaces")
+    return NimbusResolvedInterfaces(
+      nimbus_core=nc,
+      pipette=pip,
+      door_lock=m.get("door_lock"),
+    )
 
 
 @dataclass
@@ -42,12 +66,6 @@ class NimbusDriver(HamiltonTCPClient):
   Handles TCP communication, hardware discovery via introspection, and
   manages the PIP backend and door subsystem.
   """
-
-  _INTERFACES = {
-    "nimbus_core": InterfaceSpec("NimbusCore", required=True),
-    "pipette": InterfaceSpec("Pipette", required=True),
-    "door_lock": InterfaceSpec("DoorLock", required=False, raise_when_missing=False),
-  }
 
   _REQUIRED_METHODS_CORE: Set[int] = {
     3,
@@ -93,14 +111,21 @@ class NimbusDriver(HamiltonTCPClient):
 
     self._nimbus_core_address: Optional[Address] = None
     self._resolved_interfaces: Dict[str, Optional[Address]] = {}
+    self._nimbus_resolved: Optional[NimbusResolvedInterfaces] = None
 
     self.pip: NimbusPIPBackend  # set in setup()
     self.door: Optional[NimbusDoor] = None  # set in setup() if available
 
   @property
+  def nimbus_interfaces(self) -> NimbusResolvedInterfaces:
+    if self._nimbus_resolved is None:
+      raise RuntimeError("Nimbus interfaces not resolved. Call setup() first.")
+    return self._nimbus_resolved
+
+  @property
   def nimbus_core_address(self) -> Address:
     if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
+      raise RuntimeError("Nimbus root address not discovered. Call setup() first.")
     return self._nimbus_core_address
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
@@ -122,16 +147,30 @@ class NimbusDriver(HamiltonTCPClient):
     # TCP connection + Protocol 7 + Protocol 3 + root discovery
     await super().setup()
 
-    addresses = await self._discover_instrument_objects()
-    await self._resolve_interfaces(addresses)
+    root_objects = self.get_root_object_addresses()
+    if not root_objects:
+      raise RuntimeError("No root objects discovered during setup.")
 
-    nimbus_core_address = await self._require_interface("nimbus_core")
-    pipette_address = await self._require_interface("pipette")
-    door_address = self._resolved_interfaces.get("door_lock")
+    root_info = await self.introspection.get_object(root_objects[0])
+    if "nimbus" not in root_info.name.lower():
+      raise RuntimeError(
+        f"Expected a Nimbus root object, but discovered '{root_info.name}'. Wrong instrument?"
+      )
+
+    specs = nimbus_interface_specs_for_root(root_info.name)
+    self._resolved_interfaces = await resolve_interface_path_specs(
+      self, specs, instrument_label="Nimbus"
+    )
+    self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
+    self._nimbus_core_address = self._nimbus_resolved.nimbus_core
+
+    nimbus_core_address = self._nimbus_resolved.nimbus_core
+    pipette_address = self._nimbus_resolved.pipette
+    door_address = self._nimbus_resolved.door_lock
 
     await self._assert_required_methods(
       nimbus_core_address,
-      object_name="NimbusCore",
+      object_name=root_info.name,
       required_method_ids=self._REQUIRED_METHODS_CORE,
     )
     await self._assert_required_methods(
@@ -167,67 +206,7 @@ class NimbusDriver(HamiltonTCPClient):
     await super().stop()
     self.door = None
     self._resolved_interfaces = {}
-
-  async def _discover_instrument_objects(self) -> Dict[str, Address]:
-    """Discover instrument-specific objects using introspection.
-
-    Returns:
-      Dictionary mapping object names (e.g. "Pipette", "DoorLock") to their addresses.
-    """
-    addresses: Dict[str, Address] = {}
-
-    root_objects = self.get_root_object_addresses()
-    if not root_objects:
-      raise RuntimeError("No root objects discovered during setup.")
-
-    nimbus_core_addr = root_objects[0]
-    root_info = await self.introspection.get_object(nimbus_core_addr)
-    if "nimbus" not in root_info.name.lower():
-      raise RuntimeError(
-        f"Expected a Nimbus root object, but discovered '{root_info.name}'. Wrong instrument?"
-      )
-    addresses[root_info.name] = nimbus_core_addr
-    self._nimbus_core_address = nimbus_core_addr
-
-    for i in range(root_info.subobject_count):
-      try:
-        sub_addr = await self.introspection.get_subobject_address(nimbus_core_addr, i)
-        sub_info = await self.introspection.get_object(sub_addr)
-        addresses[sub_info.name] = sub_addr
-        logger.info(f"Found {sub_info.name} at {sub_addr}")
-      except Exception as e:
-        logger.debug(f"Failed to get subobject {i}: {e}")
-
-    if "DoorLock" not in addresses:
-      logger.info("DoorLock not available on this instrument")
-
-    return addresses
-
-  async def _resolve_interfaces(self, discovered: Dict[str, Address]) -> None:
-    self._resolved_interfaces = {}
-    for key, spec in self._INTERFACES.items():
-      addr = discovered.get(spec.object_name)
-      if addr is None:
-        if spec.required:
-          raise RuntimeError(
-            f"Could not find required interface '{key}' ({spec.object_name}) on Nimbus."
-          )
-        self._resolved_interfaces[key] = None
-      else:
-        self._resolved_interfaces[key] = addr
-
-  async def _require_interface(self, name: str) -> Address:
-    if name not in self._INTERFACES:
-      raise KeyError(f"Unknown interface: {name}")
-
-    spec = self._INTERFACES[name]
-    addr = self._resolved_interfaces.get(name)
-    if addr is None:
-      msg = f"Could not find interface '{name}' ({spec.object_name}) on Nimbus."
-      if spec.raise_when_missing:
-        logger.warning(msg)
-      raise RuntimeError(msg)
-    return addr
+    self._nimbus_resolved = None
 
   async def _assert_required_methods(
     self,

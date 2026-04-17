@@ -10,7 +10,7 @@ from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.packets import Address
 
 from .door import NimbusDoor
-from .driver import NimbusDriver, NimbusSetupParams
+from .driver import NimbusDriver, NimbusResolvedInterfaces, NimbusSetupParams
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class NimbusChatterboxDriver(NimbusDriver):
       "pipette": pipette_address,
       "door_lock": door_address,
     }
+    self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
 
     self.pip = NimbusPIPBackend(
       driver=self, deck=params.deck, address=pipette_address, num_channels=self._num_channels
@@ -63,6 +64,7 @@ class NimbusChatterboxDriver(NimbusDriver):
       await self.door._on_stop()
     self.door = None
     self._resolved_interfaces = {}
+    self._nimbus_resolved = None
 
   async def send_command(
     self,

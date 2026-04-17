@@ -5,7 +5,12 @@ import pytest
 
 from pylabrobot.hamilton.liquid_handlers.nimbus.chatterbox import NimbusChatterboxDriver
 from pylabrobot.hamilton.liquid_handlers.nimbus.commands import GetChannelConfiguration_1
-from pylabrobot.hamilton.liquid_handlers.nimbus.driver import NimbusDriver
+from pylabrobot.hamilton.liquid_handlers.nimbus.driver import (
+  NimbusDriver,
+  NimbusResolvedInterfaces,
+  nimbus_interface_specs_for_root,
+)
+from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.tcp.packets import Address
 
@@ -80,33 +85,44 @@ def test_nimbus_driver_error_codes_user_values_override_table():
 def test_nimbus_core_address_raises_before_setup():
   """Property requires setup() to have discovered and stored NimbusCore."""
   driver = NimbusDriver(host="127.0.0.1")
-  with pytest.raises(RuntimeError, match="NimbusCore address not discovered"):
+  with pytest.raises(RuntimeError, match="Nimbus root address not discovered"):
     _ = driver.nimbus_core_address
 
 
-def test_resolve_interfaces_maps_object_names_to_interface_keys():
-  """Maps firmware object names (NimbusCore, Pipette) to internal keys; optional DoorLock may be absent."""
+def test_nimbus_interface_specs_for_root_paths():
+  """Root-relative dot-paths match firmware tree naming (e.g. NimbusCORE.Pipette)."""
+  s = nimbus_interface_specs_for_root("NimbusCORE")
+  assert s["nimbus_core"].path == "NimbusCORE"
+  assert s["pipette"].path == "NimbusCORE.Pipette"
+  assert s["door_lock"].path == "NimbusCORE.DoorLock"
+  assert s["door_lock"].required is False
+
+
+def test_nimbus_resolved_interfaces_from_map_optional_door():
   core = Address(1, 1, 100)
   pip = Address(1, 1, 200)
+  r = NimbusResolvedInterfaces.from_resolution_map(
+    {"nimbus_core": core, "pipette": pip, "door_lock": None}
+  )
+  assert r.nimbus_core == core
+  assert r.pipette == pip
+  assert r.door_lock is None
 
+
+def test_resolve_interface_path_specs_required_missing_raises():
   async def _run() -> None:
-    driver = NimbusDriver(host="127.0.0.1")
-    await driver._resolve_interfaces({"NimbusCore": core, "Pipette": pip})
-    assert driver._resolved_interfaces["nimbus_core"] == core
-    assert driver._resolved_interfaces["pipette"] == pip
-    assert driver._resolved_interfaces["door_lock"] is None
+    from unittest.mock import AsyncMock
 
-  asyncio.run(_run())
+    from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 
-
-def test_resolve_interfaces_missing_required_core_raises():
-  """Required InterfaceSpec entries must appear in the discovery map by object_name."""
-  pip_only = Address(1, 1, 200)
-
-  async def _run() -> None:
-    driver = NimbusDriver(host="127.0.0.1")
+    tcp = HamiltonTCPClient(host="127.0.0.1", port=2000)
+    tcp.resolve_path = AsyncMock(side_effect=KeyError)  # type: ignore[method-assign]
     with pytest.raises(RuntimeError, match="nimbus_core"):
-      await driver._resolve_interfaces({"Pipette": pip_only})
+      await resolve_interface_path_specs(
+        tcp,
+        {"nimbus_core": InterfacePathSpec("NimbusCORE", True)},
+        instrument_label="Nimbus",
+      )
 
   asyncio.run(_run())
 

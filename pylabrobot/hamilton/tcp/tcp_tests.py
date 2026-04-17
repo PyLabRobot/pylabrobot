@@ -21,6 +21,8 @@ from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.introspection import (
   EnumInfo,
+  FirmwareTree,
+  FirmwareTreeNode,
   GlobalTypePool,
   HamiltonIntrospection,
   InterfaceInfo,
@@ -30,6 +32,7 @@ from pylabrobot.hamilton.tcp.introspection import (
   ParameterType,
   StructInfo,
   TypeRegistry,
+  flatten_firmware_tree,
 )
 from pylabrobot.hamilton.tcp.messages import (
   CommandMessage,
@@ -408,6 +411,38 @@ class TestTransportApiAlignment(unittest.TestCase):
     self.assertIn("Root.Child", str(t1))
     self.assertGreaterEqual(counts["obj"], 4)  # built twice (initial + refresh)
     self.assertGreaterEqual(counts["sub"], 2)
+
+  def test_flatten_firmware_tree_preorder(self):
+    a0 = Address(1, 1, 10)
+    a1 = Address(1, 1, 11)
+    a2 = Address(1, 1, 12)
+    o0 = ObjectInfo(name="root", version="v", method_count=1, subobject_count=1, address=a0)
+    o1 = ObjectInfo(name="child", version="v", method_count=1, subobject_count=0, address=a1)
+    o2 = ObjectInfo(name="other", version="v", method_count=1, subobject_count=0, address=a2)
+    child = FirmwareTreeNode(path="R.c", address=a1, object_info=o1, children=[])
+    root = FirmwareTreeNode(path="R", address=a0, object_info=o0, children=[child])
+    other_root = FirmwareTreeNode(path="S", address=a2, object_info=o2, children=[])
+    tree = FirmwareTree(roots=[root, other_root])
+    flat = flatten_firmware_tree(tree)
+    self.assertEqual([p for p, _, _ in flat], ["R", "R.c", "S"])
+
+  def test_get_firmware_tree_flat_delegates_to_flatten(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    a0 = Address(1, 1, 20)
+    o0 = ObjectInfo(name="only", version="v", method_count=0, subobject_count=0, address=a0)
+    root = FirmwareTreeNode(path="Only", address=a0, object_info=o0, children=[])
+    tree = FirmwareTree(roots=[root])
+
+    async def fake_get_firmware_tree(refresh: bool = False):
+      del refresh
+      return tree
+
+    client.get_firmware_tree = fake_get_firmware_tree  # type: ignore[method-assign]
+    got = asyncio.run(client.get_firmware_tree_flat())
+    self.assertEqual(len(got), 1)
+    self.assertEqual(got[0][0], "Only")
+    self.assertEqual(got[0][1], a0)
+    self.assertIs(got[0][2], o0)
 
 
 class TestHcResultHelperUsesIntrospection(unittest.IsolatedAsyncioTestCase):

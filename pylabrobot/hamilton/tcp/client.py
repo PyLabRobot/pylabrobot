@@ -30,6 +30,7 @@ from pylabrobot.hamilton.tcp.introspection import (
   HamiltonIntrospection,
   MethodDescriptor,
   ObjectRegistry,
+  flatten_firmware_tree,
 )
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.hamilton.tcp.protocol import (
@@ -659,6 +660,15 @@ class HamiltonTCPClient(Driver):
   async def get_firmware_tree(self, refresh: bool = False):
     """Return cached firmware tree, or build it through introspection."""
     return await self.introspection.get_firmware_tree(refresh=refresh)
+
+  async def get_firmware_tree_flat(self, refresh: bool = False):
+    """Firmware object tree as a flat list of ``(path, address, object_info)`` per node.
+
+    Same preorder as :func:`~pylabrobot.hamilton.tcp.introspection.flatten_firmware_tree`;
+    convenient for dot-path indexing without walking :class:`FirmwareTree` manually.
+    """
+    tree = await self.get_firmware_tree(refresh=refresh)
+    return flatten_firmware_tree(tree)
 
   async def stop(self):
     try:
