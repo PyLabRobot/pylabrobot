@@ -354,6 +354,11 @@ class LiquidHandler(Resource, Machine):
     spread: str,
   ) -> List[Coordinate]:
     """Compute channel spread offsets for a single-resource multi-channel operation."""
+    pip_has_old_firmware = getattr(self.backend, "_pip_has_old_firmware", None)
+    if spread != "custom" and callable(pip_has_old_firmware) and pip_has_old_firmware():
+      centers = list(reversed(resource.centers(yn=len(use_channels), zn=0)))
+      return [c - resource.center() for c in centers]
+
     return compute_channel_offsets(
       resource=resource,
       num_channels=len(use_channels),
@@ -955,13 +960,18 @@ class LiquidHandler(Resource, Machine):
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
     if len(set(resources)) == 1:
+      original_num_resources = len(resources)
       resource = resources[0]
       resources = [resource] * len(use_channels)
+      pip_has_old_firmware = getattr(self.backend, "_pip_has_old_firmware", None)
+      legacy_repeated_resource_list = (
+        callable(pip_has_old_firmware) and pip_has_old_firmware() and original_num_resources > 1
+      )
+      if not legacy_repeated_resource_list:
+        center_offsets = self._compute_spread_offsets(resource, use_channels, spread)
 
-      center_offsets = self._compute_spread_offsets(resource, use_channels, spread)
-
-      # add user defined offsets to the computed centers
-      offsets = [c + o for c, o in zip(center_offsets, offsets)]
+        # add user defined offsets to the computed centers
+        offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     # create operations
     aspirations = [
@@ -1128,13 +1138,18 @@ class LiquidHandler(Resource, Machine):
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
     if len(set(resources)) == 1:
+      original_num_resources = len(resources)
       resource = resources[0]
       resources = [resource] * len(use_channels)
+      pip_has_old_firmware = getattr(self.backend, "_pip_has_old_firmware", None)
+      legacy_repeated_resource_list = (
+        callable(pip_has_old_firmware) and pip_has_old_firmware() and original_num_resources > 1
+      )
+      if not legacy_repeated_resource_list:
+        center_offsets = self._compute_spread_offsets(resource, use_channels, spread)
 
-      center_offsets = self._compute_spread_offsets(resource, use_channels, spread)
-
-      # add user defined offsets to the computed centers
-      offsets = [c + o for c, o in zip(center_offsets, offsets)]
+        # add user defined offsets to the computed centers
+        offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     tips = [self.head[channel].get_tip() for channel in use_channels]
 

@@ -49,6 +49,7 @@ from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
+from pylabrobot.resources.well import CrossSectionType, WellBottomType
 from pylabrobot.serializer import serialize
 
 from .liquid_handler import LiquidHandler
@@ -1328,3 +1329,50 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     wide_gap_lower = abs(wide_offsets[1] - wide_offsets[0])
     tight_gap_lower = abs(tight_offsets[1] - tight_offsets[0])
     self.assertGreater(wide_gap_lower, tight_gap_lower)
+
+  async def test_old_pip_firmware_preserves_repeated_resource_zero_offsets(self):
+    """Legacy PIP firmware should keep the old repeated-resource zero-offset behavior."""
+    self.backend._pip_has_old_firmware = lambda: True
+
+    small_well = Well(
+      name="small_well",
+      size_x=107.2,
+      size_y=70.9,
+      size_z=24.76,
+      material_z_thickness=1.0,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.RECTANGLE,
+    )
+    self.deck.assign_child_resource(small_well, location=Coordinate(200, 100, 0))
+    small_well.tracker.set_volume(50_000)
+
+    tips = [self.tip_rack.get_item(f"{chr(65 + i)}1").get_tip() for i in range(8)]
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+
+    await self.lh.aspirate([small_well] * 8, vols=[100] * 8, use_channels=list(range(8)))
+
+    ops = self.backend.aspirate.call_args.kwargs["ops"]
+    offsets = [op.offset.y for op in ops]
+    self.assertEqual(offsets, [0.0] * 8)
+
+  async def test_modern_firmware_still_rejects_too_small_single_resource(self):
+    """Modern spacing logic should still reject resources that cannot fit the channels."""
+    self.backend._pip_has_old_firmware = lambda: False
+
+    small_well = Well(
+      name="small_well",
+      size_x=107.2,
+      size_y=70.9,
+      size_z=24.76,
+      material_z_thickness=1.0,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.RECTANGLE,
+    )
+    self.deck.assign_child_resource(small_well, location=Coordinate(200, 100, 0))
+    small_well.tracker.set_volume(50_000)
+
+    tips = [self.tip_rack.get_item(f"{chr(65 + i)}1").get_tip() for i in range(8)]
+    self.lh.update_head_state({i: t for i, t in enumerate(tips)})
+
+    with self.assertRaisesRegex(ValueError, "Resource is too small to space channels."):
+      await self.lh.aspirate([small_well] * 8, vols=[100] * 8, use_channels=list(range(8)))

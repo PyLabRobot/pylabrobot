@@ -1173,9 +1173,16 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
     self.assertTrue(sent.startswith("C0AS"))
+    self.assertNotIn("po", sent)
     self.assertNotIn("gi", sent)
     self.assertNotIn("gj", sent)
     self.assertNotIn("gk", sent)
+    self.assertNotIn("lk", sent)
+    self.assertNotIn("ik", sent)
+    self.assertNotIn("sd", sent)
+    self.assertNotIn("se", sent)
+    self.assertNotIn("sz", sent)
+    self.assertNotIn("io", sent)
 
   async def test_dispense_pip_omits_tadm_fields_for_old_pip_firmware(self):
     self._set_pip_firmware_year(2009)
@@ -1193,9 +1200,75 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
     self.assertTrue(sent.startswith("C0DS"))
+    self.assertNotIn("po", sent)
     self.assertNotIn("gi", sent)
     self.assertNotIn("gj", sent)
     self.assertNotIn("gk", sent)
+
+  async def test_aspirate_pip_includes_po_for_modern_pip_firmware(self):
+    self._set_pip_firmware_year(2024)
+
+    await self.STAR.aspirate_pip(
+      aspiration_type=[0],
+      tip_pattern=[True],
+      x_positions=[8000],
+      y_positions=[3427],
+      aspiration_volumes=[100],
+      pull_out_distance_transport_air=[100],
+    )
+
+    sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0AS"))
+    self.assertIn("po0100", sent)
+
+  async def test_dispense_pip_includes_po_for_modern_pip_firmware(self):
+    self._set_pip_firmware_year(2024)
+
+    await self.STAR.dispense_pip(
+      tip_pattern=[True],
+      dispensing_mode=[0],
+      x_positions=[8000],
+      y_positions=[3427],
+      dispense_volumes=[100],
+      pull_out_distance_transport_air=[100],
+    )
+
+    sent = self.STAR._write_and_read_command.call_args.kwargs["cmd"]
+    self.assertTrue(sent.startswith("C0DS"))
+    self.assertIn("po0100", sent)
+
+  async def test_ops_to_fw_positions_allows_legacy_sub_9mm_spacing(self):
+    self._set_pip_firmware_year(2009)
+
+    op1 = Pickup(
+      resource=self.tip_rack["A1"][0],
+      offset=Coordinate.zero(),
+      tip=self.tip_rack["A1"][0].get_tip(),
+    )
+    op2 = Pickup(
+      resource=self.tip_rack["A1"][0],
+      offset=Coordinate(0, -7.9, 0),
+      tip=self.tip_rack["A1"][0].get_tip(),
+    )
+
+    self.STAR._ops_to_fw_positions((op1, op2), use_channels=[0, 1])
+
+  async def test_ops_to_fw_positions_rejects_modern_sub_9mm_spacing(self):
+    self._set_pip_firmware_year(2024)
+
+    op1 = Pickup(
+      resource=self.tip_rack["A1"][0],
+      offset=Coordinate.zero(),
+      tip=self.tip_rack["A1"][0].get_tip(),
+    )
+    op2 = Pickup(
+      resource=self.tip_rack["A1"][0],
+      offset=Coordinate(0, -7.9, 0),
+      tip=self.tip_rack["A1"][0].get_tip(),
+    )
+
+    with self.assertRaisesRegex(ValueError, "Minimum distance between two y positions is <9mm"):
+      self.STAR._ops_to_fw_positions((op1, op2), use_channels=[0, 1])
 
   async def test_portrait_tip_rack_handling(self):
     deck = STARLetDeck()

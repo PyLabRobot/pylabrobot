@@ -416,21 +416,25 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       y_pos = ops[i].resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + ops[i].offset.y
       y_positions.append(round(y_pos * 10))
 
+    pip_has_old_firmware = getattr(self, "_pip_has_old_firmware", None)
+    enforce_min_y_spacing = not (callable(pip_has_old_firmware) and pip_has_old_firmware())
+
     # check that the minimum d between any two y positions is >9mm
     # O(n^2) search is not great but this is most readable, and the max size is 16, so it's fine.
-    for channel_idx1, (x1, y1) in enumerate(zip(x_positions, y_positions)):
-      for channel_idx2, (x2, y2) in enumerate(zip(x_positions, y_positions)):
-        if channel_idx1 == channel_idx2:
-          continue
-        if not channels_involved[channel_idx1] or not channels_involved[channel_idx2]:
-          continue
-        if x1 != x2:  # channels not on the same column -> will be two operations on the machine
-          continue
-        if y1 != y2 and abs(y1 - y2) < 90:
-          raise ValueError(
-            f"Minimum distance between two y positions is <9mm: {y1}, {y2}"
-            f" (channel {channel_idx1} and {channel_idx2})"
-          )
+    if enforce_min_y_spacing:
+      for channel_idx1, (x1, y1) in enumerate(zip(x_positions, y_positions)):
+        for channel_idx2, (x2, y2) in enumerate(zip(x_positions, y_positions)):
+          if channel_idx1 == channel_idx2:
+            continue
+          if not channels_involved[channel_idx1] or not channels_involved[channel_idx2]:
+            continue
+          if x1 != x2:  # channels not on the same column -> will be two operations on the machine
+            continue
+          if y1 != y2 and abs(y1 - y2) < 90:
+            raise ValueError(
+              f"Minimum distance between two y positions is <9mm: {y1}, {y2}"
+              f" (channel {channel_idx1} and {channel_idx2})"
+            )
 
     if len(ops) > self.num_channels:
       raise ValueError(f"Too many channels specified: {len(ops)} > {self.num_channels}")
