@@ -48,7 +48,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Hamilton | STAR(let) | <span class="badge badge-transfer">arm</span> | Full | [PLR](00_liquid-handling/hamilton-star/_hamilton-star.rst) / [OEM](https://www.hamiltoncompany.com/microlab-star) |
 | Hamilton | Vantage | <span class="badge badge-transfer">arm</span> | Mostly | [PLR](00_liquid-handling/hamilton-vantage/_hamilton-vantage.rst) / [OEM](https://www.hamiltoncompany.com/microlab-vantage) |
 | Hamilton | Prep | | WIP | [OEM](https://www.hamiltoncompany.com/microlab-prep) |
-| Hamilton | Nimbus | <span class="badge badge-transfer">arm</span> | WIP | [OEM](https://www.hamiltoncompany.com/microlab-nimbus) |
+| Hamilton | Nimbus | <span class="badge badge-transfer">arm</span> | Mostly | [OEM](https://www.hamiltoncompany.com/microlab-nimbus) |
 | Tecan | EVO | <span class="badge badge-transfer">arm</span> | Basic | [PLR](00_liquid-handling/tecan-evo/_tecan-evo.rst) / [OEM](https://lifesciences.tecan.com/freedom-evo-platform) |
 | Opentrons | OT-2 |  | Mostly | [PLR](00_liquid-handling/opentrons/ot2/hello-world.ipynb) / [OEM](https://opentrons.com/products/ot-2-robot) |
 
@@ -64,6 +64,14 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
 | Agilent (BioTek) | EL406 | Mostly | [PLR](00_liquid-handling/plate-washing/biotek-el406.ipynb) / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-el406-washer-dispenser-795212) |
+| Agilent (BioTek) | EL405 | Mostly | [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-elx405-select-deep-well-microplate-washer-1623186) |
+
+### Bulk Dispensers
+
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Thermo Fisher Scientific | Multidrop Combi | Mostly (v1b1) | [OEM](https://www.thermofisher.com/order/catalog/product/5840300) |
+| Formulatrix | Mantis | WIP | [OEM](https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/) |
 
 ---
 
@@ -75,7 +83,8 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|-------------|--------|
 | Brooks Automation | PreciseFlex PF400 |  Full | [PLR](01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.ipynb) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
 | Brooks Automation | PreciseFlex PF3400 |  Full | [PLR](01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.ipynb) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
-| PAA | KX2 | WIP | |
+| PAA | KX2 | Mostly | |
+| UFactory | xArm 6 | Basics (v1b1) | [OEM](https://www.ufactory.cc/xarm-collaborative-robot/) |
 
 ### Centrifuges
 
@@ -114,6 +123,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating</span> | Full | [PLR](01_material-handling/storage/cytomat.ipynb) / OEM? |
 | Inheco | Incubator Shaker (MTP/DWP) | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Mostly | [OEM](https://www.inheco.com/incubator-shaker.html) |
 | Inheco | SCILA | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Mostly | [OEM](https://www.inheco.com/scila.html) |
+| Liconic | STX series | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | [PLR](01_material-handling/storage/liconic.ipynb) / [OEM](https://www.liconic.com/stx.html) |
 
 ### Peelers
 
@@ -134,7 +144,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Opentrons | Thermocycler | Full | [OEM](https://opentrons.com/products/thermocycler-module-1) |
 | Thermo Fisher Scientific | ATC | Full | [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html) |
 | Thermo Fisher Scientific | ProFlex | Full | [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html) |
-| Inheco | ODTC | WIP | [OEM](https://www.inheco.com/odtc.html) |
+| Inheco | ODTC | Mostly | [OEM](https://www.inheco.com/odtc.html) |
 
 ### Temperature Controllers
 
@@ -142,6 +152,7 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|----------|-------------|--------|
 | Opentrons | Temperature Module | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | [PLR](01_material-handling/temperature-controllers/ot-temperature-controller.ipynb) / [OEM](https://opentrons.com/products/temperature-module-gen2) |
 | Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [OEM](https://www.inheco.com/cpac.html) |
+| Hamilton | Heater/Cooler | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full (v1b1) | [OEM](https://www.hamiltoncompany.com/temperature-control/heater-cooler) |
 
 ### Tilting
 
@@ -161,13 +172,17 @@ tr > td:nth-child(5) { width: 15%; }
 | Agilent (BioTek) | Cytation 1 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](02_analytical/plate-reading/cytation.ipynb) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-1-cell-imaging-multimode-reader-1623200) |
 | Agilent (BioTek) | Cytation 5 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](02_analytical/plate-reading/cytation.ipynb) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202) |
 | Agilent (BioTek) | Synergy H1 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Full | [PLR](02_analytical/plate-reading/synergyh1.ipynb) / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-h1-multimode-reader-1623193) |
+| Agilent (BioTek) | Synergy HT | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Full | [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194) |
 | Byonoy | Absorbance 96 Automate | <span class="badge badge-absorbance">absorbance</span> | Full | [PLR](02_analytical/plate-reading/byonoy/absorbance.ipynb) / [OEM](https://byonoy.com/absorbance-96-automate/) |
 | Byonoy | Luminescence 96 | <span class="badge badge-luminescence">luminescence</span> | Full | [PLR](02_analytical/plate-reading/byonoy/luminescence.ipynb) / [OEM](https://byonoy.com/luminescence-96/) |
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | Full | [PLR](02_analytical/plate-reading/byonoy/luminescence.ipynb) / [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
 | Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | [PLR](02_analytical/plate-reading/pico.ipynb) / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
+| Molecular Devices | ImageXpress Micro | <span class="badge badge-microscopy">microscopy</span> | WIP | [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-micro-4) |
+| Molecular Devices | ImageXpress Nano | <span class="badge badge-microscopy">microscopy</span> | WIP | [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-nano) |
 | Tecan | Infinite 200 PRO | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Mostly | [PLR](02_analytical/plate-reading/tecan-infinite.ipynb) / [OEM](https://lifesciences.tecan.com/infinite-200-pro) |
+| Tecan | Spark 20M | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> | Mostly | [PLR](02_analytical/plate-reading/tecan-spark.ipynb) / [OEM](https://lifesciences.tecan.com/spark-multimode-microplate-reader) |
 
 
 ### Flow Cytometers
@@ -187,6 +202,12 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
 | Mettler Toledo | WXS205SDU | Full | [PLR](02_analytical/scales/mettler-toledo-WXS205SDU.ipynb) / [OEM](https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html) |
+
+### Barcode Scanners
+
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Keyence | Barcode Scanner | Full | [OEM](https://www.keyence.com/products/barcode/) |
 
 ---
 
