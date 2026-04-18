@@ -14,7 +14,11 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
-from pylabrobot.hamilton.tcp.status_exception import HamiltonStatusException
+from pylabrobot.hamilton.tcp.hoi_error import (
+  HoiError,
+  parse_hamilton_error_entries,
+  parse_hamilton_error_params,
+)
 from pylabrobot.device import Driver
 from pylabrobot.hamilton.tcp.commands import TCPCommand, hamilton_error_for_entry
 from pylabrobot.hamilton.tcp.error_tables import HC_RESULT_PROTOCOL
@@ -24,8 +28,6 @@ from pylabrobot.hamilton.tcp.messages import (
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
-  parse_hamilton_error_entries,
-  parse_hamilton_error_params,
 )
 from pylabrobot.hamilton.tcp.introspection import (
   HamiltonIntrospection,
@@ -588,9 +590,11 @@ class HamiltonTCPClient(Driver):
           if command.error_entries_use_physical_channels():
             per_channel: Dict[int, Exception] = {}
             context_by_channel: Dict[int, Optional[str]] = {}
+            hoi_exceptions: Dict[int, Exception] = {}
             for idx, entry in enumerate(entries):
               _iface_name, desc = await self._hc_result_text.describe_entry(entry)
               err = hamilton_error_for_entry(entry, desc)
+              hoi_exceptions[idx] = err
               channel = command._channel_index_for_entry(idx, entry)
               if channel is None:
                 channel = idx
@@ -614,7 +618,12 @@ class HamiltonTCPClient(Driver):
                 len(per_channel),
                 channel_summary,
               )
-              raise ChannelizedError(errors=per_channel, raw_response=response_message.hoi.params)
+              raise ChannelizedError(
+                errors=per_channel,
+                raw_response=response_message.hoi.params,
+                hoi_entries=list(entries),
+                hoi_exceptions=hoi_exceptions,
+              )
             logger.debug(
               "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
               action.name,
@@ -647,8 +656,8 @@ class HamiltonTCPClient(Driver):
               len(entries),
               summary,
             )
-            raise HamiltonStatusException(
-              errors=entry_errors,
+            raise HoiError(
+              exceptions=entry_errors,
               entries=list(entries),
               raw_response=response_message.hoi.params,
             )

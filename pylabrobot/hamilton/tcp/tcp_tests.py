@@ -21,7 +21,11 @@ from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient, _HcResultDescriptionHelper
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
-from pylabrobot.hamilton.tcp.status_exception import HamiltonStatusException
+from pylabrobot.hamilton.tcp.hoi_error import (
+  HoiError,
+  parse_hamilton_error_entries,
+  parse_hamilton_error_entry,
+)
 from pylabrobot.hamilton.tcp.introspection import (
   EnumInfo,
   FirmwareTree,
@@ -46,8 +50,6 @@ from pylabrobot.hamilton.tcp.messages import (
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
-  parse_hamilton_error_entries,
-  parse_hamilton_error_entry,
   parse_into_struct,
   split_hoi_params_after_warning_prefix,
 )
@@ -582,7 +584,7 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
       f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}"
     )
 
-  async def test_void_command_raises_hamilton_status_exception(self):
+  async def test_void_command_raises_hoi_error(self):
     entry = HcResultEntry(1, 1, 5376, 1, 35, 0x0206)
     err_params = HoiParams().add(self._format_wire_entry(entry), Str).build()
 
@@ -624,9 +626,9 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
     client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     cmd = CmdVoid(Address(1, 1, 5376))
-    with self.assertRaises(HamiltonStatusException) as ctx:
+    with self.assertRaises(HoiError) as ctx:
       await client.send_command(cmd)
-    self.assertIn(0, ctx.exception.errors)
+    self.assertIn(0, ctx.exception.exceptions)
     self.assertEqual(ctx.exception.entries[0].result, 0x0206)
 
   async def test_channels_involved_raises_channelized_error(self):
@@ -675,6 +677,8 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ChannelizedError) as ctx:
       await client.send_command(cmd)
     self.assertIn(0, ctx.exception.errors)
+    self.assertEqual(len(ctx.exception.kwargs["hoi_entries"]), 1)
+    self.assertIn(0, ctx.exception.kwargs["hoi_exceptions"])
 
 
 class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):

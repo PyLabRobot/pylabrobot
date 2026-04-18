@@ -172,7 +172,7 @@ class TCPCommand:
     Returns ``True`` when the command carries per-channel wire parameters:
     Prep ``StructArray`` elements with a ``channel`` field, or Nimbus
     ``channels_involved`` parallel arrays. Void MLPrep / status queries return
-    ``False`` so the client raises :class:`~pylabrobot.hamilton.tcp.status_exception.HamiltonStatusException`
+    ``False`` so the client raises :class:`~pylabrobot.hamilton.tcp.hoi_error.HoiError`
     instead of attributing errors to synthetic ``ch0``.
     """
     if not is_dataclass(self):
@@ -210,7 +210,7 @@ class TCPCommand:
 
     Only non-success, non-warning entries from a warning-frame prefix are
     included; warnings remain log-only. Exception frames are handled
-    separately in ``send_command`` via ``parse_hamilton_error_entry``.
+    separately in ``send_command`` via :func:`~pylabrobot.hamilton.tcp.hoi_error.parse_hamilton_error_entry`.
 
     ``entry_index`` passed to ``_channel_index_for_entry`` is the position of
     the entry in the *original* entries list (i.e. active-channel ordinal),
