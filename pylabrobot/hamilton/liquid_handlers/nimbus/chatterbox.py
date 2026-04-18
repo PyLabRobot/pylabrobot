@@ -30,15 +30,8 @@ class NimbusChatterboxDriver(NimbusDriver):
   async def setup(self, backend_params: Optional[BackendParams] = None):
     from .pip_backend import NimbusPIPBackend
 
-    if backend_params is None:
-      params = NimbusSetupParams()
-    elif isinstance(backend_params, NimbusSetupParams):
-      params = backend_params
-    else:
-      raise TypeError(
-        "NimbusChatterboxDriver.setup expected NimbusSetupParams | None for backend_params, "
-        f"got {type(backend_params).__name__}"
-      )
+    if not isinstance(backend_params, NimbusSetupParams):
+      backend_params = NimbusSetupParams()
 
     # Use canned addresses (skip TCP connection entirely)
     pipette_address = Address(1, 1, 257)
@@ -53,10 +46,10 @@ class NimbusChatterboxDriver(NimbusDriver):
     self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
 
     self.pip = NimbusPIPBackend(
-      driver=self, deck=params.deck, address=pipette_address, num_channels=self._num_channels
+      driver=self, deck=backend_params.deck, address=pipette_address, num_channels=self._num_channels
     )
     self.door = NimbusDoor(driver=self, address=door_address)
-    if params.require_door_lock and self.door is None:
+    if backend_params.require_door_lock and self.door is None:
       raise RuntimeError("DoorLock is required but not available on this instrument.")
 
   async def stop(self):

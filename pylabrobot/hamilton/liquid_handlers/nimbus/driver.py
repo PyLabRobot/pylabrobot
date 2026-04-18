@@ -133,15 +133,8 @@ class NimbusDriver(HamiltonTCPClient):
     Args:
       backend_params: Optional :class:`NimbusSetupParams`.
     """
-    if backend_params is None:
-      params = NimbusSetupParams()
-    elif isinstance(backend_params, NimbusSetupParams):
-      params = backend_params
-    else:
-      raise TypeError(
-        "NimbusDriver.setup expected NimbusSetupParams | None for backend_params, "
-        f"got {type(backend_params).__name__}"
-      )
+    if not isinstance(backend_params, NimbusSetupParams):
+      backend_params = NimbusSetupParams()
 
     # TCP connection + Protocol 7 + Protocol 3 + root discovery
     await super().setup()
@@ -186,12 +179,12 @@ class NimbusDriver(HamiltonTCPClient):
 
     # Create backends — each object stores its own address and state
     self.pip = NimbusPIPBackend(
-      driver=self, deck=params.deck, address=pipette_address, num_channels=num_channels
+      driver=self, deck=backend_params.deck, address=pipette_address, num_channels=num_channels
     )
 
     if door_address is not None:
       self.door = NimbusDoor(driver=self, address=door_address)
-    elif params.require_door_lock:
+    elif backend_params.require_door_lock:
       raise RuntimeError("DoorLock is required but not available on this instrument.")
 
     # Initialize subsystems
