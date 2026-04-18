@@ -55,7 +55,6 @@ class NimbusResolvedInterfaces:
 
 @dataclass
 class NimbusSetupParams(BackendParams):
-  deck: Optional[NimbusDeck] = None
   require_door_lock: bool = False
 
 
@@ -87,6 +86,7 @@ class NimbusDriver(HamiltonTCPClient):
 
   def __init__(
     self,
+    deck: NimbusDeck,
     host: str,
     port: int = 2000,
     read_timeout: float = 300.0,
@@ -108,6 +108,7 @@ class NimbusDriver(HamiltonTCPClient):
       error_codes=merged_error_codes,
     )
 
+    self.deck = deck
     self._nimbus_core_address: Optional[Address] = None
     self._resolved_interfaces: Dict[str, Optional[Address]] = {}
     self._nimbus_resolved: Optional[NimbusResolvedInterfaces] = None
@@ -136,6 +137,7 @@ class NimbusDriver(HamiltonTCPClient):
     if not isinstance(backend_params, NimbusSetupParams):
       backend_params = NimbusSetupParams()
 
+    assert self.deck is not None, "NimbusDriver requires a deck before setup()"
     # TCP connection + Protocol 7 + Protocol 3 + root discovery
     await super().setup()
 
@@ -179,7 +181,7 @@ class NimbusDriver(HamiltonTCPClient):
 
     # Create backends — each object stores its own address and state
     self.pip = NimbusPIPBackend(
-      driver=self, deck=backend_params.deck, address=pipette_address, num_channels=num_channels
+      driver=self, deck=self.deck, address=pipette_address, num_channels=num_channels
     )
 
     if door_address is not None:

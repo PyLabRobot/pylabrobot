@@ -13,6 +13,7 @@ from pylabrobot.hamilton.liquid_handlers.nimbus.driver import (
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.packets import Address
+from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
 # Stable key from NIMBUS_ERROR_CODES for merge-override tests (must exist in table).
 _NIMBUS_OVERRIDE_KEY = (0x0001, 0x0001, 0x0101, 1, 0x0F01)
@@ -21,7 +22,7 @@ _NIMBUS_OTHER_KEY = (0x0001, 0x0001, 0x0101, 1, 0x0F02)
 
 def test_chatterbox_setup_and_command_roundtrip():
   async def _run() -> None:
-    driver = NimbusChatterboxDriver(num_channels=8)
+    driver = NimbusChatterboxDriver(deck=NimbusDeck(), num_channels=8)
     await driver.setup()
 
     assert driver.nimbus_core_address == Address(1, 1, 48896)
@@ -43,7 +44,7 @@ def test_chatterbox_setup_and_command_roundtrip():
 
 def test_assert_required_methods_missing_raises():
   async def _run() -> None:
-    driver = NimbusDriver(host="127.0.0.1")
+    driver = NimbusDriver(deck=NimbusDeck(), host="127.0.0.1")
 
     class _Method:
       def __init__(self, method_id: int):
@@ -75,6 +76,7 @@ def test_nimbus_driver_error_codes_user_values_override_table():
   exercised elsewhere (tcp_tests do not assert Nimbus defaults).
   """
   driver = NimbusDriver(
+    deck=NimbusDeck(),
     host="127.0.0.1",
     error_codes={_NIMBUS_OVERRIDE_KEY: "custom text for tests"},
   )
@@ -84,7 +86,7 @@ def test_nimbus_driver_error_codes_user_values_override_table():
 
 def test_nimbus_core_address_raises_before_setup():
   """Property requires setup() to have discovered and stored NimbusCore."""
-  driver = NimbusDriver(host="127.0.0.1")
+  driver = NimbusDriver(deck=NimbusDeck(), host="127.0.0.1")
   with pytest.raises(RuntimeError, match="Nimbus root address not discovered"):
     _ = driver.nimbus_core_address
 
@@ -131,7 +133,7 @@ def test_assert_required_methods_succeeds_when_all_present():
   """Complements test_assert_required_methods_missing_raises: no false positive when the set is satisfied."""
 
   async def _run() -> None:
-    driver = NimbusDriver(host="127.0.0.1")
+    driver = NimbusDriver(deck=NimbusDeck(), host="127.0.0.1")
 
     class _Method:
       def __init__(self, method_id: int):

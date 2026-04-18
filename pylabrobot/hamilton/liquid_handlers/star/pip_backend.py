@@ -194,9 +194,8 @@ def _assert_range(values, lo, hi, name):
 class STARPIPBackend(PIPBackend):
   """Translates PIP operations into STAR firmware commands via the driver."""
 
-  def __init__(self, driver: STARDriver, deck=None, traversal_height: float = 245.0):
+  def __init__(self, driver: STARDriver, traversal_height: float = 245.0):
     self.driver = driver
-    self.deck = deck
     self.traversal_height = traversal_height
     self.channels: List[PIPChannel] = []
     self._fw_lock = _FirmwareLock()

@@ -26,11 +26,11 @@ class Nimbus(Device):
     port: int = 2000,
   ):
     if chatterbox:
-      driver: NimbusDriver = NimbusChatterboxDriver()
+      driver: NimbusDriver = NimbusChatterboxDriver(deck=deck)
     else:
       if not host:
         raise ValueError("host must be provided when chatterbox is False.")
-      driver = NimbusDriver(host=host, port=port)
+      driver = NimbusDriver(deck=deck, host=host, port=port)
     super().__init__(driver=driver)
     self.driver: NimbusDriver = driver
     self.deck = deck
@@ -45,12 +45,12 @@ class Nimbus(Device):
     PIP backend.
     """
     if not isinstance(backend_params, NimbusSetupParams):
-      backend_params = NimbusSetupParams(deck=self.deck)
+      backend_params = NimbusSetupParams()
 
     try:
       await self.driver.setup(backend_params=backend_params)
 
-      self.pip = PIP(backend=self.driver.pip)
+      self.pip = PIP(backend=self.driver.pip, deck=self.deck)
       self._capabilities = [self.pip]
       await self.pip._on_setup()
       self._setup_finished = True

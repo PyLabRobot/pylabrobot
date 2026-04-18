@@ -428,12 +428,13 @@ class LiquidHandler(Resource, Machine):
     await super().setup(**backend_kwargs)
 
     # Create capabilities with adapter backends
-    self._lh_cap = PIP(backend=_LHAdapter(self.backend))
+    self._lh_cap = PIP(backend=_LHAdapter(self.backend), deck=self.deck)
     await self._lh_cap._on_setup()
 
     if self.backend.head96_installed:
       self._head96_cap = Head96(
         backend=_Head96Adapter(self.backend),
+        deck=self.deck,
       )
       await self._head96_cap._on_setup()
 

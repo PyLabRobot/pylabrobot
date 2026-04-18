@@ -7,6 +7,7 @@ from pylabrobot.capabilities.capability import BackendParams, Capability, need_c
 from pylabrobot.resources import (
   Container,
   Coordinate,
+  Deck,
   Plate,
   Tip,
   TipRack,
@@ -44,8 +45,8 @@ class Head96(Capability):
   def __init__(
     self,
     backend: Head96Backend,
+    deck: Deck,
     default_offset: Coordinate = Coordinate.zero(),
-    deck=None,
   ):
     super().__init__(backend=backend)
     self.backend: Head96Backend = backend
