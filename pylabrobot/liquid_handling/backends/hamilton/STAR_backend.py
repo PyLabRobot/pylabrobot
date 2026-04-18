@@ -1289,6 +1289,21 @@ class ExtendedConfiguration:
 
 
 @dataclass
+class PipChannelInformation:
+  """Installed hardware information for a single pipetting channel (VW command)."""
+
+  ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
+  HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
+  StopDiscType = Literal["core_i", "core_ii"]
+  PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
+
+  channel_type: ChannelType
+  head_type: HeadType
+  stop_disc_type: StopDiscType
+  pressure_adc: PressureADC
+
+
+@dataclass
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1355,6 +1370,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._unsafe = UnSafe(self)
 
     self._iswap_version: Optional[str] = None  # loaded lazily
+    self._pip_channel_information: List[PipChannelInformation] = []
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
     self._x_grouping_tolerance_mm: float = 0.1
@@ -1520,6 +1536,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return cast(
       str,
       (await self.send_command(STARBackend.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"],
+    )
+
+  async def _pip_channel_request_configuration(self, channel: int) -> PipChannelInformation:
+    """Request installed hardware for a pipetting channel using the VW command.
+
+    Args:
+      channel: 0-indexed channel number.
+    """
+    resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
+    hw_tokens = resp.split("vw")[-1].strip().split()
+    return PipChannelInformation(
+      channel_type="ML_STAR_RPC" if hw_tokens[0] == "1" else "ML_STAR",
+      head_type="ML_STAR_PLE"
+      if hw_tokens[1] == "1"
+      else "ML_STAR_RPC"
+      if hw_tokens[1] == "2"
+      else "ML_STAR",
+      stop_disc_type="core_i" if hw_tokens[2] == "0" else "core_ii",
+      pressure_adc="Analog_Devices_AD5263" if hw_tokens[3] == "1" else "Renesas_X9268",
     )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -1692,6 +1727,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
+
+      # Cache per-channel hardware configuration for version-specific behavior
+      self._pip_channel_information = [
+        await self._pip_channel_request_configuration(ch) for ch in range(self.num_channels)
+      ]
 
     async def set_up_autoload():
       if self.machine_conf.auto_load_installed and not skip_autoload:
