@@ -24,6 +24,8 @@ from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from .pip_backend import _dispensing_mode_for_op  # noqa: F401
 
 if TYPE_CHECKING:
+  from pylabrobot.resources.hamilton import HamiltonDeck
+
   from .driver import STARDriver
 
 logger = logging.getLogger(__name__)
@@ -47,10 +49,10 @@ def _channel_pattern_to_hex(pattern: List[bool]) -> str:
 class STARHead96Backend(Head96Backend):
   """Translates Head96 operations into STAR firmware commands via the driver."""
 
-  def __init__(self, driver: STARDriver, traversal_height: float = 245.0, deck=None):
+  def __init__(self, driver: STARDriver, deck: "HamiltonDeck", traversal_height: float = 245.0):
     self.driver = driver
-    self.traversal_height = traversal_height
     self.deck = deck
+    self.traversal_height = traversal_height
 
   @contextmanager
   def use_traversal_height(self, height: float):
@@ -76,12 +78,9 @@ class STARHead96Backend(Head96Backend):
     """
     already_initialized = await self.request_initialization_status()
     if not already_initialized:
-      if self.deck is not None:
-        trash96 = self.deck.get_trash_area96()
-        loc = self._position_96_head_in_resource(trash96)
-        await self.initialize(x=loc.x, y=loc.y, z=loc.z)
-      else:
-        await self.initialize()
+      trash96 = self.deck.get_trash_area96()
+      loc = self._position_96_head_in_resource(trash96)
+      await self.initialize(x=loc.x, y=loc.y, z=loc.z)
 
     # Cache firmware version and configuration for version-specific behavior
     self.fw_version = await self.request_firmware_version()

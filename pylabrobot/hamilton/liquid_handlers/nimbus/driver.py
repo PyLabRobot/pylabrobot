@@ -8,7 +8,6 @@ from typing import Dict, Optional
 from pylabrobot.hamilton.liquid_handlers.tcp_base import HamiltonTCPHandler
 from pylabrobot.hamilton.tcp.introspection import HamiltonIntrospection
 from pylabrobot.hamilton.tcp.packets import Address
-
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
 from .commands import (
@@ -30,6 +29,7 @@ class NimbusDriver(HamiltonTCPHandler):
 
   def __init__(
     self,
+    deck: NimbusDeck,
     host: str,
     port: int = 2000,
     read_timeout: float = 30.0,
@@ -46,6 +46,7 @@ class NimbusDriver(HamiltonTCPHandler):
       max_reconnect_attempts=max_reconnect_attempts,
     )
 
+    self.deck = deck
     self._nimbus_core_address: Optional[Address] = None
 
     self.pip: NimbusPIPBackend  # set in setup()
@@ -57,12 +58,9 @@ class NimbusDriver(HamiltonTCPHandler):
       raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
     return self._nimbus_core_address
 
-  async def setup(self, deck: Optional[NimbusDeck] = None):
-    """Initialize connection, discover hardware, and create backends.
-
-    Args:
-      deck: NimbusDeck for coordinate conversion. Required for pipetting operations.
-    """
+  async def setup(self):
+    """Initialize connection, discover hardware, and create backends."""
+    assert self.deck is not None, "NimbusDriver requires a deck before setup()"
     # TCP connection + Protocol 7 + Protocol 3 + root discovery
     await super().setup()
 
@@ -85,7 +83,7 @@ class NimbusDriver(HamiltonTCPHandler):
 
     # Create backends — each object stores its own address and state
     self.pip = NimbusPIPBackend(
-      driver=self, deck=deck, address=pipette_address, num_channels=num_channels
+      driver=self, deck=self.deck, address=pipette_address, num_channels=num_channels
     )
 
     if door_address is not None:

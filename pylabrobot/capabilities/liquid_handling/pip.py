@@ -8,6 +8,7 @@ from pylabrobot.capabilities.capability import BackendParams, Capability, need_c
 from pylabrobot.resources import (
   Container,
   Coordinate,
+  Deck,
   Plate,
   Tip,
   TipSpot,
@@ -36,9 +37,10 @@ class PIP(Capability):
   See :doc:`/user_guide/capabilities/pip` for a walkthrough.
   """
 
-  def __init__(self, backend: PIPBackend):
+  def __init__(self, backend: PIPBackend, deck: Deck):
     super().__init__(backend=backend)
     self.backend: PIPBackend = backend
+    self.deck = deck
     self.head: Dict[int, TipTracker] = {}
     self._default_use_channels: Optional[List[int]] = None
     self._blow_out_air_volume: Optional[List[Optional[float]]] = None

@@ -7,6 +7,7 @@ from typing import Optional
 
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.hamilton.tcp.packets import Address
+from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
 from .door import NimbusDoor
 from .driver import NimbusDriver
@@ -21,12 +22,12 @@ class NimbusChatterboxDriver(NimbusDriver):
   and use canned addresses and responses instead.
   """
 
-  def __init__(self, num_channels: int = 8):
+  def __init__(self, deck: NimbusDeck, num_channels: int = 8):
     # Pass dummy host — Socket is created but never opened
-    super().__init__(host="chatterbox", port=2000)
+    super().__init__(deck=deck, host="chatterbox", port=2000)
     self._num_channels = num_channels
 
-  async def setup(self, deck=None):
+  async def setup(self):
     from .pip_backend import NimbusPIPBackend
 
     # Use canned addresses (skip TCP connection entirely)
@@ -35,7 +36,7 @@ class NimbusChatterboxDriver(NimbusDriver):
     door_address = Address(1, 1, 268)
 
     self.pip = NimbusPIPBackend(
-      driver=self, deck=deck, address=pipette_address, num_channels=self._num_channels
+      driver=self, deck=self.deck, address=pipette_address, num_channels=self._num_channels
     )
     self.door = NimbusDoor(driver=self, address=door_address)
 

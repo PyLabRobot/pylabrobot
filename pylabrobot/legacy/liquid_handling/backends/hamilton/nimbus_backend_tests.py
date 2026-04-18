@@ -616,6 +616,7 @@ def _setup_backend() -> NimbusBackend:
   backend._is_initialized = True
   backend._pip_backend = NimbusPIPBackend(
     driver=backend,  # type: ignore[arg-type]
+    deck=NimbusDeck(),
     address=Address(1, 1, 257),
     num_channels=8,
   )

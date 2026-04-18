@@ -163,9 +163,10 @@ class NimbusBackend(HamiltonTCPBackend):
       raise
 
     # Create v1b1 PIP backend delegate
+    assert isinstance(self.deck, NimbusDeck), "Nimbus requires a NimbusDeck"
     self._pip_backend = NimbusPIPBackend(
       driver=self,  # type: ignore[arg-type]  # legacy backend duck-types as driver
-      deck=self.deck if isinstance(self.deck, NimbusDeck) else None,
+      deck=self.deck,
       address=self._pipette_address,
       num_channels=self._num_channels,
       traversal_height=self._channel_traversal_height,

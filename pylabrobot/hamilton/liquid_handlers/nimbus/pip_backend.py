@@ -129,7 +129,7 @@ class NimbusPIPBackend(PIPBackend):
   def __init__(
     self,
     driver: "NimbusDriver",
-    deck: Optional["NimbusDeck"] = None,
+    deck: "NimbusDeck",
     address: Optional["Address"] = None,
     num_channels: int = 8,
     traversal_height: float = 146.0,
@@ -151,12 +151,6 @@ class NimbusPIPBackend(PIPBackend):
       raise RuntimeError("Pipette address not set. Call setup() first.")
     return self.address
 
-  def _ensure_deck(self) -> "NimbusDeck":
-    """Return the deck, raising if not set."""
-    if self.deck is None:
-      raise RuntimeError("Deck must be set for pipetting operations.")
-    return self.deck
-
   async def _on_setup(self):
     """Initialize SmartRoll if not already initialized."""
     # Query initialization status
@@ -174,7 +168,6 @@ class NimbusPIPBackend(PIPBackend):
 
   async def _initialize_smart_roll(self):
     """Configure channels and initialize SmartRoll with waste positions."""
-    self._ensure_deck()
     # Set channel configuration for each channel
     for channel in range(1, self.num_channels + 1):
       await self.driver.send_command(
@@ -409,7 +402,6 @@ class NimbusPIPBackend(PIPBackend):
     """
     if not ops:
       return
-    self._ensure_deck()
     params = (
       backend_params
       if isinstance(backend_params, NimbusPIPPickUpTipsParams)
@@ -496,7 +488,6 @@ class NimbusPIPBackend(PIPBackend):
     """
     if not ops:
       return
-    self._ensure_deck()
     params = (
       backend_params
       if isinstance(backend_params, NimbusPIPDropTipsParams)
@@ -659,7 +650,7 @@ class NimbusPIPBackend(PIPBackend):
       traverse_height = self.traversal_height
     traverse_height_units = round(traverse_height * 100)
 
-    deck = self._ensure_deck()
+    deck = self.deck
 
     # Well bottoms
     well_bottoms = []
@@ -903,7 +894,7 @@ class NimbusPIPBackend(PIPBackend):
       traverse_height = self.traversal_height
     traverse_height_units = round(traverse_height * 100)
 
-    deck = self._ensure_deck()
+    deck = self.deck
 
     # Well bottoms
     well_bottoms = []

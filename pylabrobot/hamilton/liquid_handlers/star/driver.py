@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
-from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
+from pylabrobot.resources.hamilton import HamiltonDeck, TipPickupMethod, TipSize
 
 from .autoload import STARAutoload
 from .cover import STARCover
@@ -126,6 +126,7 @@ class STARDriver(HamiltonLiquidHandler):
 
   def __init__(
     self,
+    deck: HamiltonDeck,
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
@@ -141,6 +142,7 @@ class STARDriver(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
     )
+    self.deck = deck
     self.left_side_panel_installed = left_side_panel_installed
 
     # Populated during setup().
@@ -263,7 +265,8 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- lifecycle ------------------------------------------------------------
 
-  async def setup(self, deck=None, backend_params: Optional[BackendParams] = None):  # type: ignore[override]
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    assert self.deck is not None, "STARDriver requires a deck before setup()"
     await super().setup(backend_params=backend_params)
     self.id_ = 0
     self.machine_conf = await self._request_machine_configuration()
@@ -276,12 +279,12 @@ class STARDriver(HamiltonLiquidHandler):
       await self.pre_initialize_instrument()
 
     # Create backends based on discovered config.
-    self.pip = STARPIPBackend(self, deck=deck)
+    self.pip = STARPIPBackend(self)
 
     self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      self.head96 = STARHead96Backend(self, deck=deck)
+      self.head96 = STARHead96Backend(self, deck=self.deck)
     else:
       self.head96 = None
 
