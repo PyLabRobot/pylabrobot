@@ -16,6 +16,7 @@ Examples:
 
    hamilton-vantage/_hamilton-vantage
    hamilton-prep/_hamilton-prep
+   hamilton-nimbus/nimbus_v1_aspirate_dispense
    opentrons/ot2/ot2
    tecan-evo/_tecan-evo
    pumps/_pumps
