@@ -1,6 +1,7 @@
 """Canonical v1 Hamilton TCP namespace."""
 
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
+from pylabrobot.hamilton.tcp.status_exception import HamiltonStatusException
 from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.introspection import (
@@ -50,6 +51,7 @@ __all__ = [
   "flatten_firmware_tree",
   "HAMILTON_PROTOCOL_VERSION_MAJOR",
   "HAMILTON_PROTOCOL_VERSION_MINOR",
+  "HamiltonStatusException",
   "TCPCommand",
   "HamiltonTCPClient",
   "HamiltonDataType",

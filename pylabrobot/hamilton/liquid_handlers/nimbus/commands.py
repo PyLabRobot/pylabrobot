@@ -470,7 +470,8 @@ class Aspirate(NimbusCommand):
   Units:
     - linear positions/heights: 0.01 mm
     - volumes: 0.1 uL
-    - flow rates: 0.1 uL/s
+    - aspiration/dispense/mix flow parameters: 0.1 uL/s (piston motion)
+    - swap_speed: 0.01 mm/s per wire unit (leave-liquid Z speed — not uL/s)
     - settling time: 0.1 s
 
   Field meanings:
@@ -538,7 +539,8 @@ class Dispense(NimbusCommand):
   Units:
     - linear positions/heights: 0.01 mm
     - volumes: 0.1 uL
-    - flow rates: 0.1 uL/s
+    - dispense/mix/cut-off flow parameters: 0.1 uL/s where applicable
+    - swap_speed: 0.01 mm/s per wire unit (leave-liquid Z speed — not uL/s)
     - settling time: 0.1 s
 
   Field meanings:

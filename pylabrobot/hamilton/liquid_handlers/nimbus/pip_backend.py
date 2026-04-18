@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, TypeVar, Union
+from dataclasses import dataclass, fields, replace
+from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
+from pylabrobot.hamilton.liquid_handlers.liquid_class import HamiltonLiquidClass
+from pylabrobot.hamilton.liquid_handlers.liquid_class_resolver import (
+  corrected_volumes_for_ops,
+  resolve_hamilton_liquid_classes,
+)
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.resources import Tip
 from pylabrobot.resources.container import Container
@@ -76,6 +81,13 @@ class NimbusPIPDropTipsParams(BackendParams):
 
 @dataclass
 class NimbusPIPAspirateParams(BackendParams):
+  hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
+  disable_volume_correction: Optional[List[bool]] = None
+  jet: Optional[List[bool]] = None
+  blow_out: Optional[List[bool]] = None
+  auto_liquid_class_lookup: Optional[
+    Callable[..., Optional[HamiltonLiquidClass]]
+  ] = None
   minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
   adc_enabled: bool = False
   lld_mode: Optional[List[int]] = None
@@ -95,6 +107,13 @@ class NimbusPIPAspirateParams(BackendParams):
 
 @dataclass
 class NimbusPIPDispenseParams(BackendParams):
+  hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
+  disable_volume_correction: Optional[List[bool]] = None
+  jet: Optional[List[bool]] = None
+  blow_out: Optional[List[bool]] = None
+  auto_liquid_class_lookup: Optional[
+    Callable[..., Optional[HamiltonLiquidClass]]
+  ] = None
   minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
   adc_enabled: bool = False
   lld_mode: Optional[List[int]] = None
@@ -112,6 +131,37 @@ class NimbusPIPDispenseParams(BackendParams):
   stop_back_volume: Optional[List[float]] = None
   side_touch_off_distance: float = 0.0
   dispense_offset: Optional[List[float]] = None
+
+
+def _coerce_nimbus_aspirate_params(
+  backend_params: Optional[BackendParams],
+) -> NimbusPIPAspirateParams:
+  """Use Nimbus params as-is; otherwise copy overlapping fields from any backend params object."""
+  if isinstance(backend_params, NimbusPIPAspirateParams):
+    return backend_params
+  if backend_params is None:
+    return NimbusPIPAspirateParams()
+  merged = {
+    f.name: getattr(backend_params, f.name)
+    for f in fields(NimbusPIPAspirateParams)
+    if hasattr(backend_params, f.name)
+  }
+  return replace(NimbusPIPAspirateParams(), **merged)
+
+
+def _coerce_nimbus_dispense_params(
+  backend_params: Optional[BackendParams],
+) -> NimbusPIPDispenseParams:
+  if isinstance(backend_params, NimbusPIPDispenseParams):
+    return backend_params
+  if backend_params is None:
+    return NimbusPIPDispenseParams()
+  merged = {
+    f.name: getattr(backend_params, f.name)
+    for f in fields(NimbusPIPDispenseParams)
+    if hasattr(backend_params, f.name)
+  }
+  return replace(NimbusPIPDispenseParams(), **merged)
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +657,9 @@ class NimbusPIPBackend(PIPBackend):
         - settling_time: Settling time after aspiration (s, default: [1.0]*n).
         - transport_air_volume: Transport air volume (uL, default: [5.0]*n).
         - pre_wetting_volume: Pre-wetting volume (uL, default: [0.0]*n).
-        - swap_speed: Swap speed on leaving liquid (uL/s, default: [20.0]*n).
+        - swap_speed: Speed when leaving liquid (Z pull-out, mm/s; same semantics as
+          STAR/HamiltonLiquidClass). If omitted, uses liquid class per op, else 25 mm/s
+          when no liquid class resolves for that op.
         - mix_position_from_liquid_surface: Mix position offset from liquid surface
           (mm, default: [0.0]*n).
         - limit_curve_index: Limit curve index (default: [0]*n).
@@ -616,11 +668,7 @@ class NimbusPIPBackend(PIPBackend):
     """
     if not ops:
       return
-    params = (
-      backend_params
-      if isinstance(backend_params, NimbusPIPAspirateParams)
-      else NimbusPIPAspirateParams()
-    )
+    params = _coerce_nimbus_aspirate_params(backend_params)
 
     n = len(ops)
 
@@ -679,38 +727,71 @@ class NimbusPIPBackend(PIPBackend):
 
     minimum_heights_mm = well_bottoms.copy()
 
-    volumes = [op.volume for op in ops]
-    flow_rates: List[float] = [
-      op.flow_rate if op.flow_rate is not None else _get_default_flow_rate(op.tip, is_aspirate=True)
-      for op in ops
+    hlcs = resolve_hamilton_liquid_classes(
+      params.hamilton_liquid_classes,
+      list(ops),
+      jet=params.jet or False,
+      blow_out=params.blow_out or False,
+      is_aspirate=True,
+      lookup=params.auto_liquid_class_lookup,
+    )
+    volumes = corrected_volumes_for_ops(ops, hlcs, params.disable_volume_correction)
+    flow_rates = [
+      op.flow_rate
+      if op.flow_rate is not None
+      else (
+        hlc.aspiration_flow_rate
+        if hlc is not None
+        else _get_default_flow_rate(op.tip, is_aspirate=True)
+      )
+      for op, hlc in zip(ops, hlcs)
     ]
     blow_out_air_volumes = [
-      op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
+      op.blow_out_air_volume
+      if op.blow_out_air_volume is not None
+      else (hlc.aspiration_blow_out_volume if hlc is not None else 40.0)
+      for op, hlc in zip(ops, hlcs)
     ]
 
-    mix_volume: List[float] = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
-    mix_cycles: List[int] = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
-    mix_speed: List[float] = [
+    mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
+    mix_speed = [
       op.mix.flow_rate
       if op.mix is not None
       else (
         op.flow_rate
         if op.flow_rate is not None
-        else _get_default_flow_rate(op.tip, is_aspirate=True)
+        else (
+          hlc.aspiration_mix_flow_rate
+          if hlc is not None
+          else _get_default_flow_rate(op.tip, is_aspirate=True)
+        )
       )
-      for op in ops
+      for op, hlc in zip(ops, hlcs)
     ]
 
-    # Advanced parameters
+    # Advanced parameters (backend lists override liquid-class defaults)
     lld_mode = _fill_in_defaults(params.lld_mode, [0] * n)
     immersion_depth = _fill_in_defaults(params.immersion_depth, [0.0] * n)
     surface_following_distance = _fill_in_defaults(params.surface_following_distance, [0.0] * n)
     gamma_lld_sensitivity = _fill_in_defaults(params.gamma_lld_sensitivity, [0] * n)
     dp_lld_sensitivity = _fill_in_defaults(params.dp_lld_sensitivity, [0] * n)
-    settling_time = _fill_in_defaults(params.settling_time, [1.0] * n)
-    transport_air_volume = _fill_in_defaults(params.transport_air_volume, [5.0] * n)
-    pre_wetting_volume = _fill_in_defaults(params.pre_wetting_volume, [0.0] * n)
-    swap_speed = _fill_in_defaults(params.swap_speed, [20.0] * n)
+    settling_time = _fill_in_defaults(
+      params.settling_time,
+      [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs],
+    )
+    transport_air_volume = _fill_in_defaults(
+      params.transport_air_volume,
+      [hlc.aspiration_air_transport_volume if hlc is not None else 5.0 for hlc in hlcs],
+    )
+    pre_wetting_volume = _fill_in_defaults(
+      params.pre_wetting_volume,
+      [hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
+    swap_speed = _fill_in_defaults(
+      params.swap_speed,
+      [hlc.aspiration_swap_speed if hlc is not None else 25.0 for hlc in hlcs],
+    )
     mix_position_from_liquid_surface = _fill_in_defaults(
       params.mix_position_from_liquid_surface, [0.0] * n
     )
@@ -728,7 +809,8 @@ class NimbusPIPBackend(PIPBackend):
     settling_time_units = [round(t * 10) for t in settling_time]
     transport_air_volume_units = [round(v * 10) for v in transport_air_volume]
     pre_wetting_volume_units = [round(v * 10) for v in pre_wetting_volume]
-    swap_speed_units = [round(s * 10) for s in swap_speed]
+    # Nimbus Pipette wire: 0.01 mm/s per U32 element; swap_speed above is mm/s.
+    swap_speed_units = [round(s * 100) for s in swap_speed]
     mix_volume_units = [round(v * 10) for v in mix_volume]
     mix_speed_units = [round(s * 10) for s in mix_speed]
     mix_position_from_liquid_surface_units = [
@@ -848,7 +930,9 @@ class NimbusPIPBackend(PIPBackend):
         - gamma_lld_sensitivity: Gamma LLD sensitivity, 1-4 (default: [0]*n).
         - settling_time: Settling time after dispense (s, default: [1.0]*n).
         - transport_air_volume: Transport air volume (uL, default: [5.0]*n).
-        - swap_speed: Swap speed on leaving liquid (uL/s, default: [20.0]*n).
+        - swap_speed: Speed when leaving liquid (Z pull-out, mm/s; same semantics as
+          STAR/HamiltonLiquidClass). If omitted, uses liquid class per op, else 10 mm/s
+          when no liquid class resolves for that op.
         - mix_position_from_liquid_surface: Mix position offset from liquid surface
           (mm, default: [0.0]*n).
         - limit_curve_index: Limit curve index (default: [0]*n).
@@ -860,11 +944,7 @@ class NimbusPIPBackend(PIPBackend):
     """
     if not ops:
       return
-    params = (
-      backend_params
-      if isinstance(backend_params, NimbusPIPDispenseParams)
-      else NimbusPIPDispenseParams()
-    )
+    params = _coerce_nimbus_dispense_params(backend_params)
 
     n = len(ops)
 
@@ -923,44 +1003,78 @@ class NimbusPIPBackend(PIPBackend):
 
     minimum_heights_mm = well_bottoms.copy()
 
-    volumes = [op.volume for op in ops]
-    flow_rates: List[float] = [
+    hlcs = resolve_hamilton_liquid_classes(
+      params.hamilton_liquid_classes,
+      list(ops),
+      jet=params.jet or False,
+      blow_out=params.blow_out or False,
+      is_aspirate=False,
+      lookup=params.auto_liquid_class_lookup,
+    )
+    volumes = corrected_volumes_for_ops(ops, hlcs, params.disable_volume_correction)
+    flow_rates = [
       op.flow_rate
       if op.flow_rate is not None
-      else _get_default_flow_rate(op.tip, is_aspirate=False)
-      for op in ops
+      else (
+        hlc.dispense_flow_rate
+        if hlc is not None
+        else _get_default_flow_rate(op.tip, is_aspirate=False)
+      )
+      for op, hlc in zip(ops, hlcs)
     ]
     blow_out_air_volumes = [
-      op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
+      op.blow_out_air_volume
+      if op.blow_out_air_volume is not None
+      else (hlc.dispense_blow_out_volume if hlc is not None else 40.0)
+      for op, hlc in zip(ops, hlcs)
     ]
 
-    mix_volume: List[float] = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
-    mix_cycles: List[int] = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
-    mix_speed: List[float] = [
+    mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
+    mix_speed = [
       op.mix.flow_rate
       if op.mix is not None
       else (
         op.flow_rate
         if op.flow_rate is not None
-        else _get_default_flow_rate(op.tip, is_aspirate=False)
+        else (
+          hlc.dispense_mix_flow_rate
+          if hlc is not None
+          else _get_default_flow_rate(op.tip, is_aspirate=False)
+        )
       )
-      for op in ops
+      for op, hlc in zip(ops, hlcs)
     ]
 
-    # Advanced parameters
+    # Advanced parameters (backend lists override liquid-class defaults)
     lld_mode = _fill_in_defaults(params.lld_mode, [0] * n)
     immersion_depth = _fill_in_defaults(params.immersion_depth, [0.0] * n)
     surface_following_distance = _fill_in_defaults(params.surface_following_distance, [0.0] * n)
     gamma_lld_sensitivity = _fill_in_defaults(params.gamma_lld_sensitivity, [0] * n)
-    settling_time = _fill_in_defaults(params.settling_time, [1.0] * n)
-    transport_air_volume = _fill_in_defaults(params.transport_air_volume, [5.0] * n)
-    swap_speed = _fill_in_defaults(params.swap_speed, [20.0] * n)
+    settling_time = _fill_in_defaults(
+      params.settling_time,
+      [hlc.dispense_settling_time if hlc is not None else 1.0 for hlc in hlcs],
+    )
+    transport_air_volume = _fill_in_defaults(
+      params.transport_air_volume,
+      [hlc.dispense_air_transport_volume if hlc is not None else 5.0 for hlc in hlcs],
+    )
+    swap_speed = _fill_in_defaults(
+      params.swap_speed,
+      [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs],
+    )
     mix_position_from_liquid_surface = _fill_in_defaults(
       params.mix_position_from_liquid_surface, [0.0] * n
     )
     limit_curve_index = _fill_in_defaults(params.limit_curve_index, [0] * n)
-    cut_off_speed = _fill_in_defaults(params.cut_off_speed, [25.0] * n)
-    stop_back_volume = _fill_in_defaults(params.stop_back_volume, [0.0] * n)
+    cut_off_speed = _fill_in_defaults(
+      params.cut_off_speed,
+      [hlc.dispense_stop_flow_rate if hlc is not None else 25.0 for hlc in hlcs],
+    )
+    stop_back_volume = _fill_in_defaults(
+      params.stop_back_volume,
+      [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs],
+    )
     dispense_offset = _fill_in_defaults(params.dispense_offset, [0.0] * n)
 
     # Unit conversions
@@ -974,7 +1088,8 @@ class NimbusPIPBackend(PIPBackend):
     minimum_height_units = [round(z * 100) for z in minimum_heights_mm]
     settling_time_units = [round(t * 10) for t in settling_time]
     transport_air_volume_units = [round(v * 10) for v in transport_air_volume]
-    swap_speed_units = [round(s * 10) for s in swap_speed]
+    # Nimbus Pipette wire: 0.01 mm/s per U32 element; swap_speed above is mm/s.
+    swap_speed_units = [round(s * 100) for s in swap_speed]
     mix_volume_units = [round(v * 10) for v in mix_volume]
     mix_speed_units = [round(s * 10) for s in mix_speed]
     mix_position_from_liquid_surface_units = [

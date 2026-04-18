@@ -16,18 +16,15 @@ from pylabrobot.capabilities.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
-from pylabrobot.hamilton.liquid_handlers.star.liquid_classes import (
-  HamiltonLiquidClass,
-  get_star_liquid_class,
-)
+from pylabrobot.hamilton.liquid_handlers.star.liquid_classes import HamiltonLiquidClass
 from pylabrobot.resources import Resource, Tip, TipSpot, Well
 from pylabrobot.resources.hamilton import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.resources.liquid import Liquid
 
 from .errors import (
   STARFirmwareError,
   convert_star_firmware_error_to_plr_error,
 )
+from ..liquid_class_resolver import resolve_hamilton_liquid_classes
 from .pip_channel import PIPChannel
 
 if TYPE_CHECKING:
@@ -155,48 +152,6 @@ class LLDMode(enum.Enum):
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
-
-
-def _resolve_liquid_classes(
-  explicit: Optional[List[Optional[HamiltonLiquidClass]]],
-  ops: list,
-  jet: Union[bool, List[bool]],
-  blow_out: Union[bool, List[bool]],
-  is_aspirate: bool,
-) -> List[Optional[HamiltonLiquidClass]]:
-  """Resolve per-op Hamilton liquid classes.
-
-  If ``explicit`` is None, auto-detect from tip properties for each op.
-  If ``explicit`` is a list, use it as-is (None entries stay None, matching legacy behavior).
-  """
-  n = len(ops)
-  if isinstance(jet, bool):
-    jet = [jet] * n
-  if isinstance(blow_out, bool):
-    blow_out = [blow_out] * n
-
-  if explicit is not None:
-    return list(explicit)
-
-  result: List[Optional[HamiltonLiquidClass]] = []
-  for i, op in enumerate(ops):
-    tip = op.tip
-    if not isinstance(tip, HamiltonTip):
-      result.append(None)
-      continue
-    result.append(
-      get_star_liquid_class(
-        tip_volume=tip.maximal_volume,
-        is_core=False,
-        is_tip=True,
-        has_filter=tip.has_filter,
-        liquid=Liquid.WATER,
-        jet=jet[i],
-        blow_out=blow_out[i],
-      )
-    )
-
-  return result
 
 
 def _fill(val: Optional[List], default: List) -> List:
@@ -697,7 +652,7 @@ class STARPIPBackend(PIPBackend):
     n = len(ops)
 
     # Resolve liquid classes (auto-detect from tip if not provided).
-    hlcs = _resolve_liquid_classes(
+    hlcs = resolve_hamilton_liquid_classes(
       backend_params.hamilton_liquid_classes,
       ops,
       jet=backend_params.jet or False,
@@ -1178,7 +1133,7 @@ class STARPIPBackend(PIPBackend):
     ]
 
     # Resolve liquid classes.
-    hlcs = _resolve_liquid_classes(
+    hlcs = resolve_hamilton_liquid_classes(
       backend_params.hamilton_liquid_classes, ops, jet=jet, blow_out=blow_out, is_aspirate=False
     )
 

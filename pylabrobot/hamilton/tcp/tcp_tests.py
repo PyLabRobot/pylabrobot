@@ -17,8 +17,11 @@ from typing import Annotated, cast
 from unittest.mock import AsyncMock
 
 import pylabrobot.hamilton.tcp.introspection as introspection_mod
-from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
+from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
+from pylabrobot.hamilton.tcp.client import HamiltonTCPClient, _HcResultDescriptionHelper
 from pylabrobot.hamilton.tcp.commands import TCPCommand
+from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
+from pylabrobot.hamilton.tcp.status_exception import HamiltonStatusException
 from pylabrobot.hamilton.tcp.introspection import (
   EnumInfo,
   FirmwareTree,
@@ -517,6 +520,177 @@ class TestWarningAndExceptionSemantics(unittest.TestCase):
     two = HoiParams().add(self._format_entry(e1), Str).add(self._format_entry(e2), Str).build()
     got_two = parse_hamilton_error_entries(two)
     self.assertEqual([e.result for e in got_two], [0x0F08, 0x0F09])
+
+
+class TestErrorEntryChannelDetection(unittest.TestCase):
+  @dataclass
+  class _Ap:
+    channel: int
+
+  @dataclass
+  class _CmdPrep(TCPCommand):
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 1
+    dest: Address
+    aspirate_parameters: list
+
+    def __post_init__(self):
+      super().__init__(self.dest)
+
+  def test_true_when_struct_array_has_channel(self):
+    c = TestErrorEntryChannelDetection._CmdPrep(
+      Address(1, 1, 1), aspirate_parameters=[TestErrorEntryChannelDetection._Ap(0)]
+    )
+    self.assertTrue(c.error_entries_use_physical_channels())
+
+  @dataclass
+  class _CmdVoid(TCPCommand):
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 35
+    dest: Address
+
+    def __post_init__(self):
+      super().__init__(self.dest)
+
+  def test_false_for_void_command(self):
+    c = TestErrorEntryChannelDetection._CmdVoid(Address(1, 1, 1))
+    self.assertFalse(c.error_entries_use_physical_channels())
+
+  @dataclass
+  class _CmdNimbus(TCPCommand):
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 4
+    dest: Address
+    channels_involved: tuple
+
+    def __post_init__(self):
+      super().__init__(self.dest)
+
+  def test_true_when_channels_involved_present(self):
+    c = TestErrorEntryChannelDetection._CmdNimbus(Address(1, 1, 1), (1, 0))
+    self.assertTrue(c.error_entries_use_physical_channels())
+
+
+class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
+  @staticmethod
+  def _format_wire_entry(entry: HcResultEntry) -> str:
+    return (
+      f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
+      f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}"
+    )
+
+  async def test_void_command_raises_hamilton_status_exception(self):
+    entry = HcResultEntry(1, 1, 5376, 1, 35, 0x0206)
+    err_params = HoiParams().add(self._format_wire_entry(entry), Str).build()
+
+    @dataclass
+    class CmdVoid(TCPCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 35
+      dest: Address
+
+      def __post_init__(self):
+        super().__init__(self.dest)
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        hoi = HoiPacket(
+          interface_id=1,
+          action_code=Hoi2Action.STATUS_EXCEPTION,
+          action_id=0,
+          params=err_params,
+        )
+        harp = HarpPacket(
+          src=Address(1, 1, 5376),
+          dst=Address(2, 1, 65535),
+          seq=1,
+          protocol=2,
+          action_code=4,
+          payload=hoi.pack(),
+        )
+        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+    client.introspection.get_interface_name = AsyncMock(return_value="MLPrep")  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    cmd = CmdVoid(Address(1, 1, 5376))
+    with self.assertRaises(HamiltonStatusException) as ctx:
+      await client.send_command(cmd)
+    self.assertIn(0, ctx.exception.errors)
+    self.assertEqual(ctx.exception.entries[0].result, 0x0206)
+
+  async def test_channels_involved_raises_channelized_error(self):
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    err_params = HoiParams().add(self._format_wire_entry(entry), Str).build()
+
+    @dataclass
+    class CmdPick(TCPCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 4
+      dest: Address
+      channels_involved: tuple
+
+      def __post_init__(self):
+        super().__init__(self.dest)
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        hoi = HoiPacket(
+          interface_id=1,
+          action_code=Hoi2Action.STATUS_EXCEPTION,
+          action_id=0,
+          params=err_params,
+        )
+        harp = HarpPacket(
+          src=Address(1, 1, 257),
+          dst=Address(2, 1, 65535),
+          seq=1,
+          protocol=2,
+          action_code=4,
+          payload=hoi.pack(),
+        )
+        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+    client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    cmd = CmdPick(Address(1, 1, 257), (1, 0))
+    with self.assertRaises(ChannelizedError) as ctx:
+      await client.send_command(cmd)
+    self.assertIn(0, ctx.exception.errors)
+
+
+class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):
+  """NIMBUS_ERROR_CODES keys use interface_id in the 4th slot; describe_entry must match that."""
+
+  async def test_lookup_uses_interface_id_not_method_id(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0, error_codes=NIMBUS_ERROR_CODES)
+    client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    helper = _HcResultDescriptionHelper(client)
+    entry = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4E)
+    _iface, desc = await helper.describe_entry(entry)
+    self.assertIn("Tip Detected Not Correct Tip", desc)
+    entry_b = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4B)
+    _iface_b, desc_b = await helper.describe_entry(entry_b)
+    self.assertIn("No Tip Picked Up", desc_b)
 
 
 class TestCountedFlatArrayDecode(unittest.TestCase):

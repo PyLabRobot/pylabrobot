@@ -8,6 +8,7 @@ annotations and parse_into_struct). Wire → HoiParams → Packets → Messages 
 from __future__ import annotations
 
 import inspect
+from dataclasses import fields, is_dataclass
 from typing import Any, Optional
 
 from pylabrobot.hamilton.tcp.messages import (
@@ -164,6 +165,26 @@ class TCPCommand:
     via ``channels_involved`` bitmask or per-channel struct-array reflection.
     """
     return entry_index
+
+  def error_entries_use_physical_channels(self) -> bool:
+    """Whether ``STATUS_EXCEPTION`` entries should be mapped to PLR channel indices.
+
+    Returns ``True`` when the command carries per-channel wire parameters:
+    Prep ``StructArray`` elements with a ``channel`` field, or Nimbus
+    ``channels_involved`` parallel arrays. Void MLPrep / status queries return
+    ``False`` so the client raises :class:`~pylabrobot.hamilton.tcp.status_exception.HamiltonStatusException`
+    instead of attributing errors to synthetic ``ch0``.
+    """
+    if not is_dataclass(self):
+      return False
+    for f in fields(self):
+      if f.name == "channels_involved":
+        return True
+      value = getattr(self, f.name, None)
+      if isinstance(value, list) and value:
+        if getattr(value[0], "channel", None) is not None:
+          return True
+    return False
 
   def interpret_response(self, response: CommandResponse) -> Any:
     """Pure decoder for a success response — never raises on channel errors.

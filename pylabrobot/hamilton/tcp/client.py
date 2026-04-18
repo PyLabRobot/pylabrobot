@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
+from pylabrobot.hamilton.tcp.status_exception import HamiltonStatusException
 from pylabrobot.device import Driver
 from pylabrobot.hamilton.tcp.commands import TCPCommand, hamilton_error_for_entry
 from pylabrobot.hamilton.tcp.error_tables import HC_RESULT_PROTOCOL
@@ -91,9 +92,27 @@ class _HcResultDescriptionHelper:
     addr = Address(entry.module_id, entry.node_id, entry.object_id)
     iface_name = await self._client.introspection.get_interface_name(addr, entry.interface_id)
 
-    desc = self._client._error_codes.get(
-      (entry.module_id, entry.node_id, entry.object_id, entry.action_id, entry.result)
+    # Vendor tables (e.g. :data:`~pylabrobot.hamilton.tcp.error_tables.NIMBUS_ERROR_CODES`)
+    # key on ``(module, node, object_id, interface_id, hc_result)``. The wire ``action_id`` is the
+    # failing method id (e.g. PickupTips) and must not be used for that slot — otherwise we miss
+    # lookups and show raw ``HC_RESULT=0x....`` instead of "No Tip Picked Up." / etc.
+    key_iface = (
+      entry.module_id,
+      entry.node_id,
+      entry.object_id,
+      entry.interface_id,
+      entry.result,
     )
+    key_action = (
+      entry.module_id,
+      entry.node_id,
+      entry.object_id,
+      entry.action_id,
+      entry.result,
+    )
+    desc = self._client._error_codes.get(key_iface)
+    if desc is None and key_action != key_iface:
+      desc = self._client._error_codes.get(key_action)
     if desc is None:
       desc = HC_RESULT_PROTOCOL.get(entry.result)
     if desc is None:
@@ -566,35 +585,73 @@ class HamiltonTCPClient(Driver):
             logger.debug(enriched_msg)
             return None
 
-          per_channel: Dict[int, Exception] = {}
-          context_by_channel: Dict[int, Optional[str]] = {}
+          if command.error_entries_use_physical_channels():
+            per_channel: Dict[int, Exception] = {}
+            context_by_channel: Dict[int, Optional[str]] = {}
+            for idx, entry in enumerate(entries):
+              _iface_name, desc = await self._hc_result_text.describe_entry(entry)
+              err = hamilton_error_for_entry(entry, desc)
+              channel = command._channel_index_for_entry(idx, entry)
+              if channel is None:
+                channel = idx
+              per_channel.setdefault(channel, err)
+              if channel not in context_by_channel:
+                context_by_channel[channel] = await self._hc_result_text.format_entry_context(entry)
+
+            if raise_on_error:
+              channel_summary = ", ".join(
+                (
+                  f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
+                  if context_by_channel.get(ch)
+                  else f"ch{ch}: {per_channel[ch]}"
+                )
+                for ch in sorted(per_channel)
+              )
+              logger.error(
+                "Hamilton %s (action=%#x) on %d channel(s): %s",
+                action.name,
+                action,
+                len(per_channel),
+                channel_summary,
+              )
+              raise ChannelizedError(errors=per_channel, raw_response=response_message.hoi.params)
+            logger.debug(
+              "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
+              action.name,
+              action,
+              len(entries),
+            )
+            return None
+
+          entry_errors: Dict[int, Exception] = {}
+          context_by_idx: Dict[int, Optional[str]] = {}
           for idx, entry in enumerate(entries):
             _iface_name, desc = await self._hc_result_text.describe_entry(entry)
             err = hamilton_error_for_entry(entry, desc)
-            channel = command._channel_index_for_entry(idx, entry)
-            if channel is None:
-              channel = idx
-            per_channel.setdefault(channel, err)
-            if channel not in context_by_channel:
-              context_by_channel[channel] = await self._hc_result_text.format_entry_context(entry)
+            entry_errors[idx] = err
+            context_by_idx[idx] = await self._hc_result_text.format_entry_context(entry)
 
           if raise_on_error:
-            channel_summary = ", ".join(
+            summary = ", ".join(
               (
-                f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
-                if context_by_channel.get(ch)
-                else f"ch{ch}: {per_channel[ch]}"
+                f"entry[{idx}]: {entry_errors[idx]} ({context_by_idx[idx]})"
+                if context_by_idx.get(idx)
+                else f"entry[{idx}]: {entry_errors[idx]}"
               )
-              for ch in sorted(per_channel)
+              for idx in sorted(entry_errors)
             )
             logger.error(
-              "Hamilton %s (action=%#x) on %d channel(s): %s",
+              "Hamilton %s (action=%#x), instrument-wide error (%d entries): %s",
               action.name,
               action,
-              len(per_channel),
-              channel_summary,
+              len(entries),
+              summary,
             )
-            raise ChannelizedError(errors=per_channel, raw_response=response_message.hoi.params)
+            raise HamiltonStatusException(
+              errors=entry_errors,
+              entries=list(entries),
+              raw_response=response_message.hoi.params,
+            )
           logger.debug(
             "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
             action.name,

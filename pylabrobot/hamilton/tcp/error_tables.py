@@ -9,7 +9,7 @@ Tables
 ------
 - ``HC_RESULT_PROTOCOL`` : ``{code: enum_name}``. Protocol-level universal
   result codes that apply to any module. ~200 entries in the range 0–1069.
-- ``NIMBUS_ERROR_CODES`` : ``{(module_id, node_id, object_id, action_id, code):
+- ``NIMBUS_ERROR_CODES`` : ``{(module_id, node_id, object_id, interface_id, code):
   text}``. Module-scoped text registered by ``NimbusCORESystem`` and
   ``GripperControllerSystem`` ``AddErrorData`` calls at runtime. Codes in this
   table start at 0x0F01 (3841) — the module-specific range.
