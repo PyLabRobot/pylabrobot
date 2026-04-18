@@ -167,7 +167,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
 | Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | [PLR](02_analytical/plate-reading/pico.ipynb) / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
-| Tecan | Infinite 200 PRO | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Mostly | [PLR](02_analytical/plate-reading/tecan-infinite.ipynb) / [OEM](https://lifesciences.tecan.com/infinite-200-pro) |
+| Tecan | Infinite 200 PRO | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Mostly | [PLR](tecan/infinite/hello-world.ipynb) / [OEM](https://lifesciences.tecan.com/infinite-200-pro) |
 
 
 ### Flow Cytometers
