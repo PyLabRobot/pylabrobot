@@ -50,7 +50,7 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   ChannelBatch,
   plan_batches,
-  print_batches,
+  log_batches,
   validate_channel_selections,
 )
 from pylabrobot.liquid_handling.standard import (
@@ -2062,7 +2062,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     func: Callable[[ChannelBatch], Awaitable[T]],
     batches: List[ChannelBatch],
     min_traverse_height_during_command: Optional[float] = None,
-    verbose: bool = False,
   ) -> List[T]:
     """Execute a Z-axis callback across pre-planned batches with X/Y positioning.
 
@@ -2076,13 +2075,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       batches: Pre-planned batches from ``plan_batches()``.
       min_traverse_height_during_command: Absolute Z height (mm) for inter-batch
         channel raises. ``None`` uses full Z safety.
-      verbose: If True, print the batch execution plan before running.
 
     Returns:
       List of results from each batch callback, in batch order.
     """
-    if verbose:
-      print_batches(batches, label="execute_batched plan")
+    log_batches(batches)
     results: List[T] = []
     try:
       prev_batch: Optional[ChannelBatch] = None
@@ -2257,13 +2254,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: Union[LLDMode, List[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
-    move_to_z_safety_after: bool = True,
     # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
     min_traverse_height_at_beginning_of_command: Optional[float] = None,
     min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
-    verbose: bool = False,
+    # Deprecated
+    move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -2286,9 +2283,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         GAMMA to all containers.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
-      move_to_z_safety_after: Whether to move channels to safe Z height after probing.
-        Set to False when probing is immediately followed by another Z operation (e.g.
-        aspirate) to avoid unnecessary Z travel. Default True.
       min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
         channels to before the first batch. Must clear all deck obstacles since channels
         travel laterally at this height. None (default) uses full Z safety.
@@ -2298,8 +2292,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         probing. None (default) uses full Z safety.
       x_grouping_tolerance: Containers within this X distance (mm) are grouped and probed
         together. Defaults to ``_x_grouping_tolerance_mm`` (0.1 mm).
-      verbose: If True, print the batch execution plan before running.
-
+      move_to_z_safety_after: Deprecated. Use ``z_position_at_end_of_command`` instead.
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
 
@@ -2308,6 +2301,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         or if input list lengths don't match.
       RuntimeError: If any specified channel lacks a tip.
     """
+
+    if move_to_z_safety_after is not None:
+      warnings.warn(
+        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a "
+        "future release. Use 'z_position_at_end_of_command' with an appropriate Z height "
+        "instead. If not set, the default behavior will be to move to full Z safety after "
+        "the command.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
@@ -2365,7 +2368,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ),
       batches=batches,
       min_traverse_height_during_command=min_traverse_height_during_command,
-      verbose=verbose,
     )
 
     absolute_heights_measurements: Dict[int, List[Optional[float]]] = {}
@@ -2398,13 +2400,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + "\n".join(inconsistent_channels)
       )
 
-    if move_to_z_safety_after:
-      if z_position_at_end_of_command is None:
-        await self.move_all_channels_in_z_safety()
-      else:
-        await self.position_channels_in_z_direction(
-          {ch: z_position_at_end_of_command for ch in use_channels}
-        )
+    if z_position_at_end_of_command is not None:
+      await self.position_channels_in_z_direction(
+        {ch: z_position_at_end_of_command for ch in use_channels}
+      )
+    else:
+      await self.move_all_channels_in_z_safety()
 
     return relative_to_well
 
@@ -2895,7 +2896,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
-        move_to_z_safety_after=False,
+        z_position_at_end_of_command=100,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
@@ -3257,7 +3258,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
-        move_to_z_safety_after=False,
+        z_position_at_end_of_command=100,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.

@@ -15,8 +15,6 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.well import Well
 
-# Type alias for nested enum (for cleaner signatures)
-LLDMode = STARBackend.LLDMode
 
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
   pip_type_1000ul=True,
@@ -322,23 +320,6 @@ class STARChatterboxBackend(STARBackend):
   async def position_channels_in_y_direction(self, ys, make_space=True):
     print("positioning channels in y:", ys, "make_space:", make_space)
 
-  async def probe_liquid_heights(
-    self,
-    containers,
-    use_channels=None,
-    resource_offsets=None,
-    lld_mode=None,
-    search_speed=10.0,
-    n_replicates=1,
-    min_traverse_height_at_beginning_of_command=None,
-    min_traverse_height_during_command=None,
-    z_position_at_end_of_command=None,
-    move_to_z_safety_after=None,
-  ) -> List[float]:
-    """Return liquid heights from the volume tracker using each container's
-    height-from-volume function. No physical probing in simulation."""
-    return [c.compute_height_from_volume(c.tracker.get_used_volume()) for c in containers]
-
   async def request_pip_height_last_lld(self):
     return list(range(12))
 
@@ -349,7 +330,7 @@ class STARChatterboxBackend(STARBackend):
     tip_lengths: List[float],
     z_cavity_bottom: List[float],
     z_top: List[float],
-    lld_mode: List[LLDMode],
+    lld_mode: List["STARBackend.LLDMode"],
     search_speed: float,
     n_replicates: int,
   ) -> Dict[int, List[Optional[float]]]:

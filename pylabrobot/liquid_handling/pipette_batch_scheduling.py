@@ -24,10 +24,13 @@ bound partition solver typically fast on the structured instances this module se
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
 
+import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Collection, Dict, FrozenSet, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from pylabrobot.liquid_handling.channel_positioning import (
   compute_nonconsecutive_channel_offsets,
@@ -53,13 +56,12 @@ class ChannelBatch:
   y_positions: Dict[int, float] = field(default_factory=dict)  # includes phantoms
 
 
-def print_batches(
+def log_batches(
   batches: List[ChannelBatch],
   use_channels: Optional[List[int]] = None,
   containers: Optional[List["Container"]] = None,
-  label: str = "plan",
 ) -> None:
-  """Print a tree view of the batch execution plan.
+  """Log a tree view of the batch execution plan.
 
   Groups batches by X position and shows Y batches nested within each X group.
   Active channels are marked with ``*``, phantoms with a space.
@@ -70,7 +72,6 @@ def print_batches(
       container names are not shown next to active channels.
     containers: Container objects (parallel with *use_channels*). If omitted,
       container names are not shown next to active channels.
-    label: Header label for the tree.
   """
 
   ch_to_container = (
@@ -84,27 +85,28 @@ def print_batches(
     x_key = round(b.x_position, 1)
     x_groups.setdefault(x_key, []).append(b)
 
-  print(f"{label}:")
+  lines = ["plan:"]
   xg_keys = list(x_groups.keys())
   for xg_i, x_key in enumerate(xg_keys):
     xg_batches = x_groups[x_key]
     is_last_xg = xg_i == len(xg_keys) - 1
     xg_branch = "└" if is_last_xg else "├"
     xg_cont = " " if is_last_xg else "│"
-    print(f"  {xg_branch}── x-group {xg_i + 1} (x={x_key:.1f} mm)")
+    lines.append(f"  {xg_branch}── x-group {xg_i + 1} (x={x_key:.1f} mm)")
     for yb_i, b in enumerate(xg_batches):
       is_last_yb = yb_i == len(xg_batches) - 1
       yb_branch = "└" if is_last_yb else "├"
       yb_cont = " " if is_last_yb else "│"
-      print(f"  {xg_cont}   {yb_branch}── y-batch {yb_i + 1}")
+      lines.append(f"  {xg_cont}   {yb_branch}── y-batch {yb_i + 1}")
       for ch in sorted(b.y_positions.keys()):
         is_last_ch = ch == max(b.y_positions.keys())
         ch_branch = "└" if is_last_ch else "├"
         active = "*" if ch in b.channels else " "
         container_name = f" ({ch_to_container[ch].name})" if ch in ch_to_container else ""
-        print(
+        lines.append(
           f"  {xg_cont}   {yb_cont}   {ch_branch}── {active}ch{ch}: y={b.y_positions[ch]:.1f} mm{container_name}"
         )
+  logger.info("\n".join(lines))
 
 
 # --- Spacing helpers ---
