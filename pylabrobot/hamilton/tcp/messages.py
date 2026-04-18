@@ -20,9 +20,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
-from typing import Any, List, Optional, cast, get_args, get_origin, get_type_hints
+from typing import Any, List, cast, get_args, get_origin, get_type_hints
 
-from pylabrobot.io.binary import Reader, Writer
+from pylabrobot.hamilton.tcp.hoi_error import parse_hc_results_from_semicolon_string
 from pylabrobot.hamilton.tcp.packets import (
   Address,
   HarpPacket,
@@ -35,12 +35,11 @@ from pylabrobot.hamilton.tcp.protocol import (
   Hoi2Action,
   RegistrationOptionType,
 )
-from pylabrobot.hamilton.tcp.hoi_error import parse_hc_results_from_semicolon_string
 from pylabrobot.hamilton.tcp.wire_types import (
-  HamiltonDataType,
   HcResultEntry,
   decode_fragment,
 )
+from pylabrobot.io.binary import Reader, Writer
 
 PADDED_FLAG = 0x01
 
@@ -325,7 +324,9 @@ def split_hoi_params_after_warning_prefix(
   if isinstance(v1, str):
     prefix_entries = parse_hc_results_from_semicolon_string(v1)
   elif isinstance(v1, (bytes, bytearray)):
-    prefix_entries = parse_hc_results_from_semicolon_string(bytes(v1).decode("utf-8", errors="replace"))
+    prefix_entries = parse_hc_results_from_semicolon_string(
+      bytes(v1).decode("utf-8", errors="replace")
+    )
   return rest, prefix_entries
 
 

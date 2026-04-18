@@ -9,9 +9,9 @@ Focused on high-value invariants:
 
 from __future__ import annotations
 
+import asyncio
 import struct
 import unittest
-import asyncio
 from dataclasses import dataclass
 from typing import Annotated, cast
 from unittest.mock import AsyncMock
@@ -71,14 +71,14 @@ from pylabrobot.hamilton.tcp.protocol import (
 from pylabrobot.hamilton.tcp.wire_types import (
   I32,
   I64,
-  Str,
-  StrArray,
   U16,
   Bool,
   BoolArray,
   CountedFlatArray,
   HamiltonDataType,
   HcResultEntry,
+  Str,
+  StrArray,
   decode_fragment,
 )
 

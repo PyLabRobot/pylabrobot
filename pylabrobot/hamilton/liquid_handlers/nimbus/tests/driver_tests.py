@@ -10,8 +10,8 @@ from pylabrobot.hamilton.liquid_handlers.nimbus.driver import (
   NimbusResolvedInterfaces,
   nimbus_interface_specs_for_root,
 )
-from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
+from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.packets import Address
 
 # Stable key from NIMBUS_ERROR_CODES for merge-override tests (must exist in table).

@@ -1,6 +1,7 @@
 """Canonical v1 Hamilton TCP namespace."""
 
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
+from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.hoi_error import (
   HoiError,
   parse_hamilton_error_entries,
@@ -8,7 +9,6 @@ from pylabrobot.hamilton.tcp.hoi_error import (
   parse_hamilton_error_params,
 )
 from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
-from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.introspection import (
   FirmwareTree,
   MethodInfo,

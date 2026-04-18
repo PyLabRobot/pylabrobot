@@ -7,11 +7,12 @@ from unittest.mock import AsyncMock
 
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense
 from pylabrobot.hamilton.liquid_handlers.liquid_class import HamiltonLiquidClass
-from pylabrobot.hamilton.liquid_handlers.nimbus.commands import Aspirate, Dispense as DispenseCmd
+from pylabrobot.hamilton.liquid_handlers.nimbus.commands import Aspirate
+from pylabrobot.hamilton.liquid_handlers.nimbus.commands import Dispense as DispenseCmd
 from pylabrobot.hamilton.liquid_handlers.nimbus.pip_backend import (
   NimbusPIPAspirateParams,
-  NimbusPIPDispenseParams,
   NimbusPIPBackend,
+  NimbusPIPDispenseParams,
 )
 from pylabrobot.hamilton.liquid_handlers.star.pip_backend import STARPIPBackend
 from pylabrobot.hamilton.tcp.packets import Address
@@ -94,7 +95,9 @@ def test_nimbus_aspirate_volume_correction_and_param_override():
       ),
     )
 
-    aspirate_cmds = [c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)]
+    aspirate_cmds = [
+      c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)
+    ]
     assert len(aspirate_cmds) == 1
     cmd = aspirate_cmds[0].args[0]
     assert isinstance(cmd, Aspirate)
@@ -155,7 +158,9 @@ def test_nimbus_aspirate_disable_volume_correction_keeps_nominal_volume():
       ),
     )
 
-    aspirate_cmds = [c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)]
+    aspirate_cmds = [
+      c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)
+    ]
     cmd = aspirate_cmds[0].args[0]
     assert cmd.aspirate_volume[0] == 1000
 
@@ -207,7 +212,9 @@ def test_nimbus_aspirate_explicit_swap_speed_wire_units():
       backend_params=NimbusPIPAspirateParams(swap_speed=[15.0]),
     )
 
-    aspirate_cmds = [c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)]
+    aspirate_cmds = [
+      c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)
+    ]
     cmd = aspirate_cmds[0].args[0]
     assert isinstance(cmd, Aspirate)
     assert cmd.swap_speed[0] == 1500
@@ -260,7 +267,9 @@ def test_nimbus_aspirate_no_hlc_uses_25_mm_s_default():
       backend_params=NimbusPIPAspirateParams(hamilton_liquid_classes=[None]),
     )
 
-    aspirate_cmds = [c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)]
+    aspirate_cmds = [
+      c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)
+    ]
     cmd = aspirate_cmds[0].args[0]
     assert isinstance(cmd, Aspirate)
     assert cmd.swap_speed[0] == 2500
@@ -365,7 +374,9 @@ def test_nimbus_aspirate_coerces_star_aspirate_params_swap_speed():
     star_params = STARPIPBackend.AspirateParams(swap_speed=[42.0])
     await backend.aspirate([op], use_channels=[0], backend_params=star_params)
 
-    aspirate_cmds = [c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)]
+    aspirate_cmds = [
+      c for c in driver.send_command.call_args_list if isinstance(c.args[0], Aspirate)
+    ]
     cmd = aspirate_cmds[0].args[0]
     assert isinstance(cmd, Aspirate)
     assert cmd.swap_speed[0] == 4200

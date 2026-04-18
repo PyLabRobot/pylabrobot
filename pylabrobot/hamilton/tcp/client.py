@@ -14,26 +14,26 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
+from pylabrobot.device import Driver
+from pylabrobot.hamilton.tcp.commands import TCPCommand, hamilton_error_for_entry
+from pylabrobot.hamilton.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.tcp.hoi_error import (
   HoiError,
   parse_hamilton_error_entries,
   parse_hamilton_error_params,
-)
-from pylabrobot.device import Driver
-from pylabrobot.hamilton.tcp.commands import TCPCommand, hamilton_error_for_entry
-from pylabrobot.hamilton.tcp.error_tables import HC_RESULT_PROTOCOL
-from pylabrobot.hamilton.tcp.messages import (
-  CommandResponse,
-  InitMessage,
-  InitResponse,
-  RegistrationMessage,
-  RegistrationResponse,
 )
 from pylabrobot.hamilton.tcp.introspection import (
   HamiltonIntrospection,
   MethodDescriptor,
   ObjectRegistry,
   flatten_firmware_tree,
+)
+from pylabrobot.hamilton.tcp.messages import (
+  CommandResponse,
+  InitMessage,
+  InitResponse,
+  RegistrationMessage,
+  RegistrationResponse,
 )
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.hamilton.tcp.protocol import (

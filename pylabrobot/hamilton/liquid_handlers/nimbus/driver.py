@@ -11,7 +11,6 @@ from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.packets import Address
-
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
 from .commands import (

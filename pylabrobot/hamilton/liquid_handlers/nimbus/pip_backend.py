@@ -22,7 +22,6 @@ from pylabrobot.resources.trash import Trash
 
 from .commands import (
   Aspirate,
-  Dispense as DispenseCommand,
   DisableADC,
   DropTips,
   DropTipsRoll,
@@ -35,6 +34,9 @@ from .commands import (
   SetChannelConfiguration,
   _get_default_flow_rate,
   _get_tip_type_from_tip,
+)
+from .commands import (
+  Dispense as DispenseCommand,
 )
 
 if TYPE_CHECKING:
@@ -85,9 +87,7 @@ class NimbusPIPAspirateParams(BackendParams):
   disable_volume_correction: Optional[List[bool]] = None
   jet: Optional[List[bool]] = None
   blow_out: Optional[List[bool]] = None
-  auto_liquid_class_lookup: Optional[
-    Callable[..., Optional[HamiltonLiquidClass]]
-  ] = None
+  auto_liquid_class_lookup: Optional[Callable[..., Optional[HamiltonLiquidClass]]] = None
   minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
   adc_enabled: bool = False
   lld_mode: Optional[List[int]] = None
@@ -111,9 +111,7 @@ class NimbusPIPDispenseParams(BackendParams):
   disable_volume_correction: Optional[List[bool]] = None
   jet: Optional[List[bool]] = None
   blow_out: Optional[List[bool]] = None
-  auto_liquid_class_lookup: Optional[
-    Callable[..., Optional[HamiltonLiquidClass]]
-  ] = None
+  auto_liquid_class_lookup: Optional[Callable[..., Optional[HamiltonLiquidClass]]] = None
   minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
   adc_enabled: bool = False
   lld_mode: Optional[List[int]] = None

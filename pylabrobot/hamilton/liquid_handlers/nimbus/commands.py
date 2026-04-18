@@ -15,12 +15,12 @@ from pylabrobot.hamilton.tcp.messages import HoiParams, HoiParamsParser
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.hamilton.tcp.wire_types import (
+  I32,
+  U16,
   Bool,
   BoolArray,
   I16Array,
-  I32,
   I32Array,
-  U16,
   U16Array,
   U32Array,
 )

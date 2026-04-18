@@ -62,9 +62,7 @@ async def resolve_interface_path_specs(
         )
 
   found = sorted(n for n, a in resolved.items() if a is not None)
-  missing_opt = sorted(
-    n for n, s in specs.items() if not s.required and resolved.get(n) is None
-  )
+  missing_opt = sorted(n for n, s in specs.items() if not s.required and resolved.get(n) is None)
   logger.info("%s interfaces: %s", instrument_label, ", ".join(found))
   if missing_opt:
     logger.info("%s optional not present: %s", instrument_label, ", ".join(missing_opt))
