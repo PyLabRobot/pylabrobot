@@ -1,4 +1,3 @@
-import asyncio
 import gzip
 import html
 import unittest

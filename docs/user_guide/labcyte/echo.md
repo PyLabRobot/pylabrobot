@@ -1,8 +1,8 @@
 # Echo
 
-The Labcyte Echo integration currently targets the Medman access-control surface validated against
-an Echo 650. This first pass focuses on safe mechanical access operations rather than liquid
-transfer execution.
+The Labcyte Echo integration currently targets the Medman surface validated against an Echo 650.
+It covers safe mechanical access operations, source-plate survey workflows, and raw Echo protocol
+execution through `DoWellTransfer`.
 
 Supported operations:
 
@@ -14,6 +14,7 @@ Supported operations:
 - close the door
 - upload source plate maps with `set_plate_map()`
 - run `PlateSurvey`, retrieve `GetSurveyData`, and run `DryPlate`
+- execute an existing Echo transfer protocol XML with `do_well_transfer()`
 
 The driver matches the Echo's observed transport quirks:
 
@@ -36,6 +37,13 @@ Survey notes:
   `GetSurveyData` and `DryPlate(TWO_PASS)`
 - retracting a loaded source plate is much slower than an empty retract; the
   Echo integration uses longer default timeouts when `plate_type` is supplied
+
+Transfer notes:
+
+- `do_well_transfer()` is a thin wrapper around the Echo `DoWellTransfer` RPC
+- callers are responsible for generating or supplying valid Echo protocol XML
+- `EchoTransferPrintOptions` controls the nested `PrintOptions` payload
+- high-level transfer planning is not implemented in this module
 
 ## Safe Source Access Cycle
 
@@ -100,10 +108,48 @@ asyncio.run(main())
 `survey_source_plate()` does not change access state for you. It assumes the
 plate is already loaded, retracted, and ready for survey.
 
+## Running an Existing Echo Transfer Protocol
+
+```python
+import asyncio
+
+from pylabrobot.labcyte import Echo, EchoTransferPrintOptions
+
+PROTOCOL_XML = """
+<Protocol>
+  <Name>example</Name>
+  <!-- Existing Echo protocol XML goes here. -->
+</Protocol>
+"""
+
+async def main():
+  async with Echo(host="192.168.0.25") as echo:
+    await echo.lock()
+    try:
+      result = await echo.do_well_transfer(
+        PROTOCOL_XML,
+        EchoTransferPrintOptions(
+          do_plate_survey=True,
+          monitor_power=True,
+          save_print=True,
+          plate_map=True,
+        ),
+        timeout=300.0,
+      )
+      print(result.report_xml or result.raw)
+    finally:
+      await echo.unlock()
+
+
+asyncio.run(main())
+```
+
+`do_well_transfer()` intentionally does not synthesize a protocol from PLR resources. Use it when
+you already have a valid Echo transfer protocol XML document and want PyLabRobot to execute it
+through Medman.
+
 ## Scope
 
 This integration does not yet implement:
 
-- event stream registration on port `8010`
-- transfer planning or `DoWellTransfer`
-- survey uploads via `SetSurveyData`
+- high-level transfer planning from PLR resources
