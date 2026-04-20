@@ -1,4 +1,3 @@
-import contextlib
 import hashlib
 import hmac
 import logging

@@ -5,6 +5,8 @@ import sys
 import warnings
 from typing import Dict, List, Optional, Sequence, Union, cast
 
+import anyio
+
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )

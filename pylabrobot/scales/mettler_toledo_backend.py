@@ -1,7 +1,6 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
 import logging
-import time
 import warnings
 from typing import List, Literal, Optional, Union
 

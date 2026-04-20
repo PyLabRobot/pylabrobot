@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import AsyncMock, call
 
 import pytest

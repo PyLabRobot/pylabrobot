@@ -1,11 +1,8 @@
 import contextlib
 import inspect
-import sys
 import weakref
-from abc import ABC, abstractmethod
 from typing import Optional
 
-import anyio
 
 from pylabrobot.concurrency import AsyncResource, global_manager
 from pylabrobot.serializer import SerializableMixin

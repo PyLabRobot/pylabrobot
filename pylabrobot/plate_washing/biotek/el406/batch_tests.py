@@ -1,6 +1,5 @@
 # mypy: disable-error-code="union-attr,assignment,arg-type"
 
-import unittest
 
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, EL406TestCase
 

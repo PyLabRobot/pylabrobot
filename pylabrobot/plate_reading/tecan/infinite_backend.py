@@ -897,6 +897,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     start_count = decoder.count
     self._drain_pending_bin_events(decoder)
     start_time = anyio.current_time()
+    reads = 0
     try:
       with anyio.fail_after(self._max_row_wait_s):
         while decoder.count < target:

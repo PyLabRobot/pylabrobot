@@ -8,6 +8,7 @@ from pylabrobot.thermocycling import (
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 
@@ -36,9 +37,6 @@ def mock_backend() -> MagicMock:
   mock.get_current_step_index = AsyncMock(return_value=0)
   mock.get_total_step_count = AsyncMock(return_value=0)
   return mock
-
-
-from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestThermocycler(AnyioTestBase):

@@ -217,7 +217,7 @@ class GlobalManager:
           self._running_task = None
 
     try:
-      async with self._reserve_runner_for(obj) as tg:
+      async with self._reserve_runner_for(obj):
         self._stop_events[obj] = stop_event = anyio.Event()
         await self._tg.start(wrapper)
     except Exception:

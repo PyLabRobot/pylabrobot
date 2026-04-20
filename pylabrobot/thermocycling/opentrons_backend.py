@@ -1,6 +1,5 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
-import contextlib
 from typing import List, Optional, cast
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding

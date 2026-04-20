@@ -1,7 +1,5 @@
-import contextlib
 import ctypes
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
 from typing import Optional, cast
 

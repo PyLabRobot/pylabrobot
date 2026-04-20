@@ -3,8 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import sys
-from abc import ABC
-from typing import Any, Awaitable, Callable, Optional, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar
 
 from pylabrobot.concurrency import AsyncResource, global_manager
 from pylabrobot.machines.backend import MachineBackend

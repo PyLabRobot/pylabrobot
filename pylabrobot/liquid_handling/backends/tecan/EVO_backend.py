@@ -9,6 +9,8 @@ from typing import (
   Union,
 )
 
+import anyio
+
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (

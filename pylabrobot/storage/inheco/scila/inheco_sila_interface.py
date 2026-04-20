@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import datetime
 import http.server
 import logging
@@ -10,7 +9,7 @@ import socketserver
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 import anyio

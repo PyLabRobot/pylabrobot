@@ -1,6 +1,4 @@
-import unittest
 
-import pytest
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.temperature_controlling import (

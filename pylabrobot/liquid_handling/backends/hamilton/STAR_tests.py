@@ -1,6 +1,5 @@
 # mypy: disable-error-code="attr-defined,method-assign"
 
-import datetime
 import unittest
 import unittest.mock
 from typing import Literal, cast

@@ -1,4 +1,3 @@
-import atexit
 import contextlib
 import logging
 import math
@@ -108,7 +107,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
   def _spinnaker_system_context(self):
     self._spinnaker_system = PySpin.System.GetInstance()
     try:
-      version = spinnaker_sys.GetLibraryVersion()
+      version = self._spinnaker_system.GetLibraryVersion()
       logger.debug(
         f"{self.__class__.__name__} Library version: %d.%d.%d.%d",
         version.major,

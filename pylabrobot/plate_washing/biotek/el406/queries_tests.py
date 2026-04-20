@@ -4,7 +4,6 @@
 This module contains tests for Query methods.
 """
 
-import unittest
 
 # Import the backend module
 from pylabrobot.plate_washing.biotek.el406 import (

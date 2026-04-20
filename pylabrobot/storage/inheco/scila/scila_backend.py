@@ -1,4 +1,3 @@
-import contextlib
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 

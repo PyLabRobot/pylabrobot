@@ -5,7 +5,6 @@ import anyio
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines.backend import MachineBackend
 
 try:
   import serial

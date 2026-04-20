@@ -1,6 +1,4 @@
-import contextlib
 import logging
-import time
 import warnings
 from typing import List, Literal, Optional, Union, cast
 
@@ -147,7 +145,7 @@ class CytomatBackend(IncubatorBackend):
     for attempt in reversed(range(n_retries)):
       try:
         return await _send_command(command_str)
-      except (CytomatCommandUnknownError, CytomatBusyError) as e:
+      except (CytomatCommandUnknownError, CytomatBusyError):
         if not attempt:
           await self.reset_error_register()
           raise

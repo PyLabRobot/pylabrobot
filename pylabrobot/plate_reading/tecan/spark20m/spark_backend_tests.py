@@ -1,6 +1,5 @@
 import contextlib
 import sys
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice

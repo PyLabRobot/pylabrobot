@@ -325,6 +325,8 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
       wait_for_response=False,
     )
 
+    all_rows: List[float] = []
+
     try:
       with anyio.fail_after(120):
         while True:

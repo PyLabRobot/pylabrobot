@@ -1,6 +1,5 @@
 import contextlib
 import logging
-import time
 
 import anyio
 

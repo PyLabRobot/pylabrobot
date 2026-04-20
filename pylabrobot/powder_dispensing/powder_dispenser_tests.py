@@ -1,8 +1,6 @@
-import unittest
 from typing import List
 from unittest.mock import AsyncMock
 
-import pytest
 
 from pylabrobot.powder_dispensing.backend import (
   DispenseResults,

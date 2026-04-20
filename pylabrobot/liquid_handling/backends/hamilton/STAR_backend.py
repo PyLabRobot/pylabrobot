@@ -1932,7 +1932,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for idx in range(self.num_channels):
         tg.start_soon(_worker, idx)
 
-    return cast(List[ChannelCycleCounts], results)
+    return cast(List["STARBackend.ChannelCycleCounts"], results)
 
   # # # ACTION Commands # # #
 
@@ -2176,12 +2176,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           zip(use_channels, batch_lowest_immers, batch_start_pos)
         ):
 
-          async def worker(i=idx, ch=channel, l=lip, s=sps):
+          async def worker(i=idx, ch=channel, lip=lip, sps=sps):
             try:
               await detect_func(
                 channel_idx=ch,
-                lowest_immers_pos=l,
-                start_pos_search=s,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
                 channel_speed=search_speed,
               )
             except Exception as e:
@@ -3570,24 +3570,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     with H0 CommandSyntaxError trace 40 ("No parallel processes permitted"). When the head
     finishes, EV succeeds and harmlessly ensures the Z axis is at the safe position.
     """
-    start = asyncio.get_event_loop().time()
-    while asyncio.get_event_loop().time() - start < timeout:
-      await asyncio.sleep(poll_interval)
-      try:
-        await self.send_command(module="C0", command="EV", read_timeout=10)
-        logger.info("CoRe 96 head finished (EV succeeded)")
-        return
-      except STARFirmwareError as e:
-        h0_error = e.errors.get("CoRe 96 Head")
-        if (
-          h0_error is not None
-          and isinstance(h0_error, CommandSyntaxError)
-          and h0_error.trace_information == 40
-        ):
-          logger.debug("CoRe 96 head still busy, waiting...")
-          continue
-        raise
-    raise TimeoutError("CoRe 96 head did not become idle within timeout")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          await anyio.sleep(poll_interval)
+          try:
+            await self.send_command(module="C0", command="EV", read_timeout=10)
+            logger.info("CoRe 96 head finished (EV succeeded)")
+            return
+          except STARFirmwareError as e:
+            h0_error = e.errors.get("CoRe 96 Head")
+            if (
+              h0_error is not None
+              and isinstance(h0_error, CommandSyntaxError)
+              and h0_error.trace_information == 40
+            ):
+              logger.debug("CoRe 96 head still busy, waiting...")
+              continue
+            raise
+    except TimeoutError:
+      raise TimeoutError("CoRe 96 head did not become idle within timeout") from None
 
   @_requires_head96
   async def aspirate96(

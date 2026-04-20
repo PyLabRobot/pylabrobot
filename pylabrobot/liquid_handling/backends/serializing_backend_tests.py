@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import AsyncMock
 
 from pylabrobot.liquid_handling import LiquidHandler

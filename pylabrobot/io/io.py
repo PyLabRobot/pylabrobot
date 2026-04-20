@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource
 from pylabrobot.serializer import SerializableMixin

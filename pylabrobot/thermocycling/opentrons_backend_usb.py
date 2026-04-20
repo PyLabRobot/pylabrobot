@@ -2,7 +2,6 @@
 # Does not require an Opentrons liquid handler to use.
 
 import asyncio
-import contextlib
 from typing import List, Optional
 
 import anyio
