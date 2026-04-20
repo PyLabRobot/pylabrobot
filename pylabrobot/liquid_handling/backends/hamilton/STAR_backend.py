@@ -6309,6 +6309,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lp=[f"{lp:04}" for lp in lld_search_height],
       ch=[f"{ch:03}" for ch in clot_detection_height],
       zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
+    )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["po"] = [f"{po:04}" for po in pull_out_distance_transport_air]
+    command_kwargs.update(
       zu=[f"{zu:04}" for zu in second_section_height],
       zr=[f"{zr:05}" for zr in second_section_ratio],
       zx=[f"{zx:04}" for zx in minimum_height],
@@ -6333,8 +6337,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
     )
-    if self._pip_supports_extended_liquid_command_params():
-      command_kwargs["po"] = [f"{po:04}" for po in pull_out_distance_transport_air]
     if self._pip_supports_extended_liquid_command_params():
       command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
       command_kwargs["gj"] = tadm_algorithm
@@ -6545,6 +6547,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zx=[f"{zx:04}" for zx in minimum_height],
       lp=[f"{lp:04}" for lp in lld_search_height],
       zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
+    )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["po"] = [f"{po:04}" for po in pull_out_distance_transport_air]
+    command_kwargs.update(
       ip=[f"{ip:04}" for ip in immersion_depth],
       it=[f"{it:01}" for it in immersion_depth_direction],
       fp=[f"{fp:04}" for fp in surface_following_distance],
@@ -6571,8 +6577,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
     )
-    if self._pip_supports_extended_liquid_command_params():
-      command_kwargs["po"] = [f"{po:04}" for po in pull_out_distance_transport_air]
     if self._pip_supports_extended_liquid_command_params():
       command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
       command_kwargs["gj"] = tadm_algorithm
