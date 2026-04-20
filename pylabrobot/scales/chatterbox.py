@@ -1,3 +1,5 @@
+import contextlib
+
 from pylabrobot.scales.scale_backend import ScaleBackend
 
 

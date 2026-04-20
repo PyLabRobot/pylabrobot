@@ -2,7 +2,7 @@
 
 ## API
 
-In PyLabRobot, all asynchronous resources expose the [`pylabrobot.concurrency.AsyncResource` API](pylabrobot.concurrency.AsyncResource): Resources are usable exactly within the body of `async with resource:`.
+In PyLabRobot, all asynchronous resources expose the `pylabrobot.concurrency.AsyncResource` API: Resources are usable exactly within the body of `async with resource:`.
 What exactly *usable* means may depend on the resource though,
 as some functionality *may* be available outside the `async with` block too.
 Unless that is specified by the API for a specific resource, you should not rely on it.
