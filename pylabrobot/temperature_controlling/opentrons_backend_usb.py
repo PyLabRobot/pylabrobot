@@ -42,7 +42,6 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
     await stack.enter_async_context(self._serial)
     stack.push_shielded_async_callback(self.deactivate)
 
-
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
 

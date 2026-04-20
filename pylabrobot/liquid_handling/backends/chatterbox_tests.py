@@ -1,5 +1,5 @@
-import unittest
 import contextlib
+import unittest
 from types import SimpleNamespace
 
 import pytest

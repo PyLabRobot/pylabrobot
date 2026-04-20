@@ -2,9 +2,9 @@ import contextlib
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 def _parse_scalar(text: Optional[str], tag: str) -> object:
@@ -44,7 +44,6 @@ class SCILABackend(MachineBackend):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self._sila_interface)
     await self._reset_and_initialize()
-
 
   async def _reset_and_initialize(self) -> None:
     event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"

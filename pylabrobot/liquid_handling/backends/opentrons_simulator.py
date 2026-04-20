@@ -7,9 +7,9 @@ communication. Useful for testing protocols offline.
 import logging
 from typing import Dict, List, Optional, Tuple
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsOT2Backend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.standard import (
   Drop,
   Pickup,

@@ -1,8 +1,8 @@
 import math
 import unittest
-import pytest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
+import pytest
 
 from pylabrobot.plate_reading.molecular_devices.backend import (
   Calibrate,
@@ -30,26 +30,25 @@ class TestMolecularDevicesBackend(AnyioTestBase):
 
   async def _enter_lifespan(self, stack):
     await super()._enter_lifespan(stack)
-    
+
     self.mock_serial = MagicMock()
     self.mock_serial.__aenter__ = AsyncMock(return_value=self.mock_serial)
     self.mock_serial.__aexit__ = AsyncMock(return_value=None)
     self.mock_serial.write = AsyncMock()
     self.mock_serial.readline = AsyncMock(return_value=b"OK>\r\n")
 
-
     stack.enter_context(patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial))
-    
+
     self.backend = MolecularDevicesBackend(port="COM1")
     self.backend.io = self.mock_serial
-    
+
     self.send_command_mock = stack.enter_context(
       patch.object(self.backend, "send_command", new_callable=AsyncMock)
     )
 
-
   async def test_setup_stop(self):
     import sniffio
+
     if sniffio.current_async_library() == "trio":
       pytest.skip("global_manager is not supported on trio")
 
@@ -61,7 +60,6 @@ class TestMolecularDevicesBackend(AnyioTestBase):
         self.mock_serial.__aenter__.assert_called_once()
         wrapped_send_command.assert_called_with("!")
       self.mock_serial.__aexit__.assert_called_once()
-
 
   async def test_set_clear(self):
     await self.backend._set_clear()
@@ -699,7 +697,6 @@ class TestDataParsing(AnyioTestBase):
       patch.object(self.backend, "send_command", new_callable=AsyncMock)
     )
 
-
   def test_parse_absorbance_single_wavelength(self):
     data_str = """
     12345.6	25.1	96-well
@@ -960,7 +957,6 @@ class TestErrorHandling(AnyioTestBase):
     self.backend = MolecularDevicesBackend(port="/dev/tty01")
     self.backend.io = self.mock_serial
 
-
   async def _mock_send_command_response(self, response_str: str):
     self.mock_serial.readline.side_effect = [response_str.encode() + b">\r\n"]
     return await self.backend.send_command("!TEST")
@@ -1011,6 +1007,3 @@ class TestErrorHandling(AnyioTestBase):
       self.assertEqual(response, ["OK"])
     except MolecularDevicesError:
       self.fail("MolecularDevicesError raised for a valid OK response")
-
-
-

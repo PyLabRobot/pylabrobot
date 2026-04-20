@@ -14,8 +14,8 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.barcode_scanners import BarcodeScanner
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.barcode import Barcode
@@ -140,10 +140,7 @@ class ExperimentalLiconicBackend(IncubatorBackend):
             break
           await anyio.sleep(self.poll_interval)
     except TimeoutError as e:
-      raise TimeoutError(
-        f"PLC did not signal ready within {self.start_timeout} seconds"
-      ) from e
-
+      raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds") from e
 
   def _site_to_m_n(self, site: PlateHolder) -> Tuple[int, int]:
     rack = site.parent

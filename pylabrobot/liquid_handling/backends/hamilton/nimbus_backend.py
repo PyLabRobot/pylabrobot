@@ -955,7 +955,13 @@ class NimbusBackend(HamiltonTCPBackend):
 
     self._channel_traversal_height: float = 146.0  # Default traversal height in mm
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, unlock_door: bool = False, force_initialize: bool = False):
+  async def _enter_lifespan(
+    self,
+    stack: contextlib.AsyncExitStack,
+    *,
+    unlock_door: bool = False,
+    force_initialize: bool = False,
+  ):
     """Set up the Nimbus backend.
 
     This method:
@@ -1244,8 +1250,6 @@ class NimbusBackend(HamiltonTCPBackend):
     except Exception as e:
       logger.error(f"Failed to unlock door: {e}")
       raise
-
-
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.

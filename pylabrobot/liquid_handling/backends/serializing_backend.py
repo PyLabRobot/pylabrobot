@@ -1,10 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional, Union, cast
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,

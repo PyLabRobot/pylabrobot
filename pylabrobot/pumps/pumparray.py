@@ -1,6 +1,7 @@
-import anyio
 import functools
 from typing import List, Optional, Union
+
+import anyio
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.pumps.backend import PumpArrayBackend
@@ -164,7 +165,7 @@ class PumpArray(Machine):
       raise ValueError("Volume must be positive.")
     if not len(speed) == len(use_channels) == len(volume):
       raise ValueError("Speed, use_channels, and volume must be the same length.")
-    
+
     if self.calibration.calibration_mode == "duration":
       durations = [
         channel_volume / self.calibration[channel]
@@ -196,7 +197,6 @@ class PumpArray(Machine):
           )
     else:
       raise ValueError("Calibration mode must be 'duration' or 'revolutions'.")
-
 
   async def halt(self):
     """Halt the entire pump array."""

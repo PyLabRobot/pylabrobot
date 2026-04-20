@@ -7,7 +7,6 @@ This backend targets the Infinite "M" series (e.g., Infinite 200 PRO).  The
 from __future__ import annotations
 
 import logging
-import anyio
 import math
 import re
 import time
@@ -15,8 +14,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from pylabrobot.io.binary import Reader
+import anyio
+
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate
@@ -901,7 +902,9 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         while decoder.count < target:
           chunk = await self._read_packet(self._read_chunk_size)
           if not chunk:
-            raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
+            raise RuntimeError(
+              f"{mode} read returned empty chunk; transport may not support reads."
+            )
           decoder.feed(chunk)
           reads += 1
     except TimeoutError:

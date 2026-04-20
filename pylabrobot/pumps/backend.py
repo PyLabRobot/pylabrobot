@@ -27,7 +27,6 @@ class PumpBackend(MachineBackend, metaclass=ABCMeta):
     """Halt the pump."""
 
 
-
 class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
   """
   Abstract base class for pump array backends.
@@ -59,4 +58,3 @@ class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
 
   async def halt(self):
     """Halt the entire pump array."""
-

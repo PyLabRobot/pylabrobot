@@ -1,15 +1,15 @@
+import contextlib
 import inspect
 import sys
 import weakref
-import contextlib
-from typing import Optional
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import anyio
 
+from pylabrobot.concurrency import AsyncResource, global_manager
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
-from pylabrobot.concurrency import global_manager, AsyncResource
 
 
 class MachineBackend(SerializableMixin, AsyncResource):

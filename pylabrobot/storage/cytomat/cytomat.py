@@ -1,9 +1,10 @@
 import contextlib
-import anyio
 import logging
 import time
 import warnings
 from typing import List, Literal, Optional, Union, cast
+
+import anyio
 
 try:
   import serial
@@ -99,7 +100,6 @@ class CytomatBackend(IncubatorBackend):
     await stack.enter_async_context(self.io)
     await self.initialize()
     await self.wait_for_task_completion()
-
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
@@ -428,7 +428,6 @@ class CytomatChatterbox(CytomatBackend):
     await IncubatorBackend._enter_lifespan(self, stack)
     await self.wait_for_task_completion()
     stack.callback(lambda: print("closing connection to cytomat"))
-
 
   async def send_command(self, command_type, command, params):
     print(

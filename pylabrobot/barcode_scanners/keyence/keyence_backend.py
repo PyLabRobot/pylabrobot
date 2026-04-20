@@ -1,7 +1,8 @@
-import anyio
 import contextlib
 import logging
 import time
+
+import anyio
 
 try:
   import serial

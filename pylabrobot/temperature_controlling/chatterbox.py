@@ -1,4 +1,5 @@
 import contextlib
+
 from pylabrobot.temperature_controlling.backend import (
   TemperatureControllerBackend,
 )
@@ -18,7 +19,6 @@ class TemperatureControllerChatterboxBackend(TemperatureControllerBackend):
     await super()._enter_lifespan(stack)
     print("Setting up the temperature controller.")
     stack.callback(lambda: print("Stopping the temperature controller."))
-
 
   async def set_temperature(self, temperature: float):
     print(f"Setting the temperature to {temperature}.")

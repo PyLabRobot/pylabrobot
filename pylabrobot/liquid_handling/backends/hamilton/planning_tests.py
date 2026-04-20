@@ -123,6 +123,3 @@ class TestGroupByXBatchByXY(unittest.TestCase):
     result = group_by_x_batch_by_xy(locations=locations, use_channels=[2, 0])
     # Channel 0 (index 1) sorted before channel 2 (index 0)
     self.assertEqual(result, {100.0: [[1, 0]]})
-
-
-

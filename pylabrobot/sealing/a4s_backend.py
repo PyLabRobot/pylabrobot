@@ -12,9 +12,9 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.sealing.backend import SealerBackend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class A4SBackend(SealerBackend):
@@ -162,7 +162,9 @@ class A4SBackend(SealerBackend):
 
           await anyio.sleep(0.01)
     except TimeoutError:
-      raise TimeoutError(f"Timeout waiting for status {statuses} after {self.timeout} seconds") from None
+      raise TimeoutError(
+        f"Timeout waiting for status {statuses} after {self.timeout} seconds"
+      ) from None
 
   async def send_command(self, command: str):
     # command accepted: *Y01PL!
@@ -201,7 +203,9 @@ class A4SBackend(SealerBackend):
             return status
           await anyio.sleep(0.1)
     except TimeoutError:
-      raise TimeoutError(f"Timeout waiting for shuttle open sensor to be {shuttle_open} after {timeout} seconds") from None
+      raise TimeoutError(
+        f"Timeout waiting for shuttle open sensor to be {shuttle_open} after {timeout} seconds"
+      ) from None
 
   async def set_temperature(self, temperature: float):
     if not (50 <= temperature <= 200):

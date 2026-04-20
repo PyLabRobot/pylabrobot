@@ -333,6 +333,7 @@ async def _arp_scan_linux(interface: str) -> dict[str, str]:
     return await _arp_scan_bsd(interface)
 
   from anyio import Path
+
   try:
     path = Path("/proc/net/arp")
     text = await path.read_text()
@@ -518,16 +519,18 @@ async def _discover_sila1(
     # Cap NetBIOS at 3s — any device that responds will do so within a second or two.
     scan_results = {}
     async with anyio.create_task_group() as tg:
+
       async def do_netbios():
-        scan_results['netbios'] = await _netbios_scan(interface, timeout=min(timeout, 3.0))
+        scan_results["netbios"] = await _netbios_scan(interface, timeout=min(timeout, 3.0))
+
       async def do_arp():
-        scan_results['arp'] = await _arp_scan(interface)
+        scan_results["arp"] = await _arp_scan(interface)
 
       tg.start_soon(do_netbios)
       tg.start_soon(do_arp)
 
-    hosts.update(scan_results.get('netbios', {}))
-    for ip, name in scan_results.get('arp', {}).items():
+    hosts.update(scan_results.get("netbios", {}))
+    for ip, name in scan_results.get("arp", {}).items():
       if ip not in hosts:
         logger.debug("found %s via ARP (not NetBIOS)", ip)
         hosts[ip] = name
@@ -539,8 +542,11 @@ async def _discover_sila1(
 
     identification_results = {}
     async with anyio.create_task_group() as tg:
+
       async def do_query(ip):
-        identification_results[ip] = await _get_device_identification(ip, port, interface=interface, timeout=timeout)
+        identification_results[ip] = await _get_device_identification(
+          ip, port, interface=interface, timeout=timeout
+        )
 
       for ip in host_list:
         tg.start_soon(do_query, ip)

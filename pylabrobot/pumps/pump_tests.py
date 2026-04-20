@@ -43,7 +43,6 @@ class TestPumpArray(AnyioTestBase):
     self.pump_array = PumpArray(backend=self.mock_backend, calibration=None)
     await stack.enter_async_context(self.pump_array)
 
-
   async def test_setup(self):
     """Test that the AgrowPumpArrayTester class can be initialized."""
     self.assertEqual(self.pump_array.num_channels, 6)
@@ -121,6 +120,3 @@ class TestPumpArray(AnyioTestBase):
     self.pump_array.calibration = self.test_calibration
     with self.assertRaises(ValueError):
       await self.pump_array.pump_volume(speed=1, use_channels=[0], volume=-1)
-
-
-

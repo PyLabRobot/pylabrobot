@@ -1,14 +1,13 @@
-import logging
-import anyio
 import contextlib
-
-
+import logging
 import re
 import time
 from abc import ABCMeta
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Literal, Optional, Tuple, Union
+
+import anyio
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -266,7 +265,6 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     await stack.enter_async_context(self.io)
     await self.send_command("!")
 
-
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
 
@@ -293,8 +291,6 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
             break
     except TimeoutError:
       raise TimeoutError(f"Timeout waiting for response to command: {command}") from None
-
-
 
     logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
     response = raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
@@ -697,7 +693,6 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
           await anyio.sleep(1)
     except TimeoutError:
       raise TimeoutError("Timeout waiting for plate reader to become idle.") from None
-
 
   async def read_absorbance(  # type: ignore[override]
     self,

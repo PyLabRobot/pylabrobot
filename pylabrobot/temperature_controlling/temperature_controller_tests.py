@@ -1,4 +1,5 @@
 import unittest
+
 import pytest
 
 from pylabrobot.resources.coordinate import Coordinate
@@ -11,7 +12,6 @@ from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestTemperatureController(AnyioTestBase):
-
   def test_serialization(self):
     tc = TemperatureController(
       name="test_tc",
@@ -28,7 +28,6 @@ class TestTemperatureController(AnyioTestBase):
 
 
 class TestPassiveCooling(AnyioTestBase):
-
   async def test_cannot_cool_without_support(self):
     backend = TemperatureControllerChatterboxBackend(dummy_temperature=20.0)
     tc = TemperatureController(
@@ -81,7 +80,6 @@ class _FakeBackend(TemperatureControllerBackend):
 
 
 class TestPassiveCoolingWithSupport(AnyioTestBase):
-
   async def test_passive_cooling_with_support(self):
     backend = _FakeBackend(temperature=30.0)
     tc = TemperatureController(

@@ -8,8 +8,6 @@ import unittest
 import unittest.mock
 from typing import Optional
 
-from pylabrobot.testing.concurrency import AnyioTestBase
-
 from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   Aspirate,
   DisableADC,
@@ -47,6 +45,7 @@ from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestNimbusTipType(unittest.TestCase):
@@ -535,7 +534,6 @@ class TestAspirateDispenseCommands(unittest.TestCase):
 class TestNimbusBackendUnit(AnyioTestBase):
   """Unit tests for NimbusBackend class (no actual connection)."""
 
-
   async def test_backend_init(self):
     backend = NimbusBackend(host="192.168.1.100", port=2000)
     self.assertEqual(backend.io._host, "192.168.1.100")
@@ -679,7 +677,6 @@ class TestNimbusBackendCommands(AnyioTestBase):
 
 class TestNimbusBackendSerialization(AnyioTestBase):
   """Tests for NimbusBackend serialization."""
-
 
   async def test_serialize(self):
     backend = NimbusBackend(host="192.168.1.100", port=2000)
@@ -1187,6 +1184,3 @@ class TestNimbusTipPickupDropAllSizes(AnyioTestBase):
     self.assertEqual(drop_cmd.end_tip_deposit_process[0], -8350)
 
     tip_rack.unassign()
-
-
-

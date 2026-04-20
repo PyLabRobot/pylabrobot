@@ -1,6 +1,4 @@
 import unittest
-from pylabrobot.testing.concurrency import AnyioTestBase
-
 
 from pylabrobot.centrifuge import (
   BucketHasPlateError,
@@ -14,6 +12,7 @@ from pylabrobot.centrifuge import (
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 from pylabrobot.centrifuge.chatterbox import CentrifugeChatterboxBackend, LoaderChatterboxBackend
 from pylabrobot.resources import Coordinate, Cor_96_wellplate_360ul_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class CentrifugeTests(unittest.IsolatedAsyncioTestCase):

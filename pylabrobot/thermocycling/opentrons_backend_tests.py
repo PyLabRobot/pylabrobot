@@ -16,7 +16,6 @@ class TestOpentronsThermocyclerBackend(AnyioTestBase):
   async def _enter_lifespan(self, stack):
     self.thermocycler_backend = OpentronsThermocyclerBackend(opentrons_id="test_id")
 
-
   def test_opentrons_v1_serialization(self):
     """Test that the Opentrons-specific resource model serializes correctly."""
     tc_model = OpentronsThermocyclerModuleV1(

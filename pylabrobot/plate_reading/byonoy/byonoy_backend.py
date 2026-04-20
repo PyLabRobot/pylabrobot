@@ -42,10 +42,6 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
 
     tg.start_soon(self._ping_loop)
 
-
-
-
-
   def _assemble_command(self, report_id: int, payload: bytes, routing_info: bytes) -> bytes:
     packet = Writer().u16(report_id).raw_bytes(payload).finish()
     packet += b"\x00" * (62 - len(packet)) + routing_info  # pad to 64 bytes
@@ -93,9 +89,6 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
         await self.io.write(cmd)
 
       await anyio.sleep(self._ping_interval)
-
-
-
 
   def _start_background_pings(self) -> None:
     self._sending_pings = True

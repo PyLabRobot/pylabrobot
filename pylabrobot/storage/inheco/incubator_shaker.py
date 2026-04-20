@@ -1,7 +1,7 @@
 from typing import Dict
 
-from pylabrobot.machines.machine import Machine
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
 from .incubator_shaker_backend import InhecoIncubatorShakerStackBackend, InhecoIncubatorShakerUnit

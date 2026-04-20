@@ -55,12 +55,8 @@ class TestAgrowPumps(AnyioTestBase):
     self.agrow_backend = AgrowPumpArrayBackend(port="simulated", address=1)
     self.agrow_backend._modbus = SimulatedModbusClient(connected=False)
 
-
     self.pump_array = PumpArray(backend=self.agrow_backend, calibration=None)
     await stack.enter_async_context(self.pump_array)
-
-
-
 
   async def test_setup(self):
     self.assertEqual(self.agrow_backend.port, "simulated")

@@ -4,8 +4,8 @@ import warnings
 from contextlib import asynccontextmanager
 from typing import Dict, List, Literal, Optional, Union
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   DriveConfiguration,
   ExtendedConfiguration,

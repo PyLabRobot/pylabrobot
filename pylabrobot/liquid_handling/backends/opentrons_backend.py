@@ -1,5 +1,5 @@
-import uuid
 import contextlib
+import uuid
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot import utils
@@ -137,7 +137,6 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   @property
   def num_channels(self) -> int:
     return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
-
 
   def get_ot_name(self, plr_resource_name: str) -> str:
     """Opentrons only allows names in ^[a-z0-9._]+$, but in PLR we are flexible.

@@ -244,6 +244,3 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
     expected = bytes.fromhex("04010f0e03000f0e00000000")
     self.assertEqual(cmd, expected)
-
-
-

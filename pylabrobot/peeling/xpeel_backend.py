@@ -1,8 +1,9 @@
 import logging
 import time
-import anyio
 from dataclasses import dataclass
 from typing import List, Literal, Tuple
+
+import anyio
 
 try:
   import serial  # type: ignore
@@ -12,9 +13,9 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.peeling.backend import PeelerBackend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class XPeelBackend(PeelerBackend):

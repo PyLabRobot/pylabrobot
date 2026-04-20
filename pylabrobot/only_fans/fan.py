@@ -1,7 +1,7 @@
 import anyio
 
-from pylabrobot.machines.machine import Machine
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.machines.machine import Machine
 
 from .backend import FanBackend
 

@@ -727,6 +727,3 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
 
     self.assertEqual(cmd[2], 0x01)
     self.assertEqual(cmd[3], 0x00)
-
-
-

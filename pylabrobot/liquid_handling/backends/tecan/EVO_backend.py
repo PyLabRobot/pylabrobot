@@ -1,5 +1,4 @@
 from abc import ABCMeta, abstractmethod
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 from typing import (
   Dict,
   List,
@@ -10,6 +9,7 @@ from typing import (
   Union,
 )
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,

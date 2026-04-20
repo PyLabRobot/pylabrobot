@@ -1,8 +1,8 @@
 import random
 from typing import List, Literal, Optional, Union, cast
 
-from pylabrobot.machines import Machine
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.machines import Machine
 from pylabrobot.resources import (
   Coordinate,
   Plate,

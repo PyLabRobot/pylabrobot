@@ -1,5 +1,6 @@
-import anyio
 from typing import Optional, Union
+
+import anyio
 
 from pylabrobot.machines.machine import Machine
 

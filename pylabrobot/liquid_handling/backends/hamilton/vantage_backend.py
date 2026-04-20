@@ -1,6 +1,5 @@
 import contextlib
 import random
-
 import re
 import sys
 import warnings
@@ -455,7 +454,6 @@ class VantageBackend(HamiltonLiquidHandler):
         await self.ipg_initialize()
       if not await self.ipg_get_parking_status():
         await self.ipg_park()
-
 
   @property
   def num_channels(self) -> int:

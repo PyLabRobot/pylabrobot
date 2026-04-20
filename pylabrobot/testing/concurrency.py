@@ -1,22 +1,25 @@
-import inspect
 import abc
 import functools
-from contextlib import contextmanager, asynccontextmanager
+import inspect
+from contextlib import asynccontextmanager, contextmanager
 
-import pytest
 import anyio
+import pytest
 
 from pylabrobot.concurrency import _AsyncResourceBase
+
 
 def lifespan_kwargs(**kwargs):
   def decorator(func):
     func._lifespan_kwargs = kwargs
     return func
+
   return decorator
+
 
 # Note: pytest doesn't like classes with __new__, so we use _AsyncResourceBase instead of AsyncResource
 class AnyioTestBase(_AsyncResourceBase):
-  """ A test base class enabling structured concurrency.
+  """A test base class enabling structured concurrency.
 
   Intended as a replacement for `unittest.IsolatedAsyncioTestCase`.
   The `unittest` test paradigm of setUp -> test -> tearDown is
@@ -54,19 +57,24 @@ class AnyioTestBase(_AsyncResourceBase):
       @pytest.mark.parametrize("backend", ["asyncio", "trio"])
       def sync_wrapper(self, backend, *args, **kwargs):
         lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
+
         async def async_wrapper():
           async with self._lifespan(**lifespan_kwargs):
             if inspect.iscoroutinefunction(wrapped):
               return await wrapped(self, *args, **kwargs)
             else:
               return wrapped(self, *args, **kwargs)
+
         return anyio.run(async_wrapper, backend=backend)
+
       sync_wrapper.original_func = wrapped
       return sync_wrapper
 
     for name, value in list(vars(cls).items()):
-      if name in {"setUp","asyncSetUp","tearDown","asyncTearDown"}:
-        raise TypeError(f"Class {cls.__name__} should not have {name} method, use _lifespan or _enter_lifespan instead.")
+      if name in {"setUp", "asyncSetUp", "tearDown", "asyncTearDown"}:
+        raise TypeError(
+          f"Class {cls.__name__} should not have {name} method, use _lifespan or _enter_lifespan instead."
+        )
       if name.startswith("test_"):
         setattr(cls, name, wrap(value))
 
@@ -89,7 +97,9 @@ class AnyioTestBase(_AsyncResourceBase):
     if delta is not None:
       assert abs(first - second) <= delta, msg or f"{first} != {second} within {delta}"
     else:
-      assert round(abs(first - second), places) == 0, msg or f"{first} != {second} within {places} places"
+      assert round(abs(first - second), places) == 0, (
+        msg or f"{first} != {second} within {places} places"
+      )
 
   def assertIsInstance(self, obj, cls, msg=None):
     assert isinstance(obj, cls), msg or f"{obj!r} is not an instance of {cls.__name__}"
@@ -114,6 +124,7 @@ class AnyioTestBase(_AsyncResourceBase):
     class Context:
       def __init__(self):
         self.exception = None
+
     ctx = Context()
     try:
       yield ctx
@@ -134,6 +145,7 @@ class AnyioTestBase(_AsyncResourceBase):
       yield ctx
     if ctx.exception is not None:
       import re
+
       if not re.search(regex, str(ctx.exception)):
         raise AssertionError(msg or f"{regex!r} does not match {str(ctx.exception)!r}")
 

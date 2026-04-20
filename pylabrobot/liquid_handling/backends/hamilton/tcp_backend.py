@@ -7,7 +7,6 @@ It handles connection management, message routing, and the introspection API.
 from __future__ import annotations
 
 import contextlib
-
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
@@ -307,6 +306,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     def cleanup():
       self._connected = False
       logger.info("Hamilton backend stopped")
+
     stack.callback(cleanup)
 
     # Set connection state after successful connection
@@ -570,8 +570,6 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       raise RuntimeError(f"Hamilton error {action}: {error_message}")
 
     return command.interpret_response(response_message)
-
-
 
   def serialize(self) -> dict:
     """Serialize backend configuration."""

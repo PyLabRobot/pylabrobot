@@ -920,6 +920,3 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
       cmd = backend._build_wash_composite_command(plate)
       self.assertEqual(len(cmd), 102, f"Wrong length for {plate.name}")
       self.assertEqual(cmd[0], expected_prefixes[plate.name], f"Wrong prefix for {plate.name}")
-
-
-

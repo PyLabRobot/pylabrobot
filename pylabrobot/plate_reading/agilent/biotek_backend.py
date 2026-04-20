@@ -6,7 +6,6 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import anyio
 
-
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -114,7 +113,6 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
 
     stack.push_shielded_async_callback(_cleanup)
 
-
   @property
   def version(self) -> str:
     if self._version is None:
@@ -181,7 +179,6 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
 
     logger.debug(f"{self.__class__.__name__} received %s", res)
     return res
-
 
   async def send_command(
     self,

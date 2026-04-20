@@ -53,7 +53,6 @@ class TestThermocycler(AnyioTestBase):
       child_location=Coordinate(0, 0, 0),
     )
 
-
   def test_thermocycler_serialization(self):
     """Test that the high-level resource serializes and deserializes correctly."""
     self.tc.backend = ThermocyclerChatterboxBackend()
@@ -123,7 +122,6 @@ class TestThermocycler(AnyioTestBase):
       assert self.tc.backend.get_hold_time.call_count == 3  # type: ignore
     finally:
       anyio.sleep = original_sleep
-
 
   async def test_is_profile_running_logic(self):
     """Test that `is_profile_running` returns the correct boolean based on various profile states."""

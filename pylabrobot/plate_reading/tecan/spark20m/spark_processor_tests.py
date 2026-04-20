@@ -362,6 +362,3 @@ class TestProcessFluorescence(unittest.TestCase):
     assert len(proc) == len(res)
     for proc_row, res_row in zip(proc, res):
       assert proc_row == pytest.approx(res_row)
-
-
-

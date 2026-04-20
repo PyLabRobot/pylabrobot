@@ -1,11 +1,11 @@
-import logging
 import contextlib
+import logging
 import ssl
-import anyio
-import anyio.streams.tls
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+
+import anyio
+import anyio.streams.tls
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -233,7 +233,9 @@ class Socket(IOBase):
         logger.error("readuntil timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
       except anyio.IncompleteRead:
-        logger.warning("readuntil: connection closed before separator found, returning partial data")
+        logger.warning(
+          "readuntil: connection closed before separator found, returning partial data"
+        )
         result = await self._stream.receive(len(self._stream.buffer))
       except anyio.streams.buffered.DelimiterNotFound as exc:
         logger.error("readuntil error: delimiter not found")
@@ -292,7 +294,6 @@ class Socket(IOBase):
       )
       return data
 
-
   async def read_until_eof(self, chunk_size: int = 1024, timeout: Optional[float] = None) -> bytes:
     """Read until EOF is reached.
     Do not retry on timeouts.
@@ -331,8 +332,6 @@ class Socket(IOBase):
         )
       )
       return result
-
-
 
 
 class SocketValidator(Socket):

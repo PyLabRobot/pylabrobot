@@ -29,6 +29,3 @@ class ResourceHolderTests(unittest.TestCase):
   def test_assign_none_when_empty(self):
     self.holder.resource = None
     self.assertIsNone(self.holder.resource)
-
-
-

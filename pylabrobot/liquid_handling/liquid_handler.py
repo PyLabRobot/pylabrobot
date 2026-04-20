@@ -180,7 +180,6 @@ class LiquidHandler(Resource, Machine):
 
     self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
 
-
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
     serialize the state of the liquid handler and all children (the deck)."""

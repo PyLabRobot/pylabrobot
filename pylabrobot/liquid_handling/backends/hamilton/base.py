@@ -1,22 +1,23 @@
+import contextlib
 import datetime
 import logging
 import time
 import warnings
-import contextlib
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import (
   Any,
   List,
   Optional,
-  Union,
   Sequence,
   Tuple,
   TypeVar,
+  Union,
 )
 
 import anyio
 
+from pylabrobot.concurrency import MachineConnectionClosedError
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -28,7 +29,6 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.concurrency import MachineConnectionClosedError
 
 T = TypeVar("T")
 
@@ -86,8 +86,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self.id_ = 0
 
     self._wakeup_reader_loop: Optional[anyio.Event] = None
-    self._waiting_tasks_with_id: dict[int,HamiltonTask] = {}
-    self._waiting_tasks_idless: dict[str,list[HamiltonTask]] = {}
+    self._waiting_tasks_with_id: dict[int, HamiltonTask] = {}
+    self._waiting_tasks_idless: dict[str, list[HamiltonTask]] = {}
     self._tth2tti: dict[int, int] = {}  # hash to tip type index
 
   def __setattr__(self, name: str, value: Any) -> None:
@@ -112,7 +112,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       self._wakeup_reader_loop = None
       self._tth2tti.clear()
       if self._waiting_tasks_with_id or self._waiting_tasks_idless:
-        warnings.warn("Internal problem: At this point, all waiting tasks should have been cleaned up!")
+        warnings.warn(
+          "Internal problem: At this point, all waiting tasks should have been cleaned up!"
+        )
         self._waiting_tasks_with_id.clear()
         self._waiting_tasks_idless.clear()
 
@@ -296,9 +298,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       idle = not (self._waiting_tasks_with_id or self._waiting_tasks_idless)
       if id_ is None:
         # TODO: Do we want to allow multiple id-less tasks to be sent?
-        self._waiting_tasks_idless.setdefault(cmd_prefix,[]).append(task)
+        self._waiting_tasks_idless.setdefault(cmd_prefix, []).append(task)
       else:
-        if self._waiting_tasks_with_id.setdefault(id_,task) is not task:
+        if self._waiting_tasks_with_id.setdefault(id_, task) is not task:
           raise RuntimeError("Another task with this ID is already pending")
       if idle:
         self._wakeup_reader_loop.set()
@@ -397,7 +399,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
           task.done_event.set()
       self._waiting_tasks_with_id.clear()
       self._waiting_tasks_idless.clear()
-
 
   def _ops_to_fw_positions(
     self, ops: Sequence[PipettingOp], use_channels: List[int]

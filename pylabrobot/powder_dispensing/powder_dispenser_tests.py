@@ -1,7 +1,8 @@
 import unittest
-import pytest
 from typing import List
 from unittest.mock import AsyncMock
+
+import pytest
 
 from pylabrobot.powder_dispensing.backend import (
   DispenseResults,
@@ -19,7 +20,6 @@ class MockPowderDispenserBackend(PowderDispenserBackend):
   """A mock backend for testing."""
 
   async def dispense(
-
     self,
     dispense_parameters: List[PowderDispense],
     **backend_kwargs: None,
@@ -42,7 +42,6 @@ class TestPowderDispenser(AnyioTestBase):
     self.backend = AsyncMock(spec=MockPowderDispenserBackend)
     self.dispenser = PowderDispenser(backend=self.backend)
     await stack.enter_async_context(self.dispenser)
-
 
   async def test_dispense_single_resource(self):
     plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
@@ -84,6 +83,3 @@ class TestPowderDispenser(AnyioTestBase):
         [0.005, 0.010],
         dispense_parameters=[{"param": "value"}, {"param": "value"}],
       )
-
-
-

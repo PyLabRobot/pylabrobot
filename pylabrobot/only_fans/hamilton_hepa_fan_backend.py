@@ -1,5 +1,6 @@
-import anyio
 import contextlib
+
+import anyio
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -143,8 +144,6 @@ class HamiltonHepaFanBackend(FanBackend):
 
   async def turn_off(self):
     await self.send(b"\x55\xc1\x01\x11\x00\x7b")
-
-
 
   async def send(self, command: bytes):
     await self.io.write(command)

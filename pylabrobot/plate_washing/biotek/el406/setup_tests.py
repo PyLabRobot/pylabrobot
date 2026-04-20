@@ -30,7 +30,6 @@ class TestEL406BackendSetup(EL406TestCase):
     self.assertIsNone(backend.io)
 
 
-
 class TestEL406CommunicationError(unittest.TestCase):
   """Test EL406CommunicationError exception class."""
 

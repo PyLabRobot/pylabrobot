@@ -1,16 +1,16 @@
 import unittest
-import anyio
 from typing import Dict
 from unittest.mock import AsyncMock, patch
+
+import anyio
 
 from pylabrobot.arms.backend import HorizontalAccess, VerticalAccess
 from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.arms.precise_flex.joints import PFAxis
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend, PreciseFlexError
 from pylabrobot.io.socket import Socket  # Import Socket for mocking
-from pylabrobot.testing.concurrency import AnyioTestBase
-
 from pylabrobot.resources import Coordinate, Rotation
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestPreciseFlexBackendHardware(AnyioTestBase):
@@ -28,7 +28,6 @@ class TestPreciseFlexBackend(AnyioTestBase):
     self.mock_socket_instance.readline.return_value = b""
     self.mock_socket_instance.write.return_value = None
     self.mock_socket_instance._writer = AsyncMock()  # Mock the _writer attribute
-
 
     # Patch the Socket class where it's used in PreciseFlexBackend
     patcher = patch(

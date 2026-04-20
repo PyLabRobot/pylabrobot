@@ -355,6 +355,3 @@ class TestDecodeGrpcError(unittest.TestCase):
     error = MagicMock(spec=[])
     result = decode_grpc_error(error)
     self.assertIsInstance(result, str)
-
-
-

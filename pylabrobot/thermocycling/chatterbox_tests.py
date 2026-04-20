@@ -3,11 +3,9 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 from pylabrobot.resources import Coordinate
+from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
-
-
-from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestThermocyclerChatterbox(AnyioTestBase):
@@ -20,7 +18,6 @@ class TestThermocyclerChatterbox(AnyioTestBase):
       backend=ThermocyclerChatterboxBackend(),
       child_location=Coordinate.zero(),
     )
-
 
   async def test_chatterbox_run_profile(self):
     """Test that the chatterbox produces the correct log for a generic profile."""

@@ -1,11 +1,11 @@
-import anyio
 import contextlib
 import ctypes
 import logging
-
 from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
 from typing import Optional, cast
+
+import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 
@@ -316,8 +316,6 @@ class FTDI(IOBase):
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
     return cast(bytes, data)
-
-
 
   def serialize(self):
     return {

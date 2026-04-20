@@ -28,7 +28,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     mock_usb_instance = AsyncMock()
     mock_usb_instance.__aenter__.return_value = mock_usb_instance
     mock_usb_instance.__aexit__.return_value = None
-    mock_usb_instance.dev = MagicMock() # Ensure dev is synchronous
+    mock_usb_instance.dev = MagicMock()  # Ensure dev is synchronous
     self.mock_usb_class.return_value = mock_usb_instance
 
     async with self.reader:
@@ -62,7 +62,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # based on input arguments (id_product).
 
     mock_usb_success = AsyncMock()
-    mock_usb_success.dev = MagicMock() # Ensure dev is synchronous
+    mock_usb_success.dev = MagicMock()  # Ensure dev is synchronous
     mock_usb_success.__aenter__.return_value = mock_usb_success
     mock_usb_success.__aexit__.return_value = None
 
@@ -242,7 +242,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     mock_usb_instance = AsyncMock()
     mock_usb_instance.__aenter__.return_value = mock_usb_instance
     mock_usb_instance.__aexit__.return_value = None
-    mock_usb_instance.dev = MagicMock() # Ensure dev is synchronous
+    mock_usb_instance.dev = MagicMock()  # Ensure dev is synchronous
     self.mock_usb_class.return_value = mock_usb_instance
 
     async with self.reader:
@@ -305,7 +305,6 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(parsed, {"type": "RespReady", "payload": "done"})
 
-
   async def test_read_packet_in_executor_retries(self) -> None:
     # Test that _read_packet_in_executor retries on invalid packets using new validation logic
     mock_reader = AsyncMock()
@@ -359,6 +358,3 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(mock_reader._read_packet.call_count, 4)
     finally:
       mock_reader._executor.shutdown()
-
-
-

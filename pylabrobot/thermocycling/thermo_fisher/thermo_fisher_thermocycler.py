@@ -1,5 +1,4 @@
 import contextlib
-import anyio
 import hashlib
 import hmac
 import logging
@@ -12,6 +11,8 @@ from base64 import b64decode
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
+
+import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io import Socket
@@ -1007,7 +1008,6 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     )
 
   # stop method removed, logic moved to cleanup callback in _enter_lifespan
-
 
   async def get_block_status(self, *args, **kwargs):
     raise NotImplementedError

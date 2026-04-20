@@ -5,11 +5,11 @@ from typing import Dict, List, Optional
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 from .controls.config_control import ConfigControl
 from .controls.data_control import DataControl
@@ -76,7 +76,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       return None
 
     return statistics.mean(temps) / 100.0
-
 
   async def open(self) -> None:
     """Move the plate carrier out."""

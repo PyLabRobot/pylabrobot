@@ -55,7 +55,6 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("Setting up thermocycler.")
     stack.callback(lambda: print("Stopping thermocycler."))
 
-
   async def open_lid(self):
     print("Opening lid.")
     self._state.lid_open = True

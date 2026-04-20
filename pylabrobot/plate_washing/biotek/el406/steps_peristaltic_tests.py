@@ -556,6 +556,3 @@ class TestEL406BackendPeristalticPurge(EL406TestCase):
     self.backend.io.set_read_buffer(b"")  # No ACK response
     with self.assertRaises(TimeoutError):
       await self.backend.peristaltic_purge(PT96, volume=1000.0)
-
-
-

@@ -1,7 +1,8 @@
-import anyio
 import contextlib
 import logging
 from typing import Optional, cast
+
+import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
@@ -113,11 +114,9 @@ class HID(IOBase):
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
 
-
   async def _dev_call(self, func, *args):
     async with self._lock:
       return await anyio.to_thread.run_sync(func, *args)
-
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
     r"""Writes data to the HID device.
@@ -216,6 +215,7 @@ class HIDValidator(HID):
         and next_command.action == "close"
       ):
         raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+
     stack.callback(_cleanup)
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):

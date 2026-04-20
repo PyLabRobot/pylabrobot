@@ -12,8 +12,10 @@ class ScaleChatterboxBackend(ScaleBackend):
 
   async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     print("Setting up the scale.")
+
     def _cleanup():
       print("Stopping the scale.")
+
     stack.callback(_cleanup)
 
   async def tare(self):

@@ -71,7 +71,8 @@ class SynergyH1Backend(BioTekPlateReaderBackend):
 
             if retries >= max_retries:
               logger.warning(
-                f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping", e
+                f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping",
+                e,
               )
               raise
 

@@ -154,6 +154,3 @@ class TestStepAutoBatching(EL406TestCase):
     # Two shake commands
     shake_count = sum(1 for d in written if len(d) >= 3 and d[2] == 0xA3)
     self.assertEqual(shake_count, 2, "Should have two SHAKE commands")
-
-
-

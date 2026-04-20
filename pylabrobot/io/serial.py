@@ -1,13 +1,13 @@
-import logging
 import contextlib
+import logging
 from dataclasses import dataclass
 from typing import Optional, cast
 
 import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
-from pylabrobot.io.io import IOBase
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.io import IOBase
 
 try:
   import serial

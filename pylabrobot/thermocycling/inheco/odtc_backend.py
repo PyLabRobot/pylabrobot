@@ -1,12 +1,13 @@
 import datetime
 import time
-import anyio
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface, SiLAError
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 

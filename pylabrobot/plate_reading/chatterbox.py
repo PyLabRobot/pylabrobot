@@ -20,7 +20,6 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     print("Setting up the plate reader.")
     stack.callback(lambda: print("Stopping the plate reader."))
 
-
   async def open(self) -> None:
     print("Opening the plate reader.")
 

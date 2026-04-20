@@ -1,5 +1,5 @@
-from pylabrobot.only_fans import FanBackend
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.only_fans import FanBackend
 
 
 class FanChatterboxBackend(FanBackend):

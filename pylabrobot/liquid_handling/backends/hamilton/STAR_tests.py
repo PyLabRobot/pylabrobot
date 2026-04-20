@@ -1,12 +1,12 @@
 # mypy: disable-error-code="attr-defined,method-assign"
 
+import datetime
 import unittest
 import unittest.mock
-import datetime
 from typing import Literal, cast
 
-from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.chatterbox import PlateReaderChatterboxBackend
@@ -31,21 +31,20 @@ from pylabrobot.resources import (
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.testing.concurrency import AnyioTestBase, lifespan_kwargs
+from pylabrobot.testing.mock_io import MockIO
 
 from .STAR_backend import (
   CommandSyntaxError,
+  HamiltonLiquidHandler,
   HamiltonNoTipError,
   HardwareError,
   STARBackend,
-  HamiltonLiquidHandler,
   STARFirmwareError,
   UnknownHamiltonError,
   parse_star_fw_string,
 )
 from .STAR_chatterbox import _DEFAULT_EXTENDED_CONFIGURATION, _DEFAULT_MACHINE_CONFIGURATION
-
-from pylabrobot.testing.concurrency import AnyioTestBase, lifespan_kwargs
-from pylabrobot.testing.mock_io import MockIO
 
 
 class TestSTARResponseParsing(unittest.TestCase):
@@ -148,7 +147,6 @@ def _any_write_and_read_command_call(cmd):
   )
 
 
-
 class TestSTARUSBComms(AnyioTestBase):
   """Test that USB data is parsed correctly."""
 
@@ -158,7 +156,9 @@ class TestSTARUSBComms(AnyioTestBase):
     self.star.io = MockIO()
     # We need to temporarily replace _enter_lifespan with one that forwards to the parent class,
     # so as not to do any hardware setup on enter, but still start the reader loop.
-    self.star._enter_lifespan = lambda stack: HamiltonLiquidHandler._enter_lifespan(self.star, stack)
+    self.star._enter_lifespan = lambda stack: HamiltonLiquidHandler._enter_lifespan(
+      self.star, stack
+    )
     await stack.enter_async_context(self.star)
 
   async def test_send_command_correct_response(self):
@@ -175,7 +175,6 @@ class TestSTARUSBComms(AnyioTestBase):
     self.star.io.read.side_effect = lambda: b"this is plaintext"
     with self.assertRaises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
-
 
 
 class STARCommandCatcher(STARBackend):
@@ -197,6 +196,7 @@ class STARCommandCatcher(STARBackend):
     def cleanup():
       self.stop_finished = True
       self._setup_done = False
+
     stack.callback(cleanup)
 
   async def send_command(  # type: ignore
@@ -280,7 +280,9 @@ class TestSTARLiquidHandlerCommands(AnyioTestBase):
     self.STAR._iswap_parked = True
 
     # Bypass hardware initialization in _enter_lifespan
-    self.STAR._enter_lifespan = lambda stack: HamiltonLiquidHandler._enter_lifespan(self.STAR, stack)
+    self.STAR._enter_lifespan = lambda stack: HamiltonLiquidHandler._enter_lifespan(
+      self.STAR, stack
+    )
 
     if with_lh:
       await stack.enter_async_context(self.lh)
@@ -396,7 +398,6 @@ class TestSTARLiquidHandlerCommands(AnyioTestBase):
           allow_manual_input=True,
           labware_description="Cos_96_PCR_0001",
         )
-
 
   async def test_indicator_light(self):
     await self.STAR.set_loading_indicators(bit_pattern=[True] * 54, blink_pattern=[False] * 54)
@@ -1114,6 +1115,7 @@ class STARIswapMovementTests(AnyioTestBase):
 
     async def mock_enter_lifespan(stack):
       pass
+
     self.STAR._enter_lifespan = mock_enter_lifespan
 
     self.STAR._core_parked = True
@@ -1247,6 +1249,7 @@ class STARFoilTests(AnyioTestBase):
 
     async def mock_enter_lifespan(stack):
       pass
+
     self.star._enter_lifespan = mock_enter_lifespan
 
     self.star._core_parked = True
@@ -1446,6 +1449,7 @@ class TestSTARTipPickupDropAllSizes(AnyioTestBase):
 
     async def mock_enter_lifespan(stack):
       pass
+
     self.backend._enter_lifespan = mock_enter_lifespan
 
     self.backend._core_parked = True
@@ -1688,6 +1692,7 @@ class STARTestBase(AnyioTestBase):
 
     async def mock_enter_lifespan(stack):
       pass
+
     self.STAR._enter_lifespan = mock_enter_lifespan
 
     self.STAR._core_parked = True

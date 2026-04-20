@@ -2,8 +2,8 @@ from typing import Optional
 
 import anyio
 
-from pylabrobot.machines.machine import Machine
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import TemperatureControllerBackend

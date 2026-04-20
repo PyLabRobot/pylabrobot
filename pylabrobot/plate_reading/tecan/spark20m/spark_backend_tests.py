@@ -67,6 +67,7 @@ class TestExperimentalSparkBackend(AnyioTestBase):
     @contextlib.asynccontextmanager
     async def mock_bg_read(device_type):
       yield []
+
     self.mock_reader.background_read = mock_bg_read
 
     self.mock_process_absorbance.return_value = [[0.5]]
@@ -99,6 +100,7 @@ class TestExperimentalSparkBackend(AnyioTestBase):
     @contextlib.asynccontextmanager
     async def mock_bg_read(device_type):
       yield []
+
     self.mock_reader.background_read = mock_bg_read
 
     self.mock_process_fluorescence.return_value = [[100.0]]
@@ -144,6 +146,3 @@ class TestExperimentalSparkBackend(AnyioTestBase):
     self.mock_reader.msgs = []
     temp = await self.backend.get_average_temperature()
     self.assertIsNone(temp)
-
-
-

@@ -6,7 +6,6 @@ import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 
-
 try:
   from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
@@ -89,7 +88,6 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
       # do a keep-alive
       await self._modbus.read_holding_registers(0, 1, unit=self.address)
 
-
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Sets up the Modbus connection to the AgrowPumpArray and creates the
     pump mappings needed to issue commands.
@@ -98,7 +96,7 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
       if AsyncModbusSerialClient is None:
         raise RuntimeError(
           "pymodbus is not installed. Install with: pip install pylabrobot[modbus]."
-        f" Import error: {_MODBUS_IMPORT_ERROR}"
+          f" Import error: {_MODBUS_IMPORT_ERROR}"
         )
       self._modbus = AsyncModbusSerialClient(
         port=self.port,
@@ -127,9 +125,6 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
     stack.push_shielded_async_callback(self.halt)
 
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
-
-
-
 
   def serialize(self):
     return {
@@ -183,7 +178,6 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
     for pump in self.pump_index_to_address:
       address = self.pump_index_to_address[pump]
       await self.modbus.write_register(address, 0, unit=self.address)
-
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

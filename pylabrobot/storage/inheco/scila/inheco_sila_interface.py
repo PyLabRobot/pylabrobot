@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import datetime
 import contextlib
+import datetime
 import http.server
 import logging
 import random
@@ -15,7 +15,7 @@ from typing import Any, Optional, Tuple
 
 import anyio
 
-from pylabrobot.concurrency import AsyncResource, AsyncExitStackWithShielding
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource
 from pylabrobot.storage.inheco.scila.soap import (
   XSI,
   _localname,
@@ -198,9 +198,11 @@ class InhecoSiLAInterface(AsyncResource):
 
     async def run_server() -> None:
       assert self._httpd is not None
+
       def _serve():
         with self._httpd:
           self._httpd.serve_forever()
+
       await anyio.to_thread.run_sync(_serve)
 
     async def cleanup():
@@ -210,7 +212,6 @@ class InhecoSiLAInterface(AsyncResource):
     tg = await stack.enter_async_context(anyio.create_task_group())
     stack.push_shielded_async_callback(cleanup)
     tg.start_soon(run_server)
-
 
   async def _on_http(self, req: _HTTPRequest) -> bytes:
     """
@@ -231,7 +232,9 @@ class InhecoSiLAInterface(AsyncResource):
           ret = response_event["ResponseEvent"].get("returnValue", {})
           rc = ret.get("returnCode")
           if rc != 3:  # 3=Success
-            cmd.state.error = SiLAError(rc, ret.get("message", "").replace(chr(10), " "), cmd.name, details=ret)
+            cmd.state.error = SiLAError(
+              rc, ret.get("message", "").replace(chr(10), " "), cmd.name, details=ret
+            )
           else:
             cmd.state.result = (
               ET.fromstring(d)
@@ -271,7 +274,6 @@ class InhecoSiLAInterface(AsyncResource):
     if return_code is None:
       raise ValueError(f"returnCode not found in response for {command_name}")
     return return_code, result_level.get("message", "")
-
 
   def _make_request_id(self):
     return random.randint(1, 2**31 - 1)

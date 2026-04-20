@@ -1,14 +1,15 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
 import logging
-import anyio
 import time
 import warnings
 from typing import List, Literal, Optional, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.scales.scale_backend import ScaleBackend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 logger = logging.getLogger("pylabrobot")
 

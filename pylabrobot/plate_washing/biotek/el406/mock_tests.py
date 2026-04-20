@@ -1,14 +1,15 @@
 # mypy: disable-error-code="union-attr,assignment,arg-type,attr-defined"
 """Mock FTDI IO for EL406 testing."""
 
-import anyio
 from unittest.mock import patch
-from pylabrobot.testing.concurrency import AnyioTestBase
+
+import anyio
 
 from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.resources import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 _real_sleep = anyio.sleep
 
@@ -60,17 +61,16 @@ class EL406TestCase(AnyioTestBase):
 
     self.backend = ExperimentalBioTekEL406Backend()
     self.backend.io = MockFTDI()
-    
+
     self.backend.io.set_read_buffer(b"\x06" * 500)
-    
+
     await stack.enter_async_context(self.backend)
 
     def _pre_cleanup():
       if self.backend.io is not None:
         self.backend.io.set_read_buffer(b"\x06" * 500)
+
     stack.callback(_pre_cleanup)
-
-
 
 
 class MockFTDI:
@@ -94,7 +94,6 @@ class MockFTDI:
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
     pass
-
 
   async def write(self, data: bytes) -> int:
     self.written_data.append(data)

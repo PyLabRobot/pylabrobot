@@ -1,10 +1,11 @@
-import anyio
 import warnings
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 try:
   import serial

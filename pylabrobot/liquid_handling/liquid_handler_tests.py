@@ -7,8 +7,6 @@ from unittest.mock import PropertyMock
 
 import pytest
 
-from pylabrobot.testing.concurrency import AnyioTestBase
-
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
 from pylabrobot.liquid_handling.channel_positioning import (
@@ -52,6 +50,7 @@ from pylabrobot.resources.volume_tracker import (
 )
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import serialize
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 from .liquid_handler import LiquidHandler
 from .standard import (
@@ -1023,7 +1022,7 @@ class TestLiquidHandlerVolumeTracking(AnyioTestBase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
     self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
-    
+
     await stack.enter_async_context(self.lh)
     set_volume_tracking(enabled=True)
     stack.callback(set_volume_tracking, enabled=False)

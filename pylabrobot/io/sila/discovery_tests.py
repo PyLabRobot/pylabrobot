@@ -1,10 +1,9 @@
-import anyio
 import socket
 import struct
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.testing.concurrency import AnyioTestBase
+import anyio
 
 from pylabrobot.io.sila.discovery import (
   HAS_ZEROCONF,
@@ -16,6 +15,7 @@ from pylabrobot.io.sila.discovery import (
   _discover_sila2,
   _parse_device_identification,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestSiLADevice(unittest.TestCase):
@@ -264,6 +264,3 @@ class TestDiscoverSila2(AnyioTestBase):
     self.assertEqual(devices[0].port, 8091)
     self.assertEqual(devices[0].name, "Pico.local.")
     self.assertEqual(devices[0].sila_version, 2)
-
-
-

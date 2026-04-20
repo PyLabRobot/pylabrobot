@@ -233,7 +233,9 @@ class Thermocycler(ResourceHolder, Machine):
             return
           await anyio.sleep(1)
     except TimeoutError:
-      raise TimeoutError(f"Block temperature did not reach target within {timeout} seconds") from None
+      raise TimeoutError(
+        f"Block temperature did not reach target within {timeout} seconds"
+      ) from None
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
     """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""

@@ -1,8 +1,9 @@
 import logging
-import anyio
 import time
 import warnings
 from typing import List, Tuple
+
+import anyio
 
 try:
   import serial
@@ -12,11 +13,11 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.backend import IncubatorBackend
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 logger = logging.getLogger(__name__)
 

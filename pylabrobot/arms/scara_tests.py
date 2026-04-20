@@ -4,8 +4,8 @@ from pylabrobot.arms.backend import SCARABackend
 from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
 from pylabrobot.arms.scara import ExperimentalSCARA
 from pylabrobot.resources import Coordinate, Rotation
-
 from pylabrobot.testing.concurrency import AnyioTestBase
+
 
 class TestExperimentalSCARA(AnyioTestBase):
   async def _enter_lifespan(self, stack):
@@ -26,7 +26,6 @@ class TestExperimentalSCARA(AnyioTestBase):
     ]:
       setattr(self.mock_backend, method_name, AsyncMock())
     self.scara = ExperimentalSCARA(backend=self.mock_backend)
-
 
   async def test_move_to(self):
     position = PreciseFlexCartesianCoords(

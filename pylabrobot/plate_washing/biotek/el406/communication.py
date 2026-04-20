@@ -479,7 +479,9 @@ class EL406CommunicationMixin:
             return
           await anyio.sleep(poll_interval)
     except TimeoutError:
-      raise TimeoutError(f"Device still busy (STATE_RUNNING) after {timeout}s waiting for readiness")
+      raise TimeoutError(
+        f"Device still busy (STATE_RUNNING) after {timeout}s waiting for readiness"
+      )
 
   async def _send_step_command(
     self,

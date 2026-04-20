@@ -1,4 +1,4 @@
-import anyio
+import contextlib
 import datetime
 import enum
 import functools
@@ -6,7 +6,6 @@ import logging
 import re
 import sys
 import warnings
-import contextlib
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
@@ -27,6 +26,8 @@ from typing import (
   Union,
   cast,
 )
+
+import anyio
 
 if sys.version_info < (3, 10):
   from typing_extensions import Concatenate, ParamSpec
@@ -2171,7 +2172,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     for _ in range(n_replicates):
       errors = [None] * len(use_channels)
       async with anyio.create_task_group() as tg:
-        for idx, (channel, lip, sps) in enumerate(zip(use_channels, batch_lowest_immers, batch_start_pos)):
+        for idx, (channel, lip, sps) in enumerate(
+          zip(use_channels, batch_lowest_immers, batch_start_pos)
+        ):
+
           async def worker(i=idx, ch=channel, l=lip, s=sps):
             try:
               await detect_func(
@@ -2182,6 +2186,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               )
             except Exception as e:
               errors[i] = e
+
           tg.start_soon(worker)
 
       # Get heights for ALL channels, handling failures for channels with no liquid

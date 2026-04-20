@@ -487,13 +487,15 @@ class ExperimentalPicoBackend(ImagerBackend):
       )
     # TODO: We really shouldn't use the sync API here, even if we use thread-hopping.
     # There is in fact grcp.aio, which would be a lot cleaner.
-    self._channel = stack.enter_context(grpc.insecure_channel(
-      f"{self._host}:{self._port}",
-      options=[
-        ("grpc.keepalive_time_ms", 10000),
-        ("grpc.max_receive_message_length", 64 * 1024 * 1024),
-      ],
-    ))
+    self._channel = stack.enter_context(
+      grpc.insecure_channel(
+        f"{self._host}:{self._port}",
+        options=[
+          ("grpc.keepalive_time_ms", 10000),
+          ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+        ],
+      )
+    )
     self._lock_id = "pylabrobot"
 
     async def cleanup():

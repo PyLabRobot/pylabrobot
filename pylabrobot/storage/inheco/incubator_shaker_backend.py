@@ -14,12 +14,13 @@ Features:
 - Protocol-conformant parsing for EEPROM, sensor, and status commands.
 """
 
-import anyio
 import contextlib
 import logging
 import sys
 from functools import wraps
 from typing import Awaitable, Callable, Dict, List, Literal, Optional, TypeVar, cast
+
+import anyio
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.machine import MachineBackend
@@ -284,9 +285,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     stack.push_shielded_async_callback(cleanup)
 
-
   # stop method removed, logic moved to cleanup via AsyncExitStack
-
 
   # === Low-level I/O ===
 

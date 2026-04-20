@@ -1,4 +1,5 @@
 import contextlib
+
 from pylabrobot.powder_dispensing.backend import (
   PowderDispenserBackend,
 )
@@ -13,7 +14,6 @@ class CrystalPowderdose(PowderDispenserBackend):
   async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     await super()._enter_lifespan(stack)
     raise NotImplementedError("CrystalPowderdose not implemented yet")
-
 
   def serialize(self) -> dict:
     return {

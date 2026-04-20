@@ -1,7 +1,7 @@
-import logging
-import functools
-import time
 import contextlib
+import functools
+import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import anyio
@@ -12,8 +12,8 @@ try:
 except ImportError:
   pass
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource
 from pylabrobot.io.usb import USB
-from pylabrobot.concurrency import AsyncResource, AsyncExitStackWithShielding
 
 from .enums import DEVICE_ENDPOINTS, VENDOR_ID, SparkDevice, SparkEndpoint
 from .spark_packet_parser import PACKET_TYPE, parse_single_spark_packet
@@ -373,4 +373,3 @@ class SparkReaderAsync(AsyncResource):
       stack.callback(tg.cancel_scope.cancel)
       tg.start_soon(background_reader)
       yield results
-

@@ -187,6 +187,3 @@ class TestAspirateCommandEncoding(unittest.TestCase):
     """Aspirate command should be exactly 22 bytes."""
     cmd = self.backend._build_aspirate_command(PT96)
     self.assertEqual(len(cmd), 22)
-
-
-

@@ -1,7 +1,7 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
-from typing import List, Optional, cast
 import contextlib
+from typing import List, Optional, cast
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -51,7 +51,6 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Gracefully deactivate both heaters on exit."""
     stack.push_shielded_async_callback(self.deactivate_lid)
     stack.push_shielded_async_callback(self.deactivate_block)
-
 
   def serialize(self) -> dict:
     """Include the Opentrons module ID in serialized state."""

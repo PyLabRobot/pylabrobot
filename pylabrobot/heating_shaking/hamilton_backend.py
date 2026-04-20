@@ -1,14 +1,15 @@
 import abc
+import contextlib
 import time
 import warnings
-import contextlib
-import anyio
 from enum import Enum
 from typing import Dict, Literal, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.usb import USB
-from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class PlateLockPosition(Enum):

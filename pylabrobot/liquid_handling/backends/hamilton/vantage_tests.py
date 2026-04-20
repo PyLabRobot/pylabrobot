@@ -1,10 +1,8 @@
-import unittest
 import contextlib
-from pylabrobot.testing.concurrency import AnyioTestBase
-from pylabrobot.concurrency import AsyncExitStackWithShielding
-
+import unittest
 from typing import Any, List, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import Pickup
 from pylabrobot.resources import (
@@ -19,6 +17,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import VantageDeck
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 from .vantage_backend import (
   VantageBackend,
@@ -228,6 +227,7 @@ class VantageCommandCatcher(VantageBackend):
     def cleanup():
       self.stop_finished = True
       self._setup_done = False
+
     stack.callback(cleanup)
 
   async def send_command(

@@ -4,8 +4,9 @@ import math
 import struct
 import sys
 import time
-import anyio
 from typing import Dict, List, Optional, Tuple, Union
+
+import anyio
 
 from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
@@ -40,7 +41,6 @@ class CLARIOstarBackend(PlateReaderBackend):
 
     await self.initialize()
     await self.request_eeprom_data()
-
 
   async def get_stat(self):
     stat = await self.io.poll_modem_status()

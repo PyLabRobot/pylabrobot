@@ -409,6 +409,3 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(RuntimeError) as ctx:
       await self.backend._send_command("ST 1801")
     self.assertIn("Unknown error", str(ctx.exception))
-
-
-

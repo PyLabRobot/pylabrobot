@@ -1,9 +1,10 @@
+import contextlib
 import logging
 import time
-import anyio
-import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Optional
+
+import anyio
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -131,9 +132,7 @@ class USB(IOBase):
       t = anyio.current_effective_deadline() - anyio.current_time()
       assert t < float("inf"), "Timeout must be set"
       timeout_ms = int(t * 1000)
-      await anyio.to_thread.run_sync(
-        lambda :dev.write(write_endpoint, d, timeout=timeout_ms)
-      )
+      await anyio.to_thread.run_sync(lambda: dev.write(write_endpoint, d, timeout=timeout_ms))
 
     with contextlib.ExitStack() as stack:
       if timeout is not None:
@@ -230,7 +229,6 @@ class USB(IOBase):
 
     if timeout is None:
       timeout = self.read_timeout
-
 
     try:
       with anyio.fail_after(timeout):
@@ -446,8 +444,6 @@ class USB(IOBase):
     if empty_buffer:
       while await self._read_packet() is not None:
         pass
-
-
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""

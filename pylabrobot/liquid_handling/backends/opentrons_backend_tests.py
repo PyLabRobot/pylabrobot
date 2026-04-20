@@ -1,9 +1,10 @@
+import contextlib
 import unittest
 from unittest.mock import patch
-import contextlib
-from pylabrobot.testing.concurrency import AnyioTestBase
 
 import pytest
+
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 pytest.importorskip("ot_api")
 
@@ -82,7 +83,6 @@ class OpentronsBackendSetupTests(AnyioTestBase):
     self.mock_create.assert_called_once()
     self.mock_home.assert_called_once()
     self.mock_add_mounted_pipettes.assert_called_once()
-
 
   def test_serialize(self):
     serialized = OpentronsOT2Backend(host="localhost", port=1337).serialize()

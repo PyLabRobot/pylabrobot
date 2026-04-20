@@ -1,15 +1,14 @@
 # mypy: disable-error-code = attr-defined
 
 
+import contextlib
 import math
 import unittest.mock
 from typing import Iterator
 
 import pytest
-import contextlib
 
 from pylabrobot.testing.concurrency import AnyioTestBase
-
 
 pytest.importorskip("pylibftdi")
 

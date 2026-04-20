@@ -24,8 +24,6 @@ class InhecoTECControlBox:
     """
     await stack.enter_async_context(self.io)
 
-
-
   @typing.no_type_check
   def _generate_packets(self, msg):
     """Generate packets for the given message.

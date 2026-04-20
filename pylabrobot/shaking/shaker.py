@@ -1,5 +1,6 @@
-import anyio
 from typing import Optional
+
+import anyio
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder

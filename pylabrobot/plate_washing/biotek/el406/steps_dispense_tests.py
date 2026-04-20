@@ -241,6 +241,3 @@ class TestEL406BackendSyringeDispense(EL406TestCase):
     self.backend.io.set_read_buffer(b"")  # No ACK response
     with self.assertRaises(TimeoutError):
       await self.backend.syringe_dispense(PT96, volume=50.0, syringe="A")
-
-
-

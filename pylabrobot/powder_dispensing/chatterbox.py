@@ -16,7 +16,6 @@ class PowderDispenserChatterboxBackend(PowderDispenserBackend):
     print("Setting up the powder dispenser.")
     stack.callback(lambda: print("Stopping the powder dispenser."))
 
-
   async def dispense(
     self, dispense_parameters: List[PowderDispense], **backend_kwargs
   ) -> List[DispenseResults]:

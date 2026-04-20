@@ -1,4 +1,5 @@
 import contextlib
+
 try:
   import serial  # type: ignore
 
