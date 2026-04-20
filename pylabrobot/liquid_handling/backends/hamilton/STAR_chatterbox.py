@@ -320,5 +320,22 @@ class STARChatterboxBackend(STARBackend):
   async def position_channels_in_y_direction(self, ys, make_space=True):
     print("positioning channels in y:", ys, "make_space:", make_space)
 
+  async def probe_liquid_heights(
+    self,
+    containers,
+    use_channels=None,
+    resource_offsets=None,
+    lld_mode=None,
+    search_speed=10.0,
+    n_replicates=1,
+    min_traverse_height_at_beginning_of_command=None,
+    min_traverse_height_during_command=None,
+    z_position_at_end_of_command=None,
+    move_to_z_safety_after=None,
+  ) -> List[float]:
+    """Return liquid heights from the volume tracker using each container's
+    height-from-volume function. No physical probing in simulation."""
+    return [c.compute_height_from_volume(c.tracker.get_used_volume()) for c in containers]
+
   async def request_pip_height_last_lld(self):
     return list(range(12))
