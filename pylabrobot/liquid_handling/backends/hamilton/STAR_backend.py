@@ -1710,19 +1710,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     parsed values are clearly impossible.
     """
 
+    ext_conf = self.extended_conf
+
     if (
-      self._extended_conf.pip_maximal_y_position < self._extended_conf.left_arm_min_y_position
-      or self._extended_conf.pip_maximal_y_position < 100.0
+      ext_conf.pip_maximal_y_position < ext_conf.left_arm_min_y_position
+      or ext_conf.pip_maximal_y_position < 100.0
     ):
       default_bounds = ExtendedConfiguration()
       logger.warning(
         "Normalizing invalid PIP Y bounds reported by firmware: max_y=%s, min_y=%s, pip_fw=%s",
-        self._extended_conf.pip_maximal_y_position,
-        self._extended_conf.left_arm_min_y_position,
+        ext_conf.pip_maximal_y_position,
+        ext_conf.left_arm_min_y_position,
         getattr(self, "_pip_firmware_version", None),
       )
-      self._extended_conf.pip_maximal_y_position = default_bounds.pip_maximal_y_position
-      self._extended_conf.left_arm_min_y_position = default_bounds.left_arm_min_y_position
+      ext_conf.pip_maximal_y_position = default_bounds.pip_maximal_y_position
+      ext_conf.left_arm_min_y_position = default_bounds.left_arm_min_y_position
 
   def _pip_y_bounds(self) -> Tuple[float, float]:
     """Return normalized PIP Y bounds as (min_y, max_y)."""
@@ -5906,7 +5908,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= tip_type <= 99, "tip must be between 0 and 99"
     assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="DI",
       read_timeout=120,
@@ -5965,7 +5967,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     )
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="TP",
       tip_pattern=tip_pattern,
@@ -6032,7 +6034,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "z_position_at_end_of_a_command must be between 0 and 3600"
     )
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="TR",
       tip_pattern=tip_pattern,
@@ -6293,7 +6295,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
@@ -6533,7 +6535,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
@@ -8138,7 +8140,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="EA",
       read_timeout=max(300, self.read_timeout),
@@ -8417,7 +8419,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    command_kwargs = dict(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="ED",
       read_timeout=max(300, self.read_timeout),
