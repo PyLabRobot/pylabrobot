@@ -4688,9 +4688,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # STAR machines do not allow channels y < minimum
       min_y_pos, _ = self._pip_y_bounds()
       if y < min_y_pos:
-        raise ValueError(
-          f"channel {channel} y-target must be >= {min_y_pos} mm"
-        )
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm")
 
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)

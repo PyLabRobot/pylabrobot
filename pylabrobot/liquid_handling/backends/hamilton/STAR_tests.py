@@ -34,9 +34,9 @@ from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL
 
 from .STAR_backend import (
   CommandSyntaxError,
-  Head96Information,
   HamiltonNoTipError,
   HardwareError,
+  Head96Information,
   STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,

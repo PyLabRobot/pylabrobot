@@ -48,8 +48,7 @@ from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
 )
-from pylabrobot.resources.well import Well
-from pylabrobot.resources.well import CrossSectionType, WellBottomType
+from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 from pylabrobot.serializer import serialize
 
 from .liquid_handler import LiquidHandler
