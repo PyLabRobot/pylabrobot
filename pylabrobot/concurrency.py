@@ -8,9 +8,9 @@ import typing
 import warnings
 
 if sys.version_info >= (3, 10):
-  from typing import Any, TypeAlias
+  from typing import Any, Optional, TypeAlias
 else:
-  from typing_extensions import Any, TypeAlias
+  from typing_extensions import Any, Optional, TypeAlias
 
 import anyio
 import sniffio
@@ -144,10 +144,10 @@ class GlobalManager:
   """A global task manager to enable interactive (notebook) usage of async context managers."""
 
   def __init__(self):
-    self._tg: anyio.abc.TaskGroup | None = None
-    self._running_task: asyncio.Task | None = None
-    self._started: anyio.Event | None = None
-    self._stop: anyio.Event | None = None
+    self._tg: Optional[anyio.abc.TaskGroup] = None
+    self._running_task: Optional[asyncio.Task] = None
+    self._started: Optional[anyio.Event] = None
+    self._stop: Optional[anyio.Event] = None
     self._pending: set[MachineID] = set()
     self._stop_events: dict[MachineID, anyio.Event] = {}
     self._exit_events: dict[MachineID, anyio.Event] = {}

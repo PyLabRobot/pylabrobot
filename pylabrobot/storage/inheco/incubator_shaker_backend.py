@@ -189,7 +189,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       InhecoIncubatorUnitType
     ] = []  # e.g. ["incubator_mp", "incubator_shaker_dwp", ...]
 
-    self._send_command_lock: anyio.Lock | None = None
+    self._send_command_lock: Optional[anyio.Lock] = None
 
   @property
   def number_of_connected_units(self) -> int:
