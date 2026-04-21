@@ -85,6 +85,7 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
     while True:
       await anyio.sleep(25)
       # do a keep-alive
+      assert self._modbus is not None
       await self._modbus.read_holding_registers(0, 1, unit=self.address)
 
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):

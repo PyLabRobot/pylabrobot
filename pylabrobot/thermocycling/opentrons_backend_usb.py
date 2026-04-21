@@ -215,6 +215,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         await self.deactivate_block()
         await self.deactivate_lid()
       finally:
+        assert self._driver is not None
         await self._driver.disconnect()
       self._driver = None
 

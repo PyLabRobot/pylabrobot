@@ -469,7 +469,7 @@ async def _get_device_identification(
   ).encode() + body
 
   try:
-    async with anyio.fail_after(timeout):
+    with anyio.fail_after(timeout):
       async with await anyio.connect_tcp(host, port, local_host=interface) as stream:
         await stream.send(request)
 

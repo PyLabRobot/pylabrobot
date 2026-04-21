@@ -76,7 +76,12 @@ class AnyioTestBase(_AsyncResourceBase):
       if name.startswith("test_"):
         setattr(cls, name, wrap(value))
 
-  async def _enter_lifespan(self, stack, **kwargs):
+  async def _enter_lifespan(self, stack):
+    """Helper for the _lifespan implementation; override this instead of _lifespan.
+
+    Note, child classes may add keyword-only arguments to the signature, as _lifespan
+    forwards those.
+    """
     pass
 
   def assertEqual(self, first, second, msg=None):
@@ -151,3 +156,6 @@ class AnyioTestBase(_AsyncResourceBase):
   def assertWarns(self, expected_warning):
     with pytest.warns(expected_warning):
       yield
+
+  def fail(self, msg):
+    pytest.fail(msg)

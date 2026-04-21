@@ -46,7 +46,12 @@ AnonymousLifespan = _LifespanLifecycleTag("anonymous")
 class _AsyncResourceBase:
   """Implementation of `AsyncResource`, but without any `__new__` to implement ABC checking."""
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    """Helper for the _lifespan implementation; override this instead of _lifespan.
+
+    Note, child classes may add keyword-only arguments to the signature, as _lifespan
+    forwards those.
+    """
     raise NotImplementedError("Subclasses must override _enter_lifespan or _lifespan.")
 
   @contextlib.asynccontextmanager
@@ -76,7 +81,7 @@ class _AsyncResourceBase:
         # in face of exceptions and cancellation; register your cleanup when you enter.
     finally:
       if self._active_lifespan is AnonymousLifespan:
-        self._active_lifespan = None
+        self._active_lifespan = None  # type: ignore[assignment]
 
   async def __aenter__(self):
     """Enter the resource's lifespan.
@@ -91,9 +96,9 @@ class _AsyncResourceBase:
       self._active_lifespan = LifespanEntering
       active_lifespan = self._lifespan()
       await active_lifespan.__aenter__()
-      self._active_lifespan = active_lifespan
+      self._active_lifespan = active_lifespan  # type: ignore[assignment]
     except:
-      self._active_lifespan = None
+      self._active_lifespan = None  # type: ignore[assignment]
       raise
     return self
 
@@ -104,9 +109,9 @@ class _AsyncResourceBase:
     try:
       active_lifespan = self._active_lifespan
       self._active_lifespan = LifespanExiting
-      ret = await active_lifespan.__aexit__(exc_type, exc_val, exc_tb)
+      ret = await active_lifespan.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore[attr-defined]
     finally:
-      self._active_lifespan = None
+      self._active_lifespan = None  # type: ignore[assignment]
     return ret
 
 
@@ -126,7 +131,7 @@ class AsyncResource(_AsyncResourceBase, abc.ABC):
 
     return super().__new__(cls)
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     # Non-throwing base class implementation, so that derived classes can
     # call super()._enter_lifespan() without knowing how many classes are in the chain.
     pass
@@ -153,6 +158,7 @@ class GlobalManager:
       assert self._tg is None
       self._tg = tg
       self._stop = anyio.Event()
+      assert self._started is not None
       self._started.set()
       await self._stop.wait()
 
@@ -202,6 +208,7 @@ class GlobalManager:
         async with obj:
           print("entered obj context manager")
           task_status.started()
+          assert stop_event is not None
           await stop_event.wait()
       except Exception as e:
         self._errors[obj] = e
@@ -211,6 +218,7 @@ class GlobalManager:
         if exit_event is not None:
           exit_event.set()
         if not self._pending and not self._stop_events:
+          assert self._stop is not None
           self._stop.set()
           self._stop = None
           self._tg = None
@@ -219,6 +227,7 @@ class GlobalManager:
     try:
       async with self._reserve_runner_for(obj):
         self._stop_events[obj] = stop_event = anyio.Event()
+        assert self._tg is not None
         await self._tg.start(wrapper)
     except Exception:
       self._stop_events.pop(obj, None)
@@ -228,7 +237,7 @@ class GlobalManager:
       if e is not None:
         raise e
 
-  async def release_context(self, obj: any):
+  async def release_context(self, obj: Any):
     """Signals the given object's context manager to gracefully exit."""
     errors = self._errors.pop(obj, None)
     if errors is not None:

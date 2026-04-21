@@ -1038,9 +1038,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _recover_transport(self) -> None:
     try:
-      await self.io.stop()
-      await anyio.sleep(0.2)
-      await self.io.setup()
+      await self.io.recover_transport()
     except Exception:
       logger.warning("Transport recovery failed.", exc_info=True)
       return

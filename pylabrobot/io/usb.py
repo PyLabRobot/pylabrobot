@@ -115,18 +115,15 @@ class USB(IOBase):
         (specified by the `write_timeout` attribute).
     """
 
-    if self.dev is None or self.read_endpoint is None:
+    dev = self.dev
+    write_endpoint = self.write_endpoint
+    if dev is None or self.read_endpoint is None or write_endpoint is None:
       raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.write_timeout
 
     # write command to endpoint
-    write_endpoint = self.write_endpoint
-    dev = self.dev
-    if dev is None or write_endpoint is None:
-      raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
-
     async def write(d):
       t = anyio.current_effective_deadline() - anyio.current_time()
       assert t < float("inf"), "Timeout must be set"
@@ -166,8 +163,8 @@ class USB(IOBase):
     Returns:
       A bytearray containing the data read, or None if no data was received.
     """
-
-    if self.dev is None or self.read_endpoint is None:
+    dev = self.dev
+    if dev is None or self.read_endpoint is None:
       raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
     ep = endpoint if endpoint is not None else self.read_endpoint
@@ -178,7 +175,7 @@ class USB(IOBase):
     if size is None:
       if isinstance(ep, int):
         # Find endpoint object to get max packet size
-        cfg = self.dev.get_active_configuration()
+        cfg = dev.get_active_configuration()
         intf = cfg[(0, 0)]
         ep_obj = usb.util.find_descriptor(
           intf,
@@ -198,7 +195,7 @@ class USB(IOBase):
     try:
       with anyio.fail_after(timeout):
         res = await anyio.to_thread.run_sync(
-          lambda: self.dev.read(
+          lambda: dev.read(
             ep,
             read_size,
             timeout=int(timeout * 1000),  # timeout in ms
@@ -443,6 +440,12 @@ class USB(IOBase):
     if empty_buffer:
       while await self._read_packet() is not None:
         pass
+
+  async def recover_transport(self):
+    """Try to recover from a broken transport."""
+    # TODO: dispose of `.dev` and re-configure
+    while await self._read_packet() is not None:
+      pass
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""

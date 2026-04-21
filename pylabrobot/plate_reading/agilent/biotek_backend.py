@@ -1,4 +1,3 @@
-import contextlib
 import enum
 import logging
 import time
@@ -6,6 +5,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -80,7 +80,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     rects.sort()
     return rects
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     logger.info(f"{self.__class__.__name__} setting up")
 
@@ -590,7 +590,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     self._shaking = True
     self._tg.start_soon(shake_continuous)
 
-    shaking_started.wait()
+    await shaking_started.wait()
 
   async def stop_shaking(self) -> None:
     if self._shake_cancel_scope is not None:

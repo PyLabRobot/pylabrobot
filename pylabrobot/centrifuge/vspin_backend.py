@@ -1,4 +1,3 @@
-import contextlib
 import ctypes
 import json
 import logging
@@ -52,7 +51,7 @@ class Access2Backend(LoaderBackend):
     await self.io.write(command)
     return await self._read()
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     logger.debug("[loader] setup")
 

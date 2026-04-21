@@ -9,6 +9,7 @@ from typing import List, Literal, Optional, Tuple, Union
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.resources import Plate
@@ -145,7 +146,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       finally:
         cam.DeInit()
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, use_cam: bool = False):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, use_cam: bool = False):
     await super()._enter_lifespan(stack)
     logger.info(f"{self.__class__.__name__} setting up")
 

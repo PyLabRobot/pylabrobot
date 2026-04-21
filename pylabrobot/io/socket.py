@@ -1,12 +1,13 @@
-import contextlib
 import logging
 import ssl
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import anyio
+import anyio.streams.buffered
 import anyio.streams.tls
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
@@ -57,23 +58,23 @@ class Socket(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Socket object while capture or validation is active")
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await self._connect()
     stack.push_async_callback(self._disconnect)
 
   async def _connect(self):
-    raw_stream = await anyio.connect_tcp(
-      host=self._host,
-      port=self._port,
-    )
+    raw_stream = await anyio.connect_tcp(self._host, self._port)
+    stream: Any
     if self._ssl_context:
-      raw_stream = await anyio.streams.tls.TLSStream.wrap(
+      stream = await anyio.streams.tls.TLSStream.wrap(
         raw_stream,
         ssl_context=self._ssl_context,
         server_hostname=self._server_hostname,
-      )
-    self._stream = anyio.streams.buffered.BufferedByteStream(raw_stream)
+      )  # type: ignore[call-arg]
+    else:
+      stream = raw_stream
+    self._stream = anyio.streams.buffered.BufferedByteStream(stream)
 
   async def _disconnect(self):
     async with self._read_lock, self._write_lock:
@@ -138,7 +139,7 @@ class Socket(IOBase):
         )
       )
       try:
-        async with anyio.fail_after(timeout):
+        with anyio.fail_after(timeout):
           await self._stream.send(data)
       except TimeoutError as exc:
         logger.error("write timeout: %r", exc)
@@ -166,7 +167,7 @@ class Socket(IOBase):
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        async with anyio.fail_after(timeout):
+        with anyio.fail_after(timeout):
           data = await self._stream.receive(num_bytes)
       except TimeoutError as exc:
         logger.error("read timeout: %r", exc)
@@ -193,7 +194,7 @@ class Socket(IOBase):
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        async with anyio.fail_after(timeout):
+        with anyio.fail_after(timeout):
           data = await self._stream.receive_until(b"\n", max_bytes=65536)
           result = data + b"\n"
       except TimeoutError as exc:
@@ -226,7 +227,7 @@ class Socket(IOBase):
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        async with anyio.fail_after(timeout):
+        with anyio.fail_after(timeout):
           data = await self._stream.receive_until(separator, max_bytes=65536)
           result = data + separator
       except TimeoutError as exc:
@@ -275,7 +276,7 @@ class Socket(IOBase):
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        async with anyio.fail_after(timeout):
+        with anyio.fail_after(timeout):
           data = await self._stream.receive_exactly(num_bytes)
       except TimeoutError as exc:
         logger.error("read_exact timeout: %r", exc)
@@ -308,7 +309,7 @@ class Socket(IOBase):
             f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
           )
         try:
-          async with anyio.fail_after(timeout):
+          with anyio.fail_after(timeout):
             chunk = await self._stream.receive(chunk_size)
         except TimeoutError as exc:
           # if some previous read attempts already return some data, we should consider this a success

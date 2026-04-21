@@ -3,7 +3,6 @@ import struct
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from pylabrobot.io.sila.discovery import (
   HAS_ZEROCONF,
   SiLADevice,

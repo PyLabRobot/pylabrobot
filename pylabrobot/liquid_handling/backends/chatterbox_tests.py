@@ -1,6 +1,5 @@
 import contextlib
 
-
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.chatterbox import (
   LiquidHandlerChatterboxBackend,

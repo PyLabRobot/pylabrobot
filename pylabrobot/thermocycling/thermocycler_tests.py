@@ -3,12 +3,12 @@ from unittest.mock import AsyncMock, MagicMock
 import anyio
 
 from pylabrobot.resources import Coordinate
+from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.thermocycling import (
   Thermocycler,
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
 )
-from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 

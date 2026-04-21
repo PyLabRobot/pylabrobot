@@ -1,5 +1,3 @@
-
-
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.temperature_controlling import (
   TemperatureController,

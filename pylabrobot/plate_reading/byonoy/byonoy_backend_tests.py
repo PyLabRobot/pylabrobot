@@ -14,17 +14,17 @@ class TestByonoyBackend(AnyioTestBase):
     self.backend = ByonoyAbsorbance96AutomateBackend()
     self.backend.io = unittest.mock.AsyncMock()
 
-    self.backend.get_available_absorbance_wavelengths = unittest.mock.AsyncMock(
+    self.backend.get_available_absorbance_wavelengths = unittest.mock.AsyncMock(  # type: ignore[method-assign]
       return_value=[450, 660]
     )
-    self.backend.initialize_measurements = unittest.mock.AsyncMock()
+    self.backend.initialize_measurements = unittest.mock.AsyncMock()  # type: ignore[method-assign]
 
   @pytest.mark.parametrize("backend", ["asyncio", "trio"])
   async def test_setup(self):
 
     async with self.backend:
-      assert self.backend.io.__aenter__.called
-      assert self.backend.initialize_measurements.called
+      assert self.backend.io.__aenter__.called  # type: ignore[attr-defined]
+      assert self.backend.initialize_measurements.called  # type: ignore[attr-defined]
 
       assert self.backend.available_wavelengths == [450, 660]
 

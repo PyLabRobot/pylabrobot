@@ -1,4 +1,3 @@
-import contextlib
 import random
 import re
 import sys
@@ -7,6 +6,7 @@ from typing import Dict, List, Optional, Sequence, Union, cast
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
@@ -404,7 +404,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
   async def _enter_lifespan(
     self,
-    stack: contextlib.AsyncExitStack,
+    stack: AsyncExitStackWithShielding,
     *,
     skip_loading_cover: bool = False,
     skip_core96: bool = False,

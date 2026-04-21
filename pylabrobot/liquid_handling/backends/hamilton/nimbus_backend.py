@@ -6,11 +6,11 @@ instruments via TCP communication using the Hamilton protocol.
 
 from __future__ import annotations
 
-import contextlib
 import enum
 import logging
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
@@ -957,7 +957,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
   async def _enter_lifespan(
     self,
-    stack: contextlib.AsyncExitStack,
+    stack: AsyncExitStackWithShielding,
     *,
     unlock_door: bool = False,
     force_initialize: bool = False,
@@ -979,7 +979,7 @@ class NimbusBackend(HamiltonTCPBackend):
       force_initialize: If True, force initialization even if already initialized
     """
     # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
-    await super()._enter_lifespan()
+    await super()._enter_lifespan(stack)
 
     # Discover instrument objects
     await self._discover_instrument_objects()

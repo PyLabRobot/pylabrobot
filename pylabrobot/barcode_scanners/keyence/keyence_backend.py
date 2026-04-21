@@ -1,4 +1,3 @@
-import contextlib
 import logging
 
 import anyio
@@ -15,6 +14,7 @@ from pylabrobot.barcode_scanners.backend import (
   BarcodeScannerBackend,
   BarcodeScannerError,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
 
@@ -52,7 +52,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
       rtscts=False,
     )
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
     await self.initialize()

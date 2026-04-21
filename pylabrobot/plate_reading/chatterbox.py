@@ -1,7 +1,7 @@
-import contextlib
 import time
 from typing import Dict, List, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
 
@@ -15,7 +15,7 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     self.dummy_absorbance: List[List[Optional[float]]] = [[0.0] * 12] * 8
     self.dummy_fluorescence: List[List[Optional[float]]] = [[0.0] * 12] * 8
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     print("Setting up the plate reader.")
     stack.callback(lambda: print("Stopping the plate reader."))

@@ -1,8 +1,8 @@
-import contextlib
 import uuid
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot import utils
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -96,7 +96,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       "port": self.port,
     }
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, skip_home: bool = False):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
     # create run
     run_id = ot_api.runs.create()
     ot_api.set_run(run_id)

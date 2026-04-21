@@ -1,5 +1,3 @@
-import contextlib
-
 try:
   import serial  # type: ignore
 
@@ -8,6 +6,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.pumps.backend import PumpBackend
 
@@ -48,7 +47,7 @@ class MasterflexBackend(PumpBackend):
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
     await self.io.write(b"\x05")  # Enquiry; ready to send.

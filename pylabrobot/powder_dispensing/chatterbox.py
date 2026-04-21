@@ -1,6 +1,6 @@
-import contextlib
 from typing import List
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.powder_dispensing.backend import (
   DispenseResults,
   PowderDispense,
@@ -11,7 +11,7 @@ from pylabrobot.powder_dispensing.backend import (
 class PowderDispenserChatterboxBackend(PowderDispenserBackend):
   """Chatter box backend for device-free testing. Prints out all operations."""
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     print("Setting up the powder dispenser.")
     stack.callback(lambda: print("Stopping the powder dispenser."))

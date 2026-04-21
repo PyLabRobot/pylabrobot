@@ -215,7 +215,7 @@ class VantageCommandCatcher(VantageBackend):
     super().__init__()
     self.commands = []
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs) -> None:
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
@@ -364,7 +364,7 @@ class TestVantageLiquidHandlerCommands(AnyioTestBase):
     )
 
   async def test_tip_drop_01(self):
-    await self.test_tip_pickup_01.original_func(self)  # pick up tips first
+    await self.test_tip_pickup_01.original_func(self)  # type: ignore # pick up tips first
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
       "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1414 1414&tz1314 1314&th2450 2450&"
@@ -380,7 +380,7 @@ class TestVantageLiquidHandlerCommands(AnyioTestBase):
     )
 
   async def test_small_tip_drop(self):
-    await self.test_small_tip_pickup.original_func(self)  # pick up tips first
+    await self.test_small_tip_pickup.original_func(self)  # type: ignore # pick up tips first
     await self.lh.drop_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
       "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&",

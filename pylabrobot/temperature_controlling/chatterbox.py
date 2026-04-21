@@ -1,5 +1,4 @@
-import contextlib
-
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.temperature_controlling.backend import (
   TemperatureControllerBackend,
 )
@@ -15,7 +14,7 @@ class TemperatureControllerChatterboxBackend(TemperatureControllerBackend):
   def __init__(self, dummy_temperature: float = 0.0) -> None:
     self._dummy_temperature = dummy_temperature
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     print("Setting up the temperature controller.")
     stack.callback(lambda: print("Stopping the temperature controller."))

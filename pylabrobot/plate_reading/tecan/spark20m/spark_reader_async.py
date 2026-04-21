@@ -1,7 +1,7 @@
 import contextlib
 import functools
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 import anyio
 
@@ -177,12 +177,10 @@ class SparkReaderAsync(AsyncResource):
     timeout: Optional[float] = None,
   ) -> Optional[bytes]:
 
-    async def do_read():
+    async def do_read() -> Optional[bytes]:
       while True:
-        # reader._read_packet is synchronous, so run it in a thread
-        data = await anyio.to_thread.run_sync(
-          lambda: reader._read_packet(size=size, timeout=timeout, endpoint=endpoint)
-        )
+        # reader._read_packet is async
+        data = await reader._read_packet(size=size, timeout=timeout, endpoint=endpoint)
 
         if data is None:
           return None
@@ -334,7 +332,7 @@ class SparkReaderAsync(AsyncResource):
     self,
     device_type: SparkDevice,
     read_timeout: int = 100,
-  ) -> Optional[List[bytes]]:
+  ) -> AsyncIterator[Optional[List[bytes]]]:
     if device_type not in self.devices:
       logging.error(f"Device type {device_type} not connected.")
       yield None

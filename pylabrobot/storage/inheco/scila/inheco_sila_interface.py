@@ -199,12 +199,14 @@ class InhecoSiLAInterface(AsyncResource):
       assert self._httpd is not None
 
       def _serve():
+        assert self._httpd is not None
         with self._httpd:
           self._httpd.serve_forever()
 
       await anyio.to_thread.run_sync(_serve)
 
     async def cleanup():
+      assert self._httpd is not None
       await anyio.to_thread.run_sync(self._httpd.shutdown)
       self._httpd = None
 

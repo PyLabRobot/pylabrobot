@@ -1,4 +1,3 @@
-import contextlib
 import datetime
 import enum
 import functools
@@ -35,6 +34,7 @@ else:
   from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -1676,7 +1676,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def _enter_lifespan(
     self,
-    stack: contextlib.AsyncExitStack,
+    stack: AsyncExitStackWithShielding,
     *,
     skip_instrument_initialization: bool = False,
     skip_pip: bool = False,
@@ -1832,7 +1832,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       A list of exact (unrounded) minimum Y spacings in mm, one per channel,
       indexed by channel number.
     """
-    results = [None] * self.num_channels
+    results: List[Optional[float]] = [None] * self.num_channels
 
     async def _worker(idx):
       results[idx] = await self.channel_request_y_minimum_spacing(channel_idx=idx)
@@ -1923,7 +1923,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       and ``dispensing_cycles``.
     """
 
-    results = [None] * self.num_channels
+    results: List[Optional[Any]] = [None] * self.num_channels
 
     async def _worker(idx):
       results[idx] = await self.channel_request_cycle_counts(channel_idx=idx)
@@ -2170,7 +2170,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Run n_replicates detection loop for this batch
     for _ in range(n_replicates):
-      errors = [None] * len(use_channels)
+      errors: List[Optional[Exception]] = [None] * len(use_channels)
       async with anyio.create_task_group() as tg:
         for idx, (channel, lip, sps) in enumerate(
           zip(use_channels, batch_lowest_immers, batch_start_pos)

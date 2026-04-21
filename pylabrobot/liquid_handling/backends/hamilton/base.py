@@ -1,4 +1,3 @@
-import contextlib
 import datetime
 import logging
 import warnings
@@ -16,7 +15,7 @@ from typing import (
 
 import anyio
 
-from pylabrobot.concurrency import MachineConnectionClosedError
+from pylabrobot.concurrency import AsyncExitStackWithShielding, MachineConnectionClosedError
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -100,7 +99,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       return
     super().__setattr__(name, value)
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
 
@@ -302,6 +301,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         if self._waiting_tasks_with_id.setdefault(id_, task) is not task:
           raise RuntimeError("Another task with this ID is already pending")
       if idle:
+        assert self._wakeup_reader_loop is not None
         self._wakeup_reader_loop.set()
       await self.io.write(cmd.encode(), timeout=write_timeout)
 
@@ -355,6 +355,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     try:
       while True:
         if not (self._waiting_tasks_with_id or self._waiting_tasks_idless):
+          assert self._wakeup_reader_loop is not None
           await self._wakeup_reader_loop.wait()
           self._wakeup_reader_loop = anyio.Event()
           continue
@@ -375,7 +376,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
           continue
 
         cmd_prefix = resp[: self.module_id_length + 2]
-        task = self._waiting_tasks_with_id.pop(response_id, None)
+        task = None
+        if response_id is not None:
+          task = self._waiting_tasks_with_id.pop(response_id, None)
         if task is None:
           tasks = self._waiting_tasks_idless.get(cmd_prefix)
           if tasks:

@@ -108,8 +108,8 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
     mock_dev._executor.submit.side_effect = execute_sync
 
-    # Mock _read_packet to avoid TypeError in background task (must be MagicMock, not AsyncMock)
-    mock_dev._read_packet = MagicMock()
+    # Mock _read_packet to avoid TypeError in background task (must be AsyncMock)
+    mock_dev._read_packet = AsyncMock()
     mock_dev._read_packet.return_value = b"\x81\x00\x00\x00\x00"
 
     # Mock calculate_checksum to return a predictable value
@@ -152,7 +152,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
   async def test_get_response_busy_then_ready(self) -> None:
     # This tests the retry loop
     mock_reader = AsyncMock()
-    mock_reader._read_packet = MagicMock()
+    mock_reader._read_packet = AsyncMock()
 
     with patch(
       "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.parse_single_spark_packet"
@@ -195,7 +195,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
   async def test_background_read(self) -> None:
     mock_dev = AsyncMock()
-    mock_dev._read_packet = MagicMock()
+    mock_dev._read_packet = AsyncMock()
     self.reader.devices[SparkDevice.ABSORPTION] = mock_dev
 
     mock_dev._executor = MagicMock()
@@ -267,7 +267,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
   async def test_get_response_empty_packet_retry(self) -> None:
     # Test that empty packet (ZLP) triggers retry
     mock_reader = AsyncMock()
-    mock_reader._read_packet = MagicMock()
+    mock_reader._read_packet = AsyncMock()
 
     # Configure mock executor and device for read retry
     mock_reader._executor = MagicMock()
@@ -336,7 +336,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     INVALID_TRUNCATED = b"\x81\x00\x00\x05\x00"  # Payload len 5, but total len 5 (expect 4+5+1=10)
     VALID = b"\x81\x00\x00\x00\x00"
 
-    mock_reader._read_packet = MagicMock(
+    mock_reader._read_packet = AsyncMock(
       side_effect=[INVALID_SHORT, INVALID_INDICATOR, INVALID_TRUNCATED, VALID]
     )
 

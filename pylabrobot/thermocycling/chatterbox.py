@@ -1,7 +1,7 @@
-import contextlib
 from dataclasses import dataclass
 from typing import List, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
@@ -50,7 +50,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     self._state = ThermocyclerState(num_zones=num_zones)
     self.num_zones = num_zones
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     print("Setting up thermocycler.")
     stack.callback(lambda: print("Stopping thermocycler."))

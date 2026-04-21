@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import re
 from abc import ABCMeta
@@ -8,6 +7,7 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources.plate import Plate
@@ -259,7 +259,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       timeout=0.2,
     )
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(self.io)
     await self.send_command("!")

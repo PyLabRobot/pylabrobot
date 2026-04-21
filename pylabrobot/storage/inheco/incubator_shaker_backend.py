@@ -14,7 +14,6 @@ Features:
 - Protocol-conformant parsing for EEPROM, sensor, and status commands.
 """
 
-import contextlib
 import logging
 import sys
 from functools import wraps
@@ -22,6 +21,7 @@ from typing import Awaitable, Callable, Dict, List, Literal, Optional, TypeVar, 
 
 import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.machine import MachineBackend
 
@@ -202,7 +202,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       + f"DIP={self.dip_switch_id}) at {self.io.port}>"
     )
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack, *, port: Optional[str] = None):
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, port: Optional[str] = None
+  ):
     await super()._enter_lifespan(stack)
     self._send_command_lock = anyio.Lock()
     await stack.enter_async_context(self.io)

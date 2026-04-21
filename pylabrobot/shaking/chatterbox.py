@@ -1,5 +1,4 @@
-import contextlib
-
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.shaking import ShakerBackend
 
 
@@ -8,7 +7,7 @@ class ShakerChatterboxBackend(ShakerBackend):
 
   temperature: float = 0
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     print("Setting up shaker")
     stack.callback(lambda: print("Stopping shaker"))

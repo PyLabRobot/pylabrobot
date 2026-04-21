@@ -113,7 +113,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
 
     async with contextlib.AsyncExitStack() as stack:
       if timeout is not None:
-        await stack.enter_context(anyio.fail_after(timeout))
+        stack.enter_context(anyio.fail_after(timeout))
       while True:
         await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
         if await self.get_is_shaking():

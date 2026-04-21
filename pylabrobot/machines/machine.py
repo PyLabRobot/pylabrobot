@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import contextlib
 import functools
 import sys
 from typing import Any, Awaitable, Callable, TypeVar
 
-from pylabrobot.concurrency import AsyncResource, global_manager
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource, global_manager
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.serializer import SerializableMixin
 
@@ -73,7 +72,7 @@ class Machine(SerializableMixin, AsyncResource):
     data_copy["backend"] = backend
     return cls(**data_copy)
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await stack.enter_async_context(self.backend)
 
   async def setup(self, **kwargs):

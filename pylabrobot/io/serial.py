@@ -1,4 +1,3 @@
-import contextlib
 import logging
 from dataclasses import dataclass
 from typing import Optional, cast
@@ -78,7 +77,7 @@ class Serial(IOBase):
     assert self._port is not None, "Port not set. Did you call setup()?"
     return self._port
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """
     Initialize the serial connection to the device.
 
@@ -355,7 +354,7 @@ class SerialValidator(Serial):
     )
     self.cr = cr
 
-  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     pass
 
   async def write(self, data: bytes):

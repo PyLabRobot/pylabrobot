@@ -1,6 +1,5 @@
 import ctypes
 import logging
-from io import IOBase
 from typing import Optional, cast
 
 import anyio
@@ -27,6 +26,7 @@ except ImportError as e:
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
