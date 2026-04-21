@@ -37,6 +37,11 @@ logger = logging.getLogger(__name__)
 
 _ESC = b"\x1b"
 _CR = b"\r"
+# Vendor C# uses `SerialPort.WriteLine(ESC + cmd + "\r")`, which appends the
+# default .NET `NewLine` of `"\n"` — so the actual frame on the wire is
+# ESC + cmd + CR + LF. Responses are split on CR alone (see
+# SerialPortBCR_DataReceived in KX2RobotControl.cs).
+_CMD_TERM = b"\r\n"
 
 
 class KX2BarcodeReaderDriver(Driver):
@@ -108,8 +113,8 @@ class KX2BarcodeReaderDriver(Driver):
     )
 
   async def send_command(self, cmd: str, timeout: float = 5.0) -> str:
-    """Send `ESC + cmd + CR` and return the response up to the terminating CR."""
-    payload = _ESC + cmd.encode("ascii") + _CR
+    """Send `ESC + cmd + CR + LF` and return the response up to the terminating CR."""
+    payload = _ESC + cmd.encode("ascii") + _CMD_TERM
     await self.io.write(payload)
     decoded = await self._read_until_cr(timeout)
     logger.debug("[KX2 BCR %s] %s -> %r", self.io.port, cmd, decoded)
