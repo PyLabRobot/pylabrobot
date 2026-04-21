@@ -7,7 +7,6 @@ from pylabrobot.hamilton.liquid_handlers.nimbus.chatterbox import NimbusChatterb
 from pylabrobot.hamilton.liquid_handlers.nimbus.commands import GetChannelConfiguration_1
 from pylabrobot.hamilton.liquid_handlers.nimbus.driver import (
   NimbusDriver,
-  NimbusResolvedInterfaces,
   nimbus_interface_specs_for_root,
 )
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
@@ -98,17 +97,6 @@ def test_nimbus_interface_specs_for_root_paths():
   assert s["pipette"].path == "NimbusCORE.Pipette"
   assert s["door_lock"].path == "NimbusCORE.DoorLock"
   assert s["door_lock"].required is False
-
-
-def test_nimbus_resolved_interfaces_from_map_optional_door():
-  core = Address(1, 1, 100)
-  pip = Address(1, 1, 200)
-  r = NimbusResolvedInterfaces.from_resolution_map(
-    {"nimbus_core": core, "pipette": pip, "door_lock": None}
-  )
-  assert r.nimbus_core == core
-  assert r.pipette == pip
-  assert r.door_lock is None
 
 
 def test_resolve_interface_path_specs_required_missing_raises():

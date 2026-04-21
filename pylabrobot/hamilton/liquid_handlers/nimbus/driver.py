@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
@@ -30,27 +30,6 @@ def nimbus_interface_specs_for_root(root_name: str) -> Dict[str, InterfacePathSp
     "pipette": InterfacePathSpec(f"{root_name}.Pipette", True, True),
     "door_lock": InterfacePathSpec(f"{root_name}.DoorLock", False, False),
   }
-
-
-@dataclass(frozen=True)
-class NimbusResolvedInterfaces:
-  """Concrete Nimbus firmware handles after :meth:`NimbusDriver.setup`."""
-
-  nimbus_core: Address
-  pipette: Address
-  door_lock: Optional[Address]
-
-  @staticmethod
-  def from_resolution_map(m: Mapping[str, Optional[Address]]) -> NimbusResolvedInterfaces:
-    nc = m.get("nimbus_core")
-    pip = m.get("pipette")
-    if nc is None or pip is None:
-      raise RuntimeError("internal: missing required Nimbus interfaces")
-    return NimbusResolvedInterfaces(
-      nimbus_core=nc,
-      pipette=pip,
-      door_lock=m.get("door_lock"),
-    )
 
 
 @dataclass
@@ -110,17 +89,9 @@ class NimbusDriver(HamiltonTCPClient):
 
     self.deck = deck
     self._nimbus_core_address: Optional[Address] = None
-    self._resolved_interfaces: Dict[str, Optional[Address]] = {}
-    self._nimbus_resolved: Optional[NimbusResolvedInterfaces] = None
 
     self.pip: NimbusPIPBackend  # set in setup()
     self.door: Optional[NimbusDoor] = None  # set in setup() if available
-
-  @property
-  def nimbus_interfaces(self) -> NimbusResolvedInterfaces:
-    if self._nimbus_resolved is None:
-      raise RuntimeError("Nimbus interfaces not resolved. Call setup() first.")
-    return self._nimbus_resolved
 
   @property
   def nimbus_core_address(self) -> Address:
@@ -152,15 +123,13 @@ class NimbusDriver(HamiltonTCPClient):
       )
 
     specs = nimbus_interface_specs_for_root(root_info.name)
-    self._resolved_interfaces = await resolve_interface_path_specs(
-      self, specs, instrument_label="Nimbus"
-    )
-    self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
-    self._nimbus_core_address = self._nimbus_resolved.nimbus_core
-
-    nimbus_core_address = self._nimbus_resolved.nimbus_core
-    pipette_address = self._nimbus_resolved.pipette
-    door_address = self._nimbus_resolved.door_lock
+    resolved = await resolve_interface_path_specs(self, specs, instrument_label="Nimbus")
+    nimbus_core_address = resolved.get("nimbus_core")
+    pipette_address = resolved.get("pipette")
+    door_address = resolved.get("door_lock")
+    if nimbus_core_address is None or pipette_address is None:
+      raise RuntimeError("internal: missing required Nimbus interfaces")
+    self._nimbus_core_address = nimbus_core_address
 
     await self._assert_required_methods(
       nimbus_core_address,
@@ -199,8 +168,6 @@ class NimbusDriver(HamiltonTCPClient):
       await self.door._on_stop()
     await super().stop()
     self.door = None
-    self._resolved_interfaces = {}
-    self._nimbus_resolved = None
 
   async def _assert_required_methods(
     self,

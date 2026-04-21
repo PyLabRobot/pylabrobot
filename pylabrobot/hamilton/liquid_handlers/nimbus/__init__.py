@@ -2,7 +2,6 @@ from .chatterbox import NimbusChatterboxDriver
 from .door import NimbusDoor
 from .driver import (
   NimbusDriver,
-  NimbusResolvedInterfaces,
   NimbusSetupParams,
   nimbus_interface_specs_for_root,
 )
