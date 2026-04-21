@@ -4,6 +4,7 @@ import asyncio
 import enum
 import gzip
 import html
+import inspect
 import logging
 import os
 import socket
@@ -11,12 +12,14 @@ import time
 import xml.etree.ElementTree as ET
 import zlib
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple, Union
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_access import PlateAccess, PlateAccessBackend, PlateAccessState
 from pylabrobot.device import Device, Driver, need_setup_finished
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.volume_tracker import does_volume_tracking
+from pylabrobot.resources.well import Well
 from pylabrobot.resources.utils import label_to_row_index, split_identifier
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,14 @@ DEFAULT_TIMEOUT = 10.0
 DEFAULT_LOADED_RETRACT_TIMEOUT = 30.0
 DEFAULT_SURVEY_TIMEOUT = 120.0
 DEFAULT_DRY_TIMEOUT = 30.0
+DEFAULT_HOME_TIMEOUT = 60.0
+DEFAULT_TRANSFER_TIMEOUT = 300.0
+DEFAULT_ECHO_CONFIGURATION_QUERY = (
+  '<?xml version="1.0" encoding="utf-8"?><Configuration internal="true"></Configuration>'
+)
+ECHO_TRANSFER_VOLUME_INCREMENT_NL = 2.5
+
+OperatorPause = Callable[[str], Union[None, Awaitable[None]]]
 
 
 class EchoError(Exception):
@@ -63,6 +74,18 @@ class EchoInstrumentInfo:
   boot_time: str
   instrument_status: str
   model: str
+  raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EchoFluidInfo:
+  """Fluid metadata returned by ``GetFluidInfo``."""
+
+  name: str
+  description: str
+  fc_min: Optional[float]
+  fc_max: Optional[float]
+  fc_units: str
   raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -141,6 +164,10 @@ class EchoSurveyWell:
   identifier: str
   row: int
   column: int
+  volume_nl: Optional[float] = None
+  current_volume_nl: Optional[float] = None
+  fluid: str = ""
+  fluid_units: str = ""
   raw_attributes: Dict[str, str] = field(default_factory=dict)
 
 
@@ -202,11 +229,39 @@ class EchoSurveyData:
           identifier=identifier,
           row=row,
           column=column,
+          volume_nl=_float_or_none(
+            attributes.get("vl") or attributes.get("volume") or attributes.get("volume_nL")
+          ),
+          current_volume_nl=_float_or_none(attributes.get("cvl")),
+          fluid=attributes.get("fld", ""),
+          fluid_units=attributes.get("fldu", ""),
           raw_attributes=attributes,
         )
       )
 
     return cls(plate_type=plate_type, wells=wells, raw_xml=normalized_xml)
+
+  def apply_volumes_to_plate(self, plate: Plate, *, prefer_current: bool = True) -> int:
+    """Set PLR well volumes from Echo survey volume fields.
+
+    Echo reports nanoliters; PLR volume trackers use microliters.
+    """
+
+    updated = 0
+    for well_data in self.wells:
+      volume_nl = (
+        well_data.current_volume_nl
+        if prefer_current and well_data.current_volume_nl is not None
+        else well_data.volume_nl
+      )
+      if volume_nl is None:
+        continue
+      well = plate.get_well(well_data.identifier)
+      if well.tracker.is_disabled:
+        continue
+      well.tracker.set_volume(_nl_to_ul(volume_nl))
+      updated += 1
+    return updated
 
 
 @dataclass
@@ -248,12 +303,109 @@ class EchoTransferPrintOptions(BackendParams):
     )
 
 
+@dataclass(frozen=True)
+class EchoPlannedTransfer:
+  """One PLR well-to-well Echo transfer in Echo-native nL."""
+
+  source: Well
+  destination: Well
+  volume_nl: float
+
+  @property
+  def source_identifier(self) -> str:
+    return self.source.get_identifier()
+
+  @property
+  def destination_identifier(self) -> str:
+    return self.destination.get_identifier()
+
+  @property
+  def volume_ul(self) -> float:
+    return _nl_to_ul(self.volume_nl)
+
+
+@dataclass(frozen=True)
+class EchoTransferPlan:
+  """Protocol XML and source plate map generated from PLR resources."""
+
+  source_plate: Plate
+  destination_plate: Plate
+  source_plate_type: str
+  destination_plate_type: str
+  protocol_name: str
+  transfers: Tuple[EchoPlannedTransfer, ...]
+  protocol_xml: str
+  plate_map: EchoPlateMap
+
+
+@dataclass
+class EchoTransferredWell:
+  """One completed well transfer parsed from an Echo transfer report."""
+
+  source_identifier: str
+  source_row: int
+  source_column: int
+  destination_identifier: str
+  destination_row: int
+  destination_column: int
+  requested_volume_nl: Optional[float] = None
+  actual_volume_nl: Optional[float] = None
+  current_volume_nl: Optional[float] = None
+  starting_volume_nl: Optional[float] = None
+  timestamp: str = ""
+  fluid: str = ""
+  fluid_units: str = ""
+  composition: Optional[float] = None
+  fluid_thickness: Optional[float] = None
+  reason: str = ""
+  raw_attributes: Dict[str, str] = field(default_factory=dict)
+
+  @property
+  def tracker_volume_nl(self) -> Optional[float]:
+    return self.actual_volume_nl if self.actual_volume_nl is not None else self.requested_volume_nl
+
+
+@dataclass
+class EchoSkippedWell:
+  """One skipped transfer parsed from an Echo transfer report."""
+
+  source_identifier: str
+  source_row: int
+  source_column: int
+  destination_identifier: str
+  destination_row: int
+  destination_column: int
+  requested_volume_nl: Optional[float] = None
+  reason: str = ""
+  raw_attributes: Dict[str, str] = field(default_factory=dict)
+
+
 @dataclass
 class EchoTransferResult:
   """Result returned by ``DoWellTransfer``."""
 
   report_xml: Optional[str]
   raw: Dict[str, Any] = field(default_factory=dict)
+  succeeded: Optional[bool] = None
+  status: Optional[str] = None
+  source_plate_type: Optional[str] = None
+  destination_plate_type: Optional[str] = None
+  date: str = ""
+  serial_number: str = ""
+  transfers: list[EchoTransferredWell] = field(default_factory=list)
+  skipped: list[EchoSkippedWell] = field(default_factory=list)
+
+
+@dataclass
+class EchoPlateWorkflowResult:
+  """Result from a high-level source/destination load or eject workflow."""
+
+  side: str
+  plate_type: Optional[str]
+  plate_present: bool
+  barcode: str = ""
+  current_plate_type: Optional[str] = None
+  dio: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -317,6 +469,147 @@ def _element_value(element: ET.Element) -> Any:
     return _parse_scalar(text) if text.strip() else ""
   return "".join(
     ET.tostring(child, encoding="unicode", short_empty_elements=True) for child in element
+  )
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+  if value in (None, ""):
+    return None
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return None
+
+
+def _int_or_zero(value: Any) -> int:
+  try:
+    return int(value)
+  except (TypeError, ValueError):
+    return 0
+
+
+def _nl_to_ul(volume_nl: float) -> float:
+  return volume_nl / 1000.0
+
+
+def _normalize_volume_nl(volume: float, volume_unit: str) -> float:
+  normalized_unit = volume_unit.strip().lower().replace("µ", "u")
+  if normalized_unit in {"nl", "nanoliter", "nanoliters"}:
+    return float(volume)
+  if normalized_unit in {"ul", "microliter", "microliters"}:
+    return float(volume) * 1000.0
+  raise ValueError("volume_unit must be 'nL' or 'uL'.")
+
+
+def _validate_transfer_volume_nl(volume_nl: float, context: str = "") -> None:
+  prefix = f"{context}: " if context else ""
+  if volume_nl <= 0:
+    raise ValueError(f"{prefix}volume must be positive, got {volume_nl} nL.")
+  units = volume_nl / ECHO_TRANSFER_VOLUME_INCREMENT_NL
+  if abs(units - round(units)) > 1e-9:
+    raise ValueError(
+      f"{prefix}volume {volume_nl} nL is not a multiple of "
+      f"{ECHO_TRANSFER_VOLUME_INCREMENT_NL} nL."
+    )
+
+
+def _format_transfer_volume_nl(volume_nl: float) -> str:
+  if float(volume_nl).is_integer():
+    return str(int(volume_nl))
+  return f"{volume_nl:g}"
+
+
+def _resolve_plate_type(plate: Plate, plate_type: Optional[str], role: str) -> str:
+  if plate_type:
+    return plate_type
+  if plate.model:
+    return plate.model
+  raise ValueError(
+    f"{role} plate type is required when the PLR plate has no model matching an Echo plate type."
+  )
+
+
+def _resolve_well_reference(plate: Plate, well: Union[str, Well], role: str) -> Well:
+  if isinstance(well, Well):
+    if well.parent is not plate:
+      raise ValueError(f"{role} well {well.name!r} is not on plate {plate.name!r}.")
+    return well
+  return plate.get_well(str(well))
+
+
+def _make_transfer_protocol_xml(transfers: Sequence[EchoPlannedTransfer], protocol_name: str) -> str:
+  protocol = ET.Element("Protocol", {"Name": protocol_name})
+  ET.SubElement(protocol, "Name")
+  layout = ET.SubElement(protocol, "Layout")
+  for transfer in transfers:
+    ET.SubElement(
+      layout,
+      "wp",
+      {
+        "n": transfer.source_identifier,
+        "dn": transfer.destination_identifier,
+        "v": _format_transfer_volume_nl(transfer.volume_nl),
+      },
+    )
+  return '<?xml version="1.0" encoding="utf-8"?>' + ET.tostring(
+    protocol,
+    encoding="unicode",
+    short_empty_elements=True,
+  )
+
+
+def build_echo_transfer_plan(
+  source_plate: Plate,
+  destination_plate: Plate,
+  transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+  *,
+  source_plate_type: Optional[str] = None,
+  destination_plate_type: Optional[str] = None,
+  protocol_name: str = "transfer",
+  volume_unit: str = "nL",
+) -> EchoTransferPlan:
+  """Build Echo protocol XML and source plate map from PLR plates and wells."""
+
+  planned_transfers: list[EchoPlannedTransfer] = []
+  for transfer in transfers:
+    if isinstance(transfer, EchoPlannedTransfer):
+      planned = transfer
+      if planned.source.parent is not source_plate:
+        raise ValueError(f"Source well {planned.source.name!r} is not on {source_plate.name!r}.")
+      if planned.destination.parent is not destination_plate:
+        raise ValueError(
+          f"Destination well {planned.destination.name!r} is not on {destination_plate.name!r}."
+        )
+    else:
+      source_ref, destination_ref, volume = transfer
+      source = _resolve_well_reference(source_plate, source_ref, "Source")
+      destination = _resolve_well_reference(destination_plate, destination_ref, "Destination")
+      planned = EchoPlannedTransfer(
+        source=source,
+        destination=destination,
+        volume_nl=_normalize_volume_nl(float(volume), volume_unit),
+      )
+    _validate_transfer_volume_nl(
+      planned.volume_nl,
+      f"{planned.source_identifier}->{planned.destination_identifier}",
+    )
+    planned_transfers.append(planned)
+
+  if not planned_transfers:
+    raise ValueError("At least one transfer is required.")
+
+  source_type = _resolve_plate_type(source_plate, source_plate_type, "Source")
+  destination_type = _resolve_plate_type(destination_plate, destination_plate_type, "Destination")
+  source_wells = tuple(dict.fromkeys(transfer.source_identifier for transfer in planned_transfers))
+  return EchoTransferPlan(
+    source_plate=source_plate,
+    destination_plate=destination_plate,
+    source_plate_type=source_type,
+    destination_plate_type=destination_type,
+    protocol_name=protocol_name,
+    transfers=tuple(planned_transfers),
+    protocol_xml=_make_transfer_protocol_xml(planned_transfers, protocol_name),
+    plate_map=EchoPlateMap(plate_type=source_type, well_identifiers=source_wells),
   )
 
 
@@ -487,6 +780,182 @@ def _embedded_xml_from_values(values: Dict[str, Any], marker: str) -> Optional[s
     if marker_lower in normalized.lower():
       return normalized
   return None
+
+
+def _parse_echo_transfer_report(
+  report_xml: Optional[str],
+  *,
+  raw: Dict[str, Any],
+  succeeded: Optional[bool],
+  status: Optional[str],
+) -> EchoTransferResult:
+  result = EchoTransferResult(
+    report_xml=report_xml,
+    raw=raw,
+    succeeded=succeeded,
+    status=status,
+  )
+  if report_xml in (None, ""):
+    return result
+
+  normalized_xml = html.unescape(str(report_xml)).strip()
+  result.report_xml = normalized_xml
+  try:
+    root = ET.fromstring(normalized_xml)
+  except ET.ParseError as exc:
+    raise EchoProtocolError("Malformed Echo transfer report XML.") from exc
+
+  result.date = root.attrib.get("date", "")
+  result.serial_number = root.attrib.get("serial_number", "")
+  plates = root.findall(".//plateInfo/plate")
+  if len(plates) >= 1:
+    result.source_plate_type = plates[0].attrib.get("name", "") or None
+  if len(plates) >= 2:
+    result.destination_plate_type = plates[1].attrib.get("name", "") or None
+
+  for well in root.findall(".//printmap/w"):
+    attributes = {str(key): str(value) for key, value in well.attrib.items()}
+    result.transfers.append(
+      EchoTransferredWell(
+        source_identifier=attributes.get("n", ""),
+        source_row=_int_or_zero(attributes.get("r")),
+        source_column=_int_or_zero(attributes.get("c")),
+        destination_identifier=attributes.get("dn", ""),
+        destination_row=_int_or_zero(attributes.get("dr")),
+        destination_column=_int_or_zero(attributes.get("dc")),
+        requested_volume_nl=_float_or_none(attributes.get("vt")),
+        actual_volume_nl=_float_or_none(attributes.get("avt")),
+        current_volume_nl=_float_or_none(attributes.get("cvl")),
+        starting_volume_nl=_float_or_none(attributes.get("vl")),
+        timestamp=attributes.get("t", ""),
+        fluid=attributes.get("fld", ""),
+        fluid_units=attributes.get("fldu", ""),
+        composition=_float_or_none(attributes.get("fc")),
+        fluid_thickness=_float_or_none(attributes.get("ft")),
+        reason=attributes.get("reason", ""),
+        raw_attributes=attributes,
+      )
+    )
+
+  for well in root.findall(".//skippedwells/w"):
+    attributes = {str(key): str(value) for key, value in well.attrib.items()}
+    result.skipped.append(
+      EchoSkippedWell(
+        source_identifier=attributes.get("n", ""),
+        source_row=_int_or_zero(attributes.get("r")),
+        source_column=_int_or_zero(attributes.get("c")),
+        destination_identifier=attributes.get("dn", ""),
+        destination_row=_int_or_zero(attributes.get("dr")),
+        destination_column=_int_or_zero(attributes.get("dc")),
+        requested_volume_nl=_float_or_none(attributes.get("vt")),
+        reason=attributes.get("reason", ""),
+        raw_attributes=attributes,
+      )
+    )
+
+  return result
+
+
+async def _call_operator_pause(
+  callback: Optional[OperatorPause],
+  message: str,
+) -> None:
+  if callback is None:
+    return
+  result = callback(message)
+  if inspect.isawaitable(result):
+    await result
+
+
+def _preflight_transfer_volume_tracking(plan: EchoTransferPlan) -> None:
+  if not does_volume_tracking():
+    return
+
+  source_totals: Dict[Well, float] = {}
+  destination_totals: Dict[Well, float] = {}
+  for transfer in plan.transfers:
+    source_totals[transfer.source] = source_totals.get(transfer.source, 0.0) + transfer.volume_ul
+    destination_totals[transfer.destination] = (
+      destination_totals.get(transfer.destination, 0.0) + transfer.volume_ul
+    )
+
+  for well, volume_ul in source_totals.items():
+    if well.tracker.is_disabled:
+      continue
+    if (volume_ul - well.tracker.get_used_volume()) > 1e-6:
+      raise EchoCommandError(
+        "TransferWells",
+        f"Not enough liquid in {well.get_identifier()}: "
+        f"{volume_ul}uL > {well.tracker.get_used_volume()}uL.",
+      )
+
+  for well, volume_ul in destination_totals.items():
+    if well.tracker.is_disabled:
+      continue
+    if (volume_ul - well.tracker.get_free_volume()) > 1e-6:
+      raise EchoCommandError(
+        "TransferWells",
+        f"Not enough space in {well.get_identifier()}: "
+        f"{volume_ul}uL > {well.tracker.get_free_volume()}uL.",
+      )
+
+
+def _apply_transfer_volume_tracking(plan: EchoTransferPlan, result: EchoTransferResult) -> int:
+  if not does_volume_tracking():
+    return 0
+
+  planned_by_pair = {
+    (transfer.source_identifier, transfer.destination_identifier): transfer
+    for transfer in plan.transfers
+  }
+  touched: set[Well] = set()
+  updates = 0
+  try:
+    for transferred in result.transfers:
+      planned = planned_by_pair.get(
+        (transferred.source_identifier, transferred.destination_identifier)
+      )
+      if planned is None:
+        continue
+      volume_nl = transferred.tracker_volume_nl
+      if volume_nl is None:
+        continue
+      volume_ul = _nl_to_ul(volume_nl)
+      if not planned.source.tracker.is_disabled:
+        planned.source.tracker.remove_liquid(volume_ul)
+        touched.add(planned.source)
+      if not planned.destination.tracker.is_disabled:
+        planned.destination.tracker.add_liquid(volume_ul)
+        touched.add(planned.destination)
+      updates += 1
+  except Exception:
+    for well in touched:
+      if not well.tracker.is_disabled:
+        well.tracker.rollback()
+    raise
+
+  for well in touched:
+    if not well.tracker.is_disabled:
+      well.tracker.commit()
+  return updates
+
+
+def _soap_fault_status(root: ET.Element) -> Optional[str]:
+  body = next((node for node in root if _local_name(node.tag) == "Body"), None)
+  if body is None or len(body) == 0:
+    return None
+  fault = next((node for node in body if _local_name(node.tag) == "Fault"), None)
+  if fault is None:
+    return None
+  fault_string = next(
+    (
+      child.text
+      for child in fault.iter()
+      if _local_name(child.tag) == "faultstring" and child.text
+    ),
+    "",
+  )
+  return f"SOAP Fault: {fault_string}" if fault_string else "SOAP Fault"
 
 
 def _print_options_xml(options: EchoTransferPrintOptions) -> str:
@@ -703,6 +1172,23 @@ class EchoDriver(Driver):
     self._ensure_success("GetDIOEx2", result)
     return result.values
 
+  async def get_echo_configuration(
+    self,
+    config_xml: str = DEFAULT_ECHO_CONFIGURATION_QUERY,
+  ) -> str:
+    result = await self._rpc(
+      "GetEchoConfiguration",
+      (("xmlEchoConfig", "string", config_xml),),
+    )
+    self._ensure_success("GetEchoConfiguration", result)
+    value = result.values.get("xmlEchoConfig", _first_result_value(result))
+    return "" if value in (None, "") else str(value)
+
+  async def get_power_calibration(self) -> Dict[str, Any]:
+    result = await self._rpc("GetPwrCal")
+    self._ensure_success("GetPwrCal", result)
+    return result.values
+
   async def get_access_state(self) -> PlateAccessState:
     raw = await self.get_dio_ex2()
     source_plate_position = _coerce_int(raw.get("SPP"))
@@ -739,6 +1225,14 @@ class EchoDriver(Driver):
     value = _first_result_value(result)
     return None if value in (None, "") else str(value)
 
+  async def is_source_plate_present(self) -> bool:
+    plate_type = await self.get_current_source_plate_type()
+    return bool(plate_type) and plate_type.lower() != "none"
+
+  async def is_destination_plate_present(self) -> bool:
+    plate_type = await self.get_current_destination_plate_type()
+    return bool(plate_type) and plate_type.lower() != "none"
+
   async def get_destination_plate_offset(self) -> Any:
     result = await self._rpc("GetDstPlateOffset")
     self._ensure_success("GetDstPlateOffset", result)
@@ -774,6 +1268,19 @@ class EchoDriver(Driver):
     result = await self._rpc("GetCurrentPlateInsert")
     self._ensure_success("GetCurrentPlateInsert", result)
     return _first_result_value(result)
+
+  async def get_all_protocol_names(self) -> list[str]:
+    result = await self._rpc("GetAllProtocolNames")
+    self._ensure_success("GetAllProtocolNames", result)
+    return _name_list_from_value(result.values.get("ProtocolName", _first_result_value(result)))
+
+  async def get_protocol(self, name: Optional[str] = None) -> Dict[str, Any]:
+    params: Tuple[Tuple[str, str, str], ...] = ()
+    if name:
+      params = (("ProtocolName", "string", name),)
+    result = await self._rpc("GetProtocol", params)
+    self._ensure_success("GetProtocol", result)
+    return result.values
 
   async def get_instrument_lock_state(self, lock_id: Optional[str] = None) -> Dict[str, Any]:
     params: Tuple[Tuple[str, str, str], ...] = ()
@@ -814,6 +1321,21 @@ class EchoDriver(Driver):
       ),
     )
     self._ensure_success("StoreParameter", result)
+
+  async def get_fluid_info(self, fluid_type: str) -> EchoFluidInfo:
+    result = await self._rpc(
+      "GetFluidInfo",
+      (("FluidType", "string", fluid_type),),
+    )
+    self._ensure_success("GetFluidInfo", result)
+    return EchoFluidInfo(
+      name=str(result.values.get("FluidName") or result.values.get("Name") or fluid_type),
+      description=str(result.values.get("Description", "")),
+      fc_min=_float_or_none(result.values.get("FCMin")),
+      fc_max=_float_or_none(result.values.get("FCMax")),
+      fc_units=str(result.values.get("FCUnits", "")),
+      raw=result.values,
+    )
 
   async def get_transfer_volume_max_nl(self, plate_type: str) -> Any:
     result = await self._rpc(
@@ -897,7 +1419,7 @@ class EchoDriver(Driver):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
+  ) -> Optional[str]:
     self._require_lock("RetractSrcPlateGripper")
     result = await self._rpc(
       "RetractSrcPlateGripper",
@@ -908,6 +1430,8 @@ class EchoDriver(Driver):
       ),
     )
     self._ensure_success("RetractSrcPlateGripper", result)
+    barcode_value = result.values.get("BarCode")
+    return None if barcode_value in (None, "") else str(barcode_value)
 
   async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
     self._require_lock("PresentDstPlateGripper")
@@ -920,7 +1444,7 @@ class EchoDriver(Driver):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
+  ) -> Optional[str]:
     self._require_lock("RetractDstPlateGripper")
     result = await self._rpc(
       "RetractDstPlateGripper",
@@ -931,11 +1455,99 @@ class EchoDriver(Driver):
       ),
     )
     self._ensure_success("RetractDstPlateGripper", result)
+    barcode_value = result.values.get("BarCode")
+    return None if barcode_value in (None, "") else str(barcode_value)
 
   async def close_door(self, timeout: Optional[float] = None) -> None:
     self._require_lock("CloseDoor")
     result = await self._rpc("CloseDoor", timeout=timeout)
     self._ensure_success("CloseDoor", result)
+
+  async def open_door(self, timeout: Optional[float] = None) -> None:
+    self._require_lock("OpenDoor")
+    result = await self._rpc("OpenDoor", timeout=timeout)
+    self._ensure_success("OpenDoor", result)
+
+  async def home_axes(self, timeout: Optional[float] = None) -> None:
+    self._require_lock("HomeAxes")
+    result = await self._rpc("HomeAxes", timeout=_resolve_timeout(timeout, DEFAULT_HOME_TIMEOUT))
+    self._ensure_success("HomeAxes", result)
+
+  async def set_pump_direction(self, normal: bool = True, timeout: Optional[float] = None) -> None:
+    self._require_lock("SetPumpDir")
+    result = await self._rpc(
+      "SetPumpDir",
+      (("Value", "boolean", _format_bool(normal)),),
+      timeout=timeout,
+    )
+    self._ensure_success("SetPumpDir", result)
+
+  async def enable_bubbler_pump(
+    self,
+    enabled: bool = True,
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("EnableBubblerPump")
+    result = await self._rpc(
+      "EnableBubblerPump",
+      (("Value", "boolean", _format_bool(enabled)),),
+      timeout=timeout,
+    )
+    self._ensure_success("EnableBubblerPump", result)
+
+  async def actuate_bubbler_nozzle(
+    self,
+    up: bool,
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("ActuateBubblerNozzle")
+    result = await self._rpc(
+      "ActuateBubblerNozzle",
+      (("Value", "boolean", _format_bool(up)),),
+      timeout=timeout,
+    )
+    self._ensure_success("ActuateBubblerNozzle", result)
+
+  async def raise_coupling_fluid(self, timeout: Optional[float] = None) -> None:
+    await self.actuate_bubbler_nozzle(True, timeout=timeout)
+
+  async def lower_coupling_fluid(self, timeout: Optional[float] = None) -> None:
+    await self.actuate_bubbler_nozzle(False, timeout=timeout)
+
+  async def enable_vacuum_nozzle(
+    self,
+    enabled: bool,
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("EnableVacuumNozzle")
+    result = await self._rpc(
+      "EnableVacuumNozzle",
+      (("Value", "boolean", _format_bool(enabled)),),
+      timeout=timeout,
+    )
+    self._ensure_success("EnableVacuumNozzle", result)
+
+  async def actuate_vacuum_nozzle(
+    self,
+    engage: bool,
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("ActuateVacuumNozzle")
+    result = await self._rpc(
+      "ActuateVacuumNozzle",
+      (("Value", "boolean", _format_bool(engage)),),
+      timeout=timeout,
+    )
+    self._ensure_success("ActuateVacuumNozzle", result)
+
+  async def actuate_ionizer(self, enabled: bool, timeout: Optional[float] = None) -> None:
+    self._require_lock("ActuateIonizer")
+    result = await self._rpc(
+      "ActuateIonizer",
+      (("Value", "boolean", _format_bool(enabled)),),
+      timeout=timeout,
+    )
+    self._ensure_success("ActuateIonizer", result)
 
   async def set_barcodes_check(self, enabled: bool) -> None:
     self._require_lock("SetBarcodesCheck")
@@ -1006,12 +1618,18 @@ class EchoDriver(Driver):
     fetch_saved_data: bool = True,
     dry_after: bool = False,
     dry: Optional[EchoDryPlateParams] = None,
+    source_plate: Optional[Plate] = None,
+    update_volume_trackers: bool = True,
   ) -> EchoSurveyRunResult:
     await self.set_plate_map(plate_map)
     response_data = await self.survey_plate(survey)
     saved_data = None
     if fetch_saved_data and survey.save:
       saved_data = await self.get_survey_data()
+    if update_volume_trackers and does_volume_tracking() and source_plate is not None:
+      data = saved_data or response_data
+      if data is not None:
+        data.apply_volumes_to_plate(source_plate)
     dry_mode = None
     if dry_after:
       dry = dry or EchoDryPlateParams()
@@ -1040,10 +1658,255 @@ class EchoDriver(Driver):
       timeout=timeout,
     )
     self._ensure_success("DoWellTransfer", result)
-    return EchoTransferResult(
-      report_xml=_embedded_xml_from_values(result.values, "<transfer"),
+    return _parse_echo_transfer_report(
+      _embedded_xml_from_values(result.values, "<transfer"),
       raw=result.values,
+      succeeded=result.succeeded,
+      status=result.status,
     )
+
+  def build_transfer_plan(
+    self,
+    source_plate: Plate,
+    destination_plate: Plate,
+    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    *,
+    source_plate_type: Optional[str] = None,
+    destination_plate_type: Optional[str] = None,
+    protocol_name: str = "transfer",
+    volume_unit: str = "nL",
+  ) -> EchoTransferPlan:
+    return build_echo_transfer_plan(
+      source_plate,
+      destination_plate,
+      transfers,
+      source_plate_type=source_plate_type,
+      destination_plate_type=destination_plate_type,
+      protocol_name=protocol_name,
+      volume_unit=volume_unit,
+    )
+
+  async def transfer_wells(
+    self,
+    source_plate: Plate,
+    destination_plate: Plate,
+    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    *,
+    source_plate_type: Optional[str] = None,
+    destination_plate_type: Optional[str] = None,
+    protocol_name: str = "transfer",
+    volume_unit: str = "nL",
+    do_survey: bool = True,
+    close_door_before_transfer: bool = True,
+    print_options: Optional[EchoTransferPrintOptions] = None,
+    timeout: Optional[float] = None,
+    survey_timeout: Optional[float] = None,
+    update_volume_trackers: bool = True,
+  ) -> EchoTransferResult:
+    self._require_lock("TransferWells")
+    plan = self.build_transfer_plan(
+      source_plate,
+      destination_plate,
+      transfers,
+      source_plate_type=source_plate_type,
+      destination_plate_type=destination_plate_type,
+      protocol_name=protocol_name,
+      volume_unit=volume_unit,
+    )
+
+    await self.get_current_source_plate_type()
+    await self.get_current_destination_plate_type()
+    await self.retrieve_parameter("Client_IgnoreDestPlateSensor")
+    await self.retrieve_parameter("Client_IgnoreSourcePlateSensor")
+    await self.set_plate_map(plan.plate_map)
+    await self.get_plate_info(plan.source_plate_type)
+
+    if close_door_before_transfer:
+      await self.close_door()
+
+    if do_survey:
+      max_source_row = max(transfer.source.get_row() for transfer in plan.transfers)
+      survey_data = await self.survey_plate(
+        EchoSurveyParams(
+          plate_type=plan.source_plate_type,
+          start_row=0,
+          start_col=0,
+          num_rows=max_source_row + 1,
+          num_cols=source_plate.num_items_x,
+          save=True,
+          check_source=False,
+          timeout=survey_timeout,
+        )
+      )
+      if update_volume_trackers and does_volume_tracking() and survey_data is not None:
+        survey_data.apply_volumes_to_plate(source_plate)
+
+    if update_volume_trackers:
+      _preflight_transfer_volume_tracking(plan)
+
+    await self.get_dio_ex2()
+    await self.get_dio()
+
+    result = await self.do_well_transfer(
+      plan.protocol_xml,
+      print_options
+      or EchoTransferPrintOptions(
+        save_survey=True,
+        save_print=True,
+      ),
+      timeout=_resolve_timeout(timeout, DEFAULT_TRANSFER_TIMEOUT),
+    )
+    if update_volume_trackers:
+      _apply_transfer_volume_tracking(plan, result)
+    return result
+
+  async def load_source_plate(
+    self,
+    plate_type: str,
+    *,
+    barcode_location: str = "Right-Side",
+    barcode: str = "",
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = True,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    self._require_lock("LoadSourcePlate")
+    if open_door_first:
+      await self.open_door()
+    await self.open_source_plate(timeout=present_timeout)
+    await _call_operator_pause(operator_pause, "source plate presented")
+    await self.get_power_calibration()
+    await self.get_plate_info(plate_type)
+    await self.get_current_source_plate_type()
+    barcode_result = await self.close_source_plate(
+      plate_type=plate_type,
+      barcode_location=barcode_location,
+      barcode=barcode,
+      timeout=retract_timeout,
+    )
+    await self.retrieve_parameter("Client_IgnoreSourcePlateSensor")
+    current_plate_type = await self.get_current_source_plate_type()
+    dio = await self.get_dio_ex2()
+    return EchoPlateWorkflowResult(
+      side="source",
+      plate_type=plate_type,
+      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      barcode=barcode_result or "",
+      current_plate_type=current_plate_type,
+      dio=dio,
+    )
+
+  async def load_destination_plate(
+    self,
+    plate_type: str,
+    *,
+    barcode_location: str = "Right-Side",
+    barcode: str = "",
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = True,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    self._require_lock("LoadDestinationPlate")
+    if open_door_first:
+      await self.open_door()
+    await self.open_destination_plate(timeout=present_timeout)
+    await _call_operator_pause(operator_pause, "destination plate presented")
+    await self.get_power_calibration()
+    await self.get_plate_info(plate_type)
+    barcode_result = await self.close_destination_plate(
+      plate_type=plate_type,
+      barcode_location=barcode_location,
+      barcode=barcode,
+      timeout=retract_timeout,
+    )
+    await self.retrieve_parameter("Client_IgnoreDestPlateSensor")
+    current_plate_type = await self.get_current_destination_plate_type()
+    dio = await self.get_dio_ex2()
+    return EchoPlateWorkflowResult(
+      side="destination",
+      plate_type=plate_type,
+      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      barcode=barcode_result or "",
+      current_plate_type=current_plate_type,
+      dio=dio,
+    )
+
+  async def eject_source_plate(
+    self,
+    *,
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = False,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    self._require_lock("EjectSourcePlate")
+    if open_door_first:
+      await self.open_door()
+    await self.open_source_plate(timeout=present_timeout)
+    await _call_operator_pause(operator_pause, "source plate presented for removal")
+    barcode_result = await self.close_source_plate(timeout=retract_timeout)
+    current_plate_type = await self.get_current_source_plate_type()
+    dio = await self.get_dio_ex2()
+    return EchoPlateWorkflowResult(
+      side="source",
+      plate_type=None,
+      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      barcode=barcode_result or "",
+      current_plate_type=current_plate_type,
+      dio=dio,
+    )
+
+  async def eject_destination_plate(
+    self,
+    *,
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = False,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    self._require_lock("EjectDestinationPlate")
+    if open_door_first:
+      await self.open_door()
+    await self.open_destination_plate(timeout=present_timeout)
+    await _call_operator_pause(operator_pause, "destination plate presented for removal")
+    barcode_result = await self.close_destination_plate(timeout=retract_timeout)
+    current_plate_type = await self.get_current_destination_plate_type()
+    dio = await self.get_dio_ex2()
+    return EchoPlateWorkflowResult(
+      side="destination",
+      plate_type=None,
+      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      barcode=barcode_result or "",
+      current_plate_type=current_plate_type,
+      dio=dio,
+    )
+
+  async def eject_all_plates(
+    self,
+    *,
+    operator_pause: Optional[OperatorPause] = None,
+    close_door_after: bool = True,
+    open_door_first: bool = False,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> Tuple[EchoPlateWorkflowResult, EchoPlateWorkflowResult]:
+    source_result = await self.eject_source_plate(
+      operator_pause=operator_pause,
+      open_door_first=open_door_first,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
+    )
+    destination_result = await self.eject_destination_plate(
+      operator_pause=operator_pause,
+      open_door_first=False,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
+    )
+    if close_door_after:
+      await self.close_door()
+    return source_result, destination_result
 
   def _make_retract_params(
     self,
@@ -1215,10 +2078,28 @@ class EchoDriver(Driver):
     except ET.ParseError as exc:
       raise EchoProtocolError(f"Malformed XML in {method} response.") from exc
 
+    fault_status = _soap_fault_status(root)
+    if fault_status is not None:
+      return _RpcResult(
+        method=method,
+        values={"SUCCEEDED": False, "Status": fault_status},
+        succeeded=False,
+        status=fault_status,
+      )
+
     payload = self._extract_payload_element(root)
     values: Dict[str, Any] = {}
     for child in payload:
-      values[_local_name(child.tag)] = _element_value(child)
+      key = _local_name(child.tag)
+      value = _element_value(child)
+      if key in values:
+        existing_value = values[key]
+        if isinstance(existing_value, list):
+          existing_value.append(value)
+        else:
+          values[key] = [existing_value, value]
+      else:
+        values[key] = value
 
     succeeded_value = values.get("SUCCEEDED")
     return _RpcResult(
@@ -1390,6 +2271,19 @@ class Echo(Device):
     return await self.driver.get_dio_ex2()
 
   @need_setup_finished
+  async def get_echo_configuration(
+    self,
+    config_xml: str = DEFAULT_ECHO_CONFIGURATION_QUERY,
+  ) -> str:
+    """Return the raw Echo configuration XML."""
+    return await self.driver.get_echo_configuration(config_xml=config_xml)
+
+  @need_setup_finished
+  async def get_power_calibration(self) -> Dict[str, Any]:
+    """Return the raw ``GetPwrCal`` payload."""
+    return await self.driver.get_power_calibration()
+
+  @need_setup_finished
   async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
     """Open a persistent Medman event stream on port 8010."""
     return await self.driver.open_event_stream(timeout=timeout)
@@ -1418,6 +2312,16 @@ class Echo(Device):
   async def get_current_destination_plate_type(self) -> Optional[str]:
     """Return the Echo-reported current destination plate type."""
     return await self.driver.get_current_destination_plate_type()
+
+  @need_setup_finished
+  async def is_source_plate_present(self) -> bool:
+    """Return whether the Echo has a registered source plate loaded."""
+    return await self.driver.is_source_plate_present()
+
+  @need_setup_finished
+  async def is_destination_plate_present(self) -> bool:
+    """Return whether the Echo has a registered destination plate loaded."""
+    return await self.driver.is_destination_plate_present()
 
   @need_setup_finished
   async def get_destination_plate_offset(self) -> Any:
@@ -1450,6 +2354,16 @@ class Echo(Device):
     return await self.driver.get_current_plate_insert()
 
   @need_setup_finished
+  async def get_all_protocol_names(self) -> list[str]:
+    """Return the Echo protocol-name catalog."""
+    return await self.driver.get_all_protocol_names()
+
+  @need_setup_finished
+  async def get_protocol(self, name: Optional[str] = None) -> Dict[str, Any]:
+    """Return the raw ``GetProtocol`` payload."""
+    return await self.driver.get_protocol(name=name)
+
+  @need_setup_finished
   async def get_instrument_lock_state(self, lock_id: Optional[str] = None) -> Dict[str, Any]:
     """Return the raw ``GetInstrumentLockState`` payload."""
     return await self.driver.get_instrument_lock_state(lock_id=lock_id)
@@ -1473,6 +2387,11 @@ class Echo(Device):
   async def store_parameter(self, param: str, value: Any) -> None:
     """Store a named Echo parameter."""
     await self.driver.store_parameter(param, value)
+
+  @need_setup_finished
+  async def get_fluid_info(self, fluid_type: str) -> EchoFluidInfo:
+    """Return fluid metadata for a known Echo fluid type."""
+    return await self.driver.get_fluid_info(fluid_type)
 
   @need_setup_finished
   async def get_transfer_volume_max_nl(self, plate_type: str) -> Any:
@@ -1581,6 +2500,76 @@ class Echo(Device):
     return await self.plate_access.close_door(timeout=timeout, poll_interval=poll_interval)
 
   @need_setup_finished
+  async def open_door(self, timeout: Optional[float] = None) -> None:
+    """Open the Echo door."""
+    await self.driver.open_door(timeout=timeout)
+
+  @need_setup_finished
+  async def home_axes(self, timeout: Optional[float] = None) -> None:
+    """Home all Echo axes."""
+    await self.driver.home_axes(timeout=timeout)
+
+  @need_setup_finished
+  async def set_pump_direction(
+    self,
+    normal: bool = True,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Set the coupling-fluid pump direction."""
+    await self.driver.set_pump_direction(normal=normal, timeout=timeout)
+
+  @need_setup_finished
+  async def enable_bubbler_pump(
+    self,
+    enabled: bool = True,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Enable or disable the coupling-fluid bubbler pump."""
+    await self.driver.enable_bubbler_pump(enabled=enabled, timeout=timeout)
+
+  @need_setup_finished
+  async def actuate_bubbler_nozzle(
+    self,
+    up: bool,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Raise or lower the coupling-fluid bubbler nozzle."""
+    await self.driver.actuate_bubbler_nozzle(up=up, timeout=timeout)
+
+  @need_setup_finished
+  async def raise_coupling_fluid(self, timeout: Optional[float] = None) -> None:
+    """Raise the coupling fluid."""
+    await self.driver.raise_coupling_fluid(timeout=timeout)
+
+  @need_setup_finished
+  async def lower_coupling_fluid(self, timeout: Optional[float] = None) -> None:
+    """Lower the coupling fluid."""
+    await self.driver.lower_coupling_fluid(timeout=timeout)
+
+  @need_setup_finished
+  async def enable_vacuum_nozzle(
+    self,
+    enabled: bool,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Enable or disable the vacuum pump/nozzle control."""
+    await self.driver.enable_vacuum_nozzle(enabled=enabled, timeout=timeout)
+
+  @need_setup_finished
+  async def actuate_vacuum_nozzle(
+    self,
+    engage: bool,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Engage or release the vacuum nozzle mechanism."""
+    await self.driver.actuate_vacuum_nozzle(engage=engage, timeout=timeout)
+
+  @need_setup_finished
+  async def actuate_ionizer(self, enabled: bool, timeout: Optional[float] = None) -> None:
+    """Enable or disable the ionizer."""
+    await self.driver.actuate_ionizer(enabled=enabled, timeout=timeout)
+
+  @need_setup_finished
   async def set_plate_map(self, plate_map: EchoPlateMap) -> None:
     """Upload an Echo source plate map."""
     await self.driver.set_plate_map(plate_map)
@@ -1619,22 +2608,40 @@ class Echo(Device):
     fetch_saved_data: bool = True,
     dry_after: bool = False,
     dry: Optional[EchoDryPlateParams] = None,
+    source_plate: Optional[Plate] = None,
+    update_volume_trackers: bool = True,
   ) -> EchoSurveyRunResult:
     """Run the Echo source-plate survey workflow without changing access state."""
-    await self.set_plate_map(plate_map)
-    response_data = await self.survey_plate(survey)
-    saved_data = None
-    if fetch_saved_data and survey.save:
-      saved_data = await self.get_survey_data()
-    dry_mode = None
-    if dry_after:
-      dry = dry or EchoDryPlateParams()
-      await self.dry_plate(dry)
-      dry_mode = dry.mode
-    return EchoSurveyRunResult(
-      response_data=response_data,
-      saved_data=saved_data,
-      dry_mode=dry_mode,
+    return await self.driver.survey_source_plate(
+      plate_map,
+      survey,
+      fetch_saved_data=fetch_saved_data,
+      dry_after=dry_after,
+      dry=dry,
+      source_plate=source_plate,
+      update_volume_trackers=update_volume_trackers,
+    )
+
+  def build_transfer_plan(
+    self,
+    source_plate: Plate,
+    destination_plate: Plate,
+    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    *,
+    source_plate_type: Optional[str] = None,
+    destination_plate_type: Optional[str] = None,
+    protocol_name: str = "transfer",
+    volume_unit: str = "nL",
+  ) -> EchoTransferPlan:
+    """Build Echo protocol XML and source plate map from PLR resources."""
+    return self.driver.build_transfer_plan(
+      source_plate,
+      destination_plate,
+      transfers,
+      source_plate_type=source_plate_type,
+      destination_plate_type=destination_plate_type,
+      protocol_name=protocol_name,
+      volume_unit=volume_unit,
     )
 
   @need_setup_finished
@@ -1649,4 +2656,138 @@ class Echo(Device):
       protocol_xml=protocol_xml,
       print_options=print_options,
       timeout=timeout,
+    )
+
+  @need_setup_finished
+  async def transfer_wells(
+    self,
+    source_plate: Plate,
+    destination_plate: Plate,
+    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    *,
+    source_plate_type: Optional[str] = None,
+    destination_plate_type: Optional[str] = None,
+    protocol_name: str = "transfer",
+    volume_unit: str = "nL",
+    do_survey: bool = True,
+    close_door_before_transfer: bool = True,
+    print_options: Optional[EchoTransferPrintOptions] = None,
+    timeout: Optional[float] = None,
+    survey_timeout: Optional[float] = None,
+    update_volume_trackers: bool = True,
+  ) -> EchoTransferResult:
+    """Plan and execute Echo transfers from PLR plate wells."""
+    return await self.driver.transfer_wells(
+      source_plate,
+      destination_plate,
+      transfers,
+      source_plate_type=source_plate_type,
+      destination_plate_type=destination_plate_type,
+      protocol_name=protocol_name,
+      volume_unit=volume_unit,
+      do_survey=do_survey,
+      close_door_before_transfer=close_door_before_transfer,
+      print_options=print_options,
+      timeout=timeout,
+      survey_timeout=survey_timeout,
+      update_volume_trackers=update_volume_trackers,
+    )
+
+  @need_setup_finished
+  async def load_source_plate(
+    self,
+    plate_type: str,
+    *,
+    barcode_location: str = "Right-Side",
+    barcode: str = "",
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = True,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    """Run the source plate load workflow."""
+    return await self.driver.load_source_plate(
+      plate_type,
+      barcode_location=barcode_location,
+      barcode=barcode,
+      operator_pause=operator_pause,
+      open_door_first=open_door_first,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
+    )
+
+  @need_setup_finished
+  async def load_destination_plate(
+    self,
+    plate_type: str,
+    *,
+    barcode_location: str = "Right-Side",
+    barcode: str = "",
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = True,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    """Run the destination plate load workflow."""
+    return await self.driver.load_destination_plate(
+      plate_type,
+      barcode_location=barcode_location,
+      barcode=barcode,
+      operator_pause=operator_pause,
+      open_door_first=open_door_first,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
+    )
+
+  @need_setup_finished
+  async def eject_source_plate(
+    self,
+    *,
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = False,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    """Run the source plate eject workflow."""
+    return await self.driver.eject_source_plate(
+      operator_pause=operator_pause,
+      open_door_first=open_door_first,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
+    )
+
+  @need_setup_finished
+  async def eject_destination_plate(
+    self,
+    *,
+    operator_pause: Optional[OperatorPause] = None,
+    open_door_first: bool = False,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> EchoPlateWorkflowResult:
+    """Run the destination plate eject workflow."""
+    return await self.driver.eject_destination_plate(
+      operator_pause=operator_pause,
+      open_door_first=open_door_first,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
+    )
+
+  @need_setup_finished
+  async def eject_all_plates(
+    self,
+    *,
+    operator_pause: Optional[OperatorPause] = None,
+    close_door_after: bool = True,
+    open_door_first: bool = False,
+    present_timeout: Optional[float] = None,
+    retract_timeout: Optional[float] = None,
+  ) -> Tuple[EchoPlateWorkflowResult, EchoPlateWorkflowResult]:
+    """Eject source, then destination, and optionally close the door."""
+    return await self.driver.eject_all_plates(
+      operator_pause=operator_pause,
+      close_door_after=close_door_after,
+      open_door_first=open_door_first,
+      present_timeout=present_timeout,
+      retract_timeout=retract_timeout,
     )
