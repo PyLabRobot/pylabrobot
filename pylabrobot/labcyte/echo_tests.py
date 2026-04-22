@@ -19,10 +19,12 @@ from pylabrobot.labcyte.echo import (
   EchoPlateAccessBackend,
   EchoPlateMap,
   EchoPlateWorkflowResult,
+  EchoProtocolError,
   EchoSurveyData,
   EchoSurveyParams,
   EchoSurveyRunResult,
   EchoTransferredWell,
+  _HttpMessage,
   _RpcResult,
   EchoTransferPrintOptions,
   EchoTransferResult,
@@ -550,6 +552,17 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     assert data is not None
     self.assertEqual(data.plate_type, "384PP_DMSO2")
     self.assertEqual([well.identifier for well in data.wells], ["A1", "B2"])
+
+  def test_decoded_body_rejects_incomplete_gzip(self):
+    compressed = gzip.compress(b"<ok />")
+    message = _HttpMessage(
+      start_line="HTTP/1.1 200 OK",
+      headers={"content-length": str(len(compressed) - 8)},
+      body=compressed[:-8],
+    )
+
+    with self.assertRaisesRegex(EchoProtocolError, "Incomplete gzip-compressed Echo HTTP body"):
+      message.decoded_body()
 
   async def test_get_survey_data_parses_escaped_survey_xml(self):
     await self.driver.setup()

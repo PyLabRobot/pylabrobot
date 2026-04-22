@@ -427,8 +427,15 @@ class _HttpMessage:
 
   def decoded_body(self) -> str:
     payload = self.body
-    if payload[:2] == b"\x1f\x8b":
-      payload = gzip.decompress(payload)
+    if _is_probably_gzip(payload):
+      if not _gzip_stream_complete(payload):
+        raise EchoProtocolError(
+          f"Incomplete gzip-compressed Echo HTTP body ({len(payload)} bytes)."
+        )
+      try:
+        payload = gzip.decompress(payload)
+      except (EOFError, OSError, zlib.error) as exc:
+        raise EchoProtocolError("Failed to decompress gzip-compressed Echo HTTP body.") from exc
     return payload.decode("utf-8", errors="replace")
 
 
@@ -724,6 +731,19 @@ def _gzip_stream_complete(payload: bytes) -> bool:
   except zlib.error:
     return False
   return decompressor.eof
+
+
+def _is_gzip_protocol_error(error: BaseException) -> bool:
+  if isinstance(error, (EOFError, OSError, zlib.error)):
+    return True
+  if not isinstance(error, EchoProtocolError):
+    return False
+  message = str(error).lower()
+  return (
+    "gzip" in message
+    or "compressed file ended" in message
+    or "complete gzip body" in message
+  )
 
 
 def _first_result_value(result: _RpcResult) -> Any:
@@ -1625,7 +1645,28 @@ class EchoDriver(Driver):
     response_data = await self.survey_plate(survey)
     saved_data = None
     if fetch_saved_data and survey.save:
-      saved_data = await self.get_survey_data()
+      saved_data_error: BaseException | None = None
+      for attempt in range(2):
+        try:
+          saved_data = await self.get_survey_data()
+          saved_data_error = None
+          break
+        except (EchoProtocolError, EOFError, OSError, zlib.error) as exc:
+          saved_data_error = exc
+          if not _is_gzip_protocol_error(exc) or attempt > 0:
+            break
+          logger.warning(
+            "Retrying GetSurveyData after gzip decode failure: %s",
+            exc,
+          )
+          await asyncio.sleep(0.5)
+      if saved_data_error is not None:
+        if response_data is None:
+          raise saved_data_error
+        logger.warning(
+          "Using PlateSurvey response data because GetSurveyData failed: %s",
+          saved_data_error,
+        )
     if update_volume_trackers and does_volume_tracking() and source_plate is not None:
       data = saved_data or response_data
       if data is not None:
