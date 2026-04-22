@@ -2053,14 +2053,23 @@ class EchoDriver(Driver):
       key, value = line.split(":", 1)
       headers[key.strip().lower()] = value.strip()
 
-    content_length = int(headers.get("content-length", "0"))
-    body = await self._read_exact(
-      reader,
-      content_length,
-      initial=rest,
-      timeout=read_timeout,
-    )
-    if content_length > 0 and _is_probably_gzip(body) and not _gzip_stream_complete(body):
+    content_length_header = headers.get("content-length")
+    try:
+      content_length = int(content_length_header) if content_length_header is not None else None
+    except ValueError:
+      content_length = None
+
+    if content_length is not None and content_length > 0:
+      body = await self._read_exact(
+        reader,
+        content_length,
+        initial=rest,
+        timeout=read_timeout,
+      )
+    else:
+      body = rest
+
+    if _is_probably_gzip(body) and not _gzip_stream_complete(body):
       body = await self._read_until_complete_gzip_body(
         reader,
         initial=body,
@@ -2090,7 +2099,7 @@ class EchoDriver(Driver):
     reader: asyncio.StreamReader,
     *,
     initial: bytes,
-    advertised_length: int,
+    advertised_length: Optional[int],
     timeout: Optional[float] = None,
   ) -> bytes:
     read_timeout = _resolve_timeout(timeout, self.timeout)
@@ -2098,13 +2107,14 @@ class EchoDriver(Driver):
     while not _gzip_stream_complete(bytes(data)):
       chunk = await asyncio.wait_for(reader.read(4096), timeout=read_timeout)
       if not chunk:
+        advertised = "unknown" if advertised_length is None else str(advertised_length)
         raise EchoProtocolError(
           "Connection closed before complete gzip body arrived "
-          f"(advertised {advertised_length} bytes, received {len(data)} bytes)."
+          f"(advertised {advertised} bytes, received {len(data)} bytes)."
         )
       data.extend(chunk)
 
-    if len(data) != advertised_length:
+    if advertised_length is not None and len(data) != advertised_length:
       logger.warning(
         "Echo response gzip body exceeded advertised Content-Length: header=%s actual=%s",
         advertised_length,

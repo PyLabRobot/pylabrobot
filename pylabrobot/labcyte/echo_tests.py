@@ -33,7 +33,12 @@ from pylabrobot.labcyte.echo import (
 from pylabrobot.resources import Plate, Well, create_ordered_items_2d, set_volume_tracking
 
 
-def _soap_response(inner_xml: str, *, content_length_override: int | None = None) -> bytes:
+def _soap_response(
+  inner_xml: str,
+  *,
+  content_length_override: int | None = None,
+  include_content_length: bool = True,
+) -> bytes:
   body = (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
     '<SOAP-ENV:Envelope '
@@ -49,14 +54,15 @@ def _soap_response(inner_xml: str, *, content_length_override: int | None = None
   ).encode("utf-8")
   gz_body = gzip.compress(body)
   content_length = len(gz_body) if content_length_override is None else content_length_override
-  headers = (
-    "HTTP/1.1 200 OK\r\n"
-    "Server: Echo® Liquid Handler-3.1.1\r\n"
-    "Protocol: 3.1\r\n"
-    'Content-Type: text/xml; charset="utf-8"\r\n'
-    f"Content-Length: {content_length}\r\n"
-    "\r\n"
-  ).encode("iso-8859-1")
+  header_lines = [
+    "HTTP/1.1 200 OK",
+    "Server: Echo® Liquid Handler-3.1.1",
+    "Protocol: 3.1",
+    'Content-Type: text/xml; charset="utf-8"',
+  ]
+  if include_content_length:
+    header_lines.append(f"Content-Length: {content_length}")
+  headers = ("\r\n".join(header_lines) + "\r\n\r\n").encode("iso-8859-1")
   return headers + gz_body
 
 
@@ -552,6 +558,42 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     assert data is not None
     self.assertEqual(data.plate_type, "384PP_DMSO2")
     self.assertEqual([well.identifier for well in data.wells], ["A1", "B2"])
+
+  async def test_survey_plate_reads_missing_content_length_until_gzip_complete(self):
+    await self.driver.setup()
+    self.driver._lock_held = True
+    wells = "".join(
+      f'<Well n="{chr(ord("A") + row)}{column + 1}" r="{row}" c="{column}" '
+      f'comp="{row}.{column}" vl="{1000 + row * 24 + column}" '
+      f'cvl="{900 + row * 24 + column}" extra="{row * 1234567 + column}" />'
+      for row in range(16)
+      for column in range(24)
+    )
+    inner_xml = (
+      "<PlateSurveyResponse><PlateSurvey>"
+      "<SUCCEEDED>True</SUCCEEDED>"
+      "<Status>OK</Status>"
+      "<PlateSurveyData>"
+      f'<platesurvey p="384PP_DMSO2">{wells}</platesurvey>'
+      "</PlateSurveyData>"
+      "</PlateSurvey></PlateSurveyResponse>"
+    )
+    response = _soap_response(inner_xml, include_content_length=False)
+    self.assertGreater(len(response), 4096)
+    fake_writer = _FakeWriter()
+    fake_reader = _FakeReader(response)
+
+    with patch(
+      "pylabrobot.labcyte.echo.asyncio.open_connection",
+      return_value=(fake_reader, fake_writer),
+    ):
+      data = await self.driver.survey_plate(
+        EchoSurveyParams(plate_type="384PP_DMSO2", num_rows=16, num_cols=24)
+      )
+
+    assert data is not None
+    self.assertEqual(data.plate_type, "384PP_DMSO2")
+    self.assertEqual(len(data.wells), 384)
 
   def test_decoded_body_rejects_incomplete_gzip(self):
     compressed = gzip.compress(b"<ok />")
