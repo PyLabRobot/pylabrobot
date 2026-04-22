@@ -1536,6 +1536,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       channel: 0-indexed channel number.
     """
+    pip_fw = self._parse_firmware_version_datetime(await self.request_pip_channel_version(channel))
+    if pip_fw.year <= 2016:
+      raise RuntimeError(
+        f"VW (pip channel configuration) is not supported on firmware from 2016 or older "
+        f"(channel {channel} firmware date: {pip_fw.isoformat()})."
+      )
     resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
     hw_tokens = resp.split("vw")[-1].strip().split()
     return PipChannelInformation(
@@ -1720,10 +1726,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
-      # VW is not supported on firmware <= 2015 (see issue #1004). Skip the query there
-      # and leave the cache as None; otherwise populate it for every channel.
+      # VW is not supported on firmware from 2016 or older (see issue #1004). Skip the
+      # query there and leave the cache as None; otherwise populate it for every channel.
       pip_fw = self._parse_firmware_version_datetime(await self.request_pip_channel_version(0))
-      if pip_fw.year <= 2015:
+      if pip_fw.year <= 2016:
         self._pip_channel_information = None
       else:
         self._pip_channel_information = [
