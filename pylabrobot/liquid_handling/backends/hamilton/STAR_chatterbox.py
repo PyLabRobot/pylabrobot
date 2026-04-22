@@ -340,13 +340,13 @@ class STARChatterboxBackend(STARBackend):
     containers report ``cavity_bottom + compute_height_from_volume(volume)`` so the
     parent ``probe_liquid_heights`` can subtract ``z_cavity_bottom`` consistently.
     """
-    measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
-    for local_idx, (ch, orig_idx) in enumerate(zip(batch.channels, batch.indices)):
+    measurements: Dict[int, List[Optional[float]]] = {}
+    for orig_idx in batch.indices:
       container = containers[orig_idx]
       volume = container.tracker.get_used_volume()
       if volume == 0:
         absolute_height = z_cavity_bottom[orig_idx]
       else:
         absolute_height = z_cavity_bottom[orig_idx] + container.compute_height_from_volume(volume)
-      measurements[ch] = [absolute_height] * n_replicates
+      measurements[orig_idx] = [absolute_height] * n_replicates
     return measurements

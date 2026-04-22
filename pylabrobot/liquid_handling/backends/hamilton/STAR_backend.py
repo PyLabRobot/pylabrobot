@@ -3,6 +3,7 @@ import datetime
 import enum
 import functools
 import logging
+import math
 import re
 import sys
 import warnings
@@ -2132,7 +2133,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               {ch: min_traverse_height_during_command for ch in prev_batch.channels}
             )
 
-        if prev_batch is None or batch.x_position != prev_batch.x_position:
+        if prev_batch is None or not math.isclose(batch.x_position, prev_batch.x_position):
           await self.move_channel_x(0, batch.x_position)
 
         await self.position_channels_in_y_direction(batch.y_positions)
@@ -2223,9 +2224,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     *lld_mode* is indexed by original container position (``batch.indices[i]``),
     so channels within a single batch may use different detection modes concurrently.
 
-    Returns absolute heights (one list per channel, ``None`` entries for replicates
-    where no liquid was detected). The caller subtracts ``z_cavity_bottom`` to get
-    heights relative to container bottom.
+    Returns absolute heights keyed by job index (``batch.indices[i]``), so duplicate
+    channels across batches don't collide. One list per job, with ``None`` entries for
+    replicates where no liquid was detected. The caller subtracts ``z_cavity_bottom``
+    to get heights relative to container bottom.
     """
 
     def _detect_func(mode: "STARBackend.LLDMode") -> Callable[..., Any]:
@@ -2243,7 +2245,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for i in batch.indices
     ]
 
-    measurements: Dict[int, List[Optional[float]]] = {ch: [] for ch in batch.channels}
+    measurements: Dict[int, List[Optional[float]]] = {orig_idx: [] for orig_idx in batch.indices}
 
     for _ in range(n_replicates):
       results = await asyncio.gather(
@@ -2282,7 +2284,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           raise result
         else:
           height = current_absolute_liquid_heights[ch_idx]
-        measurements[ch_idx].append(height)
+        measurements[orig_idx].append(height)
 
     return measurements
 
@@ -2354,12 +2356,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
-    if use_channels is not None and len(use_channels) != len(set(use_channels)):
-      raise ValueError(
-        f"Duplicate channels in use_channels {use_channels}: each physical channel "
-        f"can only probe one container per call. To probe more containers than available "
-        f"channels, call probe_liquid_heights multiple times in sequence."
-      )
 
     if lld_mode is None:
       lld_mode = [self.LLDMode.GAMMA] * len(containers)
@@ -2412,15 +2408,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     absolute_heights_measurements: Dict[int, List[Optional[float]]] = {}
     for batch_measurements in batch_results:
-      for ch, heights in batch_measurements.items():
-        absolute_heights_measurements.setdefault(ch, []).extend(heights)
+      for orig_idx, heights in batch_measurements.items():
+        absolute_heights_measurements.setdefault(orig_idx, []).extend(heights)
 
     # Compute liquid heights relative to well bottom
     relative_to_well: List[float] = []
     inconsistent_channels: List[str] = []
 
     for idx, (ch, container) in enumerate(zip(use_channels, containers)):
-      measurements = absolute_heights_measurements[ch]
+      measurements = absolute_heights_measurements[idx]
       valid = [m for m in measurements if m is not None]
       cavity_bottom = z_cavity_bottom[idx]
 
@@ -2457,7 +2453,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 3,
-    move_to_z_safety_after: bool = True,
+    z_position_at_end_of_command: Optional[float] = None,
+    # Deprecated
+    move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
     """Probe liquid volumes in containers by measuring heights and converting to volumes.
 
@@ -2472,7 +2470,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.  Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 3.
-      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
+      z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
+        probing. None (default) uses full Z safety.
+      move_to_z_safety_after: Deprecated. Use ``z_position_at_end_of_command`` instead.
 
     Returns:
       Volumes in each container (uL).
@@ -2484,6 +2484,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
     - All containers must support height-volume functions. Volume calculation uses Container.compute_volume_from_height()
     """
+
+    if move_to_z_safety_after is not None:
+      warnings.warn(
+        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a "
+        "future release. Use 'z_position_at_end_of_command' with an appropriate Z height "
+        "instead. If not set, the default behavior will be to move to full Z safety after "
+        "the command.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     if any(not resource.supports_compute_height_volume_functions() for resource in containers):
       raise ValueError(
@@ -2497,7 +2507,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode=lld_mode,
       search_speed=search_speed,
       n_replicates=n_replicates,
-      move_to_z_safety_after=move_to_z_safety_after,
+      z_position_at_end_of_command=z_position_at_end_of_command,
     )
 
     return [
@@ -10752,8 +10762,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Machine-compatibility check of calculated parameters
     assert 0 <= max_y_search_pos_increments <= 13_714, (
       "Maximum y search position must be between 0 and "
-      + f"{STARBackend.y_drive_increment_to_mm(13_714) + self._channels_minimum_y_spacing[0]:.1f} mm, "
-      + f"is {STARBackend.y_drive_increment_to_mm(max_y_search_pos_increments):.1f} mm"
+      + f"{STARBackend.y_drive_increment_to_mm(13_714):.1f} mm, "
+      + f"is {max_y_search_pos:.1f} mm"
     )
     assert 20 <= channel_speed_increments <= 8_000, (
       f"LLD search speed must be between \n{STARBackend.y_drive_increment_to_mm(20)}"

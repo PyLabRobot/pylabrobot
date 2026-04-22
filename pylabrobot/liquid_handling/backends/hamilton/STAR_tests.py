@@ -1836,6 +1836,30 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
 
     entered["plld"].assert_awaited_once()
 
+  async def test_duplicate_channels_serialize_measurements(self):
+    """Same physical channel probing two wells in one call: results don't collide."""
+    well_a = self.plate.get_item("A1")
+    well_b = self.plate.get_item("B1")
+    self._put_tips_on_channels([0])
+
+    mocks = self._standard_mocks()
+    with contextlib.ExitStack() as stack:
+      for v in mocks.values():
+        stack.enter_context(v)
+      result = await self.STAR.probe_liquid_heights(
+        containers=[well_a, well_b],
+        use_channels=[0, 0],
+      )
+
+    # Two jobs, one result each, keyed by job index not channel.
+    self.assertEqual(len(result), 2)
+    self.assertAlmostEqual(
+      result[0], 0 - well_a.get_absolute_location("c", "c", "cavity_bottom").z
+    )
+    self.assertAlmostEqual(
+      result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z
+    )
+
 
 class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
   """Test that different channel spacing configurations produce different behavior.

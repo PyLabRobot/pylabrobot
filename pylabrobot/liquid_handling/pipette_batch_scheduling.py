@@ -24,13 +24,12 @@ bound partition solver typically fast on the structured instances this module se
     await backend.execute_batched(func=my_z_callback, batches=batches)
 """
 
+import itertools
 import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Collection, Dict, FrozenSet, List, Optional, Tuple
-
-logger = logging.getLogger(__name__)
 
 from pylabrobot.liquid_handling.channel_positioning import (
   compute_nonconsecutive_channel_offsets,
@@ -38,6 +37,8 @@ from pylabrobot.liquid_handling.channel_positioning import (
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+
+logger = logging.getLogger(__name__)
 
 # --- Data types ---
 
@@ -80,16 +81,14 @@ def log_batches(
     else {}
   )
 
-  x_groups: Dict[float, list] = {}
-  for b in batches:
-    x_key = round(b.x_position, 1)
-    x_groups.setdefault(x_key, []).append(b)
+  x_groups = [
+    (x_key, list(group))
+    for x_key, group in itertools.groupby(batches, key=lambda b: b.x_position)
+  ]
 
   lines = ["plan:"]
-  xg_keys = list(x_groups.keys())
-  for xg_i, x_key in enumerate(xg_keys):
-    xg_batches = x_groups[x_key]
-    is_last_xg = xg_i == len(xg_keys) - 1
+  for xg_i, (x_key, xg_batches) in enumerate(x_groups):
+    is_last_xg = xg_i == len(x_groups) - 1
     xg_branch = "└" if is_last_xg else "├"
     xg_cont = " " if is_last_xg else "│"
     lines.append(f"  {xg_branch}── x-group {xg_i + 1} (x={x_key:.1f} mm)")
@@ -431,5 +430,18 @@ def plan_batches(
     )
 
   partition = minimum_exact_cover(len(use_channels), valid)
+
+  # Snap batches sharing an X bucket to one representative x_position so downstream
+  # consumers can compare by equality instead of tolerance. Each batch's x_position
+  # starts as the mean of its own jobs' x-coords, so averages across batches in the
+  # same bucket drift within x_tolerance; collapse them to a shared value here.
+  buckets: Dict[int, List[ChannelBatch]] = defaultdict(list)
+  for b in partition:
+    buckets[math.floor(b.x_position / x_tolerance)].append(b)
+  for group in buckets.values():
+    shared_x = sum(b.x_position for b in group) / len(group)
+    for b in group:
+      b.x_position = shared_x
+
   partition.sort(key=lambda b: b.x_position)
   return partition
