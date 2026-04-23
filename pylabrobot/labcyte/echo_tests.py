@@ -1000,8 +1000,20 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     payload = gzip.decompress(bytes(fake_writer.buffer).split(b"\r\n\r\n", 1)[1]).decode("utf-8")
     self.assertIn("<DoWellTransfer", payload)
     self.assertIn("&lt;Protocol&gt;&lt;Name&gt;&lt;/Name&gt;&lt;/Protocol&gt;", payload)
-    self.assertIn("<PrintOptions><DoPlateSurvey>True</DoPlateSurvey>", payload)
-    self.assertIn("<PlateMap>True</PlateMap>", payload)
+    self.assertIn(
+      '<PrintOptions SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">',
+      payload,
+    )
+    self.assertIn(
+      '<DoPlateSurvey SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" '
+      'type="xsd:boolean">True</DoPlateSurvey>',
+      payload,
+    )
+    self.assertIn(
+      '<PlateMap SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" '
+      'type="xsd:boolean">True</PlateMap>',
+      payload,
+    )
     self.assertNotIn("&lt;PrintOptions&gt;", payload)
     self.assertIsNotNone(result.report_xml)
     self.assertIn("<transfer", result.report_xml)
