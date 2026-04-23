@@ -29,8 +29,8 @@ class PF400Params:
 
   l1: float = 302.0  # shoulder -> elbow [mm]
   l2: float = 289.0  # elbow -> wrist [mm]
-  l3: float = 162.0  # wrist -> TCP [mm]
-  z_tool_offset: float = 0.0
+  gripper_length: float = 162.0  # wrist -> TCP [mm]
+  gripper_z_offset: float = 0.0
   eps: float = 1e-6
 
 
@@ -58,9 +58,9 @@ def fk(joints: Dict[int, float], p: PF400Params) -> "PreciseFlexGripperLocation"
   j4 = radians(joints[4])
   rail = joints.get(6, 0.0)
   yaw = j2 + j3 + j4
-  x = rail + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.l3 * cos(yaw)
-  y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.l3 * sin(yaw)
-  z = j1 + p.z_tool_offset
+  x = rail + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.gripper_length * cos(yaw)
+  y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
+  z = j1 + p.gripper_z_offset
   j3_wrapped = (joints[3] + 180) % 360 - 180
   orientation = "right" if j3_wrapped >= 0 else "left"
   wrist = "ccw" if joints[4] >= 0 else "cw"
@@ -98,8 +98,8 @@ def ik(pose: "PreciseFlexGripperLocation", p: PF400Params) -> Dict[int, float]:
   yaw = radians(pose.rotation.yaw)
 
   # Shoulder is at (pose.rail, 0) in world; work in shoulder-centered coords.
-  x_w = pose.location.x - pose.rail - p.l3 * cos(yaw)
-  y_w = pose.location.y - p.l3 * sin(yaw)
+  x_w = pose.location.x - pose.rail - p.gripper_length * cos(yaw)
+  y_w = pose.location.y - p.gripper_length * sin(yaw)
 
   r = hypot(x_w, y_w)
   r_max = p.l1 + p.l2
@@ -126,7 +126,7 @@ def ik(pose: "PreciseFlexGripperLocation", p: PF400Params) -> Dict[int, float]:
     j4 += 2 * pi
 
   return {
-    1: pose.location.z - p.z_tool_offset,
+    1: pose.location.z - p.gripper_z_offset,
     2: degrees(j2),
     3: degrees(j3),
     4: degrees(j4),

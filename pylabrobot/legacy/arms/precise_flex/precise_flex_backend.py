@@ -86,7 +86,11 @@ class PreciseFlexBackend(SCARABackend, ABC):
     super().__init__()
     self._new_driver = _new_module.PreciseFlexDriver(host=host, port=port, timeout=timeout)
     self._new_backend = _new_module.PreciseFlexArmBackend(
-      driver=self._new_driver, is_dual_gripper=is_dual_gripper, has_rail=has_rail
+      driver=self._new_driver,
+      is_dual_gripper=is_dual_gripper,
+      has_rail=has_rail,
+      gripper_length=162.0,
+      gripper_z_offset=0.0,
     )
     # Keep these for any legacy code that accesses them directly
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)

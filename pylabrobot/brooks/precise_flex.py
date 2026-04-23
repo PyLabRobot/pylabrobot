@@ -335,14 +335,19 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   def __init__(
     self,
     driver: PreciseFlexDriver,
+    gripper_length: float,
+    gripper_z_offset: float,
     is_dual_gripper: bool = False,
     has_rail: bool = False,
-    gripper_length: float = 162.0,
   ) -> None:
     """
     Args:
       gripper_length: wrist-axis → TCP distance in mm. Depends on the mounted
-        gripper; 162 mm matches the stock single gripper.
+        gripper; the concrete Device wrapper supplies a model-appropriate default
+        (e.g. 162 mm for the stock single gripper on the PF400).
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
+        Depends on the mounted gripper; the concrete Device wrapper supplies a
+        model-appropriate default.
     """
     super().__init__()
     self.driver = driver
@@ -353,7 +358,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self.horizontal_compliance_torque: int = 0
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
-    self._kinematics_params = kinematics.PF400Params(l3=gripper_length)
+    self._kinematics_params = kinematics.PF400Params(
+      gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
+    )
     if is_dual_gripper:
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
@@ -1670,12 +1677,30 @@ class PreciseFlex400(Device):
   """Backend for the PreciseFlex 400 robotic arm."""
 
   def __init__(
-    self, host: str, port: int = 10100, has_rail: bool = False, timeout: int = 20
+    self,
+    host: str,
+    port: int = 10100,
+    has_rail: bool = False,
+    timeout: int = 20,
+    gripper_length: float = 162.0,
+    gripper_z_offset: float = 0.0,
   ) -> None:
+    """
+    Args:
+      gripper_length: wrist-axis → TCP distance in mm. Defaults to 162 mm, which
+        matches the stock single gripper on the PF400.
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
+        Defaults to 0 mm.
+    """
     driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
     self.driver: PreciseFlexDriver = driver
-    backend = PreciseFlexArmBackend(driver=driver, has_rail=has_rail)
+    backend = PreciseFlexArmBackend(
+      driver=driver,
+      has_rail=has_rail,
+      gripper_length=gripper_length,
+      gripper_z_offset=gripper_z_offset,
+    )
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
     self.arm = OrientableArm(backend=backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
@@ -1687,6 +1712,13 @@ class PreciseFlex3400Backend(PreciseFlexArmBackend):
   def __init__(
     self,
     driver: PreciseFlexDriver,
+    gripper_length: float,
+    gripper_z_offset: float,
     has_rail: bool = False,
   ) -> None:
-    super().__init__(driver=driver, has_rail=has_rail)
+    super().__init__(
+      driver=driver,
+      has_rail=has_rail,
+      gripper_length=gripper_length,
+      gripper_z_offset=gripper_z_offset,
+    )
