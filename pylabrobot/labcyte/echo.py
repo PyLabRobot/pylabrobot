@@ -22,6 +22,8 @@ from pylabrobot.resources.volume_tracker import does_volume_tracking
 from pylabrobot.resources.well import Well
 from pylabrobot.resources.utils import label_to_row_index, split_identifier
 
+ET.register_namespace("SOAP-ENV", "http://schemas.xmlsoap.org/soap/envelope/")
+
 logger = logging.getLogger(__name__)
 
 HTTP_HEADER_END = b"\r\n\r\n"
@@ -979,9 +981,22 @@ def _soap_fault_status(root: ET.Element) -> Optional[str]:
 
 
 def _print_options_xml(options: EchoTransferPrintOptions) -> str:
-  root = ET.Element("PrintOptions")
-  for name, _value_type, value in options.to_params():
-    child = ET.SubElement(root, name)
+  root = ET.Element(
+    "PrintOptions",
+    {
+      "xmlns:SOAP-ENV": "http://schemas.xmlsoap.org/soap/envelope/",
+      "SOAP-ENV:encodingStyle": "http://schemas.xmlsoap.org/soap/encoding/",
+    },
+  )
+  for name, value_type, value in options.to_params():
+    child = ET.SubElement(
+      root,
+      name,
+      {
+        "SOAP-ENV:encodingStyle": "http://schemas.xmlsoap.org/soap/encoding/",
+        "type": f"xsd:{value_type}",
+      },
+    )
     child.text = value
   return ET.tostring(root, encoding="unicode", short_empty_elements=True)
 
