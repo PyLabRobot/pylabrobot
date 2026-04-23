@@ -95,10 +95,6 @@ class KX2Driver(Driver):
     self._pvt_mode: bool = False
     self.EmcyMoveErrorReceived: bool = False
     self.grp_id: int = 0
-    # Move-done futures per axis; resolved by TPDO4 digital-input callbacks
-    # once PDO mapping lands. Until then, `_wait_for_moves_done` falls back
-    # to polling `motor_check_if_move_done`.
-    self._waiting_moves: Dict[KX2Axis, asyncio.Future] = {}
 
   # --- lifecycle -----------------------------------------------------------
 
@@ -151,12 +147,13 @@ class KX2Driver(Driver):
   async def connect_part_two(self) -> None:
     """Configure PDO mapping + Elmo DS402 parameters after the CAN bus is up.
 
-    Mirrors the legacy driver: unmap TPDO1, map TPDO3 (StatusWord, triggered
-    on MotionComplete) and TPDO4 (DigitalInputs, triggered on edge). Then
-    program Elmo vendor objects that set interpolation config, and finally
-    map RPDO1 (ControlWord) and RPDO3 (interpolated target position+velocity)
-    per motion axis. Subscribe to each node's TPDO3 cob_id so move-done
-    completes `_waiting_moves` futures.
+    Unmap TPDO1, map TPDO3 (StatusWord, triggered on MotionComplete) and
+    TPDO4 (DigitalInputs, triggered on edge). TPDO3 is kept mapped to match
+    the C# reference config, but move completion is detected by polling MS
+    (the MotionComplete event is unreliable on short moves). Then program
+    Elmo vendor objects that set interpolation config, and finally map
+    RPDO1 (ControlWord) and RPDO3 (interpolated target position+velocity)
+    per motion axis.
     """
     assert self._network is not None
 
@@ -200,29 +197,8 @@ class KX2Driver(Driver):
         PDOTransmissionType.EventDrivenDev,
       )
 
-    # TPDO3 subscription: StatusWord frames arrive on MotionComplete trigger,
-    # so any TPDO3 on an axis with a pending waiting_move completes it.
-    for nid in self.node_id_list:
-      tpdo3_cob = ((int(COBType.TPDO3) & 0x0F) << 7) | (nid & 0x7F)
-      self._network.subscribe(tpdo3_cob, self._make_tpdo3_callback(nid))
-
     self._pvt_mode = True
     await self._pvt_select_mode(False)
-
-  def _make_tpdo3_callback(self, node_id: int):
-    def _cb(cob_id: int, data: bytes, timestamp: float) -> None:
-      if self._loop is None:
-        return
-      self._loop.call_soon_threadsafe(self._dispatch_tpdo3, node_id)
-    return _cb
-
-  def _dispatch_tpdo3(self, node_id: int) -> None:
-    axis = KX2Axis(node_id) if node_id in {a.value for a in KX2Axis} else None
-    if axis is None:
-      return
-    fut = self._waiting_moves.get(axis)
-    if fut is not None and not fut.done():
-      fut.set_result(None)
 
   # --- PDO configuration (pure SDO writes; no library-PDO machinery) ------
 
@@ -868,23 +844,32 @@ class KX2Driver(Driver):
           await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
         self._pvt_mode = False
 
-  async def _wait_for_moves_done(self, timeout: float) -> None:
-    async def _one(axis: KX2Axis) -> None:
-      try:
-        await asyncio.wait_for(self._waiting_moves[axis], timeout=timeout)
-      except asyncio.TimeoutError:
-        pass
-      # Fallback query in case the digital-input edge was missed (or TPDO
-      # mapping hasn't landed yet on this driver).
-      await self.motor_check_if_move_done(int(axis))
+  async def _wait_for_moves_done(
+    self, axes: List[KX2Axis], timeout: float
+  ) -> None:
+    # Poll MS every 30ms after a 50ms warm-up. The warm-up avoids reading
+    # MS=0 in the window between CW=63 and motion actually starting.
+    assert self._loop is not None
 
-    await asyncio.gather(*(_one(axis) for axis in self._waiting_moves.keys()))
+    async def _poll_axis(axis: KX2Axis) -> None:
+      deadline = self._loop.time() + timeout
+      await asyncio.sleep(0.05)
+      while self._loop.time() < deadline:
+        try:
+          if await self.motor_check_if_move_done(int(axis)):
+            return
+        except CanError:
+          pass
+        await asyncio.sleep(0.03)
+      # Final authoritative check; propagates CanError / motor-fault.
+      if not await self.motor_check_if_move_done(int(axis)):
+        raise CanError(f"Axis {axis} move did not complete within {timeout}s")
+
+    await asyncio.gather(*(_poll_axis(a) for a in axes))
 
   async def _motors_move_start(
     self, axes: List[KX2Axis], *, relative: bool = False
   ) -> None:
-    assert self._loop is not None
-    self._waiting_moves = {ax: self._loop.create_future() for ax in axes}
     relative_bit = 0x40 if relative else 0
     for i, nid in enumerate(axes):
       last = i == (len(axes) - 1)
@@ -916,8 +901,9 @@ class KX2Driver(Driver):
         move.axis.value, 24708, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
       )
 
-    await self._motors_move_start([move.axis for move in plan.moves])
-    await self._wait_for_moves_done(timeout=plan.move_time + 2)
+    axes = [move.axis for move in plan.moves]
+    await self._motors_move_start(axes)
+    await self._wait_for_moves_done(axes, timeout=plan.move_time + 2)
 
   async def _user_program_run(
     self,
@@ -1049,9 +1035,8 @@ class KX2Driver(Driver):
     await self._binary_interpreter(int(axis), "HM", 2, CmdType.ValSet, "0")
     await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "1")  # arm
 
-    self._waiting_moves = {axis: self._loop.create_future()}
     await self._binary_interpreter(int(axis), "BG", 0, CmdType.Execute)
-    await self._wait_for_moves_done(timeout)
+    await self._wait_for_moves_done([axis], timeout)
 
     left = await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValQuery)
     if left != 0:
