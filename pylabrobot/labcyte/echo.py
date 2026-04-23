@@ -427,7 +427,7 @@ class _HttpMessage:
   headers: Dict[str, str]
   body: bytes
 
-  def decoded_body(self) -> str:
+  def decoded_body_bytes(self) -> bytes:
     payload = self.body
     if _is_probably_gzip(payload):
       if not _gzip_stream_complete(payload):
@@ -438,7 +438,10 @@ class _HttpMessage:
         payload = gzip.decompress(payload)
       except (EOFError, OSError, zlib.error) as exc:
         raise EchoProtocolError("Failed to decompress gzip-compressed Echo HTTP body.") from exc
-    return payload.decode("utf-8", errors="replace")
+    return payload
+
+  def decoded_body(self) -> str:
+    return self.decoded_body_bytes().decode("utf-8", errors="replace")
 
 
 @dataclass
@@ -999,6 +1002,32 @@ def _print_options_xml(options: EchoTransferPrintOptions) -> str:
     )
     child.text = value
   return ET.tostring(root, encoding="unicode", short_empty_elements=True)
+
+
+def _dump_malformed_xml_response(
+  method: str,
+  *,
+  payload_bytes: bytes,
+  body_text: str,
+) -> tuple[str, str] | None:
+  dump_dir = (os.getenv("PYLABROBOT_ECHO_DEBUG_DIR") or "").strip()
+  if not dump_dir:
+    return None
+  try:
+    os.makedirs(dump_dir, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    safe_method = "".join(char.lower() if char.isalnum() else "-" for char in method).strip("-")
+    base_name = f"{stamp}-{os.getpid()}-{safe_method or 'response'}"
+    raw_path = os.path.join(dump_dir, f"{base_name}.body.bin")
+    text_path = os.path.join(dump_dir, f"{base_name}.body.txt")
+    with open(raw_path, "wb") as raw_file:
+      raw_file.write(payload_bytes)
+    with open(text_path, "w", encoding="utf-8", errors="replace") as text_file:
+      text_file.write(body_text)
+    return raw_path, text_path
+  except OSError:
+    logger.exception("Failed to write malformed Echo XML response dump for %s", method)
+    return None
 
 
 def _parse_event_from_message(message: _HttpMessage) -> EchoEvent:
@@ -2138,11 +2167,21 @@ class EchoDriver(Driver):
     return bytes(data)
 
   def _parse_rpc_result(self, method: str, message: _HttpMessage) -> _RpcResult:
-    body_text = message.decoded_body()
+    payload_bytes = message.decoded_body_bytes()
+    body_text = payload_bytes.decode("utf-8", errors="replace")
     try:
       root = ET.fromstring(body_text)
     except ET.ParseError as exc:
-      raise EchoProtocolError(f"Malformed XML in {method} response.") from exc
+      dump_paths = _dump_malformed_xml_response(
+        method,
+        payload_bytes=payload_bytes,
+        body_text=body_text,
+      )
+      details = ""
+      if dump_paths is not None:
+        raw_path, text_path = dump_paths
+        details = f" Saved raw body to {raw_path} and decoded body to {text_path}."
+      raise EchoProtocolError(f"Malformed XML in {method} response.{details}") from exc
 
     fault_status = _soap_fault_status(root)
     if fault_status is not None:
@@ -2196,7 +2235,6 @@ class EchoDriver(Driver):
         "xmlns:SOAPSDK1": "http://www.w3.org/2001/XMLSchema",
         "xmlns:SOAPSDK2": "http://www.w3.org/2001/XMLSchema-instance",
         "xmlns:SOAPSDK3": "http://schemas.xmlsoap.org/soap/encoding/",
-        "xmlns:SOAP-ENV": "http://schemas.xmlsoap.org/soap/envelope/",
       },
     )
     body = ET.SubElement(

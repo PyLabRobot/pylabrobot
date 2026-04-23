@@ -1,6 +1,7 @@
 import gzip
 import html
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.capabilities.plate_access import PlateAccessState
@@ -998,8 +999,10 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       )
 
     payload = gzip.decompress(bytes(fake_writer.buffer).split(b"\r\n\r\n", 1)[1]).decode("utf-8")
+    ET.fromstring(payload)
     self.assertIn("<DoWellTransfer", payload)
     self.assertIn("&lt;Protocol&gt;&lt;Name&gt;&lt;/Name&gt;&lt;/Protocol&gt;", payload)
+    self.assertEqual(payload.count('xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"'), 1)
     self.assertIn(
       '<PrintOptions SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">',
       payload,
