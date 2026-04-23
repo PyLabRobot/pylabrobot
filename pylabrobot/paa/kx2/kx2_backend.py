@@ -499,12 +499,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       store.setdefault(axis, {})[ch] = value
 
     # Pass 1: identify axes by UI[4]
-    uis = {
-      node
-      for node in nodes
-      if node == await self.driver.motor_send_command(node, "UI", 4, val_type=ValType.Int)
-      for node in nodes
-    }
+    uis = set()
+    for node in nodes:
+      if node == await self.driver.motor_send_command(node, "UI", 4, val_type=ValType.Int):
+        uis.add(node)
     for required_axis in MOTION_AXES:
       if required_axis.value not in uis:
         raise CanError(f"Missing required axis with UI[4]={required_axis}")
