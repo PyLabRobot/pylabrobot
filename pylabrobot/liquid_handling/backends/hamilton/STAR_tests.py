@@ -1853,9 +1853,5 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
 
     # Two jobs, one result each, keyed by job index not channel.
     self.assertEqual(len(result), 2)
-    self.assertAlmostEqual(
-      result[0], 0 - well_a.get_absolute_location("c", "c", "cavity_bottom").z
-    )
-    self.assertAlmostEqual(
-      result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z
-    )
+    self.assertAlmostEqual(result[0], 0 - well_a.get_absolute_location("c", "c", "cavity_bottom").z)
+    self.assertAlmostEqual(result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z)

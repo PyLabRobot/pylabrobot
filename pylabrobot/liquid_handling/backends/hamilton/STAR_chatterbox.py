@@ -15,7 +15,6 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.well import Well
 
-
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
   pip_type_1000ul=True,
   kb_iswap_installed=True,

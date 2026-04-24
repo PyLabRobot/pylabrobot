@@ -50,8 +50,8 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
 )
 from pylabrobot.liquid_handling.pipette_batch_scheduling import (
   ChannelBatch,
-  plan_batches,
   log_batches,
+  plan_batches,
   validate_channel_selections,
 )
 from pylabrobot.liquid_handling.standard import (

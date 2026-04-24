@@ -82,8 +82,7 @@ def log_batches(
   )
 
   x_groups = [
-    (x_key, list(group))
-    for x_key, group in itertools.groupby(batches, key=lambda b: b.x_position)
+    (x_key, list(group)) for x_key, group in itertools.groupby(batches, key=lambda b: b.x_position)
   ]
 
   lines = ["plan:"]
