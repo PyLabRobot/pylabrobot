@@ -19,6 +19,10 @@ class RackReaderBackend(CapabilityBackend, metaclass=ABCMeta):
     """Initiate a rack-wide scan."""
 
   @abstractmethod
+  async def trigger_rack_id_scan(self) -> None:
+    """Initiate a rack-barcode-only scan."""
+
+  @abstractmethod
   async def get_scan_result(self) -> RackScanResult:
     """Return the most recent rack scan result."""
 

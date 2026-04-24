@@ -87,6 +87,17 @@ class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
       expect_json=False,
     )
 
+  async def test_trigger_rack_id_scan(self):
+    with patch.object(self.driver, "request", return_value=b"") as request_bytes:
+      await self.backend.trigger_rack_id_scan()
+    request_bytes.assert_called_once_with(
+      "POST",
+      "/scantube",
+      data=b"",
+      headers=None,
+      expect_json=False,
+    )
+
   async def test_get_scan_result(self):
     payload = {
       "RackID": "3000756455",
@@ -257,6 +268,34 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(barcode.data, "5007377910")
     scan_rack.assert_called_once_with(timeout=12.0, poll_interval=0.25)
     scan_barcode.assert_called_once_with()
+
+  async def test_device_exposes_rack_id_only_scan_on_rack_reading(self):
+    reader = MicronicCodeReader(timeout=12.0, poll_interval=0.25)
+    with patch.object(
+      reader.rack_reading.backend,
+      "get_state",
+      return_value=RackReaderState.IDLE,
+    ), patch.object(
+      reader.barcode_scanning.backend,
+      "_get_state",
+      return_value=RackReaderState.IDLE,
+    ):
+      await reader.setup()
+    try:
+      with patch.object(
+        reader.rack_reading,
+        "scan_rack_id",
+        return_value="5500135415",
+      ) as scan_rack_id:
+        rack_id = await reader.rack_reading.scan_rack_id(
+          timeout=reader.default_timeout,
+          poll_interval=reader.default_poll_interval,
+        )
+    finally:
+      await reader.stop()
+
+    self.assertEqual(rack_id, "5500135415")
+    scan_rack_id.assert_called_once_with(timeout=12.0, poll_interval=0.25)
 
 
 if __name__ == "__main__":
