@@ -56,9 +56,7 @@ class RackReader(Capability):
       if state == target:
         return state
       if time.monotonic() >= deadline:
-        raise RackReaderTimeoutError(
-          f"Timed out waiting for rack reader to reach {target.value}."
-        )
+        raise RackReaderTimeoutError(f"Timed out waiting for rack reader to reach {target.value}.")
       await asyncio.sleep(poll_interval)
 
   async def _wait_for_fresh_data_ready(

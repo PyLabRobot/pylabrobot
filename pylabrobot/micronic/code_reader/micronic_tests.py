@@ -197,15 +197,18 @@ class TestMicronicIOMonitorBarcodeScannerBackend(unittest.IsolatedAsyncioTestCas
     )
 
   async def test_scan_barcode_reads_single_tube_code(self):
-    with patch.object(self.driver, "request", return_value=b"") as request_bytes, patch.object(
-      self.driver,
-      "request_json",
-      side_effect=[
-        {"state": "idle"},
-        {"state": "scanning"},
-        {"state": "dataready"},
-        {"TubeID": ["5007377910"]},
-      ],
+    with (
+      patch.object(self.driver, "request", return_value=b"") as request_bytes,
+      patch.object(
+        self.driver,
+        "request_json",
+        side_effect=[
+          {"state": "idle"},
+          {"state": "scanning"},
+          {"state": "dataready"},
+          {"TubeID": ["5007377910"]},
+        ],
+      ),
     ):
       barcode = await self.backend.scan_barcode()
 
@@ -219,15 +222,18 @@ class TestMicronicIOMonitorBarcodeScannerBackend(unittest.IsolatedAsyncioTestCas
     self.assertEqual(barcode, Barcode("5007377910", "Data Matrix", "bottom"))
 
   async def test_scan_barcode_falls_back_to_rackid_payload(self):
-    with patch.object(self.driver, "request", return_value=b"") as request_bytes, patch.object(
-      self.driver,
-      "request_json",
-      side_effect=[
-        {"state": "idle"},
-        {"state": "dataready"},
-        {"unexpected": "shape"},
-        {"RackID": "5007377910"},
-      ],
+    with (
+      patch.object(self.driver, "request", return_value=b"") as request_bytes,
+      patch.object(
+        self.driver,
+        "request_json",
+        side_effect=[
+          {"state": "idle"},
+          {"state": "dataready"},
+          {"unexpected": "shape"},
+          {"RackID": "5007377910"},
+        ],
+      ),
     ):
       barcode = await self.backend.scan_barcode()
 
@@ -241,17 +247,20 @@ class TestMicronicIOMonitorBarcodeScannerBackend(unittest.IsolatedAsyncioTestCas
     self.assertEqual(barcode.data, "5007377910")
 
   async def test_scan_barcode_waits_for_new_dataready_cycle(self):
-    with patch.object(self.driver, "request", return_value=b"") as request_bytes, patch.object(
-      self.driver,
-      "request_json",
-      side_effect=[
-        {"state": "dataready"},
-        {"state": "dataready"},
-        {"state": "scanning"},
-        {"state": "dataready"},
-        {"TubeID": ["5007377910"]},
-      ],
-    ) as request_json:
+    with (
+      patch.object(self.driver, "request", return_value=b"") as request_bytes,
+      patch.object(
+        self.driver,
+        "request_json",
+        side_effect=[
+          {"state": "dataready"},
+          {"state": "dataready"},
+          {"state": "scanning"},
+          {"state": "dataready"},
+          {"TubeID": ["5007377910"]},
+        ],
+      ) as request_json,
+    ):
       barcode = await self.backend.scan_barcode()
 
     request_bytes.assert_called_once_with(
@@ -265,15 +274,18 @@ class TestMicronicIOMonitorBarcodeScannerBackend(unittest.IsolatedAsyncioTestCas
     self.assertEqual(request_json.call_count, 5)
 
   async def test_scan_barcode_raises_on_unknown_payload(self):
-    with patch.object(self.driver, "request", return_value=b""), patch.object(
-      self.driver,
-      "request_json",
-      side_effect=[
-        {"state": "idle"},
-        {"state": "dataready"},
-        {"unexpected": "shape"},
-        {"still": "bad"},
-      ],
+    with (
+      patch.object(self.driver, "request", return_value=b""),
+      patch.object(
+        self.driver,
+        "request_json",
+        side_effect=[
+          {"state": "idle"},
+          {"state": "dataready"},
+          {"unexpected": "shape"},
+          {"still": "bad"},
+        ],
+      ),
     ):
       with self.assertRaises(MicronicBarcodeScannerError):
         await self.backend.scan_barcode()
