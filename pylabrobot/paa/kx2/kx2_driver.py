@@ -3,6 +3,11 @@
 Uses the `canopen` library (python-can bus + CANopen SDO/PDO/NMT/EMCY).
 Paired with :class:`KX2ArmBackend` in ``kx2_backend.py`` via the standard
 ``Device`` + ``Driver`` + capability-backend split.
+
+This module is purely a CAN transport + Elmo interpreter layer. It knows only
+CANopen node IDs (ints). All axis-level / robot-topology concepts (axis names,
+motion-axis tuples, home status, move plans, joint-move direction, homing
+sequences) live in ``kx2_backend``.
 """
 
 from __future__ import annotations
@@ -11,35 +16,161 @@ import asyncio
 import logging
 import struct
 import time
+from dataclasses import dataclass, field
+from enum import IntEnum
 from typing import Dict, List, Optional, Tuple, Union
 
 import canopen
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
-from pylabrobot.paa.kx2.kx2_backend import (
-  MOTION_AXES,
-  COBType,
-  CanError,
-  CmdType,
-  ElmoObjectDataType,
-  HomeStatus,
-  JointMoveDirection,
-  KX2Axis,
-  MotorMoveParam,
-  MotorsMovePlan,
-  PDOTransmissionType,
-  RPDO,
-  RPDOMappedObject,
-  TPDO,
-  TPDOMappedObject,
-  TPDOTrigger,
-  ValType,
-)
 
 
 def _u32_le(value: int) -> List[int]:
   return list((value & 0xFFFFFFFF).to_bytes(4, byteorder="little", signed=False))
+
+
+class CmdType(IntEnum):
+  ValQuery = 1
+  ValSet = 2
+  Execute = 3
+
+
+class ValType(IntEnum):
+  Int = 1
+  Float = 2
+
+
+class COBType(IntEnum):
+  NMT = 0
+  EMCY = 1
+  SYNC = 1
+  TIMESTAMP = 2
+  TPDO1 = 3
+  RPDO1 = 4
+  TPDO2 = 5
+  RPDO2 = 6
+  TPDO3 = 7
+  RPDO3 = 8
+  TPDO4 = 9
+  RPDO4 = 10
+  TSDO = 11
+  RSDO = 12
+  ERRCTRL = 14
+  HEARTBEAT = 14
+
+
+class RPDO(IntEnum):
+  RPDO1 = 1
+  RPDO3 = 3
+  RPDO4 = 4
+
+
+class PDOTransmissionType(IntEnum):
+  SynchronousAcyclic = 0
+  SynchronousCyclic = 1
+  EventDrivenManf = 254  # 0xFE
+  EventDrivenDev = 255  # 0xFF
+
+
+class RPDOMappedObject(IntEnum):
+  NotMapped = 0
+  ControlWord = 0x60400010
+  TargetTorque = 0x60710010
+  MaxTorque = 0x60720010
+  TargetPosition = 0x607A0020
+  VelocityOffset = 0x60B10020
+  TargetPositionIP = 0x60C10120
+  TargetVelocityIP = 0x60C10220
+  DigitalOutputs = 0x60FE0020
+  TargetVelocity = 0x60FF0020
+
+
+class TPDO(IntEnum):
+  TPDO1 = 1
+  TPDO3 = 3
+  TPDO4 = 4
+
+
+class TPDOTrigger(IntEnum):
+  MotionComplete = 0
+  MainHomingComplete = 1
+  AuxiliaryHomingComplete = 2
+  MotorShutDownByException = 3
+  MotorStarted = 4
+  UserProgramEmitCommand = 5
+  OSInterpreterExecutionComplete = 6
+  MotionStartedEvent = 8
+  PDODataChanged = 24
+  DigitalInputEvent = 26
+  StatusWordEvent = 27
+  BinaryInterpreterCommandComplete = 31
+
+
+class TPDOMappedObject(IntEnum):
+  NotMapped = 0
+  Timestamp = 0x20410020
+  PVTHeadPointer = 0x2F110010
+  PVTTailPointer = 0x2F120010
+  StatusWord = 0x60410010
+  PositionActualValue = 0x60640020
+  VelocityDemandValue = 0x606B0020
+  VelocityActualValue = 0x606C0020
+  TorqueDemandValue = 0x60740010
+  TorqueActualValue = 0x60770010
+  IPBufferPosition = 0x60C40410
+  DigitalInputs = 0x60FD0020
+
+
+class ElmoObjectDataType(IntEnum):
+  UNSIGNED8 = 0
+  UNSIGNED16 = 1
+  UNSIGNED32 = 2
+  UNSIGNED64 = 3
+  INTEGER8 = 4
+  INTEGER16 = 5
+  INTEGER32 = 6
+  INTEGER64 = 7
+  STR = 8
+
+
+class CanError(Exception):
+  """Custom exception for CAN motor errors."""
+
+
+class JointMoveDirection(IntEnum):
+  """Move-direction hint used by the driver's move primitives.
+
+  Lives here (not in the backend) because the driver's
+  `_motor_set_move_direction` primitive consumes it to program Elmo's modulo
+  mode register. Backend-side planning also uses it, but the canonical
+  definition is the driver's.
+  """
+
+  Normal = 0
+  Clockwise = 1
+  Counterclockwise = 2
+  ShortestWay = 3
+
+
+@dataclass
+class MotorMoveParam:
+  """One axis of a coordinated move, expressed purely in node-ID terms."""
+
+  # CANopen node ID for this axis. Backend passes `int(self.Axis.X)`.
+  node_id: int
+  position: int
+  velocity: int
+  acceleration: int
+  relative: bool = False
+  direction: JointMoveDirection = JointMoveDirection.ShortestWay
+
+
+@dataclass
+class MotorsMovePlan:
+  moves: List[MotorMoveParam] = field(default_factory=list)
+  move_time: float = 10.0
+
 
 # Vendor-specific Elmo binary interpreter rides on PDO2 COB-IDs (non-standard).
 # Request: RPDO2 = (6 << 7) | node_id  = 0x300 + node_id
@@ -58,6 +189,10 @@ class KX2Driver(Driver):
   raw SDO writes to 0x14xx/0x16xx/0x18xx/0x1Axx for PDO mapping, and
   `network.send_message` / `network.subscribe` for the vendor-specific Elmo
   binary interpreter (non-standard, rides on TPDO2/RPDO2 COB-IDs).
+
+  Pure CAN transport + Elmo interpreter primitives — takes node IDs (ints),
+  knows nothing about robot topology. Axis-level concepts live in
+  :class:`KX2ArmBackend`.
   """
 
   def __init__(
@@ -82,6 +217,10 @@ class KX2Driver(Driver):
     if has_servo_gripper:
       self.node_id_list.append(6)
 
+    # Motion axes = shoulder/Z/elbow/wrist. Driver only knows node IDs;
+    # axis-level names live in the backend's KX2ArmBackend.Axis enum.
+    self.motion_node_ids: List[int] = [1, 2, 3, 4]
+
     self._network: Optional[canopen.Network] = None
     self._nodes: Dict[int, canopen.RemoteNode] = {}
     self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -94,7 +233,6 @@ class KX2Driver(Driver):
 
     self._pvt_mode: bool = False
     self.EmcyMoveErrorReceived: bool = False
-    self.grp_id: int = 0
 
   # --- lifecycle -----------------------------------------------------------
 
@@ -166,33 +304,33 @@ class KX2Driver(Driver):
         TPDO.TPDO4, node_id, [TPDOMappedObject.DigitalInputs], TPDOTrigger.DigitalInputEvent
       )
 
-    for axis in MOTION_AXES:
+    for nid in self.motion_node_ids:
       await self._can_sdo_download_elmo_object(
-        int(axis), 24768, 0, "-1", ElmoObjectDataType.INTEGER16
+        nid, 24768, 0, "-1", ElmoObjectDataType.INTEGER16
       )
       await self._can_sdo_download_elmo_object(
-        int(axis), 24772, 2, "16", ElmoObjectDataType.UNSIGNED32
+        nid, 24772, 2, "16", ElmoObjectDataType.UNSIGNED32
       )
       await self._can_sdo_download_elmo_object(
-        int(axis), 24772, 3, "0", ElmoObjectDataType.UNSIGNED8
+        nid, 24772, 3, "0", ElmoObjectDataType.UNSIGNED8
       )
       await self._can_sdo_download_elmo_object(
-        int(axis), 24772, 5, "8", ElmoObjectDataType.UNSIGNED8
+        nid, 24772, 5, "8", ElmoObjectDataType.UNSIGNED8
       )
       await self._can_sdo_download_elmo_object(
-        int(axis), 24770, 2, "-3", ElmoObjectDataType.INTEGER8
+        nid, 24770, 2, "-3", ElmoObjectDataType.INTEGER8
       )
       await self._can_sdo_download_elmo_object(
-        int(axis), 24669, 0, "1", ElmoObjectDataType.INTEGER16
+        nid, 24669, 0, "1", ElmoObjectDataType.INTEGER16
       )
 
-    for axis in MOTION_AXES:
+    for nid in self.motion_node_ids:
       await self._rpdo_map(
-        RPDO.RPDO1, int(axis), [RPDOMappedObject.ControlWord],
+        RPDO.RPDO1, nid, [RPDOMappedObject.ControlWord],
         PDOTransmissionType.SynchronousCyclic,
       )
       await self._rpdo_map(
-        RPDO.RPDO3, int(axis),
+        RPDO.RPDO3, nid,
         [RPDOMappedObject.TargetPositionIP, RPDOMappedObject.TargetVelocityIP],
         PDOTransmissionType.EventDrivenDev,
       )
@@ -459,7 +597,7 @@ class KX2Driver(Driver):
 
     # -- dispatch: single node vs. group --
     target_nodes = (
-      [int(a) for a in MOTION_AXES] if node_id == _GROUP_NODE_ID else [node_id]
+      list(self.motion_node_ids) if node_id == _GROUP_NODE_ID else [node_id]
     )
 
     futures: List[asyncio.Future] = []
@@ -575,85 +713,9 @@ class KX2Driver(Driver):
     if sync:
       await self._can_sync()
 
-  # --- high-level motor command dispatch ----------------------------------
-
-  _OS_INTERPRETER_CMDS = {"VR", "CD", "LS", "DL", "DF", "BH"}
-  _NO_QUERY_CMDS = {
-    "BG", "CP", "EI", "EO", "HP", "HX", "KL", "KR",
-    "LD", "MI", "PB", "RS", "SV", "XC##",
-  }
-
-  async def motor_send_command(
-    self,
-    node_id: int,
-    motor_command: str,
-    index: int,
-    value: str = "",
-    val_type: ValType = ValType.Int,
-    *,
-    low_priority: bool = False,
-  ) -> str:
-    """Send an Elmo motor command, auto-routing between the OS and binary interpreters.
-
-    Classifies by command name to decide which interpreter to use, and by
-    whether a value was given + whether it's a no-reply command to pick
-    `ValQuery` / `ValSet` / `Execute`. Returns the drive's response string
-    for queries; empty string otherwise.
-    """
-    if isinstance(node_id, KX2Axis):
-      node_id = int(node_id)
-    logger.debug(
-      "motor_send_command node=%d cmd=%s[%d] value=%r val_type=%s",
-      node_id, motor_command, index, value, val_type,
-    )
-
-    cmd_u = motor_command.upper()
-    has_xc = "XC##" in cmd_u
-    has_xq = "XQ##" in cmd_u
-    use_os = (cmd_u in self._OS_INTERPRETER_CMDS) or has_xc or has_xq
-
-    if value == "":
-      if (cmd_u in self._NO_QUERY_CMDS) or has_xq:
-        cmd_type = CmdType.Execute
-      else:
-        cmd_type = CmdType.ValQuery
-    else:
-      cmd_type = CmdType.ValSet
-
-    if use_os:
-      reply = await self._os_interpreter(
-        node_id=node_id, cmd=motor_command, query=not (has_xc or has_xq)
-      )
-      return reply if (cmd_type == CmdType.ValQuery and reply is not None) else ""
-
-    reply = await self._binary_interpreter(
-      node_id=node_id,
-      cmd=motor_command,
-      cmd_index=int(index),
-      cmd_type=cmd_type,
-      value=value,
-      val_type=val_type,
-      low_priority=low_priority,
-    )
-    return reply if cmd_type == CmdType.ValQuery else ""
-
-  async def get_estop_state(self) -> bool:
-    """Return True if the arm is in estop, False otherwise.
-
-    Reads the shoulder drive's SR (status register) via the binary
-    interpreter. Bits 14/15 encode the stop/safety state.
-    """
-    r = int(await self.motor_send_command(
-      node_id=int(KX2Axis.SHOULDER),
-      motor_command="SR",
-      index=1,
-      value="",
-    ))
-    if r != 8438016:
-      logger.warning("get_estop_state: SR register unexpected value %d (expected 8438016)", r)
-    b14 = (r & 0x4000) == 0x4000
-    b15 = (r & 0x8000) == 0x8000
-    return (not b14) and (not b15)
+  async def request_drive_version(self, node_id: int) -> str:
+    """Query Elmo drive firmware version (VR) via the OS interpreter."""
+    return await self._os_interpreter(int(node_id), "VR", query=True)
 
   # --- DS402 / motor control ----------------------------------------------
 
@@ -672,40 +734,19 @@ class KX2Driver(Driver):
   async def _motor_set_move_direction(
     self, node_id: int, direction: JointMoveDirection
   ) -> None:
-    val_str = "1"
-    if direction == JointMoveDirection.Clockwise:
+    # 0=Normal, 1=Clockwise, 2=Counterclockwise, 3=ShortestWay.
+    dir_int = int(direction)
+    if dir_int == 1:
       val_str = "65"
-    elif direction == JointMoveDirection.Counterclockwise:
+    elif dir_int == 2:
       val_str = "129"
-    elif direction == JointMoveDirection.ShortestWay:
+    elif dir_int == 3:
       val_str = "193"
+    else:
+      val_str = "1"
     await self._can_sdo_download_elmo_object(
       node_id, 24818, 0, val_str, ElmoObjectDataType.UNSIGNED16
     )
-
-  async def _motor_set_homed_status(self, axis: KX2Axis, status: HomeStatus) -> None:
-    val = "0"
-    if status == HomeStatus.Homed:
-      val = "1"
-    elif status == HomeStatus.InitializedWithoutHoming:
-      val = "2"
-    await self._binary_interpreter(int(axis), "UI", 3, CmdType.ValSet, val)
-
-  async def motor_get_homed_status(self, node_id: int) -> HomeStatus:
-    left = await self._binary_interpreter(node_id, "UI", 3, CmdType.ValQuery)
-    if left == 1:
-      return HomeStatus.Homed
-    if left == 2:
-      return HomeStatus.InitializedWithoutHoming
-    return HomeStatus.NotHomed
-
-  async def _motor_reset_encoder_position(self, axis: KX2Axis, position: float) -> None:
-    await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 3, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 4, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 5, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 2, CmdType.ValSet, str(position))
-    await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "1")
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
     ms_val = await self._binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
@@ -723,8 +764,8 @@ class KX2Driver(Driver):
       return False
     return False
 
-  async def motor_get_fault(self, axis: KX2Axis) -> Optional[str]:
-    val = await self._binary_interpreter(int(axis), "MF", 0, CmdType.ValQuery)
+  async def motor_get_fault(self, node_id: int) -> Optional[str]:
+    val = await self._binary_interpreter(int(node_id), "MF", 0, CmdType.ValQuery)
     if val == 0:
       return None
     assert isinstance(val, int)
@@ -770,57 +811,62 @@ class KX2Driver(Driver):
       return f"Unknown fault code: {val} (0x{val:08X})"
     return "  ".join(faults)
 
-  async def motor_enable(self, axis: KX2Axis, state: bool) -> None:
-    if not isinstance(axis, KX2Axis):
-      raise TypeError(f"axis must be KX2Axis, got {type(axis).__name__}")
+  async def motor_enable(self, node_id: int, state: bool, *, use_ds402: bool) -> None:
+    """Enable or disable a single drive.
 
-    # Motion axes use the DS402 controlword sequence over RPDO1; the gripper
-    # (and any non-motion axis) uses the binary-interpreter MO command.
-    use_bi = not (axis in MOTION_AXES or int(axis) == self.grp_id)
+    - ``use_ds402=True``: DS402 controlword sequence over RPDO1 (Fault ->
+      Shutdown -> Switched On -> Op Enabled on enable; reverse on disable).
+      Used for the four motion axes (shoulder/Z/elbow/wrist).
+    - ``use_ds402=False``: vendor binary-interpreter ``MO=1/0``. Used for the
+      rail and the servo gripper.
+
+    Caller picks the path; the driver does not know about robot topology.
+    """
+    node_id = int(node_id)
 
     if state:
       self.EmcyMoveErrorReceived = False
       max_attempts = 5
       for attempt in range(1, max_attempts + 1):
-        if use_bi:
-          await self._binary_interpreter(axis, "MO", 0, CmdType.ValSet, "1")
+        if not use_ds402:
+          await self._binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "1")
         else:
           # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
           # Matches the C# reference (clscanmotor.cs:4495-4509): back-to-back
           # CW writes, a single 100 ms settle at the end, then MO query.
           for cw in (0, 128, 6, 7, 15):
-            await self._control_word_set(node_id=int(axis), value=cw)
+            await self._control_word_set(node_id=node_id, value=cw)
         await asyncio.sleep(0.1)
         left = await self._binary_interpreter(
-          node_id=int(axis), cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
+          node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
         )
         if left == 1:
           break
         logger.warning(
-          "motor_enable attempt %d/%d failed for axis %s (MO=%s); retrying",
-          attempt, max_attempts, axis, left,
+          "motor_enable attempt %d/%d failed for node %d (MO=%s); retrying",
+          attempt, max_attempts, node_id, left,
         )
       else:
-        raise CanError(f"Motor failed to enable (axis = {axis}) after {max_attempts} attempts")
+        raise CanError(f"Motor failed to enable (node_id = {node_id}) after {max_attempts} attempts")
     else:
-      if use_bi:
+      if not use_ds402:
         try:
           await self._binary_interpreter(
-            node_id=int(axis), cmd="MO", cmd_index=0, cmd_type=CmdType.ValSet, value="0"
+            node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValSet, value="0"
           )
         except Exception:
           pass
       else:
         # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
         # Matches C# (clscanmotor.cs:4540-4543) — back-to-back, no inter-CW sleep.
-        await self._control_word_set(node_id=int(axis), value=7)
-        await self._control_word_set(node_id=int(axis), value=6)
+        await self._control_word_set(node_id=node_id, value=7)
+        await self._control_word_set(node_id=node_id, value=6)
       await asyncio.sleep(0.1)
       left = await self._binary_interpreter(
-        node_id=int(axis), cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
+        node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
       )
       if left != 0:
-        raise RuntimeError(f"Motor failed to disable (axis = {axis})")
+        raise RuntimeError(f"Motor failed to disable (node_id = {node_id})")
 
   # --- motion primitives --------------------------------------------------
 
@@ -828,100 +874,101 @@ class KX2Driver(Driver):
     """Enable/disable PVT mode on all motion axes via standard SDO writes."""
     if enable:
       if not self._pvt_mode:
-        for axis in MOTION_AXES:
+        for nid in self.motion_node_ids:
           # 0x60C4 sub 6 = 0 (disable interpolation buffer)
-          await self._can_sdo_download(int(axis), 0x60, 0xC4, 0x06, [0])
+          await self._can_sdo_download(nid, 0x60, 0xC4, 0x06, [0])
           # 0x6060 = 7 (interpolated position mode)
-          await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [7])
+          await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [7])
         self._pvt_mode = True
       else:
-        for axis in MOTION_AXES:
-          await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
+        for nid in self.motion_node_ids:
+          await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [1])
     else:
       if self._pvt_mode:
-        for axis in MOTION_AXES:
+        for nid in self.motion_node_ids:
           # 0x6060 = 1 (profile position mode)
-          await self._can_sdo_download(int(axis), 0x60, 0x60, 0x00, [1])
+          await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [1])
         self._pvt_mode = False
 
   async def _wait_for_moves_done(
-    self, axes: List[KX2Axis], timeout: float
+    self, node_ids: List[int], timeout: float
   ) -> None:
     # Poll MS every 30ms after a 50ms warm-up. The warm-up avoids reading
     # MS=0 in the window between CW=63 and motion actually starting.
     assert self._loop is not None
 
-    async def _poll_axis(axis: KX2Axis) -> None:
+    async def _poll_axis(nid: int) -> None:
       deadline = self._loop.time() + timeout
       await asyncio.sleep(0.05)
       while self._loop.time() < deadline:
         try:
-          if await self.motor_check_if_move_done(int(axis)):
+          if await self.motor_check_if_move_done(int(nid)):
             return
         except CanError:
           pass
         await asyncio.sleep(0.03)
       # Final authoritative check; propagates CanError / motor-fault.
-      if not await self.motor_check_if_move_done(int(axis)):
-        raise CanError(f"Axis {axis} move did not complete within {timeout}s")
+      if not await self.motor_check_if_move_done(int(nid)):
+        raise CanError(f"Node {nid} move did not complete within {timeout}s")
 
-    await asyncio.gather(*(_poll_axis(a) for a in axes))
+    await asyncio.gather(*(_poll_axis(n) for n in node_ids))
 
   async def _motors_move_start(
-    self, axes: List[KX2Axis], *, relative: bool = False
+    self, node_ids: List[int], *, relative: bool = False
   ) -> None:
     relative_bit = 0x40 if relative else 0
-    for i, nid in enumerate(axes):
-      last = i == (len(axes) - 1)
+    for i, nid in enumerate(node_ids):
+      last = i == (len(node_ids) - 1)
       await self._control_word_set(int(nid), 47 + relative_bit, sync=last)
-    for i, nid in enumerate(axes):
-      last = i == (len(axes) - 1)
+    for i, nid in enumerate(node_ids):
+      last = i == (len(node_ids) - 1)
       await self._control_word_set(int(nid), 47 + 0x10 + relative_bit, sync=last)
 
   async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
     await self._pvt_select_mode(False)
 
     for move in plan.moves:
-      await self._motor_set_move_direction(move.axis.value, move.direction)
+      nid = int(move.node_id)
+      await self._motor_set_move_direction(nid, move.direction)
       # 0x607A = Target Position (24698 decimal)
       await self._can_sdo_download_elmo_object(
-        move.axis.value, 24698, 0, str(int(move.position)), ElmoObjectDataType.INTEGER32,
+        nid, 24698, 0, str(int(move.position)), ElmoObjectDataType.INTEGER32,
       )
       # 0x6081 = Profile Velocity (24705 decimal)
       await self._can_sdo_download_elmo_object(
-        move.axis.value, 24705, 0, str(int(move.velocity)), ElmoObjectDataType.UNSIGNED32,
+        nid, 24705, 0, str(int(move.velocity)), ElmoObjectDataType.UNSIGNED32,
       )
       acc = max(int(move.acceleration), 100)
       # 0x6083 = Profile Acceleration (24707 decimal)
       await self._can_sdo_download_elmo_object(
-        move.axis.value, 24707, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
+        nid, 24707, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
       )
       # 0x6084 = Profile Deceleration (24708 decimal)
       await self._can_sdo_download_elmo_object(
-        move.axis.value, 24708, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
+        nid, 24708, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
       )
 
-    axes = [move.axis for move in plan.moves]
-    await self._motors_move_start(axes)
-    await self._wait_for_moves_done(axes, timeout=plan.move_time + 2)
+    node_ids = [int(move.node_id) for move in plan.moves]
+    await self._motors_move_start(node_ids)
+    await self._wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
   async def _user_program_run(
     self,
-    axis: KX2Axis,
+    node_id: int,
     user_function: str,
     params=None,
     timeout_sec: int = 0,
     wait_until_done: bool = False,
   ) -> int:
-    if not isinstance(axis, int):
-      raise ValueError("axis must be int")
-    if axis < 0 or axis > 255:
-      raise ValueError("axis must be in [0, 255]")
-    node_id = int(axis)
+    if not isinstance(node_id, int):
+      raise ValueError("node_id must be int")
+    if node_id < 0 or node_id > 255:
+      raise ValueError("node_id must be in [0, 255]")
+    node_id = int(node_id)
 
     ps = int(await self._binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
     if ps == -2:
-      raise CanError(f"Axis {axis}: controller reported PS=-2 (not ready / unavailable)")
+      raise CanError(f"Node {node_id}: controller reported PS=-2 (not ready / unavailable)")
 
     if ps != -1:
       await self._binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="0")
@@ -932,7 +979,7 @@ class KX2Driver(Driver):
           break
         await asyncio.sleep(0.01)
       else:
-        raise CanError(f"Axis {axis}: did not reach idle state (PS=-1) within 3s (last PS={ps})")
+        raise CanError(f"Node {node_id}: did not reach idle state (PS=-1) within 3s (last PS={ps})")
 
     arg_str = ""
     if params:
@@ -964,150 +1011,16 @@ class KX2Driver(Driver):
 
       if ui1 != 0:
         raise CanError(
-          f"Axis {axis}: user program ended with UI[1]={ui1} (expected 0), "
+          f"Node {node_id}: user program ended with UI[1]={ui1} (expected 0), "
           f"last_line={last_line_completed}"
         )
       if ps == 1 and ui1 == 1:
         raise CanError(
-          f"Axis {axis}: timeout waiting for '{user_function}' after {timeout_sec}s, "
+          f"Node {node_id}: timeout waiting for '{user_function}' after {timeout_sec}s, "
           f"last_line={last_line_completed}"
         )
 
     return 0
-
-  async def _motor_hard_stop_search(
-    self,
-    axis: KX2Axis,
-    srch_vel: int,
-    srch_acc: int,
-    max_pe: int,
-    hs_pe: int,
-    timeout: float,
-  ) -> None:
-    await self._binary_interpreter(int(axis), "ER", 3, CmdType.ValSet, str(max_pe * 10))
-    await self._binary_interpreter(int(axis), "AC", 0, CmdType.ValSet, str(srch_acc))
-    await self._binary_interpreter(int(axis), "DC", 0, CmdType.ValSet, str(srch_acc))
-    for i in [3, 4, 5, 2]:
-      await self._binary_interpreter(int(axis), "HM", i, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "JV", 0, CmdType.ValSet, str(srch_vel))
-
-    try:
-      params = [str(int(hs_pe)), str(int(timeout * 1000))]
-      last_line = await self._user_program_run(axis, "Home", params, int(timeout), True)
-      if last_line in [1, 2, 3]:
-        raise RuntimeError(f"Homing Script Error {34 + last_line}")
-
-      curr_pos = await self.motor_get_current_position(int(axis))
-      await self._binary_interpreter(int(axis), "PA", 0, CmdType.ValSet, str(curr_pos))
-      await self._binary_interpreter(int(axis), "SP", 0, CmdType.ValSet, str(srch_vel))
-      await self._binary_interpreter(int(axis), "AC", 0, CmdType.ValSet, str(srch_acc))
-      await self._binary_interpreter(int(axis), "DC", 0, CmdType.ValSet, str(srch_acc))
-    finally:
-      await asyncio.sleep(0.3)
-      await self._binary_interpreter(int(axis), "BG", 0, CmdType.Execute, value="0")
-      await asyncio.sleep(0.3)
-      await self._binary_interpreter(int(axis), "ER", 3, CmdType.ValSet, str(int(max_pe)))
-
-  async def _motor_index_search(
-    self,
-    axis: KX2Axis,
-    srch_vel: int,
-    srch_acc: int,
-    positive_direction: bool,
-    timeout: float,
-  ) -> Tuple[int, int]:
-    assert self._loop is not None
-    await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "0")
-
-    rev = await self._binary_interpreter(int(axis), "CA", 18, CmdType.ValQuery)
-    one_revolution = int(float(rev))
-    if not positive_direction:
-      one_revolution *= -1
-
-    await self._binary_interpreter(int(axis), "PR", 1, CmdType.ValSet, str(one_revolution))
-    await self._binary_interpreter(int(axis), "SP", 0, CmdType.ValSet, str(srch_vel))
-    await self._binary_interpreter(int(axis), "AC", 0, CmdType.ValSet, str(srch_acc))
-    await self._binary_interpreter(int(axis), "DC", 0, CmdType.ValSet, str(srch_acc))
-
-    await self._binary_interpreter(int(axis), "HM", 3, CmdType.ValSet, "3")  # index only
-    await self._binary_interpreter(int(axis), "HM", 4, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 5, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 2, CmdType.ValSet, "0")
-    await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "1")  # arm
-
-    await self._binary_interpreter(int(axis), "BG", 0, CmdType.Execute)
-    await self._wait_for_moves_done([axis], timeout)
-
-    left = await self._binary_interpreter(int(axis), "HM", 1, CmdType.ValQuery)
-    if left != 0:
-      raise RuntimeError("Homing Failure: Failed to finish index pulse search.")
-
-    cap = await self._binary_interpreter(int(axis), "HM", 7, CmdType.ValQuery)
-    captured_position = int(float(cap))
-    return one_revolution, captured_position
-
-  async def home_motor(
-    self,
-    axis: KX2Axis,
-    hs_offset: int,
-    ind_offset: int,
-    home_pos: int,
-    srch_vel: int,
-    srch_acc: int,
-    max_pe: int,
-    hs_pe: int,
-    offset_vel: int,
-    offset_acc: int,
-    timeout: float,
-  ) -> None:
-    left = await self._binary_interpreter(int(axis), "CA", 41, CmdType.ValQuery)
-    if left == 24:
-      raise RuntimeError("Error 43")
-
-    try:
-      await self._motor_hard_stop_search(axis, srch_vel, srch_acc, max_pe, hs_pe, timeout)
-    except Exception as e:
-      fault = await self.motor_get_fault(axis)
-      if fault is not None:
-        raise RuntimeError(fault)
-      raise e
-
-    await self.motor_enable(axis=axis, state=True)
-
-    await self.motors_move_absolute_execute(
-      plan=MotorsMovePlan(
-        moves=[
-          MotorMoveParam(
-            axis=KX2Axis(axis),
-            position=hs_offset,
-            velocity=offset_vel,
-            acceleration=offset_acc,
-            relative=False,
-            direction=JointMoveDirection.ShortestWay,
-          )
-        ],
-      )
-    )
-
-    is_positive = hs_offset > 0
-    await self._motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
-
-    await self.motors_move_absolute_execute(
-      plan=MotorsMovePlan(
-        moves=[
-          MotorMoveParam(
-            axis=KX2Axis(axis),
-            position=ind_offset,
-            velocity=offset_vel,
-            acceleration=offset_acc,
-            relative=False,
-            direction=JointMoveDirection.ShortestWay,
-          )
-        ]
-      )
-    )
-    await self._motor_reset_encoder_position(axis, home_pos)
-    await self._motor_set_homed_status(axis, HomeStatus.Homed)
 
   # --- I/O -----------------------------------------------------------------
 
