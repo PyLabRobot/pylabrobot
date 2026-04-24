@@ -226,7 +226,7 @@ class KX2Driver(Driver):
   # --- lifecycle -----------------------------------------------------------
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
-    """Bring up the CAN bus, reset & start all nodes, discover them."""
+    """Bring up the CAN bus, reset/start nodes, and configure PDO mapping."""
     if self._network is not None:
       await self.stop()
 
@@ -263,27 +263,10 @@ class KX2Driver(Driver):
 
     logger.info("canopen: connected, nodes=%s", discovered)
 
-  async def stop(self) -> None:
-    if self._network is not None:
-      self._network.disconnect()
-      self._network = None
-      self._nodes = {}
-
-  # --- drive init (called by KX2ArmBackend._on_setup after setup()) --------
-
-  async def connect_part_two(self) -> None:
-    """Configure PDO mapping + Elmo DS402 parameters after the CAN bus is up.
-
-    Unmap TPDO1, map TPDO3 (StatusWord, triggered on MotionComplete) and
-    TPDO4 (DigitalInputs, triggered on edge). TPDO3 is kept mapped to match
-    the C# reference config, but move completion is detected by polling MS
-    (the MotionComplete event is unreliable on short moves). Then program
-    Elmo vendor objects that set interpolation config, and finally map
-    RPDO1 (ControlWord) and RPDO3 (interpolated target position+velocity)
-    per motion axis.
-    """
-    assert self._network is not None
-
+    # Unmap TPDO1, map TPDO3 (StatusWord, triggered on MotionComplete) and
+    # TPDO4 (DigitalInputs, triggered on edge). TPDO3 is kept mapped to match
+    # the C# reference config, but move completion is detected by polling MS
+    # (the MotionComplete event is unreliable on short moves).
     for node_id in self.node_id_list:
       await self._can_tpdo_unmap(TPDO.TPDO1, node_id)
       await self._tpdo_map(
@@ -293,6 +276,7 @@ class KX2Driver(Driver):
         TPDO.TPDO4, node_id, [TPDOMappedObject.DigitalInputs], TPDOTrigger.DigitalInputEvent
       )
 
+    # Elmo vendor objects: interpolation config for PVT mode.
     for nid in self.motion_node_ids:
       await self._can_sdo_download_elmo_object(nid, 24768, 0, -1, ElmoObjectDataType.INTEGER16)
       await self._can_sdo_download_elmo_object(nid, 24772, 2, 16, ElmoObjectDataType.UNSIGNED32)
@@ -301,6 +285,7 @@ class KX2Driver(Driver):
       await self._can_sdo_download_elmo_object(nid, 24770, 2, -3, ElmoObjectDataType.INTEGER8)
       await self._can_sdo_download_elmo_object(nid, 24669, 0, 1, ElmoObjectDataType.INTEGER16)
 
+    # RPDO1 = ControlWord (for DS402 enable), RPDO3 = interpolated target.
     for nid in self.motion_node_ids:
       await self._rpdo_map(
         RPDO.RPDO1, nid, [RPDOMappedObject.ControlWord],
@@ -314,6 +299,12 @@ class KX2Driver(Driver):
 
     self._pvt_mode = True
     await self._pvt_select_mode(False)
+
+  async def stop(self) -> None:
+    if self._network is not None:
+      self._network.disconnect()
+      self._network = None
+      self._nodes = {}
 
   # --- PDO configuration (pure SDO writes; no library-PDO machinery) ------
 
@@ -942,7 +933,7 @@ class KX2Driver(Driver):
           f"last_line={last_line_completed}"
         )
 
-    return last_line_completed
+    return 0
 
   # --- I/O -----------------------------------------------------------------
 

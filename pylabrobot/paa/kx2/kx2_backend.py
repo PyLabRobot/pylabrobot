@@ -92,17 +92,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self.node_id_list = [1, 2, 3, 4, 6]
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
-    # Driver has already brought CAN up (connect + node discovery) via
-    # Device.setup(). Now read per-drive parameters, finish CANopen mapping,
-    # enable motion axes, and initialize the servo gripper.
+    # Driver has already brought CAN up (connect + node discovery + PDO
+    # mapping) via Device.setup(). Now read per-drive parameters, enable
+    # motion axes, and initialize the servo gripper.
     await self.drive_get_parameters(self.driver.node_id_list)
-    await self.driver.connect_part_two()
 
     await asyncio.sleep(2)
-
-    for axis in MOTION_AXES:
-      if self.unlimited_travel_ax[axis]:
-        self.g_joint_move_direction[axis] = JointMoveDirection.ShortestWay
 
     for axis in MOTION_AXES:
       try:
@@ -565,6 +560,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         self.unlimited_travel_ax[axis] = False
       elif (xm1 > vl3) and (xm2 < vh3):
         self.unlimited_travel_ax[axis] = True
+        if axis in MOTION_AXES:
+          self.g_joint_move_direction[axis] = JointMoveDirection.ShortestWay
       else:
         raise CanError(
           f"Invalid travel limits or modulo settings for axis {axis}. "
