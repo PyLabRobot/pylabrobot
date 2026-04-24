@@ -182,20 +182,23 @@ class MicronicIOMonitorDriver(Driver):
     for attempt in range(3):
       try:
         with request.urlopen(req, timeout=self.timeout) as response:
-          return response.read()
+          body: bytes = response.read()
+          return body
       except error.HTTPError as exc:
         body = exc.read()
-        raise self._as_micronic_error(body, fallback=f"HTTP {exc.code} for {method} {path}") from exc
+        raise self._as_micronic_error(
+          body, fallback=f"HTTP {exc.code} for {method} {path}"
+        ) from exc
       except error.URLError as exc:
         if self._is_retryable_url_error(exc) and attempt < 2:
           time.sleep(0.25)
           continue
-        raise MicronicError(f"Failed to reach Micronic server at {self.base_url}: {exc.reason}") from exc
+        raise MicronicError(
+          f"Failed to reach Micronic server at {self.base_url}: {exc.reason}"
+        ) from exc
       except (ConnectionResetError, http.client.RemoteDisconnected, OSError) as exc:
         if attempt == 2:
-          raise MicronicError(
-            f"Micronic connection failed for {method} {path}: {exc}"
-          ) from exc
+          raise MicronicError(f"Micronic connection failed for {method} {path}: {exc}") from exc
         time.sleep(0.25)
 
     raise MicronicError(f"Micronic request failed for {method} {path}.")
