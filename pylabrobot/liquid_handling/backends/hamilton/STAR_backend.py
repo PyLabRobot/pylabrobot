@@ -1371,7 +1371,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._unsafe = UnSafe(self)
 
     self._iswap_version: Optional[str] = None  # loaded lazily
-    self._pip_channel_information: List[PipChannelInformation] = []
+    self._pip_channel_information: Optional[List[PipChannelInformation]] = None
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
     self._x_grouping_tolerance_mm: float = 0.1
@@ -1545,6 +1545,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       channel: 0-indexed channel number.
     """
+    pip_fw = self._parse_firmware_version_datetime(await self.request_pip_channel_version(channel))
+    if pip_fw.year <= 2016:
+      raise RuntimeError(
+        f"VW (pip channel configuration) is not supported on firmware from 2016 or older "
+        f"(channel {channel} firmware date: {pip_fw.isoformat()})."
+      )
     resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
     hw_tokens = resp.split("vw")[-1].strip().split()
     return PipChannelInformation(
@@ -1729,10 +1735,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
-      # Cache per-channel hardware configuration for version-specific behavior
-      self._pip_channel_information = [
-        await self._pip_channel_request_configuration(ch) for ch in range(self.num_channels)
-      ]
+      # VW is not supported on firmware from 2016 or older (see issue #1004). Skip the
+      # query there and leave the cache as None; otherwise populate it for every channel.
+      pip_fw = self._parse_firmware_version_datetime(await self.request_pip_channel_version(0))
+      if pip_fw.year <= 2016:
+        self._pip_channel_information = None
+      else:
+        self._pip_channel_information = [
+          await self._pip_channel_request_configuration(ch) for ch in range(self.num_channels)
+        ]
 
     async def set_up_autoload():
       if self.machine_conf.auto_load_installed and not skip_autoload:
