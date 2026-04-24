@@ -546,7 +546,7 @@ class KX2Driver(Driver):
     if fut is not None and not fut.done():
       fut.set_result(value_str)
 
-  async def _binary_interpreter(
+  async def binary_interpreter(
     self,
     node_id: int,
     cmd: str,
@@ -720,15 +720,15 @@ class KX2Driver(Driver):
   # --- DS402 / motor control ----------------------------------------------
 
   async def motor_emergency_stop(self, node_id: int) -> None:
-    await self._binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "0")
+    await self.binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "0")
 
   async def motor_get_current_position(self, node_id: int, pu: bool = False) -> int:
     cmd = "PU" if pu else "PX"
-    val_str = await self._binary_interpreter(int(node_id), cmd, 0, CmdType.ValQuery)
+    val_str = await self.binary_interpreter(int(node_id), cmd, 0, CmdType.ValQuery)
     return int(round(float(val_str)))
 
   async def motor_get_motion_status(self, node_id: int) -> int:
-    val = await self._binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
+    val = await self.binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
     return int(round(float(val)))
 
   async def _motor_set_move_direction(
@@ -749,11 +749,11 @@ class KX2Driver(Driver):
     )
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
-    ms_val = await self._binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
+    ms_val = await self.binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
     if ms_val == 0:
       return True
     if ms_val == 1:
-      mo_val = await self._binary_interpreter(node_id, "MO", 0, CmdType.ValQuery)
+      mo_val = await self.binary_interpreter(node_id, "MO", 0, CmdType.ValQuery)
       if mo_val == 1:
         return True
       fault = await self.motor_get_fault(node_id)
@@ -765,7 +765,7 @@ class KX2Driver(Driver):
     return False
 
   async def motor_get_fault(self, node_id: int) -> Optional[str]:
-    val = await self._binary_interpreter(int(node_id), "MF", 0, CmdType.ValQuery)
+    val = await self.binary_interpreter(int(node_id), "MF", 0, CmdType.ValQuery)
     if val == 0:
       return None
     assert isinstance(val, int)
@@ -829,7 +829,7 @@ class KX2Driver(Driver):
       max_attempts = 5
       for attempt in range(1, max_attempts + 1):
         if not use_ds402:
-          await self._binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "1")
+          await self.binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "1")
         else:
           # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
           # Matches the C# reference (clscanmotor.cs:4495-4509): back-to-back
@@ -837,7 +837,7 @@ class KX2Driver(Driver):
           for cw in (0, 128, 6, 7, 15):
             await self._control_word_set(node_id=node_id, value=cw)
         await asyncio.sleep(0.1)
-        left = await self._binary_interpreter(
+        left = await self.binary_interpreter(
           node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
         )
         if left == 1:
@@ -851,7 +851,7 @@ class KX2Driver(Driver):
     else:
       if not use_ds402:
         try:
-          await self._binary_interpreter(
+          await self.binary_interpreter(
             node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValSet, value="0"
           )
         except Exception:
@@ -862,7 +862,7 @@ class KX2Driver(Driver):
         await self._control_word_set(node_id=node_id, value=7)
         await self._control_word_set(node_id=node_id, value=6)
       await asyncio.sleep(0.1)
-      left = await self._binary_interpreter(
+      left = await self.binary_interpreter(
         node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
       )
       if left != 0:
@@ -890,7 +890,7 @@ class KX2Driver(Driver):
           await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [1])
         self._pvt_mode = False
 
-  async def _wait_for_moves_done(
+  async def wait_for_moves_done(
     self, node_ids: List[int], timeout: float
   ) -> None:
     # Poll MS every 30ms after a 50ms warm-up. The warm-up avoids reading
@@ -950,9 +950,9 @@ class KX2Driver(Driver):
 
     node_ids = [int(move.node_id) for move in plan.moves]
     await self._motors_move_start(node_ids)
-    await self._wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
+    await self.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
-  async def _user_program_run(
+  async def user_program_run(
     self,
     node_id: int,
     user_function: str,
@@ -966,15 +966,15 @@ class KX2Driver(Driver):
       raise ValueError("node_id must be in [0, 255]")
     node_id = int(node_id)
 
-    ps = int(await self._binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+    ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
     if ps == -2:
       raise CanError(f"Node {node_id}: controller reported PS=-2 (not ready / unavailable)")
 
     if ps != -1:
-      await self._binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="0")
+      await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="0")
       t0 = time.monotonic()
       while (time.monotonic() - t0) < 3.0:
-        ps = int(await self._binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+        ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
         if ps == -1:
           break
         await asyncio.sleep(0.01)
@@ -987,10 +987,10 @@ class KX2Driver(Driver):
       if parts:
         arg_str = f"({','.join(parts)})"
 
-    await self._binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="1")
+    await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="1")
 
     cmd = f"XQ##{user_function}{arg_str}"
-    logger.debug("_user_program_run: %s", cmd)
+    logger.debug("user_program_run: %s", cmd)
     await self._os_interpreter(node_id, cmd, query=False)
 
     last_line_completed = 0
@@ -999,11 +999,11 @@ class KX2Driver(Driver):
       ps = 1
       ui1 = 1
       while ps == 1 and ui1 == 1 and (time.monotonic() - t0) < float(timeout_sec):
-        ps = int(await self._binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
-        ui1 = int(await self._binary_interpreter(node_id, "UI", 1, CmdType.ValQuery))
+        ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+        ui1 = int(await self.binary_interpreter(node_id, "UI", 1, CmdType.ValQuery))
         await asyncio.sleep(0.01)
 
-      expr_raw = await self._binary_interpreter(node_id, "UI", 2, CmdType.ValQuery)
+      expr_raw = await self.binary_interpreter(node_id, "UI", 2, CmdType.ValQuery)
       try:
         last_line_completed = int(str(expr_raw).strip())
       except Exception:
@@ -1025,15 +1025,15 @@ class KX2Driver(Driver):
   # --- I/O -----------------------------------------------------------------
 
   async def read_input(self, node_id: int, input_num: int) -> bool:
-    left = await self._binary_interpreter(node_id, "IB", input_num, CmdType.ValQuery)
+    left = await self.binary_interpreter(node_id, "IB", input_num, CmdType.ValQuery)
     return left == 1
 
   async def _read_output(self, node_id: int, output_num: int) -> bool:
-    expression = await self._binary_interpreter(node_id, "OP", 0, CmdType.ValQuery)
+    expression = await self.binary_interpreter(node_id, "OP", 0, CmdType.ValQuery)
     val = int(expression)
     mask = 1 << (output_num - 1)
     return (val & mask) == mask
 
   async def _set_output(self, node_id: int, output_num: int, state: bool) -> Union[str, float]:
     val = "1" if state else "0"
-    return await self._binary_interpreter(node_id, "OB", output_num, CmdType.ValSet, val)
+    return await self.binary_interpreter(node_id, "OB", output_num, CmdType.ValSet, val)
