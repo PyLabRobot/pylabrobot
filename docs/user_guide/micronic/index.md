@@ -12,6 +12,7 @@ Rack reading:
 
 - `GET /state`
 - `POST /scanbox`
+- `POST /scantube` for rack-barcode-only scans
 - `GET /scanresult`
 - `GET /rackid`
 - `GET /layoutlist`
@@ -38,6 +39,9 @@ try:
   rack_result = await reader.rack_reading.scan_rack(timeout=60.0, poll_interval=1.0)
   print(rack_result.rack_id)
   print(rack_result.entries[0].position, rack_result.entries[0].tube_id)
+
+  rack_id = await reader.rack_reading.scan_rack_id(timeout=30.0, poll_interval=1.0)
+  print(rack_id)
 
   barcode = await reader.barcode_scanning.scan()
   print(barcode.data)

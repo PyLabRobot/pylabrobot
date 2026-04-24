@@ -43,6 +43,10 @@ class MicronicRackReadingBackend(RackReaderBackend):
   async def trigger_rack_scan(self) -> None:
     await self._request("POST", "/scanbox", data=b"", expect_json=False)
 
+  async def trigger_rack_id_scan(self) -> None:
+    # Micronic exposes the rack-barcode-only trigger on a separate endpoint from full rack scans.
+    await self._request("POST", "/scantube", data=b"", expect_json=False)
+
   async def get_scan_result(self) -> RackScanResult:
     payload = await self._request_json("GET", "/scanresult")
     return self._parse_scan_result(payload)

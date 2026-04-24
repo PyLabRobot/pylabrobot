@@ -25,6 +25,10 @@ class RackReader(Capability):
     await self.backend.trigger_rack_scan()
 
   @need_capability_ready
+  async def trigger_rack_id_scan(self) -> None:
+    await self.backend.trigger_rack_id_scan()
+
+  @need_capability_ready
   async def get_scan_result(self) -> RackScanResult:
     return await self.backend.get_scan_result()
 
@@ -61,6 +65,27 @@ class RackReader(Capability):
         )
       await asyncio.sleep(poll_interval)
 
+  async def _wait_for_fresh_data_ready(
+    self,
+    initial_state: RackReaderState,
+    timeout: float,
+    poll_interval: float,
+  ) -> None:
+    require_state_change = initial_state == RackReaderState.DATAREADY
+    deadline = time.monotonic() + timeout
+    while True:
+      state = await self.backend.get_state()
+      if state != RackReaderState.DATAREADY:
+        require_state_change = False
+      elif not require_state_change:
+        return
+
+      if time.monotonic() >= deadline:
+        raise RackReaderTimeoutError(
+          f"Timed out waiting for rack reader to reach {RackReaderState.DATAREADY.value}."
+        )
+      await asyncio.sleep(poll_interval)
+
   @need_capability_ready
   async def wait_for_data_ready(
     self,
@@ -85,20 +110,26 @@ class RackReader(Capability):
 
     initial_state = await self.backend.get_state()
     await self.backend.trigger_rack_scan()
-
-    require_state_change = initial_state == RackReaderState.DATAREADY
-    deadline = time.monotonic() + timeout
-    while True:
-      state = await self.backend.get_state()
-      if state != RackReaderState.DATAREADY:
-        require_state_change = False
-      elif not require_state_change:
-        break
-
-      if time.monotonic() >= deadline:
-        raise RackReaderTimeoutError(
-          f"Timed out waiting for rack reader to reach {RackReaderState.DATAREADY.value}."
-        )
-      await asyncio.sleep(poll_interval)
-
+    await self._wait_for_fresh_data_ready(
+      initial_state=initial_state,
+      timeout=timeout,
+      poll_interval=poll_interval,
+    )
     return await self.backend.get_scan_result()
+
+  @need_capability_ready
+  async def scan_rack_id(
+    self,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
+  ) -> str:
+    """Trigger a rack-barcode-only scan and return the completed rack identifier."""
+
+    initial_state = await self.backend.get_state()
+    await self.backend.trigger_rack_id_scan()
+    await self._wait_for_fresh_data_ready(
+      initial_state=initial_state,
+      timeout=timeout,
+      poll_interval=poll_interval,
+    )
+    return await self.backend.get_rack_id()
