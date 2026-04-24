@@ -7,6 +7,7 @@ import time
 from typing import Any, Optional
 from urllib import error, parse, request
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading.standard import RackReaderError
 from pylabrobot.device import Driver
 
@@ -35,7 +36,7 @@ class MicronicHTTPDriver(Driver):
   def base_url(self) -> str:
     return f"http://{self.host}:{self.port}"
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     return None
 
   async def stop(self) -> None:

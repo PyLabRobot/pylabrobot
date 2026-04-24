@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading import (
   LayoutInfo,
   RackReaderBackend,
@@ -21,7 +22,7 @@ class MicronicRackReadingBackend(RackReaderBackend):
     super().__init__()
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.get_state()
 
   async def get_state(self) -> RackReaderState:
