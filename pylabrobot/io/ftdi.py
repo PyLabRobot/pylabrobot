@@ -1,9 +1,10 @@
-import asyncio
 import ctypes
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from io import IOBase
 from typing import Optional, cast
+
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 try:
   import pylibftdi.driver
@@ -25,6 +26,7 @@ except ImportError as e:
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
@@ -82,7 +84,7 @@ class FTDI(IOBase):
 
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
-    self._executor: Optional[ThreadPoolExecutor] = None
+    self._lock = anyio.Lock()
 
     if get_capture_or_validation_active():
       raise RuntimeError(
@@ -178,13 +180,13 @@ class FTDI(IOBase):
     device_serial_number = cast(str, usb.util.get_string(device, device.iSerialNumber))
     return device_serial_number
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Initialize the FTDI device connection with device resolution."""
     if self._dev is not None and not self._dev.closed:
-      self._dev.close()
+      await anyio.to_thread.run_sync(self._dev.close)
     try:
       # Resolve which device to connect to
-      self._device_id = self._resolve_device_serial()
+      self._device_id = await anyio.to_thread.run_sync(self._resolve_device_serial)
 
       # Create and open device
       self._dev = Device(
@@ -194,7 +196,7 @@ class FTDI(IOBase):
         vid=self._vid,
         interface_select=self._interface_select,
       )
-      self._dev.open()
+      await anyio.to_thread.run_sync(self._dev.open)
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
       raise RuntimeError(
@@ -203,7 +205,12 @@ class FTDI(IOBase):
         "Try restarting the kernel."
       ) from e
 
-    self._executor = ThreadPoolExecutor(max_workers=1)
+    async def _cleanup():
+      if self._dev is not None:
+        await anyio.to_thread.run_sync(self._dev.close)
+      self._dev = None
+
+    stack.push_shielded_async_callback(_cleanup)
 
   @property
   def device_id(self) -> str:
@@ -211,47 +218,41 @@ class FTDI(IOBase):
       raise RuntimeError("Device not initialized. Call setup() first.")
     return self._device_id
 
+  async def _dev_call(self, func, *args):
+    async with self._lock:
+      return await anyio.to_thread.run_sync(func, *args)
+
   async def set_baudrate(self, baudrate: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: setattr(self.dev, "baudrate", baudrate))
+    await self._dev_call(setattr, self.dev, "baudrate", baudrate)
     logger.log(LOG_LEVEL_IO, "[%s] set_baudrate %s", self._device_id, baudrate)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="set_baudrate", data=str(baudrate))
     )
 
   async def set_rts(self, level: bool):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setrts(level))
+    await self._dev_call(self.dev.ftdi_fn.ftdi_setrts, level)
     logger.log(LOG_LEVEL_IO, "[%s] set_rts %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self.device_id, action="set_rts", data=str(level)))
 
   async def set_dtr(self, level: bool):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setdtr(level))
+    await self._dev_call(self.dev.ftdi_fn.ftdi_setdtr, level)
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self.device_id, action="set_dtr", data=str(level)))
 
   async def usb_reset(self):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_reset())
+    await self._dev_call(self.dev.ftdi_fn.ftdi_usb_reset)
     logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_reset", data=""))
 
   async def set_latency_timer(self, latency: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
-      self._executor, lambda: self.dev.ftdi_fn.ftdi_set_latency_timer(latency)
-    )
+    await self._dev_call(self.dev.ftdi_fn.ftdi_set_latency_timer, latency)
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="set_latency_timer", data=str(latency))
     )
 
   async def set_line_property(self, bits: int, stopbits: int, parity: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
-      self._executor, lambda: self.dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
-    )
+    await self._dev_call(self.dev.ftdi_fn.ftdi_set_line_property, bits, stopbits, parity)
     logger.log(
       LOG_LEVEL_IO, "[%s] set_line_property %s,%s,%s", self._device_id, bits, stopbits, parity
     )
@@ -262,31 +263,25 @@ class FTDI(IOBase):
     )
 
   async def set_flowctrl(self, flowctrl: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setflowctrl(flowctrl))
+    await self._dev_call(self.dev.ftdi_fn.ftdi_setflowctrl, flowctrl)
     logger.log(LOG_LEVEL_IO, "[%s] set_flowctrl %s", self._device_id, flowctrl)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="set_flowctrl", data=str(flowctrl))
     )
 
   async def usb_purge_rx_buffer(self):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
+    await self._dev_call(self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_rx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_purge_rx_buffer", data=""))
 
   async def usb_purge_tx_buffer(self):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer())
+    await self._dev_call(self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_tx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_purge_tx_buffer", data=""))
 
   async def poll_modem_status(self) -> int:
-    loop = asyncio.get_running_loop()
     stat = ctypes.c_ushort(0)
-    await loop.run_in_executor(
-      self._executor, lambda: self.dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
-    )
+    await self._dev_call(self.dev.ftdi_fn.ftdi_poll_modem_status, ctypes.byref(stat))
     logger.log(LOG_LEVEL_IO, "[%s] poll_modem_status %s", self._device_id, stat.value)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="poll_modem_status", data=str(stat.value))
@@ -296,21 +291,14 @@ class FTDI(IOBase):
   async def get_serial(self) -> str:
     return self.device_id
 
-  async def stop(self):
-    if self._dev is not None:
-      self.dev.close()
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
-
   async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="write", data=data.hex()))
-    return cast(int, self.dev.write(data))
+    return cast(int, await self._dev_call(self.dev.write, data))
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    data = self.dev.read(num_bytes)
+    data = await self._dev_call(self.dev.read, num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
     capturer.record(
       FTDICommand(
@@ -322,7 +310,7 @@ class FTDI(IOBase):
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    data = self.dev.readline()
+    data = await self._dev_call(self.dev.readline)
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
     return cast(bytes, data)

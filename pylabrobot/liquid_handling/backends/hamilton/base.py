@@ -1,8 +1,5 @@
-import asyncio
 import datetime
 import logging
-import threading
-import time
 import warnings
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
@@ -13,8 +10,12 @@ from typing import (
   Sequence,
   Tuple,
   TypeVar,
+  Union,
 )
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, MachineConnectionClosedError
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -37,10 +38,9 @@ class HamiltonTask:
   """A command that has been sent, awaiting a response."""
 
   id_: Optional[int]
-  loop: asyncio.AbstractEventLoop
-  fut: asyncio.Future
   cmd: str
-  timeout_time: float
+  done_event: anyio.Event
+  response: Optional[Union[str, Exception]]
 
 
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
@@ -83,9 +83,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     self.id_ = 0
 
-    self._reading_thread: Optional[threading.Thread] = None
-    self._reading_thread_stop = threading.Event()
-    self._waiting_tasks: List[HamiltonTask] = []
+    self._wakeup_reader_loop: Optional[anyio.Event] = None
+    self._waiting_tasks_with_id: dict[int, HamiltonTask] = {}
+    self._waiting_tasks_idless: dict[str, list[HamiltonTask]] = {}
     self._tth2tti: dict[int, int] = {}  # hash to tip type index
 
   def __setattr__(self, name: str, value: Any) -> None:
@@ -99,25 +99,28 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       return
     super().__setattr__(name, value)
 
-  async def setup(self):
-    await super().setup()
-    await self.io.setup()
-    self._reading_thread_stop.clear()
-    self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
-    self._reading_thread.start()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
-  async def stop(self):
-    self._reading_thread_stop.set()
-    if self._reading_thread is not None:
-      self._reading_thread.join(timeout=10)
-      self._reading_thread = None
-    for task in self._waiting_tasks:
-      task.loop.call_soon_threadsafe(
-        task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
-      )
-    self._waiting_tasks.clear()
-    self._tth2tti.clear()
-    await self.io.stop()
+    # Put cleanup on the stack before the task group; This way,
+    # by the time we get here, the reader task has completed and done its cleanup.
+    @stack.callback
+    def cleanup():
+      self._wakeup_reader_loop = None
+      self._tth2tti.clear()
+      if self._waiting_tasks_with_id or self._waiting_tasks_idless:
+        warnings.warn(
+          "Internal problem: At this point, all waiting tasks should have been cleaned up!"
+        )
+        self._waiting_tasks_with_id.clear()
+        self._waiting_tasks_idless.clear()
+
+    self._wakeup_reader_loop = anyio.Event()
+    tg = await stack.enter_async_context(anyio.create_task_group())
+    # Put canceling the reader loop on top of the stack; it goes first
+    stack.callback(tg.cancel_scope.cancel)
+    tg.start_soon(self._continuously_read)
 
   def serialize(self) -> dict:
     usb_serialized = self.io.serialize()
@@ -255,7 +258,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     Returns:
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
-
     cmd, id_ = self._assemble_command(
       module=module,
       command=command,
@@ -283,40 +285,49 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     wait: bool = True,
   ) -> Optional[str]:
     """Write a command to the Hamilton machine and read the response."""
-    await self.io.write(cmd.encode(), timeout=write_timeout)
-
     if not wait:
+      await self.io.write(cmd.encode(), timeout=write_timeout)
       return None
 
-    # Attempt to read packets until timeout, or when we identify the right id.
-    if read_timeout is None:
-      read_timeout = self.read_timeout
+    done_evt = anyio.Event()
+    task = HamiltonTask(id_=id_, cmd=cmd, done_event=done_evt, response=None)
+    cmd_prefix = cmd[: self.module_id_length + 2]
+    try:
+      idle = not (self._waiting_tasks_with_id or self._waiting_tasks_idless)
+      if id_ is None:
+        # TODO: Do we want to allow multiple id-less tasks to be sent?
+        self._waiting_tasks_idless.setdefault(cmd_prefix, []).append(task)
+      else:
+        if self._waiting_tasks_with_id.setdefault(id_, task) is not task:
+          raise RuntimeError("Another task with this ID is already pending")
+      if idle:
+        assert self._wakeup_reader_loop is not None
+        self._wakeup_reader_loop.set()
+      await self.io.write(cmd.encode(), timeout=write_timeout)
 
-    loop = asyncio.get_event_loop()
-    fut: asyncio.Future[str] = loop.create_future()
-    self._start_reading(id_, loop, fut, cmd, read_timeout)
-    result = await fut
-    return result
+      # Attempt to read packets until timeout, or when we identify the right id.
+      if read_timeout is None:
+        read_timeout = self.read_timeout
 
-  def _start_reading(
-    self,
-    id_: Optional[int],
-    loop: asyncio.AbstractEventLoop,
-    fut: asyncio.Future,
-    cmd: str,
-    timeout: int,
-  ) -> None:
-    """Submit a task to the reading thread."""
+      with anyio.fail_after(read_timeout):
+        await done_evt.wait()
+    finally:
+      # reader loop atomically removes tasks from waiting lists and sets the response,
+      # so we have to remove us from the waiting list exactly iff we don't have a response at this point.
+      if task.response is None:
+        if id_ is None:
+          self._waiting_tasks_idless[cmd_prefix].remove(task)
+        else:
+          del self._waiting_tasks_with_id[id_]
 
-    timeout_time = time.time() + timeout
-    self._waiting_tasks.append(
-      HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
-    )
+    assert task.response is not None
 
-    if self._reading_thread is None or not self._reading_thread.is_alive():
-      self._reading_thread_stop.clear()
-      self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
-      self._reading_thread.start()
+    if isinstance(task.response, Exception):
+      # An error occurred in the reader loop.
+      raise task.response
+
+    self.check_fw_string_error(task.response)
+    return task.response
 
   @abstractmethod
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -330,13 +341,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   def _parse_response(self, resp: str, fmt: Any) -> dict:
     """Parse a firmware response."""
 
-  def _reading_thread_main(self) -> None:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(self._continuously_read())
-
   async def _continuously_read(self) -> None:
-    """Continuously read from the USB port until stop is requested.
+    """Continuously read from the USB port until cancelled.
 
     Tasks are stored in the `self._waiting_tasks` list, and contain a future that will be
     completed when the task is finished. Tasks are submitted to the list using the
@@ -346,52 +352,55 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     relevant to any of the tasks. If so, complete the future and remove the task from the
     list. If a task has timed out, complete the future with a `TimeoutError`.
     """
+    try:
+      while True:
+        if not (self._waiting_tasks_with_id or self._waiting_tasks_idless):
+          assert self._wakeup_reader_loop is not None
+          await self._wakeup_reader_loop.wait()
+          self._wakeup_reader_loop = anyio.Event()
+          continue
 
-    while not self._reading_thread_stop.is_set():
-      for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
-        task = self._waiting_tasks[idx]
-        if time.time() > task.timeout_time:
-          logger.warning("Timeout while waiting for response to command %s.", task.cmd)
-          task.loop.call_soon_threadsafe(
-            task.fut.set_exception,
-            TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
-          )
-          del self._waiting_tasks[idx]
+        try:
+          resp = (await self.io.read()).decode("utf-8")
+        except TimeoutError:
+          continue
 
-      if len(self._waiting_tasks) == 0:
-        await asyncio.sleep(0.01)
-        continue
+        if resp == "":
+          continue
 
-      try:
-        resp = (await self.io.read()).decode("utf-8")
-      except TimeoutError:
-        continue
+        # Parse response.
+        try:
+          response_id = self.get_id_from_fw_response(resp)
+        except ValueError as e:
+          logger.warning("Could not parse response: %s (%s)", resp, e)
+          continue
 
-      if resp == "":
-        continue
-
-      # Parse response.
-      try:
-        response_id = self.get_id_from_fw_response(resp)
-      except ValueError as e:
-        logger.warning("Could not parse response: %s (%s)", resp, e)
-        continue
-
-      module_and_command = resp[: self.module_id_length + 2]
-      for idx in range(len(self._waiting_tasks)):
-        task = self._waiting_tasks[idx]
-        # if the command has no id, we have to check the command itself
-        if response_id == task.id_ or (
-          task.id_ is None and task.cmd.startswith(module_and_command)
-        ):
-          try:
-            self.check_fw_string_error(resp)
-          except Exception as e:
-            task.loop.call_soon_threadsafe(task.fut.set_exception, e)
-          else:
-            task.loop.call_soon_threadsafe(task.fut.set_result, resp)
-          del self._waiting_tasks[idx]
-          break
+        cmd_prefix = resp[: self.module_id_length + 2]
+        task = None
+        if response_id is not None:
+          task = self._waiting_tasks_with_id.pop(response_id, None)
+        if task is None:
+          tasks = self._waiting_tasks_idless.get(cmd_prefix)
+          if tasks:
+            task = tasks.pop(0)
+            if not tasks:
+              del self._waiting_tasks_idless[cmd_prefix]
+        if task is not None:
+          task.response = resp
+          task.done_event.set()
+        else:
+          logger.warning("Received response for unknown command: %s", resp)
+    finally:
+      # Abort all remaining tasks
+      for task in self._waiting_tasks_with_id.values():
+        task.response = MachineConnectionClosedError()
+        task.done_event.set()
+      for tasks in self._waiting_tasks_idless.values():
+        for task in tasks:
+          task.response = MachineConnectionClosedError()
+          task.done_event.set()
+      self._waiting_tasks_with_id.clear()
+      self._waiting_tasks_idless.clear()
 
   def _ops_to_fw_positions(
     self, ops: Sequence[PipettingOp], use_channels: List[int]

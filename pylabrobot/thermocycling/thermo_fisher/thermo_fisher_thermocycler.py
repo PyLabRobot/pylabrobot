@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import hmac
 import logging
@@ -12,6 +11,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io import Socket
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -423,7 +425,6 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     return await self._read_response(timeout=response_timeout, read_once=read_once)
 
   async def _scpi_authenticate(self):
-    await self.io.setup()
     await self._read_response(timeout=5)
     challenge_res = await self.send_command({"cmd": "CHAL?"})
     challenge = self._parse_scpi_response(challenge_res)["args"][0]
@@ -614,19 +615,19 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     for char in morse_code:
       if char == ".":
         await self.buzzer_on()
-        await asyncio.sleep(short_beep_duration)
+        await anyio.sleep(short_beep_duration)
         await self.buzzer_off()
       elif char == "-":
         await self.buzzer_on()
-        await asyncio.sleep(long_beep_duration)
+        await anyio.sleep(long_beep_duration)
         await self.buzzer_off()
       elif char == " ":
-        await asyncio.sleep(space_duration)
-      await asyncio.sleep(short_beep_duration)  # between letters is a short unit
+        await anyio.sleep(space_duration)
+      await anyio.sleep(short_beep_duration)  # between letters is a short unit
 
   async def continue_run(self, block_id: int):
     for _ in range(3):
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
       res = await self.send_command({"cmd": f"TBC{block_id + 1}:CONTinue"})
       if self._parse_scpi_response(res)["status"] != "OK":
         raise ValueError("Failed to continue from indefinite hold")
@@ -816,7 +817,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       self.logger.error("Failed to abort protocol")
       raise ValueError("Failed to abort protocol")
     self.logger.info("Protocol aborted")
-    await asyncio.sleep(10)
+    await anyio.sleep(10)
 
   @dataclass
   class RunProgress:
@@ -870,7 +871,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
             abs(float(block_temps[i]) - target_temps[i]) < 0.5 for i in range(len(block_temps))
           ):
             break
-          await asyncio.sleep(5)
+          await anyio.sleep(5)
         self.logger.info("Infinite hold")
         return ThermoFisherThermocyclerBackend.RunProgress(
           running=False,
@@ -890,9 +891,34 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
   # *************Methods implementing ThermocyclerBackend***********************
 
-  async def setup(
-    self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    block_idle_temp=25,
+    cover_idle_temp=105,
+    blocks_to_setup: Optional[List[int]] = None,
   ):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+
+    async def cleanup():
+      for block_id in list(self.current_runs.keys()):
+        try:
+          await self.abort_run(block_id=block_id)
+        except Exception as e:
+          self.logger.warning(f"Failed to abort run on block {block_id}: {e}")
+        try:
+          await self.deactivate_lid(block_id=block_id)
+        except Exception as e:
+          self.logger.warning(f"Failed to deactivate lid on block {block_id}: {e}")
+        try:
+          await self.deactivate_block(block_id=block_id)
+        except Exception as e:
+          self.logger.warning(f"Failed to deactivate block on block {block_id}: {e}")
+
+    stack.push_shielded_async_callback(cleanup)
+
     await self._scpi_authenticate()
     await self.power_on()
     await self._load_num_blocks_and_type()
@@ -979,14 +1005,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       stage_name_prefixes=stage_name_prefixes,
     )
 
-  async def stop(self):
-    for block_id in self.current_runs.keys():
-      await self.abort_run(block_id=block_id)
-
-      await self.deactivate_lid(block_id=block_id)
-      await self.deactivate_block(block_id=block_id)
-
-    await self.io.stop()
+  # stop method removed, logic moved to cleanup callback in _enter_lifespan
 
   async def get_block_status(self, *args, **kwargs):
     raise NotImplementedError

@@ -1,11 +1,12 @@
-import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from io import IOBase
 from typing import Optional, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.io import IOBase
 
 try:
   import serial
@@ -58,7 +59,7 @@ class Serial(IOBase):
     self.parity = parity
     self.stopbits = stopbits
     self._ser: Optional[serial.Serial] = None
-    self._executor: Optional[ThreadPoolExecutor] = None
+    self._lock = anyio.Lock()
     self.write_timeout = write_timeout
     self.timeout = timeout
     self.rtscts = rtscts
@@ -76,7 +77,7 @@ class Serial(IOBase):
     assert self._port is not None, "Port not set. Did you call setup()?"
     return self._port
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """
     Initialize the serial connection to the device.
 
@@ -84,7 +85,7 @@ class Serial(IOBase):
     provided path or by scanning for devices matching the configured USB
     VID:PID pair), validates that the detected/selected port corresponds to
     the expected hardware, and opens the serial connection in a dedicated
-    threadpool executor to avoid blocking the asyncio event loop.
+    thread to avoid blocking the AnyIO event loop.
 
     **Behavior:**
     - Ensures `pyserial` is installed; otherwise raises `RuntimeError`.
@@ -97,9 +98,9 @@ class Serial(IOBase):
         - Verifies that it matches the specified VID/PID (when provided).
         - Logs the port choice for traceability.
     - Opens the serial port using the configured parameters
-      (baudrate, bytesize, parity, etc.) via `loop.run_in_executor` to
+      (baudrate, bytesize, parity, etc.) via `anyio.to_thread.run_sync` to
       ensure non-blocking operation.
-    - Cleans up the executor and re-raises the exception if the port cannot be opened.
+    - Registers a cleanup callback to close the serial port when the lifespan ends.
 
     **Raises:**
       RuntimeError:
@@ -110,9 +111,6 @@ class Serial(IOBase):
         - If an explicitly provided port does not match the VID/PID.
       serial.SerialException:
         - If the serial connection fails to open (e.g., device already in use).
-
-    After successful completion, `self._ser` is an open `serial.Serial`
-    instance and `self._port` is updated to the resolved port path.
     """
 
     if not HAS_SERIAL:
@@ -120,9 +118,6 @@ class Serial(IOBase):
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
         f"Import error: {_SERIAL_IMPORT_ERROR}"
       )
-
-    loop = asyncio.get_running_loop()
-    self._executor = ThreadPoolExecutor(max_workers=1)
 
     # 1. VID:PID specified - port maybe
     if self._vid is not None and self._pid is not None:
@@ -174,43 +169,33 @@ class Serial(IOBase):
       )
 
     try:
-      self._ser = await loop.run_in_executor(self._executor, _open_serial)
+      async with self._lock:
+        self._ser = await anyio.to_thread.run_sync(_open_serial)
 
     except serial.SerialException as e:
       logger.error(
         f"Could not connect to device '{self._human_readable_device_name}', is it in use by a different notebook/process?"
       )
-      if self._executor is not None:
-        self._executor.shutdown(wait=True)
-        self._executor = None
       raise e
 
     assert self._ser is not None
-
     self._port = candidate_port
 
-  async def stop(self):
-    """Close the serial device."""
+    async def _cleanup():
+      if self._ser is not None and self._ser.is_open:
+        async with self._lock:
+          await anyio.to_thread.run_sync(self._ser.close)
 
-    if self._ser is not None and self._ser.is_open:
-      loop = asyncio.get_running_loop()
-
-      if self._executor is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
-      await loop.run_in_executor(self._executor, self._ser.close)
-
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    stack.push_shielded_async_callback(_cleanup)
 
   async def write(self, data: bytes):
     """Write data to the serial device."""
 
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self._ser is None:
+    if self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
-    await loop.run_in_executor(self._executor, self._ser.write, data)
+    async with self._lock:
+      await anyio.to_thread.run_sync(self._ser.write, data)
 
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
@@ -220,11 +205,11 @@ class Serial(IOBase):
   async def read(self, num_bytes: int = 1) -> bytes:
     """Read data from the serial device."""
 
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self._ser is None:
+    if self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
-    data = await loop.run_in_executor(self._executor, self._ser.read, num_bytes)
+    async with self._lock:
+      data = await anyio.to_thread.run_sync(self._ser.read, num_bytes)
 
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
@@ -237,11 +222,11 @@ class Serial(IOBase):
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     """Read a line from the serial device."""
 
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self._ser is None:
+    if self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
-    data = await loop.run_in_executor(self._executor, self._ser.readline)
+    async with self._lock:
+      data = await anyio.to_thread.run_sync(self._ser.readline)
 
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
@@ -254,32 +239,27 @@ class Serial(IOBase):
   async def send_break(self, duration: float):
     """Send a break condition for the specified duration."""
 
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self._ser is None:
+    if self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
-    def _send_break(ser, duration: float) -> None:
-      """Send a break condition for the specified duration."""
-      assert ser is not None, "forgot to call setup?"
-      ser.send_break(duration=duration)
-
-    await loop.run_in_executor(self._executor, lambda: _send_break(self._ser, duration=duration))
+    async with self._lock:
+      await anyio.to_thread.run_sync(self._ser.send_break, duration)
     logger.log(LOG_LEVEL_IO, "[%s] send_break %s", self._port, duration)
     capturer.record(SerialCommand(device_id=self.port, action="send_break", data=str(duration)))
 
   async def reset_input_buffer(self):
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self._ser is None:
+    if self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
-    await loop.run_in_executor(self._executor, self._ser.reset_input_buffer)
+    async with self._lock:
+      await anyio.to_thread.run_sync(self._ser.reset_input_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
     capturer.record(SerialCommand(device_id=self.port, action="reset_input_buffer", data=""))
 
   async def reset_output_buffer(self):
-    loop = asyncio.get_running_loop()
-    if self._executor is None or self._ser is None:
+    if self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
-    await loop.run_in_executor(self._executor, self._ser.reset_output_buffer)
+    async with self._lock:
+      await anyio.to_thread.run_sync(self._ser.reset_output_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
     capturer.record(SerialCommand(device_id=self.port, action="reset_output_buffer", data=""))
 
@@ -374,7 +354,7 @@ class SerialValidator(Serial):
     )
     self.cr = cr
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     pass
 
   async def write(self, data: bytes):

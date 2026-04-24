@@ -1,3 +1,4 @@
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.powder_dispensing.backend import (
   PowderDispenserBackend,
 )
@@ -9,10 +10,8 @@ class CrystalPowderdose(PowderDispenserBackend):
   def __init__(self, arksuite_address: str) -> None:
     self.arksuite_address = arksuite_address
 
-  async def setup(self) -> None:
-    raise NotImplementedError("CrystalPowderdose not implemented yet")
-
-  async def stop(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     raise NotImplementedError("CrystalPowderdose not implemented yet")
 
   def serialize(self) -> dict:

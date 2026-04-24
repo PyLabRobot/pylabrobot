@@ -1,5 +1,7 @@
-import time
+import contextlib
 import typing
+
+import anyio
 
 from pylabrobot.io.hid import HID
 
@@ -15,14 +17,11 @@ class InhecoTECControlBox:
       human_readable_device_name="Inheco Control Box", vid=vid, pid=pid, serial_number=serial_number
     )
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     """
-    If io.setup() fails, ensure that libusb drivers were installed as per docs.
+    If HID._enter_lifespan() fails, ensure that libusb drivers were installed as per docs.
     """
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+    await stack.enter_async_context(self.io)
 
   @typing.no_type_check
   def _generate_packets(self, msg):
@@ -83,21 +82,21 @@ class InhecoTECControlBox:
 
   async def _read_until_end(self, timeout: int) -> str:
     """Read until a packet ends with a \\x00 byte. May read multiple packets."""
-    start = time.time()
     response = b""
-    while time.time() - start < timeout:
-      packet = await self.io.read(64, timeout=timeout)
-      if packet is not None and packet != b"":
-        if packet.endswith(b"\x00"):
-          response += packet.rstrip(b"\x00")  # strip trailing \x00's
-          break
-        elif packet.endswith(b"#"):
-          response += packet[:-1]
-          continue
-        else:
-          # I have never seen this happen, commands always end with \x00 or '#'
-          print("weird packet, please report", packet)
-          response += packet
+    with anyio.fail_after(timeout):
+      while True:
+        packet = await self.io.read(64, timeout=timeout)
+        if packet is not None and packet != b"":
+          if packet.endswith(b"\x00"):
+            response += packet.rstrip(b"\x00")  # strip trailing \x00's
+            break
+          elif packet.endswith(b"#"):
+            response += packet[:-1]
+            continue
+          else:
+            # I have never seen this happen, commands always end with \x00 or '#'
+            print("weird packet, please report", packet)
+            response += packet
 
     return response.decode("unicode_escape")
 
@@ -109,15 +108,12 @@ class InhecoTECControlBox:
     is 5ase0. Therefore it is easy to identify correct answers to the commands. This feature may
     increase integrity of the communication."
     """
+    with anyio.fail_after(timeout):
+      while True:
+        response = await self._read_until_end(timeout=timeout)
 
-    start = time.time()
-    while time.time() - start < timeout:
-      response = await self._read_until_end(timeout=int(timeout - (time.time() - start)))
-
-      if response[:4] == command[:4].lower():
-        return response
-
-    raise TimeoutError("Timeout while waiting for response from device.")
+        if response[:4] == command[:4].lower():
+          return response
 
   async def send_command(self, command: str, timeout: int = 3):
     """Send a command to the device and return the response"""

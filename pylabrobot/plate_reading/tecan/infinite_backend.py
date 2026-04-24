@@ -6,7 +6,6 @@ This backend targets the Infinite "M" series (e.g., Infinite 200 PRO).  The
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import re
@@ -15,6 +14,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -517,8 +519,6 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self.counts_per_mm_x = counts_per_mm_x
     self.counts_per_mm_y = counts_per_mm_y
     self.counts_per_mm_z = counts_per_mm_z
-    self._setup_lock = asyncio.Lock()
-    self._ready = False
     self._read_chunk_size = 512
     self._max_row_wait_s = 300.0
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
@@ -527,26 +527,20 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self._run_active = False
     self._active_step_loss_commands: List[str] = []
 
-  async def setup(self) -> None:
-    async with self._setup_lock:
-      if self._ready:
-        return
-      await self.io.setup()
-      await self._initialize_device()
-      for mode in self._MODE_CAPABILITY_COMMANDS:
-        if mode not in self._mode_capabilities:
-          await self._query_mode_capabilities(mode)
-      self._ready = True
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+    await self._initialize_device()
+    for mode in self._MODE_CAPABILITY_COMMANDS:
+      if mode not in self._mode_capabilities:
+        await self._query_mode_capabilities(mode)
 
-  async def stop(self) -> None:
-    async with self._setup_lock:
-      if not self._ready:
-        return
+    async def cleanup():
       await self._cleanup_protocol()
-      await self.io.stop()
       self._mode_capabilities.clear()
       self._reset_stream_state()
-      self._ready = False
+
+    stack.push_shielded_async_callback(cleanup)
 
   async def open(self) -> None:
     """Open the reader drawer."""
@@ -902,19 +896,24 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     target = decoder.count + row_count
     start_count = decoder.count
     self._drain_pending_bin_events(decoder)
-    start = time.monotonic()
+    start_time = anyio.current_time()
     reads = 0
-    while decoder.count < target and (time.monotonic() - start) < self._max_row_wait_s:
-      chunk = await self._read_packet(self._read_chunk_size)
-      if not chunk:
-        raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
-      decoder.feed(chunk)
-      reads += 1
-    if decoder.count < target:
+    try:
+      with anyio.fail_after(self._max_row_wait_s):
+        while decoder.count < target:
+          chunk = await self._read_packet(self._read_chunk_size)
+          if not chunk:
+            raise RuntimeError(
+              f"{mode} read returned empty chunk; transport may not support reads."
+            )
+          decoder.feed(chunk)
+          reads += 1
+    except TimeoutError:
       got = decoder.count - start_count
+      elapsed = anyio.current_time() - start_time
       raise RuntimeError(
         f"Timed out while parsing {mode.lower()} results "
-        f"(decoded {got}/{row_count} measurements in {time.monotonic() - start:.1f}s, {reads} reads)."
+        f"(decoded {got}/{row_count} measurements in {elapsed:.1f}s, {reads} reads)."
       )
 
   def _drain_pending_bin_events(self, decoder: "_MeasurementDecoder") -> None:
@@ -1039,9 +1038,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _recover_transport(self) -> None:
     try:
-      await self.io.stop()
-      await asyncio.sleep(0.2)
-      await self.io.setup()
+      await self.io.recover_transport()
     except Exception:
       logger.warning("Transport recovery failed.", exc_info=True)
       return

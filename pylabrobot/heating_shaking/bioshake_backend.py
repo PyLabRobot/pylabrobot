@@ -1,9 +1,10 @@
-import asyncio
 import warnings
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
-from pylabrobot.machines.backend import MachineBackend
 
 try:
   import serial
@@ -43,13 +44,14 @@ class BioShake(HeaterShakerBackend):
 
       # Send the command
       await self.io.write((cmd + "\r").encode("ascii"))
-      await asyncio.sleep(delay)
+      await anyio.sleep(delay)
 
       # Read and decode the response with a timeout
       try:
-        response = await asyncio.wait_for(self.io.readline(), timeout=timeout)
+        with anyio.fail_after(timeout):
+          response = await self.io.readline()
 
-      except asyncio.TimeoutError:
+      except TimeoutError:
         raise RuntimeError(f"Timed out waiting for response to '{cmd}'")
 
       decoded = response.decode("ascii", errors="ignore").strip()
@@ -77,20 +79,16 @@ class BioShake(HeaterShakerBackend):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def setup(self, skip_home: bool = False):
-    await MachineBackend.setup(self)
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     if not skip_home:
       # Reset first before homing it to ensure the device is ready for run
       await self.reset()
       # Additional seconds until next command can be send after reset
-      await asyncio.sleep(4)
+      await anyio.sleep(4)
       # Now home the device
       await self.home()
-
-  async def stop(self):
-    await MachineBackend.stop(self)
-    await self.io.stop()
 
   async def reset(self):
     # Reset the BioShake if stuck in "e" state
@@ -101,28 +99,18 @@ class BioShake(HeaterShakerBackend):
     # Send the command
     await self.io.write(("resetDevice\r").encode("ascii"))
 
-    start = asyncio.get_event_loop().time()
-    max_seconds = 30  # How long a reset typically last
-
-    while True:
-      # Break the loop if process takes longer than 30 seconds
-      if asyncio.get_event_loop().time() - start > max_seconds:
-        raise TimeoutError("Reset did not complete in time")
-
-      try:
-        # Wait for each line with a timeout
-        response = await asyncio.wait_for(self.io.readline(), timeout=2)
-        decoded = response.decode("ascii", errors="ignore").strip()
-        await asyncio.sleep(0.1)
-
-        if len(decoded) > 0:
-          # Stop when the final message arrives
-          if "Initialization complete" in decoded:
-            break
-
-      except asyncio.TimeoutError:
-        # Keep polling if nothing arrives within timeout
-        continue
+    try:
+      with anyio.fail_after(30):
+        while True:
+          response = await self.io.readline()
+          decoded = response.decode("ascii", errors="ignore").strip()
+          await anyio.sleep(0.1)
+          if len(decoded) > 0:
+            # Stop when the final message arrives
+            if "Initialization complete" in decoded:
+              break
+    except TimeoutError:
+      raise TimeoutError("Reset did not complete in time") from None
 
   async def home(self):
     # Initialize the BioShake into home position
@@ -216,7 +204,7 @@ class BioShake(HeaterShakerBackend):
     # before the edge-locking mechanism (ELM) can operate. Without this
     # delay, subsequent setElmUnlockPos commands return 'e' (error).
     sleep_time_after_stop = 3
-    await asyncio.sleep(sleep_time_after_stop)
+    await anyio.sleep(sleep_time_after_stop)
 
   @property
   def supports_locking(self) -> bool:

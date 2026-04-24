@@ -1,13 +1,14 @@
-import asyncio
 import ctypes
 import json
 import logging
 import math
 import os
-import time
 import warnings
 from typing import Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import CentrifugeBackend, LoaderBackend
@@ -33,14 +34,16 @@ class Access2Backend(LoaderBackend):
   async def _read(self) -> bytes:
     x = b""
     r = None
-    start = time.time()
-    while r != b"" or x == b"":
-      r = await self.io.read(1)
-      x += r
-      if r == b"":
-        await asyncio.sleep(0.1)
-      if x == b"" and (time.time() - start) > self.timeout:
-        raise TimeoutError("No data received within the specified timeout period")
+    with anyio.move_on_after(self.timeout) as scope:
+      while r != b"" or x == b"":
+        r = await self.io.read(1)
+        x += r
+        if r == b"":
+          await anyio.sleep(0.1)
+        if x != b"":
+          scope.deadline = float("inf")
+    if x == b"" and scope.cancel_called:
+      raise TimeoutError("No data received within the specified timeout period")
     return x
 
   async def send_command(self, command: bytes) -> bytes:
@@ -48,10 +51,11 @@ class Access2Backend(LoaderBackend):
     await self.io.write(command)
     return await self._read()
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     logger.debug("[loader] setup")
 
-    await self.io.setup()
+    await stack.enter_async_context(self.io)
     await self.io.set_baudrate(115384)
 
     status = await self.get_status()
@@ -70,10 +74,6 @@ class Access2Backend(LoaderBackend):
     # await self.send_command(bytes.fromhex("11050003002000006bd4"))
     await self.send_command(bytes.fromhex("1105000e00440b00000000000000007041020203c7"))
     # await self.send_command(bytes.fromhex("11050003002000006bd4"))
-
-  async def stop(self):
-    logger.debug("[loader] stop")
-    await self.io.stop()
 
   def serialize(self):
     return {"io": self.io.serialize(), "timeout": self.timeout}
@@ -187,8 +187,15 @@ class VSpinBackend(CentrifugeBackend):
     if device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+
+    async def _cleanup():
+      await self.configure_and_initialize()
+
+    stack.push_shielded_async_callback(_cleanup)
+
     # TODO: add functionality where if robot has been initialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
@@ -298,10 +305,6 @@ class VSpinBackend(CentrifugeBackend):
     )
     return bucket_1_position
 
-  async def stop(self):
-    await self.configure_and_initialize()
-    await self.io.stop()
-
   class _StatusPositionTachometer(ctypes.LittleEndianStructure):
     _pack_ = 1
     _fields_ = [
@@ -385,19 +388,22 @@ class VSpinBackend(CentrifugeBackend):
     been read so far."""
     data = b""
     end_byte_found = False
-    start_time = time.time()
 
-    while True:
-      chunk = await self.io.read(25)
-      if chunk:
-        data += chunk
-        end_byte_found = data[-1] == 0x0D
-        if len(chunk) < 25 and end_byte_found:
-          break
-      else:
-        if end_byte_found or time.time() - start_time > timeout:
-          break
-        await asyncio.sleep(0.0001)
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        chunk = await self.io.read(25)
+        if chunk:
+          data += chunk
+          end_byte_found = data[-1] == 0x0D
+          if len(chunk) < 25 and end_byte_found:
+            break
+        else:
+          if end_byte_found:
+            break
+          await anyio.sleep(0.0001)
+
+    if scope.cancel_called:
+      logger.warning("timed out reading response")
 
     logger.debug("Read %s", data.hex())
     return data
@@ -436,7 +442,7 @@ class VSpinBackend(CentrifugeBackend):
     await self._send_command(bytes.fromhex("aa022600062e"))  # same as unlock door
 
     # we can't tell when the door is fully open, so we just wait a bit
-    await asyncio.sleep(4)
+    await anyio.sleep(4)
 
   async def close_door(self):
     if not (await self.get_door_open()):
@@ -444,7 +450,7 @@ class VSpinBackend(CentrifugeBackend):
     # used to be:                           aa022600052d
     await self._send_command(bytes.fromhex("aa022600042c"))  # same as unlock door
     # we can't tell when the door is fully closed, so we just wait a bit
-    await asyncio.sleep(2)
+    await anyio.sleep(2)
 
   async def lock_door(self):
     if await self.get_door_open():
@@ -497,7 +503,7 @@ class VSpinBackend(CentrifugeBackend):
     while (
       abs(await self.get_position() - position) > 10
     ):  # 10 tacks tolerance (10/8000 * 360 = 0.45 degrees)
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
     await self.open_door()
 
   @staticmethod
@@ -586,7 +592,7 @@ class VSpinBackend(CentrifugeBackend):
     # 3 - wait for acceleration to the set rpm
     # we also check the position to avoid waiting forever if the speed is not reached (e.g. short spin...)
     while await self.get_tachometer() < rpm * 0.95 and await self.get_position() < final_position:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
     # 4 - once the speed is reached, compute the position at which to start deceleration
     # this is different than computed above, because above we assumed constant acceleration from 0 to rpm.
@@ -598,7 +604,7 @@ class VSpinBackend(CentrifugeBackend):
 
       # then wait until we reach that position
       while await self.get_position() < decel_start_position:
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
 
     # 5 - send deceleration command
     await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
@@ -610,7 +616,7 @@ class VSpinBackend(CentrifugeBackend):
     decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
     await self._send_command(decel_command)
 
-    await asyncio.sleep(2)
+    await anyio.sleep(2)
 
     # 6 - reset position back to 0ish
     # this part is aneeded because otherwise calling go_to_position will not work after
@@ -632,7 +638,7 @@ class VSpinBackend(CentrifugeBackend):
     start = await self.get_home_position()
     num_tries = 0
     while await self.get_home_position() == start:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
       num_tries += 1
       if num_tries % 25 == 0:
         await _reset_to_zero()

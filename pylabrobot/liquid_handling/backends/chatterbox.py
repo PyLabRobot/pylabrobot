@@ -1,5 +1,6 @@
 from typing import List, Optional, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -46,12 +47,10 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     self._num_arms = 1
     self._head96_installed = True
 
-  async def setup(self):
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     print("Setting up the liquid handler.")
-
-  async def stop(self):
-    print("Stopping the liquid handler.")
+    stack.callback(lambda: print("Stopping the liquid handler."))
 
   def serialize(self) -> dict:
     return {**super().serialize(), "num_channels": self.num_channels}

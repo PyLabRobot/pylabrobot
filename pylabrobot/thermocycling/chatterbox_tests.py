@@ -1,15 +1,14 @@
-import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 
 from pylabrobot.resources import Coordinate
+from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 
-class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
-  def __init__(self, methodName="runTest"):
-    super().__init__(methodName)
+class TestThermocyclerChatterbox(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
     self.tc = Thermocycler(
       name="tc_test",
       size_x=1,

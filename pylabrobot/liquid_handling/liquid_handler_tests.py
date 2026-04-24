@@ -50,6 +50,7 @@ from pylabrobot.resources.volume_tracker import (
 )
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import serialize
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 from .liquid_handler import LiquidHandler
 from .standard import (
@@ -476,8 +477,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class TestLiquidHandlerCommands(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.maxDiff = None
 
     self.backend = _create_mock_backend(num_channels=8)
@@ -488,7 +490,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
   async def test_offsets_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -914,19 +916,18 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend = _create_mock_backend(num_channels=16)
     self.backend.pick_up_tips = custom_pick_up_tips
     self.lh = LiquidHandler(self.backend, deck=self.deck)
-    await self.lh.setup()
-
-    with no_tip_tracking():
-      set_strictness(Strictness.IGNORE)
-      await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
-      await self.lh.pick_up_tips(
-        self.tip_rack["A1"],
-        use_channels=[1],
-        non_default=True,
-        does_not_exist=True,
-      )
-      with self.assertRaises(TypeError):  # missing non_default
-        await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[2])
+    async with self.lh:
+      with no_tip_tracking():
+        set_strictness(Strictness.IGNORE)
+        await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
+        await self.lh.pick_up_tips(
+          self.tip_rack["A1"],
+          use_channels=[1],
+          non_default=True,
+          does_not_exist=True,
+        )
+        with self.assertRaises(TypeError):  # missing non_default
+          await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[2])
 
       set_strictness(Strictness.WARN)
       await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[3])
@@ -1009,8 +1010,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(enabled=False)
 
 
-class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class TestLiquidHandlerVolumeTracking(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
@@ -1020,11 +1022,10 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
     self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
-    await self.lh.setup()
-    set_volume_tracking(enabled=True)
 
-  async def asyncTearDown(self):
-    set_volume_tracking(enabled=False)
+    await stack.enter_async_context(self.lh)
+    set_volume_tracking(enabled=True)
+    stack.callback(set_volume_tracking, enabled=False)
 
   async def test_dispense_with_volume_tracking(self):
     well = self.plate.get_item("A1")
@@ -1116,10 +1117,11 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.return_tips96()
 
 
-class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
+class TestLiquidHandlerSerializeState(AnyioTestBase):
   """Tests for LiquidHandler.serialize_state() and load_state()."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
@@ -1127,7 +1129,7 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
   async def test_serialize_state_after_setup(self):
     state = self.lh.serialize_state()
@@ -1151,20 +1153,18 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     type(backend).head96_installed = PropertyMock(return_value=False)
     deck = STARLetDeck()
     lh = LiquidHandler(backend=backend, deck=deck)
-    await lh.setup()
-
-    state = lh.serialize_state()
-    self.assertIsNone(state["head96_state"])
+    async with lh:
+      state = lh.serialize_state()
+      self.assertIsNone(state["head96_state"])
 
   async def test_serialize_state_no_arms(self):
     backend = _create_mock_backend(num_channels=8)
     type(backend).num_arms = PropertyMock(return_value=0)
     deck = STARLetDeck()
     lh = LiquidHandler(backend=backend, deck=deck)
-    await lh.setup()
-
-    state = lh.serialize_state()
-    self.assertIsNone(state["arm_state"])
+    async with lh:
+      state = lh.serialize_state()
+      self.assertIsNone(state["arm_state"])
 
   async def test_serialize_state_with_resource_pickup(self):
     resource = self.plate

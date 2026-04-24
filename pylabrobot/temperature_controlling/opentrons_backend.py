@@ -1,5 +1,6 @@
 from typing import cast
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.temperature_controlling.backend import (
   TemperatureControllerBackend,
 )
@@ -35,11 +36,9 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
         f" Import error: {_OT_IMPORT_ERROR}."
       )
 
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    await self.deactivate()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    stack.push_shielded_async_callback(self.deactivate)
 
   def serialize(self) -> dict:
     return {**super().serialize(), "opentrons_id": self.opentrons_id}

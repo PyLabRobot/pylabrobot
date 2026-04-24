@@ -1,10 +1,11 @@
 import abc
-import asyncio
 import enum
-import threading
 import time
 from typing import Dict, List, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -24,31 +25,22 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
 
   def __init__(self, pid: int, device_type: _ByonoyDevice) -> None:
     self.io = HID(human_readable_device_name="Byonoy Plate Reader", vid=0x16D0, pid=pid)
-    self._background_thread: Optional[threading.Thread] = None
-    self._stop_background = threading.Event()
     self._ping_interval = 1.0  # Send ping every second
     self._sending_pings = False  # Whether to actively send pings
     self._device_type = device_type
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Set up the plate reader. This should be called before any other methods."""
+    await super()._enter_lifespan(stack)
 
-    await self.io.setup()
+    await stack.enter_async_context(self.io)
 
     # Start background keep alive messages
-    self._stop_background.clear()
-    self._background_thread = threading.Thread(target=self._background_ping_worker, daemon=True)
-    self._background_thread.start()
 
-  async def stop(self) -> None:
-    """Close all connections to the plate reader and make sure setup() can be called again."""
+    tg = await stack.enter_async_context(anyio.create_task_group())
+    stack.callback(tg.cancel_scope.cancel)
 
-    # Stop background keep alive messages
-    self._stop_background.set()
-    if self._background_thread and self._background_thread.is_alive():
-      self._background_thread.join(timeout=2.0)
-
-    await self.io.stop()
+    tg.start_soon(self._ping_loop)
 
   def _assemble_command(self, report_id: int, payload: bytes, routing_info: bytes) -> bytes:
     packet = Writer().u16(report_id).raw_bytes(payload).finish()
@@ -68,34 +60,24 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
     if not wait_for_response:
       return None
 
-    t0 = time.time()
-    while True:
-      if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
-        raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+    try:
+      with anyio.fail_after(120):
+        while True:
+          response = await self.io.read(64, timeout=30)
+          if len(response) == 0:
+            continue
 
-      response = await self.io.read(64, timeout=30)
-      if len(response) == 0:
-        continue
-
-      # if the first 2 bytes do not match, we continue reading
-      response_report_id = Reader(response).u16()
-      if report_id == response_report_id:
-        break
+          # if the first 2 bytes do not match, we continue reading
+          response_report_id = Reader(response).u16()
+          if report_id == response_report_id:
+            break
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for response from Byonoy device") from None
     return response
 
-  def _background_ping_worker(self) -> None:
-    """Background worker that sends periodic ping commands."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    try:
-      loop.run_until_complete(self._ping_loop())
-    finally:
-      loop.close()
-
   async def _ping_loop(self) -> None:
-    """Main ping loop that runs in the background thread."""
-    while not self._stop_background.is_set():
+    """Main ping loop that runs in the background."""
+    while True:
       if self._sending_pings:
         # don't read in background thread, data might get lost here. don't use send_command
         payload = Writer().u8(1).finish()
@@ -106,7 +88,7 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
         )
         await self.io.write(cmd)
 
-      self._stop_background.wait(self._ping_interval)
+      await anyio.sleep(self._ping_interval)
 
   def _start_background_pings(self) -> None:
     self._sending_pings = True
@@ -129,11 +111,9 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=_ByonoyDevice.ABSORBANCE_96)
 
-  async def setup(self, verbose: bool = False, **backend_kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Set up the plate reader. This should be called before any other methods."""
-
-    # Call the base setup (opens HID)
-    await super().setup(**backend_kwargs)
+    await super()._enter_lifespan(stack)
 
     # After device is online, run reference initialisation
     await self.initialize_measurements()
@@ -197,34 +177,34 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
 
     # (4) Collect chunks (report_id 0x0500)
     rows: List[float] = []
-    t0 = time.time()
 
-    while True:
-      if time.time() - t0 > 120:
-        raise TimeoutError("Measurement timeout.")
+    try:
+      with anyio.fail_after(120):
+        while True:
+          chunk = await self.io.read(64, timeout=30)
+          if len(chunk) == 0:
+            continue
 
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
+          reader = Reader(chunk)
+          report_id = reader.u16()
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+          # Only handle the measurement packets
+          if report_id == 0x0500:
+            seq = reader.u8()
+            seq_len = reader.u8()
+            _ = reader.i16()  # signal_wl_nm
+            _ = reader.i16()  # reference_wl_nm
+            _ = reader.u32()  # duration_ms
+            row = [reader.f32() for _ in range(12)]
+            _ = reader.u8()  # flags
+            _ = reader.u8()  # progress
 
-      # Only handle the measurement packets
-      if report_id == 0x0500:
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.i16()  # signal_wl_nm
-        _ = reader.i16()  # reference_wl_nm
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
+            rows.extend(row)
 
-        rows.extend(row)
-
-        if seq == seq_len - 1:
-          break
+            if seq == seq_len - 1:
+              break
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for measurement data from Byonoy device") from None
 
     return rows
 
@@ -345,33 +325,33 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
       wait_for_response=False,
     )
 
-    t0 = time.time()
     all_rows: List[float] = []
 
-    while True:
-      if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
-        raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+    try:
+      with anyio.fail_after(120):
+        while True:
+          chunk = await self.io.read(64, timeout=30)
+          if len(chunk) == 0:
+            continue
 
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
+          reader = Reader(chunk)
+          report_id = reader.u16()
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+          if report_id == 0x0600:  # REP_LUM96_MEASUREMENT_IN
+            seq = reader.u8()
+            seq_len = reader.u8()
+            _ = reader.u32()  # integration_time_us
+            _ = reader.u32()  # duration_ms
+            row = [reader.f32() for _ in range(12)]
+            _ = reader.u8()  # flags
+            _ = reader.u8()  # progress
 
-      if report_id == 0x0600:  # REP_LUM96_MEASUREMENT_IN
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.u32()  # integration_time_us
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
+            all_rows.extend(row)
 
-        all_rows.extend(row)
-
-        if seq == seq_len - 1:
-          break
+            if seq == seq_len - 1:
+              break
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for luminescence data from Byonoy device") from None
 
     hybrid_result = all_rows[96 * 0 : 96 * 1]
     _ = all_rows[96 * 1 : 96 * 2]  # counting_result

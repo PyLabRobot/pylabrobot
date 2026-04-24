@@ -670,8 +670,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     return ExperimentalTecanInfinite200ProBackend._frame_command(command)
 
   async def test_open(self):
-    self.backend._ready = True
-
     await self.backend.open()
 
     self.mock_usb.write.assert_has_calls(
@@ -682,8 +680,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_close(self):
-    self.backend._ready = True
-
     await self.backend.close(self.plate)
 
     self.mock_usb.write.assert_has_calls(
@@ -695,7 +691,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_absorbance_commands(self):
     """Test that read_absorbance sends the correct configuration commands."""
-    self.backend._ready = True
 
     async def mock_await(decoder, row_count, mode):
       cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
@@ -750,7 +745,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_read_absorbance_uses_late_pending_calibration(self):
-    self.backend._ready = True
     terminal_calls = 0
 
     async def mock_await(decoder, row_count, mode):
@@ -772,7 +766,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(result[0]["data"][0][0], 0.3010299956639812)
 
   async def test_read_absorbance_subset_prepositions_to_masked_row_start(self):
-    self.backend._ready = True
     wells = self.plate.get_wells(["A2", "A3", "B1", "B2"])
 
     async def mock_await(decoder, row_count, mode):
@@ -808,7 +801,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_fluorescence_commands(self):
     """Test that read_fluorescence sends the correct configuration commands."""
-    self.backend._ready = True
 
     async def mock_await(decoder, row_count, mode):
       cal_len, cal_blob = _flr_calibration_blob(4850, 0, 0, 1000)
@@ -883,7 +875,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_luminescence_commands(self):
     """Test that read_luminescence sends the correct configuration commands."""
-    self.backend._ready = True
 
     async def mock_await(decoder, row_count, mode):
       cal_blob = bytes(14)
@@ -943,7 +934,6 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_luminescence_defaults_focal_height_to_20mm(self):
     """Test that read_luminescence defaults focal height to 20 mm."""
-    self.backend._ready = True
 
     async def mock_await(decoder, row_count, mode):
       cal_blob = bytes(14)

@@ -1,14 +1,13 @@
-import unittest
-
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.temperature_controlling import (
   TemperatureController,
   TemperatureControllerChatterboxBackend,
 )
 from pylabrobot.temperature_controlling.backend import TemperatureControllerBackend
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class TemperatureControllerTests(unittest.TestCase):
+class TestTemperatureController(AnyioTestBase):
   def test_serialization(self):
     tc = TemperatureController(
       name="test_tc",
@@ -24,7 +23,7 @@ class TemperatureControllerTests(unittest.TestCase):
     self.assertEqual(tc, deserialized)
 
 
-class PassiveCoolingTests(unittest.IsolatedAsyncioTestCase):
+class TestPassiveCooling(AnyioTestBase):
   async def test_cannot_cool_without_support(self):
     backend = TemperatureControllerChatterboxBackend(dummy_temperature=20.0)
     tc = TemperatureController(
@@ -65,12 +64,6 @@ class _FakeBackend(TemperatureControllerBackend):
   def supports_active_cooling(self) -> bool:
     return True
 
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    pass
-
   async def set_temperature(self, temperature: float):
     self.set_called = True
     self.temperature = temperature
@@ -82,7 +75,7 @@ class _FakeBackend(TemperatureControllerBackend):
     pass
 
 
-class PassiveCoolingWithSupportTests(unittest.IsolatedAsyncioTestCase):
+class TestPassiveCoolingWithSupport(AnyioTestBase):
   async def test_passive_cooling_with_support(self):
     backend = _FakeBackend(temperature=30.0)
     tc = TemperatureController(

@@ -1,8 +1,6 @@
 # mypy: disable-error-code="union-attr,assignment,arg-type"
 """Tests for BioTek EL406 plate washer backend - Dispense operations."""
 
-import unittest
-
 from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, EL406TestCase
 
@@ -241,7 +239,3 @@ class TestEL406BackendSyringeDispense(EL406TestCase):
     self.backend.io.set_read_buffer(b"")  # No ACK response
     with self.assertRaises(TimeoutError):
       await self.backend.syringe_dispense(PT96, volume=50.0, syringe="A")
-
-
-if __name__ == "__main__":
-  unittest.main()

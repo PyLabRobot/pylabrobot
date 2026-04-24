@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import enum
 import functools
@@ -27,12 +26,15 @@ from typing import (
   cast,
 )
 
+import anyio
+
 if sys.version_info < (3, 10):
   from typing_extensions import Concatenate, ParamSpec
 else:
   from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -1678,13 +1680,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
     return datetime.date(int(year_match.group(1)), 1, 1)
 
-  async def setup(
+  async def _enter_lifespan(
     self,
-    skip_instrument_initialization=False,
-    skip_pip=False,
-    skip_autoload=False,
-    skip_iswap=False,
-    skip_core96_head=False,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_instrument_initialization: bool = False,
+    skip_pip: bool = False,
+    skip_autoload: bool = False,
+    skip_iswap: bool = False,
+    skip_core96_head: bool = False,
   ):
     """Creates a USB connection and finds read/write interfaces.
 
@@ -1693,8 +1697,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       skip_iswap: if True, skip initializing the iSWAP module, if applicable.
       skip_core96_head: if True, skip initializing the CoRe 96 head module, if applicable.
     """
-
-    await super().setup()
+    await super()._enter_lifespan(stack)
 
     self.id_ = 0
 
@@ -1782,7 +1785,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await set_up_iswap()
       await set_up_core96_head()
 
-    await asyncio.gather(set_up_autoload(), set_up_arm_modules())
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(set_up_autoload)
+      tg.start_soon(set_up_arm_modules)
+      # task-group will block on exit until all tasks complete;
+      # unless some fail, then the remaining are cancelled.
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
     # the core grippers.
@@ -1790,9 +1797,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._setup_done = True
 
-  async def stop(self):
-    await super().stop()
-    self._setup_done = False
+    @stack.callback
+    def exit():
+      self._setup_done = False
 
   @property
   def setup_done(self) -> bool:
@@ -1836,14 +1843,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       A list of exact (unrounded) minimum Y spacings in mm, one per channel,
       indexed by channel number.
     """
-    return list(
-      await asyncio.gather(
-        *(
-          self.channel_request_y_minimum_spacing(channel_idx=idx)
-          for idx in range(self.num_channels)
-        )
-      )
-    )
+    results: List[Optional[float]] = [None] * self.num_channels
+
+    async def _worker(idx):
+      results[idx] = await self.channel_request_y_minimum_spacing(channel_idx=idx)
+
+    async with anyio.create_task_group() as tg:
+      for idx in range(self.num_channels):
+        tg.start_soon(_worker, idx)
+
+    return cast(List[float], results)
 
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
@@ -1925,11 +1934,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       and ``dispensing_cycles``.
     """
 
-    return list(
-      await asyncio.gather(
-        *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
-      )
-    )
+    results: List[Optional[Any]] = [None] * self.num_channels
+
+    async def _worker(idx):
+      results[idx] = await self.channel_request_cycle_counts(channel_idx=idx)
+
+    async with anyio.create_task_group() as tg:
+      for idx in range(self.num_channels):
+        tg.start_soon(_worker, idx)
+
+    return cast(List["STARBackend.ChannelCycleCounts"], results)
 
   # # # ACTION Commands # # #
 
@@ -2167,18 +2181,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Run n_replicates detection loop for this batch
     for _ in range(n_replicates):
-      errors = await asyncio.gather(
-        *[
-          detect_func(
-            channel_idx=channel,
-            lowest_immers_pos=lip,
-            start_pos_search=sps,
-            channel_speed=search_speed,
-          )
-          for channel, lip, sps in zip(use_channels, batch_lowest_immers, batch_start_pos)
-        ],
-        return_exceptions=True,
-      )
+      errors: List[Optional[Exception]] = [None] * len(use_channels)
+      async with anyio.create_task_group() as tg:
+        for idx, (channel, lip, sps) in enumerate(
+          zip(use_channels, batch_lowest_immers, batch_start_pos)
+        ):
+
+          async def worker(i=idx, ch=channel, lip=lip, sps=sps):
+            try:
+              await detect_func(
+                channel_idx=ch,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+              )
+            except Exception as e:
+              errors[i] = e
+
+          tg.start_soon(worker)
 
       # Get heights for ALL channels, handling failures for channels with no liquid
       current_absolute_liquid_heights = await self.request_pip_height_last_lld()
@@ -2651,19 +2671,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"channel_idx must be between 0 and {self.num_channels - 1}, got {channels}"
         )
 
-    await asyncio.gather(
-      *[
-        self.empty_tip(
-          channel_idx=ch,
-          vol=vol,
-          flow_rate=flow_rate,
-          acceleration=acceleration,
-          current_limit=current_limit,
-          reset_dispensing_drive_after=reset_dispensing_drive_after,
+    async with anyio.create_task_group() as tg:
+      for ch in channels:
+        tg.start_soon(
+          self.empty_tip,
+          ch,
+          vol,
+          flow_rate,
+          acceleration,
+          current_limit,
+          reset_dispensing_drive_after,
         )
-        for ch in channels
-      ]
-    )
 
   # # # Channel Liquid Handling Commands # # #
 
@@ -3563,24 +3581,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     with H0 CommandSyntaxError trace 40 ("No parallel processes permitted"). When the head
     finishes, EV succeeds and harmlessly ensures the Z axis is at the safe position.
     """
-    start = asyncio.get_event_loop().time()
-    while asyncio.get_event_loop().time() - start < timeout:
-      await asyncio.sleep(poll_interval)
-      try:
-        await self.send_command(module="C0", command="EV", read_timeout=10)
-        logger.info("CoRe 96 head finished (EV succeeded)")
-        return
-      except STARFirmwareError as e:
-        h0_error = e.errors.get("CoRe 96 Head")
-        if (
-          h0_error is not None
-          and isinstance(h0_error, CommandSyntaxError)
-          and h0_error.trace_information == 40
-        ):
-          logger.debug("CoRe 96 head still busy, waiting...")
-          continue
-        raise
-    raise TimeoutError("CoRe 96 head did not become idle within timeout")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          await anyio.sleep(poll_interval)
+          try:
+            await self.send_command(module="C0", command="EV", read_timeout=10)
+            logger.info("CoRe 96 head finished (EV succeeded)")
+            return
+          except STARFirmwareError as e:
+            h0_error = e.errors.get("CoRe 96 Head")
+            if (
+              h0_error is not None
+              and isinstance(h0_error, CommandSyntaxError)
+              and h0_error.trace_information == 40
+            ):
+              logger.debug("CoRe 96 head still busy, waiting...")
+              continue
+            raise
+    except TimeoutError:
+      raise TimeoutError("CoRe 96 head did not become idle within timeout") from None
 
   @_requires_head96
   async def aspirate96(
@@ -5497,7 +5517,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns the basic machine configuration including configuration data 1 (kb)
     and number of PIP channels (kp).
     """
-
     resp = await self.send_command(module="C0", command="RM", fmt="kb**kp##")
     kb = resp["kb"]
     return MachineConfiguration(
@@ -9442,7 +9461,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
 
       # Wait before checking again
-      await asyncio.sleep(check_interval)
+      await anyio.sleep(check_interval)
 
       # Check for presence again
       detected_rails = set(await self.request_presence_of_carriers_on_deck())

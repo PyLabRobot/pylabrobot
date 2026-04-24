@@ -150,6 +150,12 @@ class _MockChannel:
   def close(self):
     self.closed = True
 
+  def __enter__(self):
+    return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    self.close()
+
   def set_response(self, path: str, response: bytes):
     self.responses[path] = response
 
@@ -238,13 +244,15 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     )
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await backend.setup()
+      async with backend:
+        self.assertEqual(len(channel.calls), 4)
+        self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
+        self.assertEqual(channel.calls[1].path, f"/{_LOCK_SVC}/LockServer")
+        self.assertEqual(channel.calls[2].path, f"/{_OBJ_SVC}/Get_InstalledObjectives")
+        self.assertEqual(channel.calls[3].path, f"/{_FC_SVC}/Get_InstalledFilterCubes")
 
-    self.assertEqual(len(channel.calls), 4)
-    self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
-    self.assertEqual(channel.calls[1].path, f"/{_LOCK_SVC}/LockServer")
-    self.assertEqual(channel.calls[2].path, f"/{_OBJ_SVC}/Get_InstalledObjectives")
-    self.assertEqual(channel.calls[3].path, f"/{_FC_SVC}/Get_InstalledFilterCubes")
+    self.assertEqual(len(channel.calls), 5)
+    self.assertEqual(channel.calls[4].path, f"/{_LOCK_SVC}/UnlockServer")
 
     # Unlock request contains lock ID
     self.assertEqual(_decode_sila_string_from_request(channel.calls[0].request), "pylabrobot")
@@ -284,7 +292,8 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await backend.setup()
+      async with backend:
+        pass
 
     # Verify ChangeHardware was called with correct JSON params
     obj_change_calls = channel.get_calls(f"/{_OBJ_SVC}/ChangeHardware")
@@ -307,13 +316,33 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
 class TestStop(unittest.IsolatedAsyncioTestCase):
   async def test_stop_sends_unlock(self):
-    backend, channel = _make_backend()
+    backend = ExperimentalPicoBackend(host="127.0.0.1")
+    channel = _MockChannel()
 
-    await backend.stop()
+    channel.set_response(f"/{_LOCK_SVC}/UnlockServer", b"")
+    channel.set_response(f"/{_LOCK_SVC}/LockServer", b"")
+    channel.set_response(
+      f"/{_OBJ_SVC}/Get_InstalledObjectives",
+      _sila_string_response(json.dumps({"objectivesData": []})),
+    )
+    channel.set_response(
+      f"/{_FC_SVC}/Get_InstalledFilterCubes",
+      _sila_string_response(json.dumps({"filterCubesData": []})),
+    )
 
-    self.assertEqual(len(channel.calls), 1)
-    self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
-    self.assertEqual(_decode_sila_string_from_request(channel.calls[0].request), "pylabrobot")
+    with patch("grpc.insecure_channel", return_value=channel):
+      async with backend:
+        pass
+
+    # Expected calls:
+    # 0. UnlockServer (stale)
+    # 1. LockServer
+    # 2. Get_InstalledObjectives
+    # 3. Get_InstalledFilterCubes
+    # 4. UnlockServer (from cleanup!)
+    self.assertEqual(len(channel.calls), 5)
+    self.assertEqual(channel.calls[4].path, f"/{_LOCK_SVC}/UnlockServer")
+    self.assertEqual(_decode_sila_string_from_request(channel.calls[4].request), "pylabrobot")
     self.assertTrue(channel.closed)
 
 
@@ -825,7 +854,3 @@ class TestDecodeIntermediateResponse(unittest.TestCase):
     self.assertEqual(meta["blob_checksum"], 42)
     self.assertEqual(meta["packet_count"], 5)
     self.assertEqual(meta["packet_index"], 2)
-
-
-if __name__ == "__main__":
-  unittest.main()

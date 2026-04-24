@@ -1,5 +1,6 @@
 from typing import Dict
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
@@ -72,10 +73,8 @@ class IncubatorShakerStack(Resource, Machine):
     "incubator_shaker_dwp": 2.5,
   }
 
-  async def setup(self, **backend_kwargs) -> None:
-    """Connect to the stack and build per-unit proxies."""
-
-    await self.backend.setup(**backend_kwargs)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
 
     self.power_credit = 0.0
 
@@ -120,10 +119,6 @@ class IncubatorShakerStack(Resource, Machine):
     assert self.power_credit < 5, (
       f"Too many units: unit composition {self.backend.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
     )
-
-  async def stop(self):
-    """Gracefully stop backend communication."""
-    await self.backend.stop()
 
   async def request_loading_tray_states(self) -> dict:
     """Request loading tray states for all units."""

@@ -1,19 +1,19 @@
-import asyncio
+import contextlib
 import sys
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice
 from pylabrobot.plate_reading.tecan.spark20m.spark_backend import ExperimentalSparkBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 sys.modules["usb.core"] = MagicMock()
 sys.modules["usb.util"] = MagicMock()
 
 
-class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self) -> None:
+class TestExperimentalSparkBackend(AnyioTestBase):
+  async def _enter_lifespan(self, stack) -> None:
     # Patch SparkReaderAsync
     self.reader_patcher = patch(
       "pylabrobot.plate_reading.tecan.spark20m.spark_backend.SparkReaderAsync"
@@ -44,27 +44,30 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
       SparkDevice.PLATE_TRANSPORT: MagicMock(),
     }
 
-  async def asyncTearDown(self) -> None:
-    self.reader_patcher.stop()
-    self.abs_proc_patcher.stop()
-    self.fluo_proc_patcher.stop()
+    # Register cleanups
+    @stack.callback
+    def cleanup():
+      self.reader_patcher.stop()
+      self.abs_proc_patcher.stop()
+      self.fluo_proc_patcher.stop()
 
   async def test_setup(self) -> None:
-    await self.backend.setup()
-    self.mock_reader.connect.assert_called_once()
-    # Verify that send_command was called for init_module
-    self.mock_reader.send_command.assert_called()
+    async with self.backend:
+      # Verify that send_command was called for init_module
+      self.mock_reader.send_command.assert_called()
 
   async def test_open(self) -> None:
-    await self.backend.open()
-    self.mock_reader.send_command.assert_called()
+    async with self.backend:
+      await self.backend.open()
+      self.mock_reader.send_command.assert_called()
 
   async def test_read_absorbance(self) -> None:
     # Mock background read
-    stop_event = MagicMock()
-    bg_task: "asyncio.Future[None]" = asyncio.Future()
-    bg_task.set_result(None)
-    self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
+    @contextlib.asynccontextmanager
+    async def mock_bg_read(device_type):
+      yield []
+
+    self.mock_reader.background_read = mock_bg_read
 
     self.mock_process_absorbance.return_value = [[0.5]]
 
@@ -93,10 +96,11 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_fluorescence(self) -> None:
     # Mock background read
-    stop_event = MagicMock()
-    bg_task: "asyncio.Future[None]" = asyncio.Future()
-    bg_task.set_result(None)
-    self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
+    @contextlib.asynccontextmanager
+    async def mock_bg_read(device_type):
+      yield []
+
+    self.mock_reader.background_read = mock_bg_read
 
     self.mock_process_fluorescence.return_value = [[100.0]]
 
@@ -141,7 +145,3 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.mock_reader.msgs = []
     temp = await self.backend.get_average_temperature()
     self.assertIsNone(temp)
-
-
-if __name__ == "__main__":
-  unittest.main()

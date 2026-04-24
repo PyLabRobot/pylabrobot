@@ -4,6 +4,9 @@
 import asyncio
 from typing import List, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import (
   BlockStatus,
@@ -46,22 +49,20 @@ async def set_temperature_no_pause(
 
 async def wait_for_block_target(driver) -> None:
   """Wait for block temperature to reach target."""
-  max_attempts = 300  # 5 minutes max wait (300 * 1 second)
-  attempt = 0
-
-  while attempt < max_attempts:
-    try:
-      plate_temp = await driver.get_plate_temperature()
-      if plate_temp.target is not None and abs(plate_temp.current - plate_temp.target) < 1.0:
-        break
-    except Exception as e:
-      if "invalid thermistor" in str(e).lower() or "error" in str(e).lower():
-        raise RuntimeError(f"Thermocycler hardware error: {e}")
-      print(f"Temperature check failed (attempt {attempt + 1}), retrying: {e}")
-    attempt += 1
-    await asyncio.sleep(1.0)
-  else:
-    raise TimeoutError(f"Temperature did not reach target within {max_attempts} seconds")
+  try:
+    with anyio.fail_after(300):  # 5 minutes max wait (300 * 1 second)
+      while True:
+        try:
+          plate_temp = await driver.get_plate_temperature()
+          if plate_temp.target is not None and abs(plate_temp.current - plate_temp.target) < 1.0:
+            break
+        except Exception as e:
+          if "invalid thermistor" in str(e).lower() or "error" in str(e).lower():
+            raise RuntimeError(f"Thermocycler hardware error: {e}")
+          print(f"Temperature check failed, retrying: {e}")
+        await anyio.sleep(1.0)
+  except TimeoutError:
+    raise TimeoutError("Temperature did not reach target within 300 seconds")
 
 
 async def execute_cycle_step(
@@ -91,15 +92,15 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     (0x0483, 0xED8D),  # STMicroelectronics bridge seen in newer units
   }
 
-  def __init__(self):
+  def __init__(self, port: Optional[str] = None):
     """Create a new USB backend."""
     super().__init__()
     if not USE_OPENTRONS_DRIVER:
       raise RuntimeError("Opentrons thermocycler driver not available") from _import_error
 
+    self.port = port
     self._driver: Optional[AbstractThermocyclerDriver] = None
     self._current_protocol: Optional[Protocol] = None
-    self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     self._total_cycle_count: Optional[int] = None
     self._current_cycle_index: Optional[int] = None
@@ -188,11 +189,10 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
     self._current_protocol = protocol
 
-  async def setup(self, port: Optional[str] = None):
-    """Setup the USB connection to the thermocycler."""
-    if self._loop is None:
-      self._loop = asyncio.get_event_loop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
 
+    port = self.port
     if port is None:
       ports = serial.tools.list_ports.comports()
       opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
@@ -208,14 +208,18 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
       else:
         port = opentrons_ports[0].device
 
-    self._driver = await ThermocyclerDriverFactory.create(port, self._loop)
+    self._driver = await ThermocyclerDriverFactory.create(port, asyncio.get_running_loop())
 
-  async def stop(self):
-    if self._driver is not None:
-      await self.deactivate_block()
-      await self.deactivate_lid()
-      await self._driver.disconnect()
+    async def _cleanup():
+      try:
+        await self.deactivate_block()
+        await self.deactivate_lid()
+      finally:
+        assert self._driver is not None
+        await self._driver.disconnect()
       self._driver = None
+
+    stack.push_shielded_async_callback(_cleanup)
 
   async def open_lid(self):
     assert self._driver is not None

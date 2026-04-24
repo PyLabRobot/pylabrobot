@@ -1,12 +1,14 @@
 # mypy: disable-error-code = attr-defined
 
 
+import contextlib
 import math
-import unittest
 import unittest.mock
 from typing import Iterator
 
 import pytest
+
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 pytest.importorskip("pylibftdi")
 
@@ -19,14 +21,14 @@ def _byte_iter(s: str) -> Iterator[bytes]:
     yield c.encode()
 
 
-class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
+class TestCytation5Backend(AnyioTestBase):
   """Tests for the Cytation5Backend."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
+    await super()._enter_lifespan(stack)
     self.backend = CytationBackend(timeout=0.1)
     self.backend.io = unittest.mock.MagicMock()
-    self.backend.io.setup = unittest.mock.AsyncMock()
-    self.backend.io.stop = unittest.mock.AsyncMock()
+    self.backend.io._enter_lifespan = unittest.mock.AsyncMock()
     self.backend.io.read = unittest.mock.AsyncMock()
     self.backend.io.write = unittest.mock.AsyncMock()
     self.backend.io.usb_reset = unittest.mock.AsyncMock()
@@ -40,22 +42,18 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
     # Mock time.time() to control the timestamp in the results
-    self.mock_time = unittest.mock.patch("time.time", return_value=12345.6789).start()
-    self.addCleanup(self.mock_time.stop)
+    stack.enter_context(unittest.mock.patch("time.time", return_value=12345.6789))
 
   async def test_setup(self):
     self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
-    await self.backend.setup()
-    assert self.backend.io.setup.called
-    self.backend.io.usb_reset.assert_called_once()
-    self.backend.io.set_latency_timer.assert_called_with(16)
-    self.backend.io.set_baudrate.assert_called_with(9600)
-    # self.backend.io.set_line_property.assert_called_with(8, 2, 0)  #?
-    self.backend.io.set_flowctrl.assert_called_with(0x100)
-    self.backend.io.set_rts.assert_called_with(1)
-
-    await self.backend.stop()
-    assert self.backend.io.stop.called
+    async with self.backend:
+      assert self.backend.io._enter_lifespan.called
+      self.backend.io.usb_reset.assert_called_once()
+      self.backend.io.set_latency_timer.assert_called_with(16)
+      self.backend.io.set_baudrate.assert_called_with(9600)
+      # self.backend.io.set_line_property.assert_called_with(8, 2, 0)  #?
+      self.backend.io.set_flowctrl.assert_called_with(0x100)
+      self.backend.io.set_rts.assert_called_with(1)
 
   async def test_get_serial_number(self):
     self.backend.io.read.side_effect = _byte_iter("\x0600000000        0000\x03")

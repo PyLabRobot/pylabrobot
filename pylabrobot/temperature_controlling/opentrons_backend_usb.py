@@ -1,5 +1,6 @@
 from typing import Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.temperature_controlling.backend import (
   TemperatureControllerBackend,
@@ -29,21 +30,16 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
       raise RuntimeError("Serial device not initialized. Call setup() first.")
     return self._serial
 
-  async def setup(self):
-    # Setup serial communication for USB
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     self._serial = Serial(
       human_readable_device_name="Opentrons Temperature Module",
       port=self.port,
       baudrate=115200,
       timeout=3,
     )
-    await self._serial.setup()
-
-  async def stop(self):
-    await self.deactivate()
-    if self._serial is not None:
-      await self._serial.stop()
-      self._serial = None
+    await stack.enter_async_context(self._serial)
+    stack.push_shielded_async_callback(self.deactivate)
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}

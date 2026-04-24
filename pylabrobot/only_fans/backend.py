@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.machines.backend import MachineBackend
 
 
@@ -7,7 +8,7 @@ class FanBackend(MachineBackend, metaclass=ABCMeta):
   """Abstract base class for fan backends."""
 
   @abstractmethod
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Set up the fan. This should be called before any other methods."""
 
   @abstractmethod
@@ -17,7 +18,3 @@ class FanBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def turn_off(self) -> None:
     """Stop the fan, but don't close the connection."""
-
-  @abstractmethod
-  async def stop(self) -> None:
-    """Close all connections to the fan and make sure setup() can be called again."""

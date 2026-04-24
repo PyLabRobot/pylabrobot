@@ -1,19 +1,18 @@
-import unittest
 from unittest.mock import patch
 
 import pytest
 
-pytest.importorskip("ot_api")
+from pylabrobot.testing.concurrency import AnyioTestBase
 
+pytest.importorskip("ot_api")
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.thermocycling.opentrons import OpentronsThermocyclerModuleV1
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 
-class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+class TestOpentronsThermocyclerBackend(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
     self.thermocycler_backend = OpentronsThermocyclerBackend(opentrons_id="test_id")
 
   def test_opentrons_v1_serialization(self):

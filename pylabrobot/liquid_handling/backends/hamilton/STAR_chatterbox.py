@@ -4,7 +4,7 @@ import warnings
 from contextlib import asynccontextmanager
 from typing import Dict, List, Literal, Optional, Union
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   DriveConfiguration,
   ExtendedConfiguration,
@@ -99,13 +99,15 @@ class STARChatterboxBackend(STARBackend):
         extended_configuration.min_raster_pitch_pip_channels
       ] * num_channels
 
-  async def setup(
+  async def _enter_lifespan(
     self,
-    skip_instrument_initialization=False,
-    skip_pip=False,
-    skip_autoload=False,
-    skip_iswap=False,
-    skip_core96_head=False,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_instrument_initialization: bool = False,
+    skip_pip: bool = False,
+    skip_autoload: bool = False,
+    skip_iswap: bool = False,
+    skip_core96_head: bool = False,
   ):
     """Initialize the chatterbox backend and detect installed modules.
 
@@ -116,7 +118,14 @@ class STARChatterboxBackend(STARBackend):
       skip_iswap: If True, skip initializing the iSWAP module, if applicable.
       skip_core96_head: If True, skip initializing the CoRe 96 head module, if applicable.
     """
-    await LiquidHandlerBackend.setup(self)
+    await super()._enter_lifespan(
+      stack,
+      skip_instrument_initialization=skip_instrument_initialization,
+      skip_pip=skip_pip,
+      skip_autoload=skip_autoload,
+      skip_iswap=skip_iswap,
+      skip_core96_head=skip_core96_head,
+    )
 
     self.id_ = 0
 
@@ -135,10 +144,6 @@ class STARChatterboxBackend(STARBackend):
       )
     else:
       self._head96_information = None
-
-  async def stop(self):
-    await LiquidHandlerBackend.stop(self)
-    self._setup_done = False
 
   # # # # # # # # Low-level command sending/receiving # # # # # # # #
 

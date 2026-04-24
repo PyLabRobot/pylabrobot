@@ -3,6 +3,9 @@ import statistics
 import time
 from typing import Dict, List, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
 from pylabrobot.resources.plate import Plate
@@ -48,9 +51,11 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     self.sensor_control = SensorControl(self.reader.send_command)
     self.data_control = DataControl(self.reader.send_command)
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Set up the plate reader."""
-    await self.reader.connect()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.reader)
+
     await self.config_control.init_module()
     await self.data_control.turn_all_interval_messages_off()
 
@@ -71,10 +76,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       return None
 
     return statistics.mean(temps) / 100.0
-
-  async def stop(self) -> None:
-    """Close connections."""
-    await self.reader.close()
 
   async def open(self) -> None:
     """Move the plate carrier out."""
@@ -143,25 +144,23 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       FilterType.BANDPASS, wavelength=wavelength * 10, bandwidth=bandwidth, label=1
     )
 
-    # Start Background Read
-    bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.ABSORPTION)
-
-    if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(f"Failed to start background read for {SparkDevice.ABSORPTION.name}")
-
+    # Background Read
+    results = None
     try:
-      # Execute Measurement Sequence
-      await self.measurement_control.prepare_instrument(measure_reference=True)
+      async with self.reader.background_read(SparkDevice.ABSORPTION) as results:
+        if results is None:
+          raise RuntimeError(f"Failed to start background read for {SparkDevice.ABSORPTION.name}")
 
-      await self.scan_plate_range(plate, wells)
-      measurement_time = time.time()
+        # Execute Measurement Sequence
+        await self.measurement_control.prepare_instrument(measure_reference=True)
 
+        await self.scan_plate_range(plate, wells)
+        measurement_time = time.time()
     finally:
-      stop_event.set()
-      await bg_task
-
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
+      if results is not None:
+        with anyio.CancelScope(shield=True):
+          await self.data_control.turn_all_interval_messages_off()
+          await self.measurement_control.end_measurement()
 
     # Process results
     data_matrix = process_absorbance(results)
@@ -232,24 +231,23 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     await self.optics_control.set_signal_gain(gain)
     await self.measurement_control.set_number_of_reads(num_reads)
 
-    # Start Background Read
-    bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.FLUORESCENCE)
-
-    if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(f"Failed to start background read for {SparkDevice.FLUORESCENCE.name} ")
-
+    # Background Read
+    results = None
     try:
-      # Execute Measurement Sequence
-      await self.measurement_control.prepare_instrument(measure_reference=True)
-      await self.scan_plate_range(plate, wells, focal_height)
-      measurement_time = time.time()
+      async with self.reader.background_read(SparkDevice.FLUORESCENCE) as results:
+        if results is None:
+          raise RuntimeError(f"Failed to start background read for {SparkDevice.FLUORESCENCE.name}")
 
+        # Execute Measurement Sequence
+        await self.measurement_control.prepare_instrument(measure_reference=True)
+
+        await self.scan_plate_range(plate, wells)
+        measurement_time = time.time()
     finally:
-      stop_event.set()
-      await bg_task
-
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
+      if results is not None:
+        with anyio.CancelScope(shield=True):
+          await self.data_control.turn_all_interval_messages_off()
+          await self.measurement_control.end_measurement()
 
     # Process results
     data_matrix = process_fluorescence(results)

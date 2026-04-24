@@ -1,6 +1,7 @@
 import math
-import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
 
 from pylabrobot.plate_reading.molecular_devices.backend import (
   Calibrate,
@@ -18,38 +19,46 @@ from pylabrobot.plate_reading.molecular_devices.backend import (
   SpectrumSettings,
 )
 from pylabrobot.resources.agenbio.plates import AGenBio_96_wellplate_Ub_2200ul
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
+class TestMolecularDevicesBackend(AnyioTestBase):
   backend: MolecularDevicesBackend
   mock_serial: MagicMock
   send_command_mock: AsyncMock
 
-  def setUp(self):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
+
     self.mock_serial = MagicMock()
-    self.mock_serial.setup = AsyncMock()
-    self.mock_serial.stop = AsyncMock()
+    self.mock_serial.__aenter__ = AsyncMock(return_value=self.mock_serial)
+    self.mock_serial.__aexit__ = AsyncMock(return_value=None)
     self.mock_serial.write = AsyncMock()
     self.mock_serial.readline = AsyncMock(return_value=b"OK>\r\n")
 
-    with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
-      self.backend = MolecularDevicesBackend(port="COM1")
-      self.backend.io = self.mock_serial
-      self.send_command_mock = patch.object(
-        self.backend, "send_command", new_callable=AsyncMock
-      ).start()
-    self.addCleanup(patch.stopall)
+    stack.enter_context(patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial))
+
+    self.backend = MolecularDevicesBackend(port="COM1")
+    self.backend.io = self.mock_serial
+
+    self.send_command_mock = stack.enter_context(
+      patch.object(self.backend, "send_command", new_callable=AsyncMock)
+    )
 
   async def test_setup_stop(self):
+    import sniffio
+
+    if sniffio.current_async_library() == "trio":
+      pytest.skip("global_manager is not supported on trio")
+
     # un-mock send_command for this test
     with patch.object(
       self.backend, "send_command", wraps=self.backend.send_command
     ) as wrapped_send_command:
-      await self.backend.setup()
-      self.mock_serial.setup.assert_called_once()
-      wrapped_send_command.assert_called_with("!")
-      await self.backend.stop()
-      self.mock_serial.stop.assert_called_once()
+      async with self.backend:
+        self.mock_serial.__aenter__.assert_called_once()
+        wrapped_send_command.assert_called_with("!")
+      self.mock_serial.__aexit__.assert_called_once()
 
   async def test_set_clear(self):
     await self.backend._set_clear()
@@ -676,15 +685,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data.assert_called_once()
 
 
-class TestDataParsing(unittest.IsolatedAsyncioTestCase):
+class TestDataParsing(AnyioTestBase):
   send_command_mock: AsyncMock
 
-  def setUp(self):
-    with patch("pylabrobot.io.serial.Serial", return_value=MagicMock()):
-      self.backend = MolecularDevicesBackend(port="COM1")
-      self.send_command_mock = patch.object(
-        self.backend, "send_command", new_callable=AsyncMock
-      ).start()
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
+    stack.enter_context(patch("pylabrobot.io.serial.Serial", return_value=MagicMock()))
+    self.backend = MolecularDevicesBackend(port="COM1")
+    self.send_command_mock = stack.enter_context(
+      patch.object(self.backend, "send_command", new_callable=AsyncMock)
+    )
 
   def test_parse_absorbance_single_wavelength(self):
     data_str = """
@@ -933,17 +943,18 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result[1]["time"], 12355.6)
 
 
-class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
+class TestErrorHandling(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.mock_serial = MagicMock()
     self.mock_serial.setup = AsyncMock()
     self.mock_serial.stop = AsyncMock()
     self.mock_serial.write = AsyncMock()
     self.mock_serial.readline = AsyncMock()
 
-    with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
-      self.backend = MolecularDevicesBackend(port="/dev/tty01")
-      self.backend.io = self.mock_serial
+    stack.enter_context(patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial))
+    self.backend = MolecularDevicesBackend(port="/dev/tty01")
+    self.backend.io = self.mock_serial
 
   async def _mock_send_command_response(self, response_str: str):
     self.mock_serial.readline.side_effect = [response_str.encode() + b">\r\n"]
@@ -995,7 +1006,3 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(response, ["OK"])
     except MolecularDevicesError:
       self.fail("MolecularDevicesError raised for a valid OK response")
-
-
-if __name__ == "__main__":
-  unittest.main()

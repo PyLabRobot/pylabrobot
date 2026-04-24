@@ -1,9 +1,13 @@
-import asyncio
 import logging
 import ssl
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
+import anyio
+import anyio.streams.buffered
+import anyio.streams.tls
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
@@ -41,52 +45,55 @@ class Socket(IOBase):
     self._human_readable_device_name = human_readable_device_name
     self._host = host
     self._port = port
-    self._reader: Optional[asyncio.StreamReader] = None
-    self._writer: Optional[asyncio.StreamWriter] = None
+    self._stream: Optional[anyio.streams.buffered.BufferedByteStream] = None
     self._read_timeout = read_timeout
     self._write_timeout = write_timeout
     self._ssl_context = ssl_context
     self._server_hostname = server_hostname
     self._unique_id = f"{self._host}:{self._port}"
-    self._read_lock = asyncio.Lock()
-    self._write_lock = asyncio.Lock()
+    self._read_lock = anyio.Lock()
+    self._write_lock = anyio.Lock()
     self._ssl = ssl
 
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Socket object while capture or validation is active")
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     await self._connect()
+    stack.push_async_callback(self._disconnect)
 
   async def _connect(self):
-    self._reader, self._writer = await asyncio.open_connection(
-      host=self._host,
-      port=self._port,
-      ssl=self._ssl_context,
-      server_hostname=self._server_hostname,
-    )
-
-  async def stop(self):
-    await self._disconnect()
+    raw_stream = await anyio.connect_tcp(self._host, self._port)
+    stream: Any
+    if self._ssl_context:
+      stream = await anyio.streams.tls.TLSStream.wrap(
+        raw_stream,
+        ssl_context=self._ssl_context,
+        server_hostname=self._server_hostname,
+      )  # type: ignore[call-arg]
+    else:
+      stream = raw_stream
+    self._stream = anyio.streams.buffered.BufferedByteStream(stream)
 
   async def _disconnect(self):
     async with self._read_lock, self._write_lock:
-      self._reader = None
-      if self._writer is None:
+      if self._stream is None:
         return
 
       logger.info("Closing connection to socket %s:%s", self._host, self._port)
 
       try:
-        self._writer.close()
-        await self._writer.wait_closed()
+        await self._stream.aclose()
       except OSError as e:
         logger.warning("Error while closing socket connection: %s", e)
       finally:
-        self._writer = None
+        self._stream = None
 
-  async def reconnect(self):
+  async def reconnect(self, *, wait_time: float = 0):
     await self._disconnect()
+    if wait_time > 0:
+      await anyio.sleep(wait_time)
     await self._connect()
 
   def serialize(self):
@@ -114,16 +121,15 @@ class Socket(IOBase):
     )
 
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
-    """Wrapper around StreamWriter.write with lock and io logging.
+    """Wrapper around anyio.abc.ByteStream.send with lock and io logging.
     Does not retry on timeouts.
     """
-    if self._writer is None:
+    if self._stream is None:
       raise RuntimeError(
         f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._write_timeout if timeout is None else timeout
     async with self._write_lock:
-      self._writer.write(data)
       logger.log(LOG_LEVEL_IO, "[%s:%d] write %s", self._host, self._port, data)
       capturer.record(
         SocketCommand(
@@ -133,9 +139,9 @@ class Socket(IOBase):
         )
       )
       try:
-        await asyncio.wait_for(self._writer.drain(), timeout=timeout)
-        return
-      except asyncio.TimeoutError as exc:
+        with anyio.fail_after(timeout):
+          await self._stream.send(data)
+      except TimeoutError as exc:
         logger.error("write timeout: %r", exc)
         raise TimeoutError(f"Timeout while writing to socket after {timeout} seconds") from exc
       except (ConnectionResetError, OSError) as e:
@@ -143,7 +149,7 @@ class Socket(IOBase):
         raise
 
   async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
-    """Wrapper around StreamReader.read with lock and io logging.
+    """Wrapper around anyio.abc.ByteStream.receive with lock and io logging.
 
     Args:
       num_bytes: The maximum number of bytes to read from the socket.
@@ -154,17 +160,21 @@ class Socket(IOBase):
     Returns:
       The data read from the socket, which may be fewer than `num_bytes` bytes.
     """
-    if self._reader is None:
+    if self._stream is None:
       raise RuntimeError(
         f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        data = await asyncio.wait_for(self._reader.read(num_bytes), timeout=timeout)
-      except asyncio.TimeoutError as exc:
+        with anyio.fail_after(timeout):
+          data = await self._stream.receive(num_bytes)
+      except TimeoutError as exc:
         logger.error("read timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
+      except anyio.EndOfStream:
+        data = b""
+
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data)
       capturer.record(
         SocketCommand(
@@ -176,51 +186,71 @@ class Socket(IOBase):
       return data
 
   async def readline(self, timeout: Optional[float] = None) -> bytes:
-    """Wrapper around StreamReader.readline with lock and io logging."""
-    if self._reader is None:
+    """Wrapper around reading from stream until newline with lock and io logging."""
+    if self._stream is None:
       raise RuntimeError(
         f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        data = await asyncio.wait_for(self._reader.readline(), timeout=timeout)
-      except asyncio.TimeoutError as exc:
+        with anyio.fail_after(timeout):
+          data = await self._stream.receive_until(b"\n", max_bytes=65536)
+          result = data + b"\n"
+      except TimeoutError as exc:
         logger.error("readline timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-      logger.log(LOG_LEVEL_IO, "[%s:%d] readline %s", self._host, self._port, data)
+      except anyio.IncompleteRead:
+        logger.warning("readline: connection closed before newline found, returning partial data")
+        result = await self._stream.receive(len(self._stream.buffer))
+      except anyio.streams.buffered.DelimiterNotFound as exc:
+        logger.error("readline error: delimiter not found")
+        raise RuntimeError("Newline not found within max_bytes") from exc
+
+      logger.log(LOG_LEVEL_IO, "[%s:%d] readline %s", self._host, self._port, result)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
           action="readline",
-          data=data.hex(),
+          data=result.hex(),
         )
       )
-      return data
+      return result
 
   async def readuntil(self, separator: bytes = b"\n", timeout: Optional[float] = None) -> bytes:
-    """Wrapper around StreamReader.readuntil with lock and io logging.
+    """Wrapper around reading from stream until separator with lock and io logging.
     Do not retry on timeouts."""
-    if self._reader is None:
+    if self._stream is None:
       raise RuntimeError(
         f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        data = await asyncio.wait_for(self._reader.readuntil(separator), timeout=timeout)
-      except asyncio.TimeoutError as exc:
+        with anyio.fail_after(timeout):
+          data = await self._stream.receive_until(separator, max_bytes=65536)
+          result = data + separator
+      except TimeoutError as exc:
         logger.error("readuntil timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-      logger.log(LOG_LEVEL_IO, "[%s:%d] readuntil %s", self._host, self._port, data)
+      except anyio.IncompleteRead:
+        logger.warning(
+          "readuntil: connection closed before separator found, returning partial data"
+        )
+        result = await self._stream.receive(len(self._stream.buffer))
+      except anyio.streams.buffered.DelimiterNotFound as exc:
+        logger.error("readuntil error: delimiter not found")
+        raise RuntimeError("Separator not found within max_bytes") from exc
+
+      logger.log(LOG_LEVEL_IO, "[%s:%d] readuntil %s", self._host, self._port, result)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
           action="readuntil:" + separator.hex(),
-          data=data.hex(),
+          data=result.hex(),
         )
       )
-      return data
+      return result
 
   async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
     """Read exactly num_bytes, blocking until all bytes are received.
@@ -239,34 +269,31 @@ class Socket(IOBase):
       ConnectionError: If the connection is closed before num_bytes are read.
       TimeoutError: If timeout is reached before num_bytes are read.
     """
-    if self._reader is None:
+    if self._stream is None:
       raise RuntimeError(
         f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
-    data = bytearray()
     async with self._read_lock:
-      while len(data) < num_bytes:
-        remaining = num_bytes - len(data)
-        try:
-          chunk = await asyncio.wait_for(self._reader.read(remaining), timeout=timeout)
-        except asyncio.TimeoutError as exc:
-          logger.error("read_exact timeout: %r", exc)
-          raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-        if len(chunk) == 0:
-          raise ConnectionError("Connection closed before num_bytes are read")
-        data.extend(chunk)
+      try:
+        with anyio.fail_after(timeout):
+          data = await self._stream.receive_exactly(num_bytes)
+      except TimeoutError as exc:
+        logger.error("read_exact timeout: %r", exc)
+        raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
+      except anyio.IncompleteRead as exc:
+        logger.error("read_exact error: %r", exc)
+        raise ConnectionError("Connection closed before num_bytes were read") from exc
 
-      result = bytes(data)
-      logger.log(LOG_LEVEL_IO, "[%s:%d] read_exact %s", self._host, self._port, result.hex())
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read_exact %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
           action="read_exact",
-          data=result.hex(),
+          data=data.hex(),
         )
       )
-      return result
+      return data
 
   async def read_until_eof(self, chunk_size: int = 1024, timeout: Optional[float] = None) -> bytes:
     """Read until EOF is reached.
@@ -277,34 +304,35 @@ class Socket(IOBase):
 
     async with self._read_lock:
       while True:
-        if self._reader is None:
+        if self._stream is None:
           raise RuntimeError(
             f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
           )
         try:
-          chunk = await asyncio.wait_for(self._reader.read(chunk_size), timeout=timeout)
-        except asyncio.TimeoutError as exc:
+          with anyio.fail_after(timeout):
+            chunk = await self._stream.receive(chunk_size)
+        except TimeoutError as exc:
           # if some previous read attempts already return some data, we should consider this a success
           if len(buf) > 0:
             break
           logger.error("read_until_eof timeout: %r", exc)
           raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-        if len(chunk) == 0:
+        except anyio.EndOfStream:
           break
 
         logger.debug("read_until_eof: got %d bytes", len(chunk))
         buf.extend(chunk)
 
-      line = bytes(buf)
-      logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line)
+      result = bytes(buf)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, result)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
           action="read_until_eof",
-          data=line.hex(),
+          data=result.hex(),
         )
       )
-      return line
+      return result
 
 
 class SocketValidator(Socket):

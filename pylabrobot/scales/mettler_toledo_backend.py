@@ -1,11 +1,12 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
-import asyncio
 import logging
-import time
 import warnings
 from typing import List, Literal, Optional, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.scales.scale_backend import ScaleBackend
 
@@ -172,9 +173,9 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       timeout=1,
     )
 
-  async def setup(self) -> None:
-    # Core state
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
     # set output unit to grams
     await self.send_command("M21 0 0")
@@ -182,9 +183,6 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     # Handshake: parse requested serial number
     self.serial_number = await self.request_serial_number()
     # TODO: verify serial number pattern
-
-  async def stop(self) -> None:
-    await self.io.stop()
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.io.port}
@@ -266,14 +264,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     await self.io.write(command.encode() + b"\r\n")
 
     raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response = await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError("Timeout while waiting for response from scale.")
-      if raw_response != b"":
-        break
+    with anyio.fail_after(timeout):
+      while True:
+        raw_response = await self.io.readline()
+        if raw_response != b"":
+          break
+        await anyio.sleep(0.001)
     logger.debug("[scale] Received response: %s", raw_response)
     response = raw_response.decode("utf-8").strip().split()
 

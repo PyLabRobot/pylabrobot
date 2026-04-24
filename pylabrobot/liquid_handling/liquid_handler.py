@@ -24,6 +24,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
@@ -155,15 +156,13 @@ class LiquidHandler(Resource, Machine):
   def _resource_pickup(self, value: Optional[ResourcePickup]) -> None:
     self._resource_pickups[0] = value
 
-  async def setup(self, **backend_kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """Prepare the robot for use."""
-
-    if self.setup_finished:
-      raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
     self.backend.set_heads(head=self.head, head96=self.head96)
-    await super().setup(**backend_kwargs)
+
+    await super()._enter_lifespan(stack)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 

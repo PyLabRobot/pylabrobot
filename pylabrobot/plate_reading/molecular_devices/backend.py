@@ -1,12 +1,13 @@
-import asyncio
 import logging
 import re
-import time
 from abc import ABCMeta
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources.plate import Plate
@@ -258,12 +259,10 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       timeout=0.2,
     )
 
-  async def setup(self) -> None:
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.send_command("!")
-
-  async def stop(self) -> None:
-    await self.io.stop()
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
@@ -282,14 +281,16 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
     await self.io.write(command.encode() + b"\r")
     raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response += await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError(f"Timeout waiting for response to command: {command}")
-      if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
-        break
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          raw_response += await self.io.readline()
+          await anyio.sleep(0.001)
+          if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
+            break
+    except TimeoutError:
+      raise TimeoutError(f"Timeout waiting for response to command: {command}") from None
+
     logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
     response = raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
     response = [r.strip() for r in response if r.strip() != ""]
@@ -682,14 +683,15 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   async def _wait_for_idle(self, timeout: int = 600):
     """Wait for the plate reader to become idle."""
-    start_time = time.time()
-    while True:
-      if time.time() - start_time > timeout:
-        raise TimeoutError("Timeout waiting for plate reader to become idle.")
-      status = await self.get_status()
-      if status and status[1] == "IDLE":
-        break
-      await asyncio.sleep(1)
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          status = await self.get_status()
+          if status and status[1] == "IDLE":
+            break
+          await anyio.sleep(1)
+    except TimeoutError:
+      raise TimeoutError("Timeout waiting for plate reader to become idle.") from None
 
   async def read_absorbance(  # type: ignore[override]
     self,

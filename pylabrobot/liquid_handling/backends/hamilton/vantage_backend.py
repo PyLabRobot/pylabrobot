@@ -1,10 +1,12 @@
-import asyncio
 import random
 import re
 import sys
 import warnings
 from typing import Dict, List, Optional, Sequence, Union, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
@@ -400,15 +402,17 @@ class VantageBackend(HamiltonLiquidHandler):
     """Parse a firmware response."""
     return parse_vantage_fw_string(resp, fmt)
 
-  async def setup(
+  async def _enter_lifespan(
     self,
+    stack: AsyncExitStackWithShielding,
+    *,
     skip_loading_cover: bool = False,
     skip_core96: bool = False,
     skip_ipg: bool = False,
   ):
     """Creates a USB connection and finds read/write interfaces."""
 
-    await super().setup()
+    await super()._enter_lifespan(stack)
 
     tip_presences = await self.query_tip_presence()
     self._num_channels = len(tip_presences)
@@ -5280,7 +5284,7 @@ class VantageBackend(HamiltonLiquidHandler):
         random.randint(30, 100),
       )
       await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
   async def russian_roulette(self):
     """Dangerous easter egg."""
@@ -5307,7 +5311,7 @@ class VantageBackend(HamiltonLiquidHandler):
       await self.set_led_color("on", intensity=100, white=100, red=0, green=100, blue=0, uv=0)
       print("You won.")
 
-    await asyncio.sleep(5)
+    await anyio.sleep(5)
     await self.set_led_color(
       "on",
       intensity=100,

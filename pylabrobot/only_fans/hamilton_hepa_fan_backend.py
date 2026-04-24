@@ -1,5 +1,6 @@
-import asyncio
+import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
@@ -13,8 +14,9 @@ class HamiltonHepaFanBackend(FanBackend):
       human_readable_device_name="Hamilton HEPA Fan", device_id=device_id, vid=0x0856, pid=0xAC11
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)  # type: ignore[safe-super]
+    await stack.enter_async_context(self.io)
     await self.io.set_baudrate(9600)
     await self.io.set_line_property(8, 0, 0)  # 8N1
     await self.io.set_latency_timer(16)
@@ -142,12 +144,9 @@ class HamiltonHepaFanBackend(FanBackend):
   async def turn_off(self):
     await self.send(b"\x55\xc1\x01\x11\x00\x7b")
 
-  async def stop(self):
-    await self.io.stop()
-
   async def send(self, command: bytes):
     await self.io.write(command)
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
     await self.io.read(64)
 
 

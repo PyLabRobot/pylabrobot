@@ -1,4 +1,3 @@
-import unittest
 from typing import List
 from unittest.mock import AsyncMock
 
@@ -11,16 +10,11 @@ from pylabrobot.powder_dispensing.powder_dispenser import (
   PowderDispenser,
 )
 from pylabrobot.resources import Cor_96_wellplate_360ul_Fb, Powder
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class MockPowderDispenserBackend(PowderDispenserBackend):
   """A mock backend for testing."""
-
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
 
   async def dispense(
     self,
@@ -35,15 +29,16 @@ class MockPowderDispenserBackend(PowderDispenserBackend):
     return results
 
 
-class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
+class TestPowderDispenser(AnyioTestBase):
   """
   Test class for PowderDispenser.
   """
 
-  async def asyncSetUp(self) -> None:
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.backend = AsyncMock(spec=MockPowderDispenserBackend)
     self.dispenser = PowderDispenser(backend=self.backend)
-    await self.dispenser.setup()
+    await stack.enter_async_context(self.dispenser)
 
   async def test_dispense_single_resource(self):
     plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
@@ -85,7 +80,3 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
         [0.005, 0.010],
         dispense_parameters=[{"param": "value"}, {"param": "value"}],
       )
-
-
-if __name__ == "__main__":
-  unittest.main()

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import http.server
 import logging
@@ -13,6 +12,9 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource
 from pylabrobot.storage.inheco.scila.soap import (
   XSI,
   _localname,
@@ -88,7 +90,7 @@ class SiLAError(RuntimeError):
     super().__init__(f"Command {command} failed with code {code}: '{message}'")
 
 
-class InhecoSiLAInterface:
+class InhecoSiLAInterface(AsyncResource):
   @dataclass(frozen=True)
   class _HTTPRequest:
     method: str
@@ -97,11 +99,17 @@ class InhecoSiLAInterface:
     headers: dict[str, str]
     body: bytes
 
+  @dataclass
+  class _CommandState:
+    result: Any = None
+    error: Optional[Exception] = None
+
   @dataclass(frozen=True)
   class _SiLACommand:
     name: str
     request_id: int
-    fut: asyncio.Future[Any]
+    event: anyio.Event
+    state: InhecoSiLAInterface._CommandState
 
   def __init__(
     self,
@@ -114,16 +122,13 @@ class InhecoSiLAInterface:
     self._logger = logger or logging.getLogger(__name__)
 
     # single "in-flight token"
-    self._making_request = asyncio.Lock()
+    self._making_request = anyio.Lock()
 
     # pending command information
     self._pending: Optional[InhecoSiLAInterface._SiLACommand] = None
 
     # server plumbing
-    self._loop: Optional[asyncio.AbstractEventLoop] = None
     self._httpd: Optional[socketserver.TCPServer] = None
-    self._server_task: Optional[asyncio.Task[None]] = None
-    self._closed = False
 
   @property
   def client_ip(self) -> str:
@@ -139,13 +144,7 @@ class InhecoSiLAInterface:
       raise RuntimeError("Server not started yet")
     return self._httpd.server_address[1]
 
-  async def start(self) -> None:
-    if self._httpd is not None:
-      return
-    if self._closed:
-      raise RuntimeError("Bridge is closed")
-
-    self._loop = asyncio.get_running_loop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     outer = self
 
     class _Handler(http.server.BaseHTTPRequestHandler):
@@ -159,8 +158,6 @@ class InhecoSiLAInterface:
         return self.rfile.read(length) if length else b""
 
       def _do(self) -> None:
-        assert outer._loop is not None
-
         parsed = urllib.parse.urlsplit(self.path)
         req = InhecoSiLAInterface._HTTPRequest(
           method=self.command,
@@ -170,9 +167,8 @@ class InhecoSiLAInterface:
           body=self._read_body(),
         )
 
-        fut = asyncio.run_coroutine_threadsafe(outer._on_http(req), outer._loop)
         try:
-          resp_body = fut.result()
+          resp_body = anyio.from_thread.run(outer._on_http, req)
           status = 200
         except Exception as e:
           resp_body = f"Internal Server Error: {type(e).__name__}: {e}\n".encode()
@@ -201,23 +197,22 @@ class InhecoSiLAInterface:
 
     async def run_server() -> None:
       assert self._httpd is not None
-      await asyncio.to_thread(self._httpd.serve_forever)
 
-    self._server_task = asyncio.create_task(run_server(), name="http-server")
+      def _serve():
+        assert self._httpd is not None
+        with self._httpd:
+          self._httpd.serve_forever()
 
-  async def close(self) -> None:
-    self._closed = True
-    if self._httpd is None:
-      return
+      await anyio.to_thread.run_sync(_serve)
 
-    self._httpd.shutdown()
-    self._httpd.server_close()
+    async def cleanup():
+      assert self._httpd is not None
+      await anyio.to_thread.run_sync(self._httpd.shutdown)
+      self._httpd = None
 
-    if self._server_task is not None:
-      await self._server_task
-
-    self._httpd = None
-    self._server_task = None
+    tg = await stack.enter_async_context(anyio.create_task_group())
+    stack.push_shielded_async_callback(cleanup)
+    tg.start_soon(run_server)
 
   async def _on_http(self, req: _HTTPRequest) -> bytes:
     """
@@ -232,21 +227,22 @@ class InhecoSiLAInterface:
       payload = soap_body_payload(xml_str)
       tag_local = _localname(payload.tag)
 
-      if cmd is not None and not cmd.fut.done() and tag_local == "ResponseEvent":
+      if cmd is not None and not cmd.event.is_set() and tag_local == "ResponseEvent":
         response_event = soap_decode(xml_str)
         if response_event["ResponseEvent"].get("requestId") == cmd.request_id:
           ret = response_event["ResponseEvent"].get("returnValue", {})
           rc = ret.get("returnCode")
           if rc != 3:  # 3=Success
-            cmd.fut.set_exception(
-              SiLAError(rc, ret.get("message", "").replace(chr(10), " "), cmd.name, details=ret)
+            cmd.state.error = SiLAError(
+              rc, ret.get("message", "").replace(chr(10), " "), cmd.name, details=ret
             )
           else:
-            cmd.fut.set_result(
+            cmd.state.result = (
               ET.fromstring(d)
               if (d := response_event["ResponseEvent"].get("responseData"))
               else ET.Element("EmptyResponse")
             )
+          cmd.event.set()
 
       if tag_local == "DataEvent":
         try:
@@ -280,9 +276,6 @@ class InhecoSiLAInterface:
       raise ValueError(f"returnCode not found in response for {command_name}")
     return return_code, result_level.get("message", "")
 
-  async def setup(self) -> None:
-    await self.start()
-
   def _make_request_id(self):
     return random.randint(1, 2**31 - 1)
 
@@ -291,8 +284,8 @@ class InhecoSiLAInterface:
     command: str,
     **kwargs,
   ) -> Any:
-    if self._closed:
-      raise RuntimeError("Bridge is closed")
+    if self._httpd is None:
+      raise RuntimeError("Server not started")
 
     request_id = self._make_request_id()
     cmd_xml = soap_encode(
@@ -327,18 +320,22 @@ class InhecoSiLAInterface:
           with urllib.request.urlopen(req) as resp:
             return resp.read()  # type: ignore
 
-        body = await asyncio.to_thread(_do_request)
+        body = await anyio.to_thread.run_sync(_do_request)
         return_code, message = self._get_return_code_and_message(
           command, soap_decode(body.decode("utf-8"))
         )
         if return_code == 1:  # success
           return soap_decode(body.decode("utf-8"))
         elif return_code == 2:  # concurrent command
-          fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+          event = anyio.Event()
+          state = InhecoSiLAInterface._CommandState()
           self._pending = InhecoSiLAInterface._SiLACommand(
-            name=command, request_id=request_id, fut=fut
+            name=command, request_id=request_id, event=event, state=state
           )
-          return await fut  # wait for response to be handled in _on_http
+          await event.wait()
+          if self._pending.state.error is not None:
+            raise self._pending.state.error
+          return self._pending.state.result
         else:
           raise RuntimeError(f"command {command} failed: {return_code} {message}")
       finally:

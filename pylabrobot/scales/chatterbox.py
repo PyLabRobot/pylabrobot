@@ -1,3 +1,5 @@
+import contextlib
+
 from pylabrobot.scales.scale_backend import ScaleBackend
 
 
@@ -6,12 +8,15 @@ class ScaleChatterboxBackend(ScaleBackend):
 
   def __init__(self, dummy_weight: float = 0.0) -> None:
     self._dummy_weight = dummy_weight
+    super().__init__()
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     print("Setting up the scale.")
 
-  async def stop(self) -> None:
-    print("Stopping the scale.")
+    def _cleanup():
+      print("Stopping the scale.")
+
+    stack.callback(_cleanup)
 
   async def tare(self):
     print("Taring the scale")
