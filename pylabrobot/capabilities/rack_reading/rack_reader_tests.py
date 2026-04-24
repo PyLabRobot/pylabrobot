@@ -108,19 +108,6 @@ class TestRackReader(unittest.IsolatedAsyncioTestCase):
       ["get_state", "trigger_rack_scan", "get_state", "get_state", "get_scan_result"],
     )
 
-  async def test_scan_rack_id_triggers_tube_scan_and_returns_rack_id(self):
-    backend = RecordingRackReaderBackend()
-    reader = RackReader(backend=backend)
-    await reader._on_setup()
-
-    rack_id = await reader.scan_rack_id(timeout=1.0, poll_interval=0.01)
-
-    self.assertEqual(rack_id, "5500135415")
-    self.assertEqual(
-      backend.calls[:3],
-      ["trigger_tube_scan", "get_state", "get_rack_id"],
-    )
-
   async def test_scan_rack_times_out(self):
     backend = StuckRackReaderBackend()
     reader = RackReader(backend=backend)

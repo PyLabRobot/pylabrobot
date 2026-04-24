@@ -4,6 +4,7 @@ import asyncio
 import time
 from typing import Any, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend, BarcodeScannerError
 from pylabrobot.capabilities.rack_reading import RackReaderState
 from pylabrobot.resources.barcode import Barcode
@@ -29,7 +30,7 @@ class MicronicBarcodeScannerBackend(BarcodeScannerBackend):
     self.timeout = timeout
     self.poll_interval = poll_interval
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self._get_state()
 
   async def scan_barcode(self) -> Barcode:
