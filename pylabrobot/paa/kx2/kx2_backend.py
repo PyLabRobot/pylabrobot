@@ -4,7 +4,7 @@ import math
 import warnings
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -77,9 +77,16 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     RAIL = 5
     SERVO_GRIPPER = 6
 
-  def __init__(self, driver: KX2Driver) -> None:
+  def __init__(
+    self,
+    driver: KX2Driver,
+    gripper_length: float = 0.0,
+    gripper_z_offset: float = 0.0,
+  ) -> None:
     super().__init__()
     self.driver = driver
+    self.gripper_length = float(gripper_length)
+    self.gripper_z_offset = float(gripper_z_offset)
 
     self.digital_input_assignment = {}  # TODO: just cache?
     self.AnalogInputAssignment = {}
@@ -1103,9 +1110,16 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if pose.rotation.x != 0 or pose.rotation.y != 0:
       raise ValueError("Only Z rotation is supported for KX2")
 
-    joint_position: Dict[KX2ArmBackend.Axis, float] = {}
+    # Gripper -> wrist: the incoming pose describes the gripper clamp point;
+    # the joint-space math operates on the wrist axis. Rigid offset with the
+    # gripper length on the radial axis (governed by world rotation z) and the
+    # gripper z offset downward.
+    ang = math.radians(pose.rotation.z)
+    x = pose.location.x - self.gripper_length * math.sin(ang)
+    y = pose.location.y + self.gripper_length * math.cos(ang)
+    wrist_z = pose.location.z + self.gripper_z_offset
 
-    x, y = (pose.location.x), (pose.location.y)
+    joint_position: Dict[KX2ArmBackend.Axis, float] = {}
 
     # Shoulder axis
     shoulder = -math.degrees(math.atan2(x, y))
@@ -1115,7 +1129,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     joint_position[self.Axis.SHOULDER] = shoulder
 
     # Z axis
-    joint_position[self.Axis.Z] = pose.location.z
+    joint_position[self.Axis.Z] = wrist_z
 
     # Elbow axis
     elbow = (
@@ -1148,11 +1162,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     sh_deg = joint_position[self.Axis.SHOULDER]
     sh = math.radians(sh_deg)
 
-    location = Coordinate(
-      x=(-(r) * math.sin(sh)),
-      y=((r) * math.cos(sh)),
-      z=(joint_position[self.Axis.Z]),
-    )
+    wrist_x = -(r) * math.sin(sh)
+    wrist_y = (r) * math.cos(sh)
+    wrist_z = joint_position[self.Axis.Z]
 
     rotation_z = joint_position[self.Axis.WRIST] + sh_deg
 
@@ -1162,65 +1174,18 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if rotation_z < -180.0:
       rotation_z += 360.0
 
+    # Wrist -> gripper: inverse of the gripper -> wrist translation in
+    # convert_cartesian_to_joint_position so callers observe the gripper clamp
+    # point, symmetric with what they pass in.
+    ang = math.radians(rotation_z)
+    gripper_x = wrist_x + self.gripper_length * math.sin(ang)
+    gripper_y = wrist_y - self.gripper_length * math.cos(ang)
+    gripper_z = wrist_z - self.gripper_z_offset
+
     return GripperPose(
-      location=location,
+      location=Coordinate(x=gripper_x, y=gripper_y, z=gripper_z),
       rotation=Rotation(z=rotation_z),
     )
-
-  def convert_joint_position_to_tool_coordinate(
-    self,
-    joint_position: Dict[int, float],
-    ref_frame_rotate: float,
-    tool_offset: float,
-  ) -> List[float]:
-    coordinate = self.convert_joint_position_to_cartesian(joint_position)
-    tool_coord = [0.0] * (len(joint_position) - 1)
-
-    if tool_offset != 0.0:
-      ang = math.radians(coordinate[3] + ref_frame_rotate)
-      dx = -tool_offset * math.sin(ang)
-      dy = tool_offset * math.cos(ang)
-    else:
-      dx = 0.0
-      dy = 0.0
-
-    tool_coord[0] = coordinate[0] + dx
-    tool_coord[1] = coordinate[1] + dy
-    tool_coord[2] = coordinate[2]
-    tool_coord[3] = coordinate[3] + ref_frame_rotate
-
-    if len(coordinate) > 4:
-      tool_coord[4] = coordinate[4]
-
-    return tool_coord
-
-  def convert_tool_coordinate_to_joint_position(
-    self,
-    tool_coordinate: Sequence[float],
-    ref_frame_rotate: float,
-    tool_offset: float,
-  ) -> Dict[int, float]:
-    coordinate = [0.0] * (len(tool_coordinate) + 1)
-
-    if tool_offset != 0.0:
-      ang = math.radians(float(tool_coordinate[3]) - ref_frame_rotate)
-      dx = -tool_offset * math.sin(ang)
-      dy = tool_offset * math.cos(ang)
-    else:
-      dx = 0.0
-      dy = 0.0
-
-    coordinate[0] = float(tool_coordinate[0]) - dx
-    coordinate[1] = float(tool_coordinate[1]) - dy
-    coordinate[2] = float(tool_coordinate[2])
-    coordinate[3] = float(tool_coordinate[3]) - ref_frame_rotate
-
-    if len(tool_coordinate) >= 5:
-      coordinate[4] = float(tool_coordinate[4])
-    if len(tool_coordinate) >= 6:
-      coordinate[5] = float(tool_coordinate[5])
-
-    return self.convert_cartesian_to_joint_position(coordinate)
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
 
