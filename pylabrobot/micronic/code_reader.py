@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
 from pylabrobot.capabilities.rack_reading import RackReader
 from pylabrobot.device import Device
 
+from .barcode_scanning_backend import MicronicBarcodeScannerBackend
 from .http_driver import MicronicHTTPDriver
 from .rack_reading_backend import MicronicRackReadingBackend
 
@@ -27,9 +29,16 @@ class MicronicCodeReader(Device):
     self.default_timeout = timeout
     self.default_poll_interval = poll_interval
     self.rack_reading = RackReader(backend=MicronicRackReadingBackend(driver))
+    self.barcode_scanning = BarcodeScanner(
+      backend=MicronicBarcodeScannerBackend(
+        driver,
+        timeout=timeout,
+        poll_interval=poll_interval,
+      )
+    )
     # Temporary alias while the consumer code moves to the capability-centric v1b1 surface.
     self.rack_reader = self.rack_reading
-    self._capabilities = [self.rack_reading]
+    self._capabilities = [self.rack_reading, self.barcode_scanning]
 
   def serialize(self) -> dict:
     return {

@@ -34,10 +34,6 @@ class RecordingRackReaderBackend(RackReaderBackend):
     self.calls.append("trigger_rack_scan")
     self.state = RackReaderState.SCANNING
 
-  async def trigger_tube_scan(self) -> None:
-    self.calls.append("trigger_tube_scan")
-    self.state = RackReaderState.SCANNING
-
   async def get_scan_result(self) -> RackScanResult:
     self.calls.append("get_scan_result")
     return self.result
@@ -64,6 +60,26 @@ class StuckRackReaderBackend(RecordingRackReaderBackend):
     return RackReaderState.SCANNING
 
 
+class StaleDataReadyRackReaderBackend(RecordingRackReaderBackend):
+  def __init__(self):
+    super().__init__()
+    self.state = RackReaderState.DATAREADY
+    self._states_after_trigger = [
+      RackReaderState.DATAREADY,
+      RackReaderState.SCANNING,
+      RackReaderState.DATAREADY,
+    ]
+
+  async def trigger_rack_scan(self) -> None:
+    self.calls.append("trigger_rack_scan")
+
+  async def get_state(self) -> RackReaderState:
+    self.calls.append("get_state")
+    if self._states_after_trigger:
+      return self._states_after_trigger.pop(0)
+    return RackReaderState.DATAREADY
+
+
 class TestRackReader(unittest.IsolatedAsyncioTestCase):
   async def test_scan_rack_triggers_and_returns_result(self):
     backend = RecordingRackReaderBackend()
@@ -76,7 +92,20 @@ class TestRackReader(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result.entries[0].position, "A01")
     self.assertEqual(
       backend.calls[:3],
-      ["trigger_rack_scan", "get_state", "get_scan_result"],
+      ["get_state", "trigger_rack_scan", "get_state"],
+    )
+
+  async def test_scan_rack_waits_for_new_dataready_cycle(self):
+    backend = StaleDataReadyRackReaderBackend()
+    reader = RackReader(backend=backend)
+    await reader._on_setup()
+
+    result = await reader.scan_rack(timeout=1.0, poll_interval=0.0)
+
+    self.assertEqual(result.rack_id, "5500135415")
+    self.assertEqual(
+      backend.calls,
+      ["get_state", "trigger_rack_scan", "get_state", "get_state", "get_scan_result"],
     )
 
   async def test_scan_rack_id_triggers_tube_scan_and_returns_rack_id(self):

@@ -192,7 +192,7 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Micronic | Code Reader Software / IO Monitor HTTP server | <span class="badge badge-reading">rack reading</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/micronic/index.html) / [OEM](https://www.micronic.com/products/code-reader/) |
+| Micronic | Code Reader Software / IO Monitor HTTP server | <span class="badge badge-reading">rack reading</span><span class="badge badge-reading">barcode scanning</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/micronic/index.html) / [OEM](https://www.micronic.com/products/code-reader/) |
 
 ---
 

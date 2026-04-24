@@ -3,7 +3,7 @@
 pylabrobot.micronic package
 ===========================
 
-Micronic Code Reader integration built on the rack-reading capability.
+Micronic Code Reader integration built on the rack-reading and barcode-scanning capabilities.
 
 .. autosummary::
   :toctree: _autosummary
@@ -12,5 +12,8 @@ Micronic Code Reader integration built on the rack-reading capability.
 
    MicronicCodeReader
    MicronicHTTPDriver
+   MicronicError
+   MicronicBarcodeScannerBackend
+   MicronicBarcodeScannerError
    MicronicRackReaderError
    MicronicRackReadingBackend
