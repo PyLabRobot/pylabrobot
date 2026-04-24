@@ -413,6 +413,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       cmd="CL",
       cmd_index=1,
       cmd_type=CmdType.ValQuery,
+      val_type=ValType.Float,
     )
 
     iq = await self.driver.binary_interpreter(
@@ -420,6 +421,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       cmd="IQ",
       cmd_index=0,
       cmd_type=CmdType.ValQuery,
+      val_type=ValType.Float,
     )
 
     if cl == 0:
@@ -456,14 +458,14 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         return
 
       elif motor_status == 2:
-        motor_fault = self.driver.motor_get_fault(self.Axis.SERVO_GRIPPER)
+        motor_fault = await self.driver.motor_get_fault(int(self.Axis.SERVO_GRIPPER))
         if motor_fault is None:
           raise RuntimeError("Error querying whether plate is gripped. Error querying motor fault.")
         raise RuntimeError(
           f"Servo Gripper may not have gripped the plate correctly. Motor fault: '{motor_fault}'"
         )
 
-      asyncio.sleep(0.05)
+      await asyncio.sleep(0.05)
 
     raise RuntimeError(
       f"Servo Gripper was unable to confirm that the plate is gripped after {num_attempts} attempts."

@@ -734,18 +734,12 @@ class KX2Driver(Driver):
   async def _motor_set_move_direction(
     self, node_id: int, direction: JointMoveDirection
   ) -> None:
-    # 0=Normal, 1=Clockwise, 2=Counterclockwise, 3=ShortestWay.
-    dir_int = int(direction)
-    if dir_int == 1:
-      val_str = "65"
-    elif dir_int == 2:
-      val_str = "129"
-    elif dir_int == 3:
-      val_str = "193"
-    else:
-      val_str = "1"
+    # Elmo modulo mode register: bit0 enables modulo; bits6..7 encode the
+    # direction (0=Normal, 1=CW, 2=CCW, 3=Shortest). Packs to 1 + 64*direction
+    # = 1/65/129/193.
+    val = 1 + 64 * int(direction)
     await self._can_sdo_download_elmo_object(
-      node_id, 24818, 0, val_str, ElmoObjectDataType.UNSIGNED16
+      node_id, 24818, 0, str(val), ElmoObjectDataType.UNSIGNED16
     )
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
@@ -1009,18 +1003,18 @@ class KX2Driver(Driver):
       except Exception:
         last_line_completed = 0
 
-      if ui1 != 0:
-        raise CanError(
-          f"Node {node_id}: user program ended with UI[1]={ui1} (expected 0), "
-          f"last_line={last_line_completed}"
-        )
       if ps == 1 and ui1 == 1:
         raise CanError(
           f"Node {node_id}: timeout waiting for '{user_function}' after {timeout_sec}s, "
           f"last_line={last_line_completed}"
         )
+      if ui1 != 0:
+        raise CanError(
+          f"Node {node_id}: user program ended with UI[1]={ui1} (expected 0), "
+          f"last_line={last_line_completed}"
+        )
 
-    return 0
+    return last_line_completed
 
   # --- I/O -----------------------------------------------------------------
 
