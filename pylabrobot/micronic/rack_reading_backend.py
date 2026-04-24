@@ -7,12 +7,17 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading import (
   LayoutInfo,
   RackReaderBackend,
+  RackReaderError,
   RackReaderState,
   RackScanEntry,
   RackScanResult,
 )
 
-from .http_driver import MicronicHTTPDriver, MicronicRackReaderError
+from .http_driver import MicronicError, MicronicHTTPDriver
+
+
+class MicronicRackReaderError(MicronicError, RackReaderError):
+  """Raised when Micronic rack-reading operations fail."""
 
 
 class MicronicRackReadingBackend(RackReaderBackend):
@@ -26,7 +31,7 @@ class MicronicRackReadingBackend(RackReaderBackend):
     await self.get_state()
 
   async def get_state(self) -> RackReaderState:
-    payload = await self.driver.request_json("GET", "/state")
+    payload = await self._request_json("GET", "/state")
     state = payload.get("state")
     if not isinstance(state, str):
       raise MicronicRackReaderError("Micronic server response did not contain a valid state.")
@@ -36,17 +41,14 @@ class MicronicRackReadingBackend(RackReaderBackend):
       raise MicronicRackReaderError(f"Unknown Micronic state: {state}") from exc
 
   async def trigger_rack_scan(self) -> None:
-    await self.driver.request("POST", "/scanbox", data=b"", expect_json=False)
-
-  async def trigger_tube_scan(self) -> None:
-    await self.driver.request("POST", "/scantube", data=b"", expect_json=False)
+    await self._request("POST", "/scanbox", data=b"", expect_json=False)
 
   async def get_scan_result(self) -> RackScanResult:
-    payload = await self.driver.request_json("GET", "/scanresult")
+    payload = await self._request_json("GET", "/scanresult")
     return self._parse_scan_result(payload)
 
   async def get_rack_id(self) -> str:
-    payload = await self.driver.request_json("GET", "/rackid")
+    payload = await self._request_json("GET", "/rackid")
 
     if isinstance(payload, dict):
       for key in ("RackID", "rackid", "rack_id"):
@@ -57,7 +59,7 @@ class MicronicRackReadingBackend(RackReaderBackend):
     raise MicronicRackReaderError("Micronic rack ID response had an unexpected shape.")
 
   async def get_layouts(self) -> list[LayoutInfo]:
-    payload = await self.driver.request_json("GET", "/layoutlist")
+    payload = await self._request_json("GET", "/layoutlist")
 
     if isinstance(payload, list):
       return [LayoutInfo(name=str(item)) for item in payload]
@@ -71,7 +73,7 @@ class MicronicRackReadingBackend(RackReaderBackend):
     raise MicronicRackReaderError("Micronic layout list response had an unexpected shape.")
 
   async def get_current_layout(self) -> str:
-    payload = await self.driver.request_json("GET", "/currentlayout")
+    payload = await self._request_json("GET", "/currentlayout")
 
     if isinstance(payload, str):
       return payload
@@ -85,7 +87,7 @@ class MicronicRackReadingBackend(RackReaderBackend):
     raise MicronicRackReaderError("Micronic current layout response had an unexpected shape.")
 
   async def set_current_layout(self, layout: str) -> None:
-    await self.driver.request(
+    await self._request(
       "PUT",
       "/currentlayout",
       data=json.dumps({"Layout": layout}).encode("utf-8"),
@@ -142,3 +144,34 @@ class MicronicRackReadingBackend(RackReaderBackend):
     if index >= len(items):
       return None
     return items[index]
+
+  async def _request_json(
+    self,
+    method: str,
+    path: str,
+    data: bytes | None = None,
+    headers: dict[str, str] | None = None,
+  ) -> Any:
+    try:
+      return await self.driver.request_json(method, path, data=data, headers=headers)
+    except MicronicError as exc:
+      raise MicronicRackReaderError(str(exc)) from exc
+
+  async def _request(
+    self,
+    method: str,
+    path: str,
+    data: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    expect_json: bool = True,
+  ) -> bytes:
+    try:
+      return await self.driver.request(
+        method,
+        path,
+        data=data,
+        headers=headers,
+        expect_json=expect_json,
+      )
+    except MicronicError as exc:
+      raise MicronicRackReaderError(str(exc)) from exc

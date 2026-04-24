@@ -8,11 +8,10 @@ from typing import Any, Optional
 from urllib import error, parse, request
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.rack_reading.standard import RackReaderError
 from pylabrobot.device import Driver
 
 
-class MicronicRackReaderError(RackReaderError):
+class MicronicError(Exception):
   """Raised when the Micronic HTTP server returns an error."""
 
 
@@ -85,7 +84,7 @@ class MicronicHTTPDriver(Driver):
     try:
       return json.loads(response.decode("utf-8"))
     except json.JSONDecodeError as exc:
-      raise MicronicRackReaderError(
+      raise MicronicError(
         f"Micronic server returned non-JSON payload for {method} {path}."
       ) from exc
 
@@ -122,27 +121,32 @@ class MicronicHTTPDriver(Driver):
         body = exc.read()
         raise self._as_micronic_error(body, fallback=f"HTTP {exc.code} for {method} {path}") from exc
       except error.URLError as exc:
-        raise MicronicRackReaderError(
-          f"Failed to reach Micronic server at {self.base_url}: {exc.reason}"
-        ) from exc
+        if self._is_retryable_url_error(exc) and attempt < 2:
+          time.sleep(0.25)
+          continue
+        raise MicronicError(f"Failed to reach Micronic server at {self.base_url}: {exc.reason}") from exc
       except (ConnectionResetError, http.client.RemoteDisconnected, OSError) as exc:
         if attempt == 2:
-          raise MicronicRackReaderError(
+          raise MicronicError(
             f"Micronic connection failed for {method} {path}: {exc}"
           ) from exc
         time.sleep(0.25)
 
-    raise MicronicRackReaderError(f"Micronic request failed for {method} {path}.")
+    raise MicronicError(f"Micronic request failed for {method} {path}.")
 
-  def _as_micronic_error(self, body: bytes, fallback: str) -> MicronicRackReaderError:
+  def _as_micronic_error(self, body: bytes, fallback: str) -> MicronicError:
     try:
       payload = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-      return MicronicRackReaderError(fallback)
+      return MicronicError(fallback)
 
     if isinstance(payload, dict) and "ErrorMsg" in payload:
       error_code = payload.get("ErrorCode")
       error_msg = payload.get("ErrorMsg")
-      return MicronicRackReaderError(f"Micronic error {error_code}: {error_msg}")
+      return MicronicError(f"Micronic error {error_code}: {error_msg}")
 
-    return MicronicRackReaderError(fallback)
+    return MicronicError(fallback)
+
+  def _is_retryable_url_error(self, exc: error.URLError) -> bool:
+    reason = exc.reason
+    return isinstance(reason, (ConnectionResetError, http.client.RemoteDisconnected, OSError))

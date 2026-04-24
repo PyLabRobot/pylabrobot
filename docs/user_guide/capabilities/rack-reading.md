@@ -17,16 +17,11 @@ result = await reader.scan_rack(timeout=60.0, poll_interval=1.0)
 `scan_rack()` is the main public operation. It triggers the scan, waits internally until the
 reader reaches `dataready`, and then returns a `RackScanResult`.
 
-`scan_rack_id()` triggers only the rack barcode scan, waits for `dataready`, and returns the
-reader-reported rack ID.
-
 Lower-level methods are also available:
 
 - `get_state()`
 - `wait_for_data_ready()`
 - `trigger_rack_scan()`
-- `trigger_tube_scan()`
-- `scan_rack_id()`
 - `get_scan_result()`
 - `get_rack_id()`
 - `get_layouts()`

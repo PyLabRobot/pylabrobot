@@ -1,21 +1,30 @@
 # Micronic
 
 PyLabRobot includes a `v1b1` Micronic integration built on the generic `rack_reading`
-capability.
+and `barcode_scanning` capabilities.
 
 This integration targets the `IO Monitor` HTTP server exposed by the Micronic Code Reader
 Windows application.
 
 ## Supported operations
 
+Rack reading:
+
 - `GET /state`
 - `POST /scanbox`
-- `POST /scantube`
 - `GET /scanresult`
 - `GET /rackid`
 - `GET /layoutlist`
 - `GET /currentlayout`
 - `PUT /currentlayout`
+
+Single-tube barcode scanning:
+
+- `GET /state`
+- `POST /scantube`
+- `GET /scanresult`
+- `GET /rackid` as a compatibility fallback for server variants that expose the decoded
+  tube value there
 
 ## Example
 
@@ -26,17 +35,14 @@ reader = MicronicCodeReader(host="localhost", port=2500)
 await reader.setup()
 
 try:
-  result = await reader.rack_reading.scan_rack(timeout=60.0, poll_interval=1.0)
-  print(result.rack_id)
-  print(result.entries[0].position, result.entries[0].tube_id)
+  rack_result = await reader.rack_reading.scan_rack(timeout=60.0, poll_interval=1.0)
+  print(rack_result.rack_id)
+  print(rack_result.entries[0].position, rack_result.entries[0].tube_id)
+
+  barcode = await reader.barcode_scanning.scan()
+  print(barcode.data)
 finally:
   await reader.stop()
-```
-
-To retry only the rack barcode without repeating a full rack scan:
-
-```python
-rack_id = await reader.rack_reading.scan_rack_id(timeout=30.0, poll_interval=1.0)
 ```
 
 ## Notes

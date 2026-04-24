@@ -1,3 +1,4 @@
+from .barcode_scanning_backend import MicronicBarcodeScannerBackend, MicronicBarcodeScannerError
 from .code_reader import MicronicCodeReader
-from .http_driver import MicronicHTTPDriver, MicronicRackReaderError
-from .rack_reading_backend import MicronicRackReadingBackend
+from .http_driver import MicronicError, MicronicHTTPDriver
+from .rack_reading_backend import MicronicRackReaderError, MicronicRackReadingBackend
