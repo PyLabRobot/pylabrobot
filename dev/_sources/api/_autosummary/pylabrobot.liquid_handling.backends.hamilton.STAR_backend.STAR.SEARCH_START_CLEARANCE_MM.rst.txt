@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.SEARCH\_START\_CLEARANCE\_MM
+=============================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. autoattribute:: STAR.SEARCH_START_CLEARANCE_MM

@@ -21,6 +21,7 @@
       ~STAR.MAXIMUM_CHANNEL_Z_POSITION
       ~STAR.MINIMUM_CHANNEL_Z_POSITION
       ~STAR.PIP_X_MIN_WITH_LEFT_SIDE_PANEL
+      ~STAR.SEARCH_START_CLEARANCE_MM
       ~STAR.autoload_installed
       ~STAR.barcode_1d_symbology_dict
       ~STAR.core96_head_installed
