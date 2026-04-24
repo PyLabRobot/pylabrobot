@@ -1,5 +1,6 @@
 # mypy: disable-error-code="attr-defined,method-assign"
 
+import datetime
 import unittest
 import unittest.mock
 from typing import Literal, cast
@@ -32,6 +33,7 @@ from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL
 
 from .STAR_backend import (
   CommandSyntaxError,
+  ExtendedConfiguration,
   HamiltonNoTipError,
   HardwareError,
   STARBackend,
@@ -200,6 +202,109 @@ class STARCommandCatcher(STARBackend):
 
   async def stop(self):
     self.stop_finished = True
+
+
+class TestSTARLegacyFirmwareCommandParams(unittest.IsolatedAsyncioTestCase):
+  """Test old-firmware command payload compatibility gates."""
+
+  def _backend(self) -> STARBackend:
+    backend = STARBackend()
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    backend._iswap_parked = True
+    backend.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    return backend
+
+  async def test_legacy_pip_firmware_omits_newer_optional_params(self):
+    backend = self._backend()
+    backend._pip_firmware_version = datetime.date(2009, 5, 4)
+
+    await backend.initialize_pipetting_channels(tip_pattern=[True])
+    self.assertNotIn("ti", backend.send_command.call_args.kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.pick_up_tip(
+      x_positions=[0], y_positions=[0], tip_pattern=[True], tip_type_idx=1
+    )
+    self.assertNotIn("td", backend.send_command.call_args.kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.discard_tip(x_positions=[0], y_positions=[0], tip_pattern=[True])
+    self.assertNotIn("ti", backend.send_command.call_args.kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.aspirate_pip()
+    kwargs = backend.send_command.call_args.kwargs
+    self.assertNotIn("gi", kwargs)
+    self.assertNotIn("gj", kwargs)
+    self.assertNotIn("gk", kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.dispense_pip(tip_pattern=[True])
+    kwargs = backend.send_command.call_args.kwargs
+    self.assertNotIn("gi", kwargs)
+    self.assertNotIn("gj", kwargs)
+    self.assertNotIn("gk", kwargs)
+
+  async def test_modern_pip_firmware_keeps_newer_optional_params(self):
+    backend = self._backend()
+    backend._pip_firmware_version = datetime.date(2010, 1, 1)
+
+    await backend.initialize_pipetting_channels(tip_pattern=[True])
+    self.assertIn("ti", backend.send_command.call_args.kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.pick_up_tip(
+      x_positions=[0], y_positions=[0], tip_pattern=[True], tip_type_idx=1
+    )
+    self.assertIn("td", backend.send_command.call_args.kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.discard_tip(x_positions=[0], y_positions=[0], tip_pattern=[True])
+    self.assertIn("ti", backend.send_command.call_args.kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.aspirate_pip()
+    kwargs = backend.send_command.call_args.kwargs
+    self.assertIn("gi", kwargs)
+    self.assertIn("gj", kwargs)
+    self.assertIn("gk", kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.dispense_pip(tip_pattern=[True])
+    kwargs = backend.send_command.call_args.kwargs
+    self.assertIn("gi", kwargs)
+    self.assertIn("gj", kwargs)
+    self.assertIn("gk", kwargs)
+
+  async def test_legacy_core96_firmware_omits_newer_optional_params(self):
+    backend = self._backend()
+    backend._head96_information = unittest.mock.Mock(fw_version=datetime.date(2009, 5, 4))
+
+    await backend.aspirate_core_96(y_positions=1080)
+    kwargs = backend.send_command.call_args.kwargs
+    for param in ("pp", "cw", "cr", "cj", "cx"):
+      self.assertNotIn(param, kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.dispense_core_96(y_position=1080)
+    kwargs = backend.send_command.call_args.kwargs
+    for param in ("pp", "cw", "cr", "cj", "cx"):
+      self.assertNotIn(param, kwargs)
+
+  async def test_modern_core96_firmware_keeps_newer_optional_params(self):
+    backend = self._backend()
+    backend._head96_information = unittest.mock.Mock(fw_version=datetime.date(2010, 1, 1))
+
+    await backend.aspirate_core_96(y_positions=1080)
+    kwargs = backend.send_command.call_args.kwargs
+    for param in ("pp", "cw", "cr", "cj", "cx"):
+      self.assertIn(param, kwargs)
+    backend.send_command.reset_mock()
+
+    await backend.dispense_core_96(y_position=1080)
+    kwargs = backend.send_command.call_args.kwargs
+    for param in ("pp", "cw", "cr", "cj", "cx"):
+      self.assertIn(param, kwargs)
 
 
 class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
@@ -1539,6 +1644,60 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
   """
 
   # -- can_reach_position: reachability shrinks with wider spacing ----------------
+
+  def test_normalize_extended_configuration_y_bounds_replaces_reversed_bounds(self):
+    backend = STARBackend()
+    backend._extended_conf = ExtendedConfiguration()
+    backend._extended_conf.left_arm_min_y_position = 606.5
+    backend._extended_conf.pip_maximal_y_position = 6.0
+    backend._pip_firmware_version = datetime.date(2009, 5, 4)
+
+    backend._normalize_extended_configuration_y_bounds()
+
+    default_bounds = ExtendedConfiguration()
+    self.assertEqual(
+      backend.extended_conf.left_arm_min_y_position,
+      default_bounds.left_arm_min_y_position,
+    )
+    self.assertEqual(
+      backend.extended_conf.pip_maximal_y_position,
+      default_bounds.pip_maximal_y_position,
+    )
+
+  def test_normalize_extended_configuration_y_bounds_replaces_tiny_max_y(self):
+    backend = STARBackend()
+    backend._num_channels = 8
+    backend._channels_minimum_y_spacing = [9.0] * 8
+    backend._extended_conf = ExtendedConfiguration()
+    backend._extended_conf.left_arm_min_y_position = 6.0
+    backend._extended_conf.pip_maximal_y_position = 50.0
+    backend._pip_firmware_version = datetime.date(2009, 5, 4)
+
+    self.assertFalse(backend.can_reach_position(0, Coordinate(100, 100, 100)))
+    backend._normalize_extended_configuration_y_bounds()
+    self.assertTrue(backend.can_reach_position(0, Coordinate(100, 100, 100)))
+
+  def test_normalize_extended_configuration_y_bounds_leaves_valid_bounds(self):
+    backend = STARBackend()
+    backend._extended_conf = ExtendedConfiguration()
+    backend._extended_conf.left_arm_min_y_position = 10.0
+    backend._extended_conf.pip_maximal_y_position = 500.0
+    backend._pip_firmware_version = datetime.date(2021, 1, 1)
+
+    backend._normalize_extended_configuration_y_bounds()
+
+    self.assertEqual(backend.extended_conf.left_arm_min_y_position, 10.0)
+    self.assertEqual(backend.extended_conf.pip_maximal_y_position, 500.0)
+
+  def test_can_reach_position_uses_sorted_y_bounds(self):
+    backend = STARBackend()
+    backend._num_channels = 8
+    backend._channels_minimum_y_spacing = [9.0] * 8
+    backend._extended_conf = ExtendedConfiguration()
+    backend._extended_conf.left_arm_min_y_position = 606.5
+    backend._extended_conf.pip_maximal_y_position = 6.0
+
+    self.assertTrue(backend.can_reach_position(0, Coordinate(100, 100, 100)))
 
   async def test_can_reach_4ch_18mm_rejects_position_reachable_at_9mm(self):
     """A position reachable by channel 0 at 9mm spacing is unreachable at 18mm spacing.
