@@ -49,9 +49,11 @@ class MicronicIOMonitorRackReadingBackend(RackReaderBackend):
   async def trigger_rack_scan(self) -> None:
     await self._request("POST", "/scanbox", data=b"", expect_json=False)
 
-  async def trigger_rack_id_scan(self) -> None:
-    # IO Monitor exposes the rack-barcode-only trigger on /scantube, distinct from full rack scans.
-    await self._request("POST", "/scantube", data=b"", expect_json=False)
+  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
+    # IO Monitor's GET /rackid is a one-shot trigger+result on the side barcode reader,
+    # so timeout/poll_interval are unused here (the driver enforces its own HTTP timeout).
+    del timeout, poll_interval
+    return await self.get_rack_id()
 
   async def get_scan_result(self) -> RackScanResult:
     payload = await self._request_json("GET", "/scanresult")

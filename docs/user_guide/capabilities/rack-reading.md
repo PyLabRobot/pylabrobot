@@ -25,7 +25,6 @@ Lower-level methods are also available:
 - `get_state()`
 - `wait_for_data_ready()`
 - `trigger_rack_scan()`
-- `trigger_rack_id_scan()`
 - `scan_rack_id()`
 - `get_scan_result()`
 - `get_rack_id()`
@@ -46,7 +45,7 @@ try:
   print(result.rack_id)
   print(result.entries[0].position, result.entries[0].tube_id)
 
-  rack_id = await reader.rack_reading.scan_rack_id(timeout=30.0, poll_interval=1.0)
+  rack_id = await reader.rack_reading.scan_rack_id(timeout=60.0, poll_interval=1.0)
   print(rack_id)
 finally:
   await reader.stop()

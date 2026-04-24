@@ -17,8 +17,9 @@ class RackReaderChatterboxBackend(RackReaderBackend):
   async def trigger_rack_scan(self) -> None:
     self._state = RackReaderState.DATAREADY
 
-  async def trigger_rack_id_scan(self) -> None:
+  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
     self._state = RackReaderState.DATAREADY
+    return "CHATTERBOX"
 
   async def get_scan_result(self) -> RackScanResult:
     return RackScanResult(

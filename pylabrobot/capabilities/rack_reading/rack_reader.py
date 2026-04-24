@@ -25,10 +25,6 @@ class RackReader(Capability):
     await self.backend.trigger_rack_scan()
 
   @need_capability_ready
-  async def trigger_rack_id_scan(self) -> None:
-    await self.backend.trigger_rack_id_scan()
-
-  @need_capability_ready
   async def get_scan_result(self) -> RackScanResult:
     return await self.backend.get_scan_result()
 
@@ -123,13 +119,11 @@ class RackReader(Capability):
     timeout: float = 60.0,
     poll_interval: float = 1.0,
   ) -> str:
-    """Trigger a rack-barcode-only scan and return the completed rack identifier."""
+    """Perform a rack-barcode-only scan and return the rack identifier.
 
-    initial_state = await self.backend.get_state()
-    await self.backend.trigger_rack_id_scan()
-    await self._wait_for_fresh_data_ready(
-      initial_state=initial_state,
-      timeout=timeout,
-      poll_interval=poll_interval,
-    )
-    return await self.backend.get_rack_id()
+    The backend decides whether this is a one-shot read or a trigger/poll cycle;
+    ``timeout`` and ``poll_interval`` are forwarded so backends that poll can
+    honor them.
+    """
+
+    return await self.backend.scan_rack_id(timeout=timeout, poll_interval=poll_interval)

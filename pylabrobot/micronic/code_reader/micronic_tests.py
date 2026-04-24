@@ -143,16 +143,16 @@ class TestMicronicIOMonitorRackReadingBackend(unittest.IsolatedAsyncioTestCase):
       expect_json=False,
     )
 
-  async def test_trigger_rack_id_scan(self):
-    with patch.object(self.driver, "request", return_value=b"") as request_bytes:
-      await self.backend.trigger_rack_id_scan()
-    request_bytes.assert_called_once_with(
-      "POST",
-      "/scantube",
-      data=b"",
-      headers=None,
-      expect_json=False,
-    )
+  async def test_scan_rack_id_uses_rackid_endpoint(self):
+    with patch.object(
+      self.driver,
+      "request_json",
+      return_value={"RackID": "5500135415"},
+    ) as request_json:
+      rack_id = await self.backend.scan_rack_id(timeout=10.0, poll_interval=0.5)
+
+    request_json.assert_called_once_with("GET", "/rackid", data=None, headers=None)
+    self.assertEqual(rack_id, "5500135415")
 
   async def test_get_scan_result(self):
     payload = {
