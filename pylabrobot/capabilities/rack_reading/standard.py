@@ -43,6 +43,11 @@ class RackScanResult:
 
 @dataclass
 class LayoutInfo:
-  """One rack layout supported by the reader."""
+  """One rack layout supported by the reader.
+
+  Wraps a single ``name`` field today so backends can grow the metadata they
+  attach to a layout (rows, columns, tube type, vendor-specific attributes)
+  without changing the capability surface.
+  """
 
   name: str

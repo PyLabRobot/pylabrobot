@@ -1,4 +1,10 @@
-from .barcode_scanning_backend import MicronicBarcodeScannerBackend, MicronicBarcodeScannerError
-from .code_reader import MicronicCodeReader
-from .http_driver import MicronicError, MicronicHTTPDriver
-from .rack_reading_backend import MicronicRackReaderError, MicronicRackReadingBackend
+from pylabrobot.micronic.code_reader import (
+  MicronicBarcodeScannerError,
+  MicronicCodeReader,
+  MicronicError,
+  MicronicIOMonitorBarcodeScannerBackend,
+  MicronicIOMonitorDriver,
+  MicronicIOMonitorRackReadingBackend,
+  MicronicIOMonitorState,
+  MicronicRackReaderError,
+)

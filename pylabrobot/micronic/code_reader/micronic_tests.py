@@ -1,30 +1,36 @@
 import json
 import unittest
-from urllib import error
 from unittest.mock import MagicMock, patch
+from urllib import error
 
 from pylabrobot.capabilities.barcode_scanning.backend import BarcodeScannerError
 from pylabrobot.capabilities.rack_reading import RackReaderState
-from pylabrobot.resources.barcode import Barcode
 from pylabrobot.micronic import MicronicCodeReader
-from pylabrobot.micronic.barcode_scanning_backend import (
-  MicronicBarcodeScannerBackend,
+from pylabrobot.micronic.code_reader.barcode_scanning_backend import (
   MicronicBarcodeScannerError,
+  MicronicIOMonitorBarcodeScannerBackend,
 )
-from pylabrobot.micronic.http_driver import MicronicError, MicronicHTTPDriver
-from pylabrobot.micronic.rack_reading_backend import MicronicRackReadingBackend
+from pylabrobot.micronic.code_reader.driver import (
+  MicronicError,
+  MicronicIOMonitorDriver,
+  MicronicIOMonitorState,
+)
+from pylabrobot.micronic.code_reader.rack_reading_backend import (
+  MicronicIOMonitorRackReadingBackend,
+)
+from pylabrobot.resources.barcode import Barcode
 
 
-class TestMicronicHTTPDriver(unittest.IsolatedAsyncioTestCase):
+class TestMicronicIOMonitorDriver(unittest.IsolatedAsyncioTestCase):
   async def test_request_sync_retries_connection_reset(self):
-    driver = MicronicHTTPDriver()
+    driver = MicronicIOMonitorDriver()
     response = MagicMock()
     response.read.return_value = b'{"state":"idle"}'
     response.__enter__.return_value = response
     response.__exit__.return_value = False
 
     with patch(
-      "pylabrobot.micronic.http_driver.request.urlopen",
+      "pylabrobot.micronic.code_reader.driver.request.urlopen",
       side_effect=[ConnectionResetError(104, "reset"), response],
     ):
       body = driver._request_sync("GET", "/state")
@@ -32,7 +38,7 @@ class TestMicronicHTTPDriver(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(body, b'{"state":"idle"}')
 
   async def test_http_error_maps_to_backend_error(self):
-    driver = MicronicHTTPDriver()
+    driver = MicronicIOMonitorDriver()
     err = driver._as_micronic_error(
       json.dumps({"ErrorCode": 4, "ErrorMsg": "invalid state"}).encode("utf-8"),
       fallback="fallback",
@@ -41,26 +47,76 @@ class TestMicronicHTTPDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn("invalid state", str(err))
 
   async def test_request_sync_retries_retryable_urlerror(self):
-    driver = MicronicHTTPDriver()
+    driver = MicronicIOMonitorDriver()
     response = MagicMock()
     response.read.return_value = b'{"state":"idle"}'
     response.__enter__.return_value = response
     response.__exit__.return_value = False
 
     with patch(
-      "pylabrobot.micronic.http_driver.request.urlopen",
+      "pylabrobot.micronic.code_reader.driver.request.urlopen",
       side_effect=[error.URLError(ConnectionResetError(104, "reset")), response],
     ):
       body = driver._request_sync("GET", "/state")
 
     self.assertEqual(body, b'{"state":"idle"}')
 
+  async def test_get_iomonitor_state_parses_payload(self):
+    driver = MicronicIOMonitorDriver()
+    with patch.object(driver, "request_json", return_value={"state": "dataready"}):
+      state = await driver.get_iomonitor_state()
+    self.assertEqual(state, MicronicIOMonitorState.DATAREADY)
 
-class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
+  async def test_get_iomonitor_state_rejects_unknown(self):
+    driver = MicronicIOMonitorDriver()
+    with patch.object(driver, "request_json", return_value={"state": "weird"}):
+      with self.assertRaises(MicronicError):
+        await driver.get_iomonitor_state()
+
+  async def test_wait_for_fresh_data_ready_requires_state_change_when_starting_ready(self):
+    driver = MicronicIOMonitorDriver()
+    with patch.object(
+      driver,
+      "request_json",
+      side_effect=[
+        {"state": "dataready"},
+        {"state": "scanning"},
+        {"state": "dataready"},
+      ],
+    ) as request_json:
+      await driver.wait_for_fresh_data_ready(
+        initial_state=MicronicIOMonitorState.DATAREADY,
+        timeout=1.0,
+        poll_interval=0.0,
+      )
+    self.assertEqual(request_json.call_count, 3)
+
+  async def test_get_single_tube_barcode_prefers_scanresult(self):
+    driver = MicronicIOMonitorDriver()
+    with patch.object(
+      driver,
+      "request_json",
+      side_effect=[{"TubeID": ["5007377910"]}],
+    ):
+      barcode = await driver.get_single_tube_barcode()
+    self.assertEqual(barcode, "5007377910")
+
+  async def test_get_single_tube_barcode_falls_back_to_rackid(self):
+    driver = MicronicIOMonitorDriver()
+    with patch.object(
+      driver,
+      "request_json",
+      side_effect=[{"unexpected": "shape"}, {"RackID": "5007377910"}],
+    ):
+      barcode = await driver.get_single_tube_barcode()
+    self.assertEqual(barcode, "5007377910")
+
+
+class TestMicronicIOMonitorRackReadingBackend(unittest.IsolatedAsyncioTestCase):
   def setUp(self) -> None:
     super().setUp()
-    self.driver = MicronicHTTPDriver()
-    self.backend = MicronicRackReadingBackend(driver=self.driver)
+    self.driver = MicronicIOMonitorDriver()
+    self.backend = MicronicIOMonitorRackReadingBackend(driver=self.driver)
 
   async def test_on_setup_checks_state(self):
     with patch.object(self.backend, "get_state", return_value=RackReaderState.IDLE) as get_state:
@@ -132,11 +188,13 @@ class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class TestMicronicBarcodeScannerBackend(unittest.IsolatedAsyncioTestCase):
+class TestMicronicIOMonitorBarcodeScannerBackend(unittest.IsolatedAsyncioTestCase):
   def setUp(self) -> None:
     super().setUp()
-    self.driver = MicronicHTTPDriver()
-    self.backend = MicronicBarcodeScannerBackend(driver=self.driver, timeout=1.0, poll_interval=0.0)
+    self.driver = MicronicIOMonitorDriver()
+    self.backend = MicronicIOMonitorBarcodeScannerBackend(
+      driver=self.driver, timeout=1.0, poll_interval=0.0
+    )
 
   async def test_scan_barcode_reads_single_tube_code(self):
     with patch.object(self.driver, "request", return_value=b"") as request_bytes, patch.object(
@@ -234,18 +292,15 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
   async def test_device_exposes_rack_and_barcode_capabilities(self):
     reader = MicronicCodeReader(timeout=12.0, poll_interval=0.25)
     with patch.object(
-      reader.rack_reading.backend,
-      "get_state",
-      return_value=RackReaderState.IDLE,
-    ), patch.object(
-      reader.barcode_scanning.backend,
-      "_get_state",
-      return_value=RackReaderState.IDLE,
+      reader.driver,
+      "get_iomonitor_state",
+      return_value=MicronicIOMonitorState.IDLE,
     ):
       await reader.setup()
     try:
-      self.assertIs(reader.rack_reader, reader.rack_reading)
+      self.assertIn(reader.rack_reading, reader._capabilities)
       self.assertIn(reader.barcode_scanning, reader._capabilities)
+      self.assertFalse(hasattr(reader, "rack_reader"))
       with patch.object(
         reader.rack_reading,
         "scan_rack",
@@ -258,7 +313,9 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       with patch.object(
         reader.barcode_scanning,
         "scan",
-        return_value=Barcode(data="5007377910", symbology="Data Matrix", position_on_resource="bottom"),
+        return_value=Barcode(
+          data="5007377910", symbology="Data Matrix", position_on_resource="bottom"
+        ),
       ) as scan_barcode:
         barcode = await reader.barcode_scanning.scan()
     finally:
@@ -272,13 +329,9 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
   async def test_device_exposes_rack_id_only_scan_on_rack_reading(self):
     reader = MicronicCodeReader(timeout=12.0, poll_interval=0.25)
     with patch.object(
-      reader.rack_reading.backend,
-      "get_state",
-      return_value=RackReaderState.IDLE,
-    ), patch.object(
-      reader.barcode_scanning.backend,
-      "_get_state",
-      return_value=RackReaderState.IDLE,
+      reader.driver,
+      "get_iomonitor_state",
+      return_value=MicronicIOMonitorState.IDLE,
     ):
       await reader.setup()
     try:

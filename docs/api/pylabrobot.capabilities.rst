@@ -195,7 +195,7 @@ Barcode Scanning
 Rack Reading
 ------------
 
-.. currentmodule:: pylabrobot.capabilities.rack_reading
+.. currentmodule:: pylabrobot.capabilities.rack_reading.rack_reader
 
 .. autosummary::
   :toctree: _autosummary
@@ -203,8 +203,25 @@ Rack Reading
   :recursive:
 
     RackReader
+
+.. currentmodule:: pylabrobot.capabilities.rack_reading.backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
     RackReaderBackend
+
+.. currentmodule:: pylabrobot.capabilities.rack_reading.standard
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
     RackReaderState
+    RackReaderError
     RackReaderTimeoutError
     RackScanEntry
     RackScanResult

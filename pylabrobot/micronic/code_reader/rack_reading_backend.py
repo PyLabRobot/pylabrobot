@@ -1,3 +1,5 @@
+"""Rack-reading backend for the Micronic Code Reader IO Monitor server."""
+
 from __future__ import annotations
 
 import json
@@ -13,17 +15,24 @@ from pylabrobot.capabilities.rack_reading import (
   RackScanResult,
 )
 
-from .http_driver import MicronicError, MicronicHTTPDriver
+from .driver import MicronicError, MicronicIOMonitorDriver, MicronicIOMonitorState
 
 
 class MicronicRackReaderError(MicronicError, RackReaderError):
   """Raised when Micronic rack-reading operations fail."""
 
 
-class MicronicRackReadingBackend(RackReaderBackend):
-  """Rack-reading backend for the Micronic Code Reader HTTP server."""
+_IOMONITOR_TO_RACK_READER_STATE = {
+  MicronicIOMonitorState.IDLE: RackReaderState.IDLE,
+  MicronicIOMonitorState.SCANNING: RackReaderState.SCANNING,
+  MicronicIOMonitorState.DATAREADY: RackReaderState.DATAREADY,
+}
 
-  def __init__(self, driver: MicronicHTTPDriver):
+
+class MicronicIOMonitorRackReadingBackend(RackReaderBackend):
+  """Rack-reading backend for the Micronic Code Reader IO Monitor server."""
+
+  def __init__(self, driver: MicronicIOMonitorDriver):
     super().__init__()
     self.driver = driver
 
@@ -31,20 +40,17 @@ class MicronicRackReadingBackend(RackReaderBackend):
     await self.get_state()
 
   async def get_state(self) -> RackReaderState:
-    payload = await self._request_json("GET", "/state")
-    state = payload.get("state")
-    if not isinstance(state, str):
-      raise MicronicRackReaderError("Micronic server response did not contain a valid state.")
     try:
-      return RackReaderState(state)
-    except ValueError as exc:
-      raise MicronicRackReaderError(f"Unknown Micronic state: {state}") from exc
+      iomonitor_state = await self.driver.get_iomonitor_state()
+    except MicronicError as exc:
+      raise MicronicRackReaderError(str(exc)) from exc
+    return _IOMONITOR_TO_RACK_READER_STATE[iomonitor_state]
 
   async def trigger_rack_scan(self) -> None:
     await self._request("POST", "/scanbox", data=b"", expect_json=False)
 
   async def trigger_rack_id_scan(self) -> None:
-    # Micronic exposes the rack-barcode-only trigger on a separate endpoint from full rack scans.
+    # IO Monitor exposes the rack-barcode-only trigger on /scantube, distinct from full rack scans.
     await self._request("POST", "/scantube", data=b"", expect_json=False)
 
   async def get_scan_result(self) -> RackScanResult:
@@ -153,8 +159,8 @@ class MicronicRackReadingBackend(RackReaderBackend):
     self,
     method: str,
     path: str,
-    data: bytes | None = None,
-    headers: dict[str, str] | None = None,
+    data: Optional[bytes] = None,
+    headers: Optional[dict[str, str]] = None,
   ) -> Any:
     try:
       return await self.driver.request_json(method, path, data=data, headers=headers)
@@ -165,8 +171,8 @@ class MicronicRackReadingBackend(RackReaderBackend):
     self,
     method: str,
     path: str,
-    data: bytes | None = None,
-    headers: dict[str, str] | None = None,
+    data: Optional[bytes] = None,
+    headers: Optional[dict[str, str]] = None,
     expect_json: bool = True,
   ) -> bytes:
     try:

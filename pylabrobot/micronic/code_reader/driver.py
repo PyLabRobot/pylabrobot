@@ -1,6 +1,9 @@
+"""HTTP driver for the Micronic Code Reader IO Monitor server."""
+
 from __future__ import annotations
 
 import asyncio
+import enum
 import http.client
 import json
 import time
@@ -12,10 +15,22 @@ from pylabrobot.device import Driver
 
 
 class MicronicError(Exception):
-  """Raised when the Micronic HTTP server returns an error."""
+  """Raised when the Micronic IO Monitor HTTP server returns an error."""
 
 
-class MicronicHTTPDriver(Driver):
+class MicronicIOMonitorState(enum.Enum):
+  """Normalized IO Monitor device state reported by GET /state.
+
+  IO Monitor exposes a single state machine that governs both rack scans and
+  single-tube scans, so this enum is shared across all IO Monitor backends.
+  """
+
+  IDLE = "idle"
+  SCANNING = "scanning"
+  DATAREADY = "dataready"
+
+
+class MicronicIOMonitorDriver(Driver):
   """HTTP transport for the Micronic Code Reader IO Monitor server."""
 
   def __init__(
@@ -49,6 +64,57 @@ class MicronicHTTPDriver(Driver):
       "timeout": self.timeout,
       "user_agent": self.user_agent,
     }
+
+  async def get_iomonitor_state(self) -> MicronicIOMonitorState:
+    payload = await self.request_json("GET", "/state")
+    state = payload.get("state") if isinstance(payload, dict) else None
+    if not isinstance(state, str):
+      raise MicronicError("Micronic server response did not contain a valid state.")
+    try:
+      return MicronicIOMonitorState(state)
+    except ValueError as exc:
+      raise MicronicError(f"Unknown Micronic state: {state}") from exc
+
+  async def wait_for_fresh_data_ready(
+    self,
+    initial_state: MicronicIOMonitorState,
+    timeout: float,
+    poll_interval: float,
+  ) -> None:
+    # If we started at dataready, require a state change before accepting the next
+    # dataready, otherwise we'd return the previous scan's stale result.
+    require_state_change = initial_state == MicronicIOMonitorState.DATAREADY
+    deadline = time.monotonic() + timeout
+    while True:
+      state = await self.get_iomonitor_state()
+      if state != MicronicIOMonitorState.DATAREADY:
+        require_state_change = False
+      elif not require_state_change:
+        return
+      if time.monotonic() >= deadline:
+        raise MicronicError(
+          f"Timed out waiting for IO Monitor to reach {MicronicIOMonitorState.DATAREADY.value}."
+        )
+      await asyncio.sleep(poll_interval)
+
+  async def get_single_tube_barcode(self) -> str:
+    # Prefers the decoded tube value from GET /scanresult. Older IO Monitor builds
+    # expose that value on GET /rackid instead, so fall back to /rackid for
+    # cross-version compatibility.
+    scan_result_payload = await self.request_json("GET", "/scanresult")
+    barcode = _extract_single_tube_barcode(scan_result_payload)
+    if barcode is not None:
+      return barcode
+
+    rack_id_payload = await self.request_json("GET", "/rackid")
+    barcode = _extract_named_barcode(
+      rack_id_payload,
+      keys=("RackID", "rackid", "rack_id", "Barcode", "barcode", "Code", "code"),
+    )
+    if barcode is not None:
+      return barcode
+
+    raise MicronicError("Micronic single-tube scan result had an unexpected shape.")
 
   async def request(
     self,
@@ -150,3 +216,30 @@ class MicronicHTTPDriver(Driver):
   def _is_retryable_url_error(self, exc: error.URLError) -> bool:
     reason = exc.reason
     return isinstance(reason, (ConnectionResetError, http.client.RemoteDisconnected, OSError))
+
+
+def _extract_single_tube_barcode(payload: Any) -> Optional[str]:
+  if isinstance(payload, str) and payload:
+    return payload
+  return _extract_named_barcode(
+    payload,
+    keys=("TubeID", "tubeid", "tube_id", "Barcode", "barcode", "Code", "code", "Data", "data"),
+  )
+
+
+def _extract_named_barcode(payload: Any, keys: tuple[str, ...]) -> Optional[str]:
+  if not isinstance(payload, dict):
+    return None
+  for key in keys:
+    barcode = _coerce_single_barcode(payload.get(key))
+    if barcode is not None:
+      return barcode
+  return None
+
+
+def _coerce_single_barcode(value: Any) -> Optional[str]:
+  if isinstance(value, str):
+    return value or None
+  if isinstance(value, list) and len(value) == 1 and value[0] not in (None, ""):
+    return str(value[0])
+  return None
