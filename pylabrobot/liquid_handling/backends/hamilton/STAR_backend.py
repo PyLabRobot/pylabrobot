@@ -1367,6 +1367,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
     self._pip_channel_information: Optional[List[PipChannelInformation]] = None
+    self._pip_firmware_version: Optional[datetime.date] = None
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
@@ -1678,6 +1679,52 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
     return datetime.date(int(year_match.group(1)), 1, 1)
 
+  def _pip_has_old_firmware(self) -> bool:
+    """Return whether the installed PIP firmware predates 2010 compatibility changes."""
+    pip_firmware_version = getattr(self, "_pip_firmware_version", None)
+    return pip_firmware_version is not None and pip_firmware_version.year < 2010
+
+  def _core96_has_old_firmware(self) -> bool:
+    """Return whether the installed CoRe96 firmware predates 2010 compatibility changes."""
+    head96_information = getattr(self, "_head96_information", None)
+    return head96_information is not None and head96_information.fw_version.year < 2010
+
+  def _pip_supports_extended_tip_handling_command_params(self) -> bool:
+    """Return whether PIP tip-handling commands support newer optional parameters."""
+    return not self._pip_has_old_firmware()
+
+  def _pip_supports_extended_liquid_command_params(self) -> bool:
+    """Return whether PIP liquid commands support newer optional parameters."""
+    return not self._pip_has_old_firmware()
+
+  def _core96_supports_extended_liquid_command_params(self) -> bool:
+    """Return whether CoRe96 `EA`/`ED` support the newer optional parameter set."""
+    return not self._core96_has_old_firmware()
+
+  def _normalize_extended_configuration_y_bounds(self) -> None:
+    """Normalize impossible PIP Y bounds reported by some legacy STAR/STARlet firmware."""
+    ext_conf = self.extended_conf
+
+    if (
+      ext_conf.pip_maximal_y_position < ext_conf.left_arm_min_y_position
+      or ext_conf.pip_maximal_y_position < 100.0
+    ):
+      default_bounds = ExtendedConfiguration()
+      logger.warning(
+        "Normalizing invalid PIP Y bounds reported by firmware: max_y=%s, min_y=%s, pip_fw=%s",
+        ext_conf.pip_maximal_y_position,
+        ext_conf.left_arm_min_y_position,
+        self._pip_firmware_version,
+      )
+      ext_conf.pip_maximal_y_position = default_bounds.pip_maximal_y_position
+      ext_conf.left_arm_min_y_position = default_bounds.left_arm_min_y_position
+
+  def _pip_y_bounds(self) -> Tuple[float, float]:
+    """Return PIP Y bounds as a normalized ``(min_y, max_y)`` tuple."""
+    min_y = self.extended_conf.left_arm_min_y_position
+    max_y = self.extended_conf.pip_maximal_y_position
+    return min(min_y, max_y), max(min_y, max_y)
+
   async def setup(
     self,
     skip_instrument_initialization=False,
@@ -1702,6 +1749,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._machine_conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
     self._head96_information: Optional[Head96Information] = None
+    self._pip_firmware_version = None
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1720,6 +1768,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
+
+    pip_fw_response = await self.request_firmware_version()
+    pip_fw_match = re.search(r"rf(?P<fw_version>.+)$", pip_fw_response)
+    if pip_fw_match is None:
+      raise ValueError(f"Could not parse PIP firmware version from response: '{pip_fw_response}'")
+    self._pip_firmware_version = self._parse_firmware_version_datetime(
+      pip_fw_match.group("fw_version").strip()
+    )
+    self._normalize_extended_configuration_y_bounds()
 
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
@@ -1852,12 +1909,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # frontmost channel can go to y=6, every channel behind it constrains its min Y
     spacings = self._channels_minimum_y_spacing
-    min_y_pos = self.extended_conf.left_arm_min_y_position + sum(spacings[channel_idx + 1 :])
+    lower_y_bound, upper_y_bound = self._pip_y_bounds()
+    min_y_pos = lower_y_bound + sum(spacings[channel_idx + 1 :])
     if position.y < min_y_pos:
       return False
 
     # backmost channel max Y from config, every channel in front constrains its max Y
-    max_y_pos = self.extended_conf.pip_maximal_y_position - sum(spacings[:channel_idx])
+    max_y_pos = upper_y_bound - sum(spacings[:channel_idx])
     if position.y > max_y_pos:
       return False
 
@@ -3468,7 +3526,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
-    if tip_pickup_method == "from_rack":
+    if tip_pickup_method == "from_rack" and self._core96_supports_extended_liquid_command_params():
       # the STAR will not automatically move the dispensing drive down if it is still up
       # so we need to move it down here
       # see https://github.com/PyLabRobot/pylabrobot/pull/835
@@ -4614,7 +4672,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      max_y_pos = self.extended_conf.pip_maximal_y_position
+      _, max_y_pos = self._pip_y_bounds()
       if y > max_y_pos:
         raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm")
 
@@ -4627,10 +4685,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
     else:
       # STAR machines do not allow channels y < minimum
-      if y < self.extended_conf.left_arm_min_y_position:
-        raise ValueError(
-          f"channel {channel} y-target must be >= {self.extended_conf.left_arm_min_y_position} mm"
-        )
+      min_y_pos, _ = self._pip_y_bounds()
+      if y < min_y_pos:
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm")
 
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
@@ -5848,7 +5905,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= tip_type <= 99, "tip must be between 0 and 99"
     assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="DI",
       read_timeout=120,
@@ -5859,8 +5916,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       te=f"{z_position_at_end_of_a_command:04}",
       tm=[f"{tm:01}" for tm in tip_pattern],
       tt=f"{tip_type:02}",
-      ti=discarding_method,
     )
+    if self._pip_supports_extended_tip_handling_command_params():
+      command_kwargs["ti"] = discarding_method
+    return await self.send_command(**command_kwargs)
 
   # -------------- 3.5.2 Tip handling commands using PIP --------------
 
@@ -5905,7 +5964,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     )
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="TP",
       tip_pattern=tip_pattern,
@@ -5917,8 +5976,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
       th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      td=pickup_method.value,
     )
+    if self._pip_supports_extended_tip_handling_command_params():
+      command_kwargs["td"] = pickup_method.value
+    return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
   async def discard_tip(
@@ -5970,7 +6031,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "z_position_at_end_of_a_command must be between 0 and 3600"
     )
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="TR",
       tip_pattern=tip_pattern,
@@ -5982,8 +6043,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
       te=z_position_at_end_of_a_command,
-      ti=discarding_method.value,
     )
+    if self._pip_supports_extended_tip_handling_command_params():
+      command_kwargs["ti"] = discarding_method.value
+    return await self.send_command(**command_kwargs)
 
   # TODO:(command:TW) Tip Pick-up for DC wash procedure
 
@@ -6229,7 +6292,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
@@ -6267,16 +6330,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
-      gi=[f"{gi:03}" for gi in limit_curve_index],
-      gj=tadm_algorithm,
-      gk=recording_mode,
-      lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
-      ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
-      sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
-      se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
-      sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
-      io=[f"{io:04}" for io in cup_upper_edge],
     )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
+      command_kwargs["gj"] = tadm_algorithm
+      command_kwargs["gk"] = recording_mode
+      command_kwargs.update(
+        lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
+        ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
+        sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
+        se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
+        sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
+        io=[f"{io:04}" for io in cup_upper_edge],
+      )
+    else:
+      command_kwargs.pop("po")
+    return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
   async def dispense_pip(
@@ -6461,7 +6530,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
@@ -6499,10 +6568,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
-      gi=[f"{gi:03}" for gi in limit_curve_index],
-      gj=tadm_algorithm,  #
-      gk=recording_mode,  #
     )
+    if self._pip_supports_extended_liquid_command_params():
+      command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
+      command_kwargs["gj"] = tadm_algorithm
+      command_kwargs["gk"] = recording_mode
+    else:
+      command_kwargs.pop("po")
+    return await self.send_command(**command_kwargs)
 
   # TODO:(command:DA) Simultaneous aspiration & dispensation of liquid
 
@@ -8061,7 +8134,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="EA",
       read_timeout=max(300, self.read_timeout),
@@ -8073,7 +8146,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{min_z_endpos:04}",
       lz=f"{lld_search_height:04}",
       zt=f"{liquid_surface_no_lld:04}",
-      pp=f"{pull_out_distance_transport_air:04}",
+    )
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["pp"] = f"{pull_out_distance_transport_air:04}"
+    command_kwargs.update(
       zm=f"{minimum_height:04}",
       zv=f"{second_section_height:04}",
       zq=f"{second_section_ratio:05}",
@@ -8094,11 +8170,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       hp=f"{mix_position_from_liquid_surface:03}",
       mj=f"{mix_surface_following_distance:03}",
       hs=f"{speed_of_mix:04}",
-      cw=channel_pattern_hex,
-      cr=f"{limit_curve_index:03}",
-      cj=tadm_algorithm,
-      cx=recording_mode,
     )
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["cw"] = channel_pattern_hex
+      command_kwargs["cr"] = f"{limit_curve_index:03}"
+      command_kwargs["cj"] = tadm_algorithm
+      command_kwargs["cx"] = recording_mode
+    return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
   @_requires_head96
@@ -8336,7 +8414,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    return await self.send_command(
+    command_kwargs: Dict[str, Any] = dict(
       module="C0",
       command="ED",
       read_timeout=max(300, self.read_timeout),
@@ -8349,7 +8427,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zq=f"{second_section_ratio:05}",
       lz=f"{lld_search_height:04}",
       zt=f"{liquid_surface_no_lld:04}",
-      pp=f"{pull_out_distance_transport_air:04}",
+    )
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["pp"] = f"{pull_out_distance_transport_air:04}"
+    command_kwargs.update(
       iw=f"{immersion_depth:03}",
       ix=immersion_depth_direction,
       fh=f"{surface_following_distance:03}",
@@ -8371,11 +8452,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       hp=f"{mix_position_from_liquid_surface:03}",
       mj=f"{mix_surface_following_distance:03}",
       hs=f"{speed_of_mixing:04}",
-      cw=channel_pattern_hex,
-      cr=f"{limit_curve_index:03}",
-      cj=tadm_algorithm,
-      cx=recording_mode,
     )
+    if self._core96_supports_extended_liquid_command_params():
+      command_kwargs["cw"] = channel_pattern_hex
+      command_kwargs["cr"] = f"{limit_curve_index:03}"
+      command_kwargs["cj"] = tadm_algorithm
+      command_kwargs["cx"] = recording_mode
+    return await self.send_command(**command_kwargs)
 
   # -------------- 3.10.4 Adjustment & movement commands --------------
 
@@ -10707,13 +10790,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       adj_upper_y = await self.request_y_pos_channel_n(channel_idx - 1)
       max_safe_upper_y_pos = adj_upper_y - self._min_spacing_between(channel_idx, channel_idx - 1)
     else:
-      max_safe_upper_y_pos = self.extended_conf.pip_maximal_y_position
+      _, max_safe_upper_y_pos = self._pip_y_bounds()
 
     if channel_idx < (self.num_channels - 1):
       adj_lower_y = await self.request_y_pos_channel_n(channel_idx + 1)
       max_safe_lower_y_pos = adj_lower_y + self._min_spacing_between(channel_idx, channel_idx + 1)
     else:
-      max_safe_lower_y_pos = self.extended_conf.left_arm_min_y_position
+      max_safe_lower_y_pos, _ = self._pip_y_bounds()
 
     # Enable safe start and end positions
     if start_pos_search:
@@ -10794,7 +10877,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_idx, channel_idx + 1
         )
       else:
-        min_y = self.extended_conf.left_arm_min_y_position
+        min_y, _ = self._pip_y_bounds()
 
       max_safe_dist = detected_material_y_pos - min_y
       move_target = detected_material_y_pos - min(post_detection_dist, max_safe_dist)
@@ -10805,7 +10888,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_idx, channel_idx - 1
         )
       else:
-        max_y = self.extended_conf.pip_maximal_y_position
+        _, max_y = self._pip_y_bounds()
 
       max_safe_dist = max_y - detected_material_y_pos
       move_target = detected_material_y_pos + min(post_detection_dist, max_safe_dist)
@@ -11682,7 +11765,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # position_channels_in_y_direction, it will raise an error.) The minimum y is 6mm,
     # so we fix that first (in case that value is misreported). Then, we traverse the
     # list in reverse and enforce pairwise minimum spacing.
-    min_y = self.extended_conf.left_arm_min_y_position
+    min_y, _ = self._pip_y_bounds()
     if y_positions[-1] < min_y - 0.2:
       raise RuntimeError(
         "Channels are reported to be too close to the front of the machine. "
