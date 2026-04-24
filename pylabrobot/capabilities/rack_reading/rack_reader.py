@@ -66,6 +66,20 @@ class RackReader(Capability):
       await asyncio.sleep(poll_interval)
 
   @need_capability_ready
+  async def wait_for_data_ready(
+    self,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
+  ) -> RackReaderState:
+    """Wait until the reader reports that scan data is ready."""
+
+    return await self._wait_for_state(
+      target=RackReaderState.DATAREADY,
+      timeout=timeout,
+      poll_interval=poll_interval,
+    )
+
+  @need_capability_ready
   async def scan_rack(
     self,
     timeout: float = 60.0,
@@ -74,9 +88,17 @@ class RackReader(Capability):
     """Trigger a rack scan and return the completed result."""
 
     await self.backend.trigger_rack_scan()
-    await self._wait_for_state(
-      target=RackReaderState.DATAREADY,
-      timeout=timeout,
-      poll_interval=poll_interval,
-    )
+    await self.wait_for_data_ready(timeout=timeout, poll_interval=poll_interval)
     return await self.backend.get_scan_result()
+
+  @need_capability_ready
+  async def scan_rack_id(
+    self,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
+  ) -> str:
+    """Trigger a rack-ID-only scan and return the completed rack identifier."""
+
+    await self.backend.trigger_tube_scan()
+    await self.wait_for_data_ready(timeout=timeout, poll_interval=poll_interval)
+    return await self.backend.get_rack_id()
