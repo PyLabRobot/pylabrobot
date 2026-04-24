@@ -19,8 +19,13 @@ class RackReaderBackend(CapabilityBackend, metaclass=ABCMeta):
     """Initiate a rack-wide scan."""
 
   @abstractmethod
-  async def trigger_rack_id_scan(self) -> None:
-    """Initiate a rack-barcode-only scan."""
+  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
+    """Perform a rack-barcode-only scan and return the rack identifier.
+
+    Backends whose hardware exposes a one-shot rack-id read may ignore
+    ``timeout`` and ``poll_interval``; backends that need a trigger/poll cycle
+    should respect them.
+    """
 
   @abstractmethod
   async def get_scan_result(self) -> RackScanResult:

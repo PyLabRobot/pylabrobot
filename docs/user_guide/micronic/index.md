@@ -8,18 +8,17 @@ Windows application.
 
 ## Supported operations
 
-Rack reading:
+Rack reading (large scanner that decodes 96 tubes plus the side rack barcode):
 
 - `GET /state`
-- `POST /scanbox`
-- `POST /scantube` for rack-barcode-only scans
-- `GET /scanresult`
-- `GET /rackid`
+- `POST /scanbox` to trigger a full rack scan
+- `GET /scanresult` to read the decoded grid
+- `GET /rackid` for a rack-barcode-only read on the side reader (one-shot trigger+result)
 - `GET /layoutlist`
 - `GET /currentlayout`
 - `PUT /currentlayout`
 
-Single-tube barcode scanning:
+Single-tube barcode scanning (small spot, separate from the rack scanner):
 
 - `GET /state`
 - `POST /scantube`
@@ -40,7 +39,7 @@ try:
   print(rack_result.rack_id)
   print(rack_result.entries[0].position, rack_result.entries[0].tube_id)
 
-  rack_id = await reader.rack_reading.scan_rack_id(timeout=30.0, poll_interval=1.0)
+  rack_id = await reader.rack_reading.scan_rack_id(timeout=10.0, poll_interval=0.5)
   print(rack_id)
 
   barcode = await reader.barcode_scanning.scan()
@@ -55,3 +54,6 @@ finally:
 - The Micronic application must have the HTTP server enabled in `IO Monitor`.
 - The reader only supports one external client at a time.
 - `localhost` is typically safer than `127.0.0.1` on the Windows host.
+- `scan_rack` reads every tube barcode and finishes by reading the rack ID, so
+  it typically takes tens of seconds. `scan_rack_id` only reads the rack
+  barcode and completes in a few seconds.
