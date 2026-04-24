@@ -234,16 +234,14 @@ class TestSTARLegacyFirmwareCommandParams(unittest.IsolatedAsyncioTestCase):
 
     await backend.aspirate_pip()
     kwargs = backend.send_command.call_args.kwargs
-    self.assertNotIn("gi", kwargs)
-    self.assertNotIn("gj", kwargs)
-    self.assertNotIn("gk", kwargs)
+    for param in ("po", "gi", "gj", "gk", "lk", "ik", "sd", "se", "sz", "io"):
+      self.assertNotIn(param, kwargs)
     backend.send_command.reset_mock()
 
     await backend.dispense_pip(tip_pattern=[True])
     kwargs = backend.send_command.call_args.kwargs
-    self.assertNotIn("gi", kwargs)
-    self.assertNotIn("gj", kwargs)
-    self.assertNotIn("gk", kwargs)
+    for param in ("po", "gi", "gj", "gk"):
+      self.assertNotIn(param, kwargs)
 
   async def test_modern_pip_firmware_keeps_newer_optional_params(self):
     backend = self._backend()
@@ -265,16 +263,14 @@ class TestSTARLegacyFirmwareCommandParams(unittest.IsolatedAsyncioTestCase):
 
     await backend.aspirate_pip()
     kwargs = backend.send_command.call_args.kwargs
-    self.assertIn("gi", kwargs)
-    self.assertIn("gj", kwargs)
-    self.assertIn("gk", kwargs)
+    for param in ("po", "gi", "gj", "gk", "lk", "ik", "sd", "se", "sz", "io"):
+      self.assertIn(param, kwargs)
     backend.send_command.reset_mock()
 
     await backend.dispense_pip(tip_pattern=[True])
     kwargs = backend.send_command.call_args.kwargs
-    self.assertIn("gi", kwargs)
-    self.assertIn("gj", kwargs)
-    self.assertIn("gk", kwargs)
+    for param in ("po", "gi", "gj", "gk"):
+      self.assertIn(param, kwargs)
 
   async def test_legacy_core96_firmware_omits_newer_optional_params(self):
     backend = self._backend()
@@ -792,6 +788,22 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
       ]
     )
+
+  async def test_legacy_core_96_tip_pickup_skips_dispensing_drive_move(self):
+    self.STAR._head96_information = unittest.mock.Mock(fw_version=datetime.date(2009, 5, 4))
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call("C0TTid0001tt01tf1tl0519tv03600tg2tu0"),
+        _any_write_and_read_command_call("C0EPid0002xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+      ]
+    )
+    sent_commands = [
+      call.kwargs["cmd"] for call in self.STAR._write_and_read_command.call_args_list
+    ]
+    self.assertFalse(any(command.startswith("H0DQ") for command in sent_commands))
 
   async def test_tip_tracking_pick_up96(self):
     set_tip_tracking(enabled=True)

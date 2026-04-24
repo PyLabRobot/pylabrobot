@@ -3526,7 +3526,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
-    if tip_pickup_method == "from_rack":
+    if tip_pickup_method == "from_rack" and self._core96_supports_extended_liquid_command_params():
       # the STAR will not automatically move the dispensing drive down if it is still up
       # so we need to move it down here
       # see https://github.com/PyLabRobot/pylabrobot/pull/835
@@ -6335,14 +6335,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
       command_kwargs["gj"] = tadm_algorithm
       command_kwargs["gk"] = recording_mode
-    command_kwargs.update(
-      lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
-      ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
-      sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
-      se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
-      sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
-      io=[f"{io:04}" for io in cup_upper_edge],
-    )
+      command_kwargs.update(
+        lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
+        ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
+        sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
+        se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
+        sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
+        io=[f"{io:04}" for io in cup_upper_edge],
+      )
+    else:
+      command_kwargs.pop("po")
     return await self.send_command(**command_kwargs)
 
   @need_iswap_parked
@@ -6571,6 +6573,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       command_kwargs["gi"] = [f"{gi:03}" for gi in limit_curve_index]
       command_kwargs["gj"] = tadm_algorithm
       command_kwargs["gk"] = recording_mode
+    else:
+      command_kwargs.pop("po")
     return await self.send_command(**command_kwargs)
 
   # TODO:(command:DA) Simultaneous aspiration & dispensation of liquid
