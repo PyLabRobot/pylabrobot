@@ -26,11 +26,17 @@ reader = MicronicCodeReader(host="localhost", port=2500)
 await reader.setup()
 
 try:
-  result = await reader.scan_rack(timeout=60.0, poll_interval=1.0)
+  result = await reader.rack_reading.scan_rack(timeout=60.0, poll_interval=1.0)
   print(result.rack_id)
   print(result.entries[0].position, result.entries[0].tube_id)
 finally:
   await reader.stop()
+```
+
+To retry only the rack barcode without repeating a full rack scan:
+
+```python
+rack_id = await reader.rack_reading.scan_rack_id(timeout=30.0, poll_interval=1.0)
 ```
 
 ## Notes
