@@ -16,12 +16,10 @@ from pylabrobot.capabilities.arms.standard import GripperLocation as GripperPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.paa.kx2.kx2_driver import (
   CanError,
-  CmdType,
   JointMoveDirection,
   KX2Driver,
   MotorMoveParam,
   MotorsMovePlan,
-  ValType,
 )
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -32,22 +30,6 @@ class HomeStatus(IntEnum):
   NotHomed = 0
   Homed = 1
   InitializedWithoutHoming = 2
-
-
-def _is_number(s: str) -> bool:
-  try:
-    float(str(s).strip())
-    return True
-  except Exception:
-    return False
-
-
-def _to_float(s: str, default: float = 0.0) -> float:
-  try:
-    return float(str(s).strip())
-  except Exception:
-    warnings.warn(f"Error converting '{s}' to float, returning default")
-    return default
 
 
 class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
@@ -109,18 +91,6 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     self.node_id_list = [1, 2, 3, 4, 6]
 
-  # -- motion/rail/gripper decision helper --------------------------------
-
-  def _uses_ds402(self, axis: int) -> bool:
-    """Return True if this axis uses the DS402 controlword-based enable path.
-
-    The four motion joints (shoulder/Z/elbow/wrist) are driven via the DS402
-    state machine over RPDO1; the rail and the servo gripper use the Elmo
-    binary-interpreter ``MO`` command. This is the single piece of robot-
-    topology knowledge that selects between the driver's two enable paths.
-    """
-    return int(axis) in (int(a) for a in MOTION_AXES)
-
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     # Driver has already brought CAN up (connect + node discovery) via
     # Device.setup(). Now read per-drive parameters, finish CANopen mapping,
@@ -150,12 +120,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     Reads the shoulder drive's SR (status register) via the binary
     interpreter. Bits 14/15 encode the stop/safety state.
     """
-    r = int(await self.driver.binary_interpreter(
-      node_id=int(self.Axis.SHOULDER),
-      cmd="SR",
-      cmd_index=1,
-      cmd_type=CmdType.ValQuery,
-    ))
+    r = await self.driver.query_int(int(self.Axis.SHOULDER), "SR", 1)
     if r != 8438016:
       logger.warning("get_estop_state: SR register unexpected value %d (expected 8438016)", r)
     b14 = (r & 0x4000) == 0x4000
@@ -163,30 +128,20 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     return (not b14) and (not b15)
 
   async def _motor_set_homed_status(self, axis: int, status: HomeStatus) -> None:
-    status_int = int(status)
-    if status_int == 1:
-      val = "1"
-    elif status_int == 2:
-      val = "2"
-    else:
-      val = "0"
-    await self.driver.binary_interpreter(int(axis), "UI", 3, CmdType.ValSet, val)
+    await self.driver.write(int(axis), "UI", 3, int(status))
 
   async def motor_get_homed_status(self, node_id: int) -> HomeStatus:
-    left = await self.driver.binary_interpreter(int(node_id), "UI", 3, CmdType.ValQuery)
-    if left == 1:
-      return HomeStatus.Homed
-    if left == 2:
-      return HomeStatus.InitializedWithoutHoming
-    return HomeStatus.NotHomed
+    return HomeStatus(await self.driver.query_int(int(node_id), "UI", 3))
 
   async def _motor_reset_encoder_position(self, axis: int, position: float) -> None:
-    await self.driver.binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(int(axis), "HM", 3, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(int(axis), "HM", 4, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(int(axis), "HM", 5, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(int(axis), "HM", 2, CmdType.ValSet, str(position))
-    await self.driver.binary_interpreter(int(axis), "HM", 1, CmdType.ValSet, "1")
+    await self.driver.write(int(axis), "HM", 1, 0)
+    await self.driver.write(int(axis), "HM", 3, 0)
+    await self.driver.write(int(axis), "HM", 4, 0)
+    await self.driver.write(int(axis), "HM", 5, 0)
+    # Old code packed `position` as int32 via `int(round(float(str(position))))`;
+    # preserve that rounding semantic for callers that pass fractional values.
+    await self.driver.write(int(axis), "HM", 2, int(round(position)))
+    await self.driver.write(int(axis), "HM", 1, 1)
 
   async def _motor_hard_stop_search(
     self,
@@ -198,15 +153,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     timeout: float,
   ) -> None:
     nid = int(axis)
-    await self.driver.binary_interpreter(nid, "ER", 3, CmdType.ValSet, str(max_pe * 10))
-    await self.driver.binary_interpreter(nid, "AC", 0, CmdType.ValSet, str(srch_acc))
-    await self.driver.binary_interpreter(nid, "DC", 0, CmdType.ValSet, str(srch_acc))
+    await self.driver.write(nid, "ER", 3, max_pe * 10)
+    await self.driver.write(nid, "AC", 0, srch_acc)
+    await self.driver.write(nid, "DC", 0, srch_acc)
     for i in [3, 4, 5, 2]:
-      await self.driver.binary_interpreter(nid, "HM", i, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(nid, "JV", 0, CmdType.ValSet, str(srch_vel))
+      await self.driver.write(nid, "HM", i, 0)
+    await self.driver.write(nid, "JV", 0, srch_vel)
 
     try:
-      params = [str(int(hs_pe)), str(int(timeout * 1000))]
+      params = [int(hs_pe), int(timeout * 1000)]
       last_line = await self.driver.user_program_run(
         nid, "Home", params, int(timeout), True
       )
@@ -214,15 +169,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         raise RuntimeError(f"Homing Script Error {34 + last_line}")
 
       curr_pos = await self.driver.motor_get_current_position(nid)
-      await self.driver.binary_interpreter(nid, "PA", 0, CmdType.ValSet, str(curr_pos))
-      await self.driver.binary_interpreter(nid, "SP", 0, CmdType.ValSet, str(srch_vel))
-      await self.driver.binary_interpreter(nid, "AC", 0, CmdType.ValSet, str(srch_acc))
-      await self.driver.binary_interpreter(nid, "DC", 0, CmdType.ValSet, str(srch_acc))
+      await self.driver.write(nid, "PA", 0, curr_pos)
+      await self.driver.write(nid, "SP", 0, srch_vel)
+      await self.driver.write(nid, "AC", 0, srch_acc)
+      await self.driver.write(nid, "DC", 0, srch_acc)
     finally:
       await asyncio.sleep(0.3)
-      await self.driver.binary_interpreter(nid, "BG", 0, CmdType.Execute, value="0")
+      await self.driver.execute(nid, "BG", 0)
       await asyncio.sleep(0.3)
-      await self.driver.binary_interpreter(nid, "ER", 3, CmdType.ValSet, str(int(max_pe)))
+      await self.driver.write(nid, "ER", 3, int(max_pe))
 
   async def _motor_index_search(
     self,
@@ -233,33 +188,31 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     timeout: float,
   ) -> tuple:
     nid = int(axis)
-    await self.driver.binary_interpreter(nid, "HM", 1, CmdType.ValSet, "0")
+    await self.driver.write(nid, "HM", 1, 0)
 
-    rev = await self.driver.binary_interpreter(nid, "CA", 18, CmdType.ValQuery)
-    one_revolution = int(float(rev))
+    one_revolution = await self.driver.query_int(nid, "CA", 18)
     if not positive_direction:
       one_revolution *= -1
 
-    await self.driver.binary_interpreter(nid, "PR", 1, CmdType.ValSet, str(one_revolution))
-    await self.driver.binary_interpreter(nid, "SP", 0, CmdType.ValSet, str(srch_vel))
-    await self.driver.binary_interpreter(nid, "AC", 0, CmdType.ValSet, str(srch_acc))
-    await self.driver.binary_interpreter(nid, "DC", 0, CmdType.ValSet, str(srch_acc))
+    await self.driver.write(nid, "PR", 1, one_revolution)
+    await self.driver.write(nid, "SP", 0, srch_vel)
+    await self.driver.write(nid, "AC", 0, srch_acc)
+    await self.driver.write(nid, "DC", 0, srch_acc)
 
-    await self.driver.binary_interpreter(nid, "HM", 3, CmdType.ValSet, "3")  # index only
-    await self.driver.binary_interpreter(nid, "HM", 4, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(nid, "HM", 5, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(nid, "HM", 2, CmdType.ValSet, "0")
-    await self.driver.binary_interpreter(nid, "HM", 1, CmdType.ValSet, "1")  # arm
+    await self.driver.write(nid, "HM", 3, 3)  # index only
+    await self.driver.write(nid, "HM", 4, 0)
+    await self.driver.write(nid, "HM", 5, 0)
+    await self.driver.write(nid, "HM", 2, 0)
+    await self.driver.write(nid, "HM", 1, 1)  # arm
 
-    await self.driver.binary_interpreter(nid, "BG", 0, CmdType.Execute)
+    await self.driver.execute(nid, "BG", 0)
     await self.driver.wait_for_moves_done([nid], timeout)
 
-    left = await self.driver.binary_interpreter(nid, "HM", 1, CmdType.ValQuery)
+    left = await self.driver.query_int(nid, "HM", 1)
     if left != 0:
       raise RuntimeError("Homing Failure: Failed to finish index pulse search.")
 
-    cap = await self.driver.binary_interpreter(nid, "HM", 7, CmdType.ValQuery)
-    captured_position = int(float(cap))
+    captured_position = await self.driver.query_int(nid, "HM", 7)
     return one_revolution, captured_position
 
   async def home_motor(
@@ -278,7 +231,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     nid = int(axis)
 
-    left = await self.driver.binary_interpreter(nid, "CA", 41, CmdType.ValQuery)
+    left = await self.driver.query_int(nid, "CA", 41)
     if left == 24:
       raise RuntimeError("Error 43")
 
@@ -290,7 +243,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         raise RuntimeError(fault)
       raise e
 
-    await self.driver.motor_enable(node_id=nid, state=True, use_ds402=self._uses_ds402(nid))
+    await self.driver.motor_enable(node_id=nid, state=True, use_ds402=nid in MOTION_AXES)
 
     await self.driver.motors_move_absolute_execute(
       plan=MotorsMovePlan(
@@ -344,23 +297,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.servo_gripper_close()
 
   async def servo_gripper_home(self) -> None:
-    await self.driver.binary_interpreter(
-      node_id=int(self.Axis.SERVO_GRIPPER),
-      cmd="PL",
-      cmd_index=1,
-      cmd_type=CmdType.ValSet,
-      value=str(self.servo_gripper_peak_current),
-      val_type=ValType.Float,
-    )
-
-    await self.driver.binary_interpreter(
-      node_id=int(self.Axis.SERVO_GRIPPER),
-      cmd="CL",
-      cmd_index=1,
-      cmd_type=CmdType.ValSet,
-      value=str(self.servo_gripper_continuous_current),
-      val_type=ValType.Float,
-    )
+    sg = int(self.Axis.SERVO_GRIPPER)
+    await self.driver.write(sg, "PL", 1, self.servo_gripper_peak_current)
+    await self.driver.write(sg, "CL", 1, self.servo_gripper_continuous_current)
 
     await self.home_motor(
       axis=self.Axis.SERVO_GRIPPER,
@@ -379,63 +318,39 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.servo_gripper_set_default_gripping_force(100)
 
   async def servo_gripper_set_default_gripping_force(self, max_force_percent: int) -> None:
-    if max_force_percent < 10:
-      max_force_percent = 10
-    elif max_force_percent > 100:
-      max_force_percent = 100
+    max_force_percent = max(10, min(max_force_percent, 100))
 
-    cont_current = float(self.servo_gripper_continuous_current) * max_force_percent / 100.0
-    peak_current = float(self.servo_gripper_peak_current) * max_force_percent / 100.0
+    cont_current = self.servo_gripper_continuous_current * max_force_percent / 100.0
+    peak_current = self.servo_gripper_peak_current * max_force_percent / 100.0
 
-    axis = self.Axis.SERVO_GRIPPER
+    sg = int(self.Axis.SERVO_GRIPPER)
 
     # 1) PL with unscaled peak current
-    await self.driver.binary_interpreter(
-      int(axis), "PL", 1, CmdType.ValSet, str(self.servo_gripper_peak_current), val_type=ValType.Float
-    )
+    await self.driver.write(sg, "PL", 1, self.servo_gripper_peak_current)
 
     # 2) CL with scaled continuous current
-    await self.driver.binary_interpreter(
-      int(axis), "CL", 1, CmdType.ValSet, str(cont_current), val_type=ValType.Float
-    )
+    await self.driver.write(sg, "CL", 1, cont_current)
 
     # 3) PL with scaled peak current
-    await self.driver.binary_interpreter(
-      int(axis), "PL", 1, CmdType.ValSet, str(peak_current), val_type=ValType.Float
-    )
+    await self.driver.write(sg, "PL", 1, peak_current)
 
     self.servo_gripper_force_percent = max_force_percent
 
   async def get_servo_gripper_max_force(self) -> float:
     """Return current gripping force as percentage of max (0-1)."""
-    cl = await self.driver.binary_interpreter(
-      node_id=int(self.Axis.SERVO_GRIPPER),
-      cmd="CL",
-      cmd_index=1,
-      cmd_type=CmdType.ValQuery,
-      val_type=ValType.Float,
-    )
-
-    iq = await self.driver.binary_interpreter(
-      node_id=int(self.Axis.SERVO_GRIPPER),
-      cmd="IQ",
-      cmd_index=0,
-      cmd_type=CmdType.ValQuery,
-      val_type=ValType.Float,
-    )
+    sg = int(self.Axis.SERVO_GRIPPER)
+    cl = await self.driver.query_float(sg, "CL", 1)
+    iq = await self.driver.query_float(sg, "IQ", 0)
 
     if cl == 0:
-      return 0
+      return 0.0
 
-    return max(0, min(abs(iq / cl), 1))
+    return max(0.0, min(abs(iq / cl), 1.0))
 
   async def check_plate_gripped(self, num_attempts: int = 5) -> None:
     for _ in range(num_attempts):
-      motor_status = await self.driver.binary_interpreter(
-        node_id=int(self.Axis.SERVO_GRIPPER),
-        cmd="MS",
-        cmd_index=1,
-        cmd_type=CmdType.ValQuery,
+      motor_status = await self.driver.query_int(
+        int(self.Axis.SERVO_GRIPPER), "MS", 1
       )
       logger.debug("Servo gripper motor status: %s", motor_status)
 
@@ -499,16 +414,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     maintenance_required_rail: bool,
     last_maintenance_performed_date_rail: int,
   ) -> None:
+    z = int(self.Axis.Z)
+
     # MoveCount -> Z axis, UI index 22
-    await self.driver.binary_interpreter(
-      node_id=int(self.Axis.Z),
-      cmd="UI",
-      cmd_index=22,
-      cmd_type=CmdType.ValSet,
-      value=str(int(move_count)),
-      val_type=ValType.Int,
-      low_priority=False,
-    )
+    await self.driver.write(z, "UI", 22, int(move_count))
 
     # Travel[] -> each node, UF index 5
     # The source looked 1-based for Travel and 0-based for NodeIDList; handle both cleanly.
@@ -518,80 +427,23 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       pairs = zip(self.node_id_list, travel)
 
     for node_id, dist in pairs:
-      await self.driver.binary_interpreter(
-        node_id=int(node_id),
-        cmd="UF",
-        cmd_index=5,
-        cmd_type=CmdType.ValSet,
-        value=str(float(dist)),
-        val_type=ValType.Float,
-        low_priority=True,
-      )
+      await self.driver.write(int(node_id), "UF", 5, float(dist))
 
     # LastMaintenancePerformed -> Z axis, UF index 6
-    await self.driver.binary_interpreter(
-      node_id=int(self.Axis.Z),
-      cmd="UF",
-      cmd_index=6,
-      cmd_type=CmdType.ValSet,
-      value=str(float(last_maintenance_performed)),
-      val_type=ValType.Float,
-      low_priority=True,
-    )
+    await self.driver.write(z, "UF", 6, float(last_maintenance_performed))
 
     # MaintenanceRequired -> Z axis, UI index 23
-    await self.driver.binary_interpreter(
-      node_id=int(self.Axis.Z),
-      cmd="UI",
-      cmd_index=23,
-      cmd_type=CmdType.ValSet,
-      value="1" if maintenance_required else "0",
-      val_type=ValType.Int,
-      low_priority=False,
-    )
+    await self.driver.write(z, "UI", 23, 1 if maintenance_required else 0)
 
     # LastMaintenancePerformedDate -> Z axis, UI index 21
-    await self.driver.binary_interpreter(
-      node_id=int(self.Axis.Z),
-      cmd="UI",
-      cmd_index=21,
-      cmd_type=CmdType.ValSet,
-      value=str(int(last_maintenance_performed_date)),
-      val_type=ValType.Int,
-      low_priority=False,
-    )
+    await self.driver.write(z, "UI", 21, int(last_maintenance_performed_date))
 
     # Rail (if present)
     if self.robot_on_rail:
-      await self.driver.binary_interpreter(
-        node_id=int(self.Axis.RAIL),
-        cmd="UF",
-        cmd_index=6,
-        cmd_type=CmdType.ValSet,
-        value=str(float(last_maintenance_performed_rail)),
-        val_type=ValType.Float,
-        low_priority=True,
-      )
-
-      await self.driver.binary_interpreter(
-        node_id=int(self.Axis.RAIL),
-        cmd="UI",
-        cmd_index=23,
-        cmd_type=CmdType.ValSet,
-        value="1" if maintenance_required_rail else "0",
-        val_type=ValType.Int,
-        low_priority=False,
-      )
-
-      await self.driver.binary_interpreter(
-        node_id=int(self.Axis.RAIL),
-        cmd="UI",
-        cmd_index=21,
-        cmd_type=CmdType.ValSet,
-        value=str(int(last_maintenance_performed_date_rail)),
-        val_type=ValType.Int,
-        low_priority=False,
-      )
+      rail = int(self.Axis.RAIL)
+      await self.driver.write(rail, "UF", 6, float(last_maintenance_performed_rail))
+      await self.driver.write(rail, "UI", 23, 1 if maintenance_required_rail else 0)
+      await self.driver.write(rail, "UI", 21, int(last_maintenance_performed_date_rail))
 
   async def drive_get_parameters(self, node_ids) -> None:
     self.robot_on_rail = False
@@ -609,7 +461,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     # Pass 1: identify axes by UI[4]
     uis = set()
     for node in nodes:
-      if node == await self.driver.binary_interpreter(int(node), "UI", 4, CmdType.ValQuery, val_type=ValType.Int):
+      if node == await self.driver.query_int(int(node), "UI", 4):
         uis.add(node)
     for required_axis in MOTION_AXES:
       if required_axis.value not in uis:
@@ -626,7 +478,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
       # UI[5..10] digital inputs
       for ui_idx in range(5, 11):
-        ret = await self.driver.binary_interpreter(int(axis), "UI", ui_idx, CmdType.ValQuery, val_type=ValType.Int)
+        ret = await self.driver.query_int(int(axis), "UI", ui_idx)
         ch = (ui_idx - 5) + 1
         if ret == 101:
           set2d(self.digital_input_assignment, axis, ch, "GripperSensor")
@@ -641,23 +493,23 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
             self.digital_input_assignment,
             axis,
             ch,
-            "" if (not _is_number(ret) or _to_float(ret) <= 0.0) else f"AuxPin{ret}",
+            "" if ret <= 0 else f"AuxPin{ret}",
           )
 
       # UI[11..12] analog inputs
       for ui_idx in range(11, 13):
-        ret = await self.driver.binary_interpreter(int(axis), "UI", ui_idx, CmdType.ValQuery, val_type=ValType.Int)
+        ret = await self.driver.query_int(int(axis), "UI", ui_idx)
         ch = (ui_idx - 11) + 1
         set2d(
           self.AnalogInputAssignment,
           axis,
           ch,
-          "" if (not _is_number(ret) or _to_float(ret) <= 0.0) else f"AuxPin{ret}",
+          "" if ret <= 0 else f"AuxPin{ret}",
         )
 
       # UI[13..16] outputs
       for ui_idx in range(13, 17):
-        ret = await self.driver.binary_interpreter(int(axis), "UI", ui_idx, CmdType.ValQuery, val_type=ValType.Int)
+        ret = await self.driver.query_int(int(axis), "UI", ui_idx)
         ch = (ui_idx - 13) + 1
 
         if ret == 101:
@@ -685,45 +537,33 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
             self.output_assignment,
             axis,
             ch,
-            "" if (not _is_number(ret) or _to_float(ret) <= 0.0) else f"AuxPin{ret}",
+            "" if ret <= 0 else f"AuxPin{ret}",
           )
 
-      # UI[24] drive serial number
-      ret = await self.driver.binary_interpreter(int(axis), "UI", 24, CmdType.ValQuery, val_type=ValType.Int)
-      if _is_number(ret):
-        # self.drive_serial_number[axis] = int(ret)
-        pass
+      # UI[24] drive serial number (queried but not currently stored)
+      await self.driver.query_int(int(axis), "UI", 24)
 
       # UF[1], UF[2] conversion factor
-      uf1 = await self.driver.binary_interpreter(int(axis), "UF", 1, CmdType.ValQuery, val_type=ValType.Float)
-      uf2 = await self.driver.binary_interpreter(int(axis), "UF", 2, CmdType.ValQuery, val_type=ValType.Float)
-      if (
-        not (_is_number(uf1) and _is_number(uf2)) or _to_float(uf1) == 0.0 or _to_float(uf2) == 0.0
-      ):
+      uf1 = await self.driver.query_float(int(axis), "UF", 1)
+      uf2 = await self.driver.query_float(int(axis), "UF", 2)
+      if uf1 == 0.0 or uf2 == 0.0:
         raise CanError(f"Invalid Motor Conversion Factor for axis {axis}. UF[1]={uf1}, UF[2]={uf2}")
-      self.motor_conversion_factor_ax[axis] = _to_float(uf1) / _to_float(uf2)
+      self.motor_conversion_factor_ax[axis] = uf1 / uf2
 
       # XM / travel
-      xm1 = await self.driver.binary_interpreter(int(axis), "XM", 1, CmdType.ValQuery, val_type=ValType.Int)
-      xm2 = await self.driver.binary_interpreter(int(axis), "XM", 2, CmdType.ValQuery, val_type=ValType.Int)
-      uf3 = await self.driver.binary_interpreter(int(axis), "UF", 3, CmdType.ValQuery, val_type=ValType.Float)
-      uf4 = await self.driver.binary_interpreter(int(axis), "UF", 4, CmdType.ValQuery, val_type=ValType.Float)
-      vh3 = await self.driver.binary_interpreter(int(axis), "VH", 3, CmdType.ValQuery, val_type=ValType.Int)
-      vl3 = await self.driver.binary_interpreter(int(axis), "VL", 3, CmdType.ValQuery, val_type=ValType.Int)
+      xm1 = await self.driver.query_int(int(axis), "XM", 1)
+      xm2 = await self.driver.query_int(int(axis), "XM", 2)
+      uf3 = await self.driver.query_float(int(axis), "UF", 3)
+      uf4 = await self.driver.query_float(int(axis), "UF", 4)
+      vh3 = await self.driver.query_int(int(axis), "VH", 3)
+      vl3 = await self.driver.query_int(int(axis), "VL", 3)
 
-      self.max_travel_ax[axis] = _to_float(uf3)
-      self.min_travel_ax[axis] = _to_float(uf4)
+      self.max_travel_ax[axis] = uf3
+      self.min_travel_ax[axis] = uf4
 
-      if not all(_is_number(x) for x in (xm1, xm2, vh3, vl3)):
-        raise CanError(
-          f"Invalid travel limits or modulo settings for axis {axis}. "
-          f"VH[3]={vh3}, VL[3]={vl3}, XM[1]={xm1}, XM[2]={xm2}"
-        )
-
-      xm1v, xm2v, vh3v, vl3v = map(_to_float, (xm1, xm2, vh3, vl3))
-      if ((xm1v == 0.0) and (xm2v == 0.0)) or ((xm1v <= vl3v) and (xm2v >= vh3v)):
+      if ((xm1 == 0) and (xm2 == 0)) or ((xm1 <= vl3) and (xm2 >= vh3)):
         self.unlimited_travel_ax[axis] = False
-      elif (xm1v > vl3v) and (xm2v < vh3v):
+      elif (xm1 > vl3) and (xm2 < vh3):
         self.unlimited_travel_ax[axis] = True
       else:
         raise CanError(
@@ -732,14 +572,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         )
 
       # Encoder socket/type
-      ca45 = await self.driver.binary_interpreter(int(axis), "CA", 45, CmdType.ValQuery, val_type=ValType.Int)
-      ca45v = _to_float(ca45, 0.0)
-      if (not _is_number(ca45)) or not (0.0 < ca45v <= 4.0):
+      ca45 = await self.driver.query_int(int(axis), "CA", 45)
+      if not (0 < ca45 <= 4):
         raise CanError(f"Invalid encoder socket number received from axis {axis}. CA[45]={ca45}")
 
-      enc_type = await self.driver.binary_interpreter(
-        int(axis), "CA", int(round(40.0 + ca45v)), CmdType.ValQuery, val_type=ValType.Int
-      )
+      enc_type = await self.driver.query_int(int(axis), "CA", 40 + ca45)
       if enc_type in (1, 2):
         self.absolute_encoder_ax[axis] = False
       elif enc_type == 24:
@@ -749,104 +586,57 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           f"Unsupported encoder type specified for axis {axis}. CA[4{ca45}]={enc_type}"
         )
 
-      ca46 = await self.driver.binary_interpreter(int(axis), "CA", 46, CmdType.ValQuery, val_type=ValType.Int)
+      ca46 = await self.driver.query_int(int(axis), "CA", 46)
       if ca45 == ca46:
         num3 = 1.0
       else:
-        ff3 = await self.driver.binary_interpreter(int(axis), "FF", 3, CmdType.ValQuery, val_type=ValType.Float)
-        num3 = _to_float(ff3, 1.0)
+        num3 = await self.driver.query_float(int(axis), "FF", 3)
 
       denom = self.motor_conversion_factor_ax[axis] * num3  # or 1.0
 
-      sp2 = await self.driver.binary_interpreter(int(axis), "SP", 2, CmdType.ValQuery, val_type=ValType.Int)
+      sp2 = await self.driver.query_int(int(axis), "SP", 2)
       if sp2 == 100000:
-        vh2 = await self.driver.binary_interpreter(int(axis), "VH", 2, CmdType.ValQuery, val_type=ValType.Int)
-        self.max_vel_ax[axis] = _to_float(vh2) / 1.01 / denom
+        vh2 = await self.driver.query_int(int(axis), "VH", 2)
+        self.max_vel_ax[axis] = vh2 / 1.01 / denom
       else:
-        self.max_vel_ax[axis] = _to_float(sp2) / denom
+        self.max_vel_ax[axis] = sp2 / denom
 
-      sd0 = await self.driver.binary_interpreter(int(axis), "SD", 0, CmdType.ValQuery, val_type=ValType.Int)
-      self.max_accel_ax[axis] = _to_float(sd0) / 1.01 / denom
+      sd0 = await self.driver.query_int(int(axis), "SD", 0)
+      self.max_accel_ax[axis] = sd0 / 1.01 / denom
 
     # Robot-level params from shoulder_ax
-    shoulder = self.Axis.SHOULDER
+    shoulder = int(self.Axis.SHOULDER)
 
-    self.base_to_gripper_clearance_z = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 6, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.base_to_gripper_clearance_arm = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 7, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.wrist_offset = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 8, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.elbow_offset = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 9, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.elbow_zero_offset = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 10, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.MaxLinearVelMMPerSec = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 11, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.MaxLinearAccelMMPerSec2 = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 12, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.MaxLinearJerkMMPerSec3 = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 13, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.MaxRotaryVelDegPerSec = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 14, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.MaxRotaryAccelDegPerSec2 = _to_float(
-      await self.driver.binary_interpreter(int(shoulder), "UF", 15, CmdType.ValQuery, val_type=ValType.Float)
-    )
+    self.base_to_gripper_clearance_z = await self.driver.query_float(shoulder, "UF", 6)
+    self.base_to_gripper_clearance_arm = await self.driver.query_float(shoulder, "UF", 7)
+    self.wrist_offset = await self.driver.query_float(shoulder, "UF", 8)
+    self.elbow_offset = await self.driver.query_float(shoulder, "UF", 9)
+    self.elbow_zero_offset = await self.driver.query_float(shoulder, "UF", 10)
+    self.MaxLinearVelMMPerSec = await self.driver.query_float(shoulder, "UF", 11)
+    self.MaxLinearAccelMMPerSec2 = await self.driver.query_float(shoulder, "UF", 12)
+    self.MaxLinearJerkMMPerSec3 = await self.driver.query_float(shoulder, "UF", 13)
+    self.MaxRotaryVelDegPerSec = await self.driver.query_float(shoulder, "UF", 14)
+    self.MaxRotaryAccelDegPerSec2 = await self.driver.query_float(shoulder, "UF", 15)
 
-    ui17 = await self.driver.binary_interpreter(int(shoulder), "UI", 17, CmdType.ValQuery, val_type=ValType.Int)
+    ui17 = await self.driver.query_int(shoulder, "UI", 17)
     self.pvt_time_interval_msec = (
-      25
-      if (not _is_number(ui17) or _to_float(ui17) <= 0.0 or _to_float(ui17) > 255.0)
-      else int(_to_float(ui17))
+      25 if (ui17 <= 0 or ui17 > 255) else ui17
     )
 
     # Servo gripper params (only if present)
-    sg = self.Axis.SERVO_GRIPPER
-    self.servo_gripper_home_pos = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 6, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_search_vel = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 7, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_search_accel = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 8, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_default_position_error = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 9, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_hard_stop_position_error = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 10, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_hard_stop_offset = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 11, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_index_offset = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 12, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_offset_vel = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 13, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_offset_accel = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 14, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_home_timeout_msec = int(
-      await self.driver.binary_interpreter(int(sg), "UF", 15, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_continuous_current = _to_float(
-      await self.driver.binary_interpreter(int(sg), "UF", 16, CmdType.ValQuery, val_type=ValType.Float)
-    )
-    self.servo_gripper_peak_current = _to_float(
-      await self.driver.binary_interpreter(int(sg), "UF", 17, CmdType.ValQuery, val_type=ValType.Float)
-    )
+    sg = int(self.Axis.SERVO_GRIPPER)
+    self.servo_gripper_home_pos = int(await self.driver.query_float(sg, "UF", 6))
+    self.servo_gripper_home_search_vel = int(await self.driver.query_float(sg, "UF", 7))
+    self.servo_gripper_home_search_accel = int(await self.driver.query_float(sg, "UF", 8))
+    self.servo_gripper_home_default_position_error = int(await self.driver.query_float(sg, "UF", 9))
+    self.servo_gripper_home_hard_stop_position_error = int(await self.driver.query_float(sg, "UF", 10))
+    self.servo_gripper_home_hard_stop_offset = int(await self.driver.query_float(sg, "UF", 11))
+    self.servo_gripper_home_index_offset = int(await self.driver.query_float(sg, "UF", 12))
+    self.servo_gripper_home_offset_vel = int(await self.driver.query_float(sg, "UF", 13))
+    self.servo_gripper_home_offset_accel = int(await self.driver.query_float(sg, "UF", 14))
+    self.servo_gripper_home_timeout_msec = int(await self.driver.query_float(sg, "UF", 15))
+    self.servo_gripper_continuous_current = await self.driver.query_float(sg, "UF", 16)
+    self.servo_gripper_peak_current = await self.driver.query_float(sg, "UF", 17)
 
   def convert_elbow_position_to_angle(self, elbow_pos: float) -> float:
     max_travel = self.max_travel_ax[self.Axis.ELBOW]
@@ -881,7 +671,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     else:
       if c == 0:
         logger.warning("Axis %s has conversion factor of 0", axis)
-        return 0
+        return 0.0
       else:
         return raw / c
 

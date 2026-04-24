@@ -30,17 +30,6 @@ def _u32_le(value: int) -> List[int]:
   return list((value & 0xFFFFFFFF).to_bytes(4, byteorder="little", signed=False))
 
 
-class CmdType(IntEnum):
-  ValQuery = 1
-  ValSet = 2
-  Execute = 3
-
-
-class ValType(IntEnum):
-  Int = 1
-  Float = 2
-
-
 class COBType(IntEnum):
   NMT = 0
   EMCY = 1
@@ -305,24 +294,12 @@ class KX2Driver(Driver):
       )
 
     for nid in self.motion_node_ids:
-      await self._can_sdo_download_elmo_object(
-        nid, 24768, 0, "-1", ElmoObjectDataType.INTEGER16
-      )
-      await self._can_sdo_download_elmo_object(
-        nid, 24772, 2, "16", ElmoObjectDataType.UNSIGNED32
-      )
-      await self._can_sdo_download_elmo_object(
-        nid, 24772, 3, "0", ElmoObjectDataType.UNSIGNED8
-      )
-      await self._can_sdo_download_elmo_object(
-        nid, 24772, 5, "8", ElmoObjectDataType.UNSIGNED8
-      )
-      await self._can_sdo_download_elmo_object(
-        nid, 24770, 2, "-3", ElmoObjectDataType.INTEGER8
-      )
-      await self._can_sdo_download_elmo_object(
-        nid, 24669, 0, "1", ElmoObjectDataType.INTEGER16
-      )
+      await self._can_sdo_download_elmo_object(nid, 24768, 0, -1, ElmoObjectDataType.INTEGER16)
+      await self._can_sdo_download_elmo_object(nid, 24772, 2, 16, ElmoObjectDataType.UNSIGNED32)
+      await self._can_sdo_download_elmo_object(nid, 24772, 3, 0, ElmoObjectDataType.UNSIGNED8)
+      await self._can_sdo_download_elmo_object(nid, 24772, 5, 8, ElmoObjectDataType.UNSIGNED8)
+      await self._can_sdo_download_elmo_object(nid, 24770, 2, -3, ElmoObjectDataType.INTEGER8)
+      await self._can_sdo_download_elmo_object(nid, 24669, 0, 1, ElmoObjectDataType.INTEGER16)
 
     for nid in self.motion_node_ids:
       await self._rpdo_map(
@@ -451,65 +428,30 @@ class KX2Driver(Driver):
     node = self._nodes[node_id]
     await asyncio.to_thread(node.sdo.download, index, sub_index, bytes(data_byte))
 
-  async def _can_sdo_upload_elmo_object(
-    self,
-    node_id: int,
-    elmo_object_int: int,
-    sub_index: int,
-    data_type: ElmoObjectDataType,
-  ) -> str:
-    obj_byte0 = elmo_object_int >> 8
-    obj_byte1 = elmo_object_int & 0xFF
-    data_bytes = await self._can_sdo_upload(node_id, obj_byte0, obj_byte1, sub_index)
-
-    if len(data_bytes) == 0:
-      return ""
-    if data_type == ElmoObjectDataType.UNSIGNED8:
-      return str(int.from_bytes(data_bytes[:1], "little", signed=False))
-    if data_type == ElmoObjectDataType.UNSIGNED16:
-      return str(int.from_bytes(data_bytes[:2], "little", signed=False))
-    if data_type == ElmoObjectDataType.UNSIGNED32:
-      return str(int.from_bytes(data_bytes[:4], "little", signed=False))
-    if data_type == ElmoObjectDataType.UNSIGNED64:
-      return str(int.from_bytes(data_bytes[:8], "little", signed=False))
-    if data_type == ElmoObjectDataType.INTEGER16:
-      return str(int.from_bytes(data_bytes[:2], "little", signed=True))
-    if data_type == ElmoObjectDataType.INTEGER32:
-      return str(int.from_bytes(data_bytes[:4], "little", signed=True))
-    if data_type == ElmoObjectDataType.INTEGER64:
-      return str(int.from_bytes(data_bytes[:8], "little", signed=True))
-    if data_type == ElmoObjectDataType.STR:
-      return "".join(chr(b) for b in data_bytes)
-    raise CanError(f"Unsupported data type for SDO Read conversion: {data_type.name}")
-
   async def _can_sdo_download_elmo_object(
     self,
     node_id: int,
     elmo_object_int: int,
     sub_index: int,
-    data: str,
+    data: Union[int, float],
     data_type: ElmoObjectDataType,
   ) -> None:
-    if data_type == ElmoObjectDataType.UNSIGNED8:
-      data_bytes = list(int(data).to_bytes(1, "little"))
-    elif data_type == ElmoObjectDataType.UNSIGNED16:
-      data_bytes = list(int(data).to_bytes(2, "little"))
-    elif data_type == ElmoObjectDataType.UNSIGNED32:
-      data_bytes = list(int(float(data)).to_bytes(4, "little"))
-    elif data_type == ElmoObjectDataType.UNSIGNED64:
-      data_bytes = list(int(data).to_bytes(8, "little"))
-    elif data_type == ElmoObjectDataType.INTEGER8:
-      data_bytes = list(int(data).to_bytes(1, "little", signed=True))
-    elif data_type == ElmoObjectDataType.INTEGER16:
-      data_bytes = list(int(data).to_bytes(2, "little", signed=True))
-    elif data_type == ElmoObjectDataType.INTEGER32:
-      data_bytes = list(int(float(data)).to_bytes(4, "little", signed=True))
-    elif data_type == ElmoObjectDataType.INTEGER64:
-      data_bytes = list(int(data).to_bytes(8, "little", signed=True))
-    elif data_type == ElmoObjectDataType.STR:
-      data_bytes = [ord(c) for c in data]
-    else:
+    # Byte width + signedness derived from data_type; float inputs truncate to int.
+    _SDO_ELMO_PACK = {
+      ElmoObjectDataType.UNSIGNED8:  (1, False),
+      ElmoObjectDataType.UNSIGNED16: (2, False),
+      ElmoObjectDataType.UNSIGNED32: (4, False),
+      ElmoObjectDataType.UNSIGNED64: (8, False),
+      ElmoObjectDataType.INTEGER8:   (1, True),
+      ElmoObjectDataType.INTEGER16:  (2, True),
+      ElmoObjectDataType.INTEGER32:  (4, True),
+      ElmoObjectDataType.INTEGER64:  (8, True),
+    }
+    spec = _SDO_ELMO_PACK.get(data_type)
+    if spec is None:
       raise CanError(f"Unsupported data type for SDO Write: {data_type.name}")
+    width, signed = spec
+    data_bytes = list(int(data).to_bytes(width, "little", signed=signed))
 
     obj_byte0 = elmo_object_int >> 8
     obj_byte1 = elmo_object_int & 0xFF
@@ -535,39 +477,33 @@ class KX2Driver(Driver):
     msg_type = chr(data[0]) + chr(data[1])
     msg_index = ((data[3] & 0x3F) << 8) | data[2]
     is_int = (data[3] & 0x80) == 0
-    if is_int:
-      (val,) = struct.unpack("<i", data[4:8])
-      value_str = str(val)
-    else:
-      (val,) = struct.unpack("<f", data[4:8])
-      value_str = str(val)
+    fmt = "<i" if is_int else "<f"
+    (val,) = struct.unpack(fmt, data[4:8])
 
     fut = self._pending_bi.pop((node_id, msg_type, msg_index), None)
     if fut is not None and not fut.done():
-      fut.set_result(value_str)
+      fut.set_result(val)  # native int or float, no stringification
 
-  async def binary_interpreter(
+  async def _send_bi(
     self,
     node_id: int,
     cmd: str,
     cmd_index: int,
-    cmd_type: CmdType,
-    value: str = "0",
-    val_type: ValType = ValType.Int,
-    low_priority: bool = False,
-  ) -> Union[str, float]:
-    del low_priority  # request priority is not meaningful over canopen.Network.send_message
+    *,
+    is_query: bool,
+    is_execute: bool,
+    is_float: bool,
+    value: Union[int, float] = 0,
+  ) -> List[Union[int, float]]:
+    """Frame + send an 8-byte binary-interpreter request; await one response
+    per target node. Each response is decoded to its native type (int or
+    float) by :meth:`_dispatch_bi_response`.
+    """
     if self._network is None:
-      raise CanError("binary_interpreter called before setup()")
-    if value == "":
-      value = "0"
+      raise CanError("binary interpreter called before setup()")
 
     timeout = 10.0 if cmd.upper() == "SV" else 1.0
-    is_float = val_type == ValType.Float
-    is_query = cmd_type == CmdType.ValQuery
-    is_execute = cmd_type == CmdType.Execute
 
-    # -- build the 8-byte request --
     byte0 = ord(cmd[0]) & 0xFF
     byte1 = ord(cmd[-1]) & 0xFF
     byte2 = cmd_index & 0xFF
@@ -576,34 +512,22 @@ class KX2Driver(Driver):
       byte3 |= 0x40
     if is_float:
       byte3 |= 0x80
-    if is_float:
-      val_bytes = struct.pack("<f", float(value))
-    else:
-      val_bytes = struct.pack("<i", int(round(float(value))))
+
+    val_bytes = (
+      struct.pack("<f", float(value)) if is_float
+      else struct.pack("<i", int(value))
+    )
     payload = bytes([byte0, byte1, byte2, byte3]) + val_bytes
-    send_len = 4 if is_execute else 8
-    data_to_send = payload[:send_len]
+    data_to_send = payload[:4] if is_execute else payload
 
-    def _float_matches(expected_str: str, actual_str: str) -> bool:
-      try:
-        expected = float(expected_str)
-        actual = float(actual_str)
-      except ValueError:
-        return False
-      if actual == 0.0:
-        return expected == 0.0
-      ratio = expected / actual
-      return expected == actual or (0.99 < ratio < 1.01)
-
-    # -- dispatch: single node vs. group --
-    target_nodes = (
+    targets = (
       list(self.motion_node_ids) if node_id == _GROUP_NODE_ID else [node_id]
     )
 
     futures: List[asyncio.Future] = []
-    for nid in target_nodes:
+    for nid in targets:
       key = (nid, cmd, cmd_index)
-      # If a stale pending future exists, drop it.
+      # If a stale pending future exists for the same (node, cmd, index), drop it.
       old = self._pending_bi.pop(key, None)
       if old is not None and not old.done():
         old.cancel()
@@ -614,40 +538,67 @@ class KX2Driver(Driver):
     self._network.send_message(_BI_REQUEST_COB_BASE + node_id, data_to_send)
 
     try:
-      resps = await asyncio.wait_for(asyncio.gather(*futures), timeout=timeout)
+      return await asyncio.wait_for(asyncio.gather(*futures), timeout=timeout)
     except asyncio.TimeoutError:
-      for nid in target_nodes:
+      for nid in targets:
         self._pending_bi.pop((nid, cmd, cmd_index), None)
       raise CanError(
         f"Timeout waiting for response to {cmd}[{cmd_index}] from node {node_id}"
       )
 
-    # -- interpret responses --
-    if is_query:
-      if node_id == _GROUP_NODE_ID:
-        value = ",".join(str(r) for r in resps)
-      else:
-        value = str(resps[0])
-      return float(value) if is_float else int(float(value))
+  async def query_int(self, node_id: int, cmd: str, cmd_index: int) -> int:
+    """Query an int-typed Elmo parameter. Returns the drive's current value."""
+    if node_id == _GROUP_NODE_ID:
+      raise CanError("Group queries are not supported")
+    resps = await self._send_bi(
+      node_id, cmd, cmd_index, is_query=True, is_execute=False, is_float=False,
+    )
+    return int(resps[0])
 
-    if is_execute:
-      if any(r == "" for r in resps):
-        missing = [nid for nid, r in zip(target_nodes, resps) if r == ""]
-        raise CanError(f"No execute response from nodes {missing} for {cmd}[{cmd_index}]")
-      return float(value) if is_float else int(float(value))
+  async def query_float(self, node_id: int, cmd: str, cmd_index: int) -> float:
+    """Query a float-typed Elmo parameter. Returns the drive's current value."""
+    if node_id == _GROUP_NODE_ID:
+      raise CanError("Group queries are not supported")
+    resps = await self._send_bi(
+      node_id, cmd, cmd_index, is_query=True, is_execute=False, is_float=True,
+    )
+    return float(resps[0])
 
-    # Write: verify each echoed value matches the one we sent.
-    for nid, resp in zip(target_nodes, resps):
+  async def write(
+    self, node_id: int, cmd: str, cmd_index: int, value: Union[int, float],
+  ) -> None:
+    """Write an Elmo parameter. The type of ``value`` selects int vs float
+    framing on the wire. The drive echoes the accepted value back, which we
+    verify — a mismatch raises :class:`CanError`.
+    """
+    is_float = isinstance(value, float)
+    resps = await self._send_bi(
+      node_id, cmd, cmd_index,
+      is_query=False, is_execute=False, is_float=is_float, value=value,
+    )
+    targets = (
+      list(self.motion_node_ids) if node_id == _GROUP_NODE_ID else [node_id]
+    )
+    for nid, resp in zip(targets, resps):
       if is_float:
-        ok = _float_matches(value, str(resp))
+        # Elmo stores floats as float32; the echo may drift slightly relative
+        # to our float64 input — accept within ~1% ratio.
+        exp, act = float(value), float(resp)
+        ok = exp == act or (act != 0.0 and 0.99 < exp / act < 1.01)
       else:
-        ok = int(float(resp)) == int(float(value))
+        ok = int(resp) == int(value)
       if not ok:
         raise CanError(
           f"Unexpected CAN response: sent {cmd}[{cmd_index}]={value}, "
           f"got {resp} from node {nid}"
         )
-    return float(value) if is_float else int(float(value))
+
+  async def execute(self, node_id: int, cmd: str, cmd_index: int = 0) -> None:
+    """Fire-and-forget execute (e.g. ``BG``). Awaits the drive's response so
+    the caller sees the command completed on the wire, but no echo-check."""
+    await self._send_bi(
+      node_id, cmd, cmd_index, is_query=False, is_execute=True, is_float=False,
+    )
 
   async def _os_interpreter(
     self,
@@ -720,16 +671,14 @@ class KX2Driver(Driver):
   # --- DS402 / motor control ----------------------------------------------
 
   async def motor_emergency_stop(self, node_id: int) -> None:
-    await self.binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "0")
+    await self.write(node_id, "MO", 0, 0)
 
   async def motor_get_current_position(self, node_id: int, pu: bool = False) -> int:
     cmd = "PU" if pu else "PX"
-    val_str = await self.binary_interpreter(int(node_id), cmd, 0, CmdType.ValQuery)
-    return int(round(float(val_str)))
+    return await self.query_int(int(node_id), cmd, 0)
 
   async def motor_get_motion_status(self, node_id: int) -> int:
-    val = await self.binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
-    return int(round(float(val)))
+    return await self.query_int(int(node_id), "MS", 0)
 
   async def _motor_set_move_direction(
     self, node_id: int, direction: JointMoveDirection
@@ -738,16 +687,14 @@ class KX2Driver(Driver):
     # direction (0=Normal, 1=CW, 2=CCW, 3=Shortest). Packs to 1 + 64*direction
     # = 1/65/129/193.
     val = 1 + 64 * int(direction)
-    await self._can_sdo_download_elmo_object(
-      node_id, 24818, 0, str(val), ElmoObjectDataType.UNSIGNED16
-    )
+    await self._can_sdo_download_elmo_object(node_id, 24818, 0, val, ElmoObjectDataType.UNSIGNED16)
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
-    ms_val = await self.binary_interpreter(node_id, "MS", 0, CmdType.ValQuery)
+    ms_val = await self.query_int(node_id, "MS", 0)
     if ms_val == 0:
       return True
     if ms_val == 1:
-      mo_val = await self.binary_interpreter(node_id, "MO", 0, CmdType.ValQuery)
+      mo_val = await self.query_int(node_id, "MO", 0)
       if mo_val == 1:
         return True
       fault = await self.motor_get_fault(node_id)
@@ -759,10 +706,9 @@ class KX2Driver(Driver):
     return False
 
   async def motor_get_fault(self, node_id: int) -> Optional[str]:
-    val = await self.binary_interpreter(int(node_id), "MF", 0, CmdType.ValQuery)
+    val = await self.query_int(int(node_id), "MF", 0)
     if val == 0:
       return None
-    assert isinstance(val, int)
 
     faults: list[str] = []
     bit_msgs = {
@@ -823,7 +769,7 @@ class KX2Driver(Driver):
       max_attempts = 5
       for attempt in range(1, max_attempts + 1):
         if not use_ds402:
-          await self.binary_interpreter(node_id, "MO", 0, CmdType.ValSet, "1")
+          await self.write(node_id, "MO", 0, 1)
         else:
           # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
           # Matches the C# reference (clscanmotor.cs:4495-4509): back-to-back
@@ -831,9 +777,7 @@ class KX2Driver(Driver):
           for cw in (0, 128, 6, 7, 15):
             await self._control_word_set(node_id=node_id, value=cw)
         await asyncio.sleep(0.1)
-        left = await self.binary_interpreter(
-          node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
-        )
+        left = await self.query_int(node_id, "MO", 0)
         if left == 1:
           break
         logger.warning(
@@ -845,9 +789,7 @@ class KX2Driver(Driver):
     else:
       if not use_ds402:
         try:
-          await self.binary_interpreter(
-            node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValSet, value="0"
-          )
+          await self.write(node_id, "MO", 0, 0)
         except Exception:
           pass
       else:
@@ -856,9 +798,7 @@ class KX2Driver(Driver):
         await self._control_word_set(node_id=node_id, value=7)
         await self._control_word_set(node_id=node_id, value=6)
       await asyncio.sleep(0.1)
-      left = await self.binary_interpreter(
-        node_id=node_id, cmd="MO", cmd_index=0, cmd_type=CmdType.ValQuery
-      )
+      left = await self.query_int(node_id, "MO", 0)
       if left != 0:
         raise RuntimeError(f"Motor failed to disable (node_id = {node_id})")
 
@@ -926,21 +866,17 @@ class KX2Driver(Driver):
       await self._motor_set_move_direction(nid, move.direction)
       # 0x607A = Target Position (24698 decimal)
       await self._can_sdo_download_elmo_object(
-        nid, 24698, 0, str(int(move.position)), ElmoObjectDataType.INTEGER32,
+        nid, 24698, 0, int(move.position), ElmoObjectDataType.INTEGER32,
       )
       # 0x6081 = Profile Velocity (24705 decimal)
       await self._can_sdo_download_elmo_object(
-        nid, 24705, 0, str(int(move.velocity)), ElmoObjectDataType.UNSIGNED32,
+        nid, 24705, 0, int(move.velocity), ElmoObjectDataType.UNSIGNED32,
       )
       acc = max(int(move.acceleration), 100)
       # 0x6083 = Profile Acceleration (24707 decimal)
-      await self._can_sdo_download_elmo_object(
-        nid, 24707, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
-      )
+      await self._can_sdo_download_elmo_object(nid, 24707, 0, acc, ElmoObjectDataType.UNSIGNED32)
       # 0x6084 = Profile Deceleration (24708 decimal)
-      await self._can_sdo_download_elmo_object(
-        nid, 24708, 0, str(acc), ElmoObjectDataType.UNSIGNED32,
-      )
+      await self._can_sdo_download_elmo_object(nid, 24708, 0, acc, ElmoObjectDataType.UNSIGNED32)
 
     node_ids = [int(move.node_id) for move in plan.moves]
     await self._motors_move_start(node_ids)
@@ -950,7 +886,7 @@ class KX2Driver(Driver):
     self,
     node_id: int,
     user_function: str,
-    params=None,
+    params: Optional[List[Union[int, float]]] = None,
     timeout_sec: int = 0,
     wait_until_done: bool = False,
   ) -> int:
@@ -960,28 +896,24 @@ class KX2Driver(Driver):
       raise ValueError("node_id must be in [0, 255]")
     node_id = int(node_id)
 
-    ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+    ps = await self.query_int(node_id, "PS", 0)
     if ps == -2:
       raise CanError(f"Node {node_id}: controller reported PS=-2 (not ready / unavailable)")
 
     if ps != -1:
-      await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="0")
+      await self.write(node_id, "UI", 1, 0)
       t0 = time.monotonic()
       while (time.monotonic() - t0) < 3.0:
-        ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
+        ps = await self.query_int(node_id, "PS", 0)
         if ps == -1:
           break
         await asyncio.sleep(0.01)
       else:
         raise CanError(f"Node {node_id}: did not reach idle state (PS=-1) within 3s (last PS={ps})")
 
-    arg_str = ""
-    if params:
-      parts = [str(p) for p in params]
-      if parts:
-        arg_str = f"({','.join(parts)})"
+    arg_str = f"({','.join(str(p) for p in params)})" if params else ""
 
-    await self.binary_interpreter(node_id, "UI", 1, CmdType.ValSet, value="1")
+    await self.write(node_id, "UI", 1, 1)
 
     cmd = f"XQ##{user_function}{arg_str}"
     logger.debug("user_program_run: %s", cmd)
@@ -992,16 +924,12 @@ class KX2Driver(Driver):
       t0 = time.monotonic()
       ps = 1
       ui1 = 1
-      while ps == 1 and ui1 == 1 and (time.monotonic() - t0) < float(timeout_sec):
-        ps = int(await self.binary_interpreter(node_id, "PS", 0, CmdType.ValQuery))
-        ui1 = int(await self.binary_interpreter(node_id, "UI", 1, CmdType.ValQuery))
+      while ps == 1 and ui1 == 1 and (time.monotonic() - t0) < timeout_sec:
+        ps = await self.query_int(node_id, "PS", 0)
+        ui1 = await self.query_int(node_id, "UI", 1)
         await asyncio.sleep(0.01)
 
-      expr_raw = await self.binary_interpreter(node_id, "UI", 2, CmdType.ValQuery)
-      try:
-        last_line_completed = int(str(expr_raw).strip())
-      except Exception:
-        last_line_completed = 0
+      last_line_completed = await self.query_int(node_id, "UI", 2)
 
       if ps == 1 and ui1 == 1:
         raise CanError(
@@ -1019,15 +947,12 @@ class KX2Driver(Driver):
   # --- I/O -----------------------------------------------------------------
 
   async def read_input(self, node_id: int, input_num: int) -> bool:
-    left = await self.binary_interpreter(node_id, "IB", input_num, CmdType.ValQuery)
-    return left == 1
+    return await self.query_int(node_id, "IB", input_num) == 1
 
   async def _read_output(self, node_id: int, output_num: int) -> bool:
-    expression = await self.binary_interpreter(node_id, "OP", 0, CmdType.ValQuery)
-    val = int(expression)
+    val = await self.query_int(node_id, "OP", 0)
     mask = 1 << (output_num - 1)
     return (val & mask) == mask
 
-  async def _set_output(self, node_id: int, output_num: int, state: bool) -> Union[str, float]:
-    val = "1" if state else "0"
-    return await self.binary_interpreter(node_id, "OB", output_num, CmdType.ValSet, val)
+  async def _set_output(self, node_id: int, output_num: int, state: bool) -> None:
+    await self.write(node_id, "OB", output_num, 1 if state else 0)
