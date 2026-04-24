@@ -222,9 +222,7 @@ class TestSTARLegacyFirmwareCommandParams(unittest.IsolatedAsyncioTestCase):
     self.assertNotIn("ti", backend.send_command.call_args.kwargs)
     backend.send_command.reset_mock()
 
-    await backend.pick_up_tip(
-      x_positions=[0], y_positions=[0], tip_pattern=[True], tip_type_idx=1
-    )
+    await backend.pick_up_tip(x_positions=[0], y_positions=[0], tip_pattern=[True], tip_type_idx=1)
     self.assertNotIn("td", backend.send_command.call_args.kwargs)
     backend.send_command.reset_mock()
 
@@ -251,9 +249,7 @@ class TestSTARLegacyFirmwareCommandParams(unittest.IsolatedAsyncioTestCase):
     self.assertIn("ti", backend.send_command.call_args.kwargs)
     backend.send_command.reset_mock()
 
-    await backend.pick_up_tip(
-      x_positions=[0], y_positions=[0], tip_pattern=[True], tip_type_idx=1
-    )
+    await backend.pick_up_tip(x_positions=[0], y_positions=[0], tip_pattern=[True], tip_type_idx=1)
     self.assertIn("td", backend.send_command.call_args.kwargs)
     backend.send_command.reset_mock()
 
