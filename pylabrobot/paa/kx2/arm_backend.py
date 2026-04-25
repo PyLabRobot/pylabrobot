@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import logging
 import math
 import warnings
@@ -12,9 +13,16 @@ from pylabrobot.capabilities.arms.backend import (
   OrientableGripperArmBackend,
 )
 from pylabrobot.capabilities.arms.standard import GripperLocation
-from pylabrobot.capabilities.arms.standard import GripperLocation as GripperPose
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.paa.kx2.kx2_driver import (
+from pylabrobot.paa.kx2 import kinematics
+from pylabrobot.paa.kx2.config import (
+  Axis,
+  AxisConfig,
+  GripperFingerSide,
+  KX2Config,
+  ServoGripperConfig,
+)
+from pylabrobot.paa.kx2.driver import (
   CanError,
   JointMoveDirection,
   KX2Driver,
@@ -44,52 +52,22 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   estop polling, etc. The driver underneath is a pure CAN transport.
   """
 
-  class Axis(IntEnum):
-    """KX2 axis -> CANopen node-ID mapping.
-
-    Lives here (not in the driver) because the driver is axis-agnostic and
-    deals only with node IDs. External code should reference
-    ``KX2ArmBackend.Axis``.
-    """
-
-    SHOULDER = 1
-    Z = 2
-    ELBOW = 3
-    WRIST = 4
-    RAIL = 5
-    SERVO_GRIPPER = 6
 
   def __init__(
     self,
     driver: KX2Driver,
     gripper_length: float = 0.0,
     gripper_z_offset: float = 0.0,
+    gripper_finger_side: GripperFingerSide = "barcode_reader",
   ) -> None:
     super().__init__()
     self.driver = driver
-    self.gripper_length = float(gripper_length)
-    self.gripper_z_offset = float(gripper_z_offset)
-
-    self.digital_input_assignment = {}  # TODO: just cache?
-    self.AnalogInputAssignment = {}
-    self.output_assignment = {}
-    self.motor_conversion_factor_ax = {}
-    self.max_travel_ax = {}
-    self.min_travel_ax = {}
-    self.unlimited_travel_ax = {}
-    self.absolute_encoder_ax = {}
-    self.max_vel_ax = {}
-    self.max_accel_ax = {}
-
-    self.g_joint_move_direction = {
-      1: JointMoveDirection.Normal,
-      2: JointMoveDirection.Normal,
-      3: JointMoveDirection.Normal,
-      4: JointMoveDirection.Normal,
-      6: JointMoveDirection.Normal,
-    }
-
-    self.node_id_list = [1, 2, 3, 4, 6]
+    # Tooling offsets are user-supplied; everything else on the config is
+    # filled in from the drives during setup.
+    self._gripper_length = float(gripper_length)
+    self._gripper_z_offset = float(gripper_z_offset)
+    self._gripper_finger_side: GripperFingerSide = gripper_finger_side
+    self._config: Optional[KX2Config] = None
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     # Driver has already brought CAN up (connect + node discovery + PDO
@@ -101,7 +79,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     for axis in MOTION_AXES:
       try:
-        await self.driver.motor_enable(node_id=int(axis), state=True, use_ds402=True)
+        await self.driver.motor_enable(node_id=axis, state=True, use_ds402=True)
       except Exception as e:
         logger.warning("Error enabling motor on axis %s: %s", axis, e)
 
@@ -115,39 +93,39 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     Reads the shoulder drive's SR (status register) via the binary
     interpreter. Bits 14/15 encode the stop/safety state.
     """
-    r = await self.driver.query_int(int(self.Axis.SHOULDER), "SR", 1)
+    r = await self.driver.query_int(int(Axis.SHOULDER), "SR", 1)
     if r != 8438016:
       logger.warning("get_estop_state: SR register unexpected value %d (expected 8438016)", r)
     b14 = (r & 0x4000) == 0x4000
     b15 = (r & 0x8000) == 0x8000
     return (not b14) and (not b15)
 
-  async def _motor_set_homed_status(self, axis: int, status: HomeStatus) -> None:
-    await self.driver.write(int(axis), "UI", 3, int(status))
+  async def _motor_set_homed_status(self, axis: Axis, status: HomeStatus) -> None:
+    await self.driver.write(axis, "UI", 3, int(status))
 
-  async def motor_get_homed_status(self, node_id: int) -> HomeStatus:
-    return HomeStatus(await self.driver.query_int(int(node_id), "UI", 3))
+  async def motor_get_homed_status(self, axis: Axis) -> HomeStatus:
+    return HomeStatus(await self.driver.query_int(axis, "UI", 3))
 
-  async def _motor_reset_encoder_position(self, axis: int, position: float) -> None:
-    await self.driver.write(int(axis), "HM", 1, 0)
-    await self.driver.write(int(axis), "HM", 3, 0)
-    await self.driver.write(int(axis), "HM", 4, 0)
-    await self.driver.write(int(axis), "HM", 5, 0)
+  async def _motor_reset_encoder_position(self, axis: Axis, position: float) -> None:
+    await self.driver.write(axis, "HM", 1, 0)
+    await self.driver.write(axis, "HM", 3, 0)
+    await self.driver.write(axis, "HM", 4, 0)
+    await self.driver.write(axis, "HM", 5, 0)
     # Old code packed `position` as int32 via `int(round(float(str(position))))`;
     # preserve that rounding semantic for callers that pass fractional values.
-    await self.driver.write(int(axis), "HM", 2, int(round(position)))
-    await self.driver.write(int(axis), "HM", 1, 1)
+    await self.driver.write(axis, "HM", 2, int(round(position)))
+    await self.driver.write(axis, "HM", 1, 1)
 
   async def _motor_hard_stop_search(
     self,
-    axis: int,
+    axis: Axis,
     srch_vel: int,
     srch_acc: int,
     max_pe: int,
     hs_pe: int,
     timeout: float,
   ) -> None:
-    nid = int(axis)
+    nid = axis
     await self.driver.write(nid, "ER", 3, max_pe * 10)
     await self.driver.write(nid, "AC", 0, srch_acc)
     await self.driver.write(nid, "DC", 0, srch_acc)
@@ -176,13 +154,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def _motor_index_search(
     self,
-    axis: int,
+    axis: Axis,
     srch_vel: int,
     srch_acc: int,
     positive_direction: bool,
     timeout: float,
   ) -> tuple:
-    nid = int(axis)
+    nid = axis
     await self.driver.write(nid, "HM", 1, 0)
 
     one_revolution = await self.driver.query_int(nid, "CA", 18)
@@ -212,7 +190,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def home_motor(
     self,
-    axis: int,
+    axis: Axis,
     hs_offset: int,
     ind_offset: int,
     home_pos: int,
@@ -224,7 +202,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     offset_acc: int,
     timeout: float,
   ) -> None:
-    nid = int(axis)
+    nid = axis
 
     left = await self.driver.query_int(nid, "CA", 41)
     if left == 24:
@@ -280,11 +258,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def servo_gripper_initialize(self):
     try:
       await self.driver.motor_enable(
-        node_id=int(self.Axis.SERVO_GRIPPER), state=True, use_ds402=False
+        node_id=int(Axis.SERVO_GRIPPER), state=True, use_ds402=False
       )
     except Exception as e:
       logger.warning(
-        "Error enabling servo gripper motor on node %s: %s", self.Axis.SERVO_GRIPPER, e
+        "Error enabling servo gripper motor on node %s: %s", Axis.SERVO_GRIPPER, e
       )
 
     await self.servo_gripper_home()
@@ -292,36 +270,42 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.servo_gripper_close()
 
   async def servo_gripper_home(self) -> None:
-    sg = int(self.Axis.SERVO_GRIPPER)
-    await self.driver.write(sg, "PL", 1, self.servo_gripper_peak_current)
-    await self.driver.write(sg, "CL", 1, self.servo_gripper_continuous_current)
+    sgc = self._cfg.servo_gripper
+    if sgc is None:
+      raise RuntimeError("Servo gripper not present")
+    sg = int(Axis.SERVO_GRIPPER)
+    await self.driver.write(sg, "PL", 1, sgc.peak_current)
+    await self.driver.write(sg, "CL", 1, sgc.continuous_current)
 
     await self.home_motor(
-      axis=self.Axis.SERVO_GRIPPER,
-      hs_offset=self.servo_gripper_home_hard_stop_offset,
-      ind_offset=self.servo_gripper_home_index_offset,
-      home_pos=self.servo_gripper_home_pos,
-      srch_vel=self.servo_gripper_home_search_vel,
-      srch_acc=self.servo_gripper_home_search_accel,
-      max_pe=self.servo_gripper_home_default_position_error,
-      hs_pe=self.servo_gripper_home_hard_stop_position_error,
-      offset_vel=self.servo_gripper_home_offset_vel,
-      offset_acc=self.servo_gripper_home_offset_accel,
-      timeout=self.servo_gripper_home_timeout_msec / 1000,
+      axis=Axis.SERVO_GRIPPER,
+      hs_offset=sgc.home_hard_stop_offset,
+      ind_offset=sgc.home_index_offset,
+      home_pos=sgc.home_pos,
+      srch_vel=sgc.home_search_vel,
+      srch_acc=sgc.home_search_accel,
+      max_pe=sgc.home_default_position_error,
+      hs_pe=sgc.home_hard_stop_position_error,
+      offset_vel=sgc.home_offset_vel,
+      offset_acc=sgc.home_offset_accel,
+      timeout=sgc.home_timeout_msec / 1000,
     )
 
     await self.servo_gripper_set_default_gripping_force(100)
 
   async def servo_gripper_set_default_gripping_force(self, max_force_percent: int) -> None:
+    sgc = self._cfg.servo_gripper
+    if sgc is None:
+      raise RuntimeError("Servo gripper not present")
     max_force_percent = max(10, min(max_force_percent, 100))
 
-    cont_current = self.servo_gripper_continuous_current * max_force_percent / 100.0
-    peak_current = self.servo_gripper_peak_current * max_force_percent / 100.0
+    cont_current = sgc.continuous_current * max_force_percent / 100.0
+    peak_current = sgc.peak_current * max_force_percent / 100.0
 
-    sg = int(self.Axis.SERVO_GRIPPER)
+    sg = int(Axis.SERVO_GRIPPER)
 
     # 1) PL with unscaled peak current
-    await self.driver.write(sg, "PL", 1, self.servo_gripper_peak_current)
+    await self.driver.write(sg, "PL", 1, sgc.peak_current)
 
     # 2) CL with scaled continuous current
     await self.driver.write(sg, "CL", 1, cont_current)
@@ -329,11 +313,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     # 3) PL with scaled peak current
     await self.driver.write(sg, "PL", 1, peak_current)
 
-    self.servo_gripper_force_percent = max_force_percent
-
   async def get_servo_gripper_max_force(self) -> float:
     """Return current gripping force as percentage of max (0-1)."""
-    sg = int(self.Axis.SERVO_GRIPPER)
+    sg = int(Axis.SERVO_GRIPPER)
     cl = await self.driver.query_float(sg, "CL", 1)
     iq = await self.driver.query_float(sg, "IQ", 0)
 
@@ -345,7 +327,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def check_plate_gripped(self, num_attempts: int = 5) -> None:
     for _ in range(num_attempts):
       motor_status = await self.driver.query_int(
-        int(self.Axis.SERVO_GRIPPER), "MS", 1
+        int(Axis.SERVO_GRIPPER), "MS", 1
       )
       logger.debug("Servo gripper motor status: %s", motor_status)
 
@@ -358,7 +340,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         if max_force_percentage > 90:
           return
 
-        current_position = await self.motor_get_current_position(self.Axis.SERVO_GRIPPER)
+        current_position = await self.motor_get_current_position(Axis.SERVO_GRIPPER)
         closed_position = 1
         if abs(current_position - closed_position) < 2.0 / 625:
           raise RuntimeError(
@@ -368,7 +350,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         return
 
       elif motor_status == 2:
-        motor_fault = await self.driver.motor_get_fault(int(self.Axis.SERVO_GRIPPER))
+        motor_fault = await self.driver.motor_get_fault(int(Axis.SERVO_GRIPPER))
         if motor_fault is None:
           raise RuntimeError("Error querying whether plate is gripped. Error querying motor fault.")
         raise RuntimeError(
@@ -383,7 +365,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def servo_gripper_close(self, closed_position: int = 0, check_plate_gripped=True) -> None:
     await self.motors_move_joint(
-      {self.Axis.SERVO_GRIPPER: closed_position},
+      {Axis.SERVO_GRIPPER: closed_position},
       cmd_vel_pct=100,
       cmd_accel_pct=100,
     )
@@ -393,7 +375,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def servo_gripper_open(self, open_position: float) -> None:
     await self.motors_move_joint(
-      {self.Axis.SERVO_GRIPPER: open_position},
+      {Axis.SERVO_GRIPPER: open_position},
       cmd_vel_pct=100,
       cmd_accel_pct=100,
     )
@@ -409,20 +391,20 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     maintenance_required_rail: bool,
     last_maintenance_performed_date_rail: int,
   ) -> None:
-    z = int(self.Axis.Z)
+    z = int(Axis.Z)
 
     # MoveCount -> Z axis, UI index 22
     await self.driver.write(z, "UI", 22, int(move_count))
 
     # Travel[] -> each node, UF index 5
     # The source looked 1-based for Travel and 0-based for NodeIDList; handle both cleanly.
-    if len(travel) == len(self.node_id_list) + 1:
-      pairs = zip(self.node_id_list, travel[1:])
+    if len(travel) == len(self._cfg.axes) + 1:
+      pairs = zip(self._cfg.axes, travel[1:])
     else:
-      pairs = zip(self.node_id_list, travel)
+      pairs = zip(self._cfg.axes, travel)
 
     for node_id, dist in pairs:
-      await self.driver.write(int(node_id), "UF", 5, float(dist))
+      await self.driver.write(node_id, "UF", 5, float(dist))
 
     # LastMaintenancePerformed -> Z axis, UF index 6
     await self.driver.write(z, "UF", 6, float(last_maintenance_performed))
@@ -434,24 +416,18 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.driver.write(z, "UI", 21, int(last_maintenance_performed_date))
 
     # Rail (if present)
-    if self.robot_on_rail:
-      rail = int(self.Axis.RAIL)
+    if self._cfg.robot_on_rail:
+      rail = int(Axis.RAIL)
       await self.driver.write(rail, "UF", 6, float(last_maintenance_performed_rail))
       await self.driver.write(rail, "UI", 23, 1 if maintenance_required_rail else 0)
       await self.driver.write(rail, "UI", 21, int(last_maintenance_performed_date_rail))
 
   async def drive_get_parameters(self, node_ids) -> None:
-    self.robot_on_rail = False
-    self.has_servo_gripper = False
-
     nodes = (
       [int(b) for b in node_ids]
       if isinstance(node_ids, (bytes, bytearray))
       else [int(x) for x in node_ids]
     )
-
-    def set2d(store: dict, axis: int, ch: int, value: str) -> None:
-      store.setdefault(axis, {})[ch] = value
 
     # Pass 1: identify axes by UI[4]
     uis = set()
@@ -461,107 +437,78 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     for required_axis in MOTION_AXES:
       if required_axis.value not in uis:
         raise CanError(f"Missing required axis with UI[4]={required_axis}")
-    if 5 in uis:
-      self.robot_on_rail = True
+    robot_on_rail = 5 in uis
+    has_servo_gripper = 6 in uis
+    if robot_on_rail:
       warnings.warn("Rails has not been tested for KX2 robots.")
-    if 6 in uis:
-      self.has_servo_gripper = True
 
     # Pass 2: per-axis parameters
+    axes: Dict[int, AxisConfig] = {}
     for axis in nodes:
       logger.debug("Reading parameters for axis %s", axis)
 
       # UI[5..10] digital inputs
+      digital_inputs: Dict[int, str] = {}
       for ui_idx in range(5, 11):
-        ret = await self.driver.query_int(int(axis), "UI", ui_idx)
+        ret = await self.driver.query_int(axis, "UI", ui_idx)
         ch = (ui_idx - 5) + 1
         if ret == 101:
-          set2d(self.digital_input_assignment, axis, ch, "GripperSensor")
-          self.GripperSensorAxis = axis
-          self.GripperSensorInput = ch
+          digital_inputs[ch] = "GripperSensor"
         elif ret == 102:
-          set2d(self.digital_input_assignment, axis, ch, "TeachButton")
-          self.TeachButtonAxis = axis
-          self.TeachButtonInput = ch
+          digital_inputs[ch] = "TeachButton"
         else:
-          set2d(
-            self.digital_input_assignment,
-            axis,
-            ch,
-            "" if ret <= 0 else f"AuxPin{ret}",
-          )
+          digital_inputs[ch] = "" if ret <= 0 else f"AuxPin{ret}"
 
       # UI[11..12] analog inputs
+      analog_inputs: Dict[int, str] = {}
       for ui_idx in range(11, 13):
-        ret = await self.driver.query_int(int(axis), "UI", ui_idx)
+        ret = await self.driver.query_int(axis, "UI", ui_idx)
         ch = (ui_idx - 11) + 1
-        set2d(
-          self.AnalogInputAssignment,
-          axis,
-          ch,
-          "" if ret <= 0 else f"AuxPin{ret}",
-        )
+        analog_inputs[ch] = "" if ret <= 0 else f"AuxPin{ret}"
 
       # UI[13..16] outputs
+      outputs: Dict[int, str] = {}
       for ui_idx in range(13, 17):
-        ret = await self.driver.query_int(int(axis), "UI", ui_idx)
+        ret = await self.driver.query_int(axis, "UI", ui_idx)
         ch = (ui_idx - 13) + 1
-
         if ret == 101:
-          set2d(self.output_assignment, axis, ch, "IndicatorLightRed")
-          self.IndicatorLightRedAxis = axis
-          self.IndicatorLightRedOutput = ch
+          outputs[ch] = "IndicatorLightRed"
         elif ret == 102:
-          set2d(self.output_assignment, axis, ch, "IndicatorLightGreen")
-          self.IndicatorLightGreenAxis = axis
-          self.IndicatorLightGreenOutput = ch
+          outputs[ch] = "IndicatorLightGreen"
         elif ret == 103:
-          set2d(self.output_assignment, axis, ch, "IndicatorLightBlue")
-          self.IndicatorLightBlueAxis = axis
-          self.IndicatorLightBlueOutput = ch
+          outputs[ch] = "IndicatorLightBlue"
         elif ret == 104:
-          set2d(self.output_assignment, axis, ch, "IndicatorLight")
-          self.IndicatorLightAxis = axis
-          self.IndicatorLightOutput = ch
+          outputs[ch] = "IndicatorLight"
         elif ret == 105:
-          set2d(self.output_assignment, axis, ch, "Buzzer")
-          self.BuzzerAxis = axis
-          self.BuzzerOutput = ch
+          outputs[ch] = "Buzzer"
         else:
-          set2d(
-            self.output_assignment,
-            axis,
-            ch,
-            "" if ret <= 0 else f"AuxPin{ret}",
-          )
+          outputs[ch] = "" if ret <= 0 else f"AuxPin{ret}"
 
       # UI[24] drive serial number (queried but not currently stored)
-      await self.driver.query_int(int(axis), "UI", 24)
+      await self.driver.query_int(axis, "UI", 24)
 
       # UF[1], UF[2] conversion factor
-      uf1 = await self.driver.query_float(int(axis), "UF", 1)
-      uf2 = await self.driver.query_float(int(axis), "UF", 2)
+      uf1 = await self.driver.query_float(axis, "UF", 1)
+      uf2 = await self.driver.query_float(axis, "UF", 2)
       if uf1 == 0.0 or uf2 == 0.0:
         raise CanError(f"Invalid Motor Conversion Factor for axis {axis}. UF[1]={uf1}, UF[2]={uf2}")
-      self.motor_conversion_factor_ax[axis] = uf1 / uf2
+      motor_conversion_factor = uf1 / uf2
 
       # XM / travel
-      xm1 = await self.driver.query_int(int(axis), "XM", 1)
-      xm2 = await self.driver.query_int(int(axis), "XM", 2)
-      uf3 = await self.driver.query_float(int(axis), "UF", 3)
-      uf4 = await self.driver.query_float(int(axis), "UF", 4)
-      vh3 = await self.driver.query_int(int(axis), "VH", 3)
-      vl3 = await self.driver.query_int(int(axis), "VL", 3)
+      xm1 = await self.driver.query_int(axis, "XM", 1)
+      xm2 = await self.driver.query_int(axis, "XM", 2)
+      max_travel = await self.driver.query_float(axis, "UF", 3)
+      min_travel = await self.driver.query_float(axis, "UF", 4)
+      vh3 = await self.driver.query_int(axis, "VH", 3)
+      vl3 = await self.driver.query_int(axis, "VL", 3)
 
-      self.max_travel_ax[axis] = uf3
-      self.min_travel_ax[axis] = uf4
-
-      if ((xm1 == 0) and (xm2 == 0)) or ((xm1 <= vl3) and (xm2 >= vh3)):
-        self.unlimited_travel_ax[axis] = False
-      elif (xm1 > vl3) and (xm2 < vh3):
-        self.unlimited_travel_ax[axis] = True
+      joint_move_direction = JointMoveDirection.Normal
+      if (xm1 == 0 and xm2 == 0) or (xm1 <= vl3 and xm2 >= vh3):
+        unlimited_travel = False
+      elif xm1 > vl3 and xm2 < vh3:
+        unlimited_travel = True
         if axis in MOTION_AXES:
-          self.g_joint_move_direction[axis] = JointMoveDirection.ShortestWay
+          joint_move_direction = JointMoveDirection.ShortestWay
       else:
         raise CanError(
           f"Invalid travel limits or modulo settings for axis {axis}. "
@@ -569,101 +516,126 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         )
 
       # Encoder socket/type
-      ca45 = await self.driver.query_int(int(axis), "CA", 45)
+      ca45 = await self.driver.query_int(axis, "CA", 45)
       if not (0 < ca45 <= 4):
         raise CanError(f"Invalid encoder socket number received from axis {axis}. CA[45]={ca45}")
-
-      enc_type = await self.driver.query_int(int(axis), "CA", 40 + ca45)
+      enc_type = await self.driver.query_int(axis, "CA", 40 + ca45)
       if enc_type in (1, 2):
-        self.absolute_encoder_ax[axis] = False
+        absolute_encoder = False
       elif enc_type == 24:
-        self.absolute_encoder_ax[axis] = True
+        absolute_encoder = True
       else:
         raise CanError(
           f"Unsupported encoder type specified for axis {axis}. CA[4{ca45}]={enc_type}"
         )
 
-      ca46 = await self.driver.query_int(int(axis), "CA", 46)
+      ca46 = await self.driver.query_int(axis, "CA", 46)
       if ca45 == ca46:
         num3 = 1.0
       else:
-        num3 = await self.driver.query_float(int(axis), "FF", 3)
+        num3 = await self.driver.query_float(axis, "FF", 3)
 
-      denom = self.motor_conversion_factor_ax[axis] * num3  # or 1.0
+      denom = motor_conversion_factor * num3
 
-      sp2 = await self.driver.query_int(int(axis), "SP", 2)
+      sp2 = await self.driver.query_int(axis, "SP", 2)
       if sp2 == 100000:
-        vh2 = await self.driver.query_int(int(axis), "VH", 2)
-        self.max_vel_ax[axis] = vh2 / 1.01 / denom
+        vh2 = await self.driver.query_int(axis, "VH", 2)
+        max_vel = vh2 / 1.01 / denom
       else:
-        self.max_vel_ax[axis] = sp2 / denom
+        max_vel = sp2 / denom
 
-      sd0 = await self.driver.query_int(int(axis), "SD", 0)
-      self.max_accel_ax[axis] = sd0 / 1.01 / denom
+      sd0 = await self.driver.query_int(axis, "SD", 0)
+      max_accel = sd0 / 1.01 / denom
 
-    # Robot-level params from shoulder_ax
-    shoulder = int(self.Axis.SHOULDER)
+      axes[axis] = AxisConfig(
+        motor_conversion_factor=motor_conversion_factor,
+        max_travel=max_travel,
+        min_travel=min_travel,
+        unlimited_travel=unlimited_travel,
+        absolute_encoder=absolute_encoder,
+        max_vel=max_vel,
+        max_accel=max_accel,
+        joint_move_direction=joint_move_direction,
+        digital_inputs=digital_inputs,
+        analog_inputs=analog_inputs,
+        outputs=outputs,
+      )
 
-    self.base_to_gripper_clearance_z = await self.driver.query_float(shoulder, "UF", 6)
-    self.base_to_gripper_clearance_arm = await self.driver.query_float(shoulder, "UF", 7)
-    self.wrist_offset = await self.driver.query_float(shoulder, "UF", 8)
-    self.elbow_offset = await self.driver.query_float(shoulder, "UF", 9)
-    self.elbow_zero_offset = await self.driver.query_float(shoulder, "UF", 10)
-    self.MaxLinearVelMMPerSec = await self.driver.query_float(shoulder, "UF", 11)
-    self.MaxLinearAccelMMPerSec2 = await self.driver.query_float(shoulder, "UF", 12)
-    self.MaxLinearJerkMMPerSec3 = await self.driver.query_float(shoulder, "UF", 13)
-    self.MaxRotaryVelDegPerSec = await self.driver.query_float(shoulder, "UF", 14)
-    self.MaxRotaryAccelDegPerSec2 = await self.driver.query_float(shoulder, "UF", 15)
+    # Robot-level params from shoulder.
+    shoulder = int(Axis.SHOULDER)
+    base_to_gripper_clearance_z = await self.driver.query_float(shoulder, "UF", 6)
+    base_to_gripper_clearance_arm = await self.driver.query_float(shoulder, "UF", 7)
+    wrist_offset = await self.driver.query_float(shoulder, "UF", 8)
+    elbow_offset = await self.driver.query_float(shoulder, "UF", 9)
+    elbow_zero_offset = await self.driver.query_float(shoulder, "UF", 10)
 
-    ui17 = await self.driver.query_int(shoulder, "UI", 17)
-    self.pvt_time_interval_msec = (
-      25 if (ui17 <= 0 or ui17 > 255) else ui17
+    servo_gripper: Optional[ServoGripperConfig] = None
+    if has_servo_gripper:
+      sg = int(Axis.SERVO_GRIPPER)
+      servo_gripper = ServoGripperConfig(
+        home_pos=int(await self.driver.query_float(sg, "UF", 6)),
+        home_search_vel=int(await self.driver.query_float(sg, "UF", 7)),
+        home_search_accel=int(await self.driver.query_float(sg, "UF", 8)),
+        home_default_position_error=int(await self.driver.query_float(sg, "UF", 9)),
+        home_hard_stop_position_error=int(await self.driver.query_float(sg, "UF", 10)),
+        home_hard_stop_offset=int(await self.driver.query_float(sg, "UF", 11)),
+        home_index_offset=int(await self.driver.query_float(sg, "UF", 12)),
+        home_offset_vel=int(await self.driver.query_float(sg, "UF", 13)),
+        home_offset_accel=int(await self.driver.query_float(sg, "UF", 14)),
+        home_timeout_msec=int(await self.driver.query_float(sg, "UF", 15)),
+        continuous_current=await self.driver.query_float(sg, "UF", 16),
+        peak_current=await self.driver.query_float(sg, "UF", 17),
+      )
+
+    self._config = KX2Config(
+      wrist_offset=wrist_offset,
+      elbow_offset=elbow_offset,
+      elbow_zero_offset=elbow_zero_offset,
+      gripper_length=self._gripper_length,
+      gripper_z_offset=self._gripper_z_offset,
+      gripper_finger_side=self._gripper_finger_side,
+      axes=axes,
+      base_to_gripper_clearance_z=base_to_gripper_clearance_z,
+      base_to_gripper_clearance_arm=base_to_gripper_clearance_arm,
+      robot_on_rail=robot_on_rail,
+      servo_gripper=servo_gripper,
     )
 
-    # Servo gripper params (only if present)
-    sg = int(self.Axis.SERVO_GRIPPER)
-    self.servo_gripper_home_pos = int(await self.driver.query_float(sg, "UF", 6))
-    self.servo_gripper_home_search_vel = int(await self.driver.query_float(sg, "UF", 7))
-    self.servo_gripper_home_search_accel = int(await self.driver.query_float(sg, "UF", 8))
-    self.servo_gripper_home_default_position_error = int(await self.driver.query_float(sg, "UF", 9))
-    self.servo_gripper_home_hard_stop_position_error = int(await self.driver.query_float(sg, "UF", 10))
-    self.servo_gripper_home_hard_stop_offset = int(await self.driver.query_float(sg, "UF", 11))
-    self.servo_gripper_home_index_offset = int(await self.driver.query_float(sg, "UF", 12))
-    self.servo_gripper_home_offset_vel = int(await self.driver.query_float(sg, "UF", 13))
-    self.servo_gripper_home_offset_accel = int(await self.driver.query_float(sg, "UF", 14))
-    self.servo_gripper_home_timeout_msec = int(await self.driver.query_float(sg, "UF", 15))
-    self.servo_gripper_continuous_current = await self.driver.query_float(sg, "UF", 16)
-    self.servo_gripper_peak_current = await self.driver.query_float(sg, "UF", 17)
+  @property
+  def _cfg(self) -> KX2Config:
+    if self._config is None:
+      raise RuntimeError("KX2 not set up — call setup() first")
+    return self._config
 
   def convert_elbow_position_to_angle(self, elbow_pos: float) -> float:
-    max_travel = self.max_travel_ax[self.Axis.ELBOW]
-    denom = max_travel + self.elbow_zero_offset
+    max_travel = self._cfg.axes[Axis.ELBOW].max_travel
+    denom = max_travel + self._cfg.elbow_zero_offset
 
     if elbow_pos > max_travel:
-      x = (2.0 * max_travel - elbow_pos + self.elbow_zero_offset) / denom
+      x = (2.0 * max_travel - elbow_pos + self._cfg.elbow_zero_offset) / denom
       angle = math.asin(x) * (180.0 / math.pi)
       elbow_angle = 90.0 + angle
     else:
-      x = (elbow_pos + self.elbow_zero_offset) / denom
+      x = (elbow_pos + self._cfg.elbow_zero_offset) / denom
       angle = math.asin(x) * (180.0 / math.pi)
       elbow_angle = angle
 
     return elbow_angle
 
   def convert_elbow_angle_to_position(self, elbow_angle_deg: float) -> float:
-    elbow_pos = (self.max_travel_ax[self.Axis.ELBOW] + self.elbow_zero_offset) * math.sin(
+    elbow_pos = (self._cfg.axes[Axis.ELBOW].max_travel + self._cfg.elbow_zero_offset) * math.sin(
       elbow_angle_deg * (math.pi / 180.0)
-    ) - self.elbow_zero_offset
+    ) - self._cfg.elbow_zero_offset
 
     if elbow_angle_deg > 90.0:
-      elbow_pos = 2.0 * self.max_travel_ax[self.Axis.ELBOW] - elbow_pos
+      elbow_pos = 2.0 * self._cfg.axes[Axis.ELBOW].max_travel - elbow_pos
 
     return elbow_pos
 
-  async def motor_get_current_position(self, axis: "KX2ArmBackend.Axis") -> float:
-    raw = await self.driver.motor_get_current_position(node_id=int(axis), pu=self.unlimited_travel_ax[axis])
-    c = self.motor_conversion_factor_ax[axis]
-    if axis == self.Axis.ELBOW:
+  async def motor_get_current_position(self, axis: Axis) -> float:
+    raw = await self.driver.motor_get_current_position(node_id=axis, pu=self._cfg.axes[axis].unlimited_travel)
+    c = self._cfg.axes[axis].motor_conversion_factor
+    if axis == Axis.ELBOW:
       return self.convert_elbow_angle_to_position(elbow_angle_deg=raw / c)
     else:
       if c == 0:
@@ -672,7 +644,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       else:
         return raw / c
 
-  async def read_input(self, axis: int, input_num: int) -> bool:
+  async def read_input(self, axis: Axis, input_num: int) -> bool:
     return await self.driver.read_input(node_id=axis, input_num=0x10 + input_num)
 
   @staticmethod
@@ -718,17 +690,17 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def calculate_move_abs_all_axes(
     self,
-    cmd_pos: Dict["KX2ArmBackend.Axis", float],
+    cmd_pos: Dict[Axis, float],
     cmd_vel_pct: float,
     cmd_accel_pct: float,
   ) -> Optional[MotorsMovePlan]:
     target = cmd_pos.copy()
     axes = list(target.keys())
 
-    enc_pos: Dict[KX2ArmBackend.Axis, float] = {}
-    enc_vel: Dict[KX2ArmBackend.Axis, float] = {}
-    enc_accel: Dict[KX2ArmBackend.Axis, float] = {}
-    skip_ax: Dict[KX2ArmBackend.Axis, bool] = {}
+    enc_pos: Dict[Axis, float] = {}
+    enc_vel: Dict[Axis, float] = {}
+    enc_accel: Dict[Axis, float] = {}
+    skip_ax: Dict[Axis, bool] = {}
 
     # input validation / travel limits / done-wait logic
     if cmd_vel_pct <= 0.0 or cmd_vel_pct > 100.0:
@@ -737,14 +709,14 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       raise ValueError("CmdAccel out of range")
 
     # Convert elbow cmd from position->angle for planning math
-    if self.Axis.ELBOW in axes:
-      target[self.Axis.ELBOW] = self.convert_elbow_position_to_angle(target[self.Axis.ELBOW])
+    if Axis.ELBOW in axes:
+      target[Axis.ELBOW] = self.convert_elbow_position_to_angle(target[Axis.ELBOW])
 
     # Clearance check
-    if self.Axis.Z in axes:
+    if Axis.Z in axes:
       if (
-        target[self.Axis.Z] < self.min_travel_ax[self.Axis.Z] + self.base_to_gripper_clearance_z
-        and target[self.Axis.ELBOW] < self.base_to_gripper_clearance_arm
+        target[Axis.Z] < self._cfg.axes[Axis.Z].min_travel + self._cfg.base_to_gripper_clearance_z
+        and target[Axis.ELBOW] < self._cfg.base_to_gripper_clearance_arm
       ):
         raise ValueError("Base-to-gripper clearance violated")
 
@@ -752,29 +724,29 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     curr = await self.request_joint_position()
 
     # Elbow: convert both target and start to angle for distance math
-    if self.Axis.ELBOW in curr:
-      curr[self.Axis.ELBOW] = self.convert_elbow_position_to_angle(curr[self.Axis.ELBOW])
+    if Axis.ELBOW in curr:
+      curr[Axis.ELBOW] = self.convert_elbow_position_to_angle(curr[Axis.ELBOW])
 
     # Handle unlimited travel normalization when direction != NORMAL
     for ax in axes:
       if (
-        self.unlimited_travel_ax[ax]
-        and self.g_joint_move_direction[ax] != JointMoveDirection.Normal
+        self._cfg.axes[ax].unlimited_travel
+        and self._cfg.axes[ax].joint_move_direction != JointMoveDirection.Normal
       ):
-        target[ax] = self._wrap_to_range(target[ax], self.min_travel_ax[ax], self.max_travel_ax[ax])
+        target[ax] = self._wrap_to_range(target[ax], self._cfg.axes[ax].min_travel, self._cfg.axes[ax].max_travel)
 
     # Distances, skip flags, initial v/a per axis
-    dist: Dict[KX2ArmBackend.Axis, float] = {}
-    v: Dict[KX2ArmBackend.Axis, float] = {}
-    a: Dict[KX2ArmBackend.Axis, float] = {}
-    accel_time: Dict[KX2ArmBackend.Axis, float] = {}
-    total_time: Dict[KX2ArmBackend.Axis, float] = {}
+    dist: Dict[Axis, float] = {}
+    v: Dict[Axis, float] = {}
+    a: Dict[Axis, float] = {}
+    accel_time: Dict[Axis, float] = {}
+    total_time: Dict[Axis, float] = {}
 
     for ax in axes:
-      if self.unlimited_travel_ax[ax]:
+      if self._cfg.axes[ax].unlimited_travel:
         d = target[ax] - curr[ax]
-        span = self.max_travel_ax[ax] - self.min_travel_ax[ax]
-        dir_ = self.g_joint_move_direction[ax]
+        span = self._cfg.axes[ax].max_travel - self._cfg.axes[ax].min_travel
+        dir_ = self._cfg.axes[ax].joint_move_direction
 
         if dir_ == JointMoveDirection.Clockwise and d > 0.01:
           d -= span
@@ -792,8 +764,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
       skip_ax[ax] = abs(dist[ax]) < 0.01
 
-      v[ax] = (cmd_vel_pct / 100.0) * self.max_vel_ax[ax]
-      a[ax] = (cmd_accel_pct / 100.0) * self.max_accel_ax[ax]
+      v[ax] = (cmd_vel_pct / 100.0) * self._cfg.axes[ax].max_vel
+      a[ax] = (cmd_accel_pct / 100.0) * self._cfg.axes[ax].max_accel
 
       if not skip_ax[ax] and a[ax] > 0:
         accel_time[ax] = v[ax] / a[ax]
@@ -853,7 +825,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     # Convert back to encoder units (and elbow back to "position" space)
     for ax in axes:
-      conv = self.motor_conversion_factor_ax[ax]
+      conv = self._cfg.axes[ax].motor_conversion_factor
       enc_pos[ax] = target[ax] * conv
 
       if skip_ax[ax]:
@@ -870,7 +842,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           position=int(round(enc_pos[ax])),
           velocity=int(round(enc_vel[ax])),
           acceleration=int(round(enc_accel[ax])),
-          direction=self.g_joint_move_direction[ax],
+          direction=self._cfg.axes[ax].joint_move_direction,
         )
         for ax in axes
       ],
@@ -879,7 +851,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def motors_move_joint(
     self,
-    cmd_pos: Dict["KX2ArmBackend.Axis", float],
+    cmd_pos: Dict[Axis, float],
     cmd_vel_pct: float,
     cmd_accel_pct: float,
   ) -> None:
@@ -895,86 +867,29 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     await self.driver.motors_move_absolute_execute(plan)
 
-  def convert_cartesian_to_joint_position(self, pose: GripperPose) -> Dict["KX2ArmBackend.Axis", float]:
-    if pose.rotation.x != 0 or pose.rotation.y != 0:
-      raise ValueError("Only Z rotation is supported for KX2")
+  async def _cart_to_joints(
+    self, pose: kinematics.KX2GripperLocation
+  ) -> Dict[Axis, float]:
+    """Cartesian -> joints with closest-solution semantics.
 
-    # Gripper -> wrist: the incoming pose describes the gripper clamp point;
-    # the joint-space math operates on the wrist axis. Rigid offset with the
-    # gripper length on the radial axis (governed by world rotation z) and the
-    # gripper z offset downward.
-    ang = math.radians(pose.rotation.z)
-    x = pose.location.x - self.gripper_length * math.sin(ang)
-    y = pose.location.y + self.gripper_length * math.cos(ang)
-    wrist_z = pose.location.z + self.gripper_z_offset
-
-    joint_position: Dict[KX2ArmBackend.Axis, float] = {}
-
-    # Shoulder axis
-    shoulder = -math.degrees(math.atan2(x, y))
-    if abs(shoulder + 180.0) < 1e-12:
-      shoulder = 180.0
-
-    joint_position[self.Axis.SHOULDER] = shoulder
-
-    # Z axis
-    joint_position[self.Axis.Z] = wrist_z
-
-    # Elbow axis
-    elbow = (
-      math.sqrt(x * x + y * y) - self.wrist_offset - self.elbow_offset - self.elbow_zero_offset
+    If `pose.wrist` is None, fills it with the current joint's wrist sign
+    so the arm picks whichever IK solution needs the least motion. Then
+    snaps each rotary axis to the nearest 360° multiple of the current
+    position, re-enforcing the wrist sign afterward.
+    """
+    current = await self.request_joint_position()
+    current_int = {int(k): v for k, v in current.items()}
+    # IK needs an explicit cw/ccw; for closest mode fill from the current
+    # joint's sign so IK has a valid choice. Snap then runs with the
+    # *original* pose.wrist — None disables sign re-enforce so the snap
+    # actually picks the closest J4.
+    ik_wrist = pose.wrist if pose.wrist is not None else (
+      "ccw" if current_int[Axis.WRIST] >= 0 else "cw"
     )
-    joint_position[self.Axis.ELBOW] = elbow
-
-    # Wrist axis
-    wrist = (pose.rotation.z) - joint_position[self.Axis.SHOULDER]
-    joint_position[self.Axis.WRIST] = wrist
-
-    # Wrap wrist into travel range if possible by +/- 360
-    w = joint_position[self.Axis.WRIST]
-    wmin = self.min_travel_ax[self.Axis.WRIST]
-    wmax = self.max_travel_ax[self.Axis.WRIST]
-    if (w < wmin - 0.001) and (w + 360.0 <= wmax):
-      w += 360.0
-    elif (w > wmax + 0.001) and (w - 360.0 >= wmin):
-      w -= 360.0
-    joint_position[self.Axis.WRIST] = w
-
-    return joint_position
-
-  def convert_joint_position_to_cartesian(
-    self, joint_position: Dict["KX2ArmBackend.Axis", float]
-  ) -> GripperPose:
-    r = (
-      self.wrist_offset + self.elbow_offset + self.elbow_zero_offset + joint_position[self.Axis.ELBOW]
-    )
-    sh_deg = joint_position[self.Axis.SHOULDER]
-    sh = math.radians(sh_deg)
-
-    wrist_x = -(r) * math.sin(sh)
-    wrist_y = (r) * math.cos(sh)
-    wrist_z = joint_position[self.Axis.Z]
-
-    rotation_z = joint_position[self.Axis.WRIST] + sh_deg
-
-    # wrap to [-180, 180]
-    if rotation_z > 180.0:
-      rotation_z -= 360.0
-    if rotation_z < -180.0:
-      rotation_z += 360.0
-
-    # Wrist -> gripper: inverse of the gripper -> wrist translation in
-    # convert_cartesian_to_joint_position so callers observe the gripper clamp
-    # point, symmetric with what they pass in.
-    ang = math.radians(rotation_z)
-    gripper_x = wrist_x + self.gripper_length * math.sin(ang)
-    gripper_y = wrist_y - self.gripper_length * math.cos(ang)
-    gripper_z = wrist_z - self.gripper_z_offset
-
-    return GripperPose(
-      location=Coordinate(x=gripper_x, y=gripper_y, z=gripper_z),
-      rotation=Rotation(z=rotation_z),
-    )
+    resolved = dataclasses.replace(pose, wrist=ik_wrist)
+    ik_joints = kinematics.ik(resolved, self._cfg)
+    snapped = kinematics.snap_to_current(ik_joints, current_int, pose.wrist)
+    return {Axis(k): v for k, v in snapped.items()}
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
 
@@ -994,7 +909,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     for axis in MOTION_AXES:
-      await self.driver.motor_emergency_stop(node_id=int(axis))
+      await self.driver.motor_emergency_stop(node_id=axis)
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     raise NotImplementedError(
@@ -1005,14 +920,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
-    current_joint_pos = await self.request_joint_position()
-    return self.convert_joint_position_to_cartesian(current_joint_pos)
+    return kinematics.fk(await self.request_joint_position(), self._cfg)
 
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     await self.motors_move_joint(
-      {self.Axis.SERVO_GRIPPER: gripper_width},
+      {Axis.SERVO_GRIPPER: gripper_width},
       cmd_vel_pct=100,
       cmd_accel_pct=100,
     )
@@ -1023,7 +937,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if not isinstance(backend_params, KX2ArmBackend.GripParams):
       backend_params = KX2ArmBackend.GripParams()
     await self.motors_move_joint(
-      {self.Axis.SERVO_GRIPPER: gripper_width},
+      {Axis.SERVO_GRIPPER: gripper_width},
       cmd_vel_pct=100,
       cmd_accel_pct=100,
     )
@@ -1031,8 +945,27 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await self.check_plate_gripped()
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    pos = await self.motor_get_current_position(self.Axis.SERVO_GRIPPER)
+    pos = await self.motor_get_current_position(Axis.SERVO_GRIPPER)
     return abs(pos) < 1.0
+
+  async def move_to_gripper_location(
+    self,
+    pose: kinematics.KX2GripperLocation,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Cartesian move with optional explicit wrist sign.
+
+    `pose.wrist`: "cw" or "ccw" picks the wrist solution explicitly; None
+    falls back to the closest-to-current solution (same as `move_to_location`).
+    """
+    if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
+      backend_params = KX2ArmBackend.CartesianMoveParams()
+    joint_pos = await self._cart_to_joints(pose)
+    await self.motors_move_joint(
+      cmd_pos=joint_pos,
+      cmd_vel_pct=backend_params.vel_pct,
+      cmd_accel_pct=backend_params.accel_pct,
+    )
 
   async def move_to_location(
     self,
@@ -1040,15 +973,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     direction: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
-      backend_params = KX2ArmBackend.CartesianMoveParams()
-    pose = GripperLocation(location=location, rotation=Rotation(z=direction))
-    joint_pos = self.convert_cartesian_to_joint_position(pose)
-    await self.motors_move_joint(
-      cmd_pos=joint_pos,
-      cmd_vel_pct=backend_params.vel_pct,
-      cmd_accel_pct=backend_params.accel_pct,
+    pose = kinematics.KX2GripperLocation(
+      location=location, rotation=Rotation(z=direction), wrist=None
     )
+    await self.move_to_gripper_location(pose, backend_params=backend_params)
 
   async def pick_up_at_location(
     self,
@@ -1077,7 +1005,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     if not isinstance(backend_params, KX2ArmBackend.JointMoveParams):
       backend_params = KX2ArmBackend.JointMoveParams()
-    cmd_pos = {self.Axis(int(k)): float(v) for k, v in position.items()}
+    cmd_pos = {Axis(int(k)): float(v) for k, v in position.items()}
     await self.motors_move_joint(
       cmd_pos=cmd_pos,
       cmd_vel_pct=backend_params.vel_pct,
@@ -1106,11 +1034,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self, backend_params: Optional[BackendParams] = None
   ) -> Dict[int, float]:
     return {
-      self.Axis.SHOULDER: await self.motor_get_current_position(self.Axis.SHOULDER),
-      self.Axis.Z: await self.motor_get_current_position(self.Axis.Z),
-      self.Axis.ELBOW: await self.motor_get_current_position(self.Axis.ELBOW),
-      self.Axis.WRIST: await self.motor_get_current_position(self.Axis.WRIST),
-      self.Axis.SERVO_GRIPPER: await self.motor_get_current_position(self.Axis.SERVO_GRIPPER),
+      Axis.SHOULDER: await self.motor_get_current_position(Axis.SHOULDER),
+      Axis.Z: await self.motor_get_current_position(Axis.Z),
+      Axis.ELBOW: await self.motor_get_current_position(Axis.ELBOW),
+      Axis.WRIST: await self.motor_get_current_position(Axis.WRIST),
+      Axis.SERVO_GRIPPER: await self.motor_get_current_position(Axis.SERVO_GRIPPER),
     }
 
   async def start_freedrive_mode(
@@ -1119,19 +1047,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     # KX2 frees all motion axes at once; free_axes is accepted for API parity.
     del free_axes
     for axis in MOTION_AXES:
-      await self.driver.motor_enable(node_id=int(axis), state=False, use_ds402=True)
+      await self.driver.motor_enable(node_id=axis, state=False, use_ds402=True)
 
   async def stop_freedrive_mode(self, backend_params: Optional[BackendParams] = None) -> None:
     for axis in MOTION_AXES:
-      await self.driver.motor_enable(node_id=int(axis), state=True, use_ds402=True)
+      await self.driver.motor_enable(node_id=axis, state=True, use_ds402=True)
 
 
-# Motion axes = the four coordinated joints. Defined at module scope (after the
-# class body so `KX2ArmBackend.Axis` exists) and imported by callers that need
-# to iterate "all motion axes".
-MOTION_AXES = (
-  KX2ArmBackend.Axis.SHOULDER,
-  KX2ArmBackend.Axis.Z,
-  KX2ArmBackend.Axis.ELBOW,
-  KX2ArmBackend.Axis.WRIST,
-)
+MOTION_AXES = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)

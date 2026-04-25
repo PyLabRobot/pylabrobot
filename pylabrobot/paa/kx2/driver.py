@@ -1,13 +1,13 @@
 """Low-level CAN transport + CANopen/DS402 drive primitives for the PAA KX2.
 
 Uses the `canopen` library (python-can bus + CANopen SDO/PDO/NMT/EMCY).
-Paired with :class:`KX2ArmBackend` in ``kx2_backend.py`` via the standard
+Paired with :class:`KX2ArmBackend` in ``arm_backend.py`` via the standard
 ``Device`` + ``Driver`` + capability-backend split.
 
 This module is purely a CAN transport + Elmo interpreter layer. It knows only
 CANopen node IDs (ints). All axis-level / robot-topology concepts (axis names,
 motion-axis tuples, home status, move plans, joint-move direction, homing
-sequences) live in ``kx2_backend``.
+sequences) live in ``arm_backend``.
 """
 
 from __future__ import annotations
@@ -657,7 +657,7 @@ class KX2Driver(Driver):
 
   async def request_drive_version(self, node_id: int) -> str:
     """Query Elmo drive firmware version (VR) via the OS interpreter."""
-    return await self._os_interpreter(int(node_id), "VR", query=True)
+    return await self._os_interpreter(node_id, "VR", query=True)
 
   # --- DS402 / motor control ----------------------------------------------
 
@@ -666,10 +666,10 @@ class KX2Driver(Driver):
 
   async def motor_get_current_position(self, node_id: int, pu: bool = False) -> int:
     cmd = "PU" if pu else "PX"
-    return await self.query_int(int(node_id), cmd, 0)
+    return await self.query_int(node_id, cmd, 0)
 
   async def motor_get_motion_status(self, node_id: int) -> int:
-    return await self.query_int(int(node_id), "MS", 0)
+    return await self.query_int(node_id, "MS", 0)
 
   async def _motor_set_move_direction(
     self, node_id: int, direction: JointMoveDirection
@@ -692,12 +692,10 @@ class KX2Driver(Driver):
       if fault is not None:
         raise RuntimeError(f"Motor Fault: {fault}")
       raise RuntimeError("Motor Fault (Unknown)")
-    if ms_val == 2:
-      return False
     return False
 
   async def motor_get_fault(self, node_id: int) -> Optional[str]:
-    val = await self.query_int(int(node_id), "MF", 0)
+    val = await self.query_int(node_id, "MF", 0)
     if val == 0:
       return None
 
@@ -753,8 +751,6 @@ class KX2Driver(Driver):
 
     Caller picks the path; the driver does not know about robot topology.
     """
-    node_id = int(node_id)
-
     if state:
       self.EmcyMoveErrorReceived = False
       max_attempts = 5
@@ -779,10 +775,7 @@ class KX2Driver(Driver):
         raise CanError(f"Motor failed to enable (node_id = {node_id}) after {max_attempts} attempts")
     else:
       if not use_ds402:
-        try:
-          await self.write(node_id, "MO", 0, 0)
-        except Exception:
-          pass
+        await self.write(node_id, "MO", 0, 0)
       else:
         # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
         # Matches C# (clscanmotor.cs:4540-4543) — back-to-back, no inter-CW sleep.
@@ -852,6 +845,13 @@ class KX2Driver(Driver):
   async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
     await self._pvt_select_mode(False)
 
+    print(f"[MOVE PLAN] move_time={plan.move_time:.3f}s, {len(plan.moves)} axes:")
+    for move in plan.moves:
+      print(
+        f"  node={move.node_id} pos={move.position} vel={move.velocity} "
+        f"acc={move.acceleration} dir={move.direction.name}"
+      )
+
     for move in plan.moves:
       nid = int(move.node_id)
       await self._motor_set_move_direction(nid, move.direction)
@@ -869,7 +869,7 @@ class KX2Driver(Driver):
       # 0x6084 = Profile Deceleration (24708 decimal)
       await self._can_sdo_download_elmo_object(nid, 24708, 0, acc, ElmoObjectDataType.UNSIGNED32)
 
-    node_ids = [int(move.node_id) for move in plan.moves]
+    node_ids = [move.node_id for move in plan.moves]
     await self._motors_move_start(node_ids)
     await self.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
@@ -881,11 +881,8 @@ class KX2Driver(Driver):
     timeout_sec: int = 0,
     wait_until_done: bool = False,
   ) -> int:
-    if not isinstance(node_id, int):
-      raise ValueError("node_id must be int")
     if node_id < 0 or node_id > 255:
       raise ValueError("node_id must be in [0, 255]")
-    node_id = int(node_id)
 
     ps = await self.query_int(node_id, "PS", 0)
     if ps == -2:
@@ -940,10 +937,10 @@ class KX2Driver(Driver):
   async def read_input(self, node_id: int, input_num: int) -> bool:
     return await self.query_int(node_id, "IB", input_num) == 1
 
-  async def _read_output(self, node_id: int, output_num: int) -> bool:
+  async def read_output(self, node_id: int, output_num: int) -> bool:
     val = await self.query_int(node_id, "OP", 0)
     mask = 1 << (output_num - 1)
     return (val & mask) == mask
 
-  async def _set_output(self, node_id: int, output_num: int, state: bool) -> None:
+  async def set_output(self, node_id: int, output_num: int, state: bool) -> None:
     await self.write(node_id, "OB", output_num, 1 if state else 0)
