@@ -12,8 +12,9 @@ lld
 surface-following
 foil
 liquid-classes
-y-probing
-z-probing
+probing/x
+probing/y
+probing/z
 debug
 hardware/index
 ```
