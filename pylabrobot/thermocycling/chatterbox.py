@@ -131,11 +131,11 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
 
   async def get_hold_time(self) -> float:
     if not self._state.is_profile_running:
-      return 0.0
+      raise RuntimeError("Hold time is not available. Is a profile running?")
 
     # Loop through all steps and print the full log instantly.
     if self._state.protocol is None:
-      return 0.0
+      raise RuntimeError("Hold time is not available. Is a profile running?")
 
     self._state.is_profile_running = False
     self._state.current_step_index = self._state.total_steps - 1

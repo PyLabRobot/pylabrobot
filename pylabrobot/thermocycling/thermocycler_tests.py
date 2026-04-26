@@ -57,6 +57,14 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     deserialized = Thermocycler.deserialize(serialized)
     assert self.tc == deserialized
 
+  async def test_chatterbox_get_hold_time_raises_if_not_running(self):
+    """Chatterbox mirrors real backends when no profile is active."""
+    self.tc.backend = ThermocyclerChatterboxBackend()
+
+    with self.assertRaises(RuntimeError) as e:
+      await self.tc.get_hold_time()
+    self.assertEqual(str(e.exception), "Hold time is not available. Is a profile running?")
+
   async def test_run_pcr_profile_builds_correct_profile(self):
     """Test that run_pcr_profile correctly builds the flat step list."""
 
@@ -137,3 +145,16 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       self.tc.backend.get_total_step_count.return_value = total_steps  # type: ignore
       print(f"Testing with hold={hold}, cycle={cycle}, total_cycles={total_cycles}, ")
       assert await self.tc.is_profile_running() is expected
+
+  async def test_is_profile_running_returns_false_if_no_profile_running(self):
+    """RuntimeError from get_hold_time indicates that no profile is currently running."""
+    self.tc.backend.get_hold_time.side_effect = RuntimeError("No profile is running")  # type: ignore
+
+    assert await self.tc.is_profile_running() is False
+
+  async def test_is_profile_running_preserves_not_implemented_error(self):
+    """Unsupported backends should still surface NotImplementedError."""
+    self.tc.backend.get_hold_time.side_effect = NotImplementedError  # type: ignore
+
+    with self.assertRaises(NotImplementedError):
+      await self.tc.is_profile_running()
