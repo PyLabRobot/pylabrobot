@@ -2,6 +2,7 @@ import asyncio
 import dataclasses
 import logging
 import math
+import time
 import warnings
 from dataclasses import dataclass
 from enum import IntEnum
@@ -24,6 +25,7 @@ from pylabrobot.paa.kx2.config import (
 )
 from pylabrobot.paa.kx2.driver import (
   CanError,
+  InputLogic,
   JointMoveDirection,
   KX2Driver,
   MotorMoveParam,
@@ -453,7 +455,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         ret = await self.driver.query_int(axis, "UI", ui_idx)
         ch = (ui_idx - 5) + 1
         if ret == 101:
-          digital_inputs[ch] = "GripperSensor"
+          digital_inputs[ch] = "ProximitySensor"
         elif ret == 102:
           digital_inputs[ch] = "TeachButton"
         else:
@@ -646,6 +648,90 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def read_input(self, axis: Axis, input_num: int) -> bool:
     return await self.driver.read_input(node_id=axis, input_num=0x10 + input_num)
+
+  # IR breakbeam between the gripper fingers, wired to the Z-drive's IO.
+  # True = beam interrupted (object present).
+  _PROXIMITY_SENSOR_AXIS: Axis = Axis.Z
+  _PROXIMITY_SENSOR_INPUT: int = 4
+
+  async def read_proximity_sensor(self) -> bool:
+    return await self.read_input(self._PROXIMITY_SENSOR_AXIS, self._PROXIMITY_SENSOR_INPUT)
+
+  async def wait_for_proximity_sensor(
+    self, state: bool = True, timeout: float = 5.0, poll: float = 0.01,
+  ) -> bool:
+    """Poll until the sensor reads `state`. Returns True on trip, False on timeout."""
+    deadline = time.monotonic() + timeout
+    while True:
+      if await self.read_proximity_sensor() == state:
+        return True
+      if time.monotonic() >= deadline:
+        return False
+      await asyncio.sleep(poll)
+
+  async def find_z_with_proximity_sensor(
+    self,
+    max_descent: float,
+    z_start: Optional[float] = None,
+    vel_pct: float = 5.0,
+    accel_pct: float = 5.0,
+  ) -> float:
+    """Descend Z up to `max_descent`; halt when the IR breakbeam trips.
+
+    If `z_start` is given, first move Z to that height (same vel/accel) and
+    search from there; otherwise search from the current Z. Arms IL[4]=
+    StopForward so the Elmo drive halts the motor itself on the input edge
+    (sub-ms latency, no software in the loop). IL is restored to GeneralPurpose
+    afterwards even if the move raises. Returns the Z position where the drive
+    halted; raises RuntimeError if the beam never tripped.
+    """
+    move_params = KX2ArmBackend.JointMoveParams(vel_pct=vel_pct, accel_pct=accel_pct)
+    if z_start is not None:
+      await self.move_to_joint_position({Axis.Z: z_start}, backend_params=move_params)
+    z0 = await self.motor_get_current_position(Axis.Z)
+    if await self.read_proximity_sensor():
+      raise RuntimeError(
+        f"proximity sensor already tripped at start (Z {z0:.2f}); "
+        f"clear the gripper or raise z_start before searching"
+      )
+    await self.driver.configure_input_logic(
+      int(self._PROXIMITY_SENSOR_AXIS), self._PROXIMITY_SENSOR_INPUT, InputLogic.StopForward,
+    )
+    move_task = asyncio.create_task(
+      self.move_to_joint_position({Axis.Z: z0 - max_descent}, backend_params=move_params)
+    )
+    tripped = False
+    try:
+      # The drive halts itself via IL the moment the beam breaks. We poll the
+      # sensor in parallel so we can stop waiting for "move done" (which never
+      # arrives — the drive halted short of target).
+      while not move_task.done():
+        if await self.read_proximity_sensor():
+          tripped = True
+          break
+        await asyncio.sleep(0.01)
+      move_task.cancel()
+      try:
+        await move_task
+      except (asyncio.CancelledError, CanError):
+        pass
+    finally:
+      await self.driver.configure_input_logic(
+        int(self._PROXIMITY_SENSOR_AXIS), self._PROXIMITY_SENSOR_INPUT, InputLogic.GeneralPurpose,
+      )
+      # Mirror C# MotorStop (clscanmotor.cs:5517): controlled-halt CW + mode-
+      # of-operation kick to clear stuck post-IL state. Without the mode kick
+      # the next move sees MS hung and times out the same way.
+      await self.driver._control_word_set(int(Axis.Z), 271)
+      await asyncio.sleep(0.1)
+      await self.driver._can_sdo_download(int(Axis.Z), 0x60, 0x60, 0x00, [7])
+      await self.driver._can_sdo_download(int(Axis.Z), 0x60, 0x60, 0x00, [1])
+    if not tripped:
+      z_end = await self.motor_get_current_position(Axis.Z)
+      raise RuntimeError(
+        f"proximity sensor never tripped within {max_descent} (Z {z0:.2f} -> {z_end:.2f})"
+      )
+    return await self.motor_get_current_position(Axis.Z)
 
   @staticmethod
   def _wrap_to_range(x: float, lo: float, hi: float) -> float:

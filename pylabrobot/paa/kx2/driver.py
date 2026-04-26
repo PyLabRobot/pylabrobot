@@ -127,6 +127,19 @@ class CanError(Exception):
   """Custom exception for CAN motor errors."""
 
 
+class InputLogic(IntEnum):
+  """Elmo SimplIQ IL[N] codes. Even = active-low; odd (value+1) = active-high."""
+  GeneralPurpose = 0
+  StopForward = 2
+  StopReverse = 4
+  BeginMotion = 6
+  SoftStop = 8
+  MainHomeEnable = 10
+  AuxHomeEnable = 12
+  StopUnderControl = 14
+  AbortMotion = 16
+
+
 class JointMoveDirection(IntEnum):
   """Move-direction hint used by the driver's move primitives.
 
@@ -944,3 +957,22 @@ class KX2Driver(Driver):
 
   async def set_output(self, node_id: int, output_num: int, state: bool) -> None:
     await self.write(node_id, "OB", output_num, 1 if state else 0)
+
+  async def read_input_logic(self, node_id: int, input_num: int) -> int:
+    return await self.query_int(node_id, "IL", input_num)
+
+  async def configure_input_logic(
+    self, node_id: int, input_num: int, logic: int, logic_high: bool = False,
+  ) -> None:
+    """Set IL[input_num]: drive auto-acts on input edges (e.g. halt motion).
+
+    Pass an `InputLogic` member or raw int for `logic`. With `StopForward` the
+    drive halts the motor itself the instant the input trips during forward
+    motion — no software in the loop. Skips the write if value already matches;
+    settles 250ms after a real change (Elmo IL needs time to apply).
+    """
+    value = int(logic) + (1 if logic_high else 0)
+    if await self.read_input_logic(node_id, input_num) == value:
+      return
+    await self.write(node_id, "IL", input_num, value)
+    await asyncio.sleep(0.25)
