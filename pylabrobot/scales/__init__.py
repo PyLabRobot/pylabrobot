@@ -1,7 +1,7 @@
-from pylabrobot.scales.chatterbox import ScaleChatterboxBackend
-from pylabrobot.scales.mettler_toledo_backend import (
-  MettlerToledoWXS205SDU,
-  MettlerToledoWXS205SDUBackend,
-)
+"""PyLabRobot scales package - frontend, backends, and error types."""
+
+from pylabrobot.scales.chatterbox import ScaleChatterboxBackend  # backwards compat
+from pylabrobot.scales.mettler_toledo import MettlerToledoError, MettlerToledoWXS205SDUBackend
 from pylabrobot.scales.scale import Scale
 from pylabrobot.scales.scale_backend import ScaleBackend
+from pylabrobot.scales.simulator import ScaleSimulator
