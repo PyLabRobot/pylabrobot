@@ -958,6 +958,24 @@ class KX2Driver(Driver):
   async def set_output(self, node_id: int, output_num: int, state: bool) -> None:
     await self.write(node_id, "OB", output_num, 1 if state else 0)
 
+  async def motor_stop(self, node_id: int, settle: float = 0.1) -> None:
+    """Controlled halt of one axis (port of C# MotorStop, clscanmotor.cs:5517).
+
+    Sends CW=271 (Op Enabled + Halt — controlled deceleration, no power drop),
+    waits `settle` seconds for the drive to come to rest, then writes 0x6060 = 7
+    then = 1 to clear the post-halt status-word state. Used after an IL-induced
+    auto-halt so the next move doesn't see a hung MS register.
+
+    The C# version polls a TPDO-event flag with a 2.5s timeout. We can't reuse
+    `wait_for_moves_done` here because MS never goes to 0 after a halt — the
+    poll would just burn the full timeout. Drive deceleration is sub-100ms for
+    the search velocities used here, so a fixed sleep is fine.
+    """
+    await self._control_word_set(node_id, 271)
+    await asyncio.sleep(settle)
+    await self._can_sdo_download(node_id, 0x60, 0x60, 0x00, [7])
+    await self._can_sdo_download(node_id, 0x60, 0x60, 0x00, [1])
+
   async def read_input_logic(self, node_id: int, input_num: int) -> int:
     return await self.query_int(node_id, "IL", input_num)
 

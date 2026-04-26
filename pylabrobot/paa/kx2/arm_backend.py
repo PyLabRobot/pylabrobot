@@ -686,6 +686,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     halted; raises RuntimeError if the beam never tripped.
     """
     move_params = KX2ArmBackend.JointMoveParams(vel_pct=vel_pct, accel_pct=accel_pct)
+    # Pre-flight: force the drive back to Op Enabled. A prior failed search
+    # could have left it in Fault/Quick Stop where new moves silently fail
+    # (Z barely moves). Idempotent if the drive is already healthy.
+    await self.driver.motor_enable(node_id=int(Axis.Z), state=True, use_ds402=True)
     if z_start is not None:
       await self.move_to_joint_position({Axis.Z: z_start}, backend_params=move_params)
     z0 = await self.motor_get_current_position(Axis.Z)
@@ -716,16 +720,19 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       except (asyncio.CancelledError, CanError):
         pass
     finally:
-      await self.driver.configure_input_logic(
-        int(self._PROXIMITY_SENSOR_AXIS), self._PROXIMITY_SENSOR_INPUT, InputLogic.GeneralPurpose,
-      )
-      # Mirror C# MotorStop (clscanmotor.cs:5517): controlled-halt CW + mode-
-      # of-operation kick to clear stuck post-IL state. Without the mode kick
-      # the next move sees MS hung and times out the same way.
-      await self.driver._control_word_set(int(Axis.Z), 271)
-      await asyncio.sleep(0.1)
-      await self.driver._can_sdo_download(int(Axis.Z), 0x60, 0x60, 0x00, [7])
-      await self.driver._can_sdo_download(int(Axis.Z), 0x60, 0x60, 0x00, [1])
+      # Match C# search cleanup (KX2RobotControl.cs:8650-8658): halt motor
+      # FIRST, then restore IL. Reverse order would let the drive surge toward
+      # the unreached target during the gap.
+      try:
+        await self.driver.motor_stop(int(Axis.Z))
+      except Exception as e:
+        logger.warning("find_z: motor_stop failed: %s", e)
+      try:
+        await self.driver.configure_input_logic(
+          int(self._PROXIMITY_SENSOR_AXIS), self._PROXIMITY_SENSOR_INPUT, InputLogic.GeneralPurpose,
+        )
+      except Exception as e:
+        logger.warning("find_z: IL restore failed: %s", e)
     if not tripped:
       z_end = await self.motor_get_current_position(Axis.Z)
       raise RuntimeError(
