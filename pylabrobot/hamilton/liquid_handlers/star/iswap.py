@@ -49,6 +49,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     self.traversal_height = traversal_height
     self._version: Optional[str] = None
     self._parked: Optional[bool] = None
+    self._rotation_drive_x_offset: Optional[float] = None  # cached in _on_setup
 
   @property
   def version(self) -> str:
@@ -95,6 +96,9 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     if self._version is None:
       self._version = await self._request_version()
+
+    if self._rotation_drive_x_offset is None:
+      self._rotation_drive_x_offset = await self._rotation_drive_request_x_offset()
 
   async def _request_version(self) -> str:
     """Request the iSWAP firmware version from the device."""
@@ -298,7 +302,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       f"Expected one of {list(wrist_orientation_to_motor_increment_dict)}."
     )
 
-  async def rotation_drive_request_x_offset(self) -> float:
+  async def _rotation_drive_request_x_offset(self) -> float:
     """Read the X-offset i.e. X-axis center <-> iSWAP rotation drive, in mm.
 
     Stored in the master EEPROM as parameter ``kg`` (set via ``C0:AG`` —
@@ -306,6 +310,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     Previously measured to be 32.8 mm by contributor;
     per-machine calibrated during service. Required for deriving the
     iSWAP rotation drive's deck X coordinate from the X-arm carriage center.
+    Cached on the backend as ``_rotation_drive_x_offset`` during setup.
     """
     resp = await self.driver.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
     return cast(int, resp["kg"]) / 10.0
@@ -318,14 +323,14 @@ class iSWAPBackend(OrientableGripperArmBackend):
     """Position of the iSWAP rotation drive (joint 0) in deck coordinates, mm."""
     if not self.driver.extended_conf.left_x_drive.iswap_installed:  # type: ignore[union-attr]
       raise RuntimeError("iSWAP is not installed")
+    assert self._rotation_drive_x_offset is not None, "Call setup() first"
 
     x_arm_center = await self.driver.left_x_arm.request_position()  # type: ignore[union-attr]
-    iswap_x_offset = await self.rotation_drive_request_x_offset()
     rotation_drive_y = await self.rotation_drive_request_y()
     finger_loc = (await self.request_gripper_location()).location
 
     return Coordinate(
-      x=x_arm_center - iswap_x_offset,
+      x=x_arm_center - self._rotation_drive_x_offset,
       y=rotation_drive_y,
       z=finger_loc.z + self.rotation_drive_z_offset_above_finger,
     )
