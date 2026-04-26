@@ -255,16 +255,11 @@ class Thermocycler(ResourceHolder, Machine):
 
   async def is_profile_running(self, **backend_kwargs) -> bool:
     """Return True if a profile is still in progress."""
-    try:
-      hold = await self.get_hold_time(**backend_kwargs)
-      cycle = await self.get_current_cycle_index(**backend_kwargs)
-      total_cycles = await self.get_total_cycle_count(**backend_kwargs)
-      step = await self.get_current_step_index(**backend_kwargs)
-      total_steps = await self.get_total_step_count(**backend_kwargs)
-    except NotImplementedError:
-      raise
-    except RuntimeError:
-      return False
+    hold = await self.get_hold_time(**backend_kwargs)
+    cycle = await self.get_current_cycle_index(**backend_kwargs)
+    total_cycles = await self.get_total_cycle_count(**backend_kwargs)
+    step = await self.get_current_step_index(**backend_kwargs)
+    total_steps = await self.get_total_step_count(**backend_kwargs)
 
     # if still holding in a step, it's running
     if hold and hold > 0:
