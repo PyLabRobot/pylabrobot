@@ -73,18 +73,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     # Driver has already brought CAN up (connect + node discovery + PDO
-    # mapping) via Device.setup(). Now read per-drive parameters, enable
-    # motion axes, and initialize the servo gripper.
-    await self.drive_get_parameters(self.driver.node_id_list)
-
-    await asyncio.sleep(2)
-
+    # mapping) via Device.setup(). Read per-drive config, then enable motion
+    # axes and the servo gripper.
+    self._config = await self._read_config()
+    await asyncio.sleep(2)  # let drives settle before motor enables
     for axis in MOTION_AXES:
-      try:
-        await self.driver.motor_enable(node_id=axis, state=True, use_ds402=True)
-      except Exception as e:
-        logger.warning("Error enabling motor on axis %s: %s", axis, e)
-
+      await self.driver.motor_enable(node_id=axis, state=True, use_ds402=True)
     await self.servo_gripper_initialize()
 
   # -- robot-level homing / estop (moved from driver) ---------------------
@@ -424,183 +418,145 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await self.driver.write(rail, "UI", 23, 1 if maintenance_required_rail else 0)
       await self.driver.write(rail, "UI", 21, int(last_maintenance_performed_date_rail))
 
-  async def drive_get_parameters(self, node_ids) -> None:
-    nodes = (
-      [int(b) for b in node_ids]
-      if isinstance(node_ids, (bytes, bytearray))
-      else [int(x) for x in node_ids]
-    )
+  async def _read_config(self) -> KX2Config:
+    """Read the per-arm configuration from the drives.
 
-    # Pass 1: identify axes by UI[4]
-    uis = set()
-    for node in nodes:
-      if node == await self.driver.query_int(int(node), "UI", 4):
-        uis.add(node)
-    for required_axis in MOTION_AXES:
-      if required_axis.value not in uis:
-        raise CanError(f"Missing required axis with UI[4]={required_axis}")
-    robot_on_rail = 5 in uis
-    has_servo_gripper = 6 in uis
-    if robot_on_rail:
+    Driver discovery has already populated `node_id_list` with everything
+    on the bus; here we just verify the required motion axes are present
+    and read each drive's parameters.
+    """
+    nodes = self.driver.node_id_list
+    for required in MOTION_AXES:
+      if required not in nodes:
+        raise CanError(f"Missing required axis {required}")
+    has_rail = Axis.RAIL in nodes
+    has_servo_gripper = Axis.SERVO_GRIPPER in nodes
+    if has_rail:
       warnings.warn("Rails has not been tested for KX2 robots.")
 
-    # Pass 2: per-axis parameters
     axes: Dict[int, AxisConfig] = {}
-    for axis in nodes:
-      logger.debug("Reading parameters for axis %s", axis)
+    for nid in nodes:
+      axes[nid] = await self._read_axis_config(nid)
 
-      # UI[5..10] digital inputs
-      digital_inputs: Dict[int, str] = {}
-      for ui_idx in range(5, 11):
-        ret = await self.driver.query_int(axis, "UI", ui_idx)
-        ch = (ui_idx - 5) + 1
-        if ret == 101:
-          digital_inputs[ch] = "ProximitySensor"
-        elif ret == 102:
-          digital_inputs[ch] = "TeachButton"
-        else:
-          digital_inputs[ch] = "" if ret <= 0 else f"AuxPin{ret}"
-
-      # UI[11..12] analog inputs
-      analog_inputs: Dict[int, str] = {}
-      for ui_idx in range(11, 13):
-        ret = await self.driver.query_int(axis, "UI", ui_idx)
-        ch = (ui_idx - 11) + 1
-        analog_inputs[ch] = "" if ret <= 0 else f"AuxPin{ret}"
-
-      # UI[13..16] outputs
-      outputs: Dict[int, str] = {}
-      for ui_idx in range(13, 17):
-        ret = await self.driver.query_int(axis, "UI", ui_idx)
-        ch = (ui_idx - 13) + 1
-        if ret == 101:
-          outputs[ch] = "IndicatorLightRed"
-        elif ret == 102:
-          outputs[ch] = "IndicatorLightGreen"
-        elif ret == 103:
-          outputs[ch] = "IndicatorLightBlue"
-        elif ret == 104:
-          outputs[ch] = "IndicatorLight"
-        elif ret == 105:
-          outputs[ch] = "Buzzer"
-        else:
-          outputs[ch] = "" if ret <= 0 else f"AuxPin{ret}"
-
-      # UI[24] drive serial number (queried but not currently stored)
-      await self.driver.query_int(axis, "UI", 24)
-
-      # UF[1], UF[2] conversion factor
-      uf1 = await self.driver.query_float(axis, "UF", 1)
-      uf2 = await self.driver.query_float(axis, "UF", 2)
-      if uf1 == 0.0 or uf2 == 0.0:
-        raise CanError(f"Invalid Motor Conversion Factor for axis {axis}. UF[1]={uf1}, UF[2]={uf2}")
-      motor_conversion_factor = uf1 / uf2
-
-      # XM / travel
-      xm1 = await self.driver.query_int(axis, "XM", 1)
-      xm2 = await self.driver.query_int(axis, "XM", 2)
-      max_travel = await self.driver.query_float(axis, "UF", 3)
-      min_travel = await self.driver.query_float(axis, "UF", 4)
-      vh3 = await self.driver.query_int(axis, "VH", 3)
-      vl3 = await self.driver.query_int(axis, "VL", 3)
-
-      joint_move_direction = JointMoveDirection.Normal
-      if (xm1 == 0 and xm2 == 0) or (xm1 <= vl3 and xm2 >= vh3):
-        unlimited_travel = False
-      elif xm1 > vl3 and xm2 < vh3:
-        unlimited_travel = True
-        if axis in MOTION_AXES:
-          joint_move_direction = JointMoveDirection.ShortestWay
-      else:
-        raise CanError(
-          f"Invalid travel limits or modulo settings for axis {axis}. "
-          f"VH[3]={vh3}, VL[3]={vl3}, XM[1]={xm1}, XM[2]={xm2}"
-        )
-
-      # Encoder socket/type
-      ca45 = await self.driver.query_int(axis, "CA", 45)
-      if not (0 < ca45 <= 4):
-        raise CanError(f"Invalid encoder socket number received from axis {axis}. CA[45]={ca45}")
-      enc_type = await self.driver.query_int(axis, "CA", 40 + ca45)
-      if enc_type in (1, 2):
-        absolute_encoder = False
-      elif enc_type == 24:
-        absolute_encoder = True
-      else:
-        raise CanError(
-          f"Unsupported encoder type specified for axis {axis}. CA[4{ca45}]={enc_type}"
-        )
-
-      ca46 = await self.driver.query_int(axis, "CA", 46)
-      if ca45 == ca46:
-        num3 = 1.0
-      else:
-        num3 = await self.driver.query_float(axis, "FF", 3)
-
-      denom = motor_conversion_factor * num3
-
-      sp2 = await self.driver.query_int(axis, "SP", 2)
-      if sp2 == 100000:
-        vh2 = await self.driver.query_int(axis, "VH", 2)
-        max_vel = vh2 / 1.01 / denom
-      else:
-        max_vel = sp2 / denom
-
-      sd0 = await self.driver.query_int(axis, "SD", 0)
-      max_accel = sd0 / 1.01 / denom
-
-      axes[axis] = AxisConfig(
-        motor_conversion_factor=motor_conversion_factor,
-        max_travel=max_travel,
-        min_travel=min_travel,
-        unlimited_travel=unlimited_travel,
-        absolute_encoder=absolute_encoder,
-        max_vel=max_vel,
-        max_accel=max_accel,
-        joint_move_direction=joint_move_direction,
-        digital_inputs=digital_inputs,
-        analog_inputs=analog_inputs,
-        outputs=outputs,
-      )
-
-    # Robot-level params from shoulder.
-    shoulder = int(Axis.SHOULDER)
-    base_to_gripper_clearance_z = await self.driver.query_float(shoulder, "UF", 6)
-    base_to_gripper_clearance_arm = await self.driver.query_float(shoulder, "UF", 7)
-    wrist_offset = await self.driver.query_float(shoulder, "UF", 8)
-    elbow_offset = await self.driver.query_float(shoulder, "UF", 9)
-    elbow_zero_offset = await self.driver.query_float(shoulder, "UF", 10)
-
-    servo_gripper: Optional[ServoGripperConfig] = None
-    if has_servo_gripper:
-      sg = int(Axis.SERVO_GRIPPER)
-      servo_gripper = ServoGripperConfig(
-        home_pos=int(await self.driver.query_float(sg, "UF", 6)),
-        home_search_vel=int(await self.driver.query_float(sg, "UF", 7)),
-        home_search_accel=int(await self.driver.query_float(sg, "UF", 8)),
-        home_default_position_error=int(await self.driver.query_float(sg, "UF", 9)),
-        home_hard_stop_position_error=int(await self.driver.query_float(sg, "UF", 10)),
-        home_hard_stop_offset=int(await self.driver.query_float(sg, "UF", 11)),
-        home_index_offset=int(await self.driver.query_float(sg, "UF", 12)),
-        home_offset_vel=int(await self.driver.query_float(sg, "UF", 13)),
-        home_offset_accel=int(await self.driver.query_float(sg, "UF", 14)),
-        home_timeout_msec=int(await self.driver.query_float(sg, "UF", 15)),
-        continuous_current=await self.driver.query_float(sg, "UF", 16),
-        peak_current=await self.driver.query_float(sg, "UF", 17),
-      )
-
-    self._config = KX2Config(
-      wrist_offset=wrist_offset,
-      elbow_offset=elbow_offset,
-      elbow_zero_offset=elbow_zero_offset,
+    sh = int(Axis.SHOULDER)
+    return KX2Config(
+      wrist_offset=await self.driver.query_float(sh, "UF", 8),
+      elbow_offset=await self.driver.query_float(sh, "UF", 9),
+      elbow_zero_offset=await self.driver.query_float(sh, "UF", 10),
       gripper_length=self._gripper_length,
       gripper_z_offset=self._gripper_z_offset,
       gripper_finger_side=self._gripper_finger_side,
       axes=axes,
-      base_to_gripper_clearance_z=base_to_gripper_clearance_z,
-      base_to_gripper_clearance_arm=base_to_gripper_clearance_arm,
-      robot_on_rail=robot_on_rail,
-      servo_gripper=servo_gripper,
+      base_to_gripper_clearance_z=await self.driver.query_float(sh, "UF", 6),
+      base_to_gripper_clearance_arm=await self.driver.query_float(sh, "UF", 7),
+      robot_on_rail=has_rail,
+      servo_gripper=await self._read_servo_gripper_config() if has_servo_gripper else None,
+    )
+
+  async def _read_axis_config(self, nid: int) -> AxisConfig:
+    logger.debug("Reading parameters for axis %s", nid)
+
+    digital_inputs = await self._read_io_names(nid, 5, 11, _DIGITAL_INPUT_NAMES)
+    analog_inputs = await self._read_io_names(nid, 11, 13, {})
+    outputs = await self._read_io_names(nid, 13, 17, _OUTPUT_NAMES)
+
+    await self.driver.query_int(nid, "UI", 24)  # serial — read for parity, unused
+
+    uf1 = await self.driver.query_float(nid, "UF", 1)
+    uf2 = await self.driver.query_float(nid, "UF", 2)
+    if uf1 == 0.0 or uf2 == 0.0:
+      raise CanError(f"Invalid motor conversion factor for axis {nid}: UF[1]={uf1}, UF[2]={uf2}")
+    motor_conversion_factor = uf1 / uf2
+
+    xm1 = await self.driver.query_int(nid, "XM", 1)
+    xm2 = await self.driver.query_int(nid, "XM", 2)
+    max_travel = await self.driver.query_float(nid, "UF", 3)
+    min_travel = await self.driver.query_float(nid, "UF", 4)
+    vh3 = await self.driver.query_int(nid, "VH", 3)
+    vl3 = await self.driver.query_int(nid, "VL", 3)
+
+    joint_move_direction = JointMoveDirection.Normal
+    if (xm1 == 0 and xm2 == 0) or (xm1 <= vl3 and xm2 >= vh3):
+      unlimited_travel = False
+    elif xm1 > vl3 and xm2 < vh3:
+      unlimited_travel = True
+      if nid in MOTION_AXES:
+        joint_move_direction = JointMoveDirection.ShortestWay
+    else:
+      raise CanError(
+        f"Invalid travel limits or modulo settings for axis {nid}: "
+        f"VH[3]={vh3}, VL[3]={vl3}, XM[1]={xm1}, XM[2]={xm2}"
+      )
+
+    ca45 = await self.driver.query_int(nid, "CA", 45)
+    if not (0 < ca45 <= 4):
+      raise CanError(f"Invalid encoder socket for axis {nid}: CA[45]={ca45}")
+    enc_type = await self.driver.query_int(nid, "CA", 40 + ca45)
+    if enc_type in (1, 2):
+      absolute_encoder = False
+    elif enc_type == 24:
+      absolute_encoder = True
+    else:
+      raise CanError(f"Unsupported encoder type for axis {nid}: CA[4{ca45}]={enc_type}")
+
+    ca46 = await self.driver.query_int(nid, "CA", 46)
+    num3 = 1.0 if ca45 == ca46 else await self.driver.query_float(nid, "FF", 3)
+    denom = motor_conversion_factor * num3
+
+    sp2 = await self.driver.query_int(nid, "SP", 2)
+    if sp2 == 100000:
+      max_vel = await self.driver.query_int(nid, "VH", 2) / 1.01 / denom
+    else:
+      max_vel = sp2 / denom
+    max_accel = await self.driver.query_int(nid, "SD", 0) / 1.01 / denom
+
+    return AxisConfig(
+      motor_conversion_factor=motor_conversion_factor,
+      max_travel=max_travel,
+      min_travel=min_travel,
+      unlimited_travel=unlimited_travel,
+      absolute_encoder=absolute_encoder,
+      max_vel=max_vel,
+      max_accel=max_accel,
+      joint_move_direction=joint_move_direction,
+      digital_inputs=digital_inputs,
+      analog_inputs=analog_inputs,
+      outputs=outputs,
+    )
+
+  async def _read_io_names(
+    self, nid: int, start: int, end: int, named: Dict[int, str]
+  ) -> Dict[int, str]:
+    """Read UI[start..end-1] as a channel -> human name map.
+
+    Channel index is 1-based. Codes in `named` map to fixed labels; positive
+    unknowns become "AuxPinN"; non-positive means unassigned.
+    """
+    out: Dict[int, str] = {}
+    for ui_idx in range(start, end):
+      code = await self.driver.query_int(nid, "UI", ui_idx)
+      ch = ui_idx - start + 1
+      if code in named:
+        out[ch] = named[code]
+      else:
+        out[ch] = "" if code <= 0 else f"AuxPin{code}"
+    return out
+
+  async def _read_servo_gripper_config(self) -> ServoGripperConfig:
+    sg = int(Axis.SERVO_GRIPPER)
+    return ServoGripperConfig(
+      home_pos=int(await self.driver.query_float(sg, "UF", 6)),
+      home_search_vel=int(await self.driver.query_float(sg, "UF", 7)),
+      home_search_accel=int(await self.driver.query_float(sg, "UF", 8)),
+      home_default_position_error=int(await self.driver.query_float(sg, "UF", 9)),
+      home_hard_stop_position_error=int(await self.driver.query_float(sg, "UF", 10)),
+      home_hard_stop_offset=int(await self.driver.query_float(sg, "UF", 11)),
+      home_index_offset=int(await self.driver.query_float(sg, "UF", 12)),
+      home_offset_vel=int(await self.driver.query_float(sg, "UF", 13)),
+      home_offset_accel=int(await self.driver.query_float(sg, "UF", 14)),
+      home_timeout_msec=int(await self.driver.query_float(sg, "UF", 15)),
+      continuous_current=await self.driver.query_float(sg, "UF", 16),
+      peak_current=await self.driver.query_float(sg, "UF", 17),
     )
 
   @property
@@ -1148,3 +1104,18 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
 
 MOTION_AXES = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+
+# UI[5..10] code -> digital input role.
+_DIGITAL_INPUT_NAMES: Dict[int, str] = {
+  101: "ProximitySensor",
+  102: "TeachButton",
+}
+
+# UI[13..16] code -> output role.
+_OUTPUT_NAMES: Dict[int, str] = {
+  101: "IndicatorLightRed",
+  102: "IndicatorLightGreen",
+  103: "IndicatorLightBlue",
+  104: "IndicatorLight",
+  105: "Buzzer",
+}
