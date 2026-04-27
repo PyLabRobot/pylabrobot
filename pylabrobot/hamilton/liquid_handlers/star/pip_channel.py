@@ -334,20 +334,17 @@ class PIPChannel:
       zj=f"{round(z * 10):04}",
     )
 
-  # -- C0:RA  request X position ------------------------------------------------
-
+  # -- delegate to left_x_arm (C0 RX) — channels share the X carriage ----------
+  # TODO: we assume `C0RX` references the center of the x-arm, figure out what it
+  # references for half-arms (see issue 822 and new Fluid Motion STAR)
+  
   async def request_x_pos(self) -> float:
     """Request current X-position of this channel (mm).
 
     All PIP channels share the same X arm, so this returns the arm position.
     """
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RA",
-      fmt="ra#####",
-      pn=f"{self.index + 1:02}",
-    )
-    return float(resp["ra"] / 10)
+    assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
+    return await self.driver.left_x_arm.request_position()
 
   # -- C0:RB  request Y position ------------------------------------------------
 
