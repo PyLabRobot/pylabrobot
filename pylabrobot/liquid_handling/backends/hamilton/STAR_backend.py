@@ -1769,7 +1769,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             await self._iswap_rotation_drive_request_x_offset()
           )
 
-
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
         # Initialize 96-head
@@ -10045,13 +10044,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
-    
-    if self._iswap_rotation_drive_x_offset_mm is not None:
+
+    if self._iswap_rotation_drive_x_offset_mm is None:
       raise ValueError("Call setup() first")
-    
+
     x_arm_center = await self.request_left_x_arm_position()
     rotation_drive_y = await self.iswap_rotation_drive_request_y()
-    finger_plane_z = await self.request_iswap_z_position()
+    finger_plane_z = (await self.request_iswap_position()).z
 
     return Coordinate(
       x=x_arm_center - self._iswap_rotation_drive_x_offset_mm,
