@@ -10073,8 +10073,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
 
     if self._iswap_rotation_drive_x_offset_mm is None:
-      self._iswap_rotation_drive_x_offset_mm = await \
-        self._iswap_rotation_drive_request_x_offset()
+      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
 
     x_arm_center = await self.request_left_x_arm_position()
     rotation_drive_y = await self.iswap_rotation_drive_request_y()
