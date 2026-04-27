@@ -10064,37 +10064,58 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return cast(int, response["rw"])
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
-    """
-    Request the iSWAP rotation drive orientation.
-    This is the orientation of the iSWAP rotation drive (relative to the machine).
+    """Request the iSWAP rotation drive orientation.
 
-    Uses empirically determined increment values:
-      FRONT: -25 ± 50
-      RIGHT: +29068 ± 50
-      LEFT:  -29116 ± 50
+    Uses nearest-neighbour classification against firmware default `pw`
+    values. Each machine's EEPROM stores its own `pw` adjustment so the
+    actual stop position can drift by up to a few hundred increments per
+    machine; an earlier implementation used +/-50 windows and faulted on
+    machines calibrated outside that band. We now pick whichever predefined
+    stop is closest and only raise if the drive is more than ~5 deg
+    (~1700 incr) from any of them, which catches "drive is mid-transit /
+    undefined" cases without being brittle to per-machine calibration.
+
+    Defaults (W-drive resolution = 0.00310 deg/incr):
+      LEFT          W1      -29068 incr  (~ -90 deg)
+      FRONT         W2          +0 incr  (~   0 deg)
+      RIGHT         W3      +29068 incr  (~ +90 deg)
+      PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)
 
     Returns:
-      RotationDriveOrientation: The interpreted rotation orientation (LEFT, FRONT, RIGHT).
+      RotationDriveOrientation: The interpreted rotation orientation
+        (LEFT, FRONT, RIGHT, or PARKED_RIGHT).
+
+    Raises:
+      ValueError: if the measured position is more than 1700 incr (~5 deg)
+        from any predefined stop (drive is in transit or drifted).
     """
-    # Map motor increments to rotation orientations (constant lookup table).
-    rotation_orientation_to_motor_increment_dict = {
-      STARBackend.RotationDriveOrientation.FRONT: range(-75, 26),
-      STARBackend.RotationDriveOrientation.RIGHT: range(29018, 29119),
-      STARBackend.RotationDriveOrientation.LEFT: range(-29166, -29065),
-      STARBackend.RotationDriveOrientation.PARKED_RIGHT: range(29450, 29550),
-      # TODO: add range for STAR(let)s with "PARKED_LEFT" setting
+    # Nearest-neighbour reference positions (firmware `pw` defaults).
+    # PARKED_RIGHT is kept as a distinct neighbour so we can report "parked"
+    # explicitly when the drive sits at the parking stop rather than the W3
+    # work stop.
+    # TODO: add PARKED_LEFT reference for STAR(let)s that park on the left.
+    rotation_reference_positions = {
+      STARBackend.RotationDriveOrientation.LEFT: -29068,
+      STARBackend.RotationDriveOrientation.FRONT: 0,
+      STARBackend.RotationDriveOrientation.RIGHT: 29068,
+      STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
     }
+    tolerance_incr = 1700  # ~5 deg at 0.00310 deg/incr (iSWAP W-drive resolution)
 
     motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
 
-    for orientation, increment_range in rotation_orientation_to_motor_increment_dict.items():
-      if motor_position_increments in increment_range:
-        return orientation
-
-    raise ValueError(
-      f"Unknown rotation orientation: {motor_position_increments}. "
-      f"Expected one of {list(rotation_orientation_to_motor_increment_dict.values())}."
+    orientation, offset = min(
+      ((o, abs(p - motor_position_increments)) for o, p in rotation_reference_positions.items()),
+      key=lambda pair: pair[1],
     )
+    if offset > tolerance_incr:
+      raise ValueError(
+        f"Unknown rotation orientation: {motor_position_increments} incr is "
+        f"{offset} incr (~{offset * 0.00310:.2f} deg) from the nearest predefined "
+        f"stop ({orientation.name} at {rotation_reference_positions[orientation]}). "
+        "Is the rotation drive in transit or mis-calibrated?"
+      )
+    return orientation
 
   async def request_iswap_wrist_drive_position_increments(self) -> int:
     """Query the iSWAP wrist drive position (units: increments) from the firmware."""
@@ -10102,41 +10123,61 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return cast(int, response["rt"])
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
-    """
-    Request the iSWAP wrist drive orientation.
-    This is the orientation of the iSWAP wrist drive (always in relation to the iSWAP arm/rotation drive).
+    """Request the iSWAP wrist drive orientation (relative to the rotation drive).
 
     e.g.:
-    1) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) + iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
+    1) RotationDriveOrientation.FRONT + WristDriveOrientation.STRAIGHT
+       => wrist also points to the front of the machine.
+    2) RotationDriveOrientation.LEFT + WristDriveOrientation.STRAIGHT
+       => wrist also points to the left of the machine.
+    3) RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
+       => wrist points to the left of the machine.
 
-    2) iSWAP RotationDriveOrientation.LEFT (i.e. pointing to the left of the machine) + iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
+    Uses nearest-neighbour classification against firmware default `pt`
+    values. Each machine's EEPROM stores its own `pt` adjustment so the
+    actual stop position can drift by up to a few hundred increments per
+    machine; an earlier implementation used +/-50 windows and faulted on
+    machines calibrated outside that band. We now pick whichever predefined
+    stop is closest and only raise if the wrist is more than ~5 deg
+    (~1000 incr) from any of them.
 
-    3) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) + iSWAP WristDriveOrientation.RIGHT (i.e. wrist is pointing to the left !)
-
-    The relative wrist orientation is reported as a motor position increment by the STAR firmware. This value is mapped to a `WristDriveOrientation` enum member.
+    Defaults (T-drive resolution = 0.00508 deg/incr):
+      RIGHT     T1   -26577 incr  (~ -135 deg)
+      STRAIGHT  T2    -8859 incr  (~  -45 deg)
+      LEFT      T3    +8859 incr  (~  +45 deg)
+      REVERSE   T4   +26577 incr  (~ +135 deg)
 
     Returns:
-      WristDriveOrientation: The interpreted wrist orientation (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
-    """
+      WristDriveOrientation: The interpreted wrist orientation
+        (RIGHT, STRAIGHT, LEFT, or REVERSE).
 
-    # Map motor increments to wrist orientations (constant lookup table).
-    wrist_orientation_to_motor_increment_dict = {
-      STARBackend.WristDriveOrientation.RIGHT: range(-26_627, -26_527),
-      STARBackend.WristDriveOrientation.STRAIGHT: range(-8_804, -8_704),
-      STARBackend.WristDriveOrientation.LEFT: range(9_051, 9_151),
-      STARBackend.WristDriveOrientation.REVERSE: range(26_802, 26_902),
+    Raises:
+      ValueError: if the measured position is more than 1000 incr (~5 deg)
+        from any predefined stop (drive is in transit or drifted).
+    """
+    # Nearest-neighbour reference positions (firmware `pt` defaults).
+    wrist_reference_positions = {
+      STARBackend.WristDriveOrientation.RIGHT: -26577,
+      STARBackend.WristDriveOrientation.STRAIGHT: -8859,
+      STARBackend.WristDriveOrientation.LEFT: 8859,
+      STARBackend.WristDriveOrientation.REVERSE: 26577,
     }
+    tolerance_incr = 1000  # ~5 deg at 0.00508 deg/incr (iSWAP T-drive resolution)
 
     motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
 
-    for orientation, increment_range in wrist_orientation_to_motor_increment_dict.items():
-      if motor_position_increments in increment_range:
-        return orientation
-
-    raise ValueError(
-      f"Unknown wrist orientation: {motor_position_increments}. "
-      f"Expected one of {list(wrist_orientation_to_motor_increment_dict)}."
+    orientation, offset = min(
+      ((o, abs(p - motor_position_increments)) for o, p in wrist_reference_positions.items()),
+      key=lambda pair: pair[1],
     )
+    if offset > tolerance_incr:
+      raise ValueError(
+        f"Unknown wrist orientation: {motor_position_increments} incr is "
+        f"{offset} incr (~{offset * 0.00508:.2f} deg) from the nearest predefined "
+        f"stop ({orientation.name} at {wrist_reference_positions[orientation]}). "
+        "Is the wrist drive in transit or mis-calibrated?"
+      )
+    return orientation
 
   async def iswap_rotate(
     self,
