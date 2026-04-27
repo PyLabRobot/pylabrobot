@@ -9762,7 +9762,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
 
     resp = await self.send_command(module="R0", command="RG", fmt="rg##### (n)")
-    actual_increments = resp["rg"][1]
+    actual_increments = resp["rg"][1]  # rg returns [target, actual]; we want actual
 
     return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
 
