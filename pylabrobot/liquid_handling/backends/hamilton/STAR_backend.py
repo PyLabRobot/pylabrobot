@@ -1367,6 +1367,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._extended_conf: Optional[ExtendedConfiguration] = None
     self._channel_traversal_height: float = 245.0
     self._iswap_traversal_height: float = 280.0
+    self._iswap_rotation_drive_x_offset_mm: Optional[float] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1762,6 +1763,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.park_iswap(
           minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
         )
+
+        if self._iswap_rotation_drive_x_offset_mm is None:
+          self._iswap_rotation_drive_x_offset_mm = (
+            await self._iswap_rotation_drive_request_x_offset()
+          )
+
 
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
