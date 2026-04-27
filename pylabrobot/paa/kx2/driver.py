@@ -162,8 +162,8 @@ class MotorMoveParam:
   # CANopen node ID for this axis. Backend passes `int(self.Axis.X)`.
   node_id: int
   position: int
-  velocity: int
-  acceleration: int
+  velocity: int       # encoder counts/sec (driver-internal; backend converts from mm/s or deg/s)
+  acceleration: int   # encoder counts/sec^2
   relative: bool = False
   direction: JointMoveDirection = JointMoveDirection.ShortestWay
 

@@ -362,8 +362,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def servo_gripper_close(self, closed_position: int = 0, check_plate_gripped=True) -> None:
     await self.motors_move_joint(
       {Axis.SERVO_GRIPPER: closed_position},
-      cmd_vel_pct=100,
-      cmd_accel_pct=100,
+      cmd_linear_speed=None,
+      cmd_linear_acceleration=None,
+      cmd_rotary_speed=None,
+      cmd_rotary_acceleration=None,
     )
 
     if check_plate_gripped:
@@ -372,8 +374,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def servo_gripper_open(self, open_position: float) -> None:
     await self.motors_move_joint(
       {Axis.SERVO_GRIPPER: open_position},
-      cmd_vel_pct=100,
-      cmd_accel_pct=100,
+      cmd_linear_speed=None,
+      cmd_linear_acceleration=None,
+      cmd_rotary_speed=None,
+      cmd_rotary_acceleration=None,
     )
 
   async def drive_set_move_count_parameters(
@@ -629,19 +633,22 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self,
     max_descent: float,
     z_start: Optional[float] = None,
-    vel_pct: float = 5.0,
-    accel_pct: float = 5.0,
+    speed: float = 5.0,
+    acceleration: float = 50.0,
   ) -> float:
     """Descend Z up to `max_descent`; halt when the IR breakbeam trips.
 
-    If `z_start` is given, first move Z to that height (same vel/accel) and
-    search from there; otherwise search from the current Z. Arms IL[4]=
-    StopForward so the Elmo drive halts the motor itself on the input edge
-    (sub-ms latency, no software in the loop). IL is restored to GeneralPurpose
-    afterwards even if the move raises. Returns the Z position where the drive
-    halted; raises RuntimeError if the beam never tripped.
+    `speed` is in mm/s, `acceleration` in mm/s^2. If `z_start` is given,
+    first move Z to that height (same speed/accel) and search from there;
+    otherwise search from the current Z. Arms IL[4]=StopForward so the Elmo
+    drive halts the motor itself on the input edge (sub-ms latency, no
+    software in the loop). IL is restored to GeneralPurpose afterwards even
+    if the move raises. Returns the Z position where the drive halted;
+    raises RuntimeError if the beam never tripped.
     """
-    move_params = KX2ArmBackend.JointMoveParams(vel_pct=vel_pct, accel_pct=accel_pct)
+    move_params = KX2ArmBackend.JointMoveParams(
+      linear_speed=speed, linear_acceleration=acceleration,
+    )
     # Pre-flight: force the drive back to Op Enabled. A prior failed search
     # could have left it in Fault/Quick Stop where new moves silently fail
     # (Z barely moves). Idempotent if the drive is already healthy.
@@ -740,8 +747,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def calculate_move_abs_all_axes(
     self,
     cmd_pos: Dict[Axis, float],
-    cmd_vel_pct: float,
-    cmd_accel_pct: float,
+    cmd_linear_speed: Optional[float],
+    cmd_linear_acceleration: Optional[float],
+    cmd_rotary_speed: Optional[float],
+    cmd_rotary_acceleration: Optional[float],
   ) -> Optional[MotorsMovePlan]:
     target = cmd_pos.copy()
     axes = list(target.keys())
@@ -752,10 +761,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     skip_ax: Dict[Axis, bool] = {}
 
     # input validation / travel limits / done-wait logic
-    if cmd_vel_pct <= 0.0 or cmd_vel_pct > 100.0:
-      raise ValueError("CmdVel out of range")
-    if cmd_accel_pct <= 0.0 or cmd_accel_pct > 100.0:
-      raise ValueError("CmdAccel out of range")
+    for name, val in (
+      ("linear_speed", cmd_linear_speed), ("linear_acceleration", cmd_linear_acceleration),
+      ("rotary_speed", cmd_rotary_speed), ("rotary_acceleration", cmd_rotary_acceleration),
+    ):
+      if val is not None and val <= 0.0:
+        raise ValueError(f"{name} must be positive, got {val}")
 
     # Convert elbow cmd from position->angle for planning math
     if Axis.ELBOW in axes:
@@ -813,8 +824,16 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
       skip_ax[ax] = abs(dist[ax]) < 0.01
 
-      v[ax] = (cmd_vel_pct / 100.0) * self._cfg.axes[ax].max_vel
-      a[ax] = (cmd_accel_pct / 100.0) * self._cfg.axes[ax].max_accel
+      axis_max_v = self._cfg.axes[ax].max_vel
+      axis_max_a = self._cfg.axes[ax].max_accel
+      if ax in _LINEAR_AXES:
+        chosen_v = cmd_linear_speed if cmd_linear_speed is not None else axis_max_v
+        chosen_a = cmd_linear_acceleration if cmd_linear_acceleration is not None else axis_max_a
+      else:
+        chosen_v = cmd_rotary_speed if cmd_rotary_speed is not None else axis_max_v
+        chosen_a = cmd_rotary_acceleration if cmd_rotary_acceleration is not None else axis_max_a
+      v[ax] = min(chosen_v, axis_max_v)
+      a[ax] = min(chosen_a, axis_max_a)
 
       if not skip_ax[ax] and a[ax] > 0:
         accel_time[ax] = v[ax] / a[ax]
@@ -901,14 +920,18 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def motors_move_joint(
     self,
     cmd_pos: Dict[Axis, float],
-    cmd_vel_pct: float,
-    cmd_accel_pct: float,
+    cmd_linear_speed: Optional[float],
+    cmd_linear_acceleration: Optional[float],
+    cmd_rotary_speed: Optional[float],
+    cmd_rotary_acceleration: Optional[float],
   ) -> None:
     logger.debug("motors_move_joint cmd_pos=%s", cmd_pos)
     plan = await self.calculate_move_abs_all_axes(
       cmd_pos=cmd_pos,
-      cmd_vel_pct=cmd_vel_pct,
-      cmd_accel_pct=cmd_accel_pct,
+      cmd_linear_speed=cmd_linear_speed,
+      cmd_linear_acceleration=cmd_linear_acceleration,
+      cmd_rotary_speed=cmd_rotary_speed,
+      cmd_rotary_acceleration=cmd_rotary_acceleration,
     )
 
     if plan is None:  # if every axis is skipped, exit
@@ -944,13 +967,26 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   @dataclass
   class CartesianMoveParams(BackendParams):
-    vel_pct: float = 100.0
-    accel_pct: float = 100.0
+    """Per-axis speed/acceleration limits in physical units.
+
+    `linear_*` applies to Z (and rail/gripper if commanded); `rotary_*`
+    applies to shoulder/elbow/wrist. `None` falls back to the axis maximum
+    read from the drive at setup. Values above the per-axis max are clamped
+    silently.
+    """
+    linear_speed: Optional[float] = None         # mm/s
+    linear_acceleration: Optional[float] = None  # mm/s^2
+    rotary_speed: Optional[float] = None         # deg/s
+    rotary_acceleration: Optional[float] = None  # deg/s^2
 
   @dataclass
   class JointMoveParams(BackendParams):
-    vel_pct: float = 100.0
-    accel_pct: float = 100.0
+    """Per-axis speed/acceleration limits in physical units. Same shape as
+    `CartesianMoveParams` — see its docstring."""
+    linear_speed: Optional[float] = None
+    linear_acceleration: Optional[float] = None
+    rotary_speed: Optional[float] = None
+    rotary_acceleration: Optional[float] = None
 
   @dataclass
   class GripParams(BackendParams):
@@ -976,8 +1012,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     await self.motors_move_joint(
       {Axis.SERVO_GRIPPER: gripper_width},
-      cmd_vel_pct=100,
-      cmd_accel_pct=100,
+      cmd_linear_speed=None,
+      cmd_linear_acceleration=None,
+      cmd_rotary_speed=None,
+      cmd_rotary_acceleration=None,
     )
 
   async def close_gripper(
@@ -987,8 +1025,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       backend_params = KX2ArmBackend.GripParams()
     await self.motors_move_joint(
       {Axis.SERVO_GRIPPER: gripper_width},
-      cmd_vel_pct=100,
-      cmd_accel_pct=100,
+      cmd_linear_speed=None,
+      cmd_linear_acceleration=None,
+      cmd_rotary_speed=None,
+      cmd_rotary_acceleration=None,
     )
     if backend_params.check_plate_gripped:
       await self.check_plate_gripped()
@@ -1012,8 +1052,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     joint_pos = await self._cart_to_joints(pose)
     await self.motors_move_joint(
       cmd_pos=joint_pos,
-      cmd_vel_pct=backend_params.vel_pct,
-      cmd_accel_pct=backend_params.accel_pct,
+      cmd_linear_speed=backend_params.linear_speed,
+      cmd_linear_acceleration=backend_params.linear_acceleration,
+      cmd_rotary_speed=backend_params.rotary_speed,
+      cmd_rotary_acceleration=backend_params.rotary_acceleration,
     )
 
   async def move_to_location(
@@ -1057,8 +1099,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     cmd_pos = {Axis(int(k)): float(v) for k, v in position.items()}
     await self.motors_move_joint(
       cmd_pos=cmd_pos,
-      cmd_vel_pct=backend_params.vel_pct,
-      cmd_accel_pct=backend_params.accel_pct,
+      cmd_linear_speed=backend_params.linear_speed,
+      cmd_linear_acceleration=backend_params.linear_acceleration,
+      cmd_rotary_speed=backend_params.rotary_speed,
+      cmd_rotary_acceleration=backend_params.rotary_acceleration,
     )
 
   async def pick_up_at_joint_position(
@@ -1090,6 +1134,19 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       Axis.SERVO_GRIPPER: await self.motor_get_current_position(Axis.SERVO_GRIPPER),
     }
 
+  def motion_limits(self) -> "_MotionLimits":
+    """Per-axis (max_speed, max_acceleration) read from the drives at setup.
+
+    Linear axes (Z, rail, servo gripper) are mm/s, mm/s^2; rotary axes
+    (shoulder, elbow, wrist) are deg/s, deg/s^2. These are the upper bounds
+    `JointMoveParams` / `CartesianMoveParams` get clamped to. Returned as a
+    dict subclass that renders as a table in Jupyter and plain-text columns
+    in a terminal.
+    """
+    return _MotionLimits(
+      {Axis(k): (cfg.max_vel, cfg.max_accel) for k, cfg in self._cfg.axes.items()},
+    )
+
   async def start_freedrive_mode(
     self, free_axes: List[int], backend_params: Optional[BackendParams] = None
   ) -> None:
@@ -1104,6 +1161,30 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
 
 MOTION_AXES = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+
+# Axes that move in linear units (mm/s, mm/s^2). All others move in rotary
+# units (deg/s, deg/s^2). Used to pick the right speed/acceleration from
+# the linear/rotary split in JointMoveParams / CartesianMoveParams.
+_LINEAR_AXES = frozenset({Axis.Z, Axis.RAIL, Axis.SERVO_GRIPPER})
+
+
+class _MotionLimits(Dict[Axis, tuple]):
+  """Pretty-printing dict for `KX2ArmBackend.motion_limits()`. Dict access
+  still works (`limits[Axis.Z]` -> `(max_speed, max_accel)`); `__repr__`
+  formats it as an aligned ASCII table for both terminals and notebooks.
+  """
+
+  def __repr__(self) -> str:
+    rows = []
+    for ax, (v, a) in self.items():
+      unit = "mm" if ax in _LINEAR_AXES else "deg"
+      rows.append((ax.name, f"{v:.2f} {unit}/s", f"{a:.2f} {unit}/s^2"))
+    headers = ("axis", "max speed", "max acceleration")
+    widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(3)]
+    fmt = "  ".join(f"{{:<{w}}}" for w in widths)
+    out = [fmt.format(*headers), fmt.format(*("-" * w for w in widths))]
+    out.extend(fmt.format(*r) for r in rows)
+    return "\n".join(out)
 
 # UI[5..10] code -> digital input role.
 _DIGITAL_INPUT_NAMES: Dict[int, str] = {
