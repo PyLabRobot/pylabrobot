@@ -9999,6 +9999,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._iswap_parked = False
     return command_output
 
+  # -----------------------------------------------------------------------
+  # iSWAP: Rotation Drive (Joint 1)
+  # -----------------------------------------------------------------------
+
+  async def _iswap_rotation_drive_request_x_offset(self) -> float:
+    """Read the X-offset i.e. X-axis center <-> iSWAP rotation drive, in mm.
+
+    Stored in the master EEPROM as parameter `kg`.
+    Default: 34.0 mm, but typically tuned per machine during service calibration.
+    Required for deriving the iSWAP rotation drive's deck X coordinate from
+    the X-arm carriage center.
+    Cached on the backend as `_iswap_rotation_drive_x_offset_mm` during setup.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
+    return cast(int, resp["kg"]) / 10.0
+
+  # Vertical drop from the iSWAP rotation drive plane to the gripper finger
+  # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
+  # 13 mm above it.
+  iswap_rotation_drive_z_offset_above_finger_mm = 13.0
+
+  async def iswap_rotation_drive_request_position(self) -> Coordinate:
+    """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm.
+
+    Composition:
+      x = request_left_x_arm_position() - _iswap_rotation_drive_x_offset_mm
+      y = iswap_rotation_drive_request_y()
+      z = request_iswap_z_position() + iswap_rotation_drive_z_offset_above_finger_mm
+
+    The Z offset (13 mm) is the structural drop from the rotation drive
+    plane to the gripper finger plane. R0 RZ is Hamilton-calibrated to
+    the finger plane, so we add 13 mm to recover the rotation drive's
+    true Z.
+    """
+
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    
+    if self._iswap_rotation_drive_x_offset_mm is not None:
+      raise ValueError("Call setup() first")
+    
+    x_arm_center = await self.request_left_x_arm_position()
+    rotation_drive_y = await self.iswap_rotation_drive_request_y()
+    finger_plane_z = await self.request_iswap_z_position()
+
+    return Coordinate(
+      x=x_arm_center - self._iswap_rotation_drive_x_offset_mm,
+      y=rotation_drive_y,
+      z=finger_plane_z + self.iswap_rotation_drive_z_offset_above_finger_mm,
+    )
+
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Query the iSWAP rotation drive position (units: increments) from the firmware."""
     response = await self.send_command(module="R0", command="RW", fmt="rw######")
