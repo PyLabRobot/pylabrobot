@@ -8,16 +8,41 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import List
+from dataclasses import dataclass, is_dataclass
 
-from pylabrobot.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.messages import HoiParams, HoiParamsParser
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.hamilton.tcp.wire_types import (
+  I32,
+  U16,
+  Bool,
+  BoolArray,
+  I16Array,
+  I32Array,
+  U16Array,
+  U32Array,
+)
 from pylabrobot.resources import Tip
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 
 logger = logging.getLogger(__name__)
+
+
+class NimbusCommand(TCPCommand):
+  """Thin Nimbus command base for namespace clarity.
+
+  Dataclass subclasses with wire-annotated fields are auto-serialized via
+  :meth:`HoiParams.from_struct`. Non-dataclass commands (e.g. status queries
+  with no payload) inherit empty params from :class:`TCPCommand`.
+  """
+
+  protocol = HamiltonProtocol.OBJECT_DISCOVERY
+  interface_id = 1
+
+  def build_parameters(self) -> HoiParams:
+    return HoiParams.from_struct(self) if is_dataclass(self) else HoiParams()
 
 
 # ============================================================================
@@ -112,7 +137,7 @@ def _get_default_flow_rate(tip: Tip, is_aspirate: bool) -> float:
 # ============================================================================
 
 
-class LockDoor(HamiltonCommand):
+class LockDoor(NimbusCommand):
   """Lock door command (DoorLock at 1:1:268, interface_id=1, command_id=1)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -120,7 +145,7 @@ class LockDoor(HamiltonCommand):
   command_id = 1
 
 
-class UnlockDoor(HamiltonCommand):
+class UnlockDoor(NimbusCommand):
   """Unlock door command (DoorLock at 1:1:268, interface_id=1, command_id=2)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -128,7 +153,7 @@ class UnlockDoor(HamiltonCommand):
   command_id = 2
 
 
-class IsDoorLocked(HamiltonCommand):
+class IsDoorLocked(NimbusCommand):
   """Check if door is locked (DoorLock at 1:1:268, interface_id=1, command_id=3)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -144,7 +169,7 @@ class IsDoorLocked(HamiltonCommand):
     return {"locked": bool(locked)}
 
 
-class PreInitializeSmart(HamiltonCommand):
+class PreInitializeSmart(NimbusCommand):
   """Pre-initialize smart command (Pipette at 1:1:257, interface_id=1, command_id=32)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -152,55 +177,32 @@ class PreInitializeSmart(HamiltonCommand):
   command_id = 32
 
 
-class InitializeSmartRoll(HamiltonCommand):
-  """Initialize smart roll command (NimbusCore at 1:1:48896, interface_id=1, command_id=29)."""
+@dataclass
+class InitializeSmartRoll(NimbusCommand):
+  """Initialize smart roll command (NimbusCore, cmd=29).
+
+  Units:
+    - positions/distances: 0.01 mm
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 29
 
-  def __init__(
-    self,
-    dest: Address,
-    x_positions: List[int],
-    y_positions: List[int],
-    begin_tip_deposit_process: List[int],
-    end_tip_deposit_process: List[int],
-    z_position_at_end_of_a_command: List[int],
-    roll_distances: List[int],
-  ):
-    """Initialize InitializeSmartRoll command.
+  dest: Address
+  x_positions: I32Array
+  y_positions: I32Array
+  begin_tip_deposit_process: I32Array
+  end_tip_deposit_process: I32Array
+  z_position_at_end_of_a_command: I32Array
+  roll_distances: I32Array
 
-    Args:
-      dest: Destination address (NimbusCore)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      begin_tip_deposit_process: Z start positions in 0.01mm units
-      end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
-      roll_distances: Roll distances in 0.01mm units
-    """
-    super().__init__(dest)
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.begin_tip_deposit_process = begin_tip_deposit_process
-    self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
-    self.roll_distances = roll_distances
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32_array(self.begin_tip_deposit_process)
-      .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_position_at_end_of_a_command)
-      .i32_array(self.roll_distances)
-    )
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class IsInitialized(HamiltonCommand):
+
+class IsInitialized(NimbusCommand):
   """Check if instrument is initialized (NimbusCore at 1:1:48896, interface_id=1, command_id=14)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -216,7 +218,7 @@ class IsInitialized(HamiltonCommand):
     return {"initialized": bool(initialized)}
 
 
-class IsTipPresent(HamiltonCommand):
+class IsTipPresent(NimbusCommand):
   """Check tip presence (Pipette at 1:1:257, interface_id=1, command_id=16)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -233,7 +235,7 @@ class IsTipPresent(HamiltonCommand):
     return {"tip_present": tip_presence}
 
 
-class GetChannelConfiguration_1(HamiltonCommand):
+class GetChannelConfiguration_1(NimbusCommand):
   """Get channel configuration (NimbusCore root, interface_id=1, command_id=15)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -253,66 +255,51 @@ class GetChannelConfiguration_1(HamiltonCommand):
     return {"channels": channels, "channel_types": channel_types}
 
 
-class SetChannelConfiguration(HamiltonCommand):
-  """Set channel configuration (Pipette at 1:1:257, interface_id=1, command_id=67)."""
+@dataclass
+class SetChannelConfiguration(NimbusCommand):
+  """Set channel configuration (Pipette, cmd=67).
+
+  Field meanings:
+    - `channel`: 1-based physical channel index.
+    - `indexes`: firmware config slots (e.g. tip recognition / LLD monitors).
+    - `enables`: booleans matching `indexes` order.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 67
 
-  def __init__(
-    self,
-    dest: Address,
-    channel: int,
-    indexes: List[int],
-    enables: List[bool],
-  ):
-    """Initialize SetChannelConfiguration command.
+  dest: Address
+  channel: U16
+  indexes: I16Array
+  enables: BoolArray
 
-    Args:
-      dest: Destination address (Pipette)
-      channel: Channel number (1-based)
-      indexes: List of configuration indexes (e.g., [1, 3, 4])
-        1: Tip Recognition, 2: Aspirate and clot monitoring pLLD,
-        3: Aspirate monitoring with cLLD, 4: Clot monitoring with cLLD
-      enables: List of enable flags (e.g., [True, False, False, False])
-    """
-    super().__init__(dest)
-    self.channel = channel
-    self.indexes = indexes
-    self.enables = enables
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16(self.channel).i16_array(self.indexes).bool_array(self.enables)
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class GetChannelConfiguration(HamiltonCommand):
-  """Get channel configuration command (Pipette at 1:1:257, interface_id=1, command_id=66)."""
+
+@dataclass
+class GetChannelConfiguration(NimbusCommand):
+  """Get channel configuration command (Pipette, cmd=66).
+
+  Field meanings:
+    - `channel`: 1-based physical channel index.
+    - `indexes`: firmware config slots to query.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 66
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
 
-  def __init__(
-    self,
-    dest: Address,
-    channel: int,
-    indexes: List[int],
-  ):
-    """Initialize GetChannelConfiguration command.
+  dest: Address
+  channel: U16
+  indexes: I16Array
 
-    Args:
-      dest: Destination address (Pipette)
-      channel: Channel number (1-based)
-      indexes: List of configuration indexes (e.g., [2] for "Aspirate monitoring with cLLD")
-    """
-    super().__init__(dest)
-    self.channel = channel
-    self.indexes = indexes
+  def __post_init__(self):
+    super().__init__(self.dest)
 
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16(self.channel).i16_array(self.indexes)
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
@@ -325,7 +312,7 @@ class GetChannelConfiguration(HamiltonCommand):
     return {"enabled": enabled}
 
 
-class Park(HamiltonCommand):
+class Park(NimbusCommand):
   """Park command (NimbusCore at 1:1:48896, interface_id=1, command_id=3)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -333,537 +320,266 @@ class Park(HamiltonCommand):
   command_id = 3
 
 
-class PickupTips(HamiltonCommand):
-  """Pick up tips command (Pipette at 1:1:257, interface_id=1, command_id=4)."""
+@dataclass
+class PickupTips(NimbusCommand):
+  """Pick up tips command (Pipette, cmd=4).
+
+  Units:
+    - positions/heights: 0.01 mm
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+    - `tip_types`: per-channel Nimbus tip type IDs.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 4
 
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    begin_tip_pick_up_process: List[int],
-    end_tip_pick_up_process: List[int],
-    tip_types: List[int],
-  ):
-    """Initialize PickupTips command.
+  dest: Address
+  channels_involved: U16Array
+  x_positions: I32Array
+  y_positions: I32Array
+  minimum_traverse_height_at_beginning_of_a_command: I32
+  begin_tip_pick_up_process: I32Array
+  end_tip_pick_up_process: I32Array
+  tip_types: U16Array
 
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      begin_tip_pick_up_process: Z start positions in 0.01mm units
-      end_tip_pick_up_process: Z stop positions in 0.01mm units
-      tip_types: Tip type integers for each channel
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.begin_tip_pick_up_process = begin_tip_pick_up_process
-    self.end_tip_pick_up_process = end_tip_pick_up_process
-    self.tip_types = tip_types
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.begin_tip_pick_up_process)
-      .i32_array(self.end_tip_pick_up_process)
-      .u16_array(self.tip_types)
-    )
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class DropTips(HamiltonCommand):
-  """Drop tips command (Pipette at 1:1:257, interface_id=1, command_id=5)."""
+
+@dataclass
+class DropTips(NimbusCommand):
+  """Drop tips command (Pipette, cmd=5).
+
+  Units:
+    - positions/heights: 0.01 mm
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+    - `default_waste`: when true, firmware default waste position is used.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 5
 
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    begin_tip_deposit_process: List[int],
-    end_tip_deposit_process: List[int],
-    z_position_at_end_of_a_command: List[int],
-    default_waste: bool,
-  ):
-    """Initialize DropTips command.
+  dest: Address
+  channels_involved: U16Array
+  x_positions: I32Array
+  y_positions: I32Array
+  minimum_traverse_height_at_beginning_of_a_command: I32
+  begin_tip_deposit_process: I32Array
+  end_tip_deposit_process: I32Array
+  z_position_at_end_of_a_command: I32Array
+  default_waste: Bool
 
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      begin_tip_deposit_process: Z start positions in 0.01mm units
-      end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
-      default_waste: If True, drop to default waste (positions may be ignored)
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.begin_tip_deposit_process = begin_tip_deposit_process
-    self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
-    self.default_waste = default_waste
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.begin_tip_deposit_process)
-      .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_position_at_end_of_a_command)
-      .bool_value(self.default_waste)
-    )
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class DropTipsRoll(HamiltonCommand):
-  """Drop tips with roll command (Pipette at 1:1:257, interface_id=1, command_id=82)."""
+
+@dataclass
+class DropTipsRoll(NimbusCommand):
+  """Drop tips with roll command (Pipette, cmd=82).
+
+  Units:
+    - positions/heights/distances: 0.01 mm
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 82
 
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    begin_tip_deposit_process: List[int],
-    end_tip_deposit_process: List[int],
-    z_position_at_end_of_a_command: List[int],
-    roll_distances: List[int],
-  ):
-    """Initialize DropTipsRoll command.
+  dest: Address
+  channels_involved: U16Array
+  x_positions: I32Array
+  y_positions: I32Array
+  minimum_traverse_height_at_beginning_of_a_command: I32
+  begin_tip_deposit_process: I32Array
+  end_tip_deposit_process: I32Array
+  z_position_at_end_of_a_command: I32Array
+  roll_distances: I32Array
 
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      begin_tip_deposit_process: Z start positions in 0.01mm units
-      end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
-      roll_distances: Roll distance for each channel in 0.01mm units
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.begin_tip_deposit_process = begin_tip_deposit_process
-    self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
-    self.roll_distances = roll_distances
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.begin_tip_deposit_process)
-      .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_position_at_end_of_a_command)
-      .i32_array(self.roll_distances)
-    )
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class EnableADC(HamiltonCommand):
-  """Enable ADC command (Pipette at 1:1:257, interface_id=1, command_id=43)."""
+
+@dataclass
+class EnableADC(NimbusCommand):
+  """Enable ADC command (Pipette, cmd=43).
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 43
 
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-  ):
-    """Initialize EnableADC command.
+  dest: Address
+  channels_involved: U16Array
 
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16_array(self.channels_involved)
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class DisableADC(HamiltonCommand):
-  """Disable ADC command (Pipette at 1:1:257, interface_id=1, command_id=44)."""
+
+@dataclass
+class DisableADC(NimbusCommand):
+  """Disable ADC command (Pipette, cmd=44).
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 44
 
-  def __init__(
-    self,
-    dest: Address,
-    channels_involved: List[int],
-  ):
-    """Initialize DisableADC command.
+  dest: Address
+  channels_involved: U16Array
 
-    Args:
-      dest: Destination address (Pipette)
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-    """
-    super().__init__(dest)
-    self.channels_involved = channels_involved
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams().u16_array(self.channels_involved)
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class Aspirate(HamiltonCommand):
-  """Aspirate command (Pipette at 1:1:257, interface_id=1, command_id=6)."""
+
+@dataclass
+class Aspirate(NimbusCommand):
+  """Aspirate command (Pipette, cmd=6).
+
+  Units:
+    - linear positions/heights: 0.01 mm
+    - volumes: 0.1 uL
+    - aspiration/dispense/mix flow parameters: 0.1 uL/s (piston motion)
+    - swap_speed: 0.01 mm/s per wire unit (leave-liquid Z speed — not uL/s)
+    - settling time: 0.1 s
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+    - `aspirate_type`: firmware aspirate mode per channel.
+    - `lld_mode`: 0=off, 1=cLLD, 2=pLLD, 3=dual.
+    - `tadm_enabled`: enable Total Aspiration/Dispense Monitoring.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 6
 
-  def __init__(
-    self,
-    dest: Address,
-    aspirate_type: List[int],
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    lld_search_height: List[int],
-    liquid_height: List[int],
-    immersion_depth: List[int],
-    surface_following_distance: List[int],
-    minimum_height: List[int],
-    clot_detection_height: List[int],
-    min_z_endpos: int,
-    swap_speed: List[int],
-    blow_out_air_volume: List[int],
-    pre_wetting_volume: List[int],
-    aspirate_volume: List[int],
-    transport_air_volume: List[int],
-    aspiration_speed: List[int],
-    settling_time: List[int],
-    mix_volume: List[int],
-    mix_cycles: List[int],
-    mix_position_from_liquid_surface: List[int],
-    mix_surface_following_distance: List[int],
-    mix_speed: List[int],
-    tube_section_height: List[int],
-    tube_section_ratio: List[int],
-    lld_mode: List[int],
-    gamma_lld_sensitivity: List[int],
-    dp_lld_sensitivity: List[int],
-    lld_height_difference: List[int],
-    tadm_enabled: bool,
-    limit_curve_index: List[int],
-    recording_mode: int,
-  ):
-    """Initialize Aspirate command.
+  dest: Address
+  # Channel selectors/modes.
+  aspirate_type: I16Array
+  channels_involved: U16Array
+  # Motion and level tracking.
+  x_positions: I32Array
+  y_positions: I32Array
+  minimum_traverse_height_at_beginning_of_a_command: I32
+  lld_search_height: I32Array
+  liquid_height: I32Array
+  immersion_depth: I32Array
+  surface_following_distance: I32Array
+  minimum_height: I32Array
+  clot_detection_height: I32Array
+  min_z_endpos: I32
+  # Volumetric profile.
+  swap_speed: U32Array
+  blow_out_air_volume: U32Array
+  pre_wetting_volume: U32Array
+  aspirate_volume: U32Array
+  transport_air_volume: U32Array
+  aspiration_speed: U32Array
+  settling_time: U32Array
+  # Mixing profile.
+  mix_volume: U32Array
+  mix_cycles: U32Array
+  mix_position_from_liquid_surface: I32Array
+  mix_surface_following_distance: I32Array
+  mix_speed: U32Array
+  # Advanced monitoring/firmware controls.
+  tube_section_height: I32Array
+  tube_section_ratio: I32Array
+  lld_mode: I16Array
+  gamma_lld_sensitivity: I16Array
+  dp_lld_sensitivity: I16Array
+  lld_height_difference: I32Array
+  tadm_enabled: Bool
+  limit_curve_index: U32Array
+  recording_mode: U16
 
-    Args:
-      dest: Destination address (Pipette)
-      aspirate_type: Aspirate type for each channel (List[i16])
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      lld_search_height: LLD search height for each channel in 0.01mm units
-      liquid_height: Liquid height for each channel in 0.01mm units
-      immersion_depth: Immersion depth for each channel in 0.01mm units
-      surface_following_distance: Surface following distance for each channel in 0.01mm units
-      minimum_height: Minimum height for each channel in 0.01mm units
-      clot_detection_height: Clot detection height for each channel in 0.01mm units
-      min_z_endpos: Minimum Z end position in 0.01mm units
-      swap_speed: Swap speed (on leaving liquid) for each channel in 0.1uL/s units
-      blow_out_air_volume: Blowout volume for each channel in 0.1uL units
-      pre_wetting_volume: Pre-wetting volume for each channel in 0.1uL units
-      aspirate_volume: Aspirate volume for each channel in 0.1uL units
-      transport_air_volume: Transport air volume for each channel in 0.1uL units
-      aspiration_speed: Aspirate speed for each channel in 0.1uL/s units
-      settling_time: Settling time for each channel in 0.1s units
-      mix_volume: Mix volume for each channel in 0.1uL units
-      mix_cycles: Mix cycles for each channel
-      mix_position_from_liquid_surface: Mix position from liquid surface in 0.01mm units
-      mix_surface_following_distance: Mix follow distance in 0.01mm units
-      mix_speed: Mix speed for each channel in 0.1uL/s units
-      tube_section_height: Tube section height for each channel in 0.01mm units
-      tube_section_ratio: Tube section ratio for each channel
-      lld_mode: LLD mode for each channel (List[i16])
-      gamma_lld_sensitivity: Gamma LLD sensitivity for each channel (List[i16])
-      dp_lld_sensitivity: DP LLD sensitivity for each channel (List[i16])
-      lld_height_difference: LLD height difference for each channel in 0.01mm units
-      tadm_enabled: TADM enabled flag
-      limit_curve_index: Limit curve index for each channel
-      recording_mode: Recording mode (u16)
-    """
-    super().__init__(dest)
-    self.aspirate_type = aspirate_type
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.lld_search_height = lld_search_height
-    self.liquid_height = liquid_height
-    self.immersion_depth = immersion_depth
-    self.surface_following_distance = surface_following_distance
-    self.minimum_height = minimum_height
-    self.clot_detection_height = clot_detection_height
-    self.min_z_endpos = min_z_endpos
-    self.swap_speed = swap_speed
-    self.blow_out_air_volume = blow_out_air_volume
-    self.pre_wetting_volume = pre_wetting_volume
-    self.aspirate_volume = aspirate_volume
-    self.transport_air_volume = transport_air_volume
-    self.aspiration_speed = aspiration_speed
-    self.settling_time = settling_time
-    self.mix_volume = mix_volume
-    self.mix_cycles = mix_cycles
-    self.mix_position_from_liquid_surface = mix_position_from_liquid_surface
-    self.mix_surface_following_distance = mix_surface_following_distance
-    self.mix_speed = mix_speed
-    self.tube_section_height = tube_section_height
-    self.tube_section_ratio = tube_section_ratio
-    self.lld_mode = lld_mode
-    self.gamma_lld_sensitivity = gamma_lld_sensitivity
-    self.dp_lld_sensitivity = dp_lld_sensitivity
-    self.lld_height_difference = lld_height_difference
-    self.tadm_enabled = tadm_enabled
-    self.limit_curve_index = limit_curve_index
-    self.recording_mode = recording_mode
-
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .i16_array(self.aspirate_type)
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.lld_search_height)
-      .i32_array(self.liquid_height)
-      .i32_array(self.immersion_depth)
-      .i32_array(self.surface_following_distance)
-      .i32_array(self.minimum_height)
-      .i32_array(self.clot_detection_height)
-      .i32(self.min_z_endpos)
-      .u32_array(self.swap_speed)
-      .u32_array(self.blow_out_air_volume)
-      .u32_array(self.pre_wetting_volume)
-      .u32_array(self.aspirate_volume)
-      .u32_array(self.transport_air_volume)
-      .u32_array(self.aspiration_speed)
-      .u32_array(self.settling_time)
-      .u32_array(self.mix_volume)
-      .u32_array(self.mix_cycles)
-      .i32_array(self.mix_position_from_liquid_surface)
-      .i32_array(self.mix_surface_following_distance)
-      .u32_array(self.mix_speed)
-      .i32_array(self.tube_section_height)
-      .i32_array(self.tube_section_ratio)
-      .i16_array(self.lld_mode)
-      .i16_array(self.gamma_lld_sensitivity)
-      .i16_array(self.dp_lld_sensitivity)
-      .i32_array(self.lld_height_difference)
-      .bool_value(self.tadm_enabled)
-      .u32_array(self.limit_curve_index)
-      .u16(self.recording_mode)
-    )
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
-class Dispense(HamiltonCommand):
-  """Dispense command (Pipette at 1:1:257, interface_id=1, command_id=7)."""
+
+@dataclass
+class Dispense(NimbusCommand):
+  """Dispense command (Pipette, cmd=7).
+
+  Units:
+    - linear positions/heights: 0.01 mm
+    - volumes: 0.1 uL
+    - dispense/mix/cut-off flow parameters: 0.1 uL/s where applicable
+    - swap_speed: 0.01 mm/s per wire unit (leave-liquid Z speed — not uL/s)
+    - settling time: 0.1 s
+
+  Field meanings:
+    - `channels_involved`: 1=active, 0=inactive.
+    - `dispense_type`: firmware dispense mode per channel.
+    - `lld_mode`: 0=off, 1=cLLD, 2=pLLD, 3=dual.
+    - `tadm_enabled`: enable Total Aspiration/Dispense Monitoring.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 7
 
-  def __init__(
-    self,
-    dest: Address,
-    dispense_type: List[int],
-    channels_involved: List[int],
-    x_positions: List[int],
-    y_positions: List[int],
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    lld_search_height: List[int],
-    liquid_height: List[int],
-    immersion_depth: List[int],
-    surface_following_distance: List[int],
-    minimum_height: List[int],
-    min_z_endpos: int,
-    swap_speed: List[int],
-    transport_air_volume: List[int],
-    dispense_volume: List[int],
-    stop_back_volume: List[int],
-    blow_out_air_volume: List[int],
-    dispense_speed: List[int],
-    cut_off_speed: List[int],
-    settling_time: List[int],
-    mix_volume: List[int],
-    mix_cycles: List[int],
-    mix_position_from_liquid_surface: List[int],
-    mix_surface_following_distance: List[int],
-    mix_speed: List[int],
-    side_touch_off_distance: int,
-    dispense_offset: List[int],
-    tube_section_height: List[int],
-    tube_section_ratio: List[int],
-    lld_mode: List[int],
-    gamma_lld_sensitivity: List[int],
-    tadm_enabled: bool,
-    limit_curve_index: List[int],
-    recording_mode: int,
-  ):
-    """Initialize Dispense command.
+  dest: Address
+  # Channel selectors/modes.
+  dispense_type: I16Array
+  channels_involved: U16Array
+  # Motion and level tracking.
+  x_positions: I32Array
+  y_positions: I32Array
+  minimum_traverse_height_at_beginning_of_a_command: I32
+  lld_search_height: I32Array
+  liquid_height: I32Array
+  immersion_depth: I32Array
+  surface_following_distance: I32Array
+  minimum_height: I32Array
+  min_z_endpos: I32
+  # Volumetric profile.
+  swap_speed: U32Array
+  transport_air_volume: U32Array
+  dispense_volume: U32Array
+  stop_back_volume: U32Array
+  blow_out_air_volume: U32Array
+  dispense_speed: U32Array
+  cut_off_speed: U32Array
+  settling_time: U32Array
+  # Mixing profile.
+  mix_volume: U32Array
+  mix_cycles: U32Array
+  mix_position_from_liquid_surface: I32Array
+  mix_surface_following_distance: I32Array
+  mix_speed: U32Array
+  # Dispense-specific offsets and advanced controls.
+  side_touch_off_distance: I32
+  dispense_offset: I32Array
+  tube_section_height: I32Array
+  tube_section_ratio: I32Array
+  lld_mode: I16Array
+  gamma_lld_sensitivity: I16Array
+  tadm_enabled: Bool
+  limit_curve_index: U32Array
+  recording_mode: U16
 
-    Args:
-      dest: Destination address (Pipette)
-      dispense_type: Dispense type for each channel (List[i16])
-      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
-      x_positions: X positions in 0.01mm units
-      y_positions: Y positions in 0.01mm units
-      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
-      lld_search_height: LLD search height for each channel in 0.01mm units
-      liquid_height: Liquid height for each channel in 0.01mm units
-      immersion_depth: Immersion depth for each channel in 0.01mm units
-      surface_following_distance: Surface following distance for each channel in 0.01mm units
-      minimum_height: Minimum height for each channel in 0.01mm units
-      min_z_endpos: Minimum Z end position in 0.01mm units
-      swap_speed: Swap speed (on leaving liquid) for each channel in 0.1uL/s units
-      transport_air_volume: Transport air volume for each channel in 0.1uL units
-      dispense_volume: Dispense volume for each channel in 0.1uL units
-      stop_back_volume: Stop back volume for each channel in 0.1uL units
-      blow_out_air_volume: Blowout volume for each channel in 0.1uL units
-      dispense_speed: Dispense speed for each channel in 0.1uL/s units
-      cut_off_speed: Cut off speed for each channel in 0.1uL/s units
-      settling_time: Settling time for each channel in 0.1s units
-      mix_volume: Mix volume for each channel in 0.1uL units
-      mix_cycles: Mix cycles for each channel
-      mix_position_from_liquid_surface: Mix position from liquid surface in 0.01mm units
-      mix_surface_following_distance: Mix follow distance in 0.01mm units
-      mix_speed: Mix speed for each channel in 0.1uL/s units
-      side_touch_off_distance: Side touch off distance in 0.01mm units
-      dispense_offset: Dispense offset for each channel in 0.01mm units
-      tube_section_height: Tube section height for each channel in 0.01mm units
-      tube_section_ratio: Tube section ratio for each channel
-      lld_mode: LLD mode for each channel (List[i16])
-      gamma_lld_sensitivity: Gamma LLD sensitivity for each channel (List[i16])
-      tadm_enabled: TADM enabled flag
-      limit_curve_index: Limit curve index for each channel
-      recording_mode: Recording mode (u16)
-    """
-    super().__init__(dest)
-    self.dispense_type = dispense_type
-    self.channels_involved = channels_involved
-    self.x_positions = x_positions
-    self.y_positions = y_positions
-    self.minimum_traverse_height_at_beginning_of_a_command = (
-      minimum_traverse_height_at_beginning_of_a_command
-    )
-    self.lld_search_height = lld_search_height
-    self.liquid_height = liquid_height
-    self.immersion_depth = immersion_depth
-    self.surface_following_distance = surface_following_distance
-    self.minimum_height = minimum_height
-    self.min_z_endpos = min_z_endpos
-    self.swap_speed = swap_speed
-    self.transport_air_volume = transport_air_volume
-    self.dispense_volume = dispense_volume
-    self.stop_back_volume = stop_back_volume
-    self.blow_out_air_volume = blow_out_air_volume
-    self.dispense_speed = dispense_speed
-    self.cut_off_speed = cut_off_speed
-    self.settling_time = settling_time
-    self.mix_volume = mix_volume
-    self.mix_cycles = mix_cycles
-    self.mix_position_from_liquid_surface = mix_position_from_liquid_surface
-    self.mix_surface_following_distance = mix_surface_following_distance
-    self.mix_speed = mix_speed
-    self.side_touch_off_distance = side_touch_off_distance
-    self.dispense_offset = dispense_offset
-    self.tube_section_height = tube_section_height
-    self.tube_section_ratio = tube_section_ratio
-    self.lld_mode = lld_mode
-    self.gamma_lld_sensitivity = gamma_lld_sensitivity
-    self.tadm_enabled = tadm_enabled
-    self.limit_curve_index = limit_curve_index
-    self.recording_mode = recording_mode
+  def __post_init__(self):
+    super().__init__(self.dest)
 
-  def build_parameters(self) -> HoiParams:
-    return (
-      HoiParams()
-      .i16_array(self.dispense_type)
-      .u16_array(self.channels_involved)
-      .i32_array(self.x_positions)
-      .i32_array(self.y_positions)
-      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
-      .i32_array(self.lld_search_height)
-      .i32_array(self.liquid_height)
-      .i32_array(self.immersion_depth)
-      .i32_array(self.surface_following_distance)
-      .i32_array(self.minimum_height)
-      .i32(self.min_z_endpos)
-      .u32_array(self.swap_speed)
-      .u32_array(self.transport_air_volume)
-      .u32_array(self.dispense_volume)
-      .u32_array(self.stop_back_volume)
-      .u32_array(self.blow_out_air_volume)
-      .u32_array(self.dispense_speed)
-      .u32_array(self.cut_off_speed)
-      .u32_array(self.settling_time)
-      .u32_array(self.mix_volume)
-      .u32_array(self.mix_cycles)
-      .i32_array(self.mix_position_from_liquid_surface)
-      .i32_array(self.mix_surface_following_distance)
-      .u32_array(self.mix_speed)
-      .i32(self.side_touch_off_distance)
-      .i32_array(self.dispense_offset)
-      .i32_array(self.tube_section_height)
-      .i32_array(self.tube_section_ratio)
-      .i16_array(self.lld_mode)
-      .i16_array(self.gamma_lld_sensitivity)
-      .bool_value(self.tadm_enabled)
-      .u32_array(self.limit_curve_index)
-      .u16(self.recording_mode)
-    )

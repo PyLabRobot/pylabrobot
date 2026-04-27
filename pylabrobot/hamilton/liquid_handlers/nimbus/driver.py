@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
+from dataclasses import dataclass
+from typing import Dict, Optional, Set, Tuple
 
-from pylabrobot.hamilton.liquid_handlers.tcp_base import HamiltonTCPHandler
-from pylabrobot.hamilton.tcp.introspection import HamiltonIntrospection
+from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
+from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
+from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
@@ -20,23 +23,59 @@ from .pip_backend import NimbusPIPBackend
 logger = logging.getLogger(__name__)
 
 
-class NimbusDriver(HamiltonTCPHandler):
+def nimbus_interface_specs_for_root(root_name: str) -> Dict[str, InterfacePathSpec]:
+  """Dot-paths under the instrument root (same mechanism as :class:`PrepDriver`)."""
+  return {
+    "nimbus_core": InterfacePathSpec(root_name, True, True),
+    "pipette": InterfacePathSpec(f"{root_name}.Pipette", True, True),
+    "door_lock": InterfacePathSpec(f"{root_name}.DoorLock", False, False),
+  }
+
+
+@dataclass
+class NimbusSetupParams(BackendParams):
+  require_door_lock: bool = False
+
+
+class NimbusDriver(HamiltonTCPClient):
   """Driver for Hamilton Nimbus liquid handlers.
 
   Handles TCP communication, hardware discovery via introspection, and
   manages the PIP backend and door subsystem.
   """
 
+  _REQUIRED_METHODS_CORE: Set[int] = {
+    3,
+    14,
+    15,
+    29,
+  }  # Park, IsInitialized, GetChannelConfig_1, InitializeSmartRoll
+  _REQUIRED_METHODS_PIPETTE: Set[int] = {
+    4,  # PickupTips
+    5,  # DropTips
+    6,  # Aspirate
+    7,  # Dispense
+    16,  # IsTipPresent
+    43,  # EnableADC
+    44,  # DisableADC
+    66,  # GetChannelConfiguration
+    67,  # SetChannelConfiguration
+    82,  # DropTipsRoll
+  }
+
   def __init__(
     self,
     deck: NimbusDeck,
     host: str,
     port: int = 2000,
-    read_timeout: float = 30.0,
+    read_timeout: float = 300.0,
     write_timeout: float = 30.0,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
+    connection_timeout: int = 600,
+    error_codes: Optional[Dict[Tuple[int, int, int, int, int], str]] = None,
   ):
+    merged_error_codes = {**NIMBUS_ERROR_CODES, **(error_codes or {})}
     super().__init__(
       host=host,
       port=port,
@@ -44,6 +83,8 @@ class NimbusDriver(HamiltonTCPHandler):
       write_timeout=write_timeout,
       auto_reconnect=auto_reconnect,
       max_reconnect_attempts=max_reconnect_attempts,
+      connection_timeout=connection_timeout,
+      error_codes=merged_error_codes,
     )
 
     self.deck = deck
@@ -55,28 +96,54 @@ class NimbusDriver(HamiltonTCPHandler):
   @property
   def nimbus_core_address(self) -> Address:
     if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
+      raise RuntimeError("Nimbus root address not discovered. Call setup() first.")
     return self._nimbus_core_address
 
-  async def setup(self):
-    """Initialize connection, discover hardware, and create backends."""
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    """Initialize connection, discover hardware, and create backends.
+
+    Args:
+      backend_params: Optional :class:`NimbusSetupParams`.
+    """
+    if not isinstance(backend_params, NimbusSetupParams):
+      backend_params = NimbusSetupParams()
+
     assert self.deck is not None, "NimbusDriver requires a deck before setup()"
     # TCP connection + Protocol 7 + Protocol 3 + root discovery
     await super().setup()
 
-    # Discover instrument objects via introspection
-    addresses = await self._discover_instrument_objects()
+    root_objects = self.get_root_object_addresses()
+    if not root_objects:
+      raise RuntimeError("No root objects discovered during setup.")
 
-    pipette_address = addresses.get("Pipette")
-    door_address = addresses.get("DoorLock")
+    root_info = await self.introspection.get_object(root_objects[0])
+    if "nimbus" not in root_info.name.lower():
+      raise RuntimeError(
+        f"Expected a Nimbus root object, but discovered '{root_info.name}'. Wrong instrument?"
+      )
 
-    if pipette_address is None:
-      raise RuntimeError("Pipette object not discovered. Cannot proceed with setup.")
-    if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore root object not discovered. Cannot proceed with setup.")
+    specs = nimbus_interface_specs_for_root(root_info.name)
+    resolved = await resolve_interface_path_specs(self, specs, instrument_label="Nimbus")
+    nimbus_core_address = resolved.get("nimbus_core")
+    pipette_address = resolved.get("pipette")
+    door_address = resolved.get("door_lock")
+    if nimbus_core_address is None or pipette_address is None:
+      raise RuntimeError("internal: missing required Nimbus interfaces")
+    self._nimbus_core_address = nimbus_core_address
+
+    await self._assert_required_methods(
+      nimbus_core_address,
+      object_name=root_info.name,
+      required_method_ids=self._REQUIRED_METHODS_CORE,
+    )
+    await self._assert_required_methods(
+      pipette_address,
+      object_name="Pipette",
+      required_method_ids=self._REQUIRED_METHODS_PIPETTE,
+    )
 
     # Query channel configuration
-    config = await self.send_command(GetChannelConfiguration_1(self._nimbus_core_address))
+    config = await self.send_command(GetChannelConfiguration_1(nimbus_core_address))
     assert config is not None, "GetChannelConfiguration_1 command returned None"
     num_channels = config["channels"]
     logger.info(f"Channel configuration: {num_channels} channels")
@@ -88,6 +155,8 @@ class NimbusDriver(HamiltonTCPHandler):
 
     if door_address is not None:
       self.door = NimbusDoor(driver=self, address=door_address)
+    elif backend_params.require_door_lock:
+      raise RuntimeError("DoorLock is required but not available on this instrument.")
 
     # Initialize subsystems
     if self.door is not None:
@@ -100,42 +169,21 @@ class NimbusDriver(HamiltonTCPHandler):
     await super().stop()
     self.door = None
 
-  async def _discover_instrument_objects(self) -> Dict[str, Address]:
-    """Discover instrument-specific objects using introspection.
-
-    Returns:
-      Dictionary mapping object names (e.g. "Pipette", "DoorLock") to their addresses.
-    """
-    introspection = HamiltonIntrospection(self)
-    addresses: Dict[str, Address] = {}
-
-    root_objects = self._discovered_objects.get("root", [])
-    if not root_objects:
-      logger.warning("No root objects discovered")
-      return addresses
-
-    nimbus_core_addr = root_objects[0]
-    self._nimbus_core_address = nimbus_core_addr
-
-    try:
-      core_info = await introspection.get_object(nimbus_core_addr)
-
-      for i in range(core_info.subobject_count):
-        try:
-          sub_addr = await introspection.get_subobject_address(nimbus_core_addr, i)
-          sub_info = await introspection.get_object(sub_addr)
-          addresses[sub_info.name] = sub_addr
-          logger.info(f"Found {sub_info.name} at {sub_addr}")
-        except Exception as e:
-          logger.debug(f"Failed to get subobject {i}: {e}")
-
-    except Exception as e:
-      logger.warning(f"Failed to discover instrument objects: {e}")
-
-    if "DoorLock" not in addresses:
-      logger.info("DoorLock not available on this instrument")
-
-    return addresses
+  async def _assert_required_methods(
+    self,
+    address: Address,
+    *,
+    object_name: str,
+    required_method_ids: Set[int],
+  ) -> None:
+    methods = await self.introspection.methods_for_interface(address, interface_id=1)
+    available = {m.method_id for m in methods}
+    missing = sorted(required_method_ids - available)
+    if missing:
+      raise RuntimeError(
+        f"{object_name} is missing required interface-1 methods: {missing}. "
+        "Firmware is incompatible with Nimbus v1 backend requirements."
+      )
 
   async def park(self):
     """Park the instrument."""
