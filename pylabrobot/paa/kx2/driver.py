@@ -766,7 +766,11 @@ class KX2Driver(Driver):
     """
     if state:
       self.EmcyMoveErrorReceived = False
-      max_attempts = 5
+      # Drives sometimes need several seconds after a fault / power-rail
+      # bounce before they accept enable. Spread retries over ~10s rather
+      # than blasting 5 in <1s.
+      max_attempts = 20
+      inter_attempt_sleep_s = 0.5
       for attempt in range(1, max_attempts + 1):
         if not use_ds402:
           await self.write(node_id, "MO", 0, 1)
@@ -784,6 +788,7 @@ class KX2Driver(Driver):
           "motor_enable attempt %d/%d failed for node %d (MO=%s); retrying",
           attempt, max_attempts, node_id, left,
         )
+        await asyncio.sleep(inter_attempt_sleep_s)
       else:
         raise CanError(f"Motor failed to enable (node_id = {node_id}) after {max_attempts} attempts")
     else:
@@ -854,37 +859,6 @@ class KX2Driver(Driver):
     for i, nid in enumerate(node_ids):
       last = i == (len(node_ids) - 1)
       await self._control_word_set(int(nid), 47 + 0x10 + relative_bit, sync=last)
-
-  async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
-    await self._pvt_select_mode(False)
-
-    print(f"[MOVE PLAN] move_time={plan.move_time:.3f}s, {len(plan.moves)} axes:")
-    for move in plan.moves:
-      print(
-        f"  node={move.node_id} pos={move.position} vel={move.velocity} "
-        f"acc={move.acceleration} dir={move.direction.name}"
-      )
-
-    for move in plan.moves:
-      nid = int(move.node_id)
-      await self._motor_set_move_direction(nid, move.direction)
-      # 0x607A = Target Position (24698 decimal)
-      await self._can_sdo_download_elmo_object(
-        nid, 24698, 0, int(move.position), ElmoObjectDataType.INTEGER32,
-      )
-      # 0x6081 = Profile Velocity (24705 decimal)
-      await self._can_sdo_download_elmo_object(
-        nid, 24705, 0, int(move.velocity), ElmoObjectDataType.UNSIGNED32,
-      )
-      acc = max(int(move.acceleration), 100)
-      # 0x6083 = Profile Acceleration (24707 decimal)
-      await self._can_sdo_download_elmo_object(nid, 24707, 0, acc, ElmoObjectDataType.UNSIGNED32)
-      # 0x6084 = Profile Deceleration (24708 decimal)
-      await self._can_sdo_download_elmo_object(nid, 24708, 0, acc, ElmoObjectDataType.UNSIGNED32)
-
-    node_ids = [move.node_id for move in plan.moves]
-    await self._motors_move_start(node_ids)
-    await self.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
   async def user_program_run(
     self,
