@@ -134,3 +134,73 @@ STAR Liquid Handler
 
 .. autoclass:: pylabrobot.hamilton.liquid_handlers.star.iswap.iSWAPBackend.MoveToLocationParams
    :members:
+
+
+Vantage Liquid Handler
+----------------------
+
+.. currentmodule:: pylabrobot.hamilton.liquid_handlers.vantage
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    Vantage
+
+.. currentmodule:: pylabrobot.hamilton.liquid_handlers.vantage.pip_backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    VantagePIPBackend
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.pip_backend.VantagePIPBackend.PickUpTipsParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.pip_backend.VantagePIPBackend.DropTipsParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.pip_backend.VantagePIPBackend.AspirateParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.pip_backend.VantagePIPBackend.DispenseParams
+   :members:
+
+.. currentmodule:: pylabrobot.hamilton.liquid_handlers.vantage.head96_backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    VantageHead96Backend
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.head96_backend.VantageHead96Backend.PickUpTipsParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.head96_backend.VantageHead96Backend.DropTipsParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.head96_backend.VantageHead96Backend.AspirateParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.head96_backend.VantageHead96Backend.DispenseParams
+   :members:
+
+.. currentmodule:: pylabrobot.hamilton.liquid_handlers.vantage.ipg
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    IPGBackend
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.ipg.IPGBackend.PickUpParams
+   :members:
+
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.vantage.ipg.IPGBackend.DropParams
+   :members:
