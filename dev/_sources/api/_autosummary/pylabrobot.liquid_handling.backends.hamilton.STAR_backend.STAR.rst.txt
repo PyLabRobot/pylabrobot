@@ -33,6 +33,7 @@
       ~STAR.head
       ~STAR.head96
       ~STAR.head96_installed
+      ~STAR.iswap_gripper_drive_mm_per_increment
       ~STAR.iswap_installed
       ~STAR.iswap_parked
       ~STAR.iswap_traversal_height
@@ -148,6 +149,9 @@
       ~STAR.iswap_close_gripper
       ~STAR.iswap_dangerous_release_break
       ~STAR.iswap_get_plate
+      ~STAR.iswap_gripper_drive_increment_to_mm
+      ~STAR.iswap_gripper_drive_mm_to_increment
+      ~STAR.iswap_gripper_request_width
       ~STAR.iswap_initialize_z_axis
       ~STAR.iswap_minimum_traversal_height
       ~STAR.iswap_move_picked_up_resource
