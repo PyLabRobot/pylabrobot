@@ -10061,7 +10061,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Composition:
       x = request_left_x_arm_position() - _iswap_rotation_drive_x_offset_mm
       y = iswap_rotation_drive_request_y()
-      z = request_iswap_z_position() + iswap_rotation_drive_z_offset_above_finger_mm
+      z = (await request_iswap_position()).z + iswap_rotation_drive_z_offset_above_finger_mm
 
     The Z offset (13 mm) is the structural drop from the rotation drive
     plane to the gripper finger plane. R0 RZ is Hamilton-calibrated to
