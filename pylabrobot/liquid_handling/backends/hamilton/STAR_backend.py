@@ -9739,6 +9739,33 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       allow_splitting=True,
     )
 
+  # -----------------------------------------------------------------------
+  # iSWAP: Gripper
+  # -----------------------------------------------------------------------
+
+  iswap_gripper_drive_mm_per_increment = 0.00554337
+
+  @staticmethod
+  def iswap_gripper_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STARBackend.iswap_gripper_drive_mm_per_increment, 2)
+
+  @staticmethod
+  def iswap_gripper_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.iswap_gripper_drive_mm_per_increment)
+
+  async def iswap_gripper_request_width(self) -> float:
+    """Request the current iSWAP gripper jaw opening width, in mm.
+
+    RG is always available and reads the raw drive encoder.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    resp = await self.send_command(module="R0", command="RG", fmt="rg##### (n)")
+    actual_increments = resp["rg"][1]  # rg returns [target, actual]; we want actual
+
+    return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
+
   async def open_not_initialized_gripper(self):
     return await self.send_command(module="C0", command="GI")
 
