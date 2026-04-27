@@ -29,6 +29,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  VWR_1_trough_195000uL_Ub,
   nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
@@ -56,7 +57,9 @@ from .standard import (
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   ResourcePickup,
@@ -626,6 +629,40 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         wells=self.plate.get_all_items(),
         offset=Coordinate.zero(),
         tips=[self.lh.head96[i].get_tip() for i in range(96)],
+        volume=10,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
+    )
+
+  async def test_aspirate_dispense96_vwr_trough(self):
+    trough = VWR_1_trough_195000uL_Ub(name="vwr_trough")
+    self.deck.assign_child_resource(trough, location=Coordinate(300, 100, 0))
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(trough, volume=10)
+    await self.lh.dispense96(trough, volume=10)
+
+    tips = [self.lh.head96[i].get_tip() for i in range(96)]
+    self.backend.aspirate96.assert_called_with(
+      aspiration=MultiHeadAspirationContainer(
+        container=trough,
+        offset=Coordinate.zero(),
+        tips=tips,
+        volume=10,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
+    )
+    self.backend.dispense96.assert_called_with(
+      dispense=MultiHeadDispenseContainer(
+        container=trough,
+        offset=Coordinate.zero(),
+        tips=tips,
         volume=10,
         flow_rate=None,
         liquid_height=None,
