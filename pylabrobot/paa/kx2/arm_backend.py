@@ -384,25 +384,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     )
 
   async def servo_gripper_close(self, closed_position: int = 0, check_plate_gripped=True) -> None:
-    await self.motors_move_joint(
-      {Axis.SERVO_GRIPPER: closed_position},
-      cmd_linear_speed=None,
-      cmd_linear_acceleration=None,
-      cmd_rotary_speed=None,
-      cmd_rotary_acceleration=None,
-    )
+    await self.motors_move_joint({Axis.SERVO_GRIPPER: closed_position})
 
     if check_plate_gripped:
       await self.check_plate_gripped()
 
   async def servo_gripper_open(self, open_position: float) -> None:
-    await self.motors_move_joint(
-      {Axis.SERVO_GRIPPER: open_position},
-      cmd_linear_speed=None,
-      cmd_linear_acceleration=None,
-      cmd_rotary_speed=None,
-      cmd_rotary_acceleration=None,
-    )
+    await self.motors_move_joint({Axis.SERVO_GRIPPER: open_position})
 
   async def drive_set_move_count_parameters(
     self,
@@ -771,11 +759,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def calculate_move_abs_all_axes(
     self,
     cmd_pos: Dict[Axis, float],
-    cmd_linear_speed: Optional[float],
-    cmd_linear_acceleration: Optional[float],
-    cmd_rotary_speed: Optional[float],
-    cmd_rotary_acceleration: Optional[float],
+    params: Optional["KX2ArmBackend.JointMoveParams"] = None,
   ) -> Optional[MotorsMovePlan]:
+    if params is None:
+      params = KX2ArmBackend.JointMoveParams()
     target = cmd_pos.copy()
     axes = list(target.keys())
 
@@ -786,8 +773,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     # input validation / travel limits / done-wait logic
     for name, val in (
-      ("linear_speed", cmd_linear_speed), ("linear_acceleration", cmd_linear_acceleration),
-      ("rotary_speed", cmd_rotary_speed), ("rotary_acceleration", cmd_rotary_acceleration),
+      ("linear_speed", params.linear_speed),
+      ("linear_acceleration", params.linear_acceleration),
+      ("rotary_speed", params.rotary_speed),
+      ("rotary_acceleration", params.rotary_acceleration),
     ):
       if val is not None and val <= 0.0:
         raise ValueError(f"{name} must be positive, got {val}")
@@ -879,11 +868,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       axis_max_v = self._cfg.axes[ax].max_vel
       axis_max_a = self._cfg.axes[ax].max_accel
       if ax.is_linear:
-        chosen_v = cmd_linear_speed if cmd_linear_speed is not None else axis_max_v
-        chosen_a = cmd_linear_acceleration if cmd_linear_acceleration is not None else axis_max_a
+        chosen_v = params.linear_speed if params.linear_speed is not None else axis_max_v
+        chosen_a = (
+          params.linear_acceleration if params.linear_acceleration is not None else axis_max_a
+        )
       else:
-        chosen_v = cmd_rotary_speed if cmd_rotary_speed is not None else axis_max_v
-        chosen_a = cmd_rotary_acceleration if cmd_rotary_acceleration is not None else axis_max_a
+        chosen_v = params.rotary_speed if params.rotary_speed is not None else axis_max_v
+        chosen_a = (
+          params.rotary_acceleration if params.rotary_acceleration is not None else axis_max_a
+        )
       v[ax] = min(chosen_v, axis_max_v)
       a[ax] = min(chosen_a, axis_max_a)
 
@@ -972,19 +965,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def motors_move_joint(
     self,
     cmd_pos: Dict[Axis, float],
-    cmd_linear_speed: Optional[float],
-    cmd_linear_acceleration: Optional[float],
-    cmd_rotary_speed: Optional[float],
-    cmd_rotary_acceleration: Optional[float],
+    params: Optional["KX2ArmBackend.JointMoveParams"] = None,
   ) -> None:
     logger.debug("motors_move_joint cmd_pos=%s", cmd_pos)
-    plan = await self.calculate_move_abs_all_axes(
-      cmd_pos=cmd_pos,
-      cmd_linear_speed=cmd_linear_speed,
-      cmd_linear_acceleration=cmd_linear_acceleration,
-      cmd_rotary_speed=cmd_rotary_speed,
-      cmd_rotary_acceleration=cmd_rotary_acceleration,
-    )
+    plan = await self.calculate_move_abs_all_axes(cmd_pos=cmd_pos, params=params)
 
     if plan is None:  # if every axis is skipped, exit
       return
@@ -1103,26 +1087,14 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
-    await self.motors_move_joint(
-      {Axis.SERVO_GRIPPER: gripper_width},
-      cmd_linear_speed=None,
-      cmd_linear_acceleration=None,
-      cmd_rotary_speed=None,
-      cmd_rotary_acceleration=None,
-    )
+    await self.motors_move_joint({Axis.SERVO_GRIPPER: gripper_width})
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
     if not isinstance(backend_params, KX2ArmBackend.GripParams):
       backend_params = KX2ArmBackend.GripParams()
-    await self.motors_move_joint(
-      {Axis.SERVO_GRIPPER: gripper_width},
-      cmd_linear_speed=None,
-      cmd_linear_acceleration=None,
-      cmd_rotary_speed=None,
-      cmd_rotary_acceleration=None,
-    )
+    await self.motors_move_joint({Axis.SERVO_GRIPPER: gripper_width})
     if backend_params.check_plate_gripped:
       await self.check_plate_gripped()
 
@@ -1143,13 +1115,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
       backend_params = KX2ArmBackend.CartesianMoveParams()
     joint_pos = await self._cart_to_joints(pose)
-    await self.motors_move_joint(
-      cmd_pos=joint_pos,
-      cmd_linear_speed=backend_params.linear_speed,
-      cmd_linear_acceleration=backend_params.linear_acceleration,
-      cmd_rotary_speed=backend_params.rotary_speed,
-      cmd_rotary_acceleration=backend_params.rotary_acceleration,
+    # CartesianMoveParams and JointMoveParams have identical shape (linear/rotary
+    # speed + acceleration); copy the limits across to feed motors_move_joint.
+    joint_params = KX2ArmBackend.JointMoveParams(
+      linear_speed=backend_params.linear_speed,
+      linear_acceleration=backend_params.linear_acceleration,
+      rotary_speed=backend_params.rotary_speed,
+      rotary_acceleration=backend_params.rotary_acceleration,
     )
+    await self.motors_move_joint(cmd_pos=joint_pos, params=joint_params)
 
   async def move_to_location(
     self,
@@ -1190,13 +1164,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if not isinstance(backend_params, KX2ArmBackend.JointMoveParams):
       backend_params = KX2ArmBackend.JointMoveParams()
     cmd_pos = {Axis(int(k)): float(v) for k, v in position.items()}
-    await self.motors_move_joint(
-      cmd_pos=cmd_pos,
-      cmd_linear_speed=backend_params.linear_speed,
-      cmd_linear_acceleration=backend_params.linear_acceleration,
-      cmd_rotary_speed=backend_params.rotary_speed,
-      cmd_rotary_acceleration=backend_params.rotary_acceleration,
-    )
+    await self.motors_move_joint(cmd_pos=cmd_pos, params=backend_params)
 
   async def pick_up_at_joint_position(
     self,
@@ -1333,10 +1301,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         wrist_inward += 360.0
       await self.motors_move_joint(
         cmd_pos={Axis.WRIST: wrist_inward},
-        cmd_linear_speed=_YEET_WINDUP_SPEED,
-        cmd_linear_acceleration=_YEET_WINDUP_ACC,
-        cmd_rotary_speed=_YEET_WINDUP_SPEED,
-        cmd_rotary_acceleration=_YEET_WINDUP_ACC,
+        params=KX2ArmBackend.JointMoveParams(
+          linear_speed=_YEET_WINDUP_SPEED,
+          linear_acceleration=_YEET_WINDUP_ACC,
+          rotary_speed=_YEET_WINDUP_SPEED,
+          rotary_acceleration=_YEET_WINDUP_ACC,
+        ),
       )
 
       joints0 = await self.request_joint_position()
@@ -1399,10 +1369,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           Axis.SHOULDER: pickup_pose[Axis.SHOULDER],
           Axis.WRIST: pickup_pose[Axis.WRIST],
         },
-        cmd_linear_speed=_YEET_RETURN_SPEED,
-        cmd_linear_acceleration=_YEET_RETURN_ACC,
-        cmd_rotary_speed=_YEET_RETURN_SPEED,
-        cmd_rotary_acceleration=_YEET_RETURN_ACC,
+        params=KX2ArmBackend.JointMoveParams(
+          linear_speed=_YEET_RETURN_SPEED,
+          linear_acceleration=_YEET_RETURN_ACC,
+          rotary_speed=_YEET_RETURN_SPEED,
+          rotary_acceleration=_YEET_RETURN_ACC,
+        ),
       )
     finally:
       for ax, s in saved_limits.items():
