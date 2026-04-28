@@ -1291,7 +1291,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       "and open the gripper mid-swing. Anything in the gripper will be "
       "thrown. High bump can fault the drive. Type 'y' to continue: "
     )
-    if input(warning).strip().lower() != "y":
+    # Run the blocking prompt off the loop so the canopen RX listener and
+    # any other coroutines stay live while we wait for the operator.
+    answer = await asyncio.to_thread(input, warning)
+    if answer.strip().lower() != "y":
       raise RuntimeError("very_dangerously_yeet: aborted by user")
 
     driver = self.driver
