@@ -9743,6 +9743,325 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -----------------------------------------------------------------------
+  # iSWAP: Rotation Drive (Joint 1)
+  # -----------------------------------------------------------------------
+
+  class RotationDriveOrientation(enum.Enum):
+    LEFT = 1
+    FRONT = 2
+    RIGHT = 3
+    PARKED_RIGHT = None
+
+  async def _iswap_rotation_drive_request_x_offset(self) -> float:
+    """Read the X-offset i.e. X-axis center <-> iSWAP rotation drive, in mm.
+
+    Stored in the master EEPROM as parameter `kg`.
+    Default: 34.0 mm, but typically tuned per machine during service calibration.
+    Required for deriving the iSWAP rotation drive's deck X coordinate from
+    the X-arm carriage center.
+    Cached on the backend as `_iswap_rotation_drive_x_offset_mm` during setup.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
+    return cast(int, resp["kg"]) / 10.0
+
+  async def iswap_rotation_drive_request_x(self) -> float:
+    """Request iSWAP rotation drive X position (deck coordinates), in mm.
+
+    Computed as `request_left_x_arm_position() - kg` (cached at setup).
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    if self._iswap_rotation_drive_x_offset_mm is None:
+      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+    x_arm_center = await self.request_left_x_arm_position()
+    return x_arm_center - self._iswap_rotation_drive_x_offset_mm
+
+  async def iswap_rotation_drive_request_y(self) -> float:
+    """Request iSWAP rotation drive Y position (deck coordinates), in mm.
+
+    Reads the linear Y carriage that the rotation joint is mounted on. This is
+    NOT the gripper finger's Y - the finger position depends on the rotation
+    drive (W) and wrist (T) angles. Use `iswap_rotation_drive_request_position`
+    for the rotation drive's full XYZ.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
+    iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
+    return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
+
+  # Vertical drop from the iSWAP rotation drive plane to the gripper finger
+  # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
+  # 13 mm above it.
+  iswap_rotation_drive_z_offset_above_finger_mm = 13.0
+
+  async def iswap_rotation_drive_request_z(self) -> float:
+    """Request iSWAP rotation drive Z position (deck coordinates), in mm.
+
+    Adds the 13 mm structural offset to the gripper finger plane (C0 QG).
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    finger_plane_z = (await self.request_iswap_position()).z
+    return finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+
+  async def iswap_rotation_drive_request_position(self) -> Coordinate:
+    """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm."""
+    return Coordinate(
+      x=await self.iswap_rotation_drive_request_x(),
+      y=await self.iswap_rotation_drive_request_y(),
+      z=await self.iswap_rotation_drive_request_z(),
+    )
+
+  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, int]:
+    """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
+
+    Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; documented
+    slots get semantic names, user-programmable slots are exposed under
+    firmware-mnemonic names (`wp5..wp8`) so they can be addressed via
+    R0 WP wp# without translation.
+
+    Keys (all values are signed motor increments; W-drive resolution
+    0.00310 deg/incr):
+      "home"        pw[0]  - home position
+      "w1"          pw[1]  - LEFT deck position  (~ -90 deg)
+      "w2"          pw[2]  - FRONT deck position (~   0 deg)
+      "w3"          pw[3]  - RIGHT deck position (~ +90 deg)
+      "parking"     pw[4]  - past-W3 parking pose (firmware requires > iw + 50)
+      "extra_1"     pw[5]  - extra slot, address via R0 WP wp5
+      "extra_2"     pw[6]  - extra slot, address via R0 WP wp6
+      "extra_3"     pw[7]  - extra slot, address via R0 WP wp7
+      "extra_4"     pw[8]  - extra slot, address via R0 WP wp8
+      "arm_length"  pw[9]  - W arm-length offset
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pw", fmt="pw##### (n)")
+    pw = cast(List[int], resp["pw"])
+    return {
+      "home": pw[0],
+      "w1": pw[1],
+      "w2": pw[2],
+      "w3": pw[3],
+      "parking": pw[4],
+      "extra_1": pw[5],
+      "extra_2": pw[6],
+      "extra_3": pw[7],
+      "extra_4": pw[8],
+      "arm_length": pw[9],
+    }
+
+  async def request_iswap_rotation_drive_position_increments(self) -> int:
+    """Query the iSWAP rotation drive position (units: increments) from the firmware."""
+    response = await self.send_command(module="R0", command="RW", fmt="rw######")
+    return cast(int, response["rw"])
+
+  async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
+    """Request the iSWAP rotation drive orientation.
+
+    Uses nearest-neighbour classification against firmware default `pw`
+    values. Each machine's EEPROM stores its own `pw` adjustment so the
+    actual stop position can drift by up to a few hundred increments per
+    machine; an earlier implementation used +/-50 windows and faulted on
+    machines calibrated outside that band. We now pick whichever predefined
+    stop is closest and only raise if the drive is more than ~5 deg
+    (~1700 incr) from any of them, which catches "drive is mid-transit /
+    undefined" cases without being brittle to per-machine calibration.
+
+    Defaults (W-drive resolution = 0.00310 deg/incr):
+      LEFT          W1      -29068 incr  (~ -90 deg)
+      FRONT         W2          +0 incr  (~   0 deg)
+      RIGHT         W3      +29068 incr  (~ +90 deg)
+      PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)
+
+    Returns:
+      RotationDriveOrientation: The interpreted rotation orientation
+        (LEFT, FRONT, RIGHT, or PARKED_RIGHT).
+
+    Raises:
+      ValueError: if the measured position is more than 1700 incr (~5 deg)
+        from any predefined stop (drive is in transit or drifted).
+    """
+    # Nearest-neighbour reference positions (firmware `pw` defaults).
+    # PARKED_RIGHT is kept as a distinct neighbour so we can report "parked"
+    # explicitly when the drive sits at the parking stop rather than the W3
+    # work stop.
+    # TODO: add PARKED_LEFT reference for STAR(let)s that park on the left.
+    rotation_reference_positions = {
+      STARBackend.RotationDriveOrientation.LEFT: -29068,
+      STARBackend.RotationDriveOrientation.FRONT: 0,
+      STARBackend.RotationDriveOrientation.RIGHT: 29068,
+      STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
+    }
+    tolerance_incr = 1700  # ~5 deg at 0.00310 deg/incr (iSWAP W-drive resolution)
+
+    motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
+
+    orientation, offset = min(
+      ((o, abs(p - motor_position_increments)) for o, p in rotation_reference_positions.items()),
+      key=lambda pair: pair[1],
+    )
+    if offset > tolerance_incr:
+      raise ValueError(
+        f"Unknown rotation orientation: {motor_position_increments} incr is "
+        f"{offset} incr (~{offset * 0.00310:.2f} deg) from the nearest predefined "
+        f"stop ({orientation.name} at {rotation_reference_positions[orientation]}). "
+        "Is the rotation drive in transit or mis-calibrated?"
+      )
+    return orientation
+
+  async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
+    """Rotate the iSWAP rotation drive to a predefined working stop (R0 WP).
+
+    Args:
+      orientation: must be LEFT, FRONT, or RIGHT. PARKED_RIGHT is not
+        accepted; use `park_iswap()` for parking.
+
+    Raises:
+      ValueError: if orientation is not LEFT, FRONT, or RIGHT.
+    """
+    if orientation in {
+      STARBackend.RotationDriveOrientation.RIGHT,
+      STARBackend.RotationDriveOrientation.FRONT,
+      STARBackend.RotationDriveOrientation.LEFT,
+    }:
+      return await self.send_command(
+        module="R0",
+        command="WP",
+        auto_id=False,
+        wp=orientation.value,
+      )
+    else:
+      raise ValueError(f"Invalid rotation drive orientation: {orientation}")
+
+  # -----------------------------------------------------------------------
+  # iSWAP: Wrist Drive (Joint 2)
+  # -----------------------------------------------------------------------
+
+  class WristDriveOrientation(enum.Enum):
+    RIGHT = 1
+    STRAIGHT = 2
+    LEFT = 3
+    REVERSE = 4
+
+  async def request_iswap_wrist_drive_position_increments(self) -> int:
+    """Query the iSWAP wrist drive position (units: increments) from the firmware."""
+    response = await self.send_command(module="R0", command="RT", fmt="rt######")
+    return cast(int, response["rt"])
+
+  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, int]:
+    """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
+
+    Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; documented
+    slots get semantic names, user-programmable slots are exposed under
+    firmware-mnemonic names (`tp6..tp8`) so they can be addressed via
+    R0 TP tp# without translation.
+
+    Keys (all values are signed motor increments; T-drive resolution
+    0.00508 deg/incr):
+      "home"            pt[0]  - home position
+      "t1"              pt[1]  - FRONT plate grip direction (~ -135 deg)
+      "t2"              pt[2]  - RIGHT plate grip direction (~  -45 deg)
+      "t3"              pt[3]  - BACK plate grip direction  (~  +45 deg)
+      "t4"              pt[4]  - LEFT plate grip direction  (~ +135 deg)
+      "parking"         pt[5]  - free pip channel + parking pose (firmware requires < it - 50)
+      "extra_1"         pt[6]  - extra slot, address via R0 TP tp6
+      "extra_2"         pt[7]  - extra slot, address via R0 TP tp7
+      "extra_3"         pt[8]  - extra slot, address via R0 TP tp8
+      "gripper_length"  pt[9]  - gripper-length offset
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pt", fmt="pt##### (n)")
+    pt = cast(List[int], resp["pt"])
+    return {
+      "home": pt[0],
+      "t1": pt[1],
+      "t2": pt[2],
+      "t3": pt[3],
+      "t4": pt[4],
+      "parking": pt[5],
+      "extra_1": pt[6],
+      "extra_2": pt[7],
+      "extra_3": pt[8],
+      "gripper_length": pt[9],
+    }
+
+  async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
+    """Request the iSWAP wrist drive orientation (relative to the rotation drive).
+
+    e.g.:
+    1) RotationDriveOrientation.FRONT + WristDriveOrientation.STRAIGHT
+       => wrist also points to the front of the machine.
+    2) RotationDriveOrientation.LEFT + WristDriveOrientation.STRAIGHT
+       => wrist also points to the left of the machine.
+    3) RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
+       => wrist points to the left of the machine.
+
+    Uses nearest-neighbour classification against firmware default `pt`
+    values. Each machine's EEPROM stores its own `pt` adjustment so the
+    actual stop position can drift by up to a few hundred increments per
+    machine; an earlier implementation used +/-50 windows and faulted on
+    machines calibrated outside that band. We now pick whichever predefined
+    stop is closest and only raise if the wrist is more than ~5 deg
+    (~1000 incr) from any of them.
+
+    Defaults (T-drive resolution = 0.00508 deg/incr):
+      RIGHT     T1   -26577 incr  (~ -135 deg)
+      STRAIGHT  T2    -8859 incr  (~  -45 deg)
+      LEFT      T3    +8859 incr  (~  +45 deg)
+      REVERSE   T4   +26577 incr  (~ +135 deg)
+
+    Returns:
+      WristDriveOrientation: The interpreted wrist orientation
+        (RIGHT, STRAIGHT, LEFT, or REVERSE).
+
+    Raises:
+      ValueError: if the measured position is more than 1000 incr (~5 deg)
+        from any predefined stop (drive is in transit or drifted).
+    """
+    # Nearest-neighbour reference positions (firmware `pt` defaults).
+    wrist_reference_positions = {
+      STARBackend.WristDriveOrientation.RIGHT: -26577,
+      STARBackend.WristDriveOrientation.STRAIGHT: -8859,
+      STARBackend.WristDriveOrientation.LEFT: 8859,
+      STARBackend.WristDriveOrientation.REVERSE: 26577,
+    }
+    tolerance_incr = 1000  # ~5 deg at 0.00508 deg/incr (iSWAP T-drive resolution)
+
+    motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
+
+    orientation, offset = min(
+      ((o, abs(p - motor_position_increments)) for o, p in wrist_reference_positions.items()),
+      key=lambda pair: pair[1],
+    )
+    if offset > tolerance_incr:
+      raise ValueError(
+        f"Unknown wrist orientation: {motor_position_increments} incr is "
+        f"{offset} incr (~{offset * 0.00508:.2f} deg) from the nearest predefined "
+        f"stop ({orientation.name} at {wrist_reference_positions[orientation]}). "
+        "Is the wrist drive in transit or mis-calibrated?"
+      )
+    return orientation
+
+  async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
+    """Rotate the iSWAP wrist drive to a predefined orientation."""
+    return await self.send_command(
+      module="R0",
+      command="TP",
+      auto_id=False,
+      tp=orientation.value,
+    )
+
+  # -----------------------------------------------------------------------
   # iSWAP: Gripper
   # -----------------------------------------------------------------------
 
@@ -9750,7 +10069,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @staticmethod
   def iswap_gripper_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_gripper_drive_mm_per_increment, 2)
+    return round(value_increments * STARBackend.iswap_gripper_drive_mm_per_increment, 1)
 
   @staticmethod
   def iswap_gripper_drive_mm_to_increment(value_mm: float) -> int:
@@ -9769,7 +10088,58 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
 
+  async def request_iswap_gripper_predefined_positions(self) -> Dict[str, int]:
+    """Read the iSWAP gripper drive (G) predefined-position table.
+
+    Keys (motor increments; G-drive resolution 0.00554 mm/incr):
+      "home"          pg[0]  - home & parking
+      "fully_open"    pg[1]  - default 24120 = max jaw width
+      "closed"        pg[2]  - gripper closed
+      "plate_type_1"  pg[3]  - grip plate type 1
+      "plate_type_2"  pg[4]  - grip plate type 2
+      "plate_type_3"  pg[5]  - grip plate type 3
+      "plate_type_4"  pg[6]  - grip plate type 4
+      "plate_type_5"  pg[7]  - grip plate type 5
+      "plate_type_6"  pg[8]  - grip plate type 6
+      "plate_type_7"  pg[9]  - grip plate type 7
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pg", fmt="pg##### (n)")
+    pg = cast(List[int], resp["pg"])
+    return {
+      "home": pg[0],
+      "fully_open": pg[1],
+      "closed": pg[2],
+      "plate_type_1": pg[3],
+      "plate_type_2": pg[4],
+      "plate_type_3": pg[5],
+      "plate_type_4": pg[6],
+      "plate_type_5": pg[7],
+      "plate_type_6": pg[8],
+      "plate_type_7": pg[9],
+    }
+
+  async def request_plate_in_iswap(self) -> bool:
+    """Request plate in iSWAP
+
+    Returns:
+      True if holding a plate, False otherwise.
+    """
+
+    resp = await self.send_command(module="C0", command="QP", fmt="ph#")
+    return resp is not None and resp["ph"] == 1
+
   async def open_not_initialized_gripper(self):
+    """Initialize the iSWAP gripper drive (C0 GI).
+
+    Required if the gripper drive hasn't been initialized yet. After init,
+    the drive sits in a known position from which subsequent open/close
+    commands can operate.
+    """
     return await self.send_command(module="C0", command="GI")
 
   async def iswap_open_gripper(self, open_position: Optional[float] = None):
@@ -10028,180 +10398,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Once the command has completed successfully, set _iswap_parked to false
     self._iswap_parked = False
     return command_output
-
-  # -----------------------------------------------------------------------
-  # iSWAP: Rotation Drive (Joint 1)
-  # -----------------------------------------------------------------------
-
-  async def _iswap_rotation_drive_request_x_offset(self) -> float:
-    """Read the X-offset i.e. X-axis center <-> iSWAP rotation drive, in mm.
-
-    Stored in the master EEPROM as parameter `kg`.
-    Default: 34.0 mm, but typically tuned per machine during service calibration.
-    Required for deriving the iSWAP rotation drive's deck X coordinate from
-    the X-arm carriage center.
-    Cached on the backend as `_iswap_rotation_drive_x_offset_mm` during setup.
-    """
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    resp = await self.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
-    return cast(int, resp["kg"]) / 10.0
-
-  # Vertical drop from the iSWAP rotation drive plane to the gripper finger
-  # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
-  # 13 mm above it.
-  iswap_rotation_drive_z_offset_above_finger_mm = 13.0
-
-  async def iswap_rotation_drive_request_position(self) -> Coordinate:
-    """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm.
-
-    Composition:
-      x = request_left_x_arm_position() - _iswap_rotation_drive_x_offset_mm
-      y = iswap_rotation_drive_request_y()
-      z = (await request_iswap_position()).z + iswap_rotation_drive_z_offset_above_finger_mm
-
-    The Z offset (13 mm) is the structural drop from the rotation drive
-    plane to the gripper finger plane. R0 RZ is Hamilton-calibrated to
-    the finger plane, so we add 13 mm to recover the rotation drive's
-    true Z.
-    """
-
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-
-    if self._iswap_rotation_drive_x_offset_mm is None:
-      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
-
-    x_arm_center = await self.request_left_x_arm_position()
-    rotation_drive_y = await self.iswap_rotation_drive_request_y()
-    finger_plane_z = (await self.request_iswap_position()).z
-
-    return Coordinate(
-      x=x_arm_center - self._iswap_rotation_drive_x_offset_mm,
-      y=rotation_drive_y,
-      z=finger_plane_z + self.iswap_rotation_drive_z_offset_above_finger_mm,
-    )
-
-  async def request_iswap_rotation_drive_position_increments(self) -> int:
-    """Query the iSWAP rotation drive position (units: increments) from the firmware."""
-    response = await self.send_command(module="R0", command="RW", fmt="rw######")
-    return cast(int, response["rw"])
-
-  async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
-    """Request the iSWAP rotation drive orientation.
-
-    Uses nearest-neighbour classification against firmware default `pw`
-    values. Each machine's EEPROM stores its own `pw` adjustment so the
-    actual stop position can drift by up to a few hundred increments per
-    machine; an earlier implementation used +/-50 windows and faulted on
-    machines calibrated outside that band. We now pick whichever predefined
-    stop is closest and only raise if the drive is more than ~5 deg
-    (~1700 incr) from any of them, which catches "drive is mid-transit /
-    undefined" cases without being brittle to per-machine calibration.
-
-    Defaults (W-drive resolution = 0.00310 deg/incr):
-      LEFT          W1      -29068 incr  (~ -90 deg)
-      FRONT         W2          +0 incr  (~   0 deg)
-      RIGHT         W3      +29068 incr  (~ +90 deg)
-      PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)
-
-    Returns:
-      RotationDriveOrientation: The interpreted rotation orientation
-        (LEFT, FRONT, RIGHT, or PARKED_RIGHT).
-
-    Raises:
-      ValueError: if the measured position is more than 1700 incr (~5 deg)
-        from any predefined stop (drive is in transit or drifted).
-    """
-    # Nearest-neighbour reference positions (firmware `pw` defaults).
-    # PARKED_RIGHT is kept as a distinct neighbour so we can report "parked"
-    # explicitly when the drive sits at the parking stop rather than the W3
-    # work stop.
-    # TODO: add PARKED_LEFT reference for STAR(let)s that park on the left.
-    rotation_reference_positions = {
-      STARBackend.RotationDriveOrientation.LEFT: -29068,
-      STARBackend.RotationDriveOrientation.FRONT: 0,
-      STARBackend.RotationDriveOrientation.RIGHT: 29068,
-      STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
-    }
-    tolerance_incr = 1700  # ~5 deg at 0.00310 deg/incr (iSWAP W-drive resolution)
-
-    motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
-
-    orientation, offset = min(
-      ((o, abs(p - motor_position_increments)) for o, p in rotation_reference_positions.items()),
-      key=lambda pair: pair[1],
-    )
-    if offset > tolerance_incr:
-      raise ValueError(
-        f"Unknown rotation orientation: {motor_position_increments} incr is "
-        f"{offset} incr (~{offset * 0.00310:.2f} deg) from the nearest predefined "
-        f"stop ({orientation.name} at {rotation_reference_positions[orientation]}). "
-        "Is the rotation drive in transit or mis-calibrated?"
-      )
-    return orientation
-
-  async def request_iswap_wrist_drive_position_increments(self) -> int:
-    """Query the iSWAP wrist drive position (units: increments) from the firmware."""
-    response = await self.send_command(module="R0", command="RT", fmt="rt######")
-    return cast(int, response["rt"])
-
-  async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
-    """Request the iSWAP wrist drive orientation (relative to the rotation drive).
-
-    e.g.:
-    1) RotationDriveOrientation.FRONT + WristDriveOrientation.STRAIGHT
-       => wrist also points to the front of the machine.
-    2) RotationDriveOrientation.LEFT + WristDriveOrientation.STRAIGHT
-       => wrist also points to the left of the machine.
-    3) RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
-       => wrist points to the left of the machine.
-
-    Uses nearest-neighbour classification against firmware default `pt`
-    values. Each machine's EEPROM stores its own `pt` adjustment so the
-    actual stop position can drift by up to a few hundred increments per
-    machine; an earlier implementation used +/-50 windows and faulted on
-    machines calibrated outside that band. We now pick whichever predefined
-    stop is closest and only raise if the wrist is more than ~5 deg
-    (~1000 incr) from any of them.
-
-    Defaults (T-drive resolution = 0.00508 deg/incr):
-      RIGHT     T1   -26577 incr  (~ -135 deg)
-      STRAIGHT  T2    -8859 incr  (~  -45 deg)
-      LEFT      T3    +8859 incr  (~  +45 deg)
-      REVERSE   T4   +26577 incr  (~ +135 deg)
-
-    Returns:
-      WristDriveOrientation: The interpreted wrist orientation
-        (RIGHT, STRAIGHT, LEFT, or REVERSE).
-
-    Raises:
-      ValueError: if the measured position is more than 1000 incr (~5 deg)
-        from any predefined stop (drive is in transit or drifted).
-    """
-    # Nearest-neighbour reference positions (firmware `pt` defaults).
-    wrist_reference_positions = {
-      STARBackend.WristDriveOrientation.RIGHT: -26577,
-      STARBackend.WristDriveOrientation.STRAIGHT: -8859,
-      STARBackend.WristDriveOrientation.LEFT: 8859,
-      STARBackend.WristDriveOrientation.REVERSE: 26577,
-    }
-    tolerance_incr = 1000  # ~5 deg at 0.00508 deg/incr (iSWAP T-drive resolution)
-
-    motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
-
-    orientation, offset = min(
-      ((o, abs(p - motor_position_increments)) for o, p in wrist_reference_positions.items()),
-      key=lambda pair: pair[1],
-    )
-    if offset > tolerance_incr:
-      raise ValueError(
-        f"Unknown wrist orientation: {motor_position_increments} incr is "
-        f"{offset} incr (~{offset * 0.00508:.2f} deg) from the nearest predefined "
-        f"stop ({orientation.name} at {wrist_reference_positions[orientation]}). "
-        "Is the wrist drive in transit or mis-calibrated?"
-      )
-    return orientation
 
   async def iswap_rotate(
     self,
@@ -10513,16 +10709,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="RG", fmt="rg#")
 
-  async def request_plate_in_iswap(self) -> bool:
-    """Request plate in iSWAP
-
-    Returns:
-      True if holding a plate, False otherwise.
-    """
-
-    resp = await self.send_command(module="C0", command="QP", fmt="ph#")
-    return resp is not None and resp["ph"] == 1
-
   async def request_iswap_position(self) -> Coordinate:
     """Request iSWAP position ( grip center )
 
@@ -10541,14 +10727,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y=(resp["yj"] / 10) * (1 if resp["yd"] == 0 else -1),
       z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
     )
-
-  async def iswap_rotation_drive_request_y(self) -> float:
-    """Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module."""
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
-    iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
@@ -11770,41 +11948,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.move_all_channels_in_z_safety()
 
     return float(result_in_mm)
-
-  class RotationDriveOrientation(enum.Enum):
-    LEFT = 1
-    FRONT = 2
-    RIGHT = 3
-    PARKED_RIGHT = None
-
-  async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
-    if orientation in {
-      STARBackend.RotationDriveOrientation.RIGHT,
-      STARBackend.RotationDriveOrientation.FRONT,
-      STARBackend.RotationDriveOrientation.LEFT,
-    }:
-      return await self.send_command(
-        module="R0",
-        command="WP",
-        auto_id=False,
-        wp=orientation.value,
-      )
-    else:
-      raise ValueError(f"Invalid rotation drive orientation: {orientation}")
-
-  class WristDriveOrientation(enum.Enum):
-    RIGHT = 1
-    STRAIGHT = 2
-    LEFT = 3
-    REVERSE = 4
-
-  async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
-    return await self.send_command(
-      module="R0",
-      command="TP",
-      auto_id=False,
-      tp=orientation.value,
-    )
 
   @staticmethod
   def channel_id(channel_idx: int) -> str:
