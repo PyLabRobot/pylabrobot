@@ -12,6 +12,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   MachineConfiguration,
   STARBackend,
 )
+from pylabrobot.resources.container import Container
 from pylabrobot.resources.well import Well
 
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
@@ -213,6 +214,10 @@ class STARChatterboxBackend(STARBackend):
       )
     return self._channels_minimum_y_spacing[channel_idx]
 
+  async def channels_request_y_minimum_spacing(self) -> List[float]:
+    """Return mock per-channel minimum Y spacings for all channels."""
+    return list(self._channels_minimum_y_spacing)
+
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
 
@@ -316,3 +321,31 @@ class STARChatterboxBackend(STARBackend):
 
   async def request_pip_height_last_lld(self):
     return list(range(12))
+
+  async def _run_lld_on_channel_batch(
+    self,
+    batch,
+    containers: List[Container],
+    tip_lengths: List[float],
+    z_cavity_bottom: List[float],
+    z_top: List[float],
+    lld_mode: List["STARBackend.LLDMode"],
+    search_speed: float,
+    n_replicates: int,
+  ) -> Dict[int, List[Optional[float]]]:
+    """Simulate LLD by computing absolute heights from each container's volume tracker.
+
+    Empty containers report the cavity-bottom Z (relative height 0). Non-empty
+    containers report ``cavity_bottom + compute_height_from_volume(volume)`` so the
+    parent ``probe_liquid_heights`` can subtract ``z_cavity_bottom`` consistently.
+    """
+    measurements: Dict[int, List[Optional[float]]] = {}
+    for orig_idx in batch.indices:
+      container = containers[orig_idx]
+      volume = container.tracker.get_used_volume()
+      if volume == 0:
+        absolute_height = z_cavity_bottom[orig_idx]
+      else:
+        absolute_height = z_cavity_bottom[orig_idx] + container.compute_height_from_volume(volume)
+      measurements[orig_idx] = [absolute_height] * n_replicates
+    return measurements

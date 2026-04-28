@@ -137,3 +137,17 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       self.tc.backend.get_total_step_count.return_value = total_steps  # type: ignore
       print(f"Testing with hold={hold}, cycle={cycle}, total_cycles={total_cycles}, ")
       assert await self.tc.is_profile_running() is expected
+
+  async def test_is_profile_running_raises_if_no_profile_running(self):
+    """RuntimeError from get_hold_time should propagate."""
+    self.tc.backend.get_hold_time.side_effect = RuntimeError("No profile is running")  # type: ignore
+
+    with self.assertRaises(RuntimeError):
+      await self.tc.is_profile_running()
+
+  async def test_is_profile_running_preserves_not_implemented_error(self):
+    """Unsupported backends should still surface NotImplementedError."""
+    self.tc.backend.get_hold_time.side_effect = NotImplementedError  # type: ignore
+
+    with self.assertRaises(NotImplementedError):
+      await self.tc.is_profile_running()
