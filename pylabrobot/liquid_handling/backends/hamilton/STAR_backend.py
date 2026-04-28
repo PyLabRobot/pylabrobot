@@ -10028,10 +10028,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Request the iSWAP wrist drive orientation (relative to the rotation drive).
 
     e.g.:
+
     1) RotationDriveOrientation.FRONT + WristDriveOrientation.STRAIGHT
        => wrist also points to the front of the machine.
+
     2) RotationDriveOrientation.LEFT + WristDriveOrientation.STRAIGHT
        => wrist also points to the left of the machine.
+
     3) RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
        => wrist points to the left of the machine.
 
