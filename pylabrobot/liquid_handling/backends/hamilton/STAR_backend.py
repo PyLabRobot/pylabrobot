@@ -9819,24 +9819,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=await self.iswap_rotation_drive_request_z(),
     )
 
-  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, Union[int, float]]:
+  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
-    Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; documented
-    slots get semantic names, undocumented slots are returned as
+    Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; the 9 position
+    slots are returned here. Slot pw[9] (arm length) is exposed separately via
+    `request_iswap_link_1_length_mm`. Undocumented slots are returned as
     "extra_1".."extra_4" and addressable via R0 WP wp5..wp8.
 
-    Keys (motor increments unless noted; W-drive resolution 0.00310 deg/incr):
-      "home"       pw[0]  - home position
-      "left"       pw[1]  - LEFT deck position  (~ -90 deg)
-      "front"      pw[2]  - FRONT deck position (~   0 deg)
-      "right"      pw[3]  - RIGHT deck position (~ +90 deg)
-      "parking"    pw[4]  - past-W3 parking pose (firmware requires > iw + 50)
-      "extra_1"    pw[5]  - extra slot, address via R0 WP wp5
-      "extra_2"    pw[6]  - extra slot, address via R0 WP wp6
-      "extra_3"    pw[7]  - extra slot, address via R0 WP wp7
-      "extra_4"    pw[8]  - extra slot, address via R0 WP wp8
-      "link_1_len" pw[9]/10  - link 1 (rotation drive -> wrist) length in mm
+    Keys (motor increments; W-drive resolution 0.00310 deg/incr):
+      "home"     pw[0]  - home position
+      "left"     pw[1]  - LEFT deck position  (~ -90 deg)
+      "front"    pw[2]  - FRONT deck position (~   0 deg)
+      "right"    pw[3]  - RIGHT deck position (~ +90 deg)
+      "parking"  pw[4]  - past-W3 parking pose (firmware requires > iw + 50)
+      "extra_1"  pw[5]  - extra slot, address via R0 WP wp5
+      "extra_2"  pw[6]  - extra slot, address via R0 WP wp6
+      "extra_3"  pw[7]  - extra slot, address via R0 WP wp7
+      "extra_4"  pw[8]  - extra slot, address via R0 WP wp8
 
     Raises:
       RuntimeError: if the iSWAP module is not installed.
@@ -9855,8 +9855,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_2": pw[6],
       "extra_3": pw[7],
       "extra_4": pw[8],
-      "link_1_len": round(pw[9] / 10, 1),
     }
+
+  async def request_iswap_link_1_length_mm(self) -> float:
+    """Read iSWAP link 1 length (rotation joint -> wrist joint) in mm.
+
+    Sends R0 RA ra=pw and returns pw[9]/10. Default factory value 138.0 mm.
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pw", fmt="pw##### (n)")
+    pw = cast(List[int], resp["pw"])
+    return round(pw[9] / 10, 1)
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Query the iSWAP rotation drive position (units: increments) from the firmware."""
@@ -9961,24 +9974,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
 
-  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, Union[int, float]]:
+  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
 
-    Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; documented
-    slots get semantic names, undocumented slots are returned as
+    Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; the 9 position
+    slots are returned here. Slot pt[9] (arm length) is exposed separately via
+    `request_iswap_link_2_length_mm`. Undocumented slots are returned as
     "extra_1".."extra_3" and addressable via R0 TP tp6..tp8.
 
-    Keys (motor increments unless noted; T-drive resolution 0.00508 deg/incr):
-      "home"       pt[0]  - home position
-      "right"      pt[1]  - wrist twisted right relative to arm (~ -135 deg)
-      "straight"   pt[2]  - wrist aligned with arm (~ -45 deg)
-      "left"       pt[3]  - wrist twisted left relative to arm (~ +45 deg)
-      "reverse"    pt[4]  - wrist twisted 180 deg from straight (~ +135 deg)
-      "parking"    pt[5]  - free pip channel + parking pose (firmware requires < it - 50)
-      "extra_1"    pt[6]  - extra slot, address via R0 TP tp6
-      "extra_2"    pt[7]  - extra slot, address via R0 TP tp7
-      "extra_3"    pt[8]  - extra slot, address via R0 TP tp8
-      "link_2_len" pt[9]/10  - link 2 (wrist -> gripper finger) length in mm
+    Keys (motor increments; T-drive resolution 0.00508 deg/incr):
+      "home"     pt[0]  - home position
+      "right"    pt[1]  - wrist twisted right relative to arm (~ -135 deg)
+      "straight" pt[2]  - wrist aligned with arm (~ -45 deg)
+      "left"     pt[3]  - wrist twisted left relative to arm (~ +45 deg)
+      "reverse"  pt[4]  - wrist twisted 180 deg from straight (~ +135 deg)
+      "parking"  pt[5]  - free pip channel + parking pose (firmware requires < it - 50)
+      "extra_1"  pt[6]  - extra slot, address via R0 TP tp6
+      "extra_2"  pt[7]  - extra slot, address via R0 TP tp7
+      "extra_3"  pt[8]  - extra slot, address via R0 TP tp8
 
     Raises:
       RuntimeError: if the iSWAP module is not installed.
@@ -9997,8 +10010,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_1": pt[6],
       "extra_2": pt[7],
       "extra_3": pt[8],
-      "link_2_len": round(pt[9] / 10, 1),
     }
+
+  async def request_iswap_link_2_length_mm(self) -> float:
+    """Read iSWAP link 2 length (wrist joint -> gripper finger center) in mm.
+
+    Sends R0 RA ra=pt and returns pt[9]/10. Default factory value 138.0 mm.
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pt", fmt="pt##### (n)")
+    pt = cast(List[int], resp["pt"])
+    return round(pt[9] / 10, 1)
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Request the iSWAP wrist drive orientation (relative to the rotation drive).
