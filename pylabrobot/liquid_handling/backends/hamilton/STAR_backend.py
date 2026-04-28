@@ -9823,9 +9823,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; documented
-    slots get semantic names, user-programmable slots are exposed under
-    firmware-mnemonic names (`wp5..wp8`) so they can be addressed via
-    R0 WP wp# without translation.
+    slots get semantic names, undocumented slots are returned as
+    "extra_1".."extra_4" and addressable via R0 WP wp5..wp8.
 
     Keys (motor increments unless noted; W-drive resolution 0.00310 deg/incr):
       "home"       pw[0]  - home position
@@ -9966,9 +9965,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; documented
-    slots get semantic names, user-programmable slots are exposed under
-    firmware-mnemonic names (`tp6..tp8`) so they can be addressed via
-    R0 TP tp# without translation.
+    slots get semantic names, undocumented slots are returned as
+    "extra_1".."extra_3" and addressable via R0 TP tp6..tp8.
 
     Keys (motor increments unless noted; T-drive resolution 0.00508 deg/incr):
       "home"       pt[0]  - home position
@@ -10721,14 +10719,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="RG", fmt="rg#")
 
   async def request_iswap_position(self) -> Coordinate:
-    """Request iSWAP position ( grip center )
+    """Request iSWAP gripper finger center position.
 
     Returns:
-      xs: Hotel center in X direction [1mm]
+      xs: Gripper finger center in X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yj: Gripper center in Y direction [1mm]
+      yj: Gripper finger center in Y direction [1mm]
       yd: Y direction 0 = positive 1 = negative
-      zj: Gripper Z height (gripping height) [1mm]
+      zj: Gripper finger center Z height [1mm]
       zd: Z direction 0 = positive 1 = negative
     """
 
