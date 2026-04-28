@@ -9746,13 +9746,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # iSWAP: SCARA Geometry
   # -----------------------------------------------------------------------
 
-  async def request_iswap_link_1_length_mm(self) -> float:
+  async def iswap_request_link_1_length(self) -> float:
     """Read iSWAP link 1 length (rotation joint -> wrist joint) in mm.
 
-    Sends R0 RA ra=pw and returns pw[9]/10. Default factory value 138.0 mm.
-
-    Raises:
-      RuntimeError: if the iSWAP module is not installed.
+    Default factory value 138.0 mm.
     """
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
@@ -9760,13 +9757,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pw = cast(List[int], resp["pw"])
     return round(pw[9] / 10, 1)
 
-  async def request_iswap_link_2_length_mm(self) -> float:
+  async def iswap_request_link_2_length(self) -> float:
     """Read iSWAP link 2 length (wrist joint -> gripper finger center) in mm.
 
-    Sends R0 RA ra=pt and returns pt[9]/10. Default factory value 138.0 mm.
-
-    Raises:
-      RuntimeError: if the iSWAP module is not installed.
+    Default factory value 138.0 mm.
     """
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
