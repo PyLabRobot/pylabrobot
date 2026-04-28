@@ -9850,7 +9850,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; the 9 position
     slots are returned here. Slot pw[9] (arm length) is exposed separately via
-    `request_iswap_link_1_length_mm`. Undocumented slots are returned as
+    `iswap_request_link_1_length`. Undocumented slots are returned as
     "extra_1".."extra_4" and addressable via R0 WP wp5..wp8.
 
     Keys (motor increments; W-drive resolution 0.00310 deg/incr):
@@ -9991,7 +9991,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; the 9 position
     slots are returned here. Slot pt[9] (arm length) is exposed separately via
-    `request_iswap_link_2_length_mm`. Undocumented slots are returned as
+    `iswap_request_link_2_length`. Undocumented slots are returned as
     "extra_1".."extra_3" and addressable via R0 TP tp6..tp8.
 
     Keys (motor increments; T-drive resolution 0.00508 deg/incr):
