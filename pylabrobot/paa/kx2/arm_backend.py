@@ -644,22 +644,20 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self,
     max_descent: float,
     z_start: Optional[float] = None,
-    speed: float = 5.0,
-    acceleration: float = 50.0,
+    vel_pct: float = 5.0,
+    accel_pct: float = 5.0,
   ) -> float:
     """Descend Z up to `max_descent`; halt when the IR breakbeam trips.
 
-    `speed` is in mm/s, `acceleration` in mm/s^2. If `z_start` is given,
-    first move Z to that height (same speed/accel) and search from there;
-    otherwise search from the current Z. Arms IL[4]=StopForward so the Elmo
-    drive halts the motor itself on the input edge (sub-ms latency, no
-    software in the loop). IL is restored to GeneralPurpose afterwards even
-    if the move raises. Returns the Z position where the drive halted;
-    raises RuntimeError if the beam never tripped.
+    If `z_start` is given, first move Z to that height (same vel/accel) and
+    search from there; otherwise search from the current Z. Arms IL[4]=
+    StopForward so the Elmo drive halts the motor itself on the input edge
+    (sub-ms latency, no software in the loop). IL is restored to
+    GeneralPurpose afterwards even if the move raises. Returns the Z
+    position where the drive halted; raises RuntimeError if the beam never
+    tripped.
     """
-    move_params = KX2ArmBackend.JointMoveParams(
-      linear_speed=speed, linear_acceleration=acceleration,
-    )
+    move_params = KX2ArmBackend.JointMoveParams(vel_pct=vel_pct, accel_pct=accel_pct)
     # Pre-flight: force the drive back to Op Enabled. A prior failed search
     # could have left it in Fault/Quick Stop where new moves silently fail
     # (Z barely moves). Idempotent if the drive is already healthy.
@@ -769,14 +767,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     skip_ax: Dict[Axis, bool] = {}
 
     # input validation / travel limits / done-wait logic
-    for name, val in (
-      ("linear_speed", params.linear_speed),
-      ("linear_acceleration", params.linear_acceleration),
-      ("rotary_speed", params.rotary_speed),
-      ("rotary_acceleration", params.rotary_acceleration),
-    ):
-      if val is not None and val <= 0.0:
-        raise ValueError(f"{name} must be positive, got {val}")
+    if params.vel_pct <= 0.0 or params.vel_pct > 100.0:
+      raise ValueError(f"vel_pct out of range (0, 100], got {params.vel_pct}")
+    if params.accel_pct <= 0.0 or params.accel_pct > 100.0:
+      raise ValueError(f"accel_pct out of range (0, 100], got {params.accel_pct}")
 
     # Travel-limit bounds check. Mirrors C# MoveAbsoluteSingleAxisPrivate
     # (KX2RobotControl.cs:4624-4649): snap if within 0.1 of the limit, raise
@@ -862,20 +856,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
       skip_ax[ax] = abs(dist[ax]) < 0.01
 
-      axis_max_v = self._cfg.axes[ax].max_vel
-      axis_max_a = self._cfg.axes[ax].max_accel
-      if ax.is_linear:
-        chosen_v = params.linear_speed if params.linear_speed is not None else axis_max_v
-        chosen_a = (
-          params.linear_acceleration if params.linear_acceleration is not None else axis_max_a
-        )
-      else:
-        chosen_v = params.rotary_speed if params.rotary_speed is not None else axis_max_v
-        chosen_a = (
-          params.rotary_acceleration if params.rotary_acceleration is not None else axis_max_a
-        )
-      v[ax] = min(chosen_v, axis_max_v)
-      a[ax] = min(chosen_a, axis_max_a)
+      v[ax] = (params.vel_pct / 100.0) * self._cfg.axes[ax].max_vel
+      a[ax] = (params.accel_pct / 100.0) * self._cfg.axes[ax].max_accel
 
       if not skip_ax[ax] and a[ax] > 0:
         v[ax], a[ax], accel_time[ax], total_time[ax] = self._profile(
@@ -1037,26 +1019,21 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   @dataclasses.dataclass
   class CartesianMoveParams(BackendParams):
-    """Per-axis speed/acceleration limits in physical units.
+    """Speed/acceleration as a percentage of each axis's firmware max.
 
-    `linear_*` applies to Z (and rail/gripper if commanded); `rotary_*`
-    applies to shoulder/elbow/wrist. `None` falls back to the axis maximum
-    read from the drive at setup. Values above the per-axis max are clamped
-    silently.
+    Applied uniformly to every axis in the move — `vel_pct=50` means each
+    axis runs at 50% of its own `max_vel` (read from the drive at setup,
+    surfaced via `motion_limits()`). Range (0, 100].
     """
-    linear_speed: Optional[float] = None         # mm/s
-    linear_acceleration: Optional[float] = None  # mm/s^2
-    rotary_speed: Optional[float] = None         # deg/s
-    rotary_acceleration: Optional[float] = None  # deg/s^2
+    vel_pct: float = 50.0
+    accel_pct: float = 50.0
 
   @dataclasses.dataclass
   class JointMoveParams(BackendParams):
-    """Per-axis speed/acceleration limits in physical units. Same shape as
-    `CartesianMoveParams` — see its docstring."""
-    linear_speed: Optional[float] = None
-    linear_acceleration: Optional[float] = None
-    rotary_speed: Optional[float] = None
-    rotary_acceleration: Optional[float] = None
+    """Speed/acceleration as a percentage of each axis's firmware max. Same
+    shape as `CartesianMoveParams` — see its docstring."""
+    vel_pct: float = 50.0
+    accel_pct: float = 50.0
 
   @dataclasses.dataclass
   class GripParams(BackendParams):
@@ -1112,13 +1089,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
       backend_params = KX2ArmBackend.CartesianMoveParams()
     joint_pos = await self._cart_to_joints(pose)
-    # CartesianMoveParams and JointMoveParams have identical shape (linear/rotary
-    # speed + acceleration); copy the limits across to feed motors_move_joint.
     joint_params = KX2ArmBackend.JointMoveParams(
-      linear_speed=backend_params.linear_speed,
-      linear_acceleration=backend_params.linear_acceleration,
-      rotary_speed=backend_params.rotary_speed,
-      rotary_acceleration=backend_params.rotary_acceleration,
+      vel_pct=backend_params.vel_pct, accel_pct=backend_params.accel_pct,
     )
     await self.motors_move_joint(cmd_pos=joint_pos, params=joint_params)
 
@@ -1299,10 +1271,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await self.motors_move_joint(
         cmd_pos={Axis.WRIST: wrist_inward},
         params=KX2ArmBackend.JointMoveParams(
-          linear_speed=_YEET_WINDUP_SPEED,
-          linear_acceleration=_YEET_WINDUP_ACC,
-          rotary_speed=_YEET_WINDUP_SPEED,
-          rotary_acceleration=_YEET_WINDUP_ACC,
+          vel_pct=_YEET_WINDUP_VEL_PCT, accel_pct=_YEET_WINDUP_ACC_PCT,
         ),
       )
 
@@ -1367,10 +1336,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           Axis.WRIST: pickup_pose[Axis.WRIST],
         },
         params=KX2ArmBackend.JointMoveParams(
-          linear_speed=_YEET_RETURN_SPEED,
-          linear_acceleration=_YEET_RETURN_ACC,
-          rotary_speed=_YEET_RETURN_SPEED,
-          rotary_acceleration=_YEET_RETURN_ACC,
+          vel_pct=_YEET_RETURN_VEL_PCT, accel_pct=_YEET_RETURN_ACC_PCT,
         ),
       )
     finally:
@@ -1426,12 +1392,12 @@ _YEET_RELEASE_FRACTION = 0.85
 # Gripper open target (mm). Clamped at runtime to drive's max_travel - margin.
 _YEET_OPEN_POSITION = 30.0
 _YEET_OPEN_SAFETY_MARGIN = 1.0
-# Windup speed: arm holds the plate, don't whip.
-_YEET_WINDUP_SPEED = 60.0
-_YEET_WINDUP_ACC = 120.0
-# Return speed: plate is gone, snap back faster than windup.
-_YEET_RETURN_SPEED = 240.0
-_YEET_RETURN_ACC = 480.0
+# Windup: arm holds the plate, don't whip. Percentages of axis max.
+_YEET_WINDUP_VEL_PCT = 25.0
+_YEET_WINDUP_ACC_PCT = 25.0
+# Return: plate is gone, but still keep it gentle.
+_YEET_RETURN_VEL_PCT = 25.0
+_YEET_RETURN_ACC_PCT = 25.0
 
 
 async def _yeet_build_axis_move(
