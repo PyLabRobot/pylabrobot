@@ -10101,8 +10101,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     wrist_position: int,  # units: increments
     rotation_speed: int = 25_000,  # units: increments/sec
     wrist_speed: int = 20_000,  # units: increments/sec
-    rotation_acceleration: int = 170,  # units: increments/sec**2
-    wrist_acceleration: int = 145,  # units: increments/sec**2
+    rotation_acceleration: int = 170,  # units: 1000 increments/sec^2
+    wrist_acceleration: int = 145,  # units: 1000 increments/sec^2
     rotation_current_limit: int = 5,
     wrist_current_limit: int = 5,
   ) -> None:
