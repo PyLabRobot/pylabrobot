@@ -10095,7 +10095,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # iSWAP: Combined Rotation-Wrist Moves
   # -----------------------------------------------------------------------
 
-  async def _iswap_rotate_both_joints_in_increments(
+  async def _iswap_rotate_increments(
     self,
     rotation_position: int,  # units: increments
     wrist_position: int,  # units: increments
