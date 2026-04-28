@@ -81,18 +81,21 @@ class PlateAccess(Capability):
   ) -> PlateAccessState:
     """Retract the source-side access path and return the final access state."""
     deadline = time.monotonic() + timeout
-    await self.backend.close_source_plate(
+    barcode_result = await self.backend.close_source_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
       timeout=self._remaining_timeout(deadline),
     )
-    return await self._wait_for_access_state(
+    state = await self._wait_for_access_state(
       lambda state: state.source_access_closed is True,
       timeout=self._remaining_timeout(deadline),
       poll_interval=poll_interval,
       description="source access to close",
     )
+    if barcode_result not in (None, ""):
+      state.raw = {**state.raw, "barcode": str(barcode_result)}
+    return state
 
   @need_capability_ready
   async def open_destination_plate(
