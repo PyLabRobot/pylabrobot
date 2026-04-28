@@ -10109,18 +10109,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Absolute parallel move of rotation (j01) + wrist (j02) drives.
 
     Args:
-      rotation_position: signed rotation-drive destination position,
-        bounded by the rotation drive envelope.
-      wrist_position: signed wrist-drive destination position, bounded
-        by the wrist drive envelope.
-      rotation_speed: rotation max velocity, range 20..75000.
-      wrist_speed: wrist max velocity, range 20..65000.
-      rotation_acceleration: rotation acceleration in 1000 incr/sec^2,
-        range 5..200.
-      wrist_acceleration: wrist acceleration in 1000 incr/sec^2,
-        range 5..200.
-      rotation_current_limit: rotation current protection limiter, range 0..7.
-      wrist_current_limit: wrist current protection limiter, range 0..7.
+      rotation_position [increments]: signed destination, range -30032..+30032.
+      wrist_position [increments]: signed destination, range -30000..+30000.
+      rotation_speed [increments/sec]: max velocity, range 20..75000.
+      wrist_speed [increments/sec]: max velocity, range 20..65000.
+      rotation_acceleration [1000 increments/sec^2]: range 5..200.
+      wrist_acceleration [1000 increments/sec^2]: range 5..200.
+      rotation_current_limit: current protection limiter, range 0..7.
+      wrist_current_limit: current protection limiter, range 0..7.
     """
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
