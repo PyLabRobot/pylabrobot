@@ -9845,7 +9845,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=await self.iswap_rotation_drive_request_z(),
     )
 
-  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, int]:
+  async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; the 9 position
@@ -9986,7 +9986,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
 
-  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, int]:
+  async def iswap_wrist_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; the 9 position
@@ -10121,7 +10121,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
 
-  async def request_iswap_gripper_predefined_positions(self) -> Dict[str, int]:
+  async def iswap_gripper_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP gripper drive (G) predefined-position table.
 
     Keys (motor increments; G-drive resolution 0.00554 mm/incr):
