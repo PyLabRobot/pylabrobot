@@ -115,7 +115,6 @@ class IKWristSign(unittest.TestCase):
 
   def test_wrist_near_zero_satisfies_both(self):
     """When the natural J4 is exactly 0, neither cw nor ccw should shift it."""
-    c = _config()
     # Construct a pose where wrist - shoulder = 0 naturally:
     # rotation.z == shoulder. Pick rotation.z = -atan2(x, y) in degrees.
     x, y = 100.0, 100.0

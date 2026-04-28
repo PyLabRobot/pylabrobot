@@ -52,6 +52,7 @@ Different machines use different communication modes. Replace `[usb]` with one o
 | `cytation-microscopy` | numpy (1.26), opencv-python | Cytation imager |
 | `sila` | zeroconf, grpcio | SiLA devices |
 | `pico` | opencv-python, numpy, sila | ImageXpress Pico microscope |
+| `canopen` | canopen (pulls python-can) | CANopen devices: e.g. PAA KX2 plate handler. Also requires a vendor CAN driver: PEAK PCAN-Basic on macOS/Windows, the in-tree `peak_pci` module on Linux |
 | `dev` | All of the above + testing/linting tools | Development |
 
 Or install all dependencies:

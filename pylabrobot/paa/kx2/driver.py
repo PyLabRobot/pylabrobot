@@ -20,10 +20,16 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Dict, List, Optional, Tuple, Union
 
-import canopen
-
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
+
+try:
+  import canopen
+
+  _HAS_CANOPEN = True
+except ImportError as _e:
+  _HAS_CANOPEN = False
+  _CANOPEN_IMPORT_ERROR = _e
 
 
 def _u32_le(value: int) -> List[int]:
@@ -144,7 +150,7 @@ class JointMoveDirection(IntEnum):
   """Move-direction hint used by the driver's move primitives.
 
   Lives here (not in the backend) because the driver's
-  `_motor_set_move_direction` primitive consumes it to program Elmo's modulo
+  `motor_set_move_direction` primitive consumes it to program Elmo's modulo
   mode register. Backend-side planning also uses it, but the canonical
   definition is the driver's.
   """
@@ -240,6 +246,11 @@ class KX2Driver(Driver):
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Bring up the CAN bus, reset/start nodes, and configure PDO mapping."""
+    if not _HAS_CANOPEN:
+      raise ImportError(
+        "canopen is not installed. Install with `pip install pylabrobot[canopen]` "
+        f"(import error: {_CANOPEN_IMPORT_ERROR})"
+      )
     if self._network is not None:
       await self.stop()
 
@@ -291,12 +302,12 @@ class KX2Driver(Driver):
 
     # Elmo vendor objects: interpolation config for PVT mode.
     for nid in self.motion_node_ids:
-      await self._can_sdo_download_elmo_object(nid, 24768, 0, -1, ElmoObjectDataType.INTEGER16)
-      await self._can_sdo_download_elmo_object(nid, 24772, 2, 16, ElmoObjectDataType.UNSIGNED32)
-      await self._can_sdo_download_elmo_object(nid, 24772, 3, 0, ElmoObjectDataType.UNSIGNED8)
-      await self._can_sdo_download_elmo_object(nid, 24772, 5, 8, ElmoObjectDataType.UNSIGNED8)
-      await self._can_sdo_download_elmo_object(nid, 24770, 2, -3, ElmoObjectDataType.INTEGER8)
-      await self._can_sdo_download_elmo_object(nid, 24669, 0, 1, ElmoObjectDataType.INTEGER16)
+      await self.can_sdo_download_elmo_object(nid, 24768, 0, -1, ElmoObjectDataType.INTEGER16)
+      await self.can_sdo_download_elmo_object(nid, 24772, 2, 16, ElmoObjectDataType.UNSIGNED32)
+      await self.can_sdo_download_elmo_object(nid, 24772, 3, 0, ElmoObjectDataType.UNSIGNED8)
+      await self.can_sdo_download_elmo_object(nid, 24772, 5, 8, ElmoObjectDataType.UNSIGNED8)
+      await self.can_sdo_download_elmo_object(nid, 24770, 2, -3, ElmoObjectDataType.INTEGER8)
+      await self.can_sdo_download_elmo_object(nid, 24669, 0, 1, ElmoObjectDataType.INTEGER16)
 
     # RPDO1 = ControlWord (for DS402 enable), RPDO3 = interpolated target.
     for nid in self.motion_node_ids:
@@ -311,7 +322,7 @@ class KX2Driver(Driver):
       )
 
     self._pvt_mode = True
-    await self._pvt_select_mode(False)
+    await self.pvt_select_mode(False)
 
   async def stop(self) -> None:
     if self._network is not None:
@@ -432,7 +443,7 @@ class KX2Driver(Driver):
     node = self._nodes[node_id]
     await asyncio.to_thread(node.sdo.download, index, sub_index, bytes(data_byte))
 
-  async def _can_sdo_download_elmo_object(
+  async def can_sdo_download_elmo_object(
     self,
     node_id: int,
     elmo_object_int: int,
@@ -648,7 +659,7 @@ class KX2Driver(Driver):
       return ""
 
     # 0x1023:3 = OSCommand.Reply (DOMAIN / string). Library handles segmented.
-    reply = await asyncio.to_thread(node.sdo.upload, 0x1023, 3)
+    reply: bytes = await asyncio.to_thread(node.sdo.upload, 0x1023, 3)
     return reply.decode("ascii", errors="replace").rstrip("\x00").rstrip()
 
   # --- raw CANopen sends (SYNC + RPDO1 controlword) -----------------------
@@ -684,14 +695,14 @@ class KX2Driver(Driver):
   async def motor_get_motion_status(self, node_id: int) -> int:
     return await self.query_int(node_id, "MS", 0)
 
-  async def _motor_set_move_direction(
+  async def motor_set_move_direction(
     self, node_id: int, direction: JointMoveDirection
   ) -> None:
     # Elmo modulo mode register: bit0 enables modulo; bits6..7 encode the
     # direction (0=Normal, 1=CW, 2=CCW, 3=Shortest). Packs to 1 + 64*direction
     # = 1/65/129/193.
     val = 1 + 64 * int(direction)
-    await self._can_sdo_download_elmo_object(node_id, 24818, 0, val, ElmoObjectDataType.UNSIGNED16)
+    await self.can_sdo_download_elmo_object(node_id, 24818, 0, val, ElmoObjectDataType.UNSIGNED16)
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
     ms_val = await self.query_int(node_id, "MS", 0)
@@ -806,7 +817,7 @@ class KX2Driver(Driver):
 
   # --- motion primitives --------------------------------------------------
 
-  async def _pvt_select_mode(self, enable: bool) -> None:
+  async def pvt_select_mode(self, enable: bool) -> None:
     """Enable/disable PVT mode on all motion axes via standard SDO writes."""
     if enable:
       if not self._pvt_mode:
@@ -832,11 +843,12 @@ class KX2Driver(Driver):
     # Poll MS every 30ms after a 50ms warm-up. The warm-up avoids reading
     # MS=0 in the window between CW=63 and motion actually starting.
     assert self._loop is not None
+    loop = self._loop
 
     async def _poll_axis(nid: int) -> None:
-      deadline = self._loop.time() + timeout
+      deadline = loop.time() + timeout
       await asyncio.sleep(0.05)
-      while self._loop.time() < deadline:
+      while loop.time() < deadline:
         try:
           if await self.motor_check_if_move_done(int(nid)):
             return
@@ -849,7 +861,7 @@ class KX2Driver(Driver):
 
     await asyncio.gather(*(_poll_axis(n) for n in node_ids))
 
-  async def _motors_move_start(
+  async def motors_move_start(
     self, node_ids: List[int], *, relative: bool = False
   ) -> None:
     relative_bit = 0x40 if relative else 0

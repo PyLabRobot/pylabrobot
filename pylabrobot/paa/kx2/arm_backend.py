@@ -6,7 +6,7 @@ import time
 import warnings
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -43,6 +43,14 @@ class HomeStatus(IntEnum):
   InitializedWithoutHoming = 2
 
 
+MOTION_AXES = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+
+# Axes that move in linear units (mm/s, mm/s^2). All others move in rotary
+# units (deg/s, deg/s^2). Used to pick the right speed/acceleration from
+# the linear/rotary split in JointMoveParams / CartesianMoveParams.
+_LINEAR_AXES = frozenset({Axis.Z, Axis.RAIL, Axis.SERVO_GRIPPER})
+
+
 class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   """Arm-capability backend for the PAA KX2.
 
@@ -71,6 +79,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self._gripper_z_offset = float(gripper_z_offset)
     self._gripper_finger_side: GripperFingerSide = gripper_finger_side
     self._config: Optional[KX2Config] = None
+    self._freedrive_axes: List[int] = []
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     # Driver has already brought CAN up (connect + node discovery + PDO
@@ -152,7 +161,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.driver.write(nid, "JV", 0, srch_vel)
 
     try:
-      params = [int(hs_pe), int(timeout * 1000)]
+      params: List[Union[int, float]] = [int(hs_pe), int(timeout * 1000)]
       last_line = await self.driver.user_program_run(
         nid, "Home", params, int(timeout), True
       )
@@ -990,38 +999,42 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.motors_move_absolute_execute(plan)
 
   async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
-    await self.driver._pvt_select_mode(False)
+    await self.driver.pvt_select_mode(False)
 
-    print(f"[MOVE PLAN] move_time={plan.move_time:.3f}s, {len(plan.moves)} axes:")
-    for move in plan.moves:
-      print(
-        f"  node={move.node_id} pos={move.position} vel={move.velocity} "
-        f"acc={move.acceleration} dir={move.direction.name}"
+    if logger.isEnabledFor(logging.DEBUG):
+      logger.debug(
+        "move plan: move_time=%.3fs, %d axes:", plan.move_time, len(plan.moves)
       )
+      for move in plan.moves:
+        logger.debug(
+          "  node=%d pos=%s vel=%s acc=%s dir=%s",
+          move.node_id, move.position, move.velocity,
+          move.acceleration, move.direction.name,
+        )
 
     for move in plan.moves:
       nid = int(move.node_id)
-      await self.driver._motor_set_move_direction(nid, move.direction)
+      await self.driver.motor_set_move_direction(nid, move.direction)
       # 0x607A = Target Position (24698 decimal)
-      await self.driver._can_sdo_download_elmo_object(
+      await self.driver.can_sdo_download_elmo_object(
         nid, 24698, 0, int(move.position), ElmoObjectDataType.INTEGER32,
       )
       # 0x6081 = Profile Velocity (24705 decimal)
-      await self.driver._can_sdo_download_elmo_object(
+      await self.driver.can_sdo_download_elmo_object(
         nid, 24705, 0, int(move.velocity), ElmoObjectDataType.UNSIGNED32,
       )
       acc = max(int(move.acceleration), 100)
       # 0x6083 = Profile Acceleration (24707 decimal)
-      await self.driver._can_sdo_download_elmo_object(
+      await self.driver.can_sdo_download_elmo_object(
         nid, 24707, 0, acc, ElmoObjectDataType.UNSIGNED32
       )
       # 0x6084 = Profile Deceleration (24708 decimal)
-      await self.driver._can_sdo_download_elmo_object(
+      await self.driver.can_sdo_download_elmo_object(
         nid, 24708, 0, acc, ElmoObjectDataType.UNSIGNED32
       )
 
     node_ids = [move.node_id for move in plan.moves]
-    await self.driver._motors_move_start(node_ids)
+    await self.driver.motors_move_start(node_ids)
     await self.driver.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
   async def _cart_to_joints(
@@ -1034,19 +1047,17 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     snaps each rotary axis to the nearest 360° multiple of the current
     position, re-enforcing the wrist sign afterward.
     """
-    current = await self.request_joint_position()
-    current_int = {int(k): v for k, v in current.items()}
+    current = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
     # IK needs an explicit cw/ccw; for closest mode fill from the current
     # joint's sign so IK has a valid choice. Snap then runs with the
     # *original* pose.wrist — None disables sign re-enforce so the snap
     # actually picks the closest J4.
     ik_wrist = pose.wrist if pose.wrist is not None else (
-      "ccw" if current_int[Axis.WRIST] >= 0 else "cw"
+      "ccw" if current[Axis.WRIST] >= 0 else "cw"
     )
     resolved = dataclasses.replace(pose, wrist=ik_wrist)
     ik_joints = kinematics.ik(resolved, self._cfg)
-    snapped = kinematics.snap_to_current(ik_joints, current_int, pose.wrist)
-    return {Axis(k): v for k, v in snapped.items()}
+    return kinematics.snap_to_current(ik_joints, current, pose.wrist)
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
 
@@ -1078,8 +1089,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     check_plate_gripped: bool = True
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
-    for axis in MOTION_AXES:
-      await self.driver.motor_emergency_stop(node_id=axis)
+    # Fire MO=0 on every motion axis concurrently — serial halts let later
+    # axes coast for the duration of the earlier SDOs.
+    await asyncio.gather(
+      *(self.driver.motor_emergency_stop(node_id=axis) for axis in MOTION_AXES)
+    )
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
     raise NotImplementedError(
@@ -1090,7 +1104,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
-    return kinematics.fk(await self.request_joint_position(), self._cfg)
+    joints = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
+    return kinematics.fk(joints, self._cfg)
 
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -1237,14 +1252,22 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     free_axes: Optional[List[int]] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    # KX2 frees all motion axes at once; free_axes is accepted for API parity.
-    del free_axes
-    for axis in MOTION_AXES:
+    # Default: free all motion axes (shoulder/Z/elbow/wrist) but never the
+    # gripper, so a held plate doesn't drop. Caller can override with an
+    # explicit list; [0] means "all motion axes" per CanFreedrive convention.
+    if free_axes is None or free_axes == [0]:
+      axes: List[int] = [int(a) for a in MOTION_AXES]
+    else:
+      axes = [int(a) for a in free_axes]
+    for axis in axes:
       await self.driver.motor_enable(node_id=axis, state=False, use_ds402=True)
+    self._freedrive_axes = axes
 
   async def stop_freedrive_mode(self, backend_params: Optional[BackendParams] = None) -> None:
-    for axis in MOTION_AXES:
+    axes = self._freedrive_axes or list(MOTION_AXES)
+    for axis in axes:
       await self.driver.motor_enable(node_id=axis, state=True, use_ds402=True)
+    self._freedrive_axes = []
 
   async def very_dangerously_yeet(
     self,
@@ -1360,10 +1383,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await _yeet_arm_plan(driver, sh_plan)
       await _yeet_arm_plan(driver, wr_plan)
 
-      await driver._motors_move_start([int(Axis.SHOULDER)])
+      await driver.motors_move_start([int(Axis.SHOULDER)])
       t0 = time.monotonic()
       await asyncio.sleep(max(0.0, wrist_trigger_t - (time.monotonic() - t0)))
-      await driver._motors_move_start([int(Axis.WRIST)])
+      await driver.motors_move_start([int(Axis.WRIST)])
 
       await asyncio.sleep(max(0.0, release_t - (time.monotonic() - t0)))
       await self.motors_move_absolute_execute(gripper_plan)
@@ -1393,14 +1416,6 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         await driver.write(nid, "SD", 0, s["SD0"])
         cfg.axes[ax].max_vel = s["max_vel"]
         cfg.axes[ax].max_accel = s["max_accel"]
-
-
-MOTION_AXES = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
-
-# Axes that move in linear units (mm/s, mm/s^2). All others move in rotary
-# units (deg/s, deg/s^2). Used to pick the right speed/acceleration from
-# the linear/rotary split in JointMoveParams / CartesianMoveParams.
-_LINEAR_AXES = frozenset({Axis.Z, Axis.RAIL, Axis.SERVO_GRIPPER})
 
 
 class _MotionLimits(Dict[Axis, tuple]):
@@ -1523,20 +1538,20 @@ async def _yeet_build_axis_move(
 async def _yeet_arm_plan(driver: KX2Driver, plan: MotorsMovePlan) -> None:
   """Pre-load a plan onto the drives without triggering it. Splits SDO
   setup latency from the move start so the timer can be accurate."""
-  await driver._pvt_select_mode(False)
+  await driver.pvt_select_mode(False)
   for move in plan.moves:
     nid = int(move.node_id)
-    await driver._motor_set_move_direction(nid, move.direction)
-    await driver._can_sdo_download_elmo_object(
+    await driver.motor_set_move_direction(nid, move.direction)
+    await driver.can_sdo_download_elmo_object(
       nid, 24698, 0, int(move.position), ElmoObjectDataType.INTEGER32,
     )
-    await driver._can_sdo_download_elmo_object(
+    await driver.can_sdo_download_elmo_object(
       nid, 24705, 0, int(move.velocity), ElmoObjectDataType.UNSIGNED32,
     )
     acc = max(int(move.acceleration), 100)
-    await driver._can_sdo_download_elmo_object(
+    await driver.can_sdo_download_elmo_object(
       nid, 24707, 0, acc, ElmoObjectDataType.UNSIGNED32,
     )
-    await driver._can_sdo_download_elmo_object(
+    await driver.can_sdo_download_elmo_object(
       nid, 24708, 0, acc, ElmoObjectDataType.UNSIGNED32,
     )

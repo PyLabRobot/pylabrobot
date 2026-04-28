@@ -53,11 +53,11 @@ class IKError(ValueError):
   """Target pose is unreachable (for now: non-Z rotation requested)."""
 
 
-def fk(joints: Dict[int, float], c: KX2Config) -> KX2GripperLocation:
+def fk(joints: Dict[Axis, float], c: KX2Config) -> KX2GripperLocation:
   """Forward kinematics.
 
   Args:
-    joints: {1: shoulder deg, 2: Z mm, 3: elbow mm, 4: wrist deg}.
+    joints: {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
     c: arm configuration.
   Returns:
     KX2GripperLocation with the gripper clamp point and a wrist sign
@@ -93,7 +93,7 @@ def fk(joints: Dict[int, float], c: KX2Config) -> KX2GripperLocation:
   )
 
 
-def ik(pose: KX2GripperLocation, c: KX2Config) -> Dict[int, float]:
+def ik(pose: KX2GripperLocation, c: KX2Config) -> Dict[Axis, float]:
   """Inverse kinematics.
 
   Args:
@@ -102,7 +102,7 @@ def ik(pose: KX2GripperLocation, c: KX2Config) -> Dict[int, float]:
       current joint's sign, then call `snap_to_current` after).
     c: arm configuration.
   Returns:
-    joints dict {1: shoulder deg, 2: Z mm, 3: elbow mm, 4: wrist deg}.
+    joints dict {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
     J4 is in (-360°, 0°] when wrist="cw" and [0°, 360°) when wrist="ccw"
     (J4 ≈ 0 satisfies both, up to `c.eps`).
 
@@ -148,8 +148,8 @@ def ik(pose: KX2GripperLocation, c: KX2Config) -> Dict[int, float]:
 
 
 def snap_to_current(
-  joints: Dict[int, float], current: Dict[int, float], wrist: Optional[Wrist] = None
-) -> Dict[int, float]:
+  joints: Dict[Axis, float], current: Dict[Axis, float], wrist: Optional[Wrist] = None
+) -> Dict[Axis, float]:
   """Shift rotary joints by 360° multiples toward `current`. Z and elbow are
   prismatic and pass through unchanged.
 

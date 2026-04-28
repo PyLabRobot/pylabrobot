@@ -43,5 +43,6 @@ Manufacturers
     pylabrobot.mettler_toledo
     pylabrobot.molecular_devices
     pylabrobot.opentrons
+    pylabrobot.paa
     pylabrobot.qinstruments
     pylabrobot.thermo_fisher

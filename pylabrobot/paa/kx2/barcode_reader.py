@@ -82,16 +82,6 @@ import logging
 import time
 from typing import Literal, Optional
 
-ReadMode = Literal["single", "multiple", "continuous"]
-
-try:
-  import serial as pyserial
-
-  _HAS_SERIAL = True
-except ImportError as _e:
-  _HAS_SERIAL = False
-  _SERIAL_IMPORT_ERROR = _e
-
 from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
 from pylabrobot.capabilities.barcode_scanning.backend import (
   BarcodeScannerBackend,
@@ -101,6 +91,16 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
+
+ReadMode = Literal["single", "multiple", "continuous"]
+
+try:
+  import serial as pyserial
+
+  _HAS_SERIAL = True
+except ImportError as _e:
+  _HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = _e
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +125,9 @@ class KX2BarcodeReaderDriver(Driver):
 
   def __init__(self, port: str, baudrate: int = default_baudrate):
     if not _HAS_SERIAL:
-      raise RuntimeError(
-        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
-        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      raise ImportError(
+        "pyserial is not installed. Install with `pip install pylabrobot[serial]` "
+        f"(import error: {_SERIAL_IMPORT_ERROR})"
       )
     super().__init__()
     self.io = Serial(
