@@ -283,17 +283,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   # -- servo gripper ------------------------------------------------------
 
   async def servo_gripper_initialize(self):
-    try:
-      await self.driver.motor_enable(
-        node_id=int(Axis.SERVO_GRIPPER), state=True, use_ds402=False
-      )
-    except Exception as e:
-      logger.warning(
-        "Error enabling servo gripper motor on node %s: %s", Axis.SERVO_GRIPPER, e
-      )
-
+    # Don't swallow motor_enable failures here — homing is the next step
+    # and will fault with a confusing "homing failure" error if the motor
+    # never came up. Better to surface the real cause.
+    await self.driver.motor_enable(
+      node_id=int(Axis.SERVO_GRIPPER), state=True, use_ds402=False
+    )
     await self.servo_gripper_home()
-
     await self.servo_gripper_close()
 
   async def servo_gripper_home(self) -> None:
@@ -1287,7 +1283,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     higher risks tracking-error faults that need Elmo Composer recovery.
     """
     warning = (
-      f"⚠️  very_dangerously_yeet: swing the arm at {bump:.2f}× firmware-max "
+      f"WARNING: very_dangerously_yeet: swing the arm at {bump:.2f}x firmware-max "
       "and open the gripper mid-swing. Anything in the gripper will be "
       "thrown. High bump can fault the drive. Type 'y' to continue: "
     )
