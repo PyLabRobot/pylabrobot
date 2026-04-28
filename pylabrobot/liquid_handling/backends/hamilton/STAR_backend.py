@@ -10092,6 +10092,79 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -----------------------------------------------------------------------
+  # iSWAP: Combined Rotation-Wrist Moves
+  # -----------------------------------------------------------------------
+
+  async def iswap_rotate_both_joints(
+    self,
+    rotation_position_increments: int,
+    wrist_position_increments: int,
+    rotation_velocity_incr_per_sec: int = 55000,
+    wrist_velocity_incr_per_sec: int = 48000,
+    rotation_acceleration_kincr_per_sec2: int = 170,
+    wrist_acceleration_kincr_per_sec2: int = 145,
+    rotation_current_limit: int = 5,
+    wrist_current_limit: int = 5,
+  ) -> None:
+    """Absolute parallel move of rotation (j01) + wrist (j02) drives.
+
+    Args:
+      rotation_position_increments: signed rotation-drive destination position,
+        bounded by the rotation drive envelope.
+      wrist_position_increments: signed wrist-drive destination position, bounded
+        by the wrist drive envelope.
+      rotation_velocity_incr_per_sec: rotation max velocity, range 20..75000.
+      wrist_velocity_incr_per_sec: wrist max velocity, range 20..65000.
+      rotation_acceleration_kincr_per_sec2: rotation acceleration in 1000 incr/sec^2,
+        range 5..200.
+      wrist_acceleration_kincr_per_sec2: wrist acceleration in 1000 incr/sec^2,
+        range 5..200.
+      rotation_current_limit: rotation current protection limiter, range 0..7.
+      wrist_current_limit: wrist current protection limiter, range 0..7.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    if abs(rotation_position_increments) > STARBackend.iswap_rotation_drive_max_increment:
+      raise ValueError(
+        f"rotation_position_increments must be between "
+        f"{-STARBackend.iswap_rotation_drive_max_increment} and "
+        f"{STARBackend.iswap_rotation_drive_max_increment}; got {rotation_position_increments}"
+      )
+    if abs(wrist_position_increments) > STARBackend.iswap_wrist_drive_max_increment:
+      raise ValueError(
+        f"wrist_position_increments must be between "
+        f"{-STARBackend.iswap_wrist_drive_max_increment} and "
+        f"{STARBackend.iswap_wrist_drive_max_increment}; got {wrist_position_increments}"
+      )
+
+    if not 20 <= rotation_velocity_incr_per_sec <= 75000:
+      raise ValueError("rotation_velocity_incr_per_sec must be in 20..75000")
+    if not 20 <= wrist_velocity_incr_per_sec <= 65000:
+      raise ValueError("wrist_velocity_incr_per_sec must be in 20..65000")
+    if not 5 <= rotation_acceleration_kincr_per_sec2 <= 200:
+      raise ValueError("rotation_acceleration_kincr_per_sec2 must be in 5..200")
+    if not 5 <= wrist_acceleration_kincr_per_sec2 <= 200:
+      raise ValueError("wrist_acceleration_kincr_per_sec2 must be in 5..200")
+    if not 0 <= rotation_current_limit <= 7:
+      raise ValueError("rotation_current_limit must be in 0..7")
+    if not 0 <= wrist_current_limit <= 7:
+      raise ValueError("wrist_current_limit must be in 0..7")
+
+    await self.send_command(
+      module="R0",
+      command="PA",
+      wa=f"{rotation_position_increments:+06}",
+      wv=f"{rotation_velocity_incr_per_sec:05}",
+      wr=f"{rotation_acceleration_kincr_per_sec2:03}",
+      ww=f"{rotation_current_limit}",
+      ta=f"{wrist_position_increments:+06}",
+      tv=f"{wrist_velocity_incr_per_sec:05}",
+      tr=f"{wrist_acceleration_kincr_per_sec2:03}",
+      tw=f"{wrist_current_limit}",
+    )
+
+  # -----------------------------------------------------------------------
   # iSWAP: Gripper
   # -----------------------------------------------------------------------
 
