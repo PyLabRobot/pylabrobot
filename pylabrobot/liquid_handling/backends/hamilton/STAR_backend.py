@@ -9819,7 +9819,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=await self.iswap_rotation_drive_request_z(),
     )
 
-  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, int]:
+  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, Union[int, float]]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; documented
@@ -9827,18 +9827,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     firmware-mnemonic names (`wp5..wp8`) so they can be addressed via
     R0 WP wp# without translation.
 
-    Keys (all values are signed motor increments; W-drive resolution
-    0.00310 deg/incr):
-      "home"        pw[0]  - home position
-      "w1"          pw[1]  - LEFT deck position  (~ -90 deg)
-      "w2"          pw[2]  - FRONT deck position (~   0 deg)
-      "w3"          pw[3]  - RIGHT deck position (~ +90 deg)
-      "parking"     pw[4]  - past-W3 parking pose (firmware requires > iw + 50)
-      "extra_1"     pw[5]  - extra slot, address via R0 WP wp5
-      "extra_2"     pw[6]  - extra slot, address via R0 WP wp6
-      "extra_3"     pw[7]  - extra slot, address via R0 WP wp7
-      "extra_4"     pw[8]  - extra slot, address via R0 WP wp8
-      "arm_length"  pw[9]  - W arm-length offset
+    Keys (motor increments unless noted; W-drive resolution 0.00310 deg/incr):
+      "home"       pw[0]  - home position
+      "left"       pw[1]  - LEFT deck position  (~ -90 deg)
+      "front"      pw[2]  - FRONT deck position (~   0 deg)
+      "right"      pw[3]  - RIGHT deck position (~ +90 deg)
+      "parking"    pw[4]  - past-W3 parking pose (firmware requires > iw + 50)
+      "extra_1"    pw[5]  - extra slot, address via R0 WP wp5
+      "extra_2"    pw[6]  - extra slot, address via R0 WP wp6
+      "extra_3"    pw[7]  - extra slot, address via R0 WP wp7
+      "extra_4"    pw[8]  - extra slot, address via R0 WP wp8
+      "link_1_len" pw[9]/10  - link 1 (rotation drive -> wrist) length in mm
 
     Raises:
       RuntimeError: if the iSWAP module is not installed.
@@ -9849,15 +9848,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pw = cast(List[int], resp["pw"])
     return {
       "home": pw[0],
-      "w1": pw[1],
-      "w2": pw[2],
-      "w3": pw[3],
+      "left": pw[1],
+      "front": pw[2],
+      "right": pw[3],
       "parking": pw[4],
       "extra_1": pw[5],
       "extra_2": pw[6],
       "extra_3": pw[7],
       "extra_4": pw[8],
-      "arm_length": pw[9],
+      "link_1_len": round(pw[9] / 10, 1),
     }
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
@@ -9963,7 +9962,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
 
-  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, int]:
+  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, Union[int, float]]:
     """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; documented
@@ -9971,18 +9970,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     firmware-mnemonic names (`tp6..tp8`) so they can be addressed via
     R0 TP tp# without translation.
 
-    Keys (all values are signed motor increments; T-drive resolution
-    0.00508 deg/incr):
-      "home"            pt[0]  - home position
-      "t1"              pt[1]  - FRONT plate grip direction (~ -135 deg)
-      "t2"              pt[2]  - RIGHT plate grip direction (~  -45 deg)
-      "t3"              pt[3]  - BACK plate grip direction  (~  +45 deg)
-      "t4"              pt[4]  - LEFT plate grip direction  (~ +135 deg)
-      "parking"         pt[5]  - free pip channel + parking pose (firmware requires < it - 50)
-      "extra_1"         pt[6]  - extra slot, address via R0 TP tp6
-      "extra_2"         pt[7]  - extra slot, address via R0 TP tp7
-      "extra_3"         pt[8]  - extra slot, address via R0 TP tp8
-      "gripper_length"  pt[9]  - gripper-length offset
+    Keys (motor increments unless noted; T-drive resolution 0.00508 deg/incr):
+      "home"       pt[0]  - home position
+      "right"      pt[1]  - wrist twisted right relative to arm (~ -135 deg)
+      "straight"   pt[2]  - wrist aligned with arm (~ -45 deg)
+      "left"       pt[3]  - wrist twisted left relative to arm (~ +45 deg)
+      "reverse"    pt[4]  - wrist twisted 180 deg from straight (~ +135 deg)
+      "parking"    pt[5]  - free pip channel + parking pose (firmware requires < it - 50)
+      "extra_1"    pt[6]  - extra slot, address via R0 TP tp6
+      "extra_2"    pt[7]  - extra slot, address via R0 TP tp7
+      "extra_3"    pt[8]  - extra slot, address via R0 TP tp8
+      "link_2_len" pt[9]/10  - link 2 (wrist -> gripper finger) length in mm
 
     Raises:
       RuntimeError: if the iSWAP module is not installed.
@@ -9993,15 +9991,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pt = cast(List[int], resp["pt"])
     return {
       "home": pt[0],
-      "t1": pt[1],
-      "t2": pt[2],
-      "t3": pt[3],
-      "t4": pt[4],
+      "right": pt[1],
+      "straight": pt[2],
+      "left": pt[3],
+      "reverse": pt[4],
       "parking": pt[5],
       "extra_1": pt[6],
       "extra_2": pt[7],
       "extra_3": pt[8],
-      "gripper_length": pt[9],
+      "link_2_len": round(pt[9] / 10, 1),
     }
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
