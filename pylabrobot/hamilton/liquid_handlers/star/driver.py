@@ -18,7 +18,7 @@ from .cover import STARCover
 from .errors import (
   star_firmware_string_to_error,
 )
-from .fw_parsing import parse_star_fw_string
+from .fw_parsing import parse_star_firmware_version_date, parse_star_fw_string
 from .head96_backend import STARHead96Backend
 from .iswap import iSWAPBackend
 from .pip_backend import STARPIPBackend
@@ -516,10 +516,11 @@ class STARDriver(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="RE")
 
-  async def request_firmware_version(self):
+  async def request_firmware_version(self) -> datetime.date:
     """Request firmware version (C0:RF)."""
 
-    return await self.send_command(module="C0", command="RF")
+    resp = await self.send_command(module="C0", command="RF")
+    return parse_star_firmware_version_date(str(resp))
 
   async def request_parameter_value(self):
     """Request parameter value (C0:RA)."""

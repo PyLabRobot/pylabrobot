@@ -619,7 +619,13 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_pip_channel_version(self, channel: int) -> str:
     """Deprecated: use ``star.pip.backend.channels[n].request_firmware_version()``."""
-    return await self._pip_channels[channel].request_firmware_version()
+    pip_channel = self._pip_channels[channel]
+    resp = await pip_channel.send_command(
+      module=pip_channel.module_id,
+      command="RF",
+      fmt="rf" + "&" * 17,
+    )
+    return str(resp["rf"])
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""

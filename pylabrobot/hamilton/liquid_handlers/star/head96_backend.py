@@ -107,9 +107,6 @@ class STARHead96Backend(Head96Backend):
     )
 
     resp = await self.driver.send_command(module="H0", command="RF")
-    if resp is None:
-      # Chatterbox / simulation: return a sensible default
-      return datetime.date(2024, 1, 1)
     return parse_star_firmware_version_date(str(resp))
 
   async def request_initialization_status(self) -> bool:
