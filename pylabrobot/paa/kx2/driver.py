@@ -117,7 +117,7 @@ class TPDOMappedObject(IntEnum):
   DigitalInputs = 0x60FD0020
 
 
-class ElmoObjectDataType(IntEnum):
+class _ElmoObjectDataType(IntEnum):
   UNSIGNED8 = 0
   UNSIGNED16 = 1
   UNSIGNED32 = 2
@@ -133,7 +133,7 @@ class CanError(Exception):
   """Custom exception for CAN motor errors."""
 
 
-class InputLogic(IntEnum):
+class _InputLogic(IntEnum):
   """Elmo SimplIQ IL[N] codes. Even = active-low; odd (value+1) = active-high."""
   GeneralPurpose = 0
   StopForward = 2
@@ -146,7 +146,7 @@ class InputLogic(IntEnum):
   AbortMotion = 16
 
 
-class JointMoveDirection(IntEnum):
+class _JointMoveDirection(IntEnum):
   """Move-direction hint used by the driver's move primitives.
 
   Lives here (not in the backend) because the driver's
@@ -162,7 +162,7 @@ class JointMoveDirection(IntEnum):
 
 
 @dataclass
-class MotorMoveParam:
+class _MotorMoveParam:
   """One axis of a coordinated move, expressed purely in node-ID terms."""
 
   # CANopen node ID for this axis. Backend passes `int(self.Axis.X)`.
@@ -171,12 +171,12 @@ class MotorMoveParam:
   velocity: int       # encoder counts/sec (driver-internal; backend converts from mm/s or deg/s)
   acceleration: int   # encoder counts/sec^2
   relative: bool = False
-  direction: JointMoveDirection = JointMoveDirection.ShortestWay
+  direction: _JointMoveDirection = _JointMoveDirection.ShortestWay
 
 
 @dataclass
-class MotorsMovePlan:
-  moves: List[MotorMoveParam] = field(default_factory=list)
+class _MotorsMovePlan:
+  moves: List[_MotorMoveParam] = field(default_factory=list)
   move_time: float = 10.0
 
 
@@ -211,6 +211,21 @@ class KX2Driver(Driver):
     channel: Optional[str] = None,
     bitrate: int = 500000,
   ) -> None:
+    # The non-default topologies (rail-mounted KX2, gripper-less KX2)
+    # have shim code paths in this driver and the backend, but neither
+    # has been exercised against real hardware. KX2ArmBackend._on_setup
+    # also calls servo_gripper_initialize unconditionally. Refuse the
+    # configuration up front rather than letting users hit cryptic
+    # failures downstream.
+    if has_rail or not has_servo_gripper:
+      raise NotImplementedError(
+        "KX2 has only been tested with the default 4-axis arm + servo "
+        "gripper topology (has_rail=False, has_servo_gripper=True). "
+        "Other configurations have shim code paths but the setup / "
+        "homing layer needs work — see KX2ArmBackend._on_setup and "
+        "servo_gripper_initialize."
+      )
+
     super().__init__()
     self._interface = interface
     self._channel = channel
@@ -241,6 +256,13 @@ class KX2Driver(Driver):
 
     self._pvt_mode: bool = False
     self.EmcyMoveErrorReceived: bool = False
+
+  @property
+  def loop(self) -> asyncio.AbstractEventLoop:
+    """Event loop captured in setup(). Raises if accessed before setup()."""
+    if self._loop is None:
+      raise RuntimeError("KX2Driver event loop not initialized; call setup() first.")
+    return self._loop
 
   # --- lifecycle -----------------------------------------------------------
 
@@ -302,12 +324,12 @@ class KX2Driver(Driver):
 
     # Elmo vendor objects: interpolation config for PVT mode.
     for nid in self.motion_node_ids:
-      await self.can_sdo_download_elmo_object(nid, 24768, 0, -1, ElmoObjectDataType.INTEGER16)
-      await self.can_sdo_download_elmo_object(nid, 24772, 2, 16, ElmoObjectDataType.UNSIGNED32)
-      await self.can_sdo_download_elmo_object(nid, 24772, 3, 0, ElmoObjectDataType.UNSIGNED8)
-      await self.can_sdo_download_elmo_object(nid, 24772, 5, 8, ElmoObjectDataType.UNSIGNED8)
-      await self.can_sdo_download_elmo_object(nid, 24770, 2, -3, ElmoObjectDataType.INTEGER8)
-      await self.can_sdo_download_elmo_object(nid, 24669, 0, 1, ElmoObjectDataType.INTEGER16)
+      await self.can_sdo_download_elmo_object(nid, 24768, 0, -1, _ElmoObjectDataType.INTEGER16)
+      await self.can_sdo_download_elmo_object(nid, 24772, 2, 16, _ElmoObjectDataType.UNSIGNED32)
+      await self.can_sdo_download_elmo_object(nid, 24772, 3, 0, _ElmoObjectDataType.UNSIGNED8)
+      await self.can_sdo_download_elmo_object(nid, 24772, 5, 8, _ElmoObjectDataType.UNSIGNED8)
+      await self.can_sdo_download_elmo_object(nid, 24770, 2, -3, _ElmoObjectDataType.INTEGER8)
+      await self.can_sdo_download_elmo_object(nid, 24669, 0, 1, _ElmoObjectDataType.INTEGER16)
 
     # RPDO1 = ControlWord (for DS402 enable), RPDO3 = interpolated target.
     for nid in self.motion_node_ids:
@@ -449,18 +471,18 @@ class KX2Driver(Driver):
     elmo_object_int: int,
     sub_index: int,
     data: Union[int, float],
-    data_type: ElmoObjectDataType,
+    data_type: _ElmoObjectDataType,
   ) -> None:
     # Byte width + signedness derived from data_type; float inputs truncate to int.
     _SDO_ELMO_PACK = {
-      ElmoObjectDataType.UNSIGNED8:  (1, False),
-      ElmoObjectDataType.UNSIGNED16: (2, False),
-      ElmoObjectDataType.UNSIGNED32: (4, False),
-      ElmoObjectDataType.UNSIGNED64: (8, False),
-      ElmoObjectDataType.INTEGER8:   (1, True),
-      ElmoObjectDataType.INTEGER16:  (2, True),
-      ElmoObjectDataType.INTEGER32:  (4, True),
-      ElmoObjectDataType.INTEGER64:  (8, True),
+      _ElmoObjectDataType.UNSIGNED8:  (1, False),
+      _ElmoObjectDataType.UNSIGNED16: (2, False),
+      _ElmoObjectDataType.UNSIGNED32: (4, False),
+      _ElmoObjectDataType.UNSIGNED64: (8, False),
+      _ElmoObjectDataType.INTEGER8:   (1, True),
+      _ElmoObjectDataType.INTEGER16:  (2, True),
+      _ElmoObjectDataType.INTEGER32:  (4, True),
+      _ElmoObjectDataType.INTEGER64:  (8, True),
     }
     spec = _SDO_ELMO_PACK.get(data_type)
     if spec is None:
@@ -546,7 +568,7 @@ class KX2Driver(Driver):
       old = self._pending_bi.pop(key, None)
       if old is not None and not old.done():
         old.cancel()
-      fut = self._loop.create_future() if self._loop else asyncio.get_event_loop().create_future()
+      fut = self.loop.create_future()
       self._pending_bi[key] = fut
       futures.append(fut)
 
@@ -696,13 +718,13 @@ class KX2Driver(Driver):
     return await self.query_int(node_id, "MS", 0)
 
   async def motor_set_move_direction(
-    self, node_id: int, direction: JointMoveDirection
+    self, node_id: int, direction: _JointMoveDirection
   ) -> None:
     # Elmo modulo mode register: bit0 enables modulo; bits6..7 encode the
     # direction (0=Normal, 1=CW, 2=CCW, 3=Shortest). Packs to 1 + 64*direction
     # = 1/65/129/193.
     val = 1 + 64 * int(direction)
-    await self.can_sdo_download_elmo_object(node_id, 24818, 0, val, ElmoObjectDataType.UNSIGNED16)
+    await self.can_sdo_download_elmo_object(node_id, 24818, 0, val, _ElmoObjectDataType.UNSIGNED16)
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
     ms_val = await self.query_int(node_id, "MS", 0)
@@ -970,7 +992,7 @@ class KX2Driver(Driver):
   ) -> None:
     """Set IL[input_num]: drive auto-acts on input edges (e.g. halt motion).
 
-    Pass an `InputLogic` member or raw int for `logic`. With `StopForward` the
+    Pass an `_InputLogic` member or raw int for `logic`. With `StopForward` the
     drive halts the motor itself the instant the input trips during forward
     motion — no software in the loop. Skips the write if value already matches;
     settles 250ms after a real change (Elmo IL needs time to apply).
