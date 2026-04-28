@@ -9743,12 +9743,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -----------------------------------------------------------------------
-  # iSWAP: Rotation Drive (Joint 1)
+  # iSWAP: "Rotation Drive" (Joint 1)
   # -----------------------------------------------------------------------
 
   iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
   iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
-  iswap_rotation_drive_deg_per_increment = 0.00309619077  # ~1% per-stop spread on real machines
+  iswap_rotation_drive_deg_per_increment = 0.00309619077
 
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
@@ -9944,12 +9944,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Invalid rotation drive orientation: {orientation}")
 
   # -----------------------------------------------------------------------
-  # iSWAP: Wrist Drive (Joint 2)
+  # iSWAP: "Wrist Drive" (Joint 2)
   # -----------------------------------------------------------------------
 
   iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
   iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
-  iswap_wrist_drive_deg_per_increment = 0.00507968798  # ~1% per-stop spread on real machines
+  iswap_wrist_drive_deg_per_increment = 0.00507968798
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
