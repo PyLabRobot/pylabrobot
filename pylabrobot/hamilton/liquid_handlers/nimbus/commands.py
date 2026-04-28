@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass
 
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.messages import HoiParams, HoiParamsParser
@@ -31,18 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 class NimbusCommand(TCPCommand):
-  """Thin Nimbus command base for namespace clarity.
-
-  Dataclass subclasses with wire-annotated fields are auto-serialized via
-  :meth:`HoiParams.from_struct`. Non-dataclass commands (e.g. status queries
-  with no payload) inherit empty params from :class:`TCPCommand`.
-  """
+  """Thin Nimbus command base for namespace clarity."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
 
-  def build_parameters(self) -> HoiParams:
-    return HoiParams.from_struct(self) if is_dataclass(self) else HoiParams()
+  def _build_structured_parameters(self) -> HoiParams:
+    """Serialize wire-annotated dataclass payload fields in declaration order."""
+    return HoiParams.from_struct(self)
 
 
 # ============================================================================
@@ -200,6 +196,8 @@ class InitializeSmartRoll(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 class IsInitialized(NimbusCommand):
@@ -277,6 +275,8 @@ class SetChannelConfiguration(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -300,6 +300,8 @@ class GetChannelConfiguration(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
@@ -348,6 +350,8 @@ class PickupTips(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -379,6 +383,8 @@ class DropTips(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -409,6 +415,8 @@ class DropTipsRoll(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -429,6 +437,8 @@ class EnableADC(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -449,6 +459,8 @@ class DisableADC(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -516,6 +528,8 @@ class Aspirate(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()
 
 
 @dataclass
@@ -583,3 +597,5 @@ class Dispense(NimbusCommand):
   def __post_init__(self):
     super().__init__(self.dest)
 
+  def build_parameters(self) -> HoiParams:
+    return self._build_structured_parameters()

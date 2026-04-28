@@ -107,6 +107,71 @@ class HoiParams:
     return cast("HoiParams", wire_type.encode_into(value, self))
 
   # ------------------------------------------------------------------
+  # Ergonomic shims — each delegates to add() with the matching alias
+  # from wire_types.  No encoding logic lives here.
+  # ------------------------------------------------------------------
+
+  def i8(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import I8
+
+    return self.add(value, I8)
+
+  def i16(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import I16
+
+    return self.add(value, I16)
+
+  def i32(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import I32
+
+    return self.add(value, I32)
+
+  def i64(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import I64
+
+    return self.add(value, I64)
+
+  def u8(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import U8
+
+    return self.add(value, U8)
+
+  def u16(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import U16
+
+    return self.add(value, U16)
+
+  def u32(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import U32
+
+    return self.add(value, U32)
+
+  def u64(self, value: int) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import U64
+
+    return self.add(value, U64)
+
+  def f32(self, value: float) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import F32
+
+    return self.add(value, F32)
+
+  def f64(self, value: float) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import F64
+
+    return self.add(value, F64)
+
+  def bool_(self, value: bool) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import Bool
+
+    return self.add(value, Bool)
+
+  def str_(self, value: str) -> "HoiParams":
+    from pylabrobot.hamilton.tcp.wire_types import Str
+
+    return self.add(value, Str)
+
+  # ------------------------------------------------------------------
   # Generic dataclass serialiser (wire_types.py Annotated metadata)
   # ------------------------------------------------------------------
 
@@ -671,10 +736,10 @@ class InitMessage:
     Returns:
       Complete packet bytes ready to send over TCP
     """
-    # Build raw connection parameters (NOT DataFragments)
+    # Build raw Protocol-7 connection blob (NOT DataFragments — distinct from HoiParams).
     # Frame: [version:1][message_id:1][count:1][unknown:1]
     # Parameters: [id:1][type:1][reserved:2][value:2] repeated
-    params = (
+    connection_blob = (
       Writer()
       # Frame
       .u8(0)  # version
@@ -700,7 +765,7 @@ class InitMessage:
     )
 
     # Build IP packet
-    packet_size = 1 + 1 + 2 + len(params)  # protocol + version + opts_len + params
+    packet_size = 1 + 1 + 2 + len(connection_blob)  # protocol + version + opts_len + blob
 
     return (
       Writer()
@@ -708,7 +773,7 @@ class InitMessage:
       .u8(self.ip_protocol)
       .u8(self.protocol_version)
       .u16(0)  # options_length
-      .raw_bytes(params)
+      .raw_bytes(connection_blob)
       .finish()
     )
 

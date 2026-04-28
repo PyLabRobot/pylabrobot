@@ -44,7 +44,7 @@ class TCPCommand:
               self.value = value
 
           def build_parameters(self) -> HoiParams:
-              return HoiParams().add(self.value, I32)
+              return HoiParams().i32(self.value)
 
           @classmethod
           def parse_response_parameters(cls, data: bytes) -> dict:

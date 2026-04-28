@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, ClassVar, Dict, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
@@ -26,7 +26,6 @@ from pylabrobot.hamilton.tcp.introspection import (
   HamiltonIntrospection,
   MethodDescriptor,
   ObjectRegistry,
-  flatten_firmware_tree,
 )
 from pylabrobot.hamilton.tcp.messages import (
   CommandResponse,
@@ -80,7 +79,7 @@ class _HcResultDescriptionHelper:
   """Resolves ``HcResultEntry`` to display strings and optional method context.
 
   Thin adapter over :attr:`HamiltonTCPClient.introspection` for Interface-0 metadata lookups
-  used after static ``error_codes`` and :data:`HC_RESULT_PROTOCOL` tables.
+  used after :attr:`HamiltonTCPClient._ERROR_CODES` and :data:`HC_RESULT_PROTOCOL` tables.
   """
 
   def __init__(self, client: HamiltonTCPClient) -> None:
@@ -112,9 +111,9 @@ class _HcResultDescriptionHelper:
       entry.action_id,
       entry.result,
     )
-    desc = self._client._error_codes.get(key_iface)
+    desc = self._client._ERROR_CODES.get(key_iface)
     if desc is None and key_action != key_iface:
-      desc = self._client._error_codes.get(key_action)
+      desc = self._client._ERROR_CODES.get(key_action)
     if desc is None:
       desc = HC_RESULT_PROTOCOL.get(entry.result)
     if desc is None:
@@ -158,6 +157,8 @@ class _HcResultDescriptionHelper:
 class HamiltonTCPClient(Driver):
   """Standalone transport + discovery/introspection client for Hamilton TCP devices."""
 
+  _ERROR_CODES: ClassVar[Dict[Tuple[int, int, int, int, int], str]] = {}
+
   def __init__(
     self,
     host: str,
@@ -167,7 +168,6 @@ class HamiltonTCPClient(Driver):
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
     connection_timeout: int = 600,
-    error_codes: Optional[Dict[Tuple[int, int, int, int, int], str]] = None,
   ):
     super().__init__()
 
@@ -188,12 +188,10 @@ class HamiltonTCPClient(Driver):
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
     self._sequence_numbers: Dict[Address, int] = {}
-    self._discovered_objects: Dict[str, list[Address]] = {}
     self._instrument_addresses: Dict[str, Address] = {}
     self._registry = ObjectRegistry()
     self._global_object_addresses: list[Address] = []
     self._event_handlers: list[Callable[[CommandResponse], None]] = []
-    self._error_codes: Dict[Tuple[int, int, int, int, int], str] = error_codes or {}
     self._introspection_impl: Optional[HamiltonIntrospection] = None
     self._hc_result_text = _HcResultDescriptionHelper(self)
 
@@ -208,11 +206,9 @@ class HamiltonTCPClient(Driver):
     return tuple(self._global_object_addresses)
 
   def get_root_object_addresses(self) -> list[Address]:
-    """Roots from the registry, or from legacy ``_discovered_objects``."""
-    roots = self._registry.get_root_addresses()
-    if roots:
-      return list(roots)
-    return list(self._discovered_objects.get("root", []))
+    """Root address from the registry as a single-element list (protocol compatibility shim)."""
+    addr = self._registry.get_root_address()
+    return [addr] if addr is not None else []
 
   @property
   def introspection(self) -> HamiltonIntrospection:
@@ -369,9 +365,9 @@ class HamiltonTCPClient(Driver):
     await self._discover_root()
     await self._discover_globals()
 
-    root_addresses = self._registry.get_root_addresses()
-    if root_addresses:
-      root_info = await self.introspection.get_object(root_addresses[0])
+    root_addr = self._registry.get_root_address()
+    if root_addr is not None:
+      root_info = await self.introspection.get_object(root_addr)
       root_info.children = {}
       self._registry.register(root_info.name, root_info)
 
@@ -451,8 +447,11 @@ class HamiltonTCPClient(Driver):
     assert isinstance(response, RegistrationResponse)
 
     root_objects = self._parse_registration_response(response)
-    self._discovered_objects["root"] = root_objects
-    self._registry.set_root_addresses(root_objects)
+    if len(root_objects) != 1:
+      raise RuntimeError(
+        f"Expected exactly one root object from discovery, got {len(root_objects)}: {root_objects}"
+      )
+    self._registry.set_root_address(root_objects[0])
 
   async def _discover_globals(self) -> None:
     logger.info("Discovering Hamilton global objects...")
@@ -519,9 +518,63 @@ class HamiltonTCPClient(Driver):
   async def send_command(
     self,
     command: TCPCommand,
-    ensure_connection: bool = True,
-    return_raw: bool = False,
-    raise_on_error: bool = True,
+    *,
+    read_timeout: Optional[float] = None,
+  ) -> Any:
+    """Send a command and return the interpreted response. Raises on any firmware error."""
+    return await self._send_raw(
+      command,
+      ensure_connection=True,
+      return_raw=False,
+      raise_on_error=True,
+      read_timeout=read_timeout,
+    )
+
+  async def send_query(
+    self,
+    command: TCPCommand,
+    *,
+    read_timeout: Optional[float] = None,
+  ) -> Optional[tuple]:
+    """Send a read/status command and return raw HOI bytes. Returns None on firmware error.
+
+    Use for hardware state probing where the response needs manual parsing or where
+    the firmware path may legitimately return an error (e.g. tip-presence checks).
+    Follows SCPI convention: queries read state, commands change state.
+    """
+    return cast(
+      Optional[tuple],
+      await self._send_raw(
+        command,
+        ensure_connection=True,
+        return_raw=True,
+        raise_on_error=False,
+        read_timeout=read_timeout,
+      ),
+    )
+
+  async def send_discovery_command(
+    self,
+    command: TCPCommand,
+    *,
+    read_timeout: Optional[float] = None,
+  ) -> Any:
+    """Send an Interface-0 introspection command during setup (no reconnect on failure)."""
+    return await self._send_raw(
+      command,
+      ensure_connection=False,
+      return_raw=False,
+      raise_on_error=True,
+      read_timeout=read_timeout,
+    )
+
+  async def _send_raw(
+    self,
+    command: TCPCommand,
+    *,
+    ensure_connection: bool,
+    return_raw: bool,
+    raise_on_error: bool,
     read_timeout: Optional[float] = None,
   ) -> Any:
     connection_errors = (
@@ -709,8 +762,8 @@ class HamiltonTCPClient(Driver):
     raise last_error
 
   async def resolve_path(self, path: str) -> Address:
-    """Resolve strict dot-path target to Address."""
-    return await self._registry.resolve(path, self)
+    """Resolve dot-path to Address (delegates to introspection)."""
+    return await self.introspection.resolve_path(path)
 
   async def resolve_target(
     self,
@@ -722,19 +775,6 @@ class HamiltonTCPClient(Driver):
       return target
     resolved = aliases.get(target, target) if aliases is not None else target
     return await self.resolve_path(resolved)
-
-  async def get_firmware_tree(self, refresh: bool = False):
-    """Return cached firmware tree, or build it through introspection."""
-    return await self.introspection.get_firmware_tree(refresh=refresh)
-
-  async def get_firmware_tree_flat(self, refresh: bool = False):
-    """Firmware object tree as a flat list of ``(path, address, object_info)`` per node.
-
-    Same preorder as :func:`~pylabrobot.hamilton.tcp.introspection.flatten_firmware_tree`;
-    convenient for dot-path indexing without walking :class:`FirmwareTree` manually.
-    """
-    tree = await self.get_firmware_tree(refresh=refresh)
-    return flatten_firmware_tree(tree)
 
   async def stop(self):
     try:

@@ -26,11 +26,11 @@ class Nimbus(Device):
     port: int = 2000,
   ):
     if chatterbox:
-      driver: NimbusDriver = NimbusChatterboxDriver(deck=deck)
+      driver: NimbusDriver = NimbusChatterboxDriver()
     else:
       if not host:
         raise ValueError("host must be provided when chatterbox is False.")
-      driver = NimbusDriver(deck=deck, host=host, port=port)
+      driver = NimbusDriver(host=host, port=port)
     super().__init__(driver=driver)
     self.driver: NimbusDriver = driver
     self.deck = deck
@@ -44,13 +44,22 @@ class Nimbus(Device):
     runs InitializeSmartRoll, and wires the PIP capability frontend to the driver's
     PIP backend.
     """
-    if not isinstance(backend_params, NimbusSetupParams):
-      backend_params = NimbusSetupParams()
+    if backend_params is None:
+      params = NimbusSetupParams(deck=self.deck)
+    elif isinstance(backend_params, NimbusSetupParams):
+      params = backend_params
+      if params.deck is None:
+        params = NimbusSetupParams(deck=self.deck, require_door_lock=params.require_door_lock)
+    else:
+      raise TypeError(
+        "Nimbus.setup expected NimbusSetupParams | None for backend_params, "
+        f"got {type(backend_params).__name__}"
+      )
 
     try:
-      await self.driver.setup(backend_params=backend_params)
+      await self.driver.setup(backend_params=params)
 
-      self.pip = PIP(backend=self.driver.pip, deck=self.deck)
+      self.pip = PIP(backend=self.driver.pip)
       self._capabilities = [self.pip]
       await self.pip._on_setup()
       self._setup_finished = True

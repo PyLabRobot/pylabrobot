@@ -8,10 +8,9 @@ from typing import Any, Optional
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.packets import Address
-from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
 from .door import NimbusDoor
-from .driver import NimbusDriver, NimbusSetupParams
+from .driver import NimbusDriver, NimbusResolvedInterfaces, NimbusSetupParams
 
 logger = logging.getLogger(__name__)
 
@@ -23,33 +22,49 @@ class NimbusChatterboxDriver(NimbusDriver):
   and use canned addresses and responses instead.
   """
 
-  def __init__(self, deck: NimbusDeck, num_channels: int = 8):
+  def __init__(self, num_channels: int = 8):
     # Pass dummy host — Socket is created but never opened
-    super().__init__(deck=deck, host="chatterbox", port=2000)
+    super().__init__(host="chatterbox", port=2000)
     self._num_channels = num_channels
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     from .pip_backend import NimbusPIPBackend
 
-    if not isinstance(backend_params, NimbusSetupParams):
-      backend_params = NimbusSetupParams()
+    if backend_params is None:
+      params = NimbusSetupParams()
+    elif isinstance(backend_params, NimbusSetupParams):
+      params = backend_params
+    else:
+      raise TypeError(
+        "NimbusChatterboxDriver.setup expected NimbusSetupParams | None for backend_params, "
+        f"got {type(backend_params).__name__}"
+      )
 
     # Use canned addresses (skip TCP connection entirely)
     pipette_address = Address(1, 1, 257)
-    self._nimbus_core_address = Address(1, 1, 48896)
+    nimbus_core_address = Address(1, 1, 48896)
+    self._nimbus_core_address = nimbus_core_address
     door_address = Address(1, 1, 268)
+    self._resolved_interfaces = {
+      "nimbus_core": nimbus_core_address,
+      "pipette": pipette_address,
+      "door_lock": door_address,
+    }
+    self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
 
     self.pip = NimbusPIPBackend(
-      driver=self, deck=self.deck, address=pipette_address, num_channels=self._num_channels
+      driver=self, deck=params.deck, address=pipette_address, num_channels=self._num_channels
     )
     self.door = NimbusDoor(driver=self, address=door_address)
-    if backend_params.require_door_lock and self.door is None:
+    if params.require_door_lock and self.door is None:
       raise RuntimeError("DoorLock is required but not available on this instrument.")
 
   async def stop(self):
     if self.door is not None:
       await self.door._on_stop()
     self.door = None
+    self._resolved_interfaces = {}
+    self._nimbus_resolved = None
 
   async def send_command(
     self,
