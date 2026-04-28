@@ -120,9 +120,9 @@ class KX2Config:
   elbow_offset: float
   elbow_zero_offset: float
 
-  # Per-axis params keyed by drive node-id (= Axis value). Iterating
-  # `axes` (or `axes.keys()`) gives the axes present on this arm.
-  axes: Dict[int, AxisConfig]
+  # Per-axis params keyed by Axis. Iterating `axes` (or `axes.keys()`)
+  # gives the axes present on this arm.
+  axes: Dict[Axis, AxisConfig]
 
   # Robot-level clearance limits (shoulder UF6/UF7).
   base_to_gripper_clearance_z: float

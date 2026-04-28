@@ -453,9 +453,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if has_rail:
       warnings.warn("Rails has not been tested for KX2 robots.")
 
-    axes: Dict[int, AxisConfig] = {}
+    axes: Dict[Axis, AxisConfig] = {}
     for nid in nodes:
-      axes[nid] = await self._read_axis_config(nid)
+      axes[Axis(nid)] = await self._read_axis_config(nid)
 
     sh = int(Axis.SHOULDER)
     return KX2Config(
@@ -1203,7 +1203,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     in a terminal.
     """
     return _MotionLimits(
-      {Axis(k): (cfg.max_vel, cfg.max_accel) for k, cfg in self._cfg.axes.items()},
+      {k: (cfg.max_vel, cfg.max_accel) for k, cfg in self._cfg.axes.items()},
     )
 
   async def start_freedrive_mode(
