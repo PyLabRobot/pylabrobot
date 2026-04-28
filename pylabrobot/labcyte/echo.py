@@ -7,6 +7,7 @@ import html
 import inspect
 import logging
 import os
+import re
 import socket
 import time
 import xml.etree.ElementTree as ET
@@ -431,6 +432,22 @@ class _HttpMessage:
     payload = self.body
     if _is_probably_gzip(payload):
       if not _gzip_stream_complete(payload):
+        decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        partial = decompressor.decompress(payload)
+        text = partial.decode("utf-8", errors="replace")
+        if "</SOAP-ENV:Envelope>" in text or "</soap:Envelope>" in text:
+          logger.warning(
+            "Echo gzip body was missing its end-of-stream marker; using complete decoded XML payload."
+          )
+          return text.encode("utf-8")
+        repaired_text = _repair_partial_xml_document(text)
+        if repaired_text is not None:
+          logger.warning(
+            "Echo gzip body was missing its end-of-stream marker and final XML closing tags; "
+            "using repaired decoded XML payload."
+          )
+          return repaired_text.encode("utf-8")
+        logger.warning("Incomplete Echo gzip body tail: %r", text[-500:])
         raise EchoProtocolError(
           f"Incomplete gzip-compressed Echo HTTP body ({len(payload)} bytes)."
         )
@@ -727,15 +744,69 @@ def _is_probably_gzip(payload: bytes) -> bool:
 
 
 def _gzip_stream_complete(payload: bytes) -> bool:
-  if not _is_probably_gzip(payload):
-    return True
+  return _split_complete_gzip_body(payload) is not None
 
+
+def _split_complete_gzip_body(payload: bytes) -> Optional[Tuple[bytes, bytes]]:
+  if not _is_probably_gzip(payload):
+    return payload, b""
   decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
   try:
     decompressor.decompress(payload)
   except zlib.error:
-    return False
-  return decompressor.eof
+    return None
+  if not decompressor.eof:
+    return None
+  body_length = len(payload) - len(decompressor.unused_data)
+  return payload[:body_length], decompressor.unused_data
+
+
+_XML_TAG_RE = re.compile(r"<(/?)([A-Za-z_][\w:.-]*)([^<>]*)>")
+
+
+def _repair_partial_xml_document(text: str) -> Optional[str]:
+  candidate = text.strip()
+  if not candidate:
+    return None
+  lower = candidate.lower()
+  if "<soap-env:envelope" not in lower and "<soap:envelope" not in lower:
+    return None
+  if "</soap-env:envelope>" in lower or "</soap:envelope>" in lower:
+    return candidate
+
+  last_tag_end = candidate.rfind(">")
+  if last_tag_end == -1:
+    return None
+  candidate = candidate[: last_tag_end + 1]
+
+  stack: list[str] = []
+  for match in _XML_TAG_RE.finditer(candidate):
+    full_tag = match.group(0)
+    if full_tag.startswith("<?") or full_tag.startswith("<!"):
+      continue
+    closing = match.group(1) == "/"
+    tag_name = match.group(2)
+    attrs = match.group(3).strip()
+    if not closing and attrs.endswith("/"):
+      continue
+    if closing:
+      if tag_name in stack:
+        while stack:
+          open_tag = stack.pop()
+          if open_tag == tag_name:
+            break
+      continue
+    stack.append(tag_name)
+
+  if not stack:
+    return None
+
+  repaired = candidate + "".join(f"</{tag_name}>" for tag_name in reversed(stack))
+  try:
+    ET.fromstring(repaired)
+  except ET.ParseError:
+    return None
+  return repaired
 
 
 def _is_gzip_protocol_error(error: BaseException) -> bool:
@@ -1069,6 +1140,7 @@ class EchoEventStream:
     self._reader = reader
     self._writer = writer
     self._closed = False
+    self._buffer = bytearray()
 
   async def __aenter__(self) -> "EchoEventStream":
     return self
@@ -1077,8 +1149,17 @@ class EchoEventStream:
     await self.close()
 
   async def read_event(self, timeout: Optional[float] = None) -> EchoEvent:
-    message = await self._driver._read_http_message(self._reader, timeout=timeout)
+    message = await self._driver._read_http_message(
+      self._reader,
+      timeout=timeout,
+      buffer=self._buffer,
+    )
     return _parse_event_from_message(message)
+
+  async def iter_events(self, timeout: Optional[float] = None) -> AsyncIterator[EchoEvent]:
+    """Yield events from the stream until the connection closes or the caller stops iteration."""
+    while True:
+      yield await self.read_event(timeout=timeout)
 
   async def read_events(
     self,
@@ -1686,8 +1767,17 @@ class EchoDriver(Driver):
     update_volume_trackers: bool = True,
   ) -> EchoSurveyRunResult:
     await self.set_plate_map(plate_map)
-    response_data = await self.survey_plate(survey)
     saved_data = None
+    try:
+      response_data = await self.survey_plate(survey)
+    except EchoProtocolError as exc:
+      if not fetch_saved_data or not survey.save or not _is_gzip_protocol_error(exc):
+        raise
+      logger.warning(
+        "PlateSurvey returned an incomplete gzip response after the survey run; "
+        "recovering by reading the saved survey data."
+      )
+      response_data = None
     if fetch_saved_data and survey.save:
       saved_data_error: BaseException | None = None
       for attempt in range(2):
@@ -2078,9 +2168,12 @@ class EchoDriver(Driver):
     self,
     reader: asyncio.StreamReader,
     timeout: Optional[float] = None,
+    buffer: Optional[bytearray] = None,
   ) -> _HttpMessage:
     read_timeout = _resolve_timeout(timeout, self.timeout)
-    data = bytearray()
+    data = bytearray(buffer or b"")
+    if buffer is not None:
+      buffer.clear()
     while HTTP_HEADER_END not in data:
       chunk = await asyncio.wait_for(reader.read(4096), timeout=read_timeout)
       if not chunk:
@@ -2104,22 +2197,27 @@ class EchoDriver(Driver):
       content_length = None
 
     if content_length is not None and content_length > 0:
-      body = await self._read_exact(
+      framed = await self._read_exact(
         reader,
         content_length,
         initial=rest,
         timeout=read_timeout,
       )
+      body = framed[:content_length]
+      extra = framed[content_length:]
     else:
       body = rest
+      extra = b""
 
     if _is_probably_gzip(body) and not _gzip_stream_complete(body):
-      body = await self._read_until_complete_gzip_body(
+      body, extra = await self._read_until_complete_gzip_body(
         reader,
-        initial=body,
+        initial=body + extra,
         advertised_length=content_length,
         timeout=read_timeout,
       )
+    if buffer is not None and extra:
+      buffer.extend(extra)
     return _HttpMessage(start_line=start_line, headers=headers, body=body)
 
   async def _read_exact(
@@ -2145,10 +2243,14 @@ class EchoDriver(Driver):
     initial: bytes,
     advertised_length: Optional[int],
     timeout: Optional[float] = None,
-  ) -> bytes:
+  ) -> Tuple[bytes, bytes]:
     read_timeout = _resolve_timeout(timeout, self.timeout)
     data = bytearray(initial)
-    while not _gzip_stream_complete(bytes(data)):
+    while True:
+      split = _split_complete_gzip_body(bytes(data))
+      if split is not None:
+        body, extra = split
+        break
       chunk = await asyncio.wait_for(reader.read(4096), timeout=read_timeout)
       if not chunk:
         advertised = "unknown" if advertised_length is None else str(advertised_length)
@@ -2158,13 +2260,13 @@ class EchoDriver(Driver):
         )
       data.extend(chunk)
 
-    if advertised_length is not None and len(data) != advertised_length:
+    if advertised_length is not None and len(body) != advertised_length:
       logger.warning(
         "Echo response gzip body exceeded advertised Content-Length: header=%s actual=%s",
         advertised_length,
-        len(data),
+        len(body),
       )
-    return bytes(data)
+    return body, extra
 
   def _parse_rpc_result(self, method: str, message: _HttpMessage) -> _RpcResult:
     payload_bytes = message.decoded_body_bytes()

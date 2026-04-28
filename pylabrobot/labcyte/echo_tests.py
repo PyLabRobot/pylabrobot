@@ -345,6 +345,37 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn(b"POST /Medman HTTP/1.1\nHost: ", registration)
     self.assertIn(b"add", gzip.decompress(registration.split(b"\r\n\r\n", 1)[1]))
 
+  async def test_read_events_buffers_overread_callback_frames(self):
+    await self.driver.setup()
+    fake_writer = _FakeWriter()
+    fake_reader = _FakeReader(
+      _soap_request(
+        "<handleEvent><Event>"
+        "<id>7000</id>"
+        "<source>Logger</source>"
+        "<payload>first</payload>"
+        "<timestamp>1</timestamp>"
+        "</Event></handleEvent>"
+      )
+      + _soap_request(
+        "<handleEvent><Event>"
+        "<id>7001</id>"
+        "<source>Logger</source>"
+        "<payload>second</payload>"
+        "<timestamp>2</timestamp>"
+        "</Event></handleEvent>"
+      )
+    )
+
+    with patch(
+      "pylabrobot.labcyte.echo.asyncio.open_connection",
+      return_value=(fake_reader, fake_writer),
+    ):
+      events = await self.driver.read_events(max_events=2, timeout=1.0)
+
+    self.assertEqual([event.payload for event in events], ["first", "second"])
+    self.assertEqual([event.event_id for event in events], ["7000", "7001"])
+
   async def test_lock_and_unlock_toggle_driver_state(self):
     await self.driver.setup()
     responses = [
