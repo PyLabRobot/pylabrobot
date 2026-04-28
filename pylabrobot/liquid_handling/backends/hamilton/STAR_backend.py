@@ -9746,6 +9746,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # iSWAP: Rotation Drive (Joint 1)
   # -----------------------------------------------------------------------
 
+  iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
+  iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
+  iswap_rotation_drive_deg_per_increment = 0.00309619077  # ~1% per-stop spread on real machines
+
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
     FRONT = 2
@@ -9898,7 +9902,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       STARBackend.RotationDriveOrientation.RIGHT: 29068,
       STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
     }
-    tolerance_incr = 1700  # ~5 deg at 0.00310 deg/incr (iSWAP W-drive resolution)
+    tolerance_incr = 1700  # ~5 deg at iswap_rotation_drive_deg_per_increment
 
     motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
 
@@ -9909,7 +9913,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if offset > tolerance_incr:
       raise ValueError(
         f"Unknown rotation orientation: {motor_position_increments} incr is "
-        f"{offset} incr (~{offset * 0.00310:.2f} deg) from the nearest predefined "
+        f"{offset} incr (~{offset * STARBackend.iswap_rotation_drive_deg_per_increment:.2f} deg) "
+        f"from the nearest predefined "
         f"stop ({orientation.name} at {rotation_reference_positions[orientation]}). "
         "Is the rotation drive in transit or mis-calibrated?"
       )
@@ -9942,6 +9947,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -----------------------------------------------------------------------
   # iSWAP: Wrist Drive (Joint 2)
   # -----------------------------------------------------------------------
+
+  iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
+  iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
+  iswap_wrist_drive_deg_per_increment = 0.00507968798  # ~1% per-stop spread on real machines
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
@@ -10035,7 +10044,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       STARBackend.WristDriveOrientation.LEFT: 8859,
       STARBackend.WristDriveOrientation.REVERSE: 26577,
     }
-    tolerance_incr = 1000  # ~5 deg at 0.00508 deg/incr (iSWAP T-drive resolution)
+    tolerance_incr = 1000  # ~5 deg at iswap_wrist_drive_deg_per_increment
 
     motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
 
@@ -10046,7 +10055,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if offset > tolerance_incr:
       raise ValueError(
         f"Unknown wrist orientation: {motor_position_increments} incr is "
-        f"{offset} incr (~{offset * 0.00508:.2f} deg) from the nearest predefined "
+        f"{offset} incr (~{offset * STARBackend.iswap_wrist_drive_deg_per_increment:.2f} deg) "
+        f"from the nearest predefined "
         f"stop ({orientation.name} at {wrist_reference_positions[orientation]}). "
         "Is the wrist drive in transit or mis-calibrated?"
       )
@@ -10064,6 +10074,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -----------------------------------------------------------------------
   # iSWAP: Gripper
   # -----------------------------------------------------------------------
+
+  iswap_gripper_drive_min_increment = 12780  # ~ 71 mm
+  iswap_gripper_drive_max_increment = 24120  # ~ 134 mm
 
   iswap_gripper_drive_mm_per_increment = 0.00554337
 
