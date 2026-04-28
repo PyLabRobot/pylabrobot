@@ -10106,7 +10106,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     rotation_current_limit: int = 5,
     wrist_current_limit: int = 5,
   ) -> None:
-    """Absolute parallel move of rotation (j01) + wrist (j02) drives.
+    """Absolute parallel move of rotation (Joint 1) + wrist (Joint 2) drives.
 
     Args:
       rotation_position [increments]: signed destination, range -30032..+30032.
