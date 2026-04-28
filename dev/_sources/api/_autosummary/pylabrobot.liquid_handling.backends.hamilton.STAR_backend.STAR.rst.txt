@@ -33,10 +33,19 @@
       ~STAR.head
       ~STAR.head96
       ~STAR.head96_installed
+      ~STAR.iswap_gripper_drive_max_increment
+      ~STAR.iswap_gripper_drive_min_increment
       ~STAR.iswap_gripper_drive_mm_per_increment
       ~STAR.iswap_installed
       ~STAR.iswap_parked
+      ~STAR.iswap_rotation_drive_deg_per_increment
+      ~STAR.iswap_rotation_drive_max_increment
+      ~STAR.iswap_rotation_drive_min_increment
+      ~STAR.iswap_rotation_drive_z_offset_above_finger_mm
       ~STAR.iswap_traversal_height
+      ~STAR.iswap_wrist_drive_deg_per_increment
+      ~STAR.iswap_wrist_drive_max_increment
+      ~STAR.iswap_wrist_drive_min_increment
       ~STAR.machine_conf
       ~STAR.module_id_length
       ~STAR.num_arms
@@ -151,6 +160,7 @@
       ~STAR.iswap_get_plate
       ~STAR.iswap_gripper_drive_increment_to_mm
       ~STAR.iswap_gripper_drive_mm_to_increment
+      ~STAR.iswap_gripper_request_predefined_positions
       ~STAR.iswap_gripper_request_width
       ~STAR.iswap_initialize_z_axis
       ~STAR.iswap_minimum_traversal_height
@@ -158,8 +168,15 @@
       ~STAR.iswap_open_gripper
       ~STAR.iswap_put_plate
       ~STAR.iswap_reengage_break
+      ~STAR.iswap_request_link_1_length
+      ~STAR.iswap_request_link_2_length
       ~STAR.iswap_rotate
+      ~STAR.iswap_rotation_drive_request_position
+      ~STAR.iswap_rotation_drive_request_predefined_positions
+      ~STAR.iswap_rotation_drive_request_x
       ~STAR.iswap_rotation_drive_request_y
+      ~STAR.iswap_rotation_drive_request_z
+      ~STAR.iswap_wrist_drive_request_predefined_positions
       ~STAR.load_carrier
       ~STAR.load_carrier_from_autoload_belt
       ~STAR.load_carrier_from_tray_and_scan_carrier_barcode

@@ -583,9 +583,14 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_rotation_drive">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">rotate_iswap_rotation_drive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orientation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">RotationDriveOrientation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.rotate_iswap_rotation_drive" title="Link to this definition">#</a></dt>
-<dd><dl class="field-list simple">
+<dd><p>Rotate the iSWAP rotation drive to a predefined working stop (R0 WP).</p>
+<dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>orientation</strong> (<em>RotationDriveOrientation</em>)</p>
+<dd class="field-odd"><p><strong>orientation</strong> (<em>RotationDriveOrientation</em>) – must be LEFT, FRONT, or RIGHT. PARKED_RIGHT is not
+accepted; use <code class="code docutils literal notranslate"><span class="pre">park_iswap()</span></code> for parking.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if orientation is not LEFT, FRONT, or RIGHT.</p>
 </dd>
 </dl>
 </dd></dl>

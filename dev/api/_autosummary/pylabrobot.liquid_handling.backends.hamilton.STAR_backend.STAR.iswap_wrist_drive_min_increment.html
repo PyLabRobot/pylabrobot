@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=0d03ad13"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments.html" />
-    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_max_increment" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_max_increment.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -561,7 +561,7 @@
     
     <li class="breadcrumb-item"><a href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.html" class="nav-link">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment</span></li>
   </ul>
 </nav>
 </div>
@@ -578,45 +578,12 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-request-iswap-rotation-drive-orientation">
-<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-request-iswap-rotation-drive-orientation" title="Link to this heading">#</a></h1>
-<dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">request_iswap_rotation_drive_orientation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">RotationDriveOrientation</span></span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation" title="Link to this definition">#</a></dt>
-<dd><p>Request the iSWAP rotation drive orientation.</p>
-<p>Uses nearest-neighbour classification against firmware default <code class="code docutils literal notranslate"><span class="pre">pw</span></code>
-values. Each machine’s EEPROM stores its own <code class="code docutils literal notranslate"><span class="pre">pw</span></code> adjustment so the
-actual stop position can drift by up to a few hundred increments per
-machine; an earlier implementation used +/-50 windows and faulted on
-machines calibrated outside that band. We now pick whichever predefined
-stop is closest and only raise if the drive is more than ~5 deg
-(~1700 incr) from any of them, which catches “drive is mid-transit /
-undefined” cases without being brittle to per-machine calibration.</p>
-<dl class="simple">
-<dt>Defaults (W-drive resolution = 0.00310 deg/incr):</dt><dd><p>LEFT          W1      -29068 incr  (~ -90 deg)
-FRONT         W2          +0 incr  (~   0 deg)
-RIGHT         W3      +29068 incr  (~ +90 deg)
-PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><p><em>RotationDriveOrientation</em> –</p>
-<dl class="simple">
-<dt>The interpreted rotation orientation</dt><dd><p>(LEFT, FRONT, RIGHT, or PARKED_RIGHT).</p>
-</dd>
-</dl>
-</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if the measured position is more than 1700 incr (~5 deg)
-    from any predefined stop (drive is in transit or drifted).</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>RotationDriveOrientation</p>
-</dd>
-</dl>
-</dd></dl>
+  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-wrist-drive-min-increment">
+<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-wrist-drive-min-increment" title="Link to this heading">#</a></h1>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment">
+<span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">iswap_wrist_drive_min_increment</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">-30000</span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
 </section>
 
@@ -631,20 +598,20 @@ PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_max_increment.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_position</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_max_increment</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_position_increments</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -667,7 +634,7 @@ PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation"><code class="docutils literal notranslate"><span class="pre">STAR.request_iswap_rotation_drive_orientation()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment"><code class="docutils literal notranslate"><span class="pre">STAR.iswap_wrist_drive_min_increment</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -675,7 +642,7 @@ PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)</p>
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -690,7 +657,7 @@ PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)</p>
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_rotation_drive_orientation.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>

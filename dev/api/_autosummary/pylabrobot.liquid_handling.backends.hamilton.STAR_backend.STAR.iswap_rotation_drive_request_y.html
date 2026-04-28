@@ -60,8 +60,8 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier.html" />
-    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -583,7 +583,11 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_y">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">iswap_rotation_drive_request_y</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_y" title="Link to this definition">#</a></dt>
-<dd><p>Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module.</p>
+<dd><p>Request iSWAP rotation drive Y position (deck coordinates), in mm.</p>
+<p>Reads the linear Y carriage that the rotation joint is mounted on. This is
+NOT the gripper finger’s Y - the finger position depends on the rotation
+drive (W) and wrist (T) angles. Use <code class="code docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_position</span></code>
+for the rotation drive’s full XYZ.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a></p>
@@ -604,20 +608,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
