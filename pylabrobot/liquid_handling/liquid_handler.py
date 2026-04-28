@@ -207,7 +207,7 @@ class LiquidHandler(Resource, Machine):
     state of the liquid handler and all children (the deck)."""
 
     head_state = state["head_state"]
-    if head_state and not getattr(self, "head", None):
+    if head_state and self.head == {}:
       # we haven't connected with a backend yet, so we don't know the number of channels.
       # Let's assume that the state accurately describes the number of channels.
       self.head = {c: TipTracker(thing=f"Channel {c}") for c in head_state}
@@ -216,7 +216,7 @@ class LiquidHandler(Resource, Machine):
 
     head96_state = state.get("head96_state", {})
     if head96_state:
-      if not getattr(self, "head96", None):
+      if self.head96 == {}:
         self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in head96_state}
       for channel, tracker_state in head96_state.items():
         self.head96[channel].load_state(tracker_state)
