@@ -43,12 +43,9 @@ class HomeStatus(IntEnum):
   InitializedWithoutHoming = 2
 
 
-MOTION_AXES = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
-
-# Axes that move in linear units (mm/s, mm/s^2). All others move in rotary
-# units (deg/s, deg/s^2). Used to pick the right speed/acceleration from
-# the linear/rotary split in JointMoveParams / CartesianMoveParams.
-_LINEAR_AXES = frozenset({Axis.Z, Axis.RAIL, Axis.SERVO_GRIPPER})
+# Tuple of motion axes — derived from `Axis.is_motion`, kept around because
+# iteration sites (setup, halt, freedrive) want a stable ordering.
+MOTION_AXES = tuple(a for a in Axis if a.is_motion)
 
 
 class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
@@ -243,7 +240,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         raise RuntimeError(fault)
       raise e
 
-    await self.driver.motor_enable(node_id=nid, state=True, use_ds402=nid in MOTION_AXES)
+    await self.driver.motor_enable(node_id=nid, state=True, use_ds402=Axis(nid).is_motion)
 
     await self.motors_move_absolute_execute(
       plan=MotorsMovePlan(
@@ -511,7 +508,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       unlimited_travel = False
     elif xm1 > vl3 and xm2 < vh3:
       unlimited_travel = True
-      if nid in MOTION_AXES:
+      if Axis(nid).is_motion:
         joint_move_direction = JointMoveDirection.ShortestWay
     else:
       raise CanError(
@@ -881,7 +878,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
       axis_max_v = self._cfg.axes[ax].max_vel
       axis_max_a = self._cfg.axes[ax].max_accel
-      if ax in _LINEAR_AXES:
+      if ax.is_linear:
         chosen_v = cmd_linear_speed if cmd_linear_speed is not None else axis_max_v
         chosen_a = cmd_linear_acceleration if cmd_linear_acceleration is not None else axis_max_a
       else:
@@ -1426,7 +1423,7 @@ class _MotionLimits(Dict[Axis, tuple]):
   def __repr__(self) -> str:
     rows = []
     for ax, (v, a) in self.items():
-      unit = "mm" if ax in _LINEAR_AXES else "deg"
+      unit = "mm" if ax.is_linear else "deg"
       rows.append((ax.name, f"{v:.2f} {unit}/s", f"{a:.2f} {unit}/s^2"))
     headers = ("axis", "max speed", "max acceleration")
     widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(3)]

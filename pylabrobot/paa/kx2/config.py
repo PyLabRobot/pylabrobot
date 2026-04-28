@@ -27,6 +27,20 @@ class Axis(IntEnum):
   RAIL = 5
   SERVO_GRIPPER = 6
 
+  @property
+  def is_motion(self) -> bool:
+    """The four-axis arm proper. Excludes the rail (Cartesian carrier) and
+    the servo gripper (end-effector). Used for setup, halt, freedrive — any
+    operation that targets "the arm" without its peripherals."""
+    return self in (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+
+  @property
+  def is_linear(self) -> bool:
+    """Axis travels in linear units (mm/s, mm/s^2). All others are rotary
+    (deg/s, deg/s^2). Used to pick the right speed/acceleration from the
+    linear/rotary split in JointMoveParams / CartesianMoveParams."""
+    return self in (Axis.Z, Axis.RAIL, Axis.SERVO_GRIPPER)
+
 
 @dataclass
 class AxisConfig:
