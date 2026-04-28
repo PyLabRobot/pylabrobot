@@ -9743,6 +9743,38 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -----------------------------------------------------------------------
+  # iSWAP: SCARA Geometry
+  # -----------------------------------------------------------------------
+
+  async def request_iswap_link_1_length_mm(self) -> float:
+    """Read iSWAP link 1 length (rotation joint -> wrist joint) in mm.
+
+    Sends R0 RA ra=pw and returns pw[9]/10. Default factory value 138.0 mm.
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pw", fmt="pw##### (n)")
+    pw = cast(List[int], resp["pw"])
+    return round(pw[9] / 10, 1)
+
+  async def request_iswap_link_2_length_mm(self) -> float:
+    """Read iSWAP link 2 length (wrist joint -> gripper finger center) in mm.
+
+    Sends R0 RA ra=pt and returns pt[9]/10. Default factory value 138.0 mm.
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pt", fmt="pt##### (n)")
+    pt = cast(List[int], resp["pt"])
+    return round(pt[9] / 10, 1)
+
+  # -----------------------------------------------------------------------
   # iSWAP: "Rotation Drive" (Joint 1)
   # -----------------------------------------------------------------------
 
@@ -9856,20 +9888,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_3": pw[7],
       "extra_4": pw[8],
     }
-
-  async def request_iswap_link_1_length_mm(self) -> float:
-    """Read iSWAP link 1 length (rotation joint -> wrist joint) in mm.
-
-    Sends R0 RA ra=pw and returns pw[9]/10. Default factory value 138.0 mm.
-
-    Raises:
-      RuntimeError: if the iSWAP module is not installed.
-    """
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    resp = await self.send_command(module="R0", command="RA", ra="pw", fmt="pw##### (n)")
-    pw = cast(List[int], resp["pw"])
-    return round(pw[9] / 10, 1)
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Query the iSWAP rotation drive position (units: increments) from the firmware."""
@@ -10011,20 +10029,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_2": pt[7],
       "extra_3": pt[8],
     }
-
-  async def request_iswap_link_2_length_mm(self) -> float:
-    """Read iSWAP link 2 length (wrist joint -> gripper finger center) in mm.
-
-    Sends R0 RA ra=pt and returns pt[9]/10. Default factory value 138.0 mm.
-
-    Raises:
-      RuntimeError: if the iSWAP module is not installed.
-    """
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    resp = await self.send_command(module="R0", command="RA", ra="pt", fmt="pt##### (n)")
-    pt = cast(List[int], resp["pt"])
-    return round(pt[9] / 10, 1)
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Request the iSWAP wrist drive orientation (relative to the rotation drive).
