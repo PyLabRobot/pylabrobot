@@ -731,30 +731,28 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   @staticmethod
   def _profile(dist: float, v: float, a: float) -> tuple:
     """
-    Returns (v, a, t_total) after applying triangular fallback if needed.
-    If the distance is short, you cannot reach v before you must decelerate.
+    Returns (v, a, t_acc, t_total) after applying triangular fallback if
+    needed. If the distance is short, you cannot reach v before you must
+    decelerate.
     """
     if dist <= 0:
-      return v, a, 0.0
+      return v, a, 0.0, 0.0
     if a <= 0:
       # degenerate; avoid crash
-      return max(v, 1e-9), 1e-9, dist / max(v, 1e-9)
+      return max(v, 1e-9), 1e-9, 0.0, dist / max(v, 1e-9)
 
     t_acc = v / a
     d_acc = 0.5 * a * t_acc * t_acc
 
     # triangular?
     if 2.0 * d_acc > dist:
-      d_acc = dist / 2.0
-      t_acc = math.sqrt(2.0 * d_acc / a)
+      t_acc = math.sqrt(dist / a)
       v = a * t_acc
-      t_total = 2.0 * t_acc
-      return v, a, t_total
+      return v, a, t_acc, 2.0 * t_acc
 
     d_cruise = dist - 2.0 * d_acc
     t_cruise = d_cruise / max(v, 1e-9)
-    t_total = t_cruise + 2.0 * t_acc
-    return v, a, t_total
+    return v, a, t_acc, t_cruise + 2.0 * t_acc
 
   async def calculate_move_abs_all_axes(
     self,
@@ -881,9 +879,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       a[ax] = min(chosen_a, axis_max_a)
 
       if not skip_ax[ax] and a[ax] > 0:
-        accel_time[ax] = v[ax] / a[ax]
-        v[ax], a[ax], total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
-        accel_time[ax] = v[ax] / max(a[ax], 1e-9)
+        v[ax], a[ax], accel_time[ax], total_time[ax] = self._profile(
+          dist[ax], v[ax], a[ax]
+        )
       else:
         total_time[ax] = 0.0
         accel_time[ax] = 0.0
@@ -911,7 +909,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       if skip_ax[ax]:
         total_time[ax] = 0.0
         continue
-      v[ax], a[ax], total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
+      v[ax], a[ax], _, total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
 
     # Pick axis with max total_time; scale others to match its total_time
     lead_time_ax = max(axes, key=lambda ax: total_time[ax])
@@ -932,7 +930,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       if skip_ax[ax]:
         total_time[ax] = 0.0
         continue
-      v[ax], a[ax], total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
+      v[ax], a[ax], _, total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
 
     move_time = max(total_time[ax] for ax in axes)
 
@@ -1437,31 +1435,6 @@ _YEET_RETURN_SPEED = 240.0
 _YEET_RETURN_ACC = 480.0
 
 
-def _yeet_profile_time(dist: float, v: float, a: float) -> tuple:
-  if dist <= 0 or a <= 0 or v <= 0:
-    return 0.0, 0.0
-  t_acc = v / a
-  d_acc = 0.5 * a * t_acc * t_acc
-  if 2.0 * d_acc > dist:
-    t_acc = math.sqrt(dist / a)
-    return t_acc, 2.0 * t_acc
-  t_cruise = (dist - 2.0 * d_acc) / v
-  return t_acc, 2.0 * t_acc + t_cruise
-
-
-def _yeet_wrap_to_range(x: float, lo: float, hi: float) -> float:
-  span = hi - lo
-  if span == 0:
-    return lo
-  k = math.trunc(x / span)
-  x = x - k * span
-  if x < lo:
-    x += span
-  if x == hi:
-    x -= span
-  return x
-
-
 async def _yeet_build_axis_move(
   backend: "KX2ArmBackend", ax: Axis, cur: float, target: float,
 ) -> tuple:
@@ -1490,9 +1463,9 @@ async def _yeet_build_axis_move(
   dist = abs(d)
 
   if ax_cfg.unlimited_travel and direction != JointMoveDirection.Normal:
-    target = _yeet_wrap_to_range(target, ax_cfg.min_travel, ax_cfg.max_travel)
+    target = KX2ArmBackend._wrap_to_range(target, ax_cfg.min_travel, ax_cfg.max_travel)
 
-  t_acc, t_total = _yeet_profile_time(dist, v_phys, a_phys)
+  _, _, t_acc, t_total = KX2ArmBackend._profile(dist, v_phys, a_phys)
   move = MotorMoveParam(
     node_id=int(ax),
     position=int(round(target * conv)),
