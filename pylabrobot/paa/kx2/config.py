@@ -68,6 +68,29 @@ class AxisConfig:
 
 
 @dataclass
+class GripperConfig:
+  """User-supplied gripper geometry — known at construction, never read
+  from the drives. Lives on :class:`KX2ArmBackend`
+  (``self._gripper_config``) and is passed into kinematics alongside
+  :class:`KX2Config`.
+
+  Attributes:
+    length: Distance from the wrist axis to the gripper clamp point, in
+      mm. Sign tracks which finger is the radial "front" via
+      :attr:`finger_side`.
+    z_offset: Vertical offset from the wrist plate to the clamp point,
+      in mm. Positive = clamp sits below the wrist plate.
+    finger_side: Which finger is treated as the radial "front" by IK/FK.
+      The fingers are physically symmetric, so flipping side just
+      negates the gripper-length offset in the wrist frame.
+  """
+
+  length: float = 0.0
+  z_offset: float = 0.0
+  finger_side: GripperFingerSide = "barcode_reader"
+
+
+@dataclass
 class ServoGripperConfig:
   """Servo gripper params (axis 6 UF6..UF17). Only present when the
   gripper is detected on the bus."""
@@ -88,20 +111,14 @@ class ServoGripperConfig:
 
 @dataclass
 class KX2Config:
+  """Drive-read calibration. Strictly contents pulled off the bus at
+  setup; tooling (gripper geometry) lives separately on
+  :class:`GripperConfig` and is owned by the backend."""
+
   # Geometry (read from the shoulder drive's UF8/UF9/UF10).
   wrist_offset: float
   elbow_offset: float
   elbow_zero_offset: float
-
-  # Tooling — supplied at backend construction, copied here so kinematics
-  # has a single source of truth.
-  gripper_length: float
-  gripper_z_offset: float
-
-  # Which finger is treated as the radial "front" by IK/FK. The fingers are
-  # physically symmetric, so flipping side just negates the gripper_length
-  # offset in the wrist frame. Default matches the legacy convention.
-  gripper_finger_side: GripperFingerSide
 
   # Per-axis params keyed by drive node-id (= Axis value). Iterating
   # `axes` (or `axes.keys()`) gives the axes present on this arm.

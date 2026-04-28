@@ -27,7 +27,7 @@ from math import atan2, cos, degrees, hypot, radians, sin
 from typing import Dict, Literal, Optional
 
 from pylabrobot.capabilities.arms.standard import GripperLocation
-from pylabrobot.paa.kx2.config import Axis, KX2Config
+from pylabrobot.paa.kx2.config import Axis, GripperConfig, KX2Config
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -53,12 +53,13 @@ class IKError(ValueError):
   """Target pose is unreachable (for now: non-Z rotation requested)."""
 
 
-def fk(joints: Dict[Axis, float], c: KX2Config) -> KX2GripperLocation:
+def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> KX2GripperLocation:
   """Forward kinematics.
 
   Args:
     joints: {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
-    c: arm configuration.
+    c: arm configuration (drive-read calibration).
+    t: gripper tooling (user-supplied geometry).
   Returns:
     KX2GripperLocation with the gripper clamp point and a wrist sign
     derived from the joint configuration (J4 ≥ 0 → "ccw", else "cw").
@@ -81,10 +82,10 @@ def fk(joints: Dict[Axis, float], c: KX2Config) -> KX2GripperLocation:
   # so callers observe the gripper clamp point symmetric with what they
   # pass into ik. Sign tracks which finger is the radial "front".
   yaw = radians(yaw_deg)
-  gl = c.gripper_length if c.gripper_finger_side == "barcode_reader" else -c.gripper_length
+  gl = t.length if t.finger_side == "barcode_reader" else -t.length
   gripper_x = wrist_x + gl * sin(yaw)
   gripper_y = wrist_y - gl * cos(yaw)
-  gripper_z = wrist_z - c.gripper_z_offset
+  gripper_z = wrist_z - t.z_offset
 
   return KX2GripperLocation(
     location=Coordinate(x=gripper_x, y=gripper_y, z=gripper_z),
@@ -93,14 +94,15 @@ def fk(joints: Dict[Axis, float], c: KX2Config) -> KX2GripperLocation:
   )
 
 
-def ik(pose: KX2GripperLocation, c: KX2Config) -> Dict[Axis, float]:
+def ik(pose: KX2GripperLocation, c: KX2Config, t: GripperConfig) -> Dict[Axis, float]:
   """Inverse kinematics.
 
   Args:
     pose: KX2GripperLocation. Requires pose.wrist to be "cw" or "ccw" —
       "closest" semantics live in the backend wrapper (fill None with the
       current joint's sign, then call `snap_to_current` after).
-    c: arm configuration.
+    c: arm configuration (drive-read calibration).
+    t: gripper tooling (user-supplied geometry).
   Returns:
     joints dict {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
     J4 is in (-360°, 0°] when wrist="cw" and [0°, 360°) when wrist="ccw"
@@ -125,10 +127,10 @@ def ik(pose: KX2GripperLocation, c: KX2Config) -> Dict[Axis, float]:
   # the gripper z offset downward. Sign tracks which finger is the radial
   # "front".
   yaw = radians(pose.rotation.z)
-  gl = c.gripper_length if c.gripper_finger_side == "barcode_reader" else -c.gripper_length
+  gl = t.length if t.finger_side == "barcode_reader" else -t.length
   x = pose.location.x - gl * sin(yaw)
   y = pose.location.y + gl * cos(yaw)
-  wrist_z = pose.location.z + c.gripper_z_offset
+  wrist_z = pose.location.z + t.z_offset
 
   shoulder = -degrees(atan2(x, y))
   if abs(shoulder + 180.0) < c.eps:

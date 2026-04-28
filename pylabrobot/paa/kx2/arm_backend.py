@@ -20,6 +20,7 @@ from pylabrobot.paa.kx2.config import (
   Axis,
   AxisConfig,
   GripperFingerSide,
+  GripperConfig,
   KX2Config,
   ServoGripperConfig,
 )
@@ -70,11 +71,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     super().__init__()
     self.driver = driver
-    # Tooling offsets are user-supplied; everything else on the config is
-    # filled in from the drives during setup.
-    self._gripper_length = float(gripper_length)
-    self._gripper_z_offset = float(gripper_z_offset)
-    self._gripper_finger_side: GripperFingerSide = gripper_finger_side
+    # Tooling is user-supplied and known at construction; KX2Config (drive-
+    # read calibration) doesn't exist until setup runs.
+    self._gripper_config = GripperConfig(
+      length=float(gripper_length),
+      z_offset=float(gripper_z_offset),
+      finger_side=gripper_finger_side,
+    )
     self._config: Optional[KX2Config] = None
     self._freedrive_axes: List[int] = []
 
@@ -459,9 +462,6 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       wrist_offset=await self.driver.query_float(sh, "UF", 8),
       elbow_offset=await self.driver.query_float(sh, "UF", 9),
       elbow_zero_offset=await self.driver.query_float(sh, "UF", 10),
-      gripper_length=self._gripper_length,
-      gripper_z_offset=self._gripper_z_offset,
-      gripper_finger_side=self._gripper_finger_side,
       axes=axes,
       base_to_gripper_clearance_z=await self.driver.query_float(sh, "UF", 6),
       base_to_gripper_clearance_arm=await self.driver.query_float(sh, "UF", 7),
@@ -1031,7 +1031,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       "ccw" if current[Axis.WRIST] >= 0 else "cw"
     )
     resolved = dataclasses.replace(pose, wrist=ik_wrist)
-    ik_joints = kinematics.ik(resolved, self._cfg)
+    ik_joints = kinematics.ik(resolved, self._cfg, self._gripper_config)
     return kinematics.snap_to_current(ik_joints, current, pose.wrist)
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
@@ -1080,7 +1080,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
     joints = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
-    return kinematics.fk(joints, self._cfg)
+    return kinematics.fk(joints, self._cfg, self._gripper_config)
 
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -1292,7 +1292,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       pickup_pose = await self.request_joint_position()
 
       # Auto-windup: rotate wrist to the inward angle (opposite of outward).
-      wrist_inward = 0.0 if cfg.gripper_finger_side == "barcode_reader" else 180.0
+      wrist_inward = 0.0 if self._gripper_config.finger_side == "barcode_reader" else 180.0
       while wrist_inward - pickup_pose[Axis.WRIST] > 180.0:
         wrist_inward -= 360.0
       while wrist_inward - pickup_pose[Axis.WRIST] < -180.0:
@@ -1310,7 +1310,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       joints0 = await self.request_joint_position()
 
       # Outward wrist = kinematic target (180° barcode_reader, 0° proximity).
-      wrist_outward = 180.0 if cfg.gripper_finger_side == "barcode_reader" else 0.0
+      wrist_outward = 180.0 if self._gripper_config.finger_side == "barcode_reader" else 0.0
       while wrist_outward - joints0[Axis.WRIST] > 180.0:
         wrist_outward -= 360.0
       while wrist_outward - joints0[Axis.WRIST] < -180.0:
