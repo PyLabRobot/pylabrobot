@@ -9845,12 +9845,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=await self.iswap_rotation_drive_request_z(),
     )
 
-  async def request_iswap_rotation_drive_predefined_positions(self) -> Dict[str, int]:
+  async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; the 9 position
     slots are returned here. Slot pw[9] (arm length) is exposed separately via
-    `request_iswap_link_1_length_mm`. Undocumented slots are returned as
+    `iswap_request_link_1_length`. Undocumented slots are returned as
     "extra_1".."extra_4" and addressable via R0 WP wp5..wp8.
 
     Keys (motor increments; W-drive resolution 0.00310 deg/incr):
@@ -9986,12 +9986,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
 
-  async def request_iswap_wrist_drive_predefined_positions(self) -> Dict[str, int]:
+  async def iswap_wrist_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; the 9 position
     slots are returned here. Slot pt[9] (arm length) is exposed separately via
-    `request_iswap_link_2_length_mm`. Undocumented slots are returned as
+    `iswap_request_link_2_length`. Undocumented slots are returned as
     "extra_1".."extra_3" and addressable via R0 TP tp6..tp8.
 
     Keys (motor increments; T-drive resolution 0.00508 deg/incr):
@@ -10121,7 +10121,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
 
-  async def request_iswap_gripper_predefined_positions(self) -> Dict[str, int]:
+  async def iswap_gripper_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP gripper drive (G) predefined-position table.
 
     Keys (motor increments; G-drive resolution 0.00554 mm/incr):
