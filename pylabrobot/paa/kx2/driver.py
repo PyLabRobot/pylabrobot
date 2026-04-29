@@ -886,13 +886,81 @@ class KX2Driver(Driver):
   async def motors_move_start(
     self, node_ids: List[int], *, relative: bool = False
   ) -> None:
+    # CiA 402 Profile Position Mode trigger handshake. Per drive:
+    #   1. CW bit 4 = 0 (new_setpoint cleared) -- bit 5 stays high so the
+    #      drive treats the trigger as "change set immediately".
+    #   2. wait SW bit 12 (setpoint_ack) low -- drive ack of step 1.
+    #   3. CW bit 4 = 1 -- rising edge latches 0x607A; motion starts.
+    #   4. wait SW bit 12 high -- drive ack of step 3. If it doesn't go
+    #      high, the rising edge was missed (RPDO/SDO race or drive busy)
+    #      and we retry the cycle.
+    # Without (4) the failure rate is ~5-10% on this Elmo firmware: bit 4
+    # falls and rises within milliseconds and the drive doesn't always see
+    # the edge. Polling bit 12 high is the only authoritative confirmation
+    # that the new setpoint was actually latched.
     relative_bit = 0x40 if relative else 0
-    for i, nid in enumerate(node_ids):
-      last = i == (len(node_ids) - 1)
-      await self._control_word_set(int(nid), 47 + relative_bit, sync=last)
-    for i, nid in enumerate(node_ids):
-      last = i == (len(node_ids) - 1)
-      await self._control_word_set(int(nid), 47 + 0x10 + relative_bit, sync=last)
+    cw_low = 47 + relative_bit
+    cw_high = 47 + 0x10 + relative_bit
+    for nid in node_ids:
+      await self._trigger_new_setpoint(int(nid), cw_low, cw_high)
+
+  async def _trigger_new_setpoint(
+    self,
+    node_id: int,
+    cw_low: int,
+    cw_high: int,
+    *,
+    max_attempts: int = 4,
+  ) -> None:
+    """Run the CiA 402 PPM new-setpoint handshake on one drive.
+
+    Each attempt: drop CW bit 4, wait SW bit 12 low, set CW bit 4, wait
+    SW bit 12 high. Retries up to ``max_attempts`` if bit 12 doesn't go
+    high (= drive missed the rising edge). Raises on persistent failure
+    rather than letting motion silently drop."""
+    for attempt in range(1, max_attempts + 1):
+      await self._control_word_set(node_id, cw_low, sync=True)
+      cleared = await self._wait_setpoint_ack(node_id, want_high=False)
+      if not cleared:
+        logger.debug(
+          "node %d: setpoint_ack didn't clear (attempt %d/%d)",
+          node_id, attempt, max_attempts,
+        )
+        continue
+      await self._control_word_set(node_id, cw_high, sync=True)
+      raised = await self._wait_setpoint_ack(node_id, want_high=True)
+      if raised:
+        if attempt > 1:
+          logger.debug(
+            "node %d: new setpoint accepted on attempt %d", node_id, attempt
+          )
+        return
+      logger.debug(
+        "node %d: setpoint_ack didn't go high (attempt %d/%d); retrying",
+        node_id, attempt, max_attempts,
+      )
+    raise CanError(
+      f"node {node_id}: drive did not accept new PPM setpoint after "
+      f"{max_attempts} attempts (SW bit 12 never went high after CW bit 4 "
+      f"rising edge)"
+    )
+
+  async def _wait_setpoint_ack(
+    self, node_id: int, *, want_high: bool, timeout: float = 0.05
+  ) -> bool:
+    """Poll 0x6041 bit 12 until it matches ``want_high`` (or timeout).
+
+    Returns True on success, False on timeout. 50ms is plenty: this drive
+    flips bit 12 within a servo cycle (~1-2ms) when it sees the edge."""
+    assert self._loop is not None
+    deadline = self._loop.time() + timeout
+    while self._loop.time() < deadline:
+      raw = await self._can_sdo_upload(node_id, 0x60, 0x41, 0x00)
+      sw = int.from_bytes(raw[:2], "little")
+      if bool(sw & (1 << 12)) == want_high:
+        return True
+      await asyncio.sleep(0.001)
+    return False
 
   async def user_program_run(
     self,
