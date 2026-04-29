@@ -1816,44 +1816,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # X-Arm
   # -----------------------------------------------------------------------
 
-  async def x_arm_request_firmware_version(self):
-    """"""
-    
-    resp = await self.send_command(
-        module="X0",
-        command="RF",
-    )
-    fw_datetime = self._parse_firmware_version_datetime(resp)
+  async def x_arm_request_firmware_version(self) -> Tuple[str, datetime.date]:
+    """Request the X-arm firmware version and build date.
 
-    return resp.split("rf")[-1].split(" ")[0], fw_datetime
+    Returns:
+      A tuple of (version_string, build_date), e.g. ("1.0S", date(2009, 6, 24)).
+    """
+
+    resp = await self.send_command(module="X0", command="RF")
+    version = resp.split("rf")[-1].split(" ")[0]
+    build_date = self._parse_firmware_version_datetime(resp)
+    return version, build_date
 
   async def x_arm_move(
-    self,                                                                       
+    self,
     x: float,
-    acceleration_level: int = 3,                                                
+    acceleration_level: int = 3,
     current_protection_limiter: int = 7,
-    ):
+  ):
     """Move the X-arm to an absolute X position.
-                                                                                
+
     Args:
-      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.             
-      acceleration_level: Acceleration index (hardware units). Must be an       
-        integer between 1 and 5 (inclusive). Default: 3.                        
-      current_protection_limiter: Motor current limit (0-7, hardware units).    
-        Default: 7.                                                             
-    """           
-                                                                                
-    if 90.0 <= x >= 1350.0:
-        raise ValueError(f"x must be between 90.0 and 1350.0 mm; got {x}")
-    if isinstance(acceleration_level, int) and 1 <= acceleration_level > 5:
-        raise ValueError(                                                                            
-              f"acceleration_level must be an integer between 1 and 5; got {acceleration_level}"                                                         
-            )             
-    if isinstance(current_protection_limiter, int) and 0 <= current_protection_limiter > 7:
-        raise ValueError(                                            
-      f"current_protection_limiter must be an integer between 0 and 7; got  {current_protection_limiter}"                                                 
-    )             
-                                                                                
+      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+
+    if not (90.0 <= x <= 1350.0):
+      raise ValueError(f"x must be between 90.0 and 1350.0 mm, is {x}")
+    if not (1 <= acceleration_level <= 5):
+      raise ValueError(f"acceleration_level must be between 1 and 5, is {acceleration_level}")
+    if not (0 <= current_protection_limiter <= 7):
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, is {current_protection_limiter}"
+      )
+
     return await self.send_command(
       module="X0",
       command="XP",
@@ -1861,7 +1858,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lr=str(acceleration_level),
       lw=str(current_protection_limiter),
     )
-
 
   # # # # Single-Channel Pipette Commands # # # #
 
@@ -9894,6 +9890,39 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x=await self.iswap_rotation_drive_request_x(),
       y=await self.iswap_rotation_drive_request_y(),
       z=await self.iswap_rotation_drive_request_z(),
+    )
+
+  async def iswap_rotation_drive_move_x(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the iSWAP rotation drive to an absolute X position (deck coordinates).
+
+    Thin wrapper around `x_arm_move` that translates rotation-drive X into
+    X-arm carriage X using the cached `kg` offset.
+
+    Args:
+      x: Target rotation-drive X coordinate in mm.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    if self._iswap_rotation_drive_x_offset_mm is None:
+      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+    kg = self._iswap_rotation_drive_x_offset_mm
+
+    x_min = 90.0 - kg
+    x_max = 1350.0 - kg
+    if not (x_min <= x <= x_max):
+      raise ValueError(f"x must be between {x_min} and {x_max} mm, is {x}")
+
+    return await self.x_arm_move(
+      x=x + kg,
+      acceleration_level=acceleration_level,
+      current_protection_limiter=current_protection_limiter,
     )
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
