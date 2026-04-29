@@ -7177,16 +7177,16 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Deprecated: use ``star.iswap.request_rotation_drive_position_increments()``."""
-    return await self._iswap.request_rotation_drive_position_increments()
+    return await self._iswap.rotation_drive_request_angle_increments()
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
     """Deprecated: use ``star.iswap.request_rotation_drive_orientation()``."""
-    new_orient = await self._iswap.request_rotation_drive_orientation()
+    new_orient = await self._iswap.rotation_drive_request_orientation()
     return STARBackend.RotationDriveOrientation(new_orient.value)
 
   async def request_iswap_wrist_drive_position_increments(self) -> int:
     """Deprecated: use ``star.iswap.request_wrist_drive_position_increments()``."""
-    return await self._iswap.request_wrist_drive_position_increments()
+    return await self._iswap.request_wrist_drive_angle_increments()
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Deprecated: use ``star.iswap.request_wrist_drive_orientation()``."""
@@ -7757,7 +7757,7 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
     """Deprecated: use ``star.iswap.rotate_rotation_drive()``."""
-    return await self._iswap.rotate_rotation_drive(orientation)  # type: ignore[arg-type]
+    return await self._iswap.rotation_drive_rotate(orientation)  # type: ignore[arg-type]
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1

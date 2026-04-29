@@ -49,6 +49,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     self.traversal_height = traversal_height
     self._version: Optional[str] = None
     self._parked: Optional[bool] = None
+    self._rotation_drive_x_offset: Optional[float] = None  # cached in _on_setup
 
   @property
   def version(self) -> str:
@@ -95,6 +96,9 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     if self._version is None:
       self._version = await self._request_version()
+
+    if self._rotation_drive_x_offset is None:
+      self._rotation_drive_x_offset = await self._rotation_drive_request_x_offset()
 
   async def _request_version(self) -> str:
     """Request the iSWAP firmware version from the device."""
@@ -239,12 +243,12 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   # -- rotation / wrist drive ------------------------------------------------
 
-  async def request_rotation_drive_position_increments(self) -> int:
-    """Query the iSWAP rotation drive position in increments (R0 RW)."""
+  async def rotation_drive_request_angle_increments(self) -> int:
+    """Query the iSWAP rotation drive angle in increments (R0 RW)."""
     response = await self.driver.send_command(module="R0", command="RW", fmt="rw######")
     return cast(int, response["rw"])
 
-  async def request_rotation_drive_orientation(self) -> "iSWAPBackend.RotationDriveOrientation":
+  async def rotation_drive_request_orientation(self) -> "iSWAPBackend.RotationDriveOrientation":
     """Request the iSWAP rotation drive orientation.
 
     Uses empirically determined increment values:
@@ -258,19 +262,19 @@ class iSWAPBackend(OrientableGripperArmBackend):
       RDO.PARKED_RIGHT: range(29450, 29550),
     }
 
-    motor_position_increments = await self.request_rotation_drive_position_increments()
+    motor_angle_increments = await self.rotation_drive_request_angle_increments()
 
     for orientation, increment_range in rotation_orientation_to_motor_increment_dict.items():
-      if motor_position_increments in increment_range:
+      if motor_angle_increments in increment_range:
         return orientation
 
     raise ValueError(
-      f"Unknown rotation orientation: {motor_position_increments}. "
+      f"Unknown rotation orientation: {motor_angle_increments}. "
       f"Expected one of {list(rotation_orientation_to_motor_increment_dict.values())}."
     )
 
-  async def request_wrist_drive_position_increments(self) -> int:
-    """Query the iSWAP wrist drive position in increments (R0 RT)."""
+  async def request_wrist_drive_angle_increments(self) -> int:
+    """Query the iSWAP wrist drive angle in increments (R0 RT)."""
     response = await self.driver.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
 
@@ -287,15 +291,48 @@ class iSWAPBackend(OrientableGripperArmBackend):
       WDO.REVERSE: range(26_802, 26_902),
     }
 
-    motor_position_increments = await self.request_wrist_drive_position_increments()
+    motor_angle_increments = await self.request_wrist_drive_angle_increments()
 
     for orientation, increment_range in wrist_orientation_to_motor_increment_dict.items():
-      if motor_position_increments in increment_range:
+      if motor_angle_increments in increment_range:
         return orientation
 
     raise ValueError(
-      f"Unknown wrist orientation: {motor_position_increments}. "
+      f"Unknown wrist orientation: {motor_angle_increments}. "
       f"Expected one of {list(wrist_orientation_to_motor_increment_dict)}."
+    )
+
+  async def _rotation_drive_request_x_offset(self) -> float:
+    """Read the X-offset i.e. X-axis center <-> iSWAP rotation drive, in mm.
+
+    Stored in the master EEPROM as parameter ``kg`` (set via ``C0:AG`` —
+    see ``driver.set_x_offset_x_axis_iswap``).
+    Previously measured to be 32.8 mm by contributor;
+    per-machine calibrated during service. Required for deriving the
+    iSWAP rotation drive's deck X coordinate from the X-arm carriage center.
+    Cached on the backend as ``_rotation_drive_x_offset`` during setup.
+    """
+    resp = await self.driver.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
+    return cast(int, resp["kg"]) / 10.0
+
+  # Vertical drop from the iSWAP rotation drive plane to the gripper
+  # finger plane, per VENUS Programmer Guide §15.1.1.
+  rotation_drive_z_offset_above_finger = 13.0
+
+  async def rotation_drive_request_position(self) -> Coordinate:
+    """Position of the iSWAP rotation drive (joint 0) in deck coordinates, mm."""
+    if not self.driver.extended_conf.left_x_drive.iswap_installed:  # type: ignore[union-attr]
+      raise RuntimeError("iSWAP is not installed")
+    assert self._rotation_drive_x_offset is not None, "Call setup() first"
+
+    x_arm_center = await self.driver.left_x_arm.request_position()  # type: ignore[union-attr]
+    rotation_drive_y = await self.rotation_drive_request_y()
+    finger_loc = (await self.request_gripper_location()).location
+
+    return Coordinate(
+      x=x_arm_center - self._rotation_drive_x_offset,
+      y=rotation_drive_y,
+      z=finger_loc.z + self.rotation_drive_z_offset_above_finger,
     )
 
   async def rotate(
@@ -357,7 +394,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       tw=wrist_protection,
     )
 
-  async def rotate_rotation_drive(
+  async def rotation_drive_rotate(
     self, orientation: "iSWAPBackend.RotationDriveOrientation"
   ) -> None:
     """Rotate the rotation drive to the given orientation (R0 WP)."""
