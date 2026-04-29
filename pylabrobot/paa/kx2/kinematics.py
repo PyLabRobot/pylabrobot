@@ -62,7 +62,7 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> KX2GripperL
     t: gripper tooling (user-supplied geometry).
   Returns:
     KX2GripperLocation with the gripper clamp point and a wrist sign
-    derived from the joint configuration (J4 ≥ 0 → "ccw", else "cw").
+    derived from the joint configuration (J4 >= 0 -> "ccw", else "cw").
   """
   r = c.wrist_offset + c.elbow_offset + c.elbow_zero_offset + joints[Axis.ELBOW]
   sh_deg = joints[Axis.SHOULDER]
@@ -78,17 +78,14 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> KX2GripperL
   if yaw_deg < -180.0:
     yaw_deg += 360.0
 
-  # Wrist -> gripper: inverse of the gripper -> wrist translation in ik,
-  # so callers observe the gripper clamp point symmetric with what they
-  # pass into ik. Sign tracks which finger is the radial "front".
   yaw = radians(yaw_deg)
   gl = t.length if t.finger_side == "barcode_reader" else -t.length
-  gripper_x = wrist_x + gl * sin(yaw)
-  gripper_y = wrist_y - gl * cos(yaw)
-  gripper_z = wrist_z - t.z_offset
-
   return KX2GripperLocation(
-    location=Coordinate(x=gripper_x, y=gripper_y, z=gripper_z),
+    location=Coordinate(
+      x=wrist_x + gl * sin(yaw),
+      y=wrist_y - gl * cos(yaw),
+      z=wrist_z - t.z_offset,
+    ),
     rotation=Rotation(z=yaw_deg),
     wrist="ccw" if joints[Axis.WRIST] >= 0 else "cw",
   )
