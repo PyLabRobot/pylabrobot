@@ -1834,7 +1834,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_level: int = 3,
     current_protection_limiter: int = 7,
   ):
-    """Move the X-arm to an absolute X position.
+    """Move the X-arm to an absolute X position with specified acceleration.
 
     Args:
       x: Target X coordinate in mm. Must be between 90.0 and 1350.0.
