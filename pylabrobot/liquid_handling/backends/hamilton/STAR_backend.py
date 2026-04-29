@@ -1812,6 +1812,57 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # ============== LiquidHandlerBackend methods ==============
 
+  # -----------------------------------------------------------------------
+  # X-Arm
+  # -----------------------------------------------------------------------
+
+  async def x_arm_request_firmware_version(self):
+    """"""
+    
+    resp = await self.send_command(
+        module="X0",
+        command="RF",
+    )
+    fw_datetime = self._parse_firmware_version_datetime(resp)
+
+    return resp.split("rf")[-1].split(" ")[0], fw_datetime
+
+  async def x_arm_move(
+    self,                                                                       
+    x: float,
+    acceleration_level: int = 3,                                                
+    current_protection_limiter: int = 7,
+    ):
+    """Move the X-arm to an absolute X position.
+                                                                                
+    Args:
+      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.             
+      acceleration_level: Acceleration index (hardware units). Must be an       
+        integer between 1 and 5 (inclusive). Default: 3.                        
+      current_protection_limiter: Motor current limit (0-7, hardware units).    
+        Default: 7.                                                             
+    """           
+                                                                                
+    if 90.0 <= x >= 1350.0:
+        raise ValueError(f"x must be between 90.0 and 1350.0 mm; got {x}")
+    if isinstance(acceleration_level, int) and 1 <= acceleration_level > 5:
+        raise ValueError(                                                                            
+              f"acceleration_level must be an integer between 1 and 5; got {acceleration_level}"                                                         
+            )             
+    if isinstance(current_protection_limiter, int) and 0 <= current_protection_limiter > 7:
+        raise ValueError(                                            
+      f"current_protection_limiter must be an integer between 0 and 7; got  {current_protection_limiter}"                                                 
+    )             
+                                                                                
+    return await self.send_command(
+      module="X0",
+      command="XP",
+      la=f"{round(x * 10):05}",
+      lr=str(acceleration_level),
+      lw=str(current_protection_limiter),
+    )
+
+
   # # # # Single-Channel Pipette Commands # # # #
 
   # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
