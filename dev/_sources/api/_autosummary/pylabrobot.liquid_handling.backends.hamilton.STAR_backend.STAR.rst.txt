@@ -39,8 +39,11 @@
       ~STAR.iswap_installed
       ~STAR.iswap_parked
       ~STAR.iswap_rotation_drive_deg_per_increment
+      ~STAR.iswap_rotation_drive_diameter
       ~STAR.iswap_rotation_drive_max_increment
       ~STAR.iswap_rotation_drive_min_increment
+      ~STAR.iswap_rotation_drive_safety_radius
+      ~STAR.iswap_rotation_drive_y_speed_increment_range
       ~STAR.iswap_rotation_drive_z_offset_above_finger_mm
       ~STAR.iswap_traversal_height
       ~STAR.iswap_wrist_drive_deg_per_increment
@@ -173,6 +176,7 @@
       ~STAR.iswap_request_link_1_length
       ~STAR.iswap_request_link_2_length
       ~STAR.iswap_rotate
+      ~STAR.iswap_rotation_drive_move_y
       ~STAR.iswap_rotation_drive_request_position
       ~STAR.iswap_rotation_drive_request_predefined_positions
       ~STAR.iswap_rotation_drive_request_x
