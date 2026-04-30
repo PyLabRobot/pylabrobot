@@ -5,8 +5,8 @@
 <div style="text-align: center" align="center">
 <a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
 <a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
-<a href="https://docs.pylabrobot.org/user_guide/_getting-started/installation.html"><strong>Installation</strong></a> |
-<a href="https://docs.pylabrobot.org/basic.html"><strong>Getting started</strong></a>
+<a href="https://docs.pylabrobot.org/0.2.1/user_guide/_getting-started/installation.html"><strong>Installation</strong></a> |
+<a href="https://docs.pylabrobot.org/0.2.1/user_guide/index.html"><strong>Getting started</strong></a>
 </div>
 
 ## What is PyLabRobot?
@@ -23,7 +23,7 @@ Advantages over proprietary software:
 - **Modern**: PyLabRobot is built on modern Python 3.9+ features and async/await syntax.
 - **Fast support**: PyLabRobot has [an active community forum](https://discuss.pylabrobot.org) for support and discussion, and most pull requests are merged within a day.
 
-### Liquid handling robots ([docs](https://docs.pylabrobot.org/user_guide/00_liquid-handling/_liquid-handling.html))
+### Liquid handling robots ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/00_liquid-handling/_liquid-handling.html))
 
 PyLabRobot enables the use of any liquid handling robot through a single universal interface, that works on any modern operating system (Windows, macOS, Linux). We currently support Hamilton STAR, Hamilton Vantage, Tecan Freedom EVO, and Opentrons OT-2 robots, but we will soon support many more.
 
@@ -64,7 +64,7 @@ We also provide a browser-based Visualizer which can visualize the state of the 
 
 ![Visualizer](.github/img/visualizer.png)
 
-### Plate readers ([docs](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/plate-reading.html))
+### Plate readers ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/02_analytical/plate-reading/plate-reading.html))
 
 Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 
@@ -83,7 +83,7 @@ data = await pr.read_luminescence()
 
 For Cytation5, use the `Cytation5` backend.
 
-### Centrifuges ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/_centrifuge.html))
+### Centrifuges ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/centrifuge/_centrifuge.html))
 
 Centrifugation at 800g for 60 seconds:
 
@@ -95,7 +95,7 @@ await cf.setup()
 await cf.start_spin_cycle(g = 800, duration = 60)
 ```
 
-### Pumps ([docs](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/_pumps.html))
+### Pumps ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/00_liquid-handling/pumps/_pumps.html))
 
 Pumping at 100 rpm for 30 seconds using a Masterflex pump:
 
@@ -108,7 +108,7 @@ await p.setup()
 await p.run_for_duration(speed=100, duration=30)
 ```
 
-### Scales ([docs](https://docs.pylabrobot.org/user_guide/02_analytical/scales.html))
+### Scales ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/02_analytical/scales/scales.html))
 
 Taking a measurement from a Mettler Toledo scale:
 
@@ -123,7 +123,7 @@ await scale.setup()
 weight = await scale.get_weight()
 ```
 
-### Heater shakers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/heating-shaking.html))
+### Heater shakers ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/heating_shaking/heating_shaking.html))
 
 Setting the temperature of a heater shaker to 37&deg;C:
 
@@ -136,7 +136,7 @@ await hs.setup()
 await hs.set_temperature(37)
 ```
 
-### Fans ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/fans/fans.html))
+### Fans ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/fans/fans.html))
 
 Running a fan at 100% intensity for one minute:
 
@@ -149,7 +149,7 @@ await fan.setup()
 await fan.turn_on(intensity=100, duration=60)
 ```
 
-### Thermocyclers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/thermocycling/thermocycling.html))
+### Thermocyclers ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/thermocycling/thermocycling.html))
 
 Running a thermocycler with a simple protocol:
 
@@ -179,10 +179,10 @@ await tc.run_pcr_profile(
 
 [docs.pylabrobot.org](https://docs.pylabrobot.org)
 
-- [Installation](https://docs.pylabrobot.org/user_guide/_getting-started/installation.html)
-- [Getting Started](https://docs.pylabrobot.org/user_guide/index.html)
-- [Contributing](https://docs.pylabrobot.org/contributor_guide/index.html)
-- [API Reference](https://docs.pylabrobot.org/api/pylabrobot.html)
+- [Installation](https://docs.pylabrobot.org/0.2.1/user_guide/_getting-started/installation.html)
+- [Getting Started](https://docs.pylabrobot.org/0.2.1/user_guide/index.html)
+- [Contributing](https://docs.pylabrobot.org/0.2.1/contributor_guide/index.html)
+- [API Reference](https://docs.pylabrobot.org/0.2.1/api/pylabrobot.html)
 
 ### Support
 
