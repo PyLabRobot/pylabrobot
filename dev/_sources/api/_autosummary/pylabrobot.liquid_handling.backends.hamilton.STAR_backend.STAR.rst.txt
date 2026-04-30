@@ -120,6 +120,8 @@
       ~STAR.enable_cover_control
       ~STAR.ensure_can_reach_position
       ~STAR.execute_batched
+      ~STAR.experimental_iswap_rotation_drive_move_x
+      ~STAR.experimental_x_arm_move
       ~STAR.fill_selected_dual_chamber
       ~STAR.get_all_instances
       ~STAR.get_channel_spacings
@@ -352,6 +354,7 @@
       ~STAR.unload_carrier_after_carrier_barcode_scanning
       ~STAR.unlock_cover
       ~STAR.verify_and_wait_for_carriers
+      ~STAR.x_arm_request_firmware_version
       ~STAR.y_drive_increment_to_mm
       ~STAR.z_drive_increment_to_mm
       ~STAR.ztouch_probe_z_height_using_channel
