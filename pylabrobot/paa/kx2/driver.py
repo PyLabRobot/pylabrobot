@@ -997,6 +997,14 @@ class KX2Driver(Driver):
   async def motor_emergency_stop(self, node_id: int) -> None:
     await self.write(node_id, "MO", 0, 0)
 
+  async def motor_is_enabled(self, node_id: int) -> bool:
+    """Return True if the motor is energized (Elmo MO=1).
+
+    Faulted drives report MO=0 — use motor_get_fault to distinguish a
+    plain disable from a fault.
+    """
+    return await self.query_int(node_id, "MO", 0) == 1
+
   async def motor_get_current_position(self, node_id: int, pu: bool = False) -> int:
     cmd = "PU" if pu else "PX"
     return await self.query_int(node_id, cmd, 0)
@@ -1014,6 +1022,15 @@ class KX2Driver(Driver):
     await self.can_sdo_download_elmo_object(node_id, 24818, 0, val, _ElmoObjectDataType.UNSIGNED16)
 
   async def motor_check_if_move_done(self, node_id: int) -> bool:
+    # E-stop and some fault paths leave MS pinned at 2 ("stopping in
+    # progress") indefinitely, so gating fault-surfacing on ms==1 misses
+    # them — the poll loop times out before ever consulting EMCY state.
+    # Check sticky EMCY first so any fatal frame raises on the next poll
+    # iteration regardless of MS.
+    if self.emcy_move_error_received and self.emcy_move_error:
+      nid = self.emcy_move_error_node_id
+      prefix = f"Axis {nid} " if nid is not None else ""
+      raise RuntimeError(f"Motor Fault: {prefix}{self.emcy_move_error}")
     ms_val = await self.query_int(node_id, "MS", 0)
     if ms_val == 0:
       return True
@@ -1021,13 +1038,6 @@ class KX2Driver(Driver):
       mo_val = await self.query_int(node_id, "MO", 0)
       if mo_val == 1:
         return True
-      # Prefer the EMCY description: it's captured at the moment the drive
-      # faulted and includes vendor context (e.g. "E-stop button was pressed",
-      # "Position tracking error") that motor_get_fault's MF-bit decode lacks.
-      if self.emcy_move_error_received and self.emcy_move_error:
-        nid = self.emcy_move_error_node_id
-        prefix = f"Axis {nid} " if nid is not None else ""
-        raise RuntimeError(f"Motor Fault: {prefix}{self.emcy_move_error}")
       fault = await self.motor_get_fault(node_id)
       if fault is not None:
         raise RuntimeError(f"Motor Fault: {fault}")
@@ -1200,7 +1210,15 @@ class KX2Driver(Driver):
     cw_low = 47 + relative_bit
     cw_high = 47 + 0x10 + relative_bit
     for nid in node_ids:
-      await self._trigger_new_setpoint(int(nid), cw_low, cw_high)
+      nid = int(nid)
+      # Auto-recover from prior disable (post-E-stop, post-find_z IL halt,
+      # post-freedrive). A disabled drive never raises SW bit 12, so the
+      # PPM trigger spins all 10 attempts before failing. One MO read per
+      # axis is cheap; the heavy DS402 cycle only runs when actually needed.
+      if not await self.motor_is_enabled(nid):
+        logger.warning("node %d: re-enabling before motion (was disabled)", nid)
+        await self.motor_enable(node_id=nid, state=True, use_ds402=True)
+      await self._trigger_new_setpoint(nid, cw_low, cw_high)
 
   async def _trigger_new_setpoint(
     self,
@@ -1208,7 +1226,7 @@ class KX2Driver(Driver):
     cw_low: int,
     cw_high: int,
     *,
-    max_attempts: int = 4,
+    max_attempts: int = 10,
   ) -> None:
     """Run the CiA 402 PPM new-setpoint handshake on one drive.
 
