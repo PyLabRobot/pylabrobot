@@ -146,7 +146,7 @@ class _InputLogic(IntEnum):
   AbortMotion = 16
 
 
-class _JointMoveDirection(IntEnum):
+class JointMoveDirection(IntEnum):
   """Move-direction hint used by the driver's move primitives.
 
   Lives here (not in the backend) because the driver's
@@ -162,7 +162,7 @@ class _JointMoveDirection(IntEnum):
 
 
 @dataclass
-class _MotorMoveParam:
+class MotorMoveParam:
   """One axis of a coordinated move, expressed purely in node-ID terms."""
 
   # CANopen node ID for this axis. Backend passes `int(self.Axis.X)`.
@@ -171,12 +171,12 @@ class _MotorMoveParam:
   velocity: int       # encoder counts/sec (driver-internal; backend converts from mm/s or deg/s)
   acceleration: int   # encoder counts/sec^2
   relative: bool = False
-  direction: _JointMoveDirection = _JointMoveDirection.ShortestWay
+  direction: JointMoveDirection = JointMoveDirection.ShortestWay
 
 
 @dataclass
-class _MotorsMovePlan:
-  moves: List[_MotorMoveParam] = field(default_factory=list)
+class MotorsMovePlan:
+  moves: List[MotorMoveParam] = field(default_factory=list)
   move_time: float = 10.0
 
 
@@ -718,7 +718,7 @@ class KX2Driver(Driver):
     return await self.query_int(node_id, "MS", 0)
 
   async def motor_set_move_direction(
-    self, node_id: int, direction: _JointMoveDirection
+    self, node_id: int, direction: JointMoveDirection
   ) -> None:
     # Elmo modulo mode register: bit0 enables modulo; bits6..7 encode the
     # direction (0=Normal, 1=CW, 2=CCW, 3=Shortest). Packs to 1 + 64*direction

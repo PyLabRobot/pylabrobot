@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, Literal, Optional
 
-from pylabrobot.paa.kx2.driver import _JointMoveDirection
+from pylabrobot.paa.kx2.driver import JointMoveDirection
 
 
 GripperFingerSide = Literal["barcode_reader", "proximity_sensor"]
@@ -57,7 +57,7 @@ class AxisConfig:
   absolute_encoder: bool
   max_vel: float
   max_accel: float
-  joint_move_direction: _JointMoveDirection
+  joint_move_direction: JointMoveDirection
 
   # I/O pin assignments — channel -> human-readable name ("GripperSensor",
   # "Buzzer", "AuxPin42", or "" when unassigned). Probed from UI[5..16] but

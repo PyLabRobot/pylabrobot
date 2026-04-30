@@ -29,10 +29,10 @@ from pylabrobot.paa.kx2.driver import (
   CanError,
   _ElmoObjectDataType,
   _InputLogic,
-  _JointMoveDirection,
+  JointMoveDirection,
   KX2Driver,
-  _MotorMoveParam,
-  _MotorsMovePlan,
+  MotorMoveParam,
+  MotorsMovePlan,
 )
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -275,15 +275,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await self.driver.motor_enable(node_id=nid, state=True, use_ds402=axis.is_motion)
 
       await self._motors_move_absolute_execute_locked(
-        plan=_MotorsMovePlan(
+        plan=MotorsMovePlan(
           moves=[
-            _MotorMoveParam(
+            MotorMoveParam(
               node_id=nid,
               position=hs_offset,
               velocity=offset_vel,
               acceleration=offset_acc,
               relative=False,
-              direction=_JointMoveDirection.ShortestWay,
+              direction=JointMoveDirection.ShortestWay,
             )
           ],
         )
@@ -293,15 +293,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await self._motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
 
       await self._motors_move_absolute_execute_locked(
-        plan=_MotorsMovePlan(
+        plan=MotorsMovePlan(
           moves=[
-            _MotorMoveParam(
+            MotorMoveParam(
               node_id=nid,
               position=ind_offset,
               velocity=offset_vel,
               acceleration=offset_acc,
               relative=False,
-              direction=_JointMoveDirection.ShortestWay,
+              direction=JointMoveDirection.ShortestWay,
             )
           ]
         )
@@ -521,13 +521,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     vh3 = await self.driver.query_int(nid, "VH", 3)
     vl3 = await self.driver.query_int(nid, "VL", 3)
 
-    joint_move_direction = _JointMoveDirection.Normal
+    joint_move_direction = JointMoveDirection.Normal
     if (xm1 == 0 and xm2 == 0) or (xm1 <= vl3 and xm2 >= vh3):
       unlimited_travel = False
     elif xm1 > vl3 and xm2 < vh3:
       unlimited_travel = True
       if Axis(nid).is_motion:
-        joint_move_direction = _JointMoveDirection.ShortestWay
+        joint_move_direction = JointMoveDirection.ShortestWay
     else:
       raise CanError(
         f"Invalid travel limits or modulo settings for axis {nid}: "
@@ -801,7 +801,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self,
     cmd_pos: Dict[Axis, float],
     params: Optional["KX2ArmBackend.JointMoveParams"] = None,
-  ) -> Optional[_MotorsMovePlan]:
+  ) -> Optional[MotorsMovePlan]:
     if params is None:
       params = KX2ArmBackend.JointMoveParams()
     target = cmd_pos.copy()
@@ -879,7 +879,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     for ax in axes:
       if (
         self._cfg.axes[ax].unlimited_travel
-        and self._cfg.axes[ax].joint_move_direction != _JointMoveDirection.Normal
+        and self._cfg.axes[ax].joint_move_direction != JointMoveDirection.Normal
       ):
         target[ax] = self._wrap_to_range(target[ax], self._cfg.axes[ax].min_travel, self._cfg.axes[ax].max_travel)
 
@@ -900,11 +900,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         d = target_cmd_units[ax] - curr_cmd_units.get(ax, 0.0)
         span = self._cfg.axes[ax].max_travel - self._cfg.axes[ax].min_travel
         dir_ = self._cfg.axes[ax].joint_move_direction
-        if dir_ == _JointMoveDirection.Clockwise and d > 0.01:
+        if dir_ == JointMoveDirection.Clockwise and d > 0.01:
           d -= span
-        elif dir_ == _JointMoveDirection.Counterclockwise and d < -0.01:
+        elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
           d += span
-        elif dir_ == _JointMoveDirection.ShortestWay:
+        elif dir_ == JointMoveDirection.ShortestWay:
           if d > 180.0:
             d -= span
           elif d < -180.0:
@@ -954,11 +954,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         span = self._cfg.axes[ax].max_travel - self._cfg.axes[ax].min_travel
         dir_ = self._cfg.axes[ax].joint_move_direction
 
-        if dir_ == _JointMoveDirection.Clockwise and d > 0.01:
+        if dir_ == JointMoveDirection.Clockwise and d > 0.01:
           d -= span
-        elif dir_ == _JointMoveDirection.Counterclockwise and d < -0.01:
+        elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
           d += span
-        elif dir_ == _JointMoveDirection.ShortestWay:
+        elif dir_ == JointMoveDirection.ShortestWay:
           if d > 180.0:
             d -= span
           elif d < -180.0:
@@ -1041,9 +1041,9 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         enc_vel[ax] = max(v[ax] * abs(conv), 1.0)
         enc_accel[ax] = max(a[ax] * abs(conv), 1.0)
 
-    return _MotorsMovePlan(
+    return MotorsMovePlan(
       moves=[
-        _MotorMoveParam(
+        MotorMoveParam(
           node_id=int(ax),
           position=int(round(enc_pos[ax])),
           velocity=int(round(enc_vel[ax])),
@@ -1078,11 +1078,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     await self._motors_move_absolute_execute_locked(plan)
 
-  async def motors_move_absolute_execute(self, plan: _MotorsMovePlan) -> None:
+  async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
     async with self._motion_guard():
       await self._motors_move_absolute_execute_locked(plan)
 
-  async def _motors_move_absolute_execute_locked(self, plan: _MotorsMovePlan) -> None:
+  async def _motors_move_absolute_execute_locked(self, plan: MotorsMovePlan) -> None:
     """Caller MUST hold _motion_guard."""
     await self.driver.pvt_select_mode(False)
 
@@ -1476,8 +1476,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         wr_move, wr_t_acc, wr_t_total, _ = await _yeet_build_axis_move(
           self, Axis.WRIST, joints0[Axis.WRIST], wrist_outward,
         )
-        sh_plan = _MotorsMovePlan(moves=[sh_move], move_time=sh_t_total)
-        wr_plan = _MotorsMovePlan(moves=[wr_move], move_time=wr_t_total)
+        sh_plan = MotorsMovePlan(moves=[sh_move], move_time=sh_t_total)
+        wr_plan = MotorsMovePlan(moves=[wr_move], move_time=wr_t_total)
 
         # Release fires inside shoulder cruise. Wrist trigger is delayed so its
         # accel ramp finishes at release (peak ω at the gripper offset).
@@ -1488,7 +1488,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         sg = int(Axis.SERVO_GRIPPER)
         sg_cfg = cfg.axes[Axis.SERVO_GRIPPER]
         open_pos = min(_YEET_OPEN_POSITION, sg_cfg.max_travel - _YEET_OPEN_SAFETY_MARGIN)
-        gripper_plan = _MotorsMovePlan(moves=[_MotorMoveParam(
+        gripper_plan = MotorsMovePlan(moves=[MotorMoveParam(
           node_id=sg,
           position=int(round(open_pos * sg_cfg.motor_conversion_factor)),
           velocity=int(round(sg_cfg.max_vel * abs(sg_cfg.motor_conversion_factor))),
@@ -1589,7 +1589,7 @@ _YEET_RETURN_GRIPPER_ACC = 500.0    # mm/s^2
 async def _yeet_build_axis_move(
   backend: "KX2ArmBackend", ax: Axis, cur: float, target: float,
 ) -> tuple:
-  """Per-axis _MotorMoveParam at firmware velocity limit (VH[2]/1.01).
+  """Per-axis MotorMoveParam at firmware velocity limit (VH[2]/1.01).
   Returns (move, t_acc, t_total, v_phys)."""
   cfg = backend._cfg
   ax_cfg = cfg.axes[ax]
@@ -1602,22 +1602,22 @@ async def _yeet_build_axis_move(
   d = target - cur
   span = ax_cfg.max_travel - ax_cfg.min_travel
   if span > 0 and ax_cfg.unlimited_travel:
-    if direction == _JointMoveDirection.Clockwise and d > 0.01:
+    if direction == JointMoveDirection.Clockwise and d > 0.01:
       d -= span
-    elif direction == _JointMoveDirection.Counterclockwise and d < -0.01:
+    elif direction == JointMoveDirection.Counterclockwise and d < -0.01:
       d += span
-    elif direction == _JointMoveDirection.ShortestWay:
+    elif direction == JointMoveDirection.ShortestWay:
       if d > 180.0:
         d -= span
       elif d < -180.0:
         d += span
   dist = abs(d)
 
-  if ax_cfg.unlimited_travel and direction != _JointMoveDirection.Normal:
+  if ax_cfg.unlimited_travel and direction != JointMoveDirection.Normal:
     target = KX2ArmBackend._wrap_to_range(target, ax_cfg.min_travel, ax_cfg.max_travel)
 
   _, _, t_acc, t_total = KX2ArmBackend._profile(dist, v_phys, a_phys)
-  move = _MotorMoveParam(
+  move = MotorMoveParam(
     node_id=int(ax),
     position=int(round(target * conv)),
     velocity=max(int(round(v_phys * abs(conv))), 1),
@@ -1627,7 +1627,7 @@ async def _yeet_build_axis_move(
   return move, t_acc, t_total, v_phys
 
 
-async def _yeet_arm_plan(driver: KX2Driver, plan: _MotorsMovePlan) -> None:
+async def _yeet_arm_plan(driver: KX2Driver, plan: MotorsMovePlan) -> None:
   """Pre-load a plan onto the drives without triggering it. Splits SDO
   setup latency from the move start so the timer can be accurate."""
   await driver.pvt_select_mode(False)

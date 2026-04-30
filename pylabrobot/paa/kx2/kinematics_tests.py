@@ -3,7 +3,7 @@ import unittest
 
 from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperConfig, KX2Config
-from pylabrobot.paa.kx2.driver import _JointMoveDirection
+from pylabrobot.paa.kx2.driver import JointMoveDirection
 from pylabrobot.paa.kx2.kinematics import IKError, KX2GripperLocation
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -17,7 +17,7 @@ def _axis() -> AxisConfig:
     absolute_encoder=True,
     max_vel=100.0,
     max_accel=100.0,
-    joint_move_direction=_JointMoveDirection.Normal,
+    joint_move_direction=JointMoveDirection.Normal,
     digital_inputs={},
     analog_inputs={},
     outputs={},
