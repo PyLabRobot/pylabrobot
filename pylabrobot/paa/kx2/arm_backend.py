@@ -751,10 +751,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         await self._motors_move_joint_locked({Axis.Z: z_start}, params=move_params)
       z0 = await self.motor_get_current_position(Axis.Z)
       if await self.read_proximity_sensor():
-        raise RuntimeError(
-          f"proximity sensor already tripped at start (Z {z0:.2f}); "
-          f"clear the gripper or raise z_start before searching"
-        )
+        return z0
       await self.driver.configure_input_logic(
         int(self._PROXIMITY_SENSOR_AXIS), self._PROXIMITY_SENSOR_INPUT, _InputLogic.StopForward,
       )
@@ -1187,39 +1184,6 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
 
-  @dataclasses.dataclass
-  class CartesianMoveParams(BackendParams):
-    """Cartesian gripper-speed/acceleration cap during the move (mm/s,
-    mm/s^2). ``None`` means run joints at firmware max with no Cartesian
-    cap. Joint speeds are scaled uniformly so the worst-case Cartesian
-    gripper speed along the trajectory stays at or under
-    ``max_gripper_speed``."""
-    max_gripper_speed: Optional[float] = None
-    max_gripper_acceleration: Optional[float] = None
-
-  @dataclasses.dataclass
-  class JointMoveParams(BackendParams):
-    """Same shape as ``CartesianMoveParams`` — see its docstring."""
-    max_gripper_speed: Optional[float] = None
-    max_gripper_acceleration: Optional[float] = None
-
-  @dataclasses.dataclass
-  class GripParams(BackendParams):
-    check_plate_gripped: bool = True
-
-  @dataclasses.dataclass
-  class PickUpParams(BackendParams):
-    """Move-leg caps + grip-leg knob for the pick_up_* compounds."""
-    max_gripper_speed: Optional[float] = None
-    max_gripper_acceleration: Optional[float] = None
-    check_plate_gripped: bool = True
-
-  @dataclasses.dataclass
-  class DropParams(BackendParams):
-    """Move-leg caps for the drop_at_* compounds."""
-    max_gripper_speed: Optional[float] = None
-    max_gripper_acceleration: Optional[float] = None
-
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
     # Fire MO=0 on every motion axis concurrently — serial halts let later
     # axes coast for the duration of the earlier SDOs.
@@ -1248,6 +1212,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     async with self._motion_guard():
       await self._motors_move_joint_locked({Axis.SERVO_GRIPPER: gripper_width})
 
+  @dataclasses.dataclass
+  class GripParams(BackendParams):
+    check_plate_gripped: bool = True
+
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
@@ -1262,18 +1230,35 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     pos = await self.motor_get_current_position(Axis.SERVO_GRIPPER)
     return abs(pos) < 1.0
 
-  async def move_to_gripper_location(
+  @dataclasses.dataclass
+  class CartesianMoveParams(BackendParams):
+    """Cartesian gripper-speed/acceleration cap during the move (mm/s,
+    mm/s^2) plus an optional wrist-sign constraint.
+
+    ``max_gripper_speed`` / ``max_gripper_acceleration``: ``None`` means
+    run joints at firmware max with no Cartesian cap. Joint speeds are
+    scaled uniformly so the worst-case Cartesian gripper speed along the
+    trajectory stays at or under ``max_gripper_speed``.
+
+    ``wrist``: ``"cw"`` or ``"ccw"`` picks the IK wrist solution
+    explicitly; ``None`` (default) falls back to the closest-to-current
+    solution.
+    """
+    max_gripper_speed: Optional[float] = None
+    max_gripper_acceleration: Optional[float] = None
+    wrist: Optional[kinematics.Wrist] = None
+
+  async def move_to_location(
     self,
-    pose: kinematics.KX2GripperLocation,
+    location: Coordinate,
+    direction: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    """Cartesian move with optional explicit wrist sign.
-
-    `pose.wrist`: "cw" or "ccw" picks the wrist solution explicitly; None
-    falls back to the closest-to-current solution (same as `move_to_location`).
-    """
     if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
       backend_params = KX2ArmBackend.CartesianMoveParams()
+    pose = kinematics.KX2GripperLocation(
+      location=location, rotation=Rotation(z=direction), wrist=backend_params.wrist
+    )
     async with self._motion_guard():
       joint_pos = await self._cart_to_joints(pose)
       joint_params = KX2ArmBackend.JointMoveParams(
@@ -1282,16 +1267,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       )
       await self._motors_move_joint_locked(cmd_pos=joint_pos, params=joint_params)
 
-  async def move_to_location(
-    self,
-    location: Coordinate,
-    direction: float,
-    backend_params: Optional[BackendParams] = None,
-  ) -> None:
-    pose = kinematics.KX2GripperLocation(
-      location=location, rotation=Rotation(z=direction), wrist=None
-    )
-    await self.move_to_gripper_location(pose, backend_params=backend_params)
+  @dataclasses.dataclass
+  class PickUpParams(BackendParams):
+    """Move-leg caps + grip-leg knob for the pick_up_* compounds."""
+    max_gripper_speed: Optional[float] = None
+    max_gripper_acceleration: Optional[float] = None
+    check_plate_gripped: bool = True
 
   async def pick_up_at_location(
     self,
@@ -1311,6 +1292,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       await self.move_to_location(location, direction, backend_params=move_params)
       await self.close_gripper(resource_width, backend_params=grip_params)
 
+  @dataclasses.dataclass
+  class DropParams(BackendParams):
+    """Move-leg caps for the drop_at_* compounds."""
+    max_gripper_speed: Optional[float] = None
+    max_gripper_acceleration: Optional[float] = None
+
   async def drop_at_location(
     self,
     location: Coordinate,
@@ -1327,6 +1314,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     async with self._motion_guard():
       await self.move_to_location(location, direction, backend_params=move_params)
       await self.open_gripper(resource_width)
+
+  @dataclasses.dataclass
+  class JointMoveParams(BackendParams):
+    """Same shape as ``CartesianMoveParams``'s speed/accel caps — see its
+    docstring."""
+    max_gripper_speed: Optional[float] = None
+    max_gripper_acceleration: Optional[float] = None
 
   async def move_to_joint_position(
     self,
@@ -1424,6 +1418,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self,
     min_z: float = 400.0,
     bump: float = 1.25,
+    force: bool = False,
   ) -> None:
     """Easter egg — swing the arm at firmware-max and open the gripper at
     peak velocity to throw whatever is being held.
@@ -1436,17 +1431,24 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     ``bump`` scales VH[2]/SP[2]/SD[0] on shoulder + wrist for the swing's
     duration (restored in finally). 1.0 = stock; 1.25 confirmed safe;
     higher risks tracking-error faults that need Elmo Composer recovery.
+
+    ``force=True`` skips the interactive 'y' prompt — for scripted use or
+    when the prompt path is broken (notebooks ran ``input`` in a thread
+    pool where ipykernel's stdin hook doesn't reach, returning '' and
+    aborting before the operator could type).
     """
-    warning = (
-      f"WARNING: very_dangerously_yeet: swing the arm at {bump:.2f}x firmware-max "
-      "and open the gripper mid-swing. Anything in the gripper will be "
-      "thrown. High bump can fault the drive. Type 'y' to continue: "
-    )
-    # Run the blocking prompt off the loop so the canopen RX listener and
-    # any other coroutines stay live while we wait for the operator.
-    answer = await asyncio.to_thread(input, warning)
-    if answer.strip().lower() != "y":
-      raise RuntimeError("very_dangerously_yeet: aborted by user")
+    if not force:
+      warning = (
+        f"WARNING: very_dangerously_yeet: swing the arm at {bump:.2f}x firmware-max "
+        "and open the gripper mid-swing. Anything in the gripper will be "
+        "thrown. High bump can fault the drive. Type 'y' to continue: "
+      )
+      # Synchronous input(): python-can's reader thread keeps draining CAN
+      # frames while we block. Don't punt to asyncio.to_thread — ipykernel
+      # only services stdin requests on the main kernel thread.
+      answer = input(warning)
+      if answer.strip().lower() != "y":
+        raise RuntimeError("very_dangerously_yeet: aborted by user")
 
     driver = self.driver
     cfg = self._cfg
