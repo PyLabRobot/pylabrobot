@@ -9871,6 +9871,64 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
     return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
 
+  # Vertical drop from the iSWAP rotation drive plane to the gripper finger
+  # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
+  # 13 mm above it.
+  iswap_rotation_drive_z_offset_above_finger_mm = 13.0
+
+  async def iswap_rotation_drive_request_z(self) -> float:
+    """Request iSWAP rotation drive Z position (deck coordinates), in mm.
+
+    Adds the 13 mm structural offset to the gripper finger plane (C0 QG).
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    finger_plane_z = (await self.request_iswap_position()).z
+    return finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+
+  async def iswap_rotation_drive_request_position(self) -> Coordinate:
+    """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm."""
+    return Coordinate(
+      x=await self.iswap_rotation_drive_request_x(),
+      y=await self.iswap_rotation_drive_request_y(),
+      z=await self.iswap_rotation_drive_request_z(),
+    )
+
+  async def experimental_iswap_rotation_drive_move_x(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the iSWAP rotation drive to an absolute X position (deck coordinates).
+
+    Thin wrapper around `x_arm_move` that translates rotation-drive X into
+    X-arm carriage X using the cached `kg` offset.
+
+    Args:
+      x: Target rotation-drive X coordinate in mm.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+    # TODO: remove "experimental_" prefix once x_arm_move has been optimised
+
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    if self._iswap_rotation_drive_x_offset_mm is None:
+      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+    kg = self._iswap_rotation_drive_x_offset_mm
+
+    x_min = 90.0 - kg
+    x_max = 1350.0 - kg
+    if not (x_min <= x <= x_max):
+      raise ValueError(f"x must be between {x_min} and {x_max} mm, is {x}")
+
+    return await self.experimental_x_arm_move(
+      x=x + kg,
+      acceleration_level=acceleration_level,
+      current_protection_limiter=current_protection_limiter,
+    )
+
   async def iswap_rotation_drive_move_y(
     self,
     y: float,
@@ -9879,7 +9937,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_protection_limiter: int = 7,
     make_space: bool = False,
   ):
-    """Move the iSWAP rotation drive to an absolute Y position (R0 YA).
+    """Move the iSWAP rotation drive to an absolute Y position.
 
     Args:
       y: Target Y coordinate in mm.
@@ -9948,64 +10006,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       yv=f"{round(speed_increments):04}",
       yr=f"{int(acceleration_level)}",
       yw=f"{int(current_protection_limiter)}",
-    )
-
-  # Vertical drop from the iSWAP rotation drive plane to the gripper finger
-  # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
-  # 13 mm above it.
-  iswap_rotation_drive_z_offset_above_finger_mm = 13.0
-
-  async def iswap_rotation_drive_request_z(self) -> float:
-    """Request iSWAP rotation drive Z position (deck coordinates), in mm.
-
-    Adds the 13 mm structural offset to the gripper finger plane (C0 QG).
-    """
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    finger_plane_z = (await self.request_iswap_position()).z
-    return finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
-
-  async def iswap_rotation_drive_request_position(self) -> Coordinate:
-    """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm."""
-    return Coordinate(
-      x=await self.iswap_rotation_drive_request_x(),
-      y=await self.iswap_rotation_drive_request_y(),
-      z=await self.iswap_rotation_drive_request_z(),
-    )
-
-  async def experimental_iswap_rotation_drive_move_x(
-    self,
-    x: float,
-    acceleration_level: int = 3,
-    current_protection_limiter: int = 7,
-  ):
-    """Move the iSWAP rotation drive to an absolute X position (deck coordinates).
-
-    Thin wrapper around `x_arm_move` that translates rotation-drive X into
-    X-arm carriage X using the cached `kg` offset.
-
-    Args:
-      x: Target rotation-drive X coordinate in mm.
-      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
-      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
-    """
-    # TODO: remove "experimental_" prefix once x_arm_move has been optimised
-
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    if self._iswap_rotation_drive_x_offset_mm is None:
-      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
-    kg = self._iswap_rotation_drive_x_offset_mm
-
-    x_min = 90.0 - kg
-    x_max = 1350.0 - kg
-    if not (x_min <= x <= x_max):
-      raise ValueError(f"x must be between {x_min} and {x_max} mm, is {x}")
-
-    return await self.experimental_x_arm_move(
-      x=x + kg,
-      acceleration_level=acceleration_level,
-      current_protection_limiter=current_protection_limiter,
     )
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
