@@ -1162,27 +1162,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.driver.motors_move_start(node_ids)
     await self.driver.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
-  async def _cart_to_joints(
-    self, pose: kinematics.KX2GripperLocation
-  ) -> Dict[Axis, float]:
-    """Cartesian -> joints with closest-solution semantics.
-
-    If `pose.wrist` is None, fills it with the current joint's wrist sign
-    so the arm picks whichever IK solution needs the least motion. Then
-    snaps each rotary axis to the nearest 360° multiple of the current
-    position, re-enforcing the wrist sign afterward.
-    """
+  async def _cart_to_joints(self, pose: GripperLocation) -> Dict[Axis, float]:
+    """Cartesian -> joints, snapping rotary axes to whichever 360° wrap is
+    closest to the current joint position."""
     current = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
-    # IK needs an explicit cw/ccw; for closest mode fill from the current
-    # joint's sign so IK has a valid choice. Snap then runs with the
-    # *original* pose.wrist — None disables sign re-enforce so the snap
-    # actually picks the closest J4.
-    ik_wrist = pose.wrist if pose.wrist is not None else (
-      "ccw" if current[Axis.WRIST] >= 0 else "cw"
-    )
-    resolved = dataclasses.replace(pose, wrist=ik_wrist)
-    ik_joints = kinematics.ik(resolved, self._cfg, self._gripper_config)
-    return kinematics.snap_to_current(ik_joints, current, pose.wrist)
+    ik_joints = kinematics.ik(pose, self._cfg, self._gripper_config)
+    return kinematics.snap_to_current(ik_joints, current)
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
 
@@ -1241,20 +1226,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   @dataclasses.dataclass
   class CartesianMoveParams(BackendParams):
     """Cartesian gripper-speed/acceleration cap during the move (mm/s,
-    mm/s^2) plus an optional wrist-sign constraint.
-
-    ``max_gripper_speed`` / ``max_gripper_acceleration``: ``None`` means
-    run joints at firmware max with no Cartesian cap. Joint speeds are
-    scaled uniformly so the worst-case Cartesian gripper speed along the
-    trajectory stays at or under ``max_gripper_speed``.
-
-    ``wrist``: ``"cw"`` or ``"ccw"`` picks the IK wrist solution
-    explicitly; ``None`` (default) falls back to the closest-to-current
-    solution.
-    """
+    mm/s^2). ``None`` means run joints at firmware max with no Cartesian
+    cap. Joint speeds are scaled uniformly so the worst-case Cartesian
+    gripper speed along the trajectory stays at or under
+    ``max_gripper_speed``."""
     max_gripper_speed: Optional[float] = None
     max_gripper_acceleration: Optional[float] = None
-    wrist: Optional[kinematics.Wrist] = None
 
   async def move_to_location(
     self,
@@ -1264,9 +1241,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
       backend_params = KX2ArmBackend.CartesianMoveParams()
-    pose = kinematics.KX2GripperLocation(
-      location=location, rotation=Rotation(z=direction), wrist=backend_params.wrist
-    )
+    pose = GripperLocation(location=location, rotation=Rotation(z=direction))
     async with self._motion_guard():
       joint_pos = await self._cart_to_joints(pose)
       joint_params = KX2ArmBackend.JointMoveParams(

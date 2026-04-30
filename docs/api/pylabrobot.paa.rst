@@ -21,7 +21,6 @@ KX2
     KX2BarcodeReaderBackend
     KX2Config
     Axis
-    KX2GripperLocation
 
 .. autoclass:: pylabrobot.paa.kx2.arm_backend.KX2ArmBackend.CartesianMoveParams
    :members:

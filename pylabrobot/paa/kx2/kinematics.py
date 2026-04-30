@@ -5,7 +5,10 @@ The KX2 is *not* a dual-link SCARA. The elbow is a prismatic radial slide
 (not a revolute J3), Z is a separate prismatic axis, and the rail is
 outside this kinematic model. So the math is closed-form and trivially
 cheap — no two-link cosine law, no elbow-up/elbow-down branch, no
-unreachable-pose check beyond "rotation must be about +Z".
+unreachable-pose check beyond "rotation must be about +Z". The wrist is
+a continuous-rotation drive with no winding, so J4 has no preferred sign
+either — `ik` returns one canonical value, `snap_to_current` then pulls
+it to whichever 360° wrap is closest to the current J4.
 
 Joint dict keys match the drive node-IDs and the `KX2ArmBackend.Axis` enum:
   1: shoulder [deg]
@@ -13,47 +16,25 @@ Joint dict keys match the drive node-IDs and the `KX2ArmBackend.Axis` enum:
   3: elbow [mm] (radial extension)
   4: wrist [deg]
 
-Task pose is a `KX2GripperLocation` (GripperLocation + a wrist-sign
-convention). The gripper clamp point is in world coordinates; rotation.z
-is yaw in degrees about world +Z, and rotation.x/y must be 0. Sign
-convention follows right-hand rule about +Z (CCW positive looking down).
-
-For "closest" semantics — minimizing arm motion between two poses — call
-`snap_to_current` after `ik`.
+Task pose is a `GripperLocation`. The gripper clamp point is in world
+coordinates; rotation.z is yaw in degrees about world +Z, and
+rotation.x/y must be 0. Sign convention follows right-hand rule about +Z
+(CCW positive looking down).
 """
 
-from dataclasses import dataclass
 from math import atan2, cos, degrees, hypot, radians, sin
-from typing import Dict, Literal, Optional
+from typing import Dict
 
 from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.paa.kx2.config import Axis, GripperConfig, KX2Config
 from pylabrobot.resources import Coordinate, Rotation
 
 
-Wrist = Literal["cw", "ccw"]
-
-
-@dataclass
-class KX2GripperLocation(GripperLocation):
-  """Gripper pose with an optional wrist-sign constraint.
-
-  wrist:
-    - "cw":  J4 ≤ 0 (negative), with a small tolerance near 0.
-    - "ccw": J4 ≥ 0 (positive), with a small tolerance near 0.
-    - None: unspecified. `ik` rejects None; backend wrappers fill it with
-      the current joint's wrist sign so the arm picks whichever solution
-      needs the least motion.
-  """
-
-  wrist: Optional[Wrist] = None
-
-
 class IKError(ValueError):
   """Target pose is unreachable (for now: non-Z rotation requested)."""
 
 
-def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> KX2GripperLocation:
+def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> GripperLocation:
   """Forward kinematics.
 
   Args:
@@ -61,8 +42,8 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> KX2GripperL
     c: arm configuration (drive-read calibration).
     t: gripper tooling (user-supplied geometry).
   Returns:
-    KX2GripperLocation with the gripper clamp point and a wrist sign
-    derived from the joint configuration (J4 >= 0 -> "ccw", else "cw").
+    GripperLocation with the gripper clamp point and a yaw equivalent to
+    the joints' net world orientation.
   """
   r = c.wrist_offset + c.elbow_offset + c.elbow_zero_offset + joints[Axis.ELBOW]
   sh_deg = joints[Axis.SHOULDER]
@@ -80,41 +61,30 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> KX2GripperL
 
   yaw = radians(yaw_deg)
   gl = t.length if t.finger_side == "barcode_reader" else -t.length
-  return KX2GripperLocation(
+  return GripperLocation(
     location=Coordinate(
       x=wrist_x + gl * sin(yaw),
       y=wrist_y - gl * cos(yaw),
       z=wrist_z - t.z_offset,
     ),
     rotation=Rotation(z=yaw_deg),
-    wrist="ccw" if joints[Axis.WRIST] >= 0 else "cw",
   )
 
 
-def ik(pose: KX2GripperLocation, c: KX2Config, t: GripperConfig) -> Dict[Axis, float]:
+def ik(pose: GripperLocation, c: KX2Config, t: GripperConfig) -> Dict[Axis, float]:
   """Inverse kinematics.
 
   Args:
-    pose: KX2GripperLocation. Requires pose.wrist to be "cw" or "ccw" —
-      "closest" semantics live in the backend wrapper (fill None with the
-      current joint's sign, then call `snap_to_current` after).
+    pose: target gripper pose. rotation.x/y must be 0.
     c: arm configuration (drive-read calibration).
     t: gripper tooling (user-supplied geometry).
   Returns:
     joints dict {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
-    J4 is in (-360°, 0°] when wrist="cw" and [0°, 360°) when wrist="ccw"
-    (J4 ≈ 0 satisfies both, up to `c.eps`).
-
-    Note: J4 is not constrained to wrist travel limits. The backend's
-    `_cart_to_joints` calls `snap_to_current` immediately after, which
-    pulls J4 toward the current (in-range) wrist position by 360°
-    multiples. Direct callers of `ik` must handle travel range themselves.
+    J4 is the canonical (-180°, 180°] solution; `snap_to_current` shifts
+    it to the closest 360° wrap of the current J4 for actual motion.
   Raises:
-    ValueError if pose.wrist is not "cw" or "ccw".
     IKError if the requested rotation has an x or y component.
   """
-  if pose.wrist not in ("cw", "ccw"):
-    raise ValueError(f"pose.wrist must be 'cw' or 'ccw', got {pose.wrist!r}")
   if pose.rotation.x != 0 or pose.rotation.y != 0:
     raise IKError("Only Z rotation is supported for KX2")
 
@@ -134,34 +104,17 @@ def ik(pose: KX2GripperLocation, c: KX2Config, t: GripperConfig) -> Dict[Axis, f
     shoulder = 180.0
 
   elbow = hypot(x, y) - c.wrist_offset - c.elbow_offset - c.elbow_zero_offset
-
   wrist = pose.rotation.z - shoulder
-  # Enforce requested sign. Tolerance on the check so J4 values within FP
-  # dust of 0 aren't pushed to ±360; J4 ≈ 0 satisfies both conventions.
-  if pose.wrist == "cw" and wrist > c.eps:
-    wrist -= 360.0
-  elif pose.wrist == "ccw" and wrist < -c.eps:
-    wrist += 360.0
 
   return {Axis.SHOULDER: shoulder, Axis.Z: wrist_z, Axis.ELBOW: elbow, Axis.WRIST: wrist}
 
 
 def snap_to_current(
-  joints: Dict[Axis, float], current: Dict[Axis, float], wrist: Optional[Wrist] = None
+  joints: Dict[Axis, float], current: Dict[Axis, float]
 ) -> Dict[Axis, float]:
-  """Shift rotary joints by 360° multiples toward `current`. Z and elbow are
-  prismatic and pass through unchanged.
-
-  If `wrist` is "cw" or "ccw", re-enforce that sign half on J4 after the
-  shift (use this when the caller explicitly chose a sign and wants it
-  preserved even at the cost of extra motion). If `wrist` is None, the
-  shift is unconditional — the user wanted "closest", so trust the snap.
-  """
+  """Shift rotary joints by 360° multiples toward `current`. Z and elbow
+  are prismatic and pass through unchanged."""
   out = dict(joints)
   for axis in (Axis.SHOULDER, Axis.WRIST):
     out[axis] += 360 * round((current[axis] - out[axis]) / 360)
-  if wrist == "ccw" and out[Axis.WRIST] < 0:
-    out[Axis.WRIST] += 360
-  elif wrist == "cw" and out[Axis.WRIST] > 0:
-    out[Axis.WRIST] -= 360
   return out

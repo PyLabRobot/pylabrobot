@@ -8,7 +8,7 @@ from pylabrobot.paa.kx2.config import (
   KX2Config,
   ServoGripperConfig,
 )
-from pylabrobot.paa.kx2.kinematics import IKError, KX2GripperLocation
+from pylabrobot.paa.kx2.kinematics import IKError
 from pylabrobot.paa.kx2.kx2 import KX2
 
 __all__ = [
@@ -21,6 +21,5 @@ __all__ = [
   "KX2ArmBackend",
   "KX2BarcodeReader",
   "KX2Config",
-  "KX2GripperLocation",
   "ServoGripperConfig",
 ]

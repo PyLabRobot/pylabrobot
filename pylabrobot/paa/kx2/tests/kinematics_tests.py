@@ -1,10 +1,11 @@
 import math
 import unittest
 
+from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperConfig, KX2Config
 from pylabrobot.paa.kx2.driver import JointMoveDirection
-from pylabrobot.paa.kx2.kinematics import IKError, KX2GripperLocation
+from pylabrobot.paa.kx2.kinematics import IKError
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -41,18 +42,12 @@ def _config(
   )
 
 
-def _approx(a: float, b: float, eps: float = 1e-9) -> bool:
-  return abs(a - b) < eps
-
-
 class FKIKRoundTrip(unittest.TestCase):
-  def test_roundtrip_ccw(self):
+  def test_roundtrip(self):
     c = _config()
     g = GripperConfig(length=15.0, z_offset=3.0)
-    pose = KX2GripperLocation(
-      location=Coordinate(x=100, y=200, z=50),
-      rotation=Rotation(z=30),
-      wrist="ccw",
+    pose = GripperLocation(
+      location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30)
     )
     joints = kinematics.ik(pose, c, g)
     back = kinematics.fk(joints, c, g)
@@ -61,29 +56,12 @@ class FKIKRoundTrip(unittest.TestCase):
     self.assertAlmostEqual(back.location.z, pose.location.z, places=9)
     self.assertAlmostEqual(back.rotation.z, pose.rotation.z, places=9)
 
-  def test_roundtrip_cw_yields_same_world_pose(self):
-    """cw and ccw produce J4 360° apart but represent the same physical pose."""
-    c = _config()
-    g = GripperConfig(length=15.0, z_offset=3.0)
-    pose = KX2GripperLocation(
-      location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30), wrist="cw"
-    )
-    j_cw = kinematics.ik(pose, c, g)
-    j_ccw = kinematics.ik(KX2GripperLocation(**{**pose.__dict__, "wrist": "ccw"}), c, g)
-    self.assertAlmostEqual(j_ccw[Axis.WRIST] - j_cw[Axis.WRIST], 360.0, places=9)
-    # FK on either should land at the original pose.
-    for j in (j_cw, j_ccw):
-      back = kinematics.fk(j, c, g)
-      self.assertAlmostEqual(back.location.x, pose.location.x, places=9)
-      self.assertAlmostEqual(back.location.y, pose.location.y, places=9)
-      self.assertAlmostEqual(back.rotation.z, pose.rotation.z, places=9)
-
   def test_roundtrip_at_origin_yaw_zero(self):
     """Sanity: a pose at (0, R, Z, 0°) lands shoulder=0°."""
     c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
     g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=300, z=10), rotation=Rotation(z=0), wrist="ccw"
+    pose = GripperLocation(
+      location=Coordinate(x=0, y=300, z=10), rotation=Rotation(z=0)
     )
     joints = kinematics.ik(pose, c, g)
     self.assertAlmostEqual(joints[Axis.SHOULDER], 0.0, places=9)
@@ -92,73 +70,12 @@ class FKIKRoundTrip(unittest.TestCase):
     self.assertAlmostEqual(joints[Axis.WRIST], 0.0, places=9)
 
 
-class IKWristSign(unittest.TestCase):
-  def test_cw_yields_non_positive_wrist(self):
-    c = _config()
-    g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=50, y=300, z=20), rotation=Rotation(z=45), wrist="cw"
-    )
-    joints = kinematics.ik(pose, c, g)
-    self.assertLessEqual(joints[Axis.WRIST], c.eps)
-
-  def test_ccw_yields_non_negative_wrist(self):
-    c = _config()
-    g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=50, y=300, z=20), rotation=Rotation(z=45), wrist="ccw"
-    )
-    joints = kinematics.ik(pose, c, g)
-    self.assertGreaterEqual(joints[Axis.WRIST], -c.eps)
-
-  def test_wrist_near_zero_satisfies_both(self):
-    """When the natural J4 is exactly 0, neither cw nor ccw should shift it."""
-    # Construct a pose where wrist - shoulder = 0 naturally:
-    # rotation.z == shoulder. Pick rotation.z = -atan2(x, y) in degrees.
-    x, y = 100.0, 100.0
-    yaw_deg = -math.degrees(math.atan2(x, y))  # ≈ -45°
-    pose = KX2GripperLocation(
-      location=Coordinate(x=x, y=y, z=0),
-      rotation=Rotation(z=yaw_deg),
-      wrist="ccw",
-    )
-    # Use zero gripper offsets so location maps directly to wrist axis.
-    c0 = _config()
-    g0 = GripperConfig()
-    joints = kinematics.ik(pose, c0, g0)
-    self.assertAlmostEqual(joints[Axis.WRIST], 0.0, places=6)
-
-    pose_cw = KX2GripperLocation(**{**pose.__dict__, "wrist": "cw"})
-    joints_cw = kinematics.ik(pose_cw, c0, g0)
-    self.assertAlmostEqual(joints_cw[Axis.WRIST], 0.0, places=6)
-
-
 class IKErrors(unittest.TestCase):
-  def test_none_wrist_raises_valueerror(self):
-    c = _config()
-    g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=100, z=0), rotation=Rotation(z=0), wrist=None
-    )
-    with self.assertRaises(ValueError):
-      kinematics.ik(pose, c, g)
-
-  def test_invalid_wrist_string_raises_valueerror(self):
-    c = _config()
-    g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=100, z=0), rotation=Rotation(z=0), wrist="up",  # type: ignore
-    )
-    with self.assertRaises(ValueError):
-      kinematics.ik(pose, c, g)
-
   def test_x_rotation_raises_ikerror(self):
     c = _config()
     g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=100, z=0),
-      rotation=Rotation(x=10, z=0),
-      wrist="ccw",
+    pose = GripperLocation(
+      location=Coordinate(x=0, y=100, z=0), rotation=Rotation(x=10, z=0)
     )
     with self.assertRaises(IKError):
       kinematics.ik(pose, c, g)
@@ -166,25 +83,11 @@ class IKErrors(unittest.TestCase):
   def test_y_rotation_raises_ikerror(self):
     c = _config()
     g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=100, z=0),
-      rotation=Rotation(y=10, z=0),
-      wrist="ccw",
+    pose = GripperLocation(
+      location=Coordinate(x=0, y=100, z=0), rotation=Rotation(y=10, z=0)
     )
     with self.assertRaises(IKError):
       kinematics.ik(pose, c, g)
-
-
-class FKResult(unittest.TestCase):
-  def test_fk_sets_wrist_field_from_j4_sign(self):
-    c = _config()
-    g = GripperConfig()
-    j_pos = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 100.0, Axis.WRIST: 45.0}
-    self.assertEqual(kinematics.fk(j_pos, c, g).wrist, "ccw")
-    j_neg = {**j_pos, Axis.WRIST: -45.0}
-    self.assertEqual(kinematics.fk(j_neg, c, g).wrist, "cw")
-    j_zero = {**j_pos, Axis.WRIST: 0.0}
-    self.assertEqual(kinematics.fk(j_zero, c, g).wrist, "ccw")  # 0 ≥ 0 -> ccw
 
 
 class SnapToCurrent(unittest.TestCase):
@@ -192,52 +95,35 @@ class SnapToCurrent(unittest.TestCase):
     """J4=20 with current=380 should snap to 380 (closer than 20)."""
     j = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 20.0}
     cur = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 380.0}
-    out = kinematics.snap_to_current(j, cur, "ccw")
+    out = kinematics.snap_to_current(j, cur)
     self.assertAlmostEqual(out[Axis.WRIST], 380.0)
 
   def test_shifts_shoulder_toward_current(self):
     """Shoulder is rotary too — also snaps."""
     j = {Axis.SHOULDER: -170.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 0.0}
     cur = {Axis.SHOULDER: 200.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 0.0}
-    out = kinematics.snap_to_current(j, cur, "ccw")
+    out = kinematics.snap_to_current(j, cur)
     self.assertAlmostEqual(out[Axis.SHOULDER], 190.0)  # -170 + 360
 
   def test_prismatic_axes_pass_through(self):
     """Z and elbow are not 360°-modulo; they should be untouched."""
     j = {Axis.SHOULDER: 0.0, Axis.Z: 100.0, Axis.ELBOW: 50.0, Axis.WRIST: 0.0}
     cur = {Axis.SHOULDER: 0.0, Axis.Z: 999.0, Axis.ELBOW: 999.0, Axis.WRIST: 0.0}
-    out = kinematics.snap_to_current(j, cur, "ccw")
+    out = kinematics.snap_to_current(j, cur)
     self.assertEqual(out[Axis.Z], 100.0)
     self.assertEqual(out[Axis.ELBOW], 50.0)
 
-  def test_re_enforces_ccw_after_snap(self):
-    """Explicit ccw: snap might land J4 negative; ccw re-enforce shifts +360."""
+  def test_pure_closest_no_re_enforce(self):
+    """The wrist drive wraps freely — snap pulls to whichever 360° wrap is closest."""
     j = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 350.0}
     cur = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 0.0}
-    out = kinematics.snap_to_current(j, cur, "ccw")
-    # snap shifts 350 -> -10 (toward current 0); ccw re-enforce -> +350
-    self.assertAlmostEqual(out[Axis.WRIST], 350.0)
-
-  def test_re_enforces_cw_after_snap(self):
-    """Symmetric: explicit cw re-enforce shifts a positive J4 negative."""
-    j = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: -350.0}
-    cur = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 0.0}
-    out = kinematics.snap_to_current(j, cur, "cw")
-    # snap shifts -350 -> 10 (toward current 0); cw re-enforce -> -350
-    self.assertAlmostEqual(out[Axis.WRIST], -350.0)
-
-  def test_closest_mode_does_not_re_enforce(self):
-    """wrist=None means closest: trust the snap, don't shift back."""
-    j = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 350.0}
-    cur = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 0.0}
-    out = kinematics.snap_to_current(j, cur, None)
-    # Pure shift toward current: 350 - 360 = -10. No re-enforce.
+    out = kinematics.snap_to_current(j, cur)
     self.assertAlmostEqual(out[Axis.WRIST], -10.0)
 
   def test_no_shift_when_already_close(self):
     j = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 30.0}
     cur = {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 25.0}
-    out = kinematics.snap_to_current(j, cur, "ccw")
+    out = kinematics.snap_to_current(j, cur)
     self.assertAlmostEqual(out[Axis.WRIST], 30.0)
 
 
@@ -262,17 +148,14 @@ class GripperFingerSide(unittest.TestCase):
     self.assertAlmostEqual(
       p_bc.location.y - wrist_y, -g_bc.length * math.cos(yaw), delta=1e-5
     )
-    # z and yaw are independent of finger side.
     self.assertAlmostEqual(p_bc.location.z, p_pr.location.z, places=9)
     self.assertAlmostEqual(p_bc.rotation.z, p_pr.rotation.z, places=9)
 
   def test_proximity_roundtrip(self):
     c = _config()
     g = GripperConfig(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
-    pose = KX2GripperLocation(
-      location=Coordinate(x=100, y=200, z=50),
-      rotation=Rotation(z=30),
-      wrist="ccw",
+    pose = GripperLocation(
+      location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30)
     )
     joints = kinematics.ik(pose, c, g)
     back = kinematics.fk(joints, c, g)
@@ -286,8 +169,8 @@ class GripperFingerSide(unittest.TestCase):
     shoulder=0 but the wrist sits 2*gripper_length further out for
     barcode_reader (gripper points +y away from base) than for
     proximity_sensor (gripper points -y back toward base)."""
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=300, z=0), rotation=Rotation(z=0), wrist="ccw"
+    pose = GripperLocation(
+      location=Coordinate(x=0, y=300, z=0), rotation=Rotation(z=0)
     )
     c = _config()
     g_bc = GripperConfig(length=15.0, z_offset=3.0, finger_side="barcode_reader")
@@ -304,8 +187,8 @@ class ShoulderSnapAt180(unittest.TestCase):
     """A pose pointing exactly along -y has shoulder = ±180; we snap to +180."""
     c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
     g = GripperConfig()
-    pose = KX2GripperLocation(
-      location=Coordinate(x=0, y=-100, z=0), rotation=Rotation(z=180), wrist="ccw"
+    pose = GripperLocation(
+      location=Coordinate(x=0, y=-100, z=0), rotation=Rotation(z=180)
     )
     joints = kinematics.ik(pose, c, g)
     self.assertAlmostEqual(joints[Axis.SHOULDER], 180.0, places=9)
