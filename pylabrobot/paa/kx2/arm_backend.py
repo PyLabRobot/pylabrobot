@@ -27,6 +27,7 @@ from pylabrobot.paa.kx2.config import (
 )
 from pylabrobot.paa.kx2.driver import (
   CanError,
+  EmcyFrame,
   _ElmoObjectDataType,
   _InputLogic,
   JointMoveDirection,
@@ -116,6 +117,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       self._config = await self._read_config()
       await asyncio.sleep(2)  # let drives settle before motor enables
 
+      # Subscribe to drive EMCY frames so faults log immediately and motor
+      # disables are scheduled the moment a fault is reported, rather than
+      # waiting for the next motion call to poll motor_get_fault. Mirrors
+      # KX2RobotControl.cs:15384-15425.
+      self.driver.add_emcy_callback(self._on_emcy)
+
       # E-stop check: front-load a clear error before motor_enable's retry
       # loop times out with a cryptic message.
       if await self.get_estop_state():
@@ -134,6 +141,35 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       except Exception:
         logger.exception("KX2 setup cleanup: driver.stop() failed; ignoring")
       raise
+
+  def _on_emcy(
+    self, node_id: int, frame: EmcyFrame, description: str, disable_motors: bool
+  ) -> None:
+    """EMCY callback. Runs on the asyncio loop thread.
+
+    Logs every EMCY at error level. When the drive flagged a fatal fault
+    (``disable_motors=True``), schedules an MO=0 on every motion axis as a
+    coroutine — mirrors the C# motor-disable in KX2RobotControl.cs:15395-15404
+    minus the indicator-light I/O (no PLR analog).
+    """
+    logger.error(
+      "KX2 EMCY axis=%d code=0x%04X elmo=0x%02X: %s",
+      node_id, frame.err_code, frame.elmo_err_code, description,
+    )
+    if not disable_motors:
+      return
+
+    async def _disable_all() -> None:
+      for axis in MOTION_AXES:
+        try:
+          await self.driver.motor_emergency_stop(node_id=int(axis))
+        except Exception:
+          logger.exception("EMCY auto-disable failed for axis %s", axis.name)
+
+    # _on_emcy is invoked from _dispatch_emcy, which already runs on the
+    # asyncio loop (it's the target of call_soon_threadsafe). Schedule on the
+    # driver's captured loop — get_event_loop() is deprecated and unreliable.
+    self.driver.loop.create_task(_disable_all())
 
   # -- robot-level homing / estop (moved from driver) ---------------------
 
@@ -267,10 +303,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       try:
         await self._motor_hard_stop_search(axis, srch_vel, srch_acc, max_pe, hs_pe, timeout)
       except Exception as e:
+        # motor_check_if_move_done already raised with the rich EMCY
+        # description ("Motor Fault: ..."). Don't overwrite it with the
+        # duller MF-bit register read.
+        if str(e).startswith("Motor Fault:"):
+          raise
         fault = await self.driver.motor_get_fault(nid)
         if fault is not None:
-          raise RuntimeError(fault)
-        raise e
+          raise RuntimeError(fault) from e
+        raise
 
       await self.driver.motor_enable(node_id=nid, state=True, use_ds402=axis.is_motion)
 

@@ -18,7 +18,7 @@ import struct
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
@@ -185,9 +185,186 @@ class MotorsMovePlan:
 # Response: TPDO2 = (5 << 7) | node_id = 0x280 + node_id
 _BI_REQUEST_COB_BASE = 0x300
 _BI_RESPONSE_COB_BASE = 0x280
+_EMCY_COB_BASE = 0x80
 _GROUP_NODE_ID = 10
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class EmcyFrame:
+  """Parsed CANopen EMCY frame with Elmo manufacturer-specific fields.
+
+  Layout matches the C# `sEmcy` struct (clscanmotor.cs:6966-6978):
+  bytes [0..2) ErrCode (u16 LE), [2] ErrReg (u8), [3] ElmoErrCode (u8),
+  [4..6) ErrCodeData1 (u16 LE), [6..8) ErrCodeData2 (u16 LE).
+  """
+
+  err_code: int
+  err_reg: int
+  elmo_err_code: int
+  data1: int
+  data2: int
+
+
+@dataclass
+class _PvtEmcyState:
+  """Per-node PVT-mode queue state, mirrored from `sPVT_EMCY` in clscanmotor.cs:6943-6964."""
+
+  queue_low: bool = False
+  queue_low_write_pointer: int = 0
+  queue_low_read_pointer: int = 0
+  queue_full: bool = False
+  queue_full_failed_write_pointer: int = 0
+  bad_head_pointer: bool = False
+  bad_mode_init_data: bool = False
+  motion_terminated: bool = False
+  out_of_modulo: bool = False
+
+
+# Standard CANopen error codes that don't depend on the Elmo byte.
+# Source: clscanmotor.cs:1108-1267. The (description, disable_motors) tuple
+# corresponds to (str1, flag1) in the C#.
+_EMCY_STANDARD: Dict[int, Tuple[str, bool]] = {
+  0x8110: ("CAN message lost (corrupted or overrun)", False),
+  0x8200: ("Protocol error (unrecognized NMT request)", False),
+  0x8210: ("Attempt to access an unconfigured RPDO", False),
+  0x8130: ("Heartbeat event", False),
+  0x6180: ("Fatal CPU error: stack overflow", False),
+  0x6200: ("User program aborted by an error", False),
+  0xFF01: ("Request by user program 'emit' function", False),
+  0x6300: (
+    "Object mapped to an RPDO returned an error during interpretation "
+    "or a referenced motion failed to be performed",
+    False,
+  ),
+  0x7300: ("Resolver or Analog Encoder feedback failed", True),
+  0x7380: ("Feedback loss: no match between encoder and Hall locations.", True),
+  0x8311: (
+    "Peak current has been exceeded due to drive malfunction or badly-tuned "
+    "current controller",
+    True,
+  ),
+  0x5441: ("E-stop button was pressed", True),
+  0x5280: ("ECAM table problem", False),
+  0x7381: (
+    "Two digital Hall sensors changed at once; only one sensor can be changed "
+    "at a time",
+    True,
+  ),
+  0x8480: ("Speed tracking error", True),
+  0x8611: ("Position tracking error", True),
+  0x6320: ("Cannot start due to inconsistent database", False),
+  0x8380: ("Cannot find electrical zero of motor when attempting to start motor", False),
+  0x8481: ("Speed limit exceeded", True),
+  0x6181: ("CPU exception: fatal exception", False),
+  0x5281: ("Timing error", False),
+  0x7121: ("Motor stuck: motor powered but not moving", True),
+  0x8680: ("Position limit exceeded", True),
+  0x8381: ("Cannot tune current offsets", False),
+  0xFF10: ("Cannot start motor", False),
+  0x5400: ("Cannot start motor", False),
+  0x3120: (
+    "Under-voltage: power supply is shut down or it has too high an output impedance",
+    True,
+  ),
+  0x3310: (
+    "Over-voltage: power supply voltage is too high or servo driver could not "
+    "absorb kinetic energy while braking a load",
+    True,
+  ),
+  0x2340: (
+    "Short circuit: motor or its wiring may be defective, or drive is faulty",
+    True,
+  ),
+  0x4310: ("Temperature: drive overheating", True),
+  0xFF20: ("Safety switch is sensed - Drive in safety state", True),
+}
+
+
+def _decode_emcy(
+  frame: EmcyFrame, state: _PvtEmcyState
+) -> Tuple[str, bool, bool]:
+  """Decode an EMCY frame into (description, disable_motors, suppress_callback).
+
+  Mutates ``state`` for PVT queue events. Mirrors clscanmotor.cs:1070-1267
+  one-for-one. ``suppress_callback`` corresponds to the C# `flag2` and is only
+  set for the elmo 0x8A interpolation underflow under errCode 0xFF02 — that
+  case updates internal state but does not raise the user-visible event.
+  """
+  err = frame.err_code
+  elmo = frame.elmo_err_code
+
+  # DS301 §7.2.7.1: err_code=0 is the "no error / error reset" frame, emitted
+  # on bootup and after a fault clears. Suppress the user callback — re-enable
+  # is the explicit acknowledgment, not a spontaneous reset frame. The elmo
+  # byte is ignored: any frame with err_code=0 is a reset regardless.
+  if err == 0:
+    return ("Error reset", False, True)
+
+  if err == 0xFF00:
+    if elmo == 0x56:
+      state.queue_low = True
+      state.queue_low_write_pointer = frame.data1
+      state.queue_low_read_pointer = frame.data2
+      return ("Queue Low", False, False)
+    if elmo == 0x5B:
+      state.bad_head_pointer = True
+      return ("Bad Head Pointer", False, False)
+    if elmo == 0x34:
+      state.queue_full = True
+      state.queue_full_failed_write_pointer = frame.data1
+      return ("Queue Full", False, False)
+    if elmo == 0x07:
+      state.bad_mode_init_data = True
+      return ("Bad Mode Init Data", False, False)
+    if elmo == 0x08:
+      state.motion_terminated = True
+      return ("Motion Terminated", False, False)
+    if elmo == 0xA6:
+      state.out_of_modulo = True
+      return ("Out Of Modulo", False, False)
+    return (f"Unknown vendor EMCY 0xFF00/0x{elmo:02X}", False, False)
+
+  if err == 0xFF02:
+    if elmo == 0x07:
+      state.bad_mode_init_data = True
+      return ("Bad Mode Init Data", False, False)
+    if elmo == 0x08:
+      state.motion_terminated = True
+      return ("Motion Terminated", False, False)
+    if elmo == 0x34:
+      state.queue_full = True
+      state.queue_full_failed_write_pointer = frame.data1
+      return ("Queue Full", False, False)
+    if elmo == 0x56:
+      state.queue_low = True
+      state.queue_low_write_pointer = frame.data1
+      state.queue_low_read_pointer = frame.data2
+      return ("Queue Low", False, False)
+    if elmo == 0x5B:
+      state.bad_head_pointer = True
+      return ("Bad Head Pointer", False, False)
+    if elmo == 0x8A:
+      # State update only; user callback suppressed (C# flag2=true).
+      state.queue_low = True
+      return ("Position Interpolation buffer underflow", False, True)
+    if elmo == 0xA6:
+      state.out_of_modulo = True
+      return ("Out Of Modulo", False, False)
+    if elmo == 0xBA:
+      state.queue_full = True
+      return ("Interpolation queue is full", False, False)
+    if elmo == 0xBB:
+      return ("Incorrect interpolation sub-mode", False, False)
+    return (f"DS402 IP Error 0x{elmo:02X}", False, False)
+
+  std = _EMCY_STANDARD.get(err)
+  if std is not None:
+    desc, disable = std
+    return (desc, disable, False)
+
+  return (f"Unknown EMCY 0x{err:04X}/0x{elmo:02X}", False, False)
 
 
 class KX2Driver(Driver):
@@ -255,7 +432,18 @@ class KX2Driver(Driver):
     self._pending_bi: Dict[Tuple[int, str, int], asyncio.Future] = {}
 
     self._pvt_mode: bool = False
-    self.EmcyMoveErrorReceived: bool = False
+
+    # EMCY (CANopen Emergency, COB-ID 0x80 + node_id) state. Subscribed in
+    # setup(); fires on the canopen listener thread, marshalled into the
+    # asyncio loop via _make_emcy_callback.
+    self.emcy_move_error_received: bool = False
+    self.emcy_move_error: str = ""
+    self.emcy_move_error_node_id: Optional[int] = None
+    self.last_emcy: Optional[EmcyFrame] = None
+    self._pvt_emcy: Dict[int, _PvtEmcyState] = {}
+    self._emcy_callbacks: List[
+      Callable[[int, EmcyFrame, str, bool], None]
+    ] = []
 
   @property
   def loop(self) -> asyncio.AbstractEventLoop:
@@ -282,6 +470,15 @@ class KX2Driver(Driver):
     network.connect(interface=self._interface, channel=self._channel, bitrate=self._bitrate)
     self._network = network
 
+    # Subscribe to EMCY before Start All Nodes — bootup / fault frames
+    # emitted between NMT start and per-node setup would otherwise be lost
+    # (canopen's listener doesn't buffer pre-subscribe messages). Mirrors
+    # the C# event handler at KX2RobotControl.cs:15384-15425 /
+    # clscanmotor.cs:1057-1284.
+    for nid in self.node_id_list:
+      self._pvt_emcy[nid] = _PvtEmcyState()
+      network.subscribe(_EMCY_COB_BASE + nid, self._make_emcy_callback(nid))
+
     # Reset all nodes, then start scanner so bootup messages populate it,
     # then start all nodes.
     network.nmt.send_command(0x82)
@@ -304,7 +501,8 @@ class KX2Driver(Driver):
       # the legacy driver used for its own futures.
       node.sdo.RESPONSE_TIMEOUT = 1.0
       self._nodes[nid] = node
-      # Elmo binary-interpreter response subscription.
+      # Elmo binary-interpreter response subscription. BI traffic only
+      # happens after explicit user commands, so subscribing here is fine.
       network.subscribe(_BI_RESPONSE_COB_BASE + nid, self._make_bi_callback(nid))
 
     logger.info("canopen: connected, nodes=%s", discovered)
@@ -348,9 +546,21 @@ class KX2Driver(Driver):
 
   async def stop(self) -> None:
     if self._network is not None:
+      # Drop _loop first so racing listener-thread _cb()s no-op at their
+      # `if self._loop is None: return` guard before they try to schedule
+      # onto a torn-down loop. Network reference clears after disconnect.
+      self._loop = None
       self._network.disconnect()
       self._network = None
       self._nodes = {}
+      self._pvt_emcy = {}
+      # Clear callbacks too: _on_setup re-registers on each retry, so leaving
+      # them would compound N copies of the same handler across attempts.
+      self._emcy_callbacks = []
+      self.emcy_move_error_received = False
+      self.emcy_move_error = ""
+      self.emcy_move_error_node_id = None
+      self.last_emcy = None
 
   # --- PDO configuration (pure SDO writes; no library-PDO machinery) ------
 
@@ -493,6 +703,83 @@ class KX2Driver(Driver):
     obj_byte0 = elmo_object_int >> 8
     obj_byte1 = elmo_object_int & 0xFF
     await self._can_sdo_download(node_id, obj_byte0, obj_byte1, sub_index, data_bytes)
+
+  # --- EMCY (CANopen Emergency, COB-ID 0x80 + node_id) --------------------
+
+  def add_emcy_callback(
+    self, cb: Callable[[int, EmcyFrame, str, bool], None]
+  ) -> None:
+    """Register a callback fired on every (non-suppressed) EMCY frame.
+
+    Callback signature: ``cb(node_id, frame, description, disable_motors)``.
+    Always invoked on the asyncio loop thread captured in :meth:`setup`.
+    Exceptions raised by the callback are logged and swallowed so one bad
+    handler can't poison the rest.
+    """
+    self._emcy_callbacks.append(cb)
+
+  def clear_emcy_state(self, node_id: Optional[int] = None) -> None:
+    """Clear sticky EMCY error fields after a recovery / re-enable.
+
+    If ``node_id`` is given, also resets the per-node PVT queue state for
+    that node. Mirrors clscanmotor.cs:668-669, 3454, 4481.
+    """
+    self.emcy_move_error_received = False
+    self.emcy_move_error = ""
+    self.emcy_move_error_node_id = None
+    if node_id is not None and node_id in self._pvt_emcy:
+      self._pvt_emcy[node_id] = _PvtEmcyState()
+
+  def _make_emcy_callback(self, node_id: int):
+    """Return a `canopen.Network.subscribe` callback bound to a specific node."""
+
+    def _cb(cob_id: int, data: bytes, timestamp: float) -> None:
+      # Fires on canopen's listener thread. Marshal decoding into the loop.
+      if self._loop is None:
+        return
+      self._loop.call_soon_threadsafe(self._dispatch_emcy, node_id, bytes(data))
+
+    return _cb
+
+  def _dispatch_emcy(self, node_id: int, data: bytes) -> None:
+    if len(data) < 8:
+      logger.warning("EMCY frame too short from node %d: %s", node_id, data.hex())
+      return
+    err_code, err_reg, elmo_err, d1, d2 = struct.unpack("<HBBHH", data[:8])
+    frame = EmcyFrame(err_code, err_reg, elmo_err, d1, d2)
+    self.last_emcy = frame
+
+    state = self._pvt_emcy.setdefault(node_id, _PvtEmcyState())
+    desc, disable_motors, suppress = _decode_emcy(frame, state)
+    # Tier the level so PVT housekeeping (queue-low/underflow) doesn't drown
+    # ops logs while real faults stay loud. Unknown codes warn so we notice.
+    if disable_motors:
+      level = logging.ERROR
+    elif desc.startswith(("Unknown EMCY", "Unknown vendor EMCY", "DS402 IP Error")):
+      level = logging.WARNING
+    elif suppress:
+      level = logging.DEBUG
+    else:
+      level = logging.INFO
+    logger.log(
+      level,
+      "EMCY node=%d code=0x%04X reg=0x%02X elmo=0x%02X d1=0x%04X d2=0x%04X: %s",
+      node_id, err_code, err_reg, elmo_err, d1, d2, desc,
+    )
+
+    if disable_motors:
+      self.emcy_move_error_received = True
+      self.emcy_move_error = desc
+      self.emcy_move_error_node_id = node_id
+
+    if suppress:
+      return
+
+    for cb in list(self._emcy_callbacks):
+      try:
+        cb(node_id, frame, desc, disable_motors)
+      except Exception:
+        logger.exception("EMCY user callback raised; continuing")
 
   # --- Elmo binary interpreter (vendor protocol on TPDO2/RPDO2) ------------
 
@@ -734,6 +1021,13 @@ class KX2Driver(Driver):
       mo_val = await self.query_int(node_id, "MO", 0)
       if mo_val == 1:
         return True
+      # Prefer the EMCY description: it's captured at the moment the drive
+      # faulted and includes vendor context (e.g. "E-stop button was pressed",
+      # "Position tracking error") that motor_get_fault's MF-bit decode lacks.
+      if self.emcy_move_error_received and self.emcy_move_error:
+        nid = self.emcy_move_error_node_id
+        prefix = f"Axis {nid} " if nid is not None else ""
+        raise RuntimeError(f"Motor Fault: {prefix}{self.emcy_move_error}")
       fault = await self.motor_get_fault(node_id)
       if fault is not None:
         raise RuntimeError(f"Motor Fault: {fault}")
@@ -798,7 +1092,11 @@ class KX2Driver(Driver):
     Caller picks the path; the driver does not know about robot topology.
     """
     if state:
-      self.EmcyMoveErrorReceived = False
+      # Clear sticky EMCY state from any prior fault on this drive so the
+      # post-enable motion path doesn't re-surface stale errors. Mirrors
+      # clscanmotor.cs:4481 ("EmcyMoveErrorReceived = false" before re-enable)
+      # plus the per-axis PVT-queue clear at clscanmotor.cs:4050-4051.
+      self.clear_emcy_state(node_id=node_id)
       # Drives sometimes need several seconds after a fault / power-rail
       # bounce before they accept enable. Spread retries over ~10s rather
       # than blasting 5 in <1s.
