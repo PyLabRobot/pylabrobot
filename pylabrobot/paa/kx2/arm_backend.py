@@ -384,9 +384,16 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       timeout=sgc.home_timeout_msec / 1000,
     )
 
-    await self.servo_gripper_set_default_gripping_force(100)
+    await self._set_servo_gripper_force_limit(100)
 
-  async def servo_gripper_set_default_gripping_force(self, max_force_percent: int) -> None:
+  async def _set_servo_gripper_force_limit(self, max_force_percent: int) -> None:
+    """Scale CL (continuous) and PL (peak) current limits to the given
+    percentage of the gripper's full current rating. Clamped to [10, 100].
+
+    The drive enforces an interlock: PL can be lowered to a value below CL
+    only if CL is lowered first, and CL can only be raised when PL is at or
+    above. So: bump PL to full → set CL → set PL to scaled.
+    """
     sgc = self._cfg.servo_gripper
     if sgc is None:
       raise RuntimeError("Servo gripper not present")
@@ -396,18 +403,13 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     peak_current = sgc.peak_current * max_force_percent / 100.0
 
     sg = int(Axis.SERVO_GRIPPER)
-
-    # 1) PL with unscaled peak current
     await self.driver.write(sg, "PL", 1, sgc.peak_current)
-
-    # 2) CL with scaled continuous current
     await self.driver.write(sg, "CL", 1, cont_current)
-
-    # 3) PL with scaled peak current
     await self.driver.write(sg, "PL", 1, peak_current)
 
-  async def get_servo_gripper_max_force(self) -> float:
-    """Return current gripping force as percentage of max (0-1)."""
+  async def _get_servo_gripper_force_fraction(self) -> float:
+    """Return |IQ| / CL clamped to [0, 1] — the fraction of the configured
+    continuous current the gripper is currently drawing."""
     sg = int(Axis.SERVO_GRIPPER)
     cl = await self.driver.query_float(sg, "CL", 1)
     iq = await self.driver.query_float(sg, "IQ", 0)
@@ -425,11 +427,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       logger.debug("Servo gripper motor status: %s", motor_status)
 
       if motor_status in {0, 1}:
-        max_force_percentage = await self.get_servo_gripper_max_force()
+        max_force_percentage = await self._get_servo_gripper_force_fraction()
         if max_force_percentage > 90:
           return
         await asyncio.sleep(0.5)
-        max_force_percentage = await self.get_servo_gripper_max_force()
+        max_force_percentage = await self._get_servo_gripper_force_fraction()
         if max_force_percentage > 90:
           return
 
@@ -1215,6 +1217,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   @dataclasses.dataclass
   class GripParams(BackendParams):
     check_plate_gripped: bool = True
+    # 10..100, fraction of the gripper's full current rating used as the
+    # CL/PL torque cap during the close. ``None`` keeps whatever the last
+    # close (or setup) left in place.
+    max_force_percent: Optional[int] = None
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -1222,6 +1228,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     if not isinstance(backend_params, KX2ArmBackend.GripParams):
       backend_params = KX2ArmBackend.GripParams()
     async with self._motion_guard():
+      if backend_params.max_force_percent is not None:
+        await self._set_servo_gripper_force_limit(backend_params.max_force_percent)
       await self._motors_move_joint_locked({Axis.SERVO_GRIPPER: gripper_width})
       if backend_params.check_plate_gripped:
         await self.check_plate_gripped()
