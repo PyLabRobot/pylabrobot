@@ -9822,6 +9822,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
   iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
   iswap_rotation_drive_deg_per_increment = 0.00309619077
+  iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
+  iswap_rotation_drive_diameter = 30.5
+  iswap_rotation_drive_safety_radius = 90.0
 
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
@@ -9925,6 +9928,93 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x=x + kg,
       acceleration_level=acceleration_level,
       current_protection_limiter=current_protection_limiter,
+    )
+
+  async def iswap_rotation_drive_move_y(
+    self,
+    y: float,
+    speed: float = 220.0,
+    acceleration_level: int = 2,
+    current_protection_limiter: int = 7,
+    make_space: bool = False,
+  ):
+    """Move the iSWAP rotation drive to an absolute Y position.
+
+    To stay clear of channel 0 regardless of the current W-axis angle, the
+    iSWAP envelope is treated as a circle of radius
+    `iswap_rotation_drive_diameter / 2 + iswap_rotation_drive_safety_radius`.
+    The safety radius bounds the link-1 and protrusion sweep across all
+    rotation poses.
+
+    Args:
+      y: Target Y coordinate in mm.
+      speed: Max velocity in mm/sec. Default 220.0.
+      acceleration_level: Acceleration index, 1 or 2. Default 2.
+      current_protection_limiter: Motor current limit, 0-7. Default 7.
+      make_space: If True, reposition pipetting channels in a single
+        synchronous JY move when channel 0 is in the way and can be cleared.
+        If False, raise so the caller decides.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    iswap_radius = (
+      STARBackend.iswap_rotation_drive_diameter / 2 + STARBackend.iswap_rotation_drive_safety_radius
+    )
+    channel_0_radius = self._channels_minimum_y_spacing[0] / 2
+    channel_0_y = await self.request_y_pos_channel_n(0)
+
+    compressed_channel_0_y = self.extended_conf.left_arm_min_y_position + sum(
+      self._channels_minimum_y_spacing[1:]
+    )
+
+    max_y = self.extended_conf.pip_maximal_y_position
+    absolute_min_y = self.extended_conf.left_arm_min_y_position
+    if not (absolute_min_y <= y <= max_y):
+      raise ValueError(f"y must be between {absolute_min_y} and {max_y} mm, got {y} mm")
+
+    target_channel_0_y = y - channel_0_radius - iswap_radius
+    if channel_0_y > target_channel_0_y:
+      if target_channel_0_y < compressed_channel_0_y:
+        raise ValueError(
+          f"y={y} mm is unreachable: would require channel 0 at "
+          f"{target_channel_0_y} mm, below the compressed floor "
+          f"{compressed_channel_0_y} mm"
+        )
+      if not make_space:
+        raise ValueError(
+          f"y={y} mm requires channel 0 at <= {target_channel_0_y} mm "
+          f"(currently {channel_0_y} mm); pass make_space=True to "
+          f"reposition channels"
+        )
+      await self.move_all_channels_in_z_safety()
+      await self.position_channels_in_y_direction({0: target_channel_0_y}, make_space=True)
+
+    speed_increments = STARBackend.mm_to_y_drive_increment(speed)
+    speed_min, speed_max = STARBackend.iswap_rotation_drive_y_speed_increment_range
+    if not (speed_min <= speed_increments <= speed_max):
+      raise ValueError(
+        f"speed must be between "
+        f"{STARBackend.y_drive_increment_to_mm(speed_min)} and "
+        f"{STARBackend.y_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"got {speed} mm/sec"
+      )
+
+    if not (1 <= acceleration_level <= 2):
+      raise ValueError(f"acceleration_level must be between 1 and 2, got {acceleration_level}")
+
+    if not (0 <= current_protection_limiter <= 7):
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, got {current_protection_limiter}"
+      )
+
+    await self.send_command(
+      module="R0",
+      command="YA",
+      ya=f"{round(STARBackend.mm_to_y_drive_increment(y)):05}",
+      yv=f"{round(speed_increments):04}",
+      yr=f"{int(acceleration_level)}",
+      yw=f"{int(current_protection_limiter)}",
     )
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
