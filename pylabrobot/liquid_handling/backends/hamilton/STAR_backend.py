@@ -9824,6 +9824,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   iswap_rotation_drive_deg_per_increment = 0.00309619077
   iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
   iswap_rotation_drive_diameter = 30.5
+  iswap_rotation_drive_safety_radius = 90.0
 
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
@@ -9939,6 +9940,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Move the iSWAP rotation drive to an absolute Y position.
 
+    To stay clear of channel 0 regardless of the current W-axis angle, the
+    iSWAP envelope is treated as a circle of radius
+    `iswap_rotation_drive_diameter / 2 + iswap_rotation_drive_safety_radius`.
+    The safety radius bounds the link-1 and protrusion sweep across all
+    rotation poses.
+
     Args:
       y: Target Y coordinate in mm.
       speed: Max velocity in mm/sec. Default 220.0.
@@ -9951,7 +9958,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    iswap_radius = STARBackend.iswap_rotation_drive_diameter / 2
+    iswap_radius = (
+      STARBackend.iswap_rotation_drive_diameter / 2 + STARBackend.iswap_rotation_drive_safety_radius
+    )
     channel_0_radius = self._channels_minimum_y_spacing[0] / 2
     channel_0_y = await self.request_y_pos_channel_n(0)
 
