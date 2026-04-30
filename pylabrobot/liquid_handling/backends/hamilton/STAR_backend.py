@@ -1828,7 +1828,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     build_date = self._parse_firmware_version_datetime(resp)
     return version, build_date
 
-  async def x_arm_move(
+  async def experimental_x_arm_move(
     self,
     x: float,
     acceleration_level: int = 3,
@@ -9892,7 +9892,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=await self.iswap_rotation_drive_request_z(),
     )
 
-  async def iswap_rotation_drive_move_x(
+  async def experimental_iswap_rotation_drive_move_x(
     self,
     x: float,
     acceleration_level: int = 3,
@@ -9908,6 +9908,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
       current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
     """
+    # TODO: remove "experimental_" prefix once x_arm_move has been optimised
+
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
     if self._iswap_rotation_drive_x_offset_mm is None:
@@ -9919,7 +9921,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not (x_min <= x <= x_max):
       raise ValueError(f"x must be between {x_min} and {x_max} mm, is {x}")
 
-    return await self.x_arm_move(
+    return await self.experimental_x_arm_move(
       x=x + kg,
       acceleration_level=acceleration_level,
       current_protection_limiter=current_protection_limiter,
