@@ -90,6 +90,39 @@ class FKIKRoundTrip(unittest.TestCase):
       "IK: increasing z_offset should raise the wrist target",
     )
 
+  def test_ik_shoulder_branch_convention(self):
+    """Pin shoulder = -degrees(atan2(x, y)) (CW from +Y, standard for KX2).
+
+    The C# original computes this with four quadrant cases hand-rolling
+    atan2 (KX2RobotControl.cs:7195-7268); Python uses the standard
+    library `atan2`. The two are identical at every reachable pose modulo
+    the -Y boundary, where Python snaps -180 -> +180 (kinematics.py:113)
+    to match C#. This test pins one point per quadrant + every axis
+    crossing so a future drive-by simplification can't silently flip a
+    sign or drop the boundary snap.
+    """
+    c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
+    g = GripperParams()
+    cases = [
+      ("+Y axis",       0.0,  300.0,    0.0),
+      ("Q1 (+x, +y)", 100.0,  100.0,  -45.0),
+      ("+X axis",     300.0,    0.0,  -90.0),
+      ("Q4 (+x, -y)", 100.0, -100.0, -135.0),
+      ("-Y axis",       0.0, -300.0,  180.0),  # boundary: snapped from -180
+      ("Q3 (-x, -y)", -100.0, -100.0, 135.0),
+      ("-X axis",    -300.0,    0.0,   90.0),
+      ("Q2 (-x, +y)", -100.0,  100.0,  45.0),
+    ]
+    for label, x, y, expected_shoulder in cases:
+      pose = GripperLocation(
+        location=Coordinate(x=x, y=y, z=0), rotation=Rotation(z=0),
+      )
+      joints = kinematics.ik(pose, c, g)
+      self.assertAlmostEqual(
+        joints[Axis.SHOULDER], expected_shoulder, places=9,
+        msg=f"{label}: x={x}, y={y}",
+      )
+
 
 class IKErrors(unittest.TestCase):
   def test_x_rotation_raises_ikerror(self):

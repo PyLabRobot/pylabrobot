@@ -40,6 +40,10 @@ class IKError(ValueError):
   """Target pose is unreachable (for now: non-Z rotation requested)."""
 
 
+# Floating-point fudge for boundary checks (e.g. snap shoulder to ±180°).
+_EPS = 1e-6
+
+
 def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLocation:
   """Forward kinematics.
 
@@ -106,7 +110,7 @@ def ik(pose: GripperLocation, c: KX2Config, t: GripperParams) -> Dict[Axis, floa
   wrist_z = pose.location.z + t.z_offset
 
   shoulder = -degrees(atan2(x, y))
-  if abs(shoulder + 180.0) < c.eps:
+  if abs(shoulder + 180.0) < _EPS:
     shoulder = 180.0
 
   elbow = hypot(x, y) - c.wrist_offset - c.elbow_offset - c.elbow_zero_offset
@@ -138,10 +142,13 @@ def snap_to_current(
 def convert_elbow_position_to_angle(cfg: KX2Config, elbow_pos: float) -> float:
   max_travel = cfg.axes[Axis.ELBOW].max_travel
   denom = max_travel + cfg.elbow_zero_offset
+  # Clamp to [-1, 1]: floating-point overshoot at the joint limit (e.g.
+  # encoder reads max_travel + 1e-12) would otherwise raise ValueError
+  # from asin even though the position is physically reachable.
   if elbow_pos > max_travel:
-    x = (2.0 * max_travel - elbow_pos + cfg.elbow_zero_offset) / denom
+    x = max(-1.0, min(1.0, (2.0 * max_travel - elbow_pos + cfg.elbow_zero_offset) / denom))
     return 90.0 + asin(x) * (180.0 / pi)
-  x = (elbow_pos + cfg.elbow_zero_offset) / denom
+  x = max(-1.0, min(1.0, (elbow_pos + cfg.elbow_zero_offset) / denom))
   return asin(x) * (180.0 / pi)
 
 
@@ -426,12 +433,13 @@ def plan_joint_move(
     ax_cfg = cfg.axes[ax]
     conv = ax_cfg.motor_conversion_factor
     enc_pos = target[ax] * conv
-    if skip_ax[ax]:
-      enc_vel = 1000.0
-      enc_accel = 1000.0
-    else:
-      enc_vel = max(v[ax] * abs(conv), 1.0)
-      enc_accel = max(a[ax] * abs(conv), 1.0)
+    # Skipped axes get firmware max — same formula as moving axes. They
+    # don't move (dist < 0.01), so vel/accel are nominal; the previous
+    # 1000.0 constant was 0.03–4% of firmware max across axes, leaving
+    # the drive's profile registers in a pathologically slow state if a
+    # follow-up step ever picked them up.
+    enc_vel = max(v[ax] * abs(conv), 1.0)
+    enc_accel = max(a[ax] * abs(conv), 1.0)
     moves.append(MotorMoveParam(
       node_id=int(ax),
       position=int(round(enc_pos)),

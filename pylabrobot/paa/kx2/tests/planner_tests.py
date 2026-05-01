@@ -344,23 +344,12 @@ class ElbowConversion(unittest.TestCase):
     pos = kinematics.convert_elbow_angle_to_position(cfg, 90.0)
     self.assertAlmostEqual(pos, 300.0, places=9)
 
-  @unittest.expectedFailure
   def test_open_clamp_at_max_travel_plus_epsilon_does_not_raise(self):
-    """Regression for the open-clamp bug (PR-880 review finding 10).
-
-    Today the function may produce x slightly outside [-1, 1] due to FP
-    rounding; the call should be clamped, not raise. Until that fix
-    lands, this test is expected to fail. TODO: clamp x to [-1, 1].
-    """
+    """Floating-point overshoot at the joint limit must not raise. The asin
+    argument is clamped to [-1, 1] before the call."""
     cfg = _config(elbow=_axis(min_travel=0.0, max_travel=300.0), elbow_zero_offset=5.0)
-    # Try a few epsilons; any ValueError from asin should be considered a bug.
     for eps in (1e-15, 1e-14, 1e-12, 1e-9):
-      try:
-        kinematics.convert_elbow_position_to_angle(cfg, 300.0 + eps)
-      except ValueError:
-        raise  # expected failure today
-    # If none raised, force the failure flag off to surface that the bug is fixed.
-    self.fail("convert_elbow_position_to_angle no longer raises -- remove expectedFailure")
+      kinematics.convert_elbow_position_to_angle(cfg, 300.0 + eps)
 
 
 # --- 5. direction-aware delta in plan_joint_move ----------------------------
@@ -522,9 +511,11 @@ class EncoderUnitConversion(unittest.TestCase):
     self.assertGreater(m.velocity, 0)
     self.assertGreater(m.acceleration, 0)
 
-  def test_skip_axis_emits_default_velocity_acceleration(self):
-    """Axes the planner skips (no-op) get hardcoded enc_vel/enc_accel."""
-    cfg = _config()
+  def test_skip_axis_emits_firmware_max_velocity_acceleration(self):
+    """Axes the planner skips (no-op) still write vel/accel to the drive's
+    profile registers — set them to firmware max so a stale register can't
+    leave a follow-up move pathologically slow."""
+    cfg = _config()  # default _axis: max_vel=100, max_accel=100, conv=1.0
     g = GripperParams()
     cur = {Axis.SHOULDER: 0.0, Axis.Z: 0.0}
     tgt = {Axis.SHOULDER: 30.0, Axis.Z: 0.0}  # Z is no-op
@@ -532,8 +523,8 @@ class EncoderUnitConversion(unittest.TestCase):
     self.assertIsNotNone(plan)
     assert plan is not None  # type narrowing for mypy
     z_move = _move_for(plan, Axis.Z)
-    self.assertEqual(z_move.velocity, 1000)
-    self.assertEqual(z_move.acceleration, 1000)
+    self.assertEqual(z_move.velocity, 100)    # max_vel * |conv|
+    self.assertEqual(z_move.acceleration, 100)
 
 
 # --- 9. gripper-speed cap path ---------------------------------------------

@@ -133,5 +133,3 @@ class KX2Config:
 
   # None if no servo gripper is present on the bus.
   servo_gripper: Optional[ServoGripperConfig]
-
-  eps: float = 1e-6

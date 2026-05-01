@@ -13,6 +13,7 @@ sequences) live in ``arm_backend``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import struct
 import time
@@ -431,6 +432,15 @@ class KX2Driver(Driver):
     # via loop.call_soon_threadsafe; only the event-loop thread touches
     # this dict directly.
     self._pending_bi: Dict[Tuple[int, str, int], asyncio.Future] = {}
+
+    # Per-(node, cmd, idx) lock around the future-install + send + await
+    # cycle in _send_bi. Without it, two coroutines firing the same
+    # request would clobber each other's pending-future entry; with the
+    # motion lock above mitigating most of it but direct driver callers
+    # (notebook diagnostics) and gathered queries with overlapping keys
+    # still hit the race. setdefault(asyncio.Lock()) is fine because the
+    # garbage Lock from a missed-race insert is immediately discarded.
+    self._bi_locks: Dict[Tuple[int, str, int], asyncio.Lock] = {}
 
     self._pvt_mode: bool = False
 
@@ -879,28 +889,39 @@ class KX2Driver(Driver):
     targets = (
       list(self.motion_node_ids) if node_id == _GROUP_NODE_ID else [node_id]
     )
+    keys = [(nid, cmd, cmd_index) for nid in targets]
 
-    futures: List[asyncio.Future] = []
-    for nid in targets:
-      key = (nid, cmd, cmd_index)
-      # If a stale pending future exists for the same (node, cmd, index), drop it.
-      old = self._pending_bi.pop(key, None)
-      if old is not None and not old.done():
-        old.cancel()
-      fut = self.loop.create_future()
-      self._pending_bi[key] = fut
-      futures.append(fut)
+    # Acquire one lock per target key first, so a second caller with the
+    # same key waits at the gate instead of clobbering our pending future.
+    # AsyncExitStack releases the locks in LIFO order on any exit path.
+    async with contextlib.AsyncExitStack() as stack:
+      for key in keys:
+        await stack.enter_async_context(
+          self._bi_locks.setdefault(key, asyncio.Lock())
+        )
 
-    self._network.send_message(_BI_REQUEST_COB_BASE + node_id, data_to_send)
+      futures: List[asyncio.Future] = []
+      for key in keys:
+        fut = self.loop.create_future()
+        self._pending_bi[key] = fut
+        futures.append(fut)
 
-    try:
-      return await asyncio.wait_for(asyncio.gather(*futures), timeout=timeout)
-    except asyncio.TimeoutError:
-      for nid in targets:
-        self._pending_bi.pop((nid, cmd, cmd_index), None)
-      raise CanError(
-        f"Timeout waiting for response to {cmd}[{cmd_index}] from node {node_id}"
-      )
+      self._network.send_message(_BI_REQUEST_COB_BASE + node_id, data_to_send)
+
+      try:
+        return await asyncio.wait_for(asyncio.gather(*futures), timeout=timeout)
+      except asyncio.TimeoutError:
+        raise CanError(
+          f"Timeout waiting for response to {cmd}[{cmd_index}] from node {node_id}"
+        )
+      finally:
+        # Defensive: clear pending futures on any exit (success, timeout,
+        # other exception). Without finally a non-Timeout exception could
+        # leave stale futures keyed on (nid, cmd, cmd_index) that the next
+        # caller would await indefinitely — the dispatch resolves only the
+        # most recent future at a given key.
+        for key in keys:
+          self._pending_bi.pop(key, None)
 
   async def query_int(self, node_id: int, cmd: str, cmd_index: int) -> int:
     """Query an int-typed Elmo parameter. Returns the drive's current value."""
@@ -1234,8 +1255,10 @@ class KX2Driver(Driver):
         try:
           if await self.motor_check_if_move_done(int(nid)):
             return
-        except CanError:
-          pass
+        except CanError as e:
+          # Transient bus error — keep polling. Visible at DEBUG so a wedged
+          # bus shows up in logs instead of just burning the full timeout.
+          logger.debug("wait_for_moves_done node %d: transient CAN error: %s", nid, e)
         await asyncio.sleep(0.03)
       # Final authoritative check; propagates CanError / motor-fault.
       if not await self.motor_check_if_move_done(int(nid)):
