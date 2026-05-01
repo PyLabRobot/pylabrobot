@@ -1100,6 +1100,11 @@ class KX2Driver(Driver):
       rail and the servo gripper.
 
     Caller picks the path; the driver does not know about robot topology.
+
+    Drives sometimes need several seconds after a fault / power-rail bounce
+    before they accept enable, and disable can lag past a single 100 ms
+    settle for the same reason — the retry budget covers both directions
+    so a slow drive doesn't leave the arm half-enabled mid-freedrive.
     """
     if state:
       # Clear sticky EMCY state from any prior fault on this drive so the
@@ -1107,43 +1112,35 @@ class KX2Driver(Driver):
       # clscanmotor.cs:4481 ("EmcyMoveErrorReceived = false" before re-enable)
       # plus the per-axis PVT-queue clear at clscanmotor.cs:4050-4051.
       self.clear_emcy_state(node_id=node_id)
-      # Drives sometimes need several seconds after a fault / power-rail
-      # bounce before they accept enable. Spread retries over ~10s rather
-      # than blasting 5 in <1s.
-      max_attempts = 20
-      inter_attempt_sleep_s = 0.5
-      for attempt in range(1, max_attempts + 1):
-        if not use_ds402:
-          await self.write(node_id, "MO", 0, 1)
-        else:
-          # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
-          # Matches the C# reference (clscanmotor.cs:4495-4509): back-to-back
-          # CW writes, a single 100 ms settle at the end, then MO query.
-          for cw in (0, 128, 6, 7, 15):
-            await self._control_word_set(node_id=node_id, value=cw)
-        await asyncio.sleep(0.1)
-        left = await self.query_int(node_id, "MO", 0)
-        if left == 1:
-          break
-        logger.warning(
-          "motor_enable attempt %d/%d failed for node %d (MO=%s); retrying",
-          attempt, max_attempts, node_id, left,
-        )
-        await asyncio.sleep(inter_attempt_sleep_s)
-      else:
-        raise CanError(f"Motor failed to enable (node_id = {node_id}) after {max_attempts} attempts")
-    else:
+
+    want = 1 if state else 0
+    max_attempts = 20
+    inter_attempt_sleep_s = 0.5
+    for attempt in range(1, max_attempts + 1):
       if not use_ds402:
-        await self.write(node_id, "MO", 0, 0)
+        await self.write(node_id, "MO", 0, want)
+      elif state:
+        # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
+        # Matches the C# reference (clscanmotor.cs:4495-4509): back-to-back
+        # CW writes, a single 100 ms settle at the end, then MO query.
+        for cw in (0, 128, 6, 7, 15):
+          await self._control_word_set(node_id=node_id, value=cw)
       else:
         # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
         # Matches C# (clscanmotor.cs:4540-4543) — back-to-back, no inter-CW sleep.
         await self._control_word_set(node_id=node_id, value=7)
         await self._control_word_set(node_id=node_id, value=6)
       await asyncio.sleep(0.1)
-      left = await self.query_int(node_id, "MO", 0)
-      if left != 0:
-        raise RuntimeError(f"Motor failed to disable (node_id = {node_id})")
+      mo = await self.query_int(node_id, "MO", 0)
+      if mo == want:
+        return
+      logger.warning(
+        "motor_enable(state=%s) attempt %d/%d failed for node %d (MO=%s); retrying",
+        state, attempt, max_attempts, node_id, mo,
+      )
+      await asyncio.sleep(inter_attempt_sleep_s)
+    verb = "enable" if state else "disable"
+    raise CanError(f"Motor failed to {verb} (node_id = {node_id}) after {max_attempts} attempts")
 
   # --- motion primitives --------------------------------------------------
 
