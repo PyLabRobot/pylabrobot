@@ -10050,7 +10050,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     positions (no length slot, unlike pw/pt). Slots beyond the documented
     semantic roles are extra slots addressable via R0 YP yp5..yp9.
 
-    Keys (motor increments; Y-drive resolution 0.046302 mm/incr):
+    Keys (motor increments; see `iswap_y_drive_mm_per_increment`):
       "home"         py[0]  - home position
       "lower_limit"  py[1]  - lower travel limit
       "upper_limit"  py[2]  - upper travel limit
@@ -10102,6 +10102,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         (firmware default 60 in 1000 incr/sec^2 units).
       current_protection_limiter: Motor current limit, 0-7. Default 6
         (firmware default).
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
     """
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
@@ -10117,7 +10120,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
     )
     if not (absolute_min_z <= z <= absolute_max_z):
-      raise ValueError(f"z must be between {absolute_min_z} and {absolute_max_z} mm, got {z} mm")
+      raise ValueError(f"z must be between {absolute_min_z} and {absolute_max_z} mm, is {z}")
 
     finger_plane_z = z - STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
     z_increments = STARBackend.mm_to_z_drive_increment(finger_plane_z)
@@ -10129,7 +10132,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"speed must be between "
         f"{STARBackend.z_drive_increment_to_mm(speed_min)} and "
         f"{STARBackend.z_drive_increment_to_mm(speed_max)} mm/sec, "
-        f"got {speed} mm/sec"
+        f"is {speed}"
       )
 
     acceleration_increments = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
@@ -10139,12 +10142,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"acceleration must be between "
         f"{STARBackend.z_drive_increment_to_mm(accel_min * 1000)} and "
         f"{STARBackend.z_drive_increment_to_mm(accel_max * 1000)} mm/sec^2, "
-        f"got {acceleration} mm/sec^2"
+        f"is {acceleration}"
       )
 
     if not (0 <= current_protection_limiter <= 7):
       raise ValueError(
-        f"current_protection_limiter must be between 0 and 7, got {current_protection_limiter}"
+        f"current_protection_limiter must be between 0 and 7, is {current_protection_limiter}"
       )
 
     await self.send_command(
@@ -10163,7 +10166,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     positions (no length slot, unlike pw/pt). Slots beyond home/parking are
     extra slots addressable via R0 ZP zp2..zp9.
 
-    Keys (motor increments; Z-drive resolution 0.01072765 mm/incr):
+    Keys (motor increments; see `iswap_z_drive_mm_per_increment`):
       "home"     pz[0]  - home position
       "parking"  pz[1]  - parking pose (firmware requires pz[1] >= iz + 100)
       "extra_1"  pz[2]  - extra slot, address via R0 ZP zp2
