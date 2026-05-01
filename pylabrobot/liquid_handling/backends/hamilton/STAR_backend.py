@@ -10071,19 +10071,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RA", ra="py", fmt="py##### (n)")
     py = cast(List[int], resp["py"])
-    to_mm = STARBackend.iswap_y_drive_increment_to_mm
-    return {
-      "home": to_mm(py[0]),
-      "lower_limit": to_mm(py[1]),
-      "upper_limit": to_mm(py[2]),
-      "parking": to_mm(py[3]),
-      "pre_parking": to_mm(py[4]),
-      "extra_1": to_mm(py[5]),
-      "extra_2": to_mm(py[6]),
-      "extra_3": to_mm(py[7]),
-      "extra_4": to_mm(py[8]),
-      "extra_5": to_mm(py[9]),
-    }
+    keys = (
+      "home",
+      "lower_limit",
+      "upper_limit",
+      "parking",
+      "pre_parking",
+      "extra_1",
+      "extra_2",
+      "extra_3",
+      "extra_4",
+      "extra_5",
+    )
+    return {k: STARBackend.iswap_y_drive_increment_to_mm(py[i]) for i, k in enumerate(keys)}
 
   async def iswap_rotation_drive_move_z(
     self,
@@ -10194,18 +10194,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="R0", command="RA", ra="pz", fmt="pz##### (n)")
     pz = cast(List[int], resp["pz"])
     offset = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
-    to_mm = STARBackend.iswap_z_drive_increment_to_mm
+    keys = (
+      "home",
+      "parking",
+      "extra_1",
+      "extra_2",
+      "extra_3",
+      "extra_4",
+      "extra_5",
+      "extra_6",
+      "extra_7",
+      "extra_8",
+    )
     return {
-      "home": to_mm(pz[0]) + offset,
-      "parking": to_mm(pz[1]) + offset,
-      "extra_1": to_mm(pz[2]) + offset,
-      "extra_2": to_mm(pz[3]) + offset,
-      "extra_3": to_mm(pz[4]) + offset,
-      "extra_4": to_mm(pz[5]) + offset,
-      "extra_5": to_mm(pz[6]) + offset,
-      "extra_6": to_mm(pz[7]) + offset,
-      "extra_7": to_mm(pz[8]) + offset,
-      "extra_8": to_mm(pz[9]) + offset,
+      k: STARBackend.iswap_z_drive_increment_to_mm(pz[i]) + offset for i, k in enumerate(keys)
     }
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
