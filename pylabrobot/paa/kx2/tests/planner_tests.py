@@ -616,5 +616,129 @@ class ClearanceCheck(unittest.TestCase):
     self.assertIsNotNone(plan)
 
 
+# --- 11. exact-value pins for the sync algorithm ----------------------------
+# These tests pin the *exact* encoder velocity, acceleration, and move_time
+# the planner produces for representative cases. They're the contract for any
+# refactor of the per-axis profile + accel-sync + time-sync chain — directional
+# asserts (assertLess/Greater) are too loose to catch a value-shifting change.
+# Tolerance: ±1 on int encoder values (rounding noise from float ops); 4
+# decimals on move_time.
+
+class SyncAlgorithmExactValues(unittest.TestCase):
+  def _assert_enc_close(self, actual, expected):
+    self.assertLessEqual(
+      abs(actual - expected), 1, f"{actual} not within 1 of {expected}"
+    )
+
+  def test_single_axis_trapezoidal(self):
+    """dist=100, v_max=100, a_max=200; t_acc=0.5, d_acc=25, t_cruise=0.5."""
+    cfg = _config(shoulder=_axis(max_vel=100.0, max_accel=200.0))
+    plan = kinematics.plan_joint_move(
+      {Axis.SHOULDER: 0.0}, {Axis.SHOULDER: 100.0}, cfg, GripperParams(),
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    m = _move_for(plan, Axis.SHOULDER)
+    self.assertEqual(m.position, 100)
+    self.assertEqual(m.velocity, 100)
+    self.assertEqual(m.acceleration, 200)
+    self.assertAlmostEqual(plan.move_time, 1.5, places=4)
+
+  def test_single_axis_triangular(self):
+    """dist=10, v_max=100, a_max=200; can't reach v_max -> triangular.
+    t_acc = sqrt(10/200) = 0.2236, v_actual = a*t_acc = 44.72 -> 45."""
+    cfg = _config(shoulder=_axis(max_vel=100.0, max_accel=200.0))
+    plan = kinematics.plan_joint_move(
+      {Axis.SHOULDER: 0.0}, {Axis.SHOULDER: 10.0}, cfg, GripperParams(),
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    m = _move_for(plan, Axis.SHOULDER)
+    self.assertEqual(m.position, 10)
+    self._assert_enc_close(m.velocity, 45)
+    self.assertEqual(m.acceleration, 200)
+    self.assertAlmostEqual(plan.move_time, 0.4472136, places=4)
+
+  def test_accel_sync_two_axis_exact(self):
+    """Shoulder is the slow-accel lead (v=100, a=10); Z's accel scales down."""
+    cfg = _config(
+      shoulder=_axis(max_vel=100.0, max_accel=10.0),
+      z=_axis(min_travel=0.0, max_travel=400.0, max_vel=100.0, max_accel=1000.0),
+    )
+    plan = kinematics.plan_joint_move(
+      {Axis.SHOULDER: 0.0, Axis.Z: 0.0},
+      {Axis.SHOULDER: 50.0, Axis.Z: 50.0},
+      cfg, GripperParams(),
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    sh = _move_for(plan, Axis.SHOULDER)
+    z = _move_for(plan, Axis.Z)
+    self._assert_enc_close(sh.velocity, 22)
+    self.assertEqual(sh.acceleration, 10)
+    self._assert_enc_close(z.velocity, 15)
+    self._assert_enc_close(z.acceleration, 14)
+    self.assertAlmostEqual(plan.move_time, 4.472136, places=4)
+
+  def test_time_sync_two_axis_exact(self):
+    """Shoulder is the slow-vel lead (v=10, a=20); Z's v scales down to match
+    move_time = dist/v + v/a = 100/10 + 10/20 = 10.5s."""
+    cfg = _config(
+      shoulder=_axis(max_vel=10.0, max_accel=20.0),
+      z=_axis(min_travel=0.0, max_travel=400.0, max_vel=100.0, max_accel=200.0),
+    )
+    plan = kinematics.plan_joint_move(
+      {Axis.SHOULDER: 0.0, Axis.Z: 0.0},
+      {Axis.SHOULDER: 100.0, Axis.Z: 100.0},
+      cfg, GripperParams(),
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    sh = _move_for(plan, Axis.SHOULDER)
+    z = _move_for(plan, Axis.Z)
+    self.assertEqual(sh.velocity, 10)
+    self.assertEqual(sh.acceleration, 20)
+    self.assertEqual(z.velocity, 10)
+    self.assertEqual(z.acceleration, 20)
+    self.assertAlmostEqual(plan.move_time, 10.5, places=4)
+
+  def test_four_axis_real_conv_exact(self):
+    """Full 4-axis coordinated move with realistic KX2 conv factors. Pins
+    the entire pipeline (elbow asin + sync + encoder packing) end-to-end."""
+    cfg = _config(
+      shoulder=_axis(max_vel=145.0, max_accel=300.0, motor_conversion_factor=23301.694),
+      z=_axis(min_travel=0.0, max_travel=750.0, max_vel=750.0, max_accel=1000.0,
+              motor_conversion_factor=3997.838),
+      elbow=_axis(min_travel=0.0, max_travel=300.0, max_vel=80.0, max_accel=180.0,
+                  motor_conversion_factor=18204.444),
+      wrist=_axis(min_travel=-180.0, max_travel=180.0, max_vel=500.0, max_accel=1000.0,
+                  motor_conversion_factor=45.511, unlimited_travel=True),
+    )
+    plan = kinematics.plan_joint_move(
+      {Axis.SHOULDER: 0.0, Axis.Z: 50.0, Axis.ELBOW: 100.0, Axis.WRIST: 0.0},
+      {Axis.SHOULDER: 30.0, Axis.Z: 200.0, Axis.ELBOW: 150.0, Axis.WRIST: 90.0},
+      cfg, GripperParams(),
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    sh = _move_for(plan, Axis.SHOULDER)
+    z = _move_for(plan, Axis.Z)
+    el = _move_for(plan, Axis.ELBOW)
+    wr = _move_for(plan, Axis.WRIST)
+    self._assert_enc_close(sh.position, 699051)
+    self._assert_enc_close(sh.velocity, 1646247)
+    self._assert_enc_close(sh.acceleration, 4704052)
+    self._assert_enc_close(z.position, 799568)
+    self._assert_enc_close(z.velocity, 1548356)
+    self._assert_enc_close(z.acceleration, 3997838)
+    self._assert_enc_close(el.position, 556033)
+    self._assert_enc_close(el.velocity, 403583)
+    self._assert_enc_close(el.acceleration, 1322501)
+    self._assert_enc_close(wr.position, 4096)
+    self._assert_enc_close(wr.velocity, 9444)
+    self._assert_enc_close(wr.acceleration, 27705)
+    self.assertAlmostEqual(plan.move_time, 0.774597, places=3)
+
+
 if __name__ == "__main__":
   unittest.main()
