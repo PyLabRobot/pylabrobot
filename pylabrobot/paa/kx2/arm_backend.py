@@ -1,14 +1,12 @@
 import asyncio
 import dataclasses
 import logging
-import math
 import time
 import warnings
 from contextlib import asynccontextmanager
 from enum import IntEnum
 from typing import Dict, List, Optional, Union
 
-from pylabrobot.capabilities.arms import kinematics as arm_kinematics
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
   HasJoints,
@@ -654,44 +652,17 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       raise RuntimeError("KX2 not set up — call setup() first")
     return self._config
 
-  def convert_elbow_position_to_angle(self, elbow_pos: float) -> float:
-    max_travel = self._cfg.axes[Axis.ELBOW].max_travel
-    denom = max_travel + self._cfg.elbow_zero_offset
-
-    if elbow_pos > max_travel:
-      x = (2.0 * max_travel - elbow_pos + self._cfg.elbow_zero_offset) / denom
-      angle = math.asin(x) * (180.0 / math.pi)
-      elbow_angle = 90.0 + angle
-    else:
-      x = (elbow_pos + self._cfg.elbow_zero_offset) / denom
-      angle = math.asin(x) * (180.0 / math.pi)
-      elbow_angle = angle
-
-    return elbow_angle
-
-  def convert_elbow_angle_to_position(self, elbow_angle_deg: float) -> float:
-    elbow_pos = (self._cfg.axes[Axis.ELBOW].max_travel + self._cfg.elbow_zero_offset) * math.sin(
-      elbow_angle_deg * (math.pi / 180.0)
-    ) - self._cfg.elbow_zero_offset
-
-    if elbow_angle_deg > 90.0:
-      elbow_pos = 2.0 * self._cfg.axes[Axis.ELBOW].max_travel - elbow_pos
-
-    return elbow_pos
-
   async def motor_get_current_position(self, axis: Axis) -> float:
     raw = await self.driver.motor_get_current_position(
       node_id=int(axis), pu=self._cfg.axes[axis].unlimited_travel,
     )
     c = self._cfg.axes[axis].motor_conversion_factor
     if axis == Axis.ELBOW:
-      return self.convert_elbow_angle_to_position(elbow_angle_deg=raw / c)
-    else:
-      if c == 0:
-        logger.warning("Axis %s has conversion factor of 0", axis)
-        return 0.0
-      else:
-        return raw / c
+      return kinematics.convert_elbow_angle_to_position(self._cfg, raw / c)
+    if c == 0:
+      logger.warning("Axis %s has conversion factor of 0", axis)
+      return 0.0
+    return raw / c
 
   async def read_input(self, axis: Axis, input_num: int) -> bool:
     return await self.driver.read_input(node_id=int(axis), input_num=0x10 + input_num)
@@ -798,303 +769,6 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         )
       return await self.motor_get_current_position(Axis.Z)
 
-  @staticmethod
-  def _wrap_to_range(x: float, lo: float, hi: float) -> float:
-    span = hi - lo
-    if span == 0:
-      return lo
-    k = math.trunc(x / span)
-    x = x - k * span
-    if x < lo:
-      x += span
-    if x == hi:
-      x -= span
-    return x
-
-  @staticmethod
-  def _profile(dist: float, v: float, a: float) -> tuple:
-    """
-    Returns (v, a, t_acc, t_total) after applying triangular fallback if
-    needed. If the distance is short, you cannot reach v before you must
-    decelerate.
-    """
-    if dist <= 0:
-      return v, a, 0.0, 0.0
-    if a <= 0:
-      # degenerate; avoid crash
-      return max(v, 1e-9), 1e-9, 0.0, dist / max(v, 1e-9)
-
-    t_acc = v / a
-    d_acc = 0.5 * a * t_acc * t_acc
-
-    # triangular?
-    if 2.0 * d_acc > dist:
-      t_acc = math.sqrt(dist / a)
-      v = a * t_acc
-      return v, a, t_acc, 2.0 * t_acc
-
-    d_cruise = dist - 2.0 * d_acc
-    t_cruise = d_cruise / max(v, 1e-9)
-    return v, a, t_acc, t_cruise + 2.0 * t_acc
-
-  async def calculate_move_abs_all_axes(
-    self,
-    cmd_pos: Dict[Axis, float],
-    params: Optional["KX2ArmBackend.JointMoveParams"] = None,
-  ) -> Optional[MotorsMovePlan]:
-    if params is None:
-      params = KX2ArmBackend.JointMoveParams()
-    target = cmd_pos.copy()
-    axes = list(target.keys())
-
-    enc_pos: Dict[Axis, float] = {}
-    enc_vel: Dict[Axis, float] = {}
-    enc_accel: Dict[Axis, float] = {}
-    skip_ax: Dict[Axis, bool] = {}
-
-    # input validation / travel limits / done-wait logic
-    if params.max_gripper_speed is not None and params.max_gripper_speed <= 0.0:
-      raise ValueError(
-        f"max_gripper_speed must be positive, got {params.max_gripper_speed}"
-      )
-    if params.max_gripper_acceleration is not None and params.max_gripper_acceleration <= 0.0:
-      raise ValueError(
-        f"max_gripper_acceleration must be positive, got {params.max_gripper_acceleration}"
-      )
-
-    # Travel-limit bounds check. Mirrors C# MoveAbsoluteSingleAxisPrivate
-    # (KX2RobotControl.cs:4624-4649): snap if within 0.1 of the limit, raise
-    # otherwise. Without this, sending an out-of-range target (e.g. gripper
-    # width 600 when max_travel ~30) parks the drive trying to reach an
-    # unreachable position — MS never returns to 0 and every subsequent
-    # command on that axis hangs until full re-setup. Run before the elbow
-    # position->angle conversion so max_travel/min_travel are compared in
-    # the same space the user passed in.
-    for ax in axes:
-      ax_cfg = self._cfg.axes[ax]
-      if ax_cfg.unlimited_travel:
-        continue
-      t = target[ax]
-      if t > ax_cfg.max_travel:
-        if t - ax_cfg.max_travel < 0.1:
-          target[ax] = ax_cfg.max_travel
-        else:
-          raise ValueError(
-            f"Axis {ax.name} target {t} exceeds max_travel {ax_cfg.max_travel}"
-          )
-      elif t < ax_cfg.min_travel:
-        if ax_cfg.min_travel - t < 0.1:
-          target[ax] = ax_cfg.min_travel
-        else:
-          raise ValueError(
-            f"Axis {ax.name} target {t} below min_travel {ax_cfg.min_travel}"
-          )
-
-    # Snapshot in cmd_pos units (elbow as linear extension, not angle) for
-    # the gripper-speed cap helper, which needs joints in `kinematics.fk`'s
-    # natural units.
-    target_cmd_units = dict(target)
-
-    # Convert elbow cmd from position->angle for planning math
-    if Axis.ELBOW in axes:
-      target[Axis.ELBOW] = self.convert_elbow_position_to_angle(target[Axis.ELBOW])
-
-    # Clearance check
-    if Axis.Z in axes:
-      if (
-        target[Axis.Z] < self._cfg.axes[Axis.Z].min_travel + self._cfg.base_to_gripper_clearance_z
-        and target[Axis.ELBOW] < self._cfg.base_to_gripper_clearance_arm
-      ):
-        raise ValueError("Base-to-gripper clearance violated")
-
-    # Determine current/start positions
-    curr = await self.request_joint_position()
-    curr_cmd_units = dict(curr)
-
-    # Elbow: convert both target and start to angle for distance math
-    if Axis.ELBOW in curr:
-      curr[Axis.ELBOW] = self.convert_elbow_position_to_angle(curr[Axis.ELBOW])
-
-    # Handle unlimited travel normalization when direction != NORMAL
-    for ax in axes:
-      if (
-        self._cfg.axes[ax].unlimited_travel
-        and self._cfg.axes[ax].joint_move_direction != JointMoveDirection.Normal
-      ):
-        target[ax] = self._wrap_to_range(target[ax], self._cfg.axes[ax].min_travel, self._cfg.axes[ax].max_travel)
-
-    # Distances, skip flags, initial v/a per axis
-    dist: Dict[Axis, float] = {}
-    v: Dict[Axis, float] = {}
-    a: Dict[Axis, float] = {}
-    accel_time: Dict[Axis, float] = {}
-    total_time: Dict[Axis, float] = {}
-
-    # Direction-aware deltas in cmd_pos units (elbow as linear extension).
-    # Identical logic to the dist computation below, but evaluated against
-    # the un-converted joints so the cap helper sees the trajectory the
-    # arm actually walks. Skipped axes get delta 0.
-    cap_deltas: Dict[Axis, float] = {}
-    for ax in axes:
-      if self._cfg.axes[ax].unlimited_travel:
-        d = target_cmd_units[ax] - curr_cmd_units.get(ax, 0.0)
-        span = self._cfg.axes[ax].max_travel - self._cfg.axes[ax].min_travel
-        dir_ = self._cfg.axes[ax].joint_move_direction
-        if dir_ == JointMoveDirection.Clockwise and d > 0.01:
-          d -= span
-        elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
-          d += span
-        elif dir_ == JointMoveDirection.ShortestWay:
-          if d > 180.0:
-            d -= span
-          elif d < -180.0:
-            d += span
-        cap_deltas[ax] = d
-      else:
-        cap_deltas[ax] = target_cmd_units[ax] - curr_cmd_units.get(ax, 0.0)
-
-    # Per-axis caps from the gripper-speed limit. Helper iterates the joint
-    # path in `kinematics.fk`'s native units (elbow as linear extension,
-    # everything else as the user specified). Servo gripper isn't in fk, so
-    # always run it at firmware max regardless of cap. Pass start joints
-    # filled in with curr_cmd_units defaults so fk has all four arm axes
-    # even when the move only touches a subset.
-    arm_axes = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
-    fk_start = {ax: curr_cmd_units[ax] for ax in arm_axes if ax in curr_cmd_units}
-    fk_deltas = {ax: cap_deltas.get(ax, 0.0) for ax in arm_axes if ax in fk_start}
-    capped_v: Dict[Axis, float] = {}
-    capped_a: Dict[Axis, float] = {}
-    fk = lambda j: kinematics.fk(j, self._cfg, self._gripper_config).location
-    if params.max_gripper_speed is not None and fk_start:
-      result = arm_kinematics.joint_velocities_for_max_gripper_speed(
-        fk=fk,
-        joints_start=fk_start,
-        joint_deltas=fk_deltas,
-        joint_max_velocities={ax: self._cfg.axes[ax].max_vel for ax in fk_start},
-        max_gripper_speed=params.max_gripper_speed,
-        num_samples=1000,
-        eps=1e-3,
-      )
-      capped_v = {ax: abs(v) for ax, v in result.items()}
-    if params.max_gripper_acceleration is not None and fk_start:
-      result = arm_kinematics.joint_velocities_for_max_gripper_speed(
-        fk=fk,
-        joints_start=fk_start,
-        joint_deltas=fk_deltas,
-        joint_max_velocities={ax: self._cfg.axes[ax].max_accel for ax in fk_start},
-        max_gripper_speed=params.max_gripper_acceleration,
-        num_samples=1000,
-        eps=1e-3,
-      )
-      capped_a = {ax: abs(a) for ax, a in result.items()}
-
-    for ax in axes:
-      if self._cfg.axes[ax].unlimited_travel:
-        d = target[ax] - curr[ax]
-        span = self._cfg.axes[ax].max_travel - self._cfg.axes[ax].min_travel
-        dir_ = self._cfg.axes[ax].joint_move_direction
-
-        if dir_ == JointMoveDirection.Clockwise and d > 0.01:
-          d -= span
-        elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
-          d += span
-        elif dir_ == JointMoveDirection.ShortestWay:
-          if d > 180.0:
-            d -= span
-          elif d < -180.0:
-            d += span
-
-        dist[ax] = abs(d)
-      else:
-        dist[ax] = abs(target[ax] - curr[ax])
-
-      skip_ax[ax] = abs(dist[ax]) < 0.01
-
-      v[ax] = capped_v.get(ax, self._cfg.axes[ax].max_vel)
-      a[ax] = capped_a.get(ax, self._cfg.axes[ax].max_accel)
-
-      if not skip_ax[ax] and a[ax] > 0:
-        v[ax], a[ax], accel_time[ax], total_time[ax] = self._profile(
-          dist[ax], v[ax], a[ax]
-        )
-      else:
-        total_time[ax] = 0.0
-        accel_time[ax] = 0.0
-
-    if all(skip_ax[ax] for ax in axes):
-      return None  # nothing to do
-
-    # Pick axis with max accel_time among non-skipped; match others to that accel_time
-    lead_acc_ax = max(
-      (ax for ax in axes if not skip_ax[ax]),
-      key=lambda ax: accel_time[ax],
-    )
-    lead_acc_t = accel_time[lead_acc_ax]
-
-    for ax in axes:
-      if ax == lead_acc_ax or skip_ax[ax]:
-        continue
-      if accel_time[ax] > lead_acc_t:
-        v[ax] = lead_acc_t * a[ax]
-      elif accel_time[ax] < lead_acc_t:
-        a[ax] = v[ax] / max(lead_acc_t, 1e-9)
-
-    # Recompute times after accel sync
-    for ax in axes:
-      if skip_ax[ax]:
-        total_time[ax] = 0.0
-        continue
-      v[ax], a[ax], _, total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
-
-    # Pick axis with max total_time; scale others to match its total_time
-    lead_time_ax = max(axes, key=lambda ax: total_time[ax])
-    lead_T = total_time[lead_time_ax]
-
-    for ax in axes:
-      if ax == lead_time_ax or skip_ax[ax]:
-        continue
-      denom = v[ax] * (lead_T - (v[ax] / max(a[ax], 1e-9)))
-      if abs(denom) < 1e-12:
-        continue
-      k = dist[ax] / denom
-      v[ax] *= k
-      a[ax] *= k
-
-    # Final recompute and final move time
-    for ax in axes:
-      if skip_ax[ax]:
-        total_time[ax] = 0.0
-        continue
-      v[ax], a[ax], _, total_time[ax] = self._profile(dist[ax], v[ax], a[ax])
-
-    move_time = max(total_time[ax] for ax in axes)
-
-    # Convert back to encoder units (and elbow back to "position" space)
-    for ax in axes:
-      conv = self._cfg.axes[ax].motor_conversion_factor
-      enc_pos[ax] = target[ax] * conv
-
-      if skip_ax[ax]:
-        enc_vel[ax] = 1000.0
-        enc_accel[ax] = 1000.0
-      else:
-        enc_vel[ax] = max(v[ax] * abs(conv), 1.0)
-        enc_accel[ax] = max(a[ax] * abs(conv), 1.0)
-
-    return MotorsMovePlan(
-      moves=[
-        MotorMoveParam(
-          node_id=int(ax),
-          position=int(round(enc_pos[ax])),
-          velocity=int(round(enc_vel[ax])),
-          acceleration=int(round(enc_accel[ax])),
-          direction=self._cfg.axes[ax].joint_move_direction,
-        )
-        for ax in axes
-      ],
-      move_time=move_time,
-    )
-
   async def motors_move_joint(
     self,
     cmd_pos: Dict[Axis, float],
@@ -1111,11 +785,19 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     """Caller MUST hold _motion_guard. Used by find_z's spawned poll/move
     task, which can't re-enter the guard from a fresh asyncio Task."""
     logger.debug("motors_move_joint cmd_pos=%s", cmd_pos)
-    plan = await self.calculate_move_abs_all_axes(cmd_pos=cmd_pos, params=params)
-
-    if plan is None:  # if every axis is skipped, exit
+    if params is None:
+      params = KX2ArmBackend.JointMoveParams()
+    current = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
+    plan = kinematics.plan_joint_move(
+      current=current,
+      target=cmd_pos,
+      cfg=self._cfg,
+      gripper_cfg=self._gripper_config,
+      max_gripper_speed=params.max_gripper_speed,
+      max_gripper_acceleration=params.max_gripper_acceleration,
+    )
+    if plan is None:  # every axis a no-op
       return
-
     await self._motors_move_absolute_execute_locked(plan)
 
   async def motors_move_absolute_execute(self, plan: MotorsMovePlan) -> None:
@@ -1640,9 +1322,9 @@ async def _yeet_build_axis_move(
   dist = abs(d)
 
   if ax_cfg.unlimited_travel and direction != JointMoveDirection.Normal:
-    target = KX2ArmBackend._wrap_to_range(target, ax_cfg.min_travel, ax_cfg.max_travel)
+    target = kinematics._wrap_to_range(target, ax_cfg.min_travel, ax_cfg.max_travel)
 
-  _, _, t_acc, t_total = KX2ArmBackend._profile(dist, v_phys, a_phys)
+  _, _, t_acc, t_total = kinematics._profile(dist, v_phys, a_phys)
   move = MotorMoveParam(
     node_id=int(ax),
     position=int(round(target * conv)),
