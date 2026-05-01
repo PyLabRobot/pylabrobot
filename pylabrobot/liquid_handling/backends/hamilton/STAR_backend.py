@@ -10044,7 +10044,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       yw=f"{int(current_protection_limiter)}",
     )
 
-  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, int]:
+  async def _iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation-drive Y-axis predefined-position table from EEPROM.
 
     Sends R0 RA ra=py. Firmware returns 10 signed-integer slots; all 10 are
@@ -10082,6 +10082,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_4": py[8],
       "extra_5": py[9],
     }
+
+  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, float]:
+    """Read iSWAP rotation-drive Y predefined-position table in mm.
+
+    Wraps `_iswap_rotation_drive_request_predefined_y_positions`, converting
+    each value via `iswap_y_drive_increment_to_mm`.
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    table = await self._iswap_rotation_drive_request_predefined_y_positions()
+    return {k: STARBackend.iswap_y_drive_increment_to_mm(v) for k, v in table.items()}
 
   async def iswap_rotation_drive_move_z(
     self,
@@ -10160,7 +10172,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zw=f"{int(current_protection_limiter)}",
     )
 
-  async def iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, int]:
+  async def _iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation-drive Z-axis predefined-position table from EEPROM.
 
     Sends R0 RA ra=pz. Firmware returns 10 signed-integer slots; all 10 are
@@ -10198,6 +10210,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_7": pz[8],
       "extra_8": pz[9],
     }
+
+  async def iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, float]:
+    """Read iSWAP rotation-drive Z predefined-position table in mm.
+
+    Wraps `_iswap_rotation_drive_request_predefined_z_positions`, converting
+    each value via `iswap_z_drive_increment_to_mm`.
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    table = await self._iswap_rotation_drive_request_predefined_z_positions()
+    return {k: STARBackend.iswap_z_drive_increment_to_mm(v) for k, v in table.items()}
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
