@@ -739,7 +739,7 @@ def _infer_access_open(value: Any, position: Optional[int]) -> Optional[bool]:
     return explicit
   if position == -1:
     return True
-  if position == 0:
+  if position in (0, 1):
     return False
   return None
 
@@ -748,7 +748,7 @@ def _infer_access_closed(value: Any, position: Optional[int]) -> Optional[bool]:
   explicit = _coerce_bool(value)
   if explicit is not None:
     return explicit
-  if position == 0:
+  if position in (0, 1):
     return True
   if position == -1:
     return False
@@ -816,6 +816,31 @@ def _survey_xml_from_values(values: Dict[str, Any]) -> Optional[str]:
     if "<platesurvey" in normalized.lower():
       return normalized
   return None
+
+
+def _preview_rpc_values(values: Dict[str, Any], *, max_chars: int = 700) -> Dict[str, Any]:
+  preview: Dict[str, Any] = {}
+  for key, value in values.items():
+    if isinstance(value, str):
+      text = html.unescape(value)
+      if len(text) > max_chars:
+        preview[key] = {
+          "type": "str",
+          "length": len(text),
+          "head": text[:max_chars],
+          "tail": text[-max_chars:],
+        }
+      else:
+        preview[key] = text
+    elif isinstance(value, list):
+      preview[key] = {
+        "type": "list",
+        "length": len(value),
+        "itemTypes": [type(item).__name__ for item in value[:5]],
+      }
+    else:
+      preview[key] = value
+  return preview
 
 
 def _is_probably_gzip(payload: bytes) -> bool:
@@ -1809,6 +1834,11 @@ class EchoDriver(Driver):
     )
     self._ensure_success("PlateSurvey", result)
     survey_xml = _survey_xml_from_values(result.values)
+    if survey_xml is None:
+      logger.warning(
+        "PlateSurvey response did not include survey XML: %r",
+        _preview_rpc_values(result.values),
+      )
     return EchoSurveyData.from_xml(survey_xml) if survey_xml is not None else None
 
   async def get_survey_data(self) -> EchoSurveyData:
@@ -1816,6 +1846,10 @@ class EchoDriver(Driver):
     self._ensure_success("GetSurveyData", result)
     survey_xml = _survey_xml_from_values(result.values)
     if survey_xml is None:
+      logger.warning(
+        "GetSurveyData response did not include survey XML: %r",
+        _preview_rpc_values(result.values),
+      )
       raise EchoProtocolError("Survey XML missing from GetSurveyData response.")
     return EchoSurveyData.from_xml(survey_xml)
 
