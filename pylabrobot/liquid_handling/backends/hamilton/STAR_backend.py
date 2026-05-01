@@ -9826,6 +9826,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   iswap_rotation_drive_diameter = 30.5
   iswap_rotation_drive_safety_radius = 90.0
 
+  iswap_y_drive_mm_per_increment = 0.046302083
+  iswap_z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def iswap_y_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.iswap_y_drive_mm_per_increment)
+
+  @staticmethod
+  def iswap_y_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STARBackend.iswap_y_drive_mm_per_increment, 2)
+
+  @staticmethod
+  def iswap_z_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.iswap_z_drive_mm_per_increment)
+
+  @staticmethod
+  def iswap_z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STARBackend.iswap_z_drive_mm_per_increment, 2)
+
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
     FRONT = 2
@@ -11235,7 +11254,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
-  y_drive_mm_per_increment = 0.046302082
+  y_drive_mm_per_increment = 0.046302083
   z_drive_mm_per_increment = 0.01072765
 
   dispensing_drive_vol_per_increment = 0.046876  # uL / increment
