@@ -10054,7 +10054,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "home"         py[0]  - home position
       "lower_limit"  py[1]  - lower travel limit
       "upper_limit"  py[2]  - upper travel limit
-      "parking"      py[3]  - parking pose (firmware requires py[3] > iy + 100)
+      "parking"      py[3]  - parking pose (back of travel)
       "pre_parking"  py[4]  - pre-parking pose (firmware requires py[4] < py[3] - 430)
       "extra_1"      py[5]  - extra slot, address via R0 YP yp5
       "extra_2"      py[6]  - extra slot, address via R0 YP yp6
@@ -10168,7 +10168,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Keys (motor increments; see `iswap_z_drive_mm_per_increment`):
       "home"     pz[0]  - home position
-      "parking"  pz[1]  - parking pose (firmware requires pz[1] >= iz + 100)
+      "parking"  pz[1]  - parking pose (top of travel)
       "extra_1"  pz[2]  - extra slot, address via R0 ZP zp2
       "extra_2"  pz[3]  - extra slot, address via R0 ZP zp3
       "extra_3"  pz[4]  - extra slot, address via R0 ZP zp4
