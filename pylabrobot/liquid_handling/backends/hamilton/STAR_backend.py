@@ -9889,7 +9889,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
+    return round(STARBackend.iswap_y_drive_increment_to_mm(iswap_y_pos), 1)
 
   # Vertical drop from the iSWAP rotation drive plane to the gripper finger
   # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
@@ -10017,13 +10017,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.move_all_channels_in_z_safety()
       await self.position_channels_in_y_direction({0: target_channel_0_y}, make_space=True)
 
-    speed_increments = STARBackend.mm_to_y_drive_increment(speed)
+    speed_increments = STARBackend.iswap_y_drive_mm_to_increment(speed)
     speed_min, speed_max = STARBackend.iswap_rotation_drive_y_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
-        f"{STARBackend.y_drive_increment_to_mm(speed_min)} and "
-        f"{STARBackend.y_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_min)} and "
+        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_max)} mm/sec, "
         f"got {speed} mm/sec"
       )
 
@@ -10038,7 +10038,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.send_command(
       module="R0",
       command="YA",
-      ya=f"{round(STARBackend.mm_to_y_drive_increment(y)):05}",
+      ya=f"{round(STARBackend.iswap_y_drive_mm_to_increment(y)):05}",
       yv=f"{round(speed_increments):04}",
       yr=f"{int(acceleration_level)}",
       yw=f"{int(current_protection_limiter)}",
@@ -10113,36 +10113,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_min_incr = STARBackend.iswap_rotation_drive_z_min_increment
     z_max_incr = STARBackend.iswap_rotation_drive_z_max_increment
     absolute_min_z = (
-      STARBackend.z_drive_increment_to_mm(z_min_incr)
+      STARBackend.iswap_z_drive_increment_to_mm(z_min_incr)
       + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
     )
     absolute_max_z = (
-      STARBackend.z_drive_increment_to_mm(z_max_incr)
+      STARBackend.iswap_z_drive_increment_to_mm(z_max_incr)
       + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
     )
     if not (absolute_min_z <= z <= absolute_max_z):
       raise ValueError(f"z must be between {absolute_min_z} and {absolute_max_z} mm, is {z}")
 
     finger_plane_z = z - STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
-    z_increments = STARBackend.mm_to_z_drive_increment(finger_plane_z)
+    z_increments = STARBackend.iswap_z_drive_mm_to_increment(finger_plane_z)
 
-    speed_increments = STARBackend.mm_to_z_drive_increment(speed)
+    speed_increments = STARBackend.iswap_z_drive_mm_to_increment(speed)
     speed_min, speed_max = STARBackend.iswap_rotation_drive_z_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
-        f"{STARBackend.z_drive_increment_to_mm(speed_min)} and "
-        f"{STARBackend.z_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_min)} and "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_max)} mm/sec, "
         f"is {speed}"
       )
 
-    acceleration_increments = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
+    acceleration_increments = STARBackend.iswap_z_drive_mm_to_increment(acceleration / 1000)
     accel_min, accel_max = STARBackend.iswap_rotation_drive_z_acceleration_increment_range
     if not (accel_min <= acceleration_increments <= accel_max):
       raise ValueError(
         f"acceleration must be between "
-        f"{STARBackend.z_drive_increment_to_mm(accel_min * 1000)} and "
-        f"{STARBackend.z_drive_increment_to_mm(accel_max * 1000)} mm/sec^2, "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_min * 1000)} and "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_max * 1000)} mm/sec^2, "
         f"is {acceleration}"
       )
 
