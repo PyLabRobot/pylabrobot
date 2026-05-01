@@ -28,7 +28,6 @@ mis = "mis"
 RHE = "RHE"
 "ASEND" = "ASEND"
 caf = "caf"
-LSO = "LSO"
 
 [files]
 extend-exclude = [

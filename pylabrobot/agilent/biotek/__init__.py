@@ -1,5 +1,3 @@
-from .el406 import EL406, EL406Driver, EL406PlateWasher96Backend, EL406ShakingBackend
-from .loading_tray_backend import BioTekLoadingTrayBackend
 from .plate_readers import (
   BioTekBackend,
   Cytation1,
@@ -9,3 +7,5 @@ from .plate_readers import (
   SynergyH1,
   SynergyH1Backend,
 )
+from .loading_tray_backend import BioTekLoadingTrayBackend
+from .el406 import EL406, EL406Driver, EL406PlateWasher96Backend, EL406ShakingBackend

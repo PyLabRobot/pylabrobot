@@ -376,13 +376,9 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
         f"got {p.pre_dispense_volume}"
       )
     if not 3 <= p.pre_dispense_flow_rate <= 11:
-      raise ValueError(
-        f"Manifold pre-dispense flow rate must be 3-11, got {p.pre_dispense_flow_rate}"
-      )
+      raise ValueError(f"Manifold pre-dispense flow rate must be 3-11, got {p.pre_dispense_flow_rate}")
     if not 0 <= p.vacuum_delay_volume <= 3000:
-      raise ValueError(
-        f"Manifold vacuum delay volume must be 0-3000 uL, got {p.vacuum_delay_volume}"
-      )
+      raise ValueError(f"Manifold vacuum delay volume must be 0-3000 uL, got {p.vacuum_delay_volume}")
 
     return offset_z
 
@@ -441,12 +437,7 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
       secondary_z,
       final_secondary_z,
     ) = self._resolve_wash_defaults(
-      plate,
-      dispense_volume,
-      p.dispense_z,
-      p.aspirate_z,
-      p.secondary_z,
-      p.final_secondary_z,
+      plate, dispense_volume, p.dispense_z, p.aspirate_z, p.secondary_z, p.final_secondary_z,
     )
 
     # core dispense/aspirate params
@@ -499,16 +490,8 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
         )
       validate_flow_rate(p.pre_dispense_between_cycles_flow_rate)
 
-    return (
-      dispense_volume,
-      dispense_z,
-      aspirate_z,
-      secondary_z,
-      final_secondary_z,
-      aspirate_delay_ms,
-      final_aspirate_delay_ms,
-      sector_mask,
-    )
+    return (dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z,
+            aspirate_delay_ms, final_aspirate_delay_ms, sector_mask)
 
   async def aspirate(
     self,
@@ -534,12 +517,8 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
 
     offset_z, secondary_z, time_value, rate_byte = self._validate_aspirate_params(plate, p)
 
-    logger.info(
-      "Aspirating: vacuum=%s, travel_rate=%s, delay=%.3f s",
-      p.vacuum_filtration,
-      p.travel_rate,
-      p.delay,
-    )
+    logger.info("Aspirating: vacuum=%s, travel_rate=%s, delay=%.3f s",
+                p.vacuum_filtration, p.travel_rate, p.delay)
 
     data = self._build_aspirate_command(
       plate=plate,
@@ -578,16 +557,12 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
 
     offset_z = self._validate_dispense_params(plate, volume, p)
 
-    logger.info("Dispensing %.1f uL from buffer %s, flow rate %d", volume, p.buffer, p.flow_rate)
+    logger.info("Dispensing %.1f uL from buffer %s, flow rate %d",
+                volume, p.buffer, p.flow_rate)
 
     data = self._build_dispense_command(
-      plate=plate,
-      volume=volume,
-      buffer=p.buffer,
-      flow_rate=p.flow_rate,
-      offset_x=p.offset_x,
-      offset_y=p.offset_y,
-      offset_z=offset_z,
+      plate=plate, volume=volume, buffer=p.buffer, flow_rate=p.flow_rate,
+      offset_x=p.offset_x, offset_y=p.offset_y, offset_z=offset_z,
       pre_dispense_volume=p.pre_dispense_volume,
       pre_dispense_flow_rate=p.pre_dispense_flow_rate,
       vacuum_delay_volume=p.vacuum_delay_volume,
@@ -635,56 +610,34 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
 
     # Validate — returns resolved defaults and derived wire values
     (
-      dispense_volume,
-      dispense_z,
-      aspirate_z,
-      secondary_z,
-      final_secondary_z,
-      aspirate_delay_ms,
-      final_aspirate_delay_ms,
-      sector_mask,
+      dispense_volume, dispense_z, aspirate_z, secondary_z, final_secondary_z,
+      aspirate_delay_ms, final_aspirate_delay_ms, sector_mask,
     ) = self._validate_wash_params(plate, cycles, dispense_volume, p)
 
     data = self._build_wash_composite_command(
-      plate=plate,
-      cycles=cycles,
-      buffer=p.buffer,
-      dispense_volume=dispense_volume,
-      dispense_flow_rate=p.dispense_flow_rate,
-      dispense_x=p.dispense_x,
-      dispense_y=p.dispense_y,
-      dispense_z=dispense_z,
-      aspirate_travel_rate=p.aspirate_travel_rate,
-      aspirate_z=aspirate_z,
+      plate=plate, cycles=cycles, buffer=p.buffer,
+      dispense_volume=dispense_volume, dispense_flow_rate=p.dispense_flow_rate,
+      dispense_x=p.dispense_x, dispense_y=p.dispense_y, dispense_z=dispense_z,
+      aspirate_travel_rate=p.aspirate_travel_rate, aspirate_z=aspirate_z,
       pre_dispense_flow_rate=p.pre_dispense_flow_rate,
       aspirate_delay_ms=aspirate_delay_ms,
-      aspirate_x=p.aspirate_x,
-      aspirate_y=p.aspirate_y,
-      final_aspirate=p.final_aspirate,
-      final_aspirate_z=p.final_aspirate_z,
-      final_aspirate_x=p.final_aspirate_x,
-      final_aspirate_y=p.final_aspirate_y,
+      aspirate_x=p.aspirate_x, aspirate_y=p.aspirate_y,
+      final_aspirate=p.final_aspirate, final_aspirate_z=p.final_aspirate_z,
+      final_aspirate_x=p.final_aspirate_x, final_aspirate_y=p.final_aspirate_y,
       final_aspirate_delay_ms=final_aspirate_delay_ms,
-      pre_dispense_volume=p.pre_dispense_volume,
-      vacuum_delay_volume=p.vacuum_delay_volume,
-      soak_duration=p.soak_duration,
-      shake_duration=p.shake_duration,
+      pre_dispense_volume=p.pre_dispense_volume, vacuum_delay_volume=p.vacuum_delay_volume,
+      soak_duration=p.soak_duration, shake_duration=p.shake_duration,
       shake_intensity=p.shake_intensity,
-      secondary_aspirate=p.secondary_aspirate,
-      secondary_z=secondary_z,
-      secondary_x=p.secondary_x,
-      secondary_y=p.secondary_y,
+      secondary_aspirate=p.secondary_aspirate, secondary_z=secondary_z,
+      secondary_x=p.secondary_x, secondary_y=p.secondary_y,
       final_secondary_aspirate=p.final_secondary_aspirate,
       final_secondary_z=final_secondary_z,
-      final_secondary_x=p.final_secondary_x,
-      final_secondary_y=p.final_secondary_y,
-      bottom_wash=p.bottom_wash,
-      bottom_wash_volume=p.bottom_wash_volume,
+      final_secondary_x=p.final_secondary_x, final_secondary_y=p.final_secondary_y,
+      bottom_wash=p.bottom_wash, bottom_wash_volume=p.bottom_wash_volume,
       bottom_wash_flow_rate=p.bottom_wash_flow_rate,
       pre_dispense_between_cycles_volume=p.pre_dispense_between_cycles_volume,
       pre_dispense_between_cycles_flow_rate=p.pre_dispense_between_cycles_flow_rate,
-      wash_format=p.wash_format,
-      sector_mask=sector_mask,
+      wash_format=p.wash_format, sector_mask=sector_mask,
       move_home_first=p.move_home_first,
     )
 
@@ -743,14 +696,9 @@ class EL406PlateWasher96Backend(PlateWasher96Backend):
     submerge_enabled = p.submerge_duration > 0
 
     data = self._build_prime_command(
-      plate=plate,
-      buffer=p.buffer,
-      volume_ml=volume_ml,
-      flow_rate=p.flow_rate,
-      low_flow_volume_ml=low_flow_volume_ml,
-      low_flow_enabled=low_flow_enabled,
-      submerge_enabled=submerge_enabled,
-      submerge_duration_min=submerge_duration_min,
+      plate=plate, buffer=p.buffer, volume_ml=volume_ml, flow_rate=p.flow_rate,
+      low_flow_volume_ml=low_flow_volume_ml, low_flow_enabled=low_flow_enabled,
+      submerge_enabled=submerge_enabled, submerge_duration_min=submerge_duration_min,
     )
     framed_command = build_framed_message(command=0xA7, data=data)
     prime_timeout = self._driver.timeout + p.submerge_duration + 30

@@ -73,15 +73,12 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
     driver: XArm6Driver,
     gripper_min_mm: float = 71.0,
     gripper_max_mm: float = 150.0,
-    mm_per_gripper_unit: float = 0.1,
-    closed_threshold_mm: float = 1.0,
+    closed_threshold_mm: float = 73.0,
     park_location: Optional[Coordinate] = None,
     park_rotation: Optional[Rotation] = None,
   ) -> None:
     super().__init__()
     self._driver = driver
-    gripper_min_mm = 0.0
-    gripper_max_mm = mm_per_gripper_unit * self._MAX_GRIPPER_UNITS
     self.gripper_min_mm = gripper_min_mm
     self.gripper_max_mm = gripper_max_mm
     self.closed_threshold_mm = closed_threshold_mm

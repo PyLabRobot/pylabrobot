@@ -50,15 +50,8 @@ class EL406(Resource, Device):
     self.washer = PlateWasher96(backend=EL406PlateWasher96Backend(driver))
     self.shaker = Shaker(backend=EL406ShakingBackend(driver))
     self.syringe_dispenser = SyringeDispensing8(backend=EL406SyringeDispensingBackend8(driver))
-    self.peristaltic_dispenser = PeristalticDispensing8(
-      backend=EL406PeristalticDispensingBackend8(driver)
-    )
-    self._capabilities = [
-      self.washer,
-      self.shaker,
-      self.syringe_dispenser,
-      self.peristaltic_dispenser,
-    ]
+    self.peristaltic_dispenser = PeristalticDispensing8(backend=EL406PeristalticDispensingBackend8(driver))
+    self._capabilities = [self.washer, self.shaker, self.syringe_dispenser, self.peristaltic_dispenser]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",

@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.hamilton.tcp.packets import (
   Address,
   HarpPacket,
@@ -49,7 +50,6 @@ from pylabrobot.hamilton.tcp.protocol import (
   HarpTransportableProtocol,
   RegistrationOptionType,
 )
-from pylabrobot.io.binary import Reader, Writer
 
 # ============================================================================
 # HOI PARAMETER ENCODING - DataFragment wrapping for HOI protocol

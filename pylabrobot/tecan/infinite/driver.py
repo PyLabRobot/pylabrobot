@@ -19,9 +19,9 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 
 from .protocol import (
-  StagePosition,
   _MeasurementDecoder,
   _StreamParser,
+  StagePosition,
   frame_command,
   is_terminal_frame,
 )

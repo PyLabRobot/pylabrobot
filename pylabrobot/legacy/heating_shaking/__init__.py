@@ -1,9 +1,9 @@
 """A hybrid between pylabrobot.shaking and pylabrobot.temperature_controlling"""
 
-from pylabrobot.hamilton.heater_shaker.box import HamiltonHeaterShakerBox
 from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.legacy.heating_shaking.bioshake_backend import BioShake
 from pylabrobot.legacy.heating_shaking.chatterbox import HeaterShakerChatterboxBackend
+from pylabrobot.hamilton.heater_shaker.box import HamiltonHeaterShakerBox
 from pylabrobot.legacy.heating_shaking.hamilton_backend import HamiltonHeaterShakerBackend
 from pylabrobot.legacy.heating_shaking.heater_shaker import HeaterShaker
 from pylabrobot.legacy.heating_shaking.inheco.thermoshake import (

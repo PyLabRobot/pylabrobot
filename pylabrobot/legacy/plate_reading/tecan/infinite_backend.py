@@ -34,11 +34,19 @@ from pylabrobot.tecan.infinite.luminescence_backend import (
 from pylabrobot.tecan.infinite.protocol import (  # noqa: F401
   BIN_RE,
   StagePosition,
-  _absorbance_od_calibrated,
   _AbsorbanceCalibration,
   _AbsorbanceCalibrationItem,
   _AbsorbanceMeasurement,
   _AbsorbanceRunDecoder,
+  _FluorescenceCalibration,
+  _FluorescenceRunDecoder,
+  _LuminescenceCalibration,
+  _LuminescenceMeasurement,
+  _LuminescenceRunDecoder,
+  _MeasurementDecoder,
+  _StreamEvent,
+  _StreamParser,
+  _absorbance_od_calibrated,
   _consume_leading_ascii_frame,
   _consume_status_frame,
   _decode_abs_calibration,
@@ -48,19 +56,11 @@ from pylabrobot.tecan.infinite.protocol import (  # noqa: F401
   _decode_lum_calibration,
   _decode_lum_data,
   _fluorescence_corrected,
-  _FluorescenceCalibration,
-  _FluorescenceRunDecoder,
   _integration_microseconds_to_seconds,
   _is_abs_calibration_len,
   _is_abs_data_len,
   _luminescence_intensity,
-  _LuminescenceCalibration,
-  _LuminescenceMeasurement,
-  _LuminescenceRunDecoder,
-  _MeasurementDecoder,
   _split_payload_and_trailer,
-  _StreamEvent,
-  _StreamParser,
   format_plate_result,
   frame_command,
   is_terminal_frame,
@@ -183,10 +183,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   ) -> List[Dict]:
     params = TecanInfiniteAbsorbanceParams(flashes=flashes, bandwidth=bandwidth)
     results = await self._absorbance.read_absorbance(
-      plate=plate,
-      wells=wells,
-      wavelength=wavelength,
-      backend_params=params,
+      plate=plate, wells=wells, wavelength=wavelength, backend_params=params,
     )
     return [
       {

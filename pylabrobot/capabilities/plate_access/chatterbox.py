@@ -48,7 +48,7 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> Optional[str]:
+  ) -> None:
     logger.info(
       "Closing source-side access with plate_type=%s barcode_location=%s barcode=%s timeout=%s.",
       plate_type,
@@ -59,7 +59,6 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     self._state.source_access_open = False
     self._state.source_access_closed = True
     self._state.source_plate_position = 0
-    return None
 
   async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
     logger.info("Opening destination-side access.")
@@ -75,7 +74,7 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> Optional[str]:
+  ) -> None:
     logger.info(
       "Closing destination-side access with plate_type=%s barcode_location=%s barcode=%s timeout=%s.",
       plate_type,
@@ -86,7 +85,6 @@ class PlateAccessChatterboxBackend(PlateAccessBackend):
     self._state.destination_access_open = False
     self._state.destination_access_closed = True
     self._state.destination_plate_position = 0
-    return None
 
   async def close_door(self, timeout: Optional[float] = None) -> None:
     logger.info("Closing plate access door.")

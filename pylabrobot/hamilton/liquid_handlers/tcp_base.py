@@ -7,8 +7,9 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
+from pylabrobot.io.binary import Reader
+from pylabrobot.io.socket import Socket
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.hamilton.tcp.messages import (
   CommandResponse,
@@ -24,8 +25,6 @@ from pylabrobot.hamilton.tcp.protocol import (
   RegistrationActionCode,
   RegistrationOptionType,
 )
-from pylabrobot.io.binary import Reader
-from pylabrobot.io.socket import Socket
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +289,7 @@ class HamiltonTCPHandler(Driver):
     logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
     return CommandResponse.from_bytes(complete_data)
 
-  async def setup(self, backend_params: Optional[BackendParams] = None):
+  async def setup(self):
     """Initialize Hamilton connection and discover objects.
 
     Hamilton uses strict request-response protocol:
@@ -299,7 +298,6 @@ class HamiltonTCPHandler(Driver):
     3. Protocol 3 registration
     4. Discover objects via Protocol 3 introspection
     """
-    del backend_params
 
     # Step 1: Establish TCP connection
     await self.io.setup()

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
@@ -28,8 +27,7 @@ class NimbusChatterboxDriver(NimbusDriver):
     super().__init__(deck=deck, host="chatterbox", port=2000)
     self._num_channels = num_channels
 
-  async def setup(self, backend_params: Optional[BackendParams] = None):
-    del backend_params
+  async def setup(self):
     from .pip_backend import NimbusPIPBackend
 
     # Use canned addresses (skip TCP connection entirely)

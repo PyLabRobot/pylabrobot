@@ -13,8 +13,6 @@ from __future__ import annotations
 
 import logging
 
-from pylabrobot.capabilities.capability import BackendParams
-
 from .base import _CytationBase
 
 logger = logging.getLogger(__name__)
@@ -31,8 +29,7 @@ class Cytation1(_CytationBase):
 
   _model_name = "Agilent BioTek Cytation 1"
 
-  async def setup(self, backend_params: BackendParams | None = None) -> None:
-    del backend_params
+  async def setup(self) -> None:
     await self._setup_base()
 
     self._capabilities = [self.microscopy, self.temperature, self.loading_tray]

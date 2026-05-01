@@ -107,7 +107,6 @@ def _consume_status_frame(buffer: bytearray, length: int) -> bool:
 @dataclass
 class _StreamEvent:
   """Parsed stream event (ASCII or binary)."""
-
   text: Optional[str] = None
   payload_len: Optional[int] = None
   blob: Optional[bytes] = None
@@ -419,10 +418,7 @@ def _decode_flr_calibration(payload_len: int, blob: bytes) -> Optional[_Fluoresc
   ref_dark = reader.u16()
   ref_bright = reader.u16()
   return _FluorescenceCalibration(
-    ex=ex,
-    meas_dark=meas_dark,
-    ref_dark=ref_dark,
-    ref_bright=ref_bright,
+    ex=ex, meas_dark=meas_dark, ref_dark=ref_dark, ref_bright=ref_bright,
   )
 
 

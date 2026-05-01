@@ -3,14 +3,15 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
-from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.capabilities.capability import Capability
 from pylabrobot.capabilities.loading_tray import LoadingTray
 from pylabrobot.capabilities.microscopy import Microscopy
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
+
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
 
 from .microscopy_backend import CytationImagingConfig, CytationMicroscopyBackend
 
@@ -102,7 +103,11 @@ class _CytationBase(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self.loading_tray.open(backend_params=BioTekLoadingTrayBackend.OpenParams(slow=slow))
+    await self.loading_tray.open(
+      backend_params=BioTekLoadingTrayBackend.OpenParams(slow=slow)
+    )
 
   async def close(self, slow: bool = False) -> None:
-    await self.loading_tray.close(backend_params=BioTekLoadingTrayBackend.CloseParams(slow=slow))
+    await self.loading_tray.close(
+      backend_params=BioTekLoadingTrayBackend.CloseParams(slow=slow)
+    )

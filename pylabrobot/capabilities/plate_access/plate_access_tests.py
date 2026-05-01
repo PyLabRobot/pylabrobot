@@ -136,19 +136,11 @@ class TestPlateAccess(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(state.door_closed)
 
   async def test_action_methods_wait_for_expected_state(self):
-    self.mock_backend.get_access_state = AsyncMock(
-      side_effect=[
-        PlateAccessState(
-          source_access_open=False, destination_access_closed=True, door_closed=False
-        ),
-        PlateAccessState(
-          source_access_open=True, destination_access_closed=False, door_closed=False
-        ),
-        PlateAccessState(
-          source_access_open=False, destination_access_closed=True, door_closed=True
-        ),
-      ]
-    )
+    self.mock_backend.get_access_state = AsyncMock(side_effect=[
+      PlateAccessState(source_access_open=False, destination_access_closed=True, door_closed=False),
+      PlateAccessState(source_access_open=True, destination_access_closed=False, door_closed=False),
+      PlateAccessState(source_access_open=False, destination_access_closed=True, door_closed=True),
+    ])
     cap = await self._make_cap()
 
     opened_state = await cap.open_source_plate(timeout=0.1, poll_interval=0.001)
@@ -158,9 +150,7 @@ class TestPlateAccess(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(final_state.door_closed)
 
   async def test_action_timeout_raises(self):
-    self.mock_backend.get_access_state = AsyncMock(
-      return_value=PlateAccessState(source_access_open=False)
-    )
+    self.mock_backend.get_access_state = AsyncMock(return_value=PlateAccessState(source_access_open=False))
     cap = await self._make_cap()
 
     with self.assertRaises(TimeoutError):

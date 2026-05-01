@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
@@ -35,8 +34,7 @@ class Cytation5(_CytationBase):
 
   _model_name = "Agilent BioTek Cytation 5"
 
-  async def setup(self, backend_params: BackendParams | None = None) -> None:
-    del backend_params
+  async def setup(self) -> None:
     await self._setup_base()
 
     self.absorbance = Absorbance(backend=self.driver)

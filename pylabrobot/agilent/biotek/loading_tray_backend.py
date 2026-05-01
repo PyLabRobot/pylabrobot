@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.loading_tray.backend import LoadingTrayBackend
 
@@ -16,7 +17,7 @@ class BioTekLoadingTrayBackend(LoadingTrayBackend):
   class CloseParams(BackendParams):
     slow: bool = False
 
-  def __init__(self, driver: Any):
+  def __init__(self, driver: BioTekBackend):
     self._driver = driver
 
   async def open(self, backend_params: Optional[BackendParams] = None):

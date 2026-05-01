@@ -58,7 +58,7 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> Optional[str]:
+  ) -> None:
     """Retract the source-side access path."""
 
   @abstractmethod
@@ -72,7 +72,7 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> Optional[str]:
+  ) -> None:
     """Retract the destination-side access path."""
 
   @abstractmethod

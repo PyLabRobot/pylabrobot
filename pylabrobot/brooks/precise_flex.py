@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, List, Literal, Optional
 
-from pylabrobot.brooks import kinematics
 from pylabrobot.brooks.error_codes import ERROR_CODES
+from pylabrobot.brooks import kinematics
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
   HasJoints,
@@ -395,14 +395,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       wrist=current.wrist if cart.wrist is None else cart.wrist,
       rail=current.rail if cart.rail is None else cart.rail,
     )
-    wrist: Wrist = cart.wrist or "ccw"
-    rail = cart.rail if cart.rail is not None else 0.0
-    ik_joints = _snap_to_current(kinematics.ik(cart, p=self._kinematics_params), joints, wrist)
+    ik_joints = _snap_to_current(kinematics.ik(cart, p=self._kinematics_params), joints, cart.wrist)
     joints[PFAxis.BASE] = ik_joints[1]
     joints[PFAxis.SHOULDER] = ik_joints[2]
     joints[PFAxis.ELBOW] = ik_joints[3]
     joints[PFAxis.WRIST] = ik_joints[4]
-    joints[PFAxis.RAIL] = rail
+    joints[PFAxis.RAIL] = cart.rail
     return joints
 
   # -- high-level motion API -------------------------------------------------

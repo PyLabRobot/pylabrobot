@@ -94,18 +94,6 @@ class SCILADriver(Driver):
     positions = await self.request_drawer_statuses()
     return positions[drawer_id]
 
-  async def open(self, drawer_id: int) -> None:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    await self.send_command("PrepareForInput", position=drawer_id)
-    await self.send_command("OpenDoor")
-
-  async def close(self, drawer_id: int) -> None:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    await self.send_command("PrepareForOutput", position=drawer_id)
-    await self.send_command("CloseDoor")
-
   # -- CO2 / valves --
 
   async def request_co2_flow_status(self) -> str:

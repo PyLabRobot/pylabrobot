@@ -17,8 +17,8 @@ from typing import Dict, List, Optional
 # Re-exported for backward compatibility (tests import these from this module)
 from pylabrobot.hamilton.liquid_handlers.nimbus.commands import (  # noqa: F401
   Aspirate,
-  DisableADC,
   Dispense,
+  DisableADC,
   DropTips,
   DropTipsRoll,
   EnableADC,
