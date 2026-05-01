@@ -25,6 +25,7 @@ Supported operations:
 - parse transfer reports into completed and skipped wells
 - update PLR volume trackers from survey and transfer results when volume tracking is enabled
 - run source/destination load and eject workflows with caller-provided operator pauses
+- model the physical Echo source and destination positions as PLR plate holders
 
 The driver matches the Echo's observed transport quirks:
 
@@ -279,6 +280,20 @@ async def main(source_plate, destination_plate):
     finally:
       await echo.unlock()
 ```
+
+The `Echo` frontend also exposes the physical plate positions as PLR resource holders:
+
+```python
+echo.source_plate = source_plate
+echo.destination_plate = destination_plate
+
+assert echo.source_plate is source_plate
+assert source_plate.parent is echo.source_position
+```
+
+Use these positions to keep a PLR workcell model aligned with the plates physically loaded in the
+Echo. The holders accept `Plate` resources only; source/destination access commands still control
+the real instrument state.
 
 `transfer()` is the high-level PLR API. It accepts `Well` objects, infers one source plate and one
 destination plate from their parents, and then uses the same execution path as `transfer_wells()`.
