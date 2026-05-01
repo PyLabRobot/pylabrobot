@@ -93,6 +93,7 @@ class DispatchEmcyTests(unittest.TestCase):
     self.assertEqual(self.driver.emcy_move_error, "E-stop button was pressed")
     self.assertEqual(self.driver.emcy_move_error_node_id, 1)
     self.assertIsNotNone(self.driver.last_emcy)
+    assert self.driver.last_emcy is not None  # type narrowing for mypy
     self.assertEqual(self.driver.last_emcy.err_code, 0x5441)
 
   def test_non_fatal_does_not_set_sticky_error(self):

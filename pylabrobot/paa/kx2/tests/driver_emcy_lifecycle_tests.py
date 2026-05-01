@@ -11,6 +11,7 @@ Covers the post-PR-880 fixes for:
 import asyncio
 import struct
 import unittest
+from typing import List, Tuple
 from unittest import mock
 
 from pylabrobot.paa.kx2 import driver as driver_mod
@@ -107,8 +108,9 @@ class SetupOrdersEmcySubscribeBeforeNmtStartTests(unittest.TestCase):
   def test_emcy_subscribe_precedes_nmt_start(self):
     # Build a fake canopen.Network that records subscribe + nmt.send_command
     # in call order, and stub the rest of setup just enough to reach the
-    # ordering point we care about.
-    calls = []
+    # ordering point we care about. Entries are heterogeneous tuples: some
+    # carry a payload (e.g. ("nmt", code)), others are tag-only (("scan",)).
+    calls: List[Tuple] = []
 
     class _FakeNmt:
       def send_command(self_inner, code):
