@@ -58,8 +58,8 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
-    """Retract the source-side access path."""
+  ) -> Optional[str]:
+    """Retract the source-side access path and return a read barcode when available."""
 
   @abstractmethod
   async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
@@ -72,8 +72,8 @@ class PlateAccessBackend(CapabilityBackend, metaclass=ABCMeta):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
-    """Retract the destination-side access path."""
+  ) -> Optional[str]:
+    """Retract the destination-side access path and return a read barcode when available."""
 
   @abstractmethod
   async def close_door(self, timeout: Optional[float] = None) -> None:
