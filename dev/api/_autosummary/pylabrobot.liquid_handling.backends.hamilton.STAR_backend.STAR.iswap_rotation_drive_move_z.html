@@ -583,20 +583,23 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_z">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">iswap_rotation_drive_move_z</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">118.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">acceleration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">643.66</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_protection_limiter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_z" title="Link to this definition">#</a></dt>
-<dd><p>Move the iSWAP rotation drive to an absolute Z position (deck coordinates).</p>
-<p><code class="code docutils literal notranslate"><span class="pre">z</span></code> is the rotation-drive plane Z, matching what
-<code class="code docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_z</span></code> returns. The 13 mm offset to the gripper
-finger plane (where R0 ZA is calibrated) is applied internally.</p>
+<dd><p>Move the iSWAP rotation-drive bottom to an absolute Z (deck coordinates).</p>
+<p><code class="code docutils literal notranslate"><span class="pre">z</span></code> is the rotation-drive bottom Z (lowest physical point of the drive),
+matching what <code class="code docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_z</span></code> returns. The 13 mm offset
+to the finger plane (R0 ZA reference) is applied internally.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>z</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target rotation-drive Z coordinate in mm.</p></li>
+<li><p><strong>z</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target rotation-drive-bottom Z coordinate in mm.</p></li>
 <li><p><strong>speed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Max velocity in mm/sec. Default 118.0 (firmware default).</p></li>
 <li><p><strong>acceleration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Acceleration in mm/sec^2. Default 643.66
 (firmware default 60 in 1000 incr/sec^2 units).</p></li>
 <li><p><strong>current_protection_limiter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Motor current limit, 0-7. Default 6
 (firmware default).</p></li>
 </ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – if the iSWAP module is not installed.</p>
 </dd>
 </dl>
 </dd></dl>

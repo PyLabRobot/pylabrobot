@@ -53,6 +53,8 @@
       ~STAR.iswap_wrist_drive_deg_per_increment
       ~STAR.iswap_wrist_drive_max_increment
       ~STAR.iswap_wrist_drive_min_increment
+      ~STAR.iswap_y_drive_mm_per_increment
+      ~STAR.iswap_z_drive_mm_per_increment
       ~STAR.machine_conf
       ~STAR.module_id_length
       ~STAR.num_arms
@@ -184,10 +186,16 @@
       ~STAR.iswap_rotation_drive_move_z
       ~STAR.iswap_rotation_drive_request_position
       ~STAR.iswap_rotation_drive_request_predefined_positions
+      ~STAR.iswap_rotation_drive_request_predefined_y_positions
+      ~STAR.iswap_rotation_drive_request_predefined_z_positions
       ~STAR.iswap_rotation_drive_request_x
       ~STAR.iswap_rotation_drive_request_y
       ~STAR.iswap_rotation_drive_request_z
       ~STAR.iswap_wrist_drive_request_predefined_positions
+      ~STAR.iswap_y_drive_increment_to_mm
+      ~STAR.iswap_y_drive_mm_to_increment
+      ~STAR.iswap_z_drive_increment_to_mm
+      ~STAR.iswap_z_drive_mm_to_increment
       ~STAR.load_carrier
       ~STAR.load_carrier_from_autoload_belt
       ~STAR.load_carrier_from_tray_and_scan_carrier_barcode

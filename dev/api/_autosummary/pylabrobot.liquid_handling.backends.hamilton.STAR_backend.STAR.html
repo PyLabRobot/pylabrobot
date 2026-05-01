@@ -707,6 +707,12 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_min_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_wrist_drive_min_increment</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_mm_per_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_mm_per_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_mm_per_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_y_drive_mm_per_increment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_mm_per_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_mm_per_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_mm_per_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_z_drive_mm_per_increment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.machine_conf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">machine_conf</span></code></a></p></td>
 <td><p>Machine configuration.</p></td>
 </tr>
@@ -1068,13 +1074,19 @@
 <td><p>Move the iSWAP rotation drive to an absolute Y position.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_move_z</span></code></a>(z[, speed, ...])</p></td>
-<td><p>Move the iSWAP rotation drive to an absolute Z position (deck coordinates).</p></td>
+<td><p>Move the iSWAP rotation-drive bottom to an absolute Z (deck coordinates).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_position.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_position" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_position</span></code></a>()</p></td>
 <td><p>Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_positions.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_positions" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_predefined_positions</span></code></a>()</p></td>
 <td><p>Read the iSWAP rotation drive (W) predefined-position table from EEPROM.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_y_positions.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_y_positions" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_y_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_predefined_y_positions</span></code></a>()</p></td>
+<td><p>Read iSWAP rotation-drive Y predefined-position table from EEPROM, in mm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_z_positions.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_z_positions" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_predefined_z_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_predefined_z_positions</span></code></a>()</p></td>
+<td><p>Read iSWAP rotation-drive Z predefined-position table from EEPROM, in mm.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_x</span></code></a>()</p></td>
 <td><p>Request iSWAP rotation drive X position (deck coordinates), in mm.</p></td>
@@ -1083,10 +1095,22 @@
 <td><p>Request iSWAP rotation drive Y position (deck coordinates), in mm.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_request_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_z</span></code></a>()</p></td>
-<td><p>Request iSWAP rotation drive Z position (deck coordinates), in mm.</p></td>
+<td><p>Request iSWAP rotation-drive-bottom Z (deck coordinates), in mm.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_request_predefined_positions.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_request_predefined_positions" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_wrist_drive_request_predefined_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_wrist_drive_request_predefined_positions</span></code></a>()</p></td>
 <td><p>Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_increment_to_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_increment_to_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_increment_to_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_y_drive_increment_to_mm</span></code></a>(value_increments)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_mm_to_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_mm_to_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_y_drive_mm_to_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_y_drive_mm_to_increment</span></code></a>(value_mm)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_increment_to_mm.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_increment_to_mm" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_increment_to_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_z_drive_increment_to_mm</span></code></a>(value_increments)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_mm_to_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_mm_to_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_z_drive_mm_to_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_z_drive_mm_to_increment</span></code></a>(value_mm)</p></td>
+<td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.load_carrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_carrier</span></code></a>(carrier[, ...])</p></td>
 <td><p>Use autoload to load carrier.</p></td>
