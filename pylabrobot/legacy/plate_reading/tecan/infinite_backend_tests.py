@@ -606,7 +606,9 @@ class TestTecanInfiniteScanGeometry(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(identifiers, ["A1", "A2", "A3", "B1", "B2", "B3"])
 
   def test_scan_range_serpentine(self):
-    setattr(self.backend._driver, "map_well_to_stage", lambda well: (well.get_column(), well.get_row()))
+    setattr(
+      self.backend._driver, "map_well_to_stage", lambda well: (well.get_column(), well.get_row())
+    )
     row_index, row_wells = self.backend._group_by_row(self.plate.get_all_items())[0]
     start_x, end_x, count = self.backend._scan_range(row_index, row_wells, serpentine=True)
     self.assertEqual((start_x, end_x, count), (0, 2, 3))

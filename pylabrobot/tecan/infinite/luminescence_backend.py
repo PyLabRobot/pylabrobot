@@ -16,8 +16,8 @@ from pylabrobot.serializer import SerializableMixin
 
 from .driver import TecanInfiniteDriver
 from .protocol import (
-  _LuminescenceRunDecoder,
   _integration_microseconds_to_seconds,
+  _LuminescenceRunDecoder,
   format_plate_result,
 )
 

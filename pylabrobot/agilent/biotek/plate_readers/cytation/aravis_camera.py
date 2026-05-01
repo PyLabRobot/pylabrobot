@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional, cast
 
 try:
   import numpy as np
@@ -27,15 +27,15 @@ logger = logging.getLogger(__name__)
 #   - Python bindings: pip install PyGObject
 # If not installed, AravisCamera.setup() will raise ImportError with instructions.
 try:
-  import gi
+  import gi  # type: ignore[import-not-found]
 
   gi.require_version("Aravis", "0.8")
-  from gi.repository import Aravis  # type: ignore[attr-defined]
+  from gi.repository import Aravis  # type: ignore[import-not-found,attr-defined]
 
   HAS_ARAVIS = True
 except (ImportError, ValueError):
   HAS_ARAVIS = False
-  Aravis = None  # type: ignore[assignment]
+  Aravis = None  # type: ignore[no-redef,assignment]
 
 # Number of pre-allocated buffers for the Aravis stream.
 # For single-frame software-triggered capture, 5 is more than sufficient.
@@ -88,9 +88,9 @@ class AravisCamera:
   """
 
   def __init__(self) -> None:
-    self._camera: Optional[object] = None  # Aravis.Camera
-    self._device: Optional[object] = None  # Aravis.Device
-    self._stream: Optional[object] = None  # Aravis.Stream
+    self._camera: Optional[Any] = None  # Aravis.Camera
+    self._device: Optional[Any] = None  # Aravis.Device
+    self._stream: Optional[Any] = None  # Aravis.Stream
     self._serial_number: Optional[str] = None
     self._acquiring: bool = False
     self._width: int = 0
@@ -243,6 +243,8 @@ class AravisCamera:
       raise RuntimeError("Camera is not initialized. Call setup() first.")
     if not self._acquiring:
       raise RuntimeError("Camera is not acquiring. Call start_acquisition() first.")
+    if self._device is None or self._stream is None:
+      raise RuntimeError("Camera stream is not initialized. Call setup() first.")
 
     # Send software trigger command.
     self._device.execute_command("TriggerSoftware")
@@ -301,6 +303,8 @@ class AravisCamera:
     """
     if self._camera is None:
       raise RuntimeError("Camera is not initialized. Call setup() first.")
+    if self._device is None:
+      raise RuntimeError("Camera device is not initialized. Call setup() first.")
     # Disable auto-exposure before setting manual value.
     self._device.set_string_feature_value("ExposureAuto", "Off")
     # GenICam ExposureTime is in microseconds.
@@ -312,7 +316,7 @@ class AravisCamera:
     if self._camera is None:
       raise RuntimeError("Camera is not initialized. Call setup() first.")
     exposure_us = self._camera.get_exposure_time()
-    return exposure_us / 1000.0
+    return cast(float, exposure_us / 1000.0)
 
   async def set_gain(self, gain: float) -> None:
     """Set gain value.
@@ -325,6 +329,8 @@ class AravisCamera:
     """
     if self._camera is None:
       raise RuntimeError("Camera is not initialized. Call setup() first.")
+    if self._device is None:
+      raise RuntimeError("Camera device is not initialized. Call setup() first.")
     self._device.set_string_feature_value("GainAuto", "Off")
     self._camera.set_gain(gain)
 
@@ -341,13 +347,15 @@ class AravisCamera:
     aravis_mode = mode_map.get(mode.lower())
     if aravis_mode is None:
       raise ValueError(f"Invalid auto-gain mode '{mode}'. Use 'off', 'once', or 'continuous'.")
+    if self._device is None:
+      raise RuntimeError("Camera device is not initialized. Call setup() first.")
     self._device.set_string_feature_value("GainAuto", aravis_mode)
 
   async def get_gain(self) -> float:
     """Read current gain value (from hardware, not cached)."""
     if self._camera is None:
       raise RuntimeError("Camera is not initialized. Call setup() first.")
-    return self._camera.get_gain()
+    return cast(float, self._camera.get_gain())
 
   async def set_auto_exposure(self, mode: str) -> None:
     """Set auto-exposure mode.
@@ -362,6 +370,8 @@ class AravisCamera:
     aravis_mode = mode_map.get(mode.lower())
     if aravis_mode is None:
       raise ValueError(f"Invalid auto-exposure mode '{mode}'. Use 'off', 'once', or 'continuous'.")
+    if self._device is None:
+      raise RuntimeError("Camera device is not initialized. Call setup() first.")
     self._device.set_string_feature_value("ExposureAuto", aravis_mode)
 
   async def set_pixel_format(self, fmt: Optional[int] = None) -> None:

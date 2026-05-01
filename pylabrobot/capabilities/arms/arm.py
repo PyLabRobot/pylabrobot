@@ -170,7 +170,9 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: float,
   ) -> Coordinate:
-    return to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
+    return (
+      to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
+    )
 
   def _resolve_pickup_distance(
     self, resource: Resource, pickup_distance_from_bottom: Optional[float]
@@ -264,7 +266,9 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: Optional[float],
   ) -> Tuple[Coordinate, float]:
-    pickup_distance_from_bottom = self._resolve_pickup_distance(resource, pickup_distance_from_bottom)
+    pickup_distance_from_bottom = self._resolve_pickup_distance(
+      resource, pickup_distance_from_bottom
+    )
     assert resource.get_absolute_rotation().x == 0 and resource.get_absolute_rotation().y == 0
     assert resource.get_absolute_rotation().z % 90 == 0
     location = self._pickup_location(resource, offset, pickup_distance_from_bottom)

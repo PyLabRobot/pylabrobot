@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.liquid_handlers.tcp_base import HamiltonTCPHandler
 from pylabrobot.hamilton.tcp.introspection import HamiltonIntrospection
 from pylabrobot.hamilton.tcp.packets import Address
@@ -58,8 +59,9 @@ class NimbusDriver(HamiltonTCPHandler):
       raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
     return self._nimbus_core_address
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize connection, discover hardware, and create backends."""
+    del backend_params
     assert self.deck is not None, "NimbusDriver requires a deck before setup()"
     # TCP connection + Protocol 7 + Protocol 3 + root discovery
     await super().setup()

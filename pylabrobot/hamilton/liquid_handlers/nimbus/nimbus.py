@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
@@ -35,7 +36,7 @@ class Nimbus(Device):
     self.deck = deck
     self.pip: PIP  # set in setup()
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the Nimbus instrument.
 
     Establishes the TCP connection, discovers hardware objects, queries channel
@@ -43,6 +44,7 @@ class Nimbus(Device):
     runs InitializeSmartRoll, and wires the PIP capability frontend to the driver's
     PIP backend.
     """
+    del backend_params
     try:
       await self.driver.setup()
 

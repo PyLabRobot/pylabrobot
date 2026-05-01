@@ -1,5 +1,7 @@
 """Legacy. Use pylabrobot.brooks instead."""
 
+from __future__ import annotations
+
 import warnings
 from abc import ABC
 from typing import Dict, List, Optional, Union
@@ -36,26 +38,6 @@ def _to_new_coords(
   if isinstance(position, PreciseFlexCartesianCoords):
     return _to_new_cartesian(position)
   return position
-
-
-def _to_new_access(access: Optional[AccessPattern]) -> Optional[_new_module.AccessPattern]:
-  """Convert legacy AccessPattern to new module's AccessPattern."""
-  if access is None:
-    return None
-  if isinstance(access, VerticalAccess):
-    return _new_module.VerticalAccess(
-      approach_height_mm=access.approach_height_mm,
-      clearance_mm=access.clearance_mm,
-      gripper_offset_mm=access.gripper_offset_mm,
-    )
-  if isinstance(access, HorizontalAccess):
-    return _new_module.HorizontalAccess(
-      approach_distance_mm=access.approach_distance_mm,
-      clearance_mm=access.clearance_mm,
-      lift_height_mm=access.lift_height_mm,
-      gripper_offset_mm=access.gripper_offset_mm,
-    )
-  return None
 
 
 def _from_new_coords(
@@ -198,7 +180,13 @@ class PreciseFlexBackend(SCARABackend, ABC):
     position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ):
-    await self._new_backend.approach(_to_new_coords(position), _to_new_access(access))
+    converted = _to_new_coords(position)
+    if isinstance(converted, dict):
+      await self._approach_j(converted, access)
+    elif isinstance(position, PreciseFlexCartesianCoords):
+      await self._approach_c(position, access)
+    else:
+      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
 
   async def pick_up_resource(
     self,
@@ -209,8 +197,8 @@ class PreciseFlexBackend(SCARABackend, ABC):
     grasp_force: float = 10.0,
   ):
     converted = _to_new_coords(position)
+    del access
     params = _new_module.PreciseFlexArmBackend.PickUpParams(
-      access=_to_new_access(access),
       finger_speed_percent=finger_speed_percent,
       grasp_force=grasp_force,
     )
@@ -219,13 +207,14 @@ class PreciseFlexBackend(SCARABackend, ABC):
         converted, plate_width, backend_params=params
       )
     elif isinstance(converted, _new_module.PreciseFlexGripperLocation):
-      new_access = _to_new_access(access) or _new_module.VerticalAccess()
+      if not isinstance(position, PreciseFlexCartesianCoords):
+        raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
       await self._new_backend._set_grasp_data(
         plate_width=plate_width,
         finger_speed_percent=finger_speed_percent,
         grasp_force=grasp_force,
       )
-      await self._new_backend._pick_plate_c(cartesian_position=converted, access=new_access)
+      await self._pick_plate_c(position)
     else:
       raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
 
@@ -235,14 +224,16 @@ class PreciseFlexBackend(SCARABackend, ABC):
     access: Optional[AccessPattern] = None,
   ):
     converted = _to_new_coords(position)
+    del access
     if isinstance(converted, dict):
-      params = _new_module.PreciseFlexArmBackend.DropParams(access=_to_new_access(access))
+      params = _new_module.PreciseFlexArmBackend.DropParams()
       await self._new_backend.drop_at_joint_position(
         converted, resource_width=0, backend_params=params
       )
     elif isinstance(converted, _new_module.PreciseFlexGripperLocation):
-      new_access = _to_new_access(access) or _new_module.VerticalAccess()
-      await self._new_backend._place_plate_c(cartesian_position=converted, access=new_access)
+      if not isinstance(position, PreciseFlexCartesianCoords):
+        raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
+      await self._place_plate_c(position)
     else:
       raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
 
@@ -251,8 +242,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     if isinstance(converted, dict):
       await self._new_backend.move_to_joint_position(converted)
     elif isinstance(converted, _new_module.PreciseFlexGripperLocation):
-      await self._new_backend._move_c(
-        profile_index=self._new_backend.profile_index, cartesian_coords=converted
+      await self.send_command(
+        f"moveC {self._new_backend.profile_index} "
+        f"{converted.location.x} {converted.location.y} {converted.location.z} "
+        f"{converted.rotation.z} {converted.rotation.y} {converted.rotation.x} 4097"
       )
     else:
       raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
@@ -261,8 +254,16 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new_backend.request_joint_position()
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
-    result = await self._new_backend.request_gripper_location()
-    return _from_new_coords(result)
+    data = await self.send_command("wherec")
+    parts = data.split()
+    if len(parts) != 7:
+      raise _new_module.PreciseFlexError(-1, "Unexpected response format from wherec command.")
+    orientation = ElbowOrientation.RIGHT if int(parts[6]) & 0x01 else ElbowOrientation.LEFT
+    return PreciseFlexCartesianCoords(
+      location=Coordinate(float(parts[0]), float(parts[1]), float(parts[2])),
+      rotation=Rotation(float(parts[5]), float(parts[4]), float(parts[3])),
+      orientation=orientation,
+    )
 
   async def send_command(self, command: str) -> str:
     return await self._new_driver.send_command(command)
@@ -364,7 +365,25 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return (type_code, station_index, angles)
 
   async def set_joint_angles(self, location_index, joint_position):
-    await self._new_backend._set_joint_angles(location_index, joint_position)
+    if self._has_rail:
+      await self.send_command(
+        f"locAngles {location_index} "
+        f"{joint_position[_new_module.PFAxis.RAIL]} "
+        f"{joint_position[_new_module.PFAxis.BASE]} "
+        f"{joint_position[_new_module.PFAxis.SHOULDER]} "
+        f"{joint_position[_new_module.PFAxis.ELBOW]} "
+        f"{joint_position[_new_module.PFAxis.WRIST]} "
+        f"{joint_position[_new_module.PFAxis.GRIPPER]}"
+      )
+    else:
+      await self.send_command(
+        f"locAngles {location_index} "
+        f"{joint_position[_new_module.PFAxis.BASE]} "
+        f"{joint_position[_new_module.PFAxis.SHOULDER]} "
+        f"{joint_position[_new_module.PFAxis.ELBOW]} "
+        f"{joint_position[_new_module.PFAxis.WRIST]} "
+        f"{joint_position[_new_module.PFAxis.GRIPPER]}"
+      )
 
   async def get_location_xyz(self, location_index):
     data = await self.send_command(f"locXyz {location_index}")
@@ -382,7 +401,11 @@ class PreciseFlexBackend(SCARABackend, ABC):
     converted = _to_new_coords(cartesian_position)
     if not isinstance(converted, _new_module.PreciseFlexGripperLocation):
       raise TypeError("Expected cartesian coordinates, got joint position dict")
-    await self._new_backend._set_location_xyz(location_index, converted)
+    await self.send_command(
+      f"locXyz {location_index} "
+      f"{converted.location.x} {converted.location.y} {converted.location.z} "
+      f"{converted.rotation.z} {converted.rotation.y} {converted.rotation.x}"
+    )
 
   async def get_location_z_clearance(self, location_index):
     data = await self.send_command(f"locZClearance {location_index}")
@@ -411,7 +434,17 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return (int(parts[0]), int(parts[1]))
 
   async def set_location_config(self, location_index, config_value):
-    await self._new_backend._set_location_config(location_index, config_value)
+    valid_mask = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x1000 | 0x2000
+    invalid_bits = config_value & ~valid_mask
+    if invalid_bits:
+      raise ValueError(f"Invalid config bits specified: 0x{invalid_bits:04X}")
+    if config_value & 0x01 and config_value & 0x02:
+      raise ValueError("Cannot specify both GPL_Righty and GPL_Lefty")
+    if config_value & 0x04 and config_value & 0x08:
+      raise ValueError("Cannot specify both GPL_Above and GPL_Below")
+    if config_value & 0x10 and config_value & 0x20:
+      raise ValueError("Cannot specify both GPL_Flip and GPL_NoFlip")
+    await self.send_command(f"locConfig {location_index} {config_value}")
 
   async def dest_c(self, arg1=0):
     return await self._new_backend.dest_c(arg1)
@@ -501,10 +534,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new_backend.request_motion_profile_values(profile)
 
   async def move_to_stored_location(self, location_index, profile_index):
-    await self._new_backend._move_to_stored_location(location_index, profile_index)
+    await self.send_command(f"move {location_index} {profile_index}")
 
   async def move_to_stored_location_appro(self, location_index, profile_index):
-    await self._new_backend._move_to_stored_location_appro(location_index, profile_index)
+    await self.send_command(f"moveAppro {location_index} {profile_index}")
 
   async def move_extra_axis(self, axis1_position, axis2_position=None):
     if axis2_position is None:
@@ -519,7 +552,11 @@ class PreciseFlexBackend(SCARABackend, ABC):
     converted = _to_new_coords(cartesian_coords)
     if not isinstance(converted, _new_module.PreciseFlexGripperLocation):
       raise TypeError("Expected cartesian coordinates, got joint position dict")
-    await self._new_backend._move_c(profile_index, converted)
+    await self.send_command(
+      f"moveC {profile_index} "
+      f"{converted.location.x} {converted.location.y} {converted.location.z} "
+      f"{converted.rotation.z} {converted.rotation.y} {converted.rotation.x} 4097"
+    )
 
   async def move_j(self, profile_index, joint_coords):
     await self._new_backend._move_j(profile_index, joint_coords)
@@ -773,31 +810,63 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return self._new_backend._parse_angles_response(parts)
 
   async def _approach_j(self, position: Dict[int, float], access=None):
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._approach_j(position, new_access)
+    await self.set_joint_angles(self._new_backend.location_index, position)
+    await self._set_grip_detail(access or VerticalAccess())
+    await self.move_to_stored_location_appro(
+      self._new_backend.location_index,
+      self._new_backend.profile_index,
+    )
 
   async def _pick_plate_j(self, position: Dict[int, float], access=None):
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._pick_plate_j(position, new_access)
+    await self.set_joint_angles(self._new_backend.location_index, position)
+    await self._set_grip_detail(access or VerticalAccess())
+    await self.pick_plate_from_stored_position(self._new_backend.location_index)
 
   async def _place_plate_j(self, position: Dict[int, float], access=None):
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._place_plate_j(position, new_access)
+    await self.set_joint_angles(self._new_backend.location_index, position)
+    await self._set_grip_detail(access or VerticalAccess())
+    await self.place_plate_to_stored_position(self._new_backend.location_index)
 
   async def _approach_c(self, position: PreciseFlexCartesianCoords, access=None):
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._approach_c(_to_new_cartesian(position), new_access)
+    await self.set_location_xyz(self._new_backend.location_index, position)
+    await self._set_grip_detail(access or VerticalAccess())
+    await self.set_location_config(self._new_backend.location_index, 1)
+    await self.move_to_stored_location_appro(
+      self._new_backend.location_index,
+      self._new_backend.profile_index,
+    )
 
   async def _pick_plate_c(self, position: PreciseFlexCartesianCoords, access=None):
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._pick_plate_c(_to_new_cartesian(position), new_access)
+    await self.set_location_xyz(self._new_backend.location_index, position)
+    await self._set_grip_detail(access or VerticalAccess())
+    await self.set_location_config(self._new_backend.location_index, 4097)
+    await self.pick_plate_from_stored_position(self._new_backend.location_index)
 
   async def _place_plate_c(self, position: PreciseFlexCartesianCoords, access=None):
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._place_plate_c(_to_new_cartesian(position), new_access)
+    await self.set_location_xyz(self._new_backend.location_index, position)
+    await self._set_grip_detail(access or VerticalAccess())
+    await self.set_location_config(self._new_backend.location_index, 4097)
+    await self.place_plate_to_stored_position(self._new_backend.location_index)
 
   async def _set_grip_detail(self, access):
     if access is not None and not isinstance(access, (VerticalAccess, HorizontalAccess)):
       raise TypeError("Access pattern must be VerticalAccess or HorizontalAccess.")
-    new_access = _to_new_access(access) or _new_module.VerticalAccess()
-    return await self._new_backend._set_grip_detail(new_access)
+    if access is None:
+      access = VerticalAccess()
+    if isinstance(access, VerticalAccess):
+      return await self.set_station_type(
+        self._new_backend.location_index,
+        1,
+        0,
+        access.clearance_mm,
+        0,
+        access.gripper_offset_mm,
+      )
+    return await self.set_station_type(
+      self._new_backend.location_index,
+      0,
+      0,
+      access.clearance_mm,
+      access.lift_height_mm,
+      access.gripper_offset_mm,
+    )

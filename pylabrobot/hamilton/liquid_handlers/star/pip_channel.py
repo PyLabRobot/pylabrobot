@@ -338,7 +338,7 @@ class PIPChannel:
   # -- delegate to left_x_arm (C0 RX) — channels share the X carriage ----------
   # TODO: we assume `C0RX` references the center of the x-arm, figure out what it
   # references for half-arms (see issue 822 and new Fluid Motion STAR)
-  
+
   async def request_x_pos(self) -> float:
     """Request current X-position of this channel (mm).
 

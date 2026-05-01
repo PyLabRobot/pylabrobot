@@ -114,7 +114,7 @@ class XArm6Driver(Driver):
     if not isinstance(backend_params, XArm6Driver.SetupParams):
       backend_params = XArm6Driver.SetupParams()
 
-    from xarm.wrapper import XArmAPI  # type: ignore[import-not-found]
+    from xarm.wrapper import XArmAPI  # type: ignore[import-not-found,import-untyped]
 
     self._arm = XArmAPI(self._ip)
     await self.clear_errors()
@@ -127,7 +127,7 @@ class XArm6Driver(Driver):
       )
 
     if not backend_params.skip_gripper_init:
-      await self._call_sdk(self._arm.set_gripper_mode, 1, op="set_gripper_mode")
+      await self._call_sdk(self._arm.set_gripper_mode, 0, op="set_gripper_mode")
       await self._call_sdk(self._arm.set_gripper_enable, True, op="set_gripper_enable")
 
     # Re-assert position control mode after gripper init (gripper mode change

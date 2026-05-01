@@ -1,17 +1,18 @@
 """Tests for the new Tecan Infinite 200 PRO architecture."""
 
 import unittest
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.io.usb import USB
 from pylabrobot.resources import Coordinate, Plate, Well, create_ordered_items_2d
 from pylabrobot.tecan.infinite.driver import TecanInfiniteDriver
 from pylabrobot.tecan.infinite.protocol import (
+  _absorbance_od_calibrated,
   _AbsorbanceRunDecoder,
+  _consume_leading_ascii_frame,
   _FluorescenceRunDecoder,
   _LuminescenceRunDecoder,
-  _absorbance_od_calibrated,
-  _consume_leading_ascii_frame,
   frame_command,
   is_terminal_frame,
 )
@@ -111,6 +112,7 @@ class TestDecoders(unittest.TestCase):
     cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
     decoder.feed_bin(cal_len, cal_blob)
     self.assertIsNotNone(decoder.calibration)
+    assert decoder.calibration is not None
     data_len, data_blob = _abs_data_blob(6000, 500, 1000)
     decoder.feed_bin(data_len, data_blob)
     self.assertTrue(decoder.done)
@@ -195,14 +197,17 @@ class TestAbsorbanceBackend(unittest.IsolatedAsyncioTestCase):
     with patch.object(driver, "_await_measurements", side_effect=mock_await):
       with patch.object(driver, "_await_scan_terminal", new_callable=AsyncMock):
         results = await backend.read_absorbance(
-          plate=self.plate, wells=[], wavelength=600,
+          plate=self.plate,
+          wells=[],
+          wavelength=600,
           backend_params=TecanInfiniteAbsorbanceParams(),
         )
 
     self.assertEqual(len(results), 1)
     self.assertEqual(results[0].wavelength, 600)
     self.assertIsNotNone(results[0].data)
-    self.assertAlmostEqual(results[0].data[0][0], 0.3010299956639812)
+    assert results[0].data is not None
+    self.assertAlmostEqual(cast(float, results[0].data[0][0]), 0.3010299956639812)
 
 
 class TestFluorescenceBackend(unittest.IsolatedAsyncioTestCase):
@@ -234,8 +239,11 @@ class TestFluorescenceBackend(unittest.IsolatedAsyncioTestCase):
     with patch.object(driver, "_await_measurements", side_effect=mock_await):
       with patch.object(driver, "_await_scan_terminal", new_callable=AsyncMock):
         results = await backend.read_fluorescence(
-          plate=self.plate, wells=[], excitation_wavelength=485,
-          emission_wavelength=520, focal_height=20.0,
+          plate=self.plate,
+          wells=[],
+          excitation_wavelength=485,
+          emission_wavelength=520,
+          focal_height=20.0,
           backend_params=TecanInfiniteFluorescenceParams(),
         )
 
@@ -273,7 +281,9 @@ class TestLuminescenceBackend(unittest.IsolatedAsyncioTestCase):
     with patch.object(driver, "_await_measurements", side_effect=mock_await):
       with patch.object(driver, "_await_scan_terminal", new_callable=AsyncMock):
         results = await backend.read_luminescence(
-          plate=self.plate, wells=[], focal_height=14.62,
+          plate=self.plate,
+          wells=[],
+          focal_height=14.62,
           backend_params=TecanInfiniteLuminescenceParams(),
         )
 

@@ -13,15 +13,26 @@ import time
 import xml.etree.ElementTree as ET
 import zlib
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple, Union
+from typing import (
+  Any,
+  AsyncIterator,
+  Awaitable,
+  Callable,
+  Dict,
+  Iterable,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+)
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_access import PlateAccess, PlateAccessBackend, PlateAccessState
 from pylabrobot.device import Device, Driver, need_setup_finished
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.utils import label_to_row_index, split_identifier
 from pylabrobot.resources.volume_tracker import does_volume_tracking
 from pylabrobot.resources.well import Well
-from pylabrobot.resources.utils import label_to_row_index, split_identifier
 
 ET.register_namespace("SOAP-ENV", "http://schemas.xmlsoap.org/soap/envelope/")
 
@@ -44,6 +55,10 @@ DEFAULT_ECHO_CONFIGURATION_QUERY = (
 ECHO_TRANSFER_VOLUME_INCREMENT_NL = 2.5
 
 OperatorPause = Callable[[str], Union[None, Awaitable[None]]]
+
+
+def _is_loaded_plate_type(plate_type: Optional[str]) -> bool:
+  return plate_type is not None and plate_type.lower() != "none"
 
 
 class EchoError(Exception):
@@ -537,8 +552,7 @@ def _validate_transfer_volume_nl(volume_nl: float, context: str = "") -> None:
   units = volume_nl / ECHO_TRANSFER_VOLUME_INCREMENT_NL
   if abs(units - round(units)) > 1e-9:
     raise ValueError(
-      f"{prefix}volume {volume_nl} nL is not a multiple of "
-      f"{ECHO_TRANSFER_VOLUME_INCREMENT_NL} nL."
+      f"{prefix}volume {volume_nl} nL is not a multiple of {ECHO_TRANSFER_VOLUME_INCREMENT_NL} nL."
     )
 
 
@@ -566,7 +580,9 @@ def _resolve_well_reference(plate: Plate, well: Union[str, Well], role: str) -> 
   return plate.get_well(str(well))
 
 
-def _make_transfer_protocol_xml(transfers: Sequence[EchoPlannedTransfer], protocol_name: str) -> str:
+def _make_transfer_protocol_xml(
+  transfers: Sequence[EchoPlannedTransfer], protocol_name: str
+) -> str:
   protocol = ET.Element("Protocol", {"Name": protocol_name})
   ET.SubElement(protocol, "Name")
   layout = ET.SubElement(protocol, "Layout")
@@ -815,11 +831,7 @@ def _is_gzip_protocol_error(error: BaseException) -> bool:
   if not isinstance(error, EchoProtocolError):
     return False
   message = str(error).lower()
-  return (
-    "gzip" in message
-    or "compressed file ended" in message
-    or "complete gzip body" in message
-  )
+  return "gzip" in message or "compressed file ended" in message or "complete gzip body" in message
 
 
 def _first_result_value(result: _RpcResult) -> Any:
@@ -1045,9 +1057,7 @@ def _soap_fault_status(root: ET.Element) -> Optional[str]:
     return None
   fault_string = next(
     (
-      child.text
-      for child in fault.iter()
-      if _local_name(child.tag) == "faultstring" and child.text
+      child.text for child in fault.iter() if _local_name(child.tag) == "faultstring" and child.text
     ),
     "",
   )
@@ -1238,7 +1248,8 @@ class EchoDriver(Driver):
       pid = os.getpid()
     return f"{resolved_host}:{slot_a}:{slot_b}:{epoch}:{pid}"
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    del backend_params
     if self._token is None:
       self._token = self.build_token(
         self.host,
@@ -1372,11 +1383,11 @@ class EchoDriver(Driver):
 
   async def is_source_plate_present(self) -> bool:
     plate_type = await self.get_current_source_plate_type()
-    return bool(plate_type) and plate_type.lower() != "none"
+    return _is_loaded_plate_type(plate_type)
 
   async def is_destination_plate_present(self) -> bool:
     plate_type = await self.get_current_destination_plate_type()
-    return bool(plate_type) and plate_type.lower() != "none"
+    return _is_loaded_plate_type(plate_type)
 
   async def get_destination_plate_offset(self) -> Any:
     result = await self._rpc("GetDstPlateOffset")
@@ -1844,7 +1855,9 @@ class EchoDriver(Driver):
     self,
     source_plate: Plate,
     destination_plate: Plate,
-    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    transfers: Sequence[
+      Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]
+    ],
     *,
     source_plate_type: Optional[str] = None,
     destination_plate_type: Optional[str] = None,
@@ -1865,7 +1878,9 @@ class EchoDriver(Driver):
     self,
     source_plate: Plate,
     destination_plate: Plate,
-    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    transfers: Sequence[
+      Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]
+    ],
     *,
     source_plate_type: Optional[str] = None,
     destination_plate_type: Optional[str] = None,
@@ -1966,7 +1981,7 @@ class EchoDriver(Driver):
     return EchoPlateWorkflowResult(
       side="source",
       plate_type=plate_type,
-      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      plate_present=_is_loaded_plate_type(current_plate_type),
       barcode=barcode_result or "",
       current_plate_type=current_plate_type,
       dio=dio,
@@ -2002,7 +2017,7 @@ class EchoDriver(Driver):
     return EchoPlateWorkflowResult(
       side="destination",
       plate_type=plate_type,
-      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      plate_present=_is_loaded_plate_type(current_plate_type),
       barcode=barcode_result or "",
       current_plate_type=current_plate_type,
       dio=dio,
@@ -2027,7 +2042,7 @@ class EchoDriver(Driver):
     return EchoPlateWorkflowResult(
       side="source",
       plate_type=None,
-      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      plate_present=_is_loaded_plate_type(current_plate_type),
       barcode=barcode_result or "",
       current_plate_type=current_plate_type,
       dio=dio,
@@ -2052,7 +2067,7 @@ class EchoDriver(Driver):
     return EchoPlateWorkflowResult(
       side="destination",
       plate_type=None,
-      plate_present=bool(current_plate_type) and current_plate_type.lower() != "none",
+      plate_present=_is_loaded_plate_type(current_plate_type),
       barcode=barcode_result or "",
       current_plate_type=current_plate_type,
       dio=dio,
@@ -2398,8 +2413,8 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
-    await self.driver.close_source_plate(
+  ) -> Optional[str]:
+    return await self.driver.close_source_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -2415,8 +2430,8 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
-    await self.driver.close_destination_plate(
+  ) -> Optional[str]:
+    return await self.driver.close_destination_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -2832,7 +2847,9 @@ class Echo(Device):
     self,
     source_plate: Plate,
     destination_plate: Plate,
-    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    transfers: Sequence[
+      Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]
+    ],
     *,
     source_plate_type: Optional[str] = None,
     destination_plate_type: Optional[str] = None,
@@ -2869,7 +2886,9 @@ class Echo(Device):
     self,
     source_plate: Plate,
     destination_plate: Plate,
-    transfers: Sequence[Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]],
+    transfers: Sequence[
+      Union[EchoPlannedTransfer, Tuple[Union[str, Well], Union[str, Well], float]]
+    ],
     *,
     source_plate_type: Optional[str] = None,
     destination_plate_type: Optional[str] = None,

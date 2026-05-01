@@ -16,8 +16,8 @@ Sign conventions follow right-hand rule about +Z (CCW positive looking down).
 """
 
 from dataclasses import dataclass
-from math import atan2, cos, hypot, pi, radians, degrees, sin
-from typing import TYPE_CHECKING, Dict
+from math import atan2, cos, degrees, hypot, pi, radians, sin
+from typing import TYPE_CHECKING, Dict, Literal
 
 if TYPE_CHECKING:
   from pylabrobot.brooks.precise_flex import PreciseFlexGripperLocation
@@ -62,8 +62,8 @@ def fk(joints: Dict[int, float], p: PF400Params) -> "PreciseFlexGripperLocation"
   y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
   j3_wrapped = (joints[3] + 180) % 360 - 180
-  orientation = "right" if j3_wrapped >= 0 else "left"
-  wrist = "ccw" if joints[4] >= 0 else "cw"
+  orientation: Literal["right", "left"] = "right" if j3_wrapped >= 0 else "left"
+  wrist: Literal["cw", "ccw"] = "ccw" if joints[4] >= 0 else "cw"
   return PreciseFlexGripperLocation(
     location=Coordinate(x, y, z),
     rotation=Rotation(-180, 90, z=degrees(yaw)),

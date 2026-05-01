@@ -74,8 +74,6 @@ from pylabrobot.legacy.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
 )
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
-from pylabrobot.legacy.plate_reading import PlateReader
-from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -83,7 +81,6 @@ from pylabrobot.resources import (
   Lid,
   Plate,
   PlateAdapter,
-  PlateHolder,
   Resource,
   ResourceHolder,
   ResourceStack,
@@ -317,16 +314,12 @@ class _ArmAdapter(OrientableGripperArmBackend):
   def __init__(self, legacy: LiquidHandlerBackend):
     self._legacy = legacy
 
-  async def pick_up_at_location(
-    self, location, direction, resource_width, backend_params=None
-  ):
+  async def pick_up_at_location(self, location, direction, resource_width, backend_params=None):
     kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
     pickup = kw.pop("_pickup")
     await self._legacy.pick_up_resource(pickup=pickup, **kw)
 
-  async def drop_at_location(
-    self, location, direction, resource_width, backend_params=None
-  ):
+  async def drop_at_location(self, location, direction, resource_width, backend_params=None):
     kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
     drop = kw.pop("_drop")
     await self._legacy.drop_resource(drop=drop, **kw)
@@ -453,9 +446,7 @@ class LiquidHandler(Resource, Machine):
 
     # Create arm capability with adapter backend
     if self.backend.num_arms > 0:
-      self._arm_cap = OrientableArm(
-        backend=_ArmAdapter(self.backend), reference_resource=self.deck
-      )
+      self._arm_cap = OrientableArm(backend=_ArmAdapter(self.backend), reference_resource=self.deck)
       await self._arm_cap._on_setup()
 
   def serialize_state(self) -> Dict[str, Any]:
@@ -1252,7 +1243,13 @@ class LiquidHandler(Resource, Machine):
       del backend_kwargs[extra]
 
     pickup_distance_from_bottom = resource.get_size_z() - pickup_distance_from_top
-    await self._arm_cap.pick_up_resource(
+    arm_cap = self._arm_cap
+    if arm_cap is None:
+      await self.backend.pick_up_resource(resource_pickup, **backend_kwargs)
+      self._resource_pickup = resource_pickup
+      self._state_updated()
+      return
+    await arm_cap.pick_up_resource(
       resource=resource,
       offset=offset,
       pickup_distance_from_bottom=pickup_distance_from_bottom,
@@ -1289,7 +1286,11 @@ class LiquidHandler(Resource, Machine):
     )
 
     grip_dir = _LEGACY_TO_NEW_GRIP[direction or self._resource_pickup.direction]
-    await self._arm_cap.move_picked_up_resource(
+    arm_cap = self._arm_cap
+    if arm_cap is None:
+      await self.backend.move_picked_up_resource(move, **backend_kwargs)
+      return
+    await arm_cap.move_picked_up_resource(
       to=to,
       direction=grip_dir,
       offset=offset,
@@ -1405,7 +1406,35 @@ class LiquidHandler(Resource, Machine):
     )
 
     # Delegate to arm capability — handles backend call + resource tree update
-    await self._arm_cap.drop_resource(
+    arm_cap = self._arm_cap
+    if arm_cap is None:
+      await self.backend.drop_resource(drop, **backend_kwargs)
+      resource.rotate(z=resource_rotation_wrt_destination_wrt_local)
+      resource.unassign()
+      if isinstance(destination, Coordinate):
+        self.deck.assign_child_resource(resource, location=destination - self.deck.location)
+      elif isinstance(destination, ResourceHolder):
+        destination.assign_child_resource(resource)
+      elif isinstance(destination, ResourceStack):
+        destination.assign_child_resource(resource)
+      elif isinstance(destination, PlateAdapter):
+        if not isinstance(resource, Plate):
+          raise ValueError("Only plates can be moved to a PlateAdapter")
+        destination.assign_child_resource(
+          resource, location=destination.compute_plate_location(resource)
+        )
+      elif isinstance(destination, Plate) and isinstance(resource, Lid):
+        destination.assign_child_resource(resource)
+      elif isinstance(destination, Trash):
+        pass
+      else:
+        destination.assign_child_resource(
+          resource, location=destination.get_location_wrt(self.deck)
+        )
+      self._resource_pickup = None
+      self._state_updated()
+      return
+    await arm_cap.drop_resource(
       destination=destination,
       offset=offset,
       direction=_LEGACY_TO_NEW_GRIP[direction],

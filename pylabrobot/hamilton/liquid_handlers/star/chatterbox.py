@@ -2,10 +2,10 @@
 
 import logging
 
-from .autoload import STARAutoload
-from .cover import STARCover
 from pylabrobot.resources.hamilton import HamiltonDeck
 
+from .autoload import STARAutoload
+from .cover import STARCover
 from .driver import (
   DriveConfiguration,
   ExtendedConfiguration,

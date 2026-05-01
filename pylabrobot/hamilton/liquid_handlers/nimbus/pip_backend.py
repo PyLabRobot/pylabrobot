@@ -17,7 +17,6 @@ from pylabrobot.resources.trash import Trash
 
 from .commands import (
   Aspirate,
-  Dispense as DispenseCommand,
   DisableADC,
   DropTips,
   DropTipsRoll,
@@ -30,6 +29,9 @@ from .commands import (
   SetChannelConfiguration,
   _get_default_flow_rate,
   _get_tip_type_from_tip,
+)
+from .commands import (
+  Dispense as DispenseCommand,
 )
 
 if TYPE_CHECKING:
@@ -151,8 +153,9 @@ class NimbusPIPBackend(PIPBackend):
       raise RuntimeError("Pipette address not set. Call setup() first.")
     return self.address
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize SmartRoll if not already initialized."""
+    del backend_params
     # Query initialization status
     init_status = await self.driver.send_command(IsInitialized(self.driver.nimbus_core_address))
     assert init_status is not None

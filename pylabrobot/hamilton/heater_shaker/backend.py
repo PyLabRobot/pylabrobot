@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from enum import Enum
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.shaking import ShakerBackend
@@ -29,7 +29,7 @@ class HamiltonHeaterShakerBackend(
 
   async def _send_command(self, command: str, **kwargs) -> str:
     resp = await self.driver.send_command(module=f"T{self.index}", command=command, **kwargs)
-    return resp  # type: ignore[return-value]
+    return cast(str, resp)
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self._send_command("SI")
@@ -74,9 +74,7 @@ class HamiltonHeaterShakerBackend(
       if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
-        logger.error(
-          "[HHS %d] failed to start shaking within %ss timeout", self.index, timeout
-        )
+        logger.error("[HHS %d] failed to start shaking within %ss timeout", self.index, timeout)
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
