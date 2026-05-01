@@ -9896,8 +9896,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # 13 mm above it.
   iswap_rotation_drive_z_offset_above_finger_mm = 13.0
 
-  # Position is in finger-plane coords; `iswap_rotation_drive_move_z` adds
-  # the 13 mm offset to return the bottom position of the rotation drive.
+  # Z increment ranges below are in finger-plane coords (the R0 ZA reference).
+  # `iswap_rotation_drive_move_z` and `iswap_rotation_drive_request_z` apply
+  # the 13 mm offset internally to translate between deck and finger-plane Z.
   iswap_rotation_drive_z_min_increment = -187
   iswap_rotation_drive_z_max_increment = 26_661
   iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
