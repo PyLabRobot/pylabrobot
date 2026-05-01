@@ -348,6 +348,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     registration = bytes(fake_writer.buffer)
     self.assertIn(b"POST /Medman HTTP/1.1\nHost: ", registration)
     self.assertIn(b"add", gzip.decompress(registration.split(b"\r\n\r\n", 1)[1]))
+    self.assertTrue(fake_writer.closed)
 
   async def test_read_events_buffers_overread_callback_frames(self):
     await self.driver.setup()
@@ -379,6 +380,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual([event.payload for event in events], ["first", "second"])
     self.assertEqual([event.event_id for event in events], ["7000", "7001"])
+    self.assertTrue(fake_writer.closed)
 
   async def test_lock_and_unlock_toggle_driver_state(self):
     await self.driver.setup()
@@ -981,6 +983,59 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(plan.transfers[0].volume_nl, 5.0)
     self.assertIn('<wp n="A1" dn="B1" v="5" />', plan.protocol_xml)
 
+  async def test_transfer_protocol_xml_matches_echo_layout_shape(self):
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+
+    plan = build_echo_transfer_plan(
+      source_plate,
+      destination_plate,
+      [
+        ("A1", "B1", 2.5),
+        ("B2", "A3", 10.0),
+      ],
+      protocol_name="parity",
+    )
+    root = ET.fromstring(plan.protocol_xml)
+    layout = root.find("Layout")
+
+    self.assertEqual(root.tag, "Protocol")
+    self.assertEqual(root.attrib["Name"], "parity")
+    self.assertIsNotNone(root.find("Name"))
+    assert layout is not None
+    self.assertEqual(
+      [well.attrib for well in layout.findall("wp")],
+      [
+        {"n": "A1", "dn": "B1", "v": "2.5"},
+        {"n": "B2", "dn": "A3", "v": "10"},
+      ],
+    )
+
+  async def test_transfer_plan_builds_sparse_unique_source_plate_map(self):
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+
+    plan = build_echo_transfer_plan(
+      source_plate,
+      destination_plate,
+      [
+        ("A1", "B1", 2.5),
+        ("A1", "B2", 2.5),
+        ("B2", "A3", 5.0),
+      ],
+    )
+    plate_map_root = ET.fromstring(plan.plate_map.to_xml())
+
+    self.assertEqual(plan.plate_map.well_identifiers, ("A1", "B2"))
+    self.assertEqual(plate_map_root.attrib, {"p": "384PP_DMSO2"})
+    self.assertEqual(
+      [well.attrib for well in plate_map_root.findall("./Wells/Well")],
+      [
+        {"n": "A1", "r": "0", "c": "0", "wc": "", "sid": ""},
+        {"n": "B2", "r": "1", "c": "1", "wc": "", "sid": ""},
+      ],
+    )
+
   async def test_transfer_infers_plates_from_plr_wells(self):
     source_plate = _make_plate("source", "384PP_DMSO2")
     destination_plate = _make_plate("destination", "1536LDV_Dest")
@@ -1144,6 +1199,61 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result.transfers[0].fluid, "DMSO")
     self.assertEqual(len(result.skipped), 1)
     self.assertEqual(result.skipped[0].reason, "empty")
+
+  async def test_do_well_transfer_parses_multiple_report_fields(self):
+    await self.driver.setup()
+    self.driver._lock_held = True
+    fake_reader = _FakeReader(
+      _soap_response(
+        "<DoWellTransferResponse><DoWellTransfer>"
+        "<SUCCEEDED>True</SUCCEEDED><Status>Complete</Status>"
+        "<Value>"
+        "&lt;transfer date=&quot;2026-04-22&quot; serial_number=&quot;E6XX-20044&quot;&gt;"
+        "&lt;plateInfo&gt;&lt;plate name=&quot;384PP_DMSO2&quot; /&gt;"
+        "&lt;plate name=&quot;1536LDV_Dest&quot; /&gt;&lt;/plateInfo&gt;"
+        "&lt;printmap&gt;"
+        "&lt;w n=&quot;A1&quot; r=&quot;0&quot; c=&quot;0&quot; dn=&quot;B1&quot; dr=&quot;1&quot; dc=&quot;0&quot; "
+        "vt=&quot;2.5&quot; avt=&quot;2.5&quot; cvl=&quot;997.5&quot; vl=&quot;1000&quot; "
+        "fld=&quot;DMSO&quot; fct=&quot;42&quot; ft=&quot;9.5&quot; t=&quot;12:00:00&quot; /&gt;"
+        "&lt;w n=&quot;B2&quot; r=&quot;1&quot; c=&quot;1&quot; dn=&quot;C3&quot; dr=&quot;2&quot; dc=&quot;2&quot; "
+        "vt=&quot;5&quot; avt=&quot;4.5&quot; cvl=&quot;995&quot; vl=&quot;999.5&quot; /&gt;"
+        "&lt;/printmap&gt;"
+        "&lt;skippedwells&gt;"
+        "&lt;w n=&quot;A2&quot; r=&quot;0&quot; c=&quot;1&quot; dn=&quot;B2&quot; dr=&quot;1&quot; dc=&quot;1&quot; "
+        "vt=&quot;10&quot; reason=&quot;Insufficient fluid&quot; /&gt;"
+        "&lt;/skippedwells&gt;"
+        "&lt;/transfer&gt;"
+        "</Value>"
+        "</DoWellTransfer></DoWellTransferResponse>"
+      )
+    )
+
+    with patch(
+      "pylabrobot.labcyte.echo.asyncio.open_connection",
+      return_value=(fake_reader, _FakeWriter()),
+    ):
+      result = await self.driver.do_well_transfer("<Protocol />")
+
+    self.assertEqual(result.status, "Complete")
+    self.assertEqual(result.date, "2026-04-22")
+    self.assertEqual(result.serial_number, "E6XX-20044")
+    self.assertEqual(result.source_plate_type, "384PP_DMSO2")
+    self.assertEqual(result.destination_plate_type, "1536LDV_Dest")
+    self.assertEqual(len(result.transfers), 2)
+    self.assertEqual(result.transfers[0].source_identifier, "A1")
+    self.assertEqual(result.transfers[0].destination_identifier, "B1")
+    self.assertEqual(result.transfers[0].requested_volume_nl, 2.5)
+    self.assertEqual(result.transfers[0].actual_volume_nl, 2.5)
+    self.assertEqual(result.transfers[0].current_volume_nl, 997.5)
+    self.assertEqual(result.transfers[0].starting_volume_nl, 1000.0)
+    self.assertEqual(result.transfers[0].fluid_thickness, 9.5)
+    self.assertEqual(result.transfers[0].timestamp, "12:00:00")
+    self.assertEqual(result.transfers[1].actual_volume_nl, 4.5)
+    self.assertEqual(len(result.skipped), 1)
+    self.assertEqual(result.skipped[0].source_identifier, "A2")
+    self.assertEqual(result.skipped[0].destination_identifier, "B2")
+    self.assertEqual(result.skipped[0].requested_volume_nl, 10.0)
+    self.assertEqual(result.skipped[0].reason, "Insufficient fluid")
 
   async def test_transfer_wells_updates_volume_trackers_after_successful_report(self):
     await self.driver.setup()
