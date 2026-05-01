@@ -109,6 +109,9 @@ def ik(pose: GripperLocation, c: KX2Config, t: GripperParams) -> Dict[Axis, floa
   y = pose.location.y + gl * cos(yaw)
   wrist_z = pose.location.z + t.z_offset
 
+  # atan2 returns (-π, π]; on the -Y axis it yields -180°. Snap to +180°
+  # so the boundary lands on the "in-range" side of an exclusive max
+  # convention and downstream sign comparisons are stable.
   shoulder = -degrees(atan2(x, y))
   if abs(shoulder + 180.0) < _EPS:
     shoulder = 180.0

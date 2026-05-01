@@ -1093,8 +1093,8 @@ class KX2Driver(Driver):
         return True
       fault = await self.motor_get_fault(node_id)
       if fault is not None:
-        raise RuntimeError(f"Motor Fault: {fault}")
-      raise RuntimeError("Motor Fault (Unknown)")
+        raise RuntimeError(f"Motor Fault: Axis {node_id} {fault}")
+      raise RuntimeError(f"Motor Fault: Axis {node_id} (Unknown)")
     return False
 
   async def motor_get_fault(self, node_id: int) -> Optional[str]:
@@ -1331,7 +1331,7 @@ class KX2Driver(Driver):
         node_id, attempt, max_attempts,
       )
     raise CanError(
-      f"node {node_id}: drive did not accept new PPM setpoint after "
+      f"Axis {node_id}: drive did not accept new PPM setpoint after "
       f"{max_attempts} attempts (SW bit 12 never went high after CW bit 4 "
       f"rising edge)"
     )
