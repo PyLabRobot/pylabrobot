@@ -377,7 +377,7 @@ def plan_joint_move(
       continue
     v[ax], a[ax], _, total_time[ax] = _profile(dist[ax], v[ax], a[ax])
 
-  # Sync total times to the lead axis.
+  # Sync total times to the lead axis so all axes finish together.
   lead_time_ax = max(axes, key=lambda ax: total_time[ax])
   lead_T = total_time[lead_time_ax]
   for ax in axes:

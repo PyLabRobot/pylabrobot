@@ -1048,8 +1048,9 @@ class KX2Driver(Driver):
     val = await self.query_int(node_id, "MF", 0)
     if val == 0:
       return None
-
-    faults: list[str] = []
+    # Elmo MF register: most faults are independent single bits. Bits 13/14/15
+    # are different — they form a 3-bit selector (b15<<2 | b14<<1 | b13) where
+    # only four combinations are real faults; the rest mean nothing.
     bit_msgs = {
       0x0001: "Motor Hall sensor feedback angle not found yet.",
       0x0004: "Feedback loss: no match between encoder and Hall location.",
@@ -1070,22 +1071,16 @@ class KX2Driver(Driver):
       0x400000: "Position limit exceeded.",
       0x20000000: "Cannot start motor.",
     }
-    for bit, msg in bit_msgs.items():
-      if val & bit:
-        faults.append(msg)
-
-    b13 = bool(val & 0x2000)
-    b14 = bool(val & 0x4000)
-    b15 = bool(val & 0x8000)
-    if (not b15) and (not b14) and b13:
-      faults.append("Power supply under voltage.")
-    if (not b15) and b14 and (not b13):
-      faults.append("Power supply over voltage.")
-    if b15 and (not b14) and b13:
-      faults.append("Motor lead short circuit or faulty drive.")
-    if b15 and b14 and (not b13):
-      faults.append("Drive overheated.")
-
+    triplet_msgs = {
+      0b001: "Power supply under voltage.",                # b13 only
+      0b010: "Power supply over voltage.",                 # b14 only
+      0b101: "Motor lead short circuit or faulty drive.",  # b13 + b15
+      0b110: "Drive overheated.",                          # b14 + b15
+    }
+    faults = [msg for bit, msg in bit_msgs.items() if val & bit]
+    triplet = (val >> 13) & 0b111
+    if triplet in triplet_msgs:
+      faults.append(triplet_msgs[triplet])
     if not faults:
       return f"Unknown fault code: {val} (0x{val:08X})"
     return "  ".join(faults)
@@ -1144,6 +1139,30 @@ class KX2Driver(Driver):
 
   # --- motion primitives --------------------------------------------------
 
+  async def _set_op_mode(self, node_id: int, mode: int, timeout_s: float = 0.05) -> None:
+    """Write 0x6060 (modes_of_operation) and poll 0x6061 (modes_of_operation_display)
+    until the drive acknowledges. CiA 402 §6.2: 0x6060 is the request, 0x6061 is
+    the actual mode — issuing a move (0x607A or 0x60C1 write) before the drive
+    flips reads the actual mode races the mode change. Drives typically ack in
+    <5 ms; timeout is generous so a busy bus doesn't false-fail.
+
+    See https://www.stober.jp/manual/manual-commissioning-instruction-cia402-443080-01-en.pdf
+    for a CiA 402 commissioning reference (object table, mode codes, state machine).
+    """
+    await self._can_sdo_download(node_id, 0x60, 0x60, 0x00, [mode])
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    while True:
+      raw = await self._can_sdo_upload(node_id, 0x60, 0x61, 0x00)
+      actual = struct.unpack("<b", raw[:1])[0] if raw else None  # INTEGER8
+      if actual == mode:
+        return
+      if asyncio.get_event_loop().time() >= deadline:
+        raise CanError(
+          f"node {node_id}: 0x6061 modes_of_operation_display = {actual}, "
+          f"expected {mode} after {timeout_s * 1000:.0f}ms — drive didn't ack mode change"
+        )
+      await asyncio.sleep(0.005)
+
   async def pvt_select_mode(self, enable: bool) -> None:
     """Enable/disable PVT mode on all motion axes via standard SDO writes."""
     if enable:
@@ -1151,17 +1170,15 @@ class KX2Driver(Driver):
         for nid in self.motion_node_ids:
           # 0x60C4 sub 6 = 0 (disable interpolation buffer)
           await self._can_sdo_download(nid, 0x60, 0xC4, 0x06, [0])
-          # 0x6060 = 7 (interpolated position mode)
-          await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [7])
+          await self._set_op_mode(nid, 7)  # interpolated position mode
         self._pvt_mode = True
       else:
         for nid in self.motion_node_ids:
-          await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [1])
+          await self._set_op_mode(nid, 1)
     else:
       if self._pvt_mode:
         for nid in self.motion_node_ids:
-          # 0x6060 = 1 (profile position mode)
-          await self._can_sdo_download(nid, 0x60, 0x60, 0x00, [1])
+          await self._set_op_mode(nid, 1)  # profile position mode
         self._pvt_mode = False
 
   async def wait_for_moves_done(
