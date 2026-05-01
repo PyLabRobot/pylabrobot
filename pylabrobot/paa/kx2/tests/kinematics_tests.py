@@ -69,6 +69,27 @@ class FKIKRoundTrip(unittest.TestCase):
     self.assertAlmostEqual(joints[Axis.Z], 10.0, places=9)
     self.assertAlmostEqual(joints[Axis.WRIST], 0.0, places=9)
 
+  def test_z_offset_sign_convention(self):
+    """Pin the documented convention: positive z_offset = clamp sits below
+    the wrist plate (in world frame, +Z up). FK with the same Z joint and
+    a larger z_offset must produce a *lower* gripper z; IK must require a
+    *higher* wrist Z to reach the same gripper z."""
+    c = _config()
+    joints = {Axis.SHOULDER: 0.0, Axis.Z: 100.0, Axis.ELBOW: 50.0, Axis.WRIST: 0.0}
+    g_low = GripperParams(z_offset=0.0)
+    g_high = GripperParams(z_offset=10.0)
+    self.assertGreater(
+      kinematics.fk(joints, c, g_low).location.z,
+      kinematics.fk(joints, c, g_high).location.z,
+      "FK: increasing z_offset should lower the gripper",
+    )
+    pose = GripperLocation(location=Coordinate(x=0, y=300, z=50), rotation=Rotation(z=0))
+    self.assertGreater(
+      kinematics.ik(pose, c, g_high)[Axis.Z],
+      kinematics.ik(pose, c, g_low)[Axis.Z],
+      "IK: increasing z_offset should raise the wrist target",
+    )
+
 
 class IKErrors(unittest.TestCase):
   def test_x_rotation_raises_ikerror(self):

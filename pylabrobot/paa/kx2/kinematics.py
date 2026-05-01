@@ -202,6 +202,17 @@ def plan_joint_move(
   ``request_joint_position`` (linear-extension units for elbow). Returns
   ``None`` if every axis would be a no-op (within 0.01 of current).
 
+  ``target`` may be a subset of axes (e.g. ``{Axis.Z: 100}``) — unspecified
+  axes don't move.
+
+  ``current`` must include all four arm axes (SHOULDER/Z/ELBOW/WRIST) when
+  a gripper-speed/accel cap is given: the cap helper evaluates the FK
+  Jacobian at the start pose, and the column for any moving axis depends
+  on the absolute position of every other arm axis (the radius from the
+  shoulder enters the shoulder Jacobian, etc.). The orchestrator always
+  passes a full ``current`` from ``request_joint_position``; tests calling
+  this function directly must do the same.
+
   ``max_gripper_speed`` / ``max_gripper_acceleration`` cap joint velocities
   so the worst-case Cartesian gripper speed/accel along the trajectory
   stays at or under the cap.
@@ -294,10 +305,20 @@ def plan_joint_move(
   # path in `fk`'s natural units. Servo gripper isn't in fk, so it always
   # runs at firmware max regardless of cap.
   arm_axes = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
-  fk_start = {ax: curr_cmd_units[ax] for ax in arm_axes if ax in curr_cmd_units}
-  fk_deltas = {ax: cap_deltas.get(ax, 0.0) for ax in arm_axes if ax in fk_start}
   capped_v: Dict[Axis, float] = {}
   capped_a: Dict[Axis, float] = {}
+  cap_requested = max_gripper_speed is not None or max_gripper_acceleration is not None
+  cap_relevant = any(ax in arm_axes for ax in axes)
+  if cap_requested and cap_relevant:
+    missing = [ax for ax in arm_axes if ax not in curr_cmd_units]
+    if missing:
+      raise ValueError(
+        f"max_gripper_speed/acceleration requires `current` to include all "
+        f"four arm axes (SHOULDER/Z/ELBOW/WRIST); missing: "
+        f"{[ax.name for ax in missing]}"
+      )
+  fk_start = {ax: curr_cmd_units[ax] for ax in arm_axes if ax in curr_cmd_units}
+  fk_deltas = {ax: cap_deltas.get(ax, 0.0) for ax in arm_axes if ax in fk_start}
   fk_loc = lambda j: fk(j, cfg, gripper_params).location
   if max_gripper_speed is not None and fk_start:
     result = arm_kinematics.joint_velocities_for_max_gripper_speed(

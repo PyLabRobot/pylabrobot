@@ -186,6 +186,7 @@ class MotorsMovePlan:
 _BI_REQUEST_COB_BASE = 0x300
 _BI_RESPONSE_COB_BASE = 0x280
 _EMCY_COB_BASE = 0x80
+_TPDO3_COB_BASE = 0x380
 _GROUP_NODE_ID = 10
 
 logger = logging.getLogger(__name__)
@@ -445,6 +446,13 @@ class KX2Driver(Driver):
       Callable[[int, EmcyFrame, str, bool], None]
     ] = []
 
+    # StatusWord (0x6041) push-cache from TPDO3, COB-ID 0x380+node_id. The
+    # canopen listener thread parses the 2-byte SW out of each TPDO3 frame and
+    # marshals (sw, set_event) onto the asyncio loop. _wait_setpoint_ack reads
+    # the cache + waits on the event instead of polling 0x6041 via SDO.
+    self._statusword: Dict[int, int] = {}
+    self._statusword_event: Dict[int, asyncio.Event] = {}
+
   @property
   def loop(self) -> asyncio.AbstractEventLoop:
     """Event loop captured in setup(). Raises if accessed before setup()."""
@@ -507,14 +515,24 @@ class KX2Driver(Driver):
 
     logger.info("canopen: connected, nodes=%s", discovered)
 
-    # Unmap TPDO1, map TPDO3 (StatusWord, triggered on MotionComplete) and
-    # TPDO4 (DigitalInputs, triggered on edge). TPDO3 is kept mapped to match
-    # the C# reference config, but move completion is detected by polling MS
-    # (the MotionComplete event is unreliable on short moves).
+    # TPDO3 push for StatusWord (0x6041) so _wait_setpoint_ack can wait on
+    # the bit-12 transition without an SDO round-trip per poll. Subscribe
+    # before remapping so we don't lose the first frame the drive emits
+    # when the new event-trigger arms. 1 ms inhibit (10 * 100 us) caps
+    # bus traffic — SW changes happen at the ~1-2 ms servo cycle, so the
+    # inhibit doesn't lose edges in practice and keeps the bus quiet
+    # during PVT streaming if anyone resurrects the IPM runtime.
+    for nid in self.motion_node_ids:
+      self._statusword_event[nid] = asyncio.Event()
+      network.subscribe(_TPDO3_COB_BASE + nid, self._make_tpdo3_callback(nid))
+
+    # Unmap TPDO1, map TPDO3 (StatusWord, triggered on any SW change) and
+    # TPDO4 (DigitalInputs, triggered on edge).
     for node_id in self.node_id_list:
       await self._can_tpdo_unmap(TPDO.TPDO1, node_id)
       await self._tpdo_map(
-        TPDO.TPDO3, node_id, [TPDOMappedObject.StatusWord], TPDOTrigger.MotionComplete
+        TPDO.TPDO3, node_id, [TPDOMappedObject.StatusWord],
+        TPDOTrigger.StatusWordEvent, delay_100_us=10,
       )
       await self._tpdo_map(
         TPDO.TPDO4, node_id, [TPDOMappedObject.DigitalInputs], TPDOTrigger.DigitalInputEvent
@@ -561,6 +579,8 @@ class KX2Driver(Driver):
       self.emcy_move_error = ""
       self.emcy_move_error_node_id = None
       self.last_emcy = None
+      self._statusword = {}
+      self._statusword_event = {}
 
   # --- PDO configuration (pure SDO writes; no library-PDO machinery) ------
 
@@ -573,8 +593,8 @@ class KX2Driver(Driver):
     node_id &= 0x7F
     num1 = ((cob_type_int & 0x01) << 7) | node_id
     num2 = (cob_type_int >> 1) & 0x07
-    await self._can_sdo_download(node_id, 0x18, tpdo.value - 1, 1, [num1, num2, 0, 0xC0])
-    await self._can_sdo_download(node_id, 0x1A, tpdo.value - 1, 0, [0, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x1800 + tpdo.value - 1, 1, [num1, num2, 0, 0xC0])
+    await self._can_sdo_download(node_id, 0x1A00 + tpdo.value - 1, 0, [0, 0, 0, 0])
 
   async def _rpdo_map(
     self,
@@ -590,22 +610,22 @@ class KX2Driver(Driver):
     cob_id_11 = ((int(cob_type) & 0x0F) << 7) | (node_id & 0x7F)
 
     # Disable PDO (bit 31 set)
-    await self._can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(0x80000000 | cob_id_11))
+    await self._can_sdo_download(node_id, 0x1400 + rpdo_idx, 1, _u32_le(0x80000000 | cob_id_11))
     # Clear mapping count
-    await self._can_sdo_download(node_id, 0x16, rpdo_idx, 0, [0, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x1600 + rpdo_idx, 0, [0, 0, 0, 0])
     # Transmission type
     await self._can_sdo_download(
-      node_id, 0x14, rpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
+      node_id, 0x1400 + rpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
     )
     # Mapped objects
     for i, mo in enumerate(mapped_objects):
-      await self._can_sdo_download(node_id, 0x16, rpdo_idx, i + 1, _u32_le(int(mo)))
+      await self._can_sdo_download(node_id, 0x1600 + rpdo_idx, i + 1, _u32_le(int(mo)))
     # Mapping count
     await self._can_sdo_download(
-      node_id, 0x16, rpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
+      node_id, 0x1600 + rpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
     )
     # Re-enable (clear bit 31)
-    await self._can_sdo_download(node_id, 0x14, rpdo_idx, 1, _u32_le(cob_id_11))
+    await self._can_sdo_download(node_id, 0x1400 + rpdo_idx, 1, _u32_le(cob_id_11))
 
   async def _tpdo_map(
     self,
@@ -625,55 +645,44 @@ class KX2Driver(Driver):
     event_mask = 1 << int(event_trigger)
 
     # Disable TPDO (bit 30 + 31)
-    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(0xC0000000 | cob_id_11))
+    await self._can_sdo_download(node_id, 0x1800 + tpdo_idx, 1, _u32_le(0xC0000000 | cob_id_11))
     # Clear mapping count
-    await self._can_sdo_download(node_id, 0x1A, tpdo_idx, 0, [0, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x1A00 + tpdo_idx, 0, [0, 0, 0, 0])
     # Transmission type
     await self._can_sdo_download(
-      node_id, 0x18, tpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
+      node_id, 0x1800 + tpdo_idx, 2, [int(transmission_type) & 0xFF, 0, 0, 0]
     )
     # Inhibit / delay 100us
-    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 3, [delay_100_us & 0xFF, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x1800 + tpdo_idx, 3, [delay_100_us & 0xFF, 0, 0, 0])
     # Event timer (ms)
-    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 5, [event_timer_ms & 0xFF, 0, 0, 0])
+    await self._can_sdo_download(node_id, 0x1800 + tpdo_idx, 5, [event_timer_ms & 0xFF, 0, 0, 0])
     # Vendor event mask at 0x2F20:<tpdo_num>
-    await self._can_sdo_download(node_id, 0x2F, 0x20, int(tpdo) & 0xFF, _u32_le(event_mask))
+    await self._can_sdo_download(node_id, 0x2F20, int(tpdo) & 0xFF, _u32_le(event_mask))
     # Mapped objects
     for i, mo in enumerate(mapped_objects):
-      await self._can_sdo_download(node_id, 0x1A, tpdo_idx, i + 1, _u32_le(int(mo)))
+      await self._can_sdo_download(node_id, 0x1A00 + tpdo_idx, i + 1, _u32_le(int(mo)))
     # Mapping count
     await self._can_sdo_download(
-      node_id, 0x1A, tpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
+      node_id, 0x1A00 + tpdo_idx, 0, [len(mapped_objects) & 0xFF, 0, 0, 0]
     )
     # Re-enable (clear bits 30 + 31)
-    await self._can_sdo_download(node_id, 0x18, tpdo_idx, 1, _u32_le(cob_id_11))
+    await self._can_sdo_download(node_id, 0x1800 + tpdo_idx, 1, _u32_le(cob_id_11))
 
   # --- SDO -----------------------------------------------------------------
 
   async def _can_sdo_upload(
-    self,
-    node_id: int,
-    object_byte0: int,
-    object_byte1: int,
-    sub_index: int,
+    self, node_id: int, index: int, sub_index: int,
   ) -> bytes:
-    index = (object_byte0 << 8) | object_byte1
-    node = self._nodes[node_id]
     # node.sdo.upload is blocking I/O (library handles expedited + segmented
     # transfers + abort codes); run off the event loop.
-    return await asyncio.to_thread(node.sdo.upload, index, sub_index)
+    return await asyncio.to_thread(self._nodes[node_id].sdo.upload, index, sub_index)
 
   async def _can_sdo_download(
-    self,
-    node_id: int,
-    object_byte0: int,
-    object_byte1: int,
-    sub_index: int,
-    data_byte: List[int],
+    self, node_id: int, index: int, sub_index: int, data: List[int],
   ) -> None:
-    index = (object_byte0 << 8) | object_byte1
-    node = self._nodes[node_id]
-    await asyncio.to_thread(node.sdo.download, index, sub_index, bytes(data_byte))
+    await asyncio.to_thread(
+      self._nodes[node_id].sdo.download, index, sub_index, bytes(data),
+    )
 
   async def can_sdo_download_elmo_object(
     self,
@@ -699,10 +708,7 @@ class KX2Driver(Driver):
       raise CanError(f"Unsupported data type for SDO Write: {data_type.name}")
     width, signed = spec
     data_bytes = list(int(data).to_bytes(width, "little", signed=signed))
-
-    obj_byte0 = elmo_object_int >> 8
-    obj_byte1 = elmo_object_int & 0xFF
-    await self._can_sdo_download(node_id, obj_byte0, obj_byte1, sub_index, data_bytes)
+    await self._can_sdo_download(node_id, elmo_object_int, sub_index, data_bytes)
 
   # --- EMCY (CANopen Emergency, COB-ID 0x80 + node_id) --------------------
 
@@ -780,6 +786,32 @@ class KX2Driver(Driver):
         cb(node_id, frame, desc, disable_motors)
       except Exception:
         logger.exception("EMCY user callback raised; continuing")
+
+  def _make_tpdo3_callback(self, node_id: int):
+    """Return a callback that decodes TPDO3 (StatusWord) and signals waiters."""
+
+    def _cb(cob_id: int, data: bytes, timestamp: float) -> None:
+      if self._loop is None:
+        return
+      if len(data) < 2:
+        # StatusWord is 2 bytes — a shorter frame means the drive's TPDO3
+        # mapping is wrong or a different sender is squatting on the COB-ID.
+        # _wait_setpoint_ack would silently fall back to SDO probing forever.
+        logger.warning(
+          "TPDO3 frame too short from node %d: %s (expected >=2 bytes)",
+          node_id, bytes(data).hex(),
+        )
+        return
+      sw = int.from_bytes(bytes(data[:2]), "little")
+      self._loop.call_soon_threadsafe(self._dispatch_statusword, node_id, sw)
+
+    return _cb
+
+  def _dispatch_statusword(self, node_id: int, sw: int) -> None:
+    self._statusword[node_id] = sw
+    ev = self._statusword_event.get(node_id)
+    if ev is not None:
+      ev.set()
 
   # --- Elmo binary interpreter (vendor protocol on TPDO2/RPDO2) ------------
 
@@ -1149,10 +1181,10 @@ class KX2Driver(Driver):
     See https://www.stober.jp/manual/manual-commissioning-instruction-cia402-443080-01-en.pdf
     for a CiA 402 commissioning reference (object table, mode codes, state machine).
     """
-    await self._can_sdo_download(node_id, 0x60, 0x60, 0x00, [mode])
+    await self._can_sdo_download(node_id, 0x6060, 0x00, [mode])
     deadline = asyncio.get_event_loop().time() + timeout_s
     while True:
-      raw = await self._can_sdo_upload(node_id, 0x60, 0x61, 0x00)
+      raw = await self._can_sdo_upload(node_id, 0x6061, 0x00)
       actual = struct.unpack("<b", raw[:1])[0] if raw else None  # INTEGER8
       if actual == mode:
         return
@@ -1169,12 +1201,18 @@ class KX2Driver(Driver):
       if not self._pvt_mode:
         for nid in self.motion_node_ids:
           # 0x60C4 sub 6 = 0 (disable interpolation buffer)
-          await self._can_sdo_download(nid, 0x60, 0xC4, 0x06, [0])
+          await self._can_sdo_download(nid, 0x60C4, 0x06, [0])
           await self._set_op_mode(nid, 7)  # interpolated position mode
         self._pvt_mode = True
       else:
+        # Re-arm: drop to PPM, reset the interpolation-buffer pointer, climb
+        # back into IPM. Mirrors C# PVTSelectMode true-and-already-in-PVT
+        # (clscanmotor.cs:6014-6031). Skipping any of the three steps leaves
+        # the drive in the wrong mode or with a stale IP buffer.
         for nid in self.motion_node_ids:
           await self._set_op_mode(nid, 1)
+          await self._can_sdo_download(nid, 0x60C4, 0x06, [0])
+          await self._set_op_mode(nid, 7)
     else:
       if self._pvt_mode:
         for nid in self.motion_node_ids:
@@ -1278,18 +1316,41 @@ class KX2Driver(Driver):
   async def _wait_setpoint_ack(
     self, node_id: int, *, want_high: bool, timeout: float = 0.05
   ) -> bool:
-    """Poll 0x6041 bit 12 until it matches ``want_high`` (or timeout).
+    """Wait until 0x6041 bit 12 matches ``want_high`` (or timeout).
 
-    Returns True on success, False on timeout. 50ms is plenty: this drive
-    flips bit 12 within a servo cycle (~1-2ms) when it sees the edge."""
+    TPDO3 maps StatusWord with the StatusWordEvent trigger; the canopen
+    listener thread parses each frame into self._statusword[node_id] and
+    signals self._statusword_event[node_id]. We wait on the event, with
+    a 5 ms grace before falling back to an SDO probe — covers the case
+    where the drive's event-trigger config didn't take and TPDO3 is
+    silent. 50 ms total is plenty: bit 12 flips within a servo cycle
+    (~1-2 ms) once the drive sees the edge.
+    """
     assert self._loop is not None
+    ev = self._statusword_event.get(node_id)
     deadline = self._loop.time() + timeout
     while self._loop.time() < deadline:
-      raw = await self._can_sdo_upload(node_id, 0x60, 0x41, 0x00)
-      sw = int.from_bytes(raw[:2], "little")
-      if bool(sw & (1 << 12)) == want_high:
+      sw = self._statusword.get(node_id)
+      if sw is not None and bool(sw & (1 << 12)) == want_high:
         return True
-      await asyncio.sleep(0.001)
+      if ev is None:
+        # No subscription (drive outside motion_node_ids); SDO poll only.
+        raw = await self._can_sdo_upload(node_id, 0x6041, 0x00)
+        sw = int.from_bytes(raw[:2], "little")
+        if bool(sw & (1 << 12)) == want_high:
+          return True
+        await asyncio.sleep(0.001)
+        continue
+      ev.clear()
+      try:
+        remaining = max(0.0, deadline - self._loop.time())
+        await asyncio.wait_for(ev.wait(), timeout=min(remaining, 0.005))
+      except asyncio.TimeoutError:
+        # TPDO3 didn't fire within 5 ms — probe via SDO and update the
+        # cache so subsequent waits start from the latest known SW.
+        raw = await self._can_sdo_upload(node_id, 0x6041, 0x00)
+        sw = int.from_bytes(raw[:2], "little")
+        self._statusword[node_id] = sw
     return False
 
   async def user_program_run(
@@ -1379,8 +1440,8 @@ class KX2Driver(Driver):
     """
     await self._control_word_set(node_id, 271)
     await asyncio.sleep(settle)
-    await self._can_sdo_download(node_id, 0x60, 0x60, 0x00, [7])
-    await self._can_sdo_download(node_id, 0x60, 0x60, 0x00, [1])
+    await self._can_sdo_download(node_id, 0x6060, 0x00, [7])
+    await self._can_sdo_download(node_id, 0x6060, 0x00, [1])
 
   async def read_input_logic(self, node_id: int, input_num: int) -> int:
     return await self.query_int(node_id, "IL", input_num)
