@@ -21,7 +21,7 @@ Supported operations:
 - run `PlateSurvey`, retrieve `GetSurveyData`, and run `DryPlate`
 - build Echo protocol XML from PLR source wells, destination wells, and volumes
 - execute an existing Echo transfer protocol XML with `do_well_transfer()`
-- execute PLR-native transfers with `transfer_wells()`
+- execute PLR-native transfers with `transfer()` or `transfer_wells()`
 - parse transfer reports into completed and skipped wells
 - update PLR volume trackers from survey and transfer results when volume tracking is enabled
 - run source/destination load and eject workflows with caller-provided operator pauses
@@ -51,7 +51,9 @@ Survey notes:
 Transfer notes:
 
 - `do_well_transfer()` is a thin wrapper around the Echo `DoWellTransfer` RPC
-- `transfer_wells()` builds the Echo protocol XML from PLR wells and executes it
+- `transfer()` accepts PLR wells directly, infers the source/destination plates, and executes them
+- `transfer_wells()` builds the Echo protocol XML from explicit plates plus well references and
+  executes it
 - `EchoTransferPrintOptions` controls the nested `PrintOptions` payload
 - Echo transfer volumes are in nL by default; pass `volume_unit="uL"` to use PLR-style uL inputs
 - successful transfer reports update PLR volume trackers only when PLR volume tracking is enabled
@@ -266,10 +268,8 @@ async def main(source_plate, destination_plate):
   async with Echo(host="192.168.0.25") as echo:
     await echo.lock()
     try:
-      result = await echo.transfer_wells(
-        source_plate,
-        destination_plate,
-        [("A1", "B1", 5.0)],  # Echo-native nL by default.
+      result = await echo.transfer(
+        [(source_plate.get_well("A1"), destination_plate.get_well("B1"), 5.0)],
         source_plate_type="384PP_DMSO2",
         destination_plate_type="1536LDV_Dest",
         do_survey=True,
@@ -280,11 +280,13 @@ async def main(source_plate, destination_plate):
       await echo.unlock()
 ```
 
-`transfer_wells()` performs the observed Echo flow: source/destination checks, sparse source
-`SetPlateMap`, optional source survey, status reads, protocol XML generation, `DoWellTransfer`, and
-structured report parsing. When volume tracking is enabled, survey data can set measured source
-volumes and successful transfer report entries move actual dispensed volume from source wells to
-destination wells.
+`transfer()` is the high-level PLR API. It accepts `Well` objects, infers one source plate and one
+destination plate from their parents, and then uses the same execution path as `transfer_wells()`.
+Use `transfer_wells()` when the caller has plate objects plus string well identifiers. Both methods
+perform the observed Echo flow: source/destination checks, sparse source `SetPlateMap`, optional
+source survey, status reads, protocol XML generation, `DoWellTransfer`, and structured report
+parsing. When volume tracking is enabled, survey data can set measured source volumes and successful
+transfer report entries move actual dispensed volume from source wells to destination wells.
 
 ## Scope
 

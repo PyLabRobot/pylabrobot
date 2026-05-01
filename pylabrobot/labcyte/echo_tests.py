@@ -544,7 +544,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
         "<SUCCEEDED>True</SUCCEEDED>"
         "<Status>OK</Status>"
         "<PlateSurveyData>"
-        '<platesurvey p="384PP_DMSO2">'
+        '<platesurvey p="384PP_DMSO2" barcode="1234567890">'
         '<Well n="A1" r="0" c="0" comp="1.83" />'
         '<Well n="B2" r="1" c="1" comp="1.75" />'
         "</platesurvey>"
@@ -563,6 +563,8 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
     assert data is not None
     self.assertEqual(data.plate_type, "384PP_DMSO2")
+    self.assertEqual(data.barcode, "1234567890")
+    self.assertEqual(data.raw_attributes["barcode"], "1234567890")
     self.assertEqual([well.identifier for well in data.wells], ["A1", "B2"])
     self.assertEqual(data.wells[0].raw_attributes["comp"], "1.83")
     self.assertIn("<platesurvey", data.raw_xml)
@@ -979,6 +981,60 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(plan.transfers[0].volume_nl, 5.0)
     self.assertIn('<wp n="A1" dn="B1" v="5" />', plan.protocol_xml)
 
+  async def test_transfer_infers_plates_from_plr_wells(self):
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+    transfer_result = EchoTransferResult(report_xml=None, raw={}, status="OK")
+    self.driver.transfer_wells = AsyncMock(return_value=transfer_result)
+
+    result = await self.driver.transfer(
+      [
+        (
+          source_plate.get_well("A1"),
+          destination_plate.get_well("B1"),
+          2.5,
+        )
+      ],
+      do_survey=False,
+    )
+
+    self.assertEqual(result, transfer_result)
+    self.driver.transfer_wells.assert_awaited_once_with(
+      source_plate,
+      destination_plate,
+      [
+        (
+          source_plate.get_well("A1"),
+          destination_plate.get_well("B1"),
+          2.5,
+        )
+      ],
+      source_plate_type=None,
+      destination_plate_type=None,
+      protocol_name="transfer",
+      volume_unit="nL",
+      do_survey=False,
+      close_door_before_transfer=True,
+      print_options=None,
+      timeout=None,
+      survey_timeout=None,
+      update_volume_trackers=True,
+    )
+
+  async def test_transfer_rejects_multiple_source_plates(self):
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    other_source_plate = _make_plate("other-source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+
+    with self.assertRaisesRegex(ValueError, "one source plate"):
+      await self.driver.transfer(
+        [
+          (source_plate.get_well("A1"), destination_plate.get_well("B1"), 2.5),
+          (other_source_plate.get_well("A1"), destination_plate.get_well("B2"), 2.5),
+        ],
+        do_survey=False,
+      )
+
   async def test_store_parameter_serializes_scalar_type(self):
     await self.driver.setup()
     fake_writer = _FakeWriter()
@@ -1358,6 +1414,7 @@ class TestEchoDevice(unittest.IsolatedAsyncioTestCase):
       plate_present=True,
     )
     echo.driver.transfer_wells = AsyncMock(return_value=transfer_result)
+    echo.driver.transfer = AsyncMock(return_value=transfer_result)
     echo.driver.load_source_plate = AsyncMock(return_value=load_result)
 
     returned_transfer = await echo.transfer_wells(
@@ -1366,11 +1423,29 @@ class TestEchoDevice(unittest.IsolatedAsyncioTestCase):
       [("A1", "B1", 2.5)],
       do_survey=False,
     )
+    returned_inferred_transfer = await echo.transfer(
+      [(source_plate.get_well("A1"), destination_plate.get_well("B1"), 2.5)],
+      do_survey=False,
+    )
     returned_load = await echo.load_source_plate("384PP_DMSO2")
 
     self.assertEqual(returned_transfer, transfer_result)
+    self.assertEqual(returned_inferred_transfer, transfer_result)
     self.assertEqual(returned_load, load_result)
     echo.driver.transfer_wells.assert_awaited_once()
+    echo.driver.transfer.assert_awaited_once_with(
+      [(source_plate.get_well("A1"), destination_plate.get_well("B1"), 2.5)],
+      source_plate_type=None,
+      destination_plate_type=None,
+      protocol_name="transfer",
+      volume_unit="nL",
+      do_survey=False,
+      close_door_before_transfer=True,
+      print_options=None,
+      timeout=None,
+      survey_timeout=None,
+      update_volume_trackers=True,
+    )
     echo.driver.load_source_plate.assert_awaited_once_with(
       "384PP_DMSO2",
       barcode_location="Right-Side",

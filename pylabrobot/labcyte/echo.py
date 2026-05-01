@@ -196,6 +196,7 @@ class EchoSurveyData:
   plate_type: Optional[str]
   wells: list[EchoSurveyWell]
   raw_xml: str
+  raw_attributes: Dict[str, str] = field(default_factory=dict)
 
   @classmethod
   def from_xml(cls, xml_text: str) -> "EchoSurveyData":
@@ -257,7 +258,25 @@ class EchoSurveyData:
         )
       )
 
-    return cls(plate_type=plate_type, wells=wells, raw_xml=normalized_xml)
+    return cls(
+      plate_type=plate_type,
+      wells=wells,
+      raw_xml=normalized_xml,
+      raw_attributes={str(key): str(value) for key, value in root.attrib.items()},
+    )
+
+  @property
+  def barcode(self) -> Optional[str]:
+    """Return the plate barcode when Echo included one in the survey payload."""
+
+    for key, value in self.raw_attributes.items():
+      normalized_key = key.lower().replace("_", "")
+      if normalized_key in {"barcode", "platebarcode", "srcbarcode", "sourcebarcode", "bc"}:
+        return value
+    for key, value in self.raw_attributes.items():
+      if "barcode" in key.lower():
+        return value
+    return None
 
   def apply_volumes_to_plate(self, plate: Plate, *, prefer_current: bool = True) -> int:
     """Set PLR well volumes from Echo survey volume fields.
@@ -354,6 +373,41 @@ class EchoTransferPlan:
   transfers: Tuple[EchoPlannedTransfer, ...]
   protocol_xml: str
   plate_map: EchoPlateMap
+
+
+EchoTransferInput = Union[EchoPlannedTransfer, Tuple[Well, Well, float]]
+
+
+def _infer_transfer_plates(transfers: Sequence[EchoTransferInput]) -> Tuple[Plate, Plate]:
+  source_plate: Optional[Plate] = None
+  destination_plate: Optional[Plate] = None
+
+  for transfer in transfers:
+    if isinstance(transfer, EchoPlannedTransfer):
+      source = transfer.source
+      destination = transfer.destination
+    else:
+      source, destination, _volume = transfer
+
+    if not isinstance(source.parent, Plate):
+      raise ValueError(f"Source well {source.name!r} is not assigned to a PLR Plate.")
+    if not isinstance(destination.parent, Plate):
+      raise ValueError(f"Destination well {destination.name!r} is not assigned to a PLR Plate.")
+
+    if source_plate is None:
+      source_plate = source.parent
+    elif source.parent is not source_plate:
+      raise ValueError("Echo transfer() currently supports one source plate per call.")
+
+    if destination_plate is None:
+      destination_plate = destination.parent
+    elif destination.parent is not destination_plate:
+      raise ValueError("Echo transfer() currently supports one destination plate per call.")
+
+  if source_plate is None or destination_plate is None:
+    raise ValueError("At least one transfer is required.")
+
+  return source_plate, destination_plate
 
 
 @dataclass
@@ -1950,6 +2004,45 @@ class EchoDriver(Driver):
       _apply_transfer_volume_tracking(plan, result)
     return result
 
+  async def transfer(
+    self,
+    transfers: Sequence[EchoTransferInput],
+    *,
+    source_plate_type: Optional[str] = None,
+    destination_plate_type: Optional[str] = None,
+    protocol_name: str = "transfer",
+    volume_unit: str = "nL",
+    do_survey: bool = True,
+    close_door_before_transfer: bool = True,
+    print_options: Optional[EchoTransferPrintOptions] = None,
+    timeout: Optional[float] = None,
+    survey_timeout: Optional[float] = None,
+    update_volume_trackers: bool = True,
+  ) -> EchoTransferResult:
+    """Plan and execute Echo transfers from PLR wells.
+
+    This is the highest-level transfer entry point: each transfer contains real PLR
+    source and destination wells, so the source and destination plates are inferred
+    from the well parents. Use ``transfer_wells`` when the caller only has well
+    identifiers and wants to pass the plates explicitly.
+    """
+    source_plate, destination_plate = _infer_transfer_plates(transfers)
+    return await self.transfer_wells(
+      source_plate,
+      destination_plate,
+      transfers,
+      source_plate_type=source_plate_type,
+      destination_plate_type=destination_plate_type,
+      protocol_name=protocol_name,
+      volume_unit=volume_unit,
+      do_survey=do_survey,
+      close_door_before_transfer=close_door_before_transfer,
+      print_options=print_options,
+      timeout=timeout,
+      survey_timeout=survey_timeout,
+      update_volume_trackers=update_volume_trackers,
+    )
+
   async def load_source_plate(
     self,
     plate_type: str,
@@ -2413,8 +2506,8 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> Optional[str]:
-    return await self.driver.close_source_plate(
+  ) -> None:
+    await self.driver.close_source_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -2430,8 +2523,8 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> Optional[str]:
-    return await self.driver.close_destination_plate(
+  ) -> None:
+    await self.driver.close_destination_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -2905,6 +2998,37 @@ class Echo(Device):
     return await self.driver.transfer_wells(
       source_plate,
       destination_plate,
+      transfers,
+      source_plate_type=source_plate_type,
+      destination_plate_type=destination_plate_type,
+      protocol_name=protocol_name,
+      volume_unit=volume_unit,
+      do_survey=do_survey,
+      close_door_before_transfer=close_door_before_transfer,
+      print_options=print_options,
+      timeout=timeout,
+      survey_timeout=survey_timeout,
+      update_volume_trackers=update_volume_trackers,
+    )
+
+  @need_setup_finished
+  async def transfer(
+    self,
+    transfers: Sequence[EchoTransferInput],
+    *,
+    source_plate_type: Optional[str] = None,
+    destination_plate_type: Optional[str] = None,
+    protocol_name: str = "transfer",
+    volume_unit: str = "nL",
+    do_survey: bool = True,
+    close_door_before_transfer: bool = True,
+    print_options: Optional[EchoTransferPrintOptions] = None,
+    timeout: Optional[float] = None,
+    survey_timeout: Optional[float] = None,
+    update_volume_trackers: bool = True,
+  ) -> EchoTransferResult:
+    """Plan and execute Echo transfers from PLR wells, inferring plates from well parents."""
+    return await self.driver.transfer(
       transfers,
       source_plate_type=source_plate_type,
       destination_plate_type=destination_plate_type,

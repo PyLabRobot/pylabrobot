@@ -20,6 +20,7 @@ from .echo import (
   EchoSurveyRunResult,
   EchoSurveyWell,
   EchoTransferPlan,
+  EchoTransferInput,
   EchoTransferPrintOptions,
   EchoTransferredWell,
   EchoTransferResult,

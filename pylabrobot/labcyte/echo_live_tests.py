@@ -39,8 +39,8 @@ class TestEcho650LiveValidation(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(state.raw, dict)
 
   async def test_plate_catalogs_and_protocol_catalog_are_readable(self) -> None:
-    source_plate_types = await self.echo.get_source_plate_names()
-    destination_plate_types = await self.echo.get_destination_plate_names()
+    source_plate_types = await self.echo.get_all_source_plate_names()
+    destination_plate_types = await self.echo.get_all_destination_plate_names()
     protocol_names = await self.echo.get_all_protocol_names()
 
     self.assertGreater(len(source_plate_types), 0)
@@ -48,7 +48,7 @@ class TestEcho650LiveValidation(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(protocol_names, list)
 
   async def test_event_channel_is_connectable(self) -> None:
-    events = await self.echo.read_available_events(max_events=1, timeout=0.5)
+    events = await self.echo.read_events(max_events=1, timeout=0.5)
     self.assertIsInstance(events, list)
 
   @unittest.skipUnless(
@@ -58,10 +58,12 @@ class TestEcho650LiveValidation(unittest.IsolatedAsyncioTestCase):
   async def test_lock_and_door_cycle(self) -> None:
     await self.echo.lock()
     try:
-      opened = await self.echo.open_door(timeout=10.0)
+      await self.echo.open_door(timeout=10.0)
+      opened = await self.echo.get_access_state()
       self.assertTrue(opened.door_open)
 
-      closed = await self.echo.close_door(timeout=10.0)
+      await self.echo.close_door(timeout=10.0)
+      closed = await self.echo.get_access_state()
       self.assertTrue(closed.door_closed)
     except EchoCommandError:
       raise
