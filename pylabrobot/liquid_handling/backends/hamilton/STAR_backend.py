@@ -10045,14 +10045,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       yw=f"{int(current_protection_limiter)}",
     )
 
-  async def _iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, int]:
-    """Read the iSWAP rotation-drive Y-axis predefined-position table from EEPROM.
+  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, float]:
+    """Read iSWAP rotation-drive Y predefined-position table from EEPROM, in mm.
 
     Sends R0 RA ra=py. Firmware returns 10 signed-integer slots; all 10 are
     positions (no length slot, unlike pw/pt). Slots beyond the documented
     semantic roles are extra slots addressable via R0 YP yp5..yp9.
 
-    Keys (motor increments; see `iswap_y_drive_mm_per_increment`):
+    Keys (mm):
       "home"         py[0]  - home position
       "lower_limit"  py[1]  - lower travel limit
       "upper_limit"  py[2]  - upper travel limit
@@ -10071,30 +10071,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RA", ra="py", fmt="py##### (n)")
     py = cast(List[int], resp["py"])
+    to_mm = STARBackend.iswap_y_drive_increment_to_mm
     return {
-      "home": py[0],
-      "lower_limit": py[1],
-      "upper_limit": py[2],
-      "parking": py[3],
-      "pre_parking": py[4],
-      "extra_1": py[5],
-      "extra_2": py[6],
-      "extra_3": py[7],
-      "extra_4": py[8],
-      "extra_5": py[9],
+      "home": to_mm(py[0]),
+      "lower_limit": to_mm(py[1]),
+      "upper_limit": to_mm(py[2]),
+      "parking": to_mm(py[3]),
+      "pre_parking": to_mm(py[4]),
+      "extra_1": to_mm(py[5]),
+      "extra_2": to_mm(py[6]),
+      "extra_3": to_mm(py[7]),
+      "extra_4": to_mm(py[8]),
+      "extra_5": to_mm(py[9]),
     }
-
-  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, float]:
-    """Read iSWAP rotation-drive Y predefined-position table in mm.
-
-    Wraps `_iswap_rotation_drive_request_predefined_y_positions`, converting
-    each value via `iswap_y_drive_increment_to_mm`.
-
-    Raises:
-      RuntimeError: if the iSWAP module is not installed.
-    """
-    table = await self._iswap_rotation_drive_request_predefined_y_positions()
-    return {k: STARBackend.iswap_y_drive_increment_to_mm(v) for k, v in table.items()}
 
   async def iswap_rotation_drive_move_z(
     self,
@@ -10173,14 +10162,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zw=f"{int(current_protection_limiter)}",
     )
 
-  async def _iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, int]:
-    """Read the iSWAP rotation-drive Z-axis predefined-position table from EEPROM.
+  async def iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, float]:
+    """Read iSWAP rotation-drive Z predefined-position table from EEPROM, in mm.
 
     Sends R0 RA ra=pz. Firmware returns 10 signed-integer slots; all 10 are
     positions (no length slot, unlike pw/pt). Slots beyond home/parking are
     extra slots addressable via R0 ZP zp2..zp9.
 
-    Keys (motor increments; see `iswap_z_drive_mm_per_increment`):
+    Returns rotation-drive-bottom Z (matching `iswap_rotation_drive_request_z`
+    and `iswap_rotation_drive_move_z`): each EEPROM finger-plane increment is
+    converted via `iswap_z_drive_increment_to_mm` then offset by
+    `iswap_rotation_drive_z_offset_above_finger_mm`.
+
+    Keys (mm):
       "home"     pz[0]  - home position
       "parking"  pz[1]  - parking pose
       "extra_1"  pz[2]  - extra slot, address via R0 ZP zp2
@@ -10199,34 +10193,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RA", ra="pz", fmt="pz##### (n)")
     pz = cast(List[int], resp["pz"])
-    return {
-      "home": pz[0],
-      "parking": pz[1],
-      "extra_1": pz[2],
-      "extra_2": pz[3],
-      "extra_3": pz[4],
-      "extra_4": pz[5],
-      "extra_5": pz[6],
-      "extra_6": pz[7],
-      "extra_7": pz[8],
-      "extra_8": pz[9],
-    }
-
-  async def iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, float]:
-    """Read iSWAP rotation-drive Z predefined-position table in mm.
-
-    Returns rotation-drive-bottom Z (matching `iswap_rotation_drive_request_z`
-    and `iswap_rotation_drive_move_z`). Wraps the increment private method,
-    converts via `iswap_z_drive_increment_to_mm`, then adds
-    `iswap_rotation_drive_z_offset_above_finger_mm` so EEPROM finger-plane
-    increments map to deck-coordinate mm at the rotation drive's bottom.
-
-    Raises:
-      RuntimeError: if the iSWAP module is not installed.
-    """
-    table = await self._iswap_rotation_drive_request_predefined_z_positions()
     offset = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
-    return {k: STARBackend.iswap_z_drive_increment_to_mm(v) + offset for k, v in table.items()}
+    to_mm = STARBackend.iswap_z_drive_increment_to_mm
+    return {
+      "home": to_mm(pz[0]) + offset,
+      "parking": to_mm(pz[1]) + offset,
+      "extra_1": to_mm(pz[2]) + offset,
+      "extra_2": to_mm(pz[3]) + offset,
+      "extra_3": to_mm(pz[4]) + offset,
+      "extra_4": to_mm(pz[5]) + offset,
+      "extra_5": to_mm(pz[6]) + offset,
+      "extra_6": to_mm(pz[7]) + offset,
+      "extra_7": to_mm(pz[8]) + offset,
+      "extra_8": to_mm(pz[9]) + offset,
+    }
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
