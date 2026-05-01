@@ -69,7 +69,7 @@ class InhecoThermoshakeBackend(HeaterShakerBackend):
     return await self._new.set_shaker_shape(shape)
 
   async def shake(self, speed: float, shape: int = 0):
-    await self._new.shake(speed=speed, shape=shape)
+    await self._new.start_shaking(speed=speed, shape=shape)
 
   async def lock_plate(self):
     await self._new.lock_plate()

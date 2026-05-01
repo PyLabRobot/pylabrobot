@@ -1,7 +1,9 @@
 import abc
+import logging
 import warnings
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,
@@ -10,6 +12,8 @@ from pylabrobot.device import Device, Driver
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
+
+logger = logging.getLogger(__name__)
 
 
 class InhecoTemperatureControllerBackend(
@@ -22,11 +26,12 @@ class InhecoTemperatureControllerBackend(
     return True
 
   def __init__(self, index: int, control_box: InhecoTECControlBox):
-    assert 1 <= index <= 6, "Index must be between 1 and 6 (inclusive)"
+    if not (1 <= index <= 6):
+      raise ValueError("Index must be between 1 and 6 (inclusive)")
     self.index = index
     self.interface = control_box
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   async def stop(self):
@@ -39,14 +44,18 @@ class InhecoTemperatureControllerBackend(
   # -- temperature control
 
   async def set_temperature(self, temperature: float):
+    logger.info("[Inheco idx=%d] setting temperature to %.1f C", self.index, temperature)
     await self.set_target_temperature(temperature)
     await self.start_temperature_control()
 
   async def request_current_temperature(self) -> float:
     response = await self.interface.send_command(f"{self.index}RAT0")
-    return float(response) / 10
+    temp = float(response) / 10
+    logger.info("[Inheco idx=%d] read temperature: actual=%.1f C", self.index, temp)
+    return temp
 
   async def deactivate(self):
+    logger.info("[Inheco idx=%d] deactivating temperature control", self.index)
     await self.stop_temperature_control()
 
   # --- firmware temp
@@ -75,7 +84,8 @@ class InhecoTemperatureControllerBackend(
     - 4 INHECO copyright
     """
 
-    assert info_type in range(5), "Info type must be in the range 0 to 4"
+    if info_type not in range(5):
+      raise ValueError("Info type must be in the range 0 to 4")
     return await self.interface.send_command(f"{self.index}RFV{info_type}")
 
 

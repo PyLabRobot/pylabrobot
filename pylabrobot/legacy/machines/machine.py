@@ -67,8 +67,9 @@ class Machine(SerializableMixin, ABC):
       await cap._on_setup()
     self._setup_finished = True
 
-  @need_setup_finished
   async def stop(self):
+    if not self._setup_finished:
+      return
     for cap in reversed(self._capabilities):
       await cap._on_stop()
     await self._backend.stop()

@@ -10,10 +10,13 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from typing import Optional
+
 from pylabrobot.capabilities.barcode_scanning.backend import (
   BarcodeScannerBackend,
   BarcodeScannerError,
 )
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
@@ -52,11 +55,13 @@ class KeyenceBarcodeScannerDriver(Driver):
       rtscts=False,
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
+    logger.info("[Keyence %s] connected", self.io.port)
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[Keyence %s] disconnected", self.io.port)
 
   async def send_command(self, command: str) -> str:
     """Send a command to the barcode scanner and return the response.
@@ -64,7 +69,8 @@ class KeyenceBarcodeScannerDriver(Driver):
 
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
     response = await self.io.read()
-    return response.decode(self.serial_messaging_encoding).strip()
+    decoded = response.decode(self.serial_messaging_encoding).strip()
+    return decoded
 
 
 class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
@@ -77,14 +83,14 @@ class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
     super().__init__()
     self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the barcode scanner motor after the driver connects."""
 
     deadline = time.time() + self.init_timeout
     while time.time() < deadline:
       response = await self.driver.send_command("RMOTOR")
       if response.strip() == "MOTORON":
-        logger.info("Barcode scanner motor is ON.")
+        logger.info("[Keyence %s] barcode scanner motor is ON", self.driver.io.port)
         break
       elif response.strip() == "MOTOROFF":
         raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
@@ -97,7 +103,10 @@ class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
   async def scan_barcode(self) -> Barcode:
     data = await self.driver.send_command("LON")
     if data.startswith("NG"):
+      logger.error("[Keyence %s] barcode reader is off: cannot read barcode", self.driver.io.port)
       raise BarcodeScannerError("Barcode reader is off: cannot read barcode")
     if data.startswith("ERR99"):
+      logger.error("[Keyence %s] barcode reader error: %s", self.driver.io.port, data)
       raise BarcodeScannerError(f"Error response from barcode reader: {data}")
+    logger.info("[Keyence %s] scanned barcode: %s", self.driver.io.port, data)
     return Barcode(data=data, symbology="unknown", position_on_resource="front")

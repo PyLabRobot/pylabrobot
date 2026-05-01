@@ -55,11 +55,11 @@ class Pico(Resource, Device):
     Device.__init__(self, driver=driver)
     self.driver: PicoDriver = driver
 
-    self.microscopy = Microscopy(
+    self.microscope = Microscopy(
       backend=PicoMicroscopyBackend(
         driver=driver,
         objectives=objectives,
         filter_cubes=filter_cubes,
       )
     )
-    self._capabilities = [self.microscopy]
+    self._capabilities = [self.microscope]

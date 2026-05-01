@@ -55,9 +55,12 @@ class STARAutoload:
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def _on_setup(self):
-    """Initialize Auto load module (C0:II)."""
-    await self.driver.send_command(module="C0", command="II")
+  async def _on_setup(self, backend_params=None):
+    """Initialize autoload module if not already initialized, then park."""
+    already_initialized = await self.request_initialization_status()
+    if not already_initialized:
+      await self.driver.send_command(module="C0", command="II")
+    await self.park()
 
   async def _on_stop(self):
     pass
@@ -502,9 +505,7 @@ class STARAutoload:
         park_autoload_after=False,
       )
     else:
-      resp = await self.load_carrier_from_belt(
-        barcode_reading=False, park_autoload_after=False
-      )
+      resp = await self.load_carrier_from_belt(barcode_reading=False, park_autoload_after=False)
 
     if park_autoload_after:
       await self.park()

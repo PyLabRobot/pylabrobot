@@ -3,11 +3,12 @@ import logging
 import time
 from typing import Optional, Union
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class CLARIOstarDriver(Driver):
@@ -24,7 +25,7 @@ class CLARIOstarDriver(Driver):
       human_readable_device_name="BMG CLARIOstar", device_id=device_id, vid=0x0403, pid=0xBB68
     )
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     await self.io.set_baudrate(125000)
     await self.io.set_line_property(8, 0, 0)  # 8N1
@@ -32,6 +33,7 @@ class CLARIOstarDriver(Driver):
 
     await self._initialize()
     await self._request_eeprom_data()
+    logger.info("[CLARIOstar %s] connected", self.io.device_id or "default")
 
   async def stop(self) -> None:
     await self.io.stop()
@@ -120,11 +122,13 @@ class CLARIOstarDriver(Driver):
 
   async def open(self) -> None:
     """Open the plate tray."""
+    logger.info("[CLARIOstar %s] open tray", self.io.device_id or "default")
     open_response = await self.send(b"\x02\x00\x0e\x0c\x03\x01\x00\x00\x00\x00\x00")
     await self._wait_for_ready_and_return(open_response)
 
   async def close(self) -> None:
     """Close the plate tray."""
+    logger.info("[CLARIOstar %s] close tray", self.io.device_id or "default")
     close_response = await self.send(b"\x02\x00\x0e\x0c\x03\x00\x00\x00\x00\x00\x00")
     await self._wait_for_ready_and_return(close_response)
 

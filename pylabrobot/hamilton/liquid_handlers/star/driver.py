@@ -3,27 +3,29 @@
 import asyncio
 import datetime
 import enum
+import logging
 import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from pylabrobot.capabilities.liquid_handling.head96_backend import Head96Backend
-from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
-from pylabrobot.resources.hamilton import TipPickupMethod, TipSize
+from pylabrobot.resources.hamilton import HamiltonDeck, TipPickupMethod, TipSize
 
 from .autoload import STARAutoload
 from .cover import STARCover
 from .errors import (
   star_firmware_string_to_error,
 )
-from .fw_parsing import parse_star_fw_string
+from .fw_parsing import parse_star_firmware_version_date, parse_star_fw_string
 from .head96_backend import STARHead96Backend
 from .iswap import iSWAPBackend
 from .pip_backend import STARPIPBackend
 from .wash_station import STARWashStation
 from .x_arm import STARXArm
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration dataclasses
@@ -119,13 +121,18 @@ class STARDriver(HamiltonLiquidHandler):
   Adds STAR-specific firmware parsing, error handling, and machine configuration.
   """
 
+  PIP_X_MIN_WITH_LEFT_SIDE_PANEL: float = 320.0
+  HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL: float = 0.0
+
   def __init__(
     self,
+    deck: HamiltonDeck,
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    left_side_panel_installed: bool = False,
   ):
     super().__init__(
       id_product=0x8000,
@@ -135,13 +142,15 @@ class STARDriver(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
     )
+    self.deck = deck
+    self.left_side_panel_installed = left_side_panel_installed
 
     # Populated during setup().
     self.machine_conf: Optional[MachineConfiguration] = None
     self.extended_conf: Optional[ExtendedConfiguration] = None
     self._channels_minimum_y_spacing: List[float] = []
-    self.pip: PIPBackend  # set in setup()
-    self.head96: Optional[Head96Backend] = None  # set in setup() if installed
+    self.pip: STARPIPBackend  # set in setup()
+    self.head96: Optional[STARHead96Backend] = None  # set in setup() if installed
     self.iswap: Optional["iSWAPBackend"] = None  # set in setup() if installed
     self.autoload: Optional["STARAutoload"] = None  # set in setup() if installed
     self.left_x_arm: Optional["STARXArm"] = None  # set in setup()
@@ -256,11 +265,18 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- lifecycle ------------------------------------------------------------
 
-  async def setup(self):
-    await super().setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    assert self.deck is not None, "STARDriver requires a deck before setup()"
+    await super().setup(backend_params=backend_params)
     self.id_ = 0
     self.machine_conf = await self._request_machine_configuration()
     self.extended_conf = await self._request_extended_configuration()
+
+    # Instrument-level initialization.
+    initialized = await self.request_instrument_initialization_status()
+    if not initialized:
+      logger.info("Running instrument pre-initialization (C0:VI).")
+      await self.pre_initialize_instrument()
 
     # Create backends based on discovered config.
     self.pip = STARPIPBackend(self)
@@ -268,7 +284,7 @@ class STARDriver(HamiltonLiquidHandler):
     self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      self.head96 = STARHead96Backend(self)
+      self.head96 = STARHead96Backend(self, deck=self.deck)
     else:
       self.head96 = None
 
@@ -303,11 +319,14 @@ class STARDriver(HamiltonLiquidHandler):
       await sub._on_setup()
 
   @property
-  def _subsystems(self):
-    """All active subsystems, for lifecycle management."""
-    subs = [self.cover]
-    if self.autoload is not None:
-      subs.append(self.autoload)
+  def _subsystems(self) -> List[Any]:
+    """Subsystems whose lifecycle is managed by the driver directly.
+
+    Note: PIP, head96, iSWAP, and autoload are excluded — their lifecycle
+    is managed by the higher-level STAR device, which controls parallelization
+    and passes context (deck) they need.
+    """
+    subs: List[Any] = [self.cover]
     if self.left_x_arm is not None:
       subs.append(self.left_x_arm)
     if self.right_x_arm is not None:
@@ -497,10 +516,11 @@ class STARDriver(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="RE")
 
-  async def request_firmware_version(self):
+  async def request_firmware_version(self) -> datetime.date:
     """Request firmware version (C0:RF)."""
 
-    return await self.send_command(module="C0", command="RF")
+    resp = await self.send_command(module="C0", command="RF")
+    return parse_star_firmware_version_date(str(resp))
 
   async def request_parameter_value(self):
     """Request parameter value (C0:RA)."""
@@ -630,16 +650,18 @@ class STARDriver(HamiltonLiquidHandler):
 
   async def store_installation_data(
     self,
-    date: datetime.datetime = datetime.datetime.now(),
+    date: Optional[datetime.datetime] = None,
     serial_number: str = "0000",
   ):
     """Store installation data (C0:SI).
 
     Args:
-      date: installation date.
+      date: installation date. Defaults to now.
       serial_number: 4-character serial number string.
     """
 
+    if date is None:
+      date = datetime.datetime.now()
     if len(serial_number) != 4:
       raise ValueError("serial number must be 4 chars long")
 
@@ -648,17 +670,19 @@ class STARDriver(HamiltonLiquidHandler):
   async def store_verification_data(
     self,
     verification_subject: int = 0,
-    date: datetime.datetime = datetime.datetime.now(),
+    date: Optional[datetime.datetime] = None,
     verification_status: bool = False,
   ):
     """Store verification data (C0:AV).
 
     Args:
       verification_subject: verification subject. Default 0. Must be between 0 and 24.
-      date: verification date.
+      date: verification date. Defaults to now.
       verification_status: verification status.
     """
 
+    if date is None:
+      date = datetime.datetime.now()
     if not 0 <= verification_subject <= 24:
       raise ValueError("verification_subject must be between 0 and 24")
 
@@ -675,13 +699,15 @@ class STARDriver(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="AT")
 
-  async def save_download_date(self, date: datetime.datetime = datetime.datetime.now()):
+  async def save_download_date(self, date: Optional[datetime.datetime] = None):
     """Save Download date (C0:AO).
 
     Args:
       date: download date. Default now.
     """
 
+    if date is None:
+      date = datetime.datetime.now()
     return await self.send_command(
       module="C0",
       command="AO",

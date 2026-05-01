@@ -245,7 +245,7 @@ class PlateReader(ResourceHolder, Machine):
         "The return type of read_luminescence will change in a future version. Please set "
         "use_new_return_type=True to use the new return type."
       )
-      return result[0]["data"]  # type: ignore[no-any-return]
+      return result[0]["data"]  # type: ignore[no-any-return, return-value]
     return result
 
   @need_setup_finished
@@ -292,7 +292,7 @@ class PlateReader(ResourceHolder, Machine):
         "The return type of read_absorbance will change in a future version. Please set "
         "use_new_return_type=True to use the new return type."
       )
-      return result[0]["data"]  # type: ignore[no-any-return]
+      return result[0]["data"]  # type: ignore[no-any-return, return-value]
     return result
 
   @need_setup_finished
@@ -352,7 +352,7 @@ class PlateReader(ResourceHolder, Machine):
         "The return type of read_fluorescence will change in a future version. Please set "
         "use_new_return_type=True to use the new return type."
       )
-      return result[0]["data"]  # type: ignore[no-any-return]
+      return result[0]["data"]  # type: ignore[no-any-return, return-value]
     return result
 
   def serialize(self) -> dict:

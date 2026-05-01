@@ -113,6 +113,28 @@ Peeling
     PeelerBackend
 
 
+Loading Tray
+------------
+
+.. currentmodule:: pylabrobot.capabilities.loading_tray.loading_tray
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    LoadingTray
+
+.. currentmodule:: pylabrobot.capabilities.loading_tray.backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    LoadingTrayBackend
+
+
 Tilting
 -------
 
@@ -287,7 +309,7 @@ Bulk Dispensing - Peristaltic
   :nosignatures:
   :recursive:
 
-    PeristalticDispensing
+    PeristalticDispensing8
 
 .. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.backend
 
@@ -296,7 +318,7 @@ Bulk Dispensing - Peristaltic
   :nosignatures:
   :recursive:
 
-    PeristalticDispensingBackend
+    PeristalticDispensingBackend8
 
 
 Bulk Dispensing - Syringe
@@ -309,7 +331,7 @@ Bulk Dispensing - Syringe
   :nosignatures:
   :recursive:
 
-    SyringeDispensing
+    SyringeDispensing8
 
 .. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.backend
 
@@ -318,7 +340,7 @@ Bulk Dispensing - Syringe
   :nosignatures:
   :recursive:
 
-    SyringeDispensingBackend
+    SyringeDispensingBackend8
 
 
 Liquid Handling - PIP (Independent Channels)

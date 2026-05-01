@@ -12,7 +12,7 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.peeling import PeelerBackend, Peeler
+from pylabrobot.capabilities.peeling import Peeler, PeelerBackend
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.serializer import SerializableMixin
@@ -74,7 +74,7 @@ class XPeelDriver(Driver):
       rtscts=False,
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
 
   async def stop(self):
@@ -236,6 +236,16 @@ class XPeelPeelerBackend(PeelerBackend):
 
   @dataclass
   class PeelParams(BackendParams):
+    """XPeel-specific parameters for the peel (de-seal) operation.
+
+    Args:
+      begin_location: Starting roller position offset in mm. Must be one of -2, 0, 2,
+        or 4. Default 0.
+      fast: If True, uses faster peel speed. Default False.
+      adhere_time: Time in seconds for the roller to press on the seal before peeling.
+        Must be one of 2.5, 5.0, 7.5, or 10.0. Default 2.5.
+    """
+
     begin_location: Literal[-2, 0, 2, 4] = 0
     fast: bool = False
     adhere_time: float = 2.5

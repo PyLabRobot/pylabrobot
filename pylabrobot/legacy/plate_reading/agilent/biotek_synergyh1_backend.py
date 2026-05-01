@@ -1,6 +1,6 @@
 """Legacy. Use pylabrobot.agilent instead."""
 
-from pylabrobot.agilent.biotek import synergy_h1
+from pylabrobot.agilent.biotek.plate_readers.synergy import synergy_h1
 from pylabrobot.legacy.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 
 

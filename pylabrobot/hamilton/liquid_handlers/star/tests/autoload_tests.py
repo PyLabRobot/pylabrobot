@@ -14,17 +14,26 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
 
   # -- initialization --------------------------------------------------------
 
-  async def test_on_setup(self):
+  async def test_on_setup_not_initialized(self):
+    self.mock_driver.send_command.return_value = {"qw": 0}
     await self.autoload._on_setup()
-    self.mock_driver.send_command.assert_called_once_with(module="C0", command="II")
+    calls = self.mock_driver.send_command.call_args_list
+    # Should check init status, initialize, then park (safe z + park)
+    self.assertEqual(calls[0].kwargs, {"module": "I0", "command": "QW", "fmt": "qw#"})
+    self.assertEqual(calls[1].kwargs, {"module": "C0", "command": "II"})
+
+  async def test_on_setup_already_initialized(self):
+    self.mock_driver.send_command.return_value = {"qw": 1}
+    await self.autoload._on_setup()
+    calls = self.mock_driver.send_command.call_args_list
+    # Should check init status, skip init, then park
+    self.assertEqual(calls[0].kwargs, {"module": "I0", "command": "QW", "fmt": "qw#"})
 
   async def test_request_initialization_status_true(self):
     self.mock_driver.send_command.return_value = {"qw": 1}
     result = await self.autoload.request_initialization_status()
     self.assertTrue(result)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="I0", command="QW", fmt="qw#"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="I0", command="QW", fmt="qw#")
 
   async def test_request_initialization_status_false(self):
     self.mock_driver.send_command.return_value = {"qw": 0}
@@ -43,17 +52,13 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     self.mock_driver.send_command.return_value = {"qa": 12}
     result = await self.autoload.request_track()
     self.assertEqual(result, 12)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="QA", fmt="qa##"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="QA", fmt="qa##")
 
   async def test_request_type_1d(self):
     self.mock_driver.send_command.return_value = {"cq": 0}
     result = await self.autoload.request_type()
     self.assertEqual(result, "ML-STAR with 1D Barcode Scanner")
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="CQ", fmt="cq#"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="CQ", fmt="cq#")
 
   async def test_request_type_2d(self):
     self.mock_driver.send_command.return_value = {"cq": 2}
@@ -155,7 +160,7 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     # Carrier not on tray -> should proceed with CN command
     self.mock_driver.send_command.side_effect = [
       {"ct": 0},  # presence check returns absent
-      None,        # CN command
+      None,  # CN command
     ]
     await self.autoload.take_carrier_out_to_belt(carrier_end_rail=10)
     calls = self.mock_driver.send_command.call_args_list
@@ -175,15 +180,15 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_1d_barcode_type(self):
     await self.autoload.set_1d_barcode_type("Code 39")
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="CB", bt="04"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="CB", bt="04")
     self.assertEqual(self.autoload._default_1d_symbology, "Code 39")
 
   async def test_set_1d_barcode_type_default(self):
     await self.autoload.set_1d_barcode_type(None)
     self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="CB", bt="02"  # Code 128 default
+      module="C0",
+      command="CB",
+      bt="02",  # Code 128 default
     )
 
   async def test_load_carrier_from_tray_and_scan_carrier_barcode(self):
@@ -193,6 +198,7 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
       carrier_barcode_reading=True,
     )
     self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(result.data, "ABC123")
     self.mock_driver.send_command.assert_called_once_with(
       module="C0",
@@ -217,8 +223,8 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
   async def test_unload_carrier(self):
     self.mock_driver.send_command.side_effect = [
       "C0CRid0001",  # CR command
-      None,           # safe z
-      None,           # park XP
+      None,  # safe z
+      None,  # park XP
     ]
     await self.autoload.unload_carrier(carrier_end_rail=10, park_autoload_after=True)
     calls = self.mock_driver.send_command.call_args_list
@@ -227,9 +233,7 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
   async def test_unload_carrier_no_park(self):
     self.mock_driver.send_command.return_value = "C0CRid0001"
     await self.autoload.unload_carrier(carrier_end_rail=10, park_autoload_after=False)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="CR", cp="10"
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="CR", cp="10")
 
   async def test_unload_carrier_invalid_rail(self):
     with self.assertRaises(ValueError):
@@ -256,15 +260,13 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_carrier_monitoring(self):
     await self.autoload.set_carrier_monitoring(should_monitor=True)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="CU", cu=True
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="CU", cu=True)
 
   async def test_load_carrier_from_belt_no_barcode(self):
     self.mock_driver.send_command.side_effect = [
       "C0CLid0001",  # CL command
-      None,           # safe z (park)
-      None,           # park XP
+      None,  # safe z (park)
+      None,  # park XP
     ]
     result = await self.autoload.load_carrier_from_belt(
       barcode_reading=False,
@@ -302,24 +304,24 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(calls[1].kwargs["bd"], "1")  # horizontal
     # Verify returned barcode dict
     self.assertEqual(len(result), 5)
-    self.assertIsNotNone(result[0])
+    assert result[0] is not None
     self.assertEqual(result[0].data, "ABC123")
-    self.assertIsNotNone(result[1])
+    assert result[1] is not None
     self.assertEqual(result[1].data, "DEF456")
     self.assertIsNone(result[2])  # "00" means no barcode
-    self.assertIsNotNone(result[3])
+    assert result[3] is not None
     self.assertEqual(result[3].data, "GHI789")
-    self.assertIsNotNone(result[4])
+    assert result[4] is not None
     self.assertEqual(result[4].data, "JKL012")
 
   async def test_load_carrier(self):
     """Test high-level load_carrier orchestration."""
     self.mock_driver.send_command.side_effect = [
-      {"ct": 1},       # CT: presence check returns True
-      "C0CIid0001",    # CI: carrier barcode scan (no barcode reading)
-      "C0CLid0001",    # CL: belt load (no barcode reading)
-      None,             # IV: safe z (park)
-      None,             # XP: park
+      {"ct": 1},  # CT: presence check returns True
+      "C0CIid0001",  # CI: carrier barcode scan (no barcode reading)
+      "C0CLid0001",  # CL: belt load (no barcode reading)
+      None,  # IV: safe z (park)
+      None,  # XP: park
     ]
     result = await self.autoload.load_carrier(
       carrier_end_rail=10,
@@ -339,9 +341,9 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
   async def test_take_carrier_out_to_belt_error_recovery(self):
     """Test that move_to_safe_z_position (IV) is called before RuntimeError on CN failure."""
     self.mock_driver.send_command.side_effect = [
-      {"ct": 0},                      # CT: carrier NOT present on tray
+      {"ct": 0},  # CT: carrier NOT present on tray
       RuntimeError("CN firmware error"),  # CN: raises exception
-      None,                            # IV: move_to_safe_z_position
+      None,  # IV: move_to_safe_z_position
     ]
     with self.assertRaises(RuntimeError):
       await self.autoload.take_carrier_out_to_belt(carrier_end_rail=10)
@@ -353,7 +355,7 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     """Test that move_to_safe_z_position (IV) is called before RuntimeError on CA failure."""
     self.mock_driver.send_command.side_effect = [
       RuntimeError("CA firmware error"),  # CA: raises exception
-      None,                               # IV: move_to_safe_z_position
+      None,  # IV: move_to_safe_z_position
     ]
     with self.assertRaises(RuntimeError):
       await self.autoload.unload_carrier_after_barcode_scanning()
@@ -365,7 +367,7 @@ class TestAutoloadCommands(unittest.IsolatedAsyncioTestCase):
     """Test that move_to_safe_z_position (IV) is called before RuntimeError on CI failure."""
     self.mock_driver.send_command.side_effect = [
       RuntimeError("CI firmware error"),  # CI: raises exception
-      None,                               # IV: move_to_safe_z_position
+      None,  # IV: move_to_safe_z_position
     ]
     with self.assertRaises(RuntimeError):
       await self.autoload.load_carrier_from_tray_and_scan_carrier_barcode(

@@ -3,6 +3,7 @@ from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval
 from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling import HumidityController
 from pylabrobot.capabilities.shaking import Shaker
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
@@ -69,9 +70,7 @@ class Liconic(Resource, Device):
 
     self.retrieval = AutomatedRetrieval(backend=backend)
     self.tc = (
-      TemperatureController(backend=backend)
-      if liconic_model.has_temperature_control
-      else None
+      TemperatureController(backend=backend) if liconic_model.has_temperature_control else None
     )
     self.humidity_controller = (
       HumidityController(backend=backend) if liconic_model.has_humidity_control else None
@@ -95,10 +94,10 @@ class Liconic(Resource, Device):
   def racks(self) -> List[PlateCarrier]:
     return self._racks
 
-  async def setup(self, **backend_kwargs):
+  async def setup(self, backend_params: Optional[BackendParams] = None, **backend_kwargs):
     if self.barcode_scanner is not None:
       await self.barcode_scanner.backend._on_setup()
-    await super().setup()
+    await super().setup(backend_params=backend_params)
     await self.driver.set_racks(self._racks)
 
   async def stop(self):

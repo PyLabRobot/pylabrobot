@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
 from pylabrobot.capabilities.centrifuging import Centrifuge
+from pylabrobot.capabilities.centrifuging import CentrifugeBackend as _NewCentrifugeBackend
 from pylabrobot.capabilities.centrifuging.errors import (
   BucketHasPlateError,
   BucketNoPlateError,
@@ -88,7 +88,8 @@ class VSpinDriver(Driver):
     self.io = FTDI(human_readable_device_name="Agilent VSpin Centrifuge", device_id=device_id)
     self.device_id = device_id
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    logger.info("[vSpin %s] connected", self.device_id)
     await self.io.setup()
     for _ in range(3):
       await self.configure_and_initialize()
@@ -105,6 +106,7 @@ class VSpinDriver(Driver):
     await self.io.set_dtr(True)
 
   async def stop(self):
+    logger.info("[vSpin %s] disconnected", self.device_id)
     await self.configure_and_initialize()
     await self.io.stop()
 
@@ -219,7 +221,7 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
     if driver.device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(driver.device_id)
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     driver = self.driver
 
     await driver.send_command(bytes.fromhex("aa01121f32"))
@@ -315,12 +317,14 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
   async def open_door(self):
     if await self.driver.request_door_open():
       return
+    logger.info("[vSpin %s] open door", self.driver.device_id)
     await self.driver.send_command(bytes.fromhex("aa022600062e"))
     await asyncio.sleep(4)
 
   async def close_door(self):
     if not (await self.driver.request_door_open()):
       return
+    logger.info("[vSpin %s] close door", self.driver.device_id)
     await self.driver.send_command(bytes.fromhex("aa022600042c"))
     await asyncio.sleep(2)
 
@@ -329,6 +333,7 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
       raise RuntimeError("Cannot lock door while it is open.")
     if await self.driver.request_door_locked():
       return
+    logger.info("[vSpin %s] lock door", self.driver.device_id)
     await self.driver.send_command(bytes.fromhex("aa0226000028"))
 
   async def unlock_door(self):
@@ -353,6 +358,7 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
     await self.go_to_position(await self.request_bucket_1_position() + FULL_ROTATION // 2)
 
   async def go_to_position(self, position: int):
+    logger.info("[vSpin %s] go_to_position: position=%d", self.driver.device_id, position)
     await self.close_door()
     await self.lock_door()
 
@@ -381,6 +387,15 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
 
   @dataclass
   class SpinParams(BackendParams):
+    """VSpin centrifuge parameters for spin operations.
+
+    Args:
+      acceleration: Acceleration rate as a fraction of maximum (0 to 1, exclusive of 0).
+        Default 0.8.
+      deceleration: Deceleration rate as a fraction of maximum (0 to 1, exclusive of 0).
+        Default 0.8.
+    """
+
     acceleration: float = 0.8
     deceleration: float = 0.8
 
@@ -420,6 +435,15 @@ class VSpinCentrifugeBackend(_NewCentrifugeBackend):
       await self.unlock_bucket()
 
     rpm = VSpinCentrifugeBackend.g_to_rpm(g)
+    logger.info(
+      "[vSpin %s] spin: g=%.1f rpm=%d duration=%.1fs acceleration=%.2f deceleration=%.2f",
+      self.driver.device_id,
+      g,
+      rpm,
+      duration,
+      acceleration,
+      deceleration,
+    )
 
     acceleration_ticks_per_second2 = 12903.2 * acceleration
     rounds_per_second = rpm / 60
@@ -535,7 +559,7 @@ class Access2Driver(Driver):
     await self.io.write(command)
     return await self._read()
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     logger.debug("[loader] setup")
 
     await self.io.setup()

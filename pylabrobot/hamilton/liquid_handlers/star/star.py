@@ -1,31 +1,33 @@
 """STAR device: wires STARDriver backends to PIP/Head96/iSWAP capability frontends."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from pylabrobot.arms.arm import GripperArm
-from pylabrobot.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.arm import GripperArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate
-from pylabrobot.resources.hamilton import HamiltonDeck
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
+from pylabrobot.resources.hamilton import HamiltonDeck, STARDeck, STARLetDeck
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers, HamiltonSTARDeck
 
 from .chatterbox import STARChatterboxDriver
 from .core import CoreGripper
 from .driver import STARDriver
 
 
-class STAR(Device):
-  """Hamilton STAR liquid handler.
+class _HamiltonSTAR(Device):
+  """Base class for Hamilton STAR/STARLet liquid handlers.
 
-  User-facing device that wires capability frontends (PIP, Head96, iSWAP) to the
-  STARDriver's backends after hardware discovery during setup().
+  Wires capability frontends (PIP, Head96, iSWAP) to the STARDriver's backends
+  after hardware discovery during setup().
   """
 
   def __init__(self, deck: HamiltonDeck, chatterbox: bool = False):
-    driver = STARChatterboxDriver() if chatterbox else STARDriver()
+    driver = STARChatterboxDriver(deck=deck) if chatterbox else STARDriver(deck=deck)
     super().__init__(driver=driver)
     self.driver: STARDriver = driver
     self.deck = deck
@@ -33,16 +35,16 @@ class STAR(Device):
     self.head96: Optional[Head96] = None  # set in setup() if installed
     self.iswap: Optional[OrientableArm] = None  # set in setup() if installed
 
-  async def setup(self):
-    await self.driver.setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await self.driver.setup(backend_params=backend_params)
 
     # PIP is always present.
-    self.pip = PIP(backend=self.driver.pip)
+    self.pip = PIP(backend=self.driver.pip, deck=self.deck)
     self._capabilities = [self.pip]
 
     # Head96 only if the hardware has a 96-head installed.
     if self.driver.head96 is not None:
-      self.head96 = Head96(backend=self.driver.head96)
+      self.head96 = Head96(backend=self.driver.head96, deck=self.deck)
       self._capabilities.append(self.head96)
 
     # iSWAP only if installed.
@@ -50,8 +52,20 @@ class STAR(Device):
       self.iswap = OrientableArm(backend=self.driver.iswap, reference_resource=self.deck)
       self._capabilities.append(self.iswap)
 
-    for cap in self._capabilities:
-      await cap._on_setup()
+    # Matches legacy: autoload runs in parallel with arm modules.
+    # Arm modules run sequentially (pip → iswap → head96) because they share the left x-arm.
+    async def setup_arm_modules():
+      await self.pip._on_setup()
+      if self.iswap is not None:
+        await self.iswap._on_setup()
+      if self.head96 is not None:
+        await self.head96._on_setup()
+
+    async def setup_autoload():
+      if self.driver.autoload is not None:
+        await self.driver.autoload._on_setup()
+
+    await asyncio.gather(setup_autoload(), setup_arm_modules())
     self._setup_finished = True
 
   async def stop(self):
@@ -81,7 +95,7 @@ class STAR(Device):
     """
 
     # Park iSWAP first if it's out — the arms share the X drive.
-    if self.iswap is not None and not self.iswap.backend.parked:
+    if self.iswap is not None and not self.iswap.backend.parked:  # type: ignore[attr-defined]
       await self.iswap.backend.park()
 
     core_grippers_resource = self.deck.get_resource("core_grippers")
@@ -120,3 +134,17 @@ class STAR(Device):
         end_z=205.0 + z_offset,
         traversal_height=traversal_height,
       )
+
+
+class STAR(_HamiltonSTAR):
+  """Hamilton STAR liquid handler."""
+
+  def __init__(self, chatterbox: bool = False):
+    super().__init__(deck=STARDeck(), chatterbox=chatterbox)
+
+
+class STARLet(_HamiltonSTAR):
+  """Hamilton STARLet liquid handler."""
+
+  def __init__(self, chatterbox: bool = False):
+    super().__init__(deck=STARLetDeck(), chatterbox=chatterbox)

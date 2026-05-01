@@ -1,13 +1,17 @@
 import asyncio
 import enum
+import logging
 import threading
 import time
 from abc import ABCMeta
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
+
+logger = logging.getLogger(__name__)
 
 
 class ByonoyDevice(enum.Enum):
@@ -27,8 +31,9 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     self._sending_pings = False
     self._device_type = device_type
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
+    logger.info("[Byonoy %s pid=0x%04X] connected", self._device_type.name, self.io.pid)
     self._stop_background.clear()
     self._background_thread = threading.Thread(target=self._background_ping_worker, daemon=True)
     self._background_thread.start()
@@ -38,6 +43,7 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     if self._background_thread and self._background_thread.is_alive():
       self._background_thread.join(timeout=2.0)
     await self.io.stop()
+    logger.info("[Byonoy %s pid=0x%04X] disconnected", self._device_type.name, self.io.pid)
 
   def _assemble_command(self, report_id: int, payload: bytes, routing_info: bytes) -> bytes:
     packet = Writer().u16(report_id).raw_bytes(payload).finish()
@@ -59,6 +65,12 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     t0 = time.time()
     while True:
       if time.time() - t0 > 120:
+        logger.error(
+          "[Byonoy %s pid=0x%04X] timeout waiting for response to command 0x%04X after 120s",
+          self._device_type.name,
+          self.io.pid,
+          report_id,
+        )
         raise TimeoutError("Reading data timed out after 2 minutes.")
       response = await self.io.read(64, timeout=30)
       if len(response) == 0:
@@ -73,6 +85,8 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     asyncio.set_event_loop(loop)
     try:
       loop.run_until_complete(self._ping_loop())
+    except Exception:
+      logger.error("Background ping worker crashed", exc_info=True)
     finally:
       loop.close()
 

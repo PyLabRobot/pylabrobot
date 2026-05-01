@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import sys
 from abc import ABC
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, Optional, TypeVar
 
 from pylabrobot.serializer import SerializableMixin
 
@@ -19,7 +19,7 @@ _R = TypeVar("_R", bound=Awaitable[Any])
 class CapabilityBackend(ABC):
   """Base class for capability-specific backends."""
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional["BackendParams"] = None):
     """Called when the parent capability is set up."""
 
   async def _on_stop(self):
@@ -37,7 +37,8 @@ def need_capability_ready(func: Callable[_P, _R]) -> Callable[_P, _R]:
 
   @functools.wraps(func)
   async def wrapper(*args, **kwargs):
-    assert isinstance(args[0], Capability), "The first argument must be a Capability."
+    if not isinstance(args[0], Capability):
+      raise RuntimeError("The first argument must be a Capability.")
     self = args[0]
 
     if not self.setup_finished:
@@ -84,9 +85,9 @@ class Capability(ABC):
   def setup_finished(self) -> bool:
     return self._setup_finished
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     """Called by the parent Device after driver.setup() completes."""
-    await self.backend._on_setup()
+    await self.backend._on_setup(backend_params=backend_params)
     self._setup_finished = True
 
   async def _on_stop(self):

@@ -35,8 +35,8 @@ Peristaltic dispensers push fluid through flexible tubing using a rotating pump 
 
 | Device | Manufacturer | Peristaltic | Syringe |
 |--------|-------------|:-----------:|:-------:|
-| [Multidrop Combi](../thermo_fisher/multidrop_combi/hello-world) | Thermo Fisher | yes | -- |
-| [EL406](../agilent/biotek/el406/hello-world) | BioTek (Agilent) | yes | yes |
+| [Multidrop Combi](../../thermo_fisher/multidrop_combi/hello-world) | Thermo Fisher | yes | -- |
+| [EL406](../../agilent/biotek/el406/hello-world) | BioTek (Agilent) | yes | yes |
 
 ```{toctree}
 :maxdepth: 1
@@ -48,5 +48,5 @@ syringe
 
 ## API reference
 
-- {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic.PeristalticDispensing` / {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.backend.PeristalticDispensingBackend`
-- {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.syringe.SyringeDispensing` / {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.backend.SyringeDispensingBackend`
+- {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic8.PeristalticDispensing8` / {class}`~pylabrobot.capabilities.bulk_dispensers.peristaltic.backend8.PeristalticDispensingBackend8`
+- {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.syringe8.SyringeDispensing8` / {class}`~pylabrobot.capabilities.bulk_dispensers.syringe.backend8.SyringeDispensingBackend8`

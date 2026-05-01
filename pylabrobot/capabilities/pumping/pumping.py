@@ -26,12 +26,10 @@ class Pump(Capability):
     self.calibration = calibration
 
   def serialize(self) -> dict:
-    if self.calibration is None:
-      return super().serialize()
-    return {
-      **super().serialize(),
-      "calibration": self.calibration.serialize(),
-    }
+    base: dict = {"type": self.__class__.__name__}
+    if self.calibration is not None:
+      base["calibration"] = self.calibration.serialize()
+    return base
 
   @need_capability_ready
   async def run_revolutions(self, num_revolutions: float):

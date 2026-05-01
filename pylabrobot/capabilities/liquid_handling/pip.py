@@ -8,6 +8,7 @@ from pylabrobot.capabilities.capability import BackendParams, Capability, need_c
 from pylabrobot.resources import (
   Container,
   Coordinate,
+  Deck,
   Plate,
   Tip,
   TipSpot,
@@ -22,12 +23,9 @@ from pylabrobot.resources.errors import HasTipError
 from .errors import BlowOutVolumeError, ChannelizedError
 from .pip_backend import PIPBackend
 from .standard import Aspiration, Dispense, Mix, Pickup, TipDrop
-from .utils import (
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
-)
+from .utils import get_tight_single_resource_liquid_op_offsets
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class PIP(Capability):
@@ -39,15 +37,16 @@ class PIP(Capability):
   See :doc:`/user_guide/capabilities/pip` for a walkthrough.
   """
 
-  def __init__(self, backend: PIPBackend):
+  def __init__(self, backend: PIPBackend, deck: Deck):
     super().__init__(backend=backend)
     self.backend: PIPBackend = backend
+    self.deck = deck
     self.head: Dict[int, TipTracker] = {}
     self._default_use_channels: Optional[List[int]] = None
     self._blow_out_air_volume: Optional[List[Optional[float]]] = None
 
-  async def _on_setup(self):
-    await super()._on_setup()
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
+    await super()._on_setup(backend_params=backend_params)
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
   @property
@@ -477,18 +476,12 @@ class PIP(Capability):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      if spread == "tight":
-        center_offsets = get_tight_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "wide":
-        center_offsets = get_wide_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "custom":
-        center_offsets = [Coordinate.zero()] * len(use_channels)
-      else:
-        raise ValueError("Invalid spread. Must be 'tight', 'wide', or 'custom'.")
+      # Lazy import to avoid circular dependency between capabilities and legacy modules.
+      from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
+
+      center_offsets = compute_channel_offsets(
+        resource=resource, num_channels=len(use_channels), spread=spread
+      )
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     aspirations = [
@@ -602,18 +595,12 @@ class PIP(Capability):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      if spread == "tight":
-        center_offsets = get_tight_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "wide":
-        center_offsets = get_wide_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
-      elif spread == "custom":
-        center_offsets = [Coordinate.zero()] * len(use_channels)
-      else:
-        raise ValueError("Invalid spread. Must be 'tight', 'wide', or 'custom'.")
+      # Lazy import to avoid circular dependency between capabilities and legacy modules.
+      from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
+
+      center_offsets = compute_channel_offsets(
+        resource=resource, num_channels=len(use_channels), spread=spread
+      )
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     tips = [self.head[channel].get_tip() for channel in use_channels]

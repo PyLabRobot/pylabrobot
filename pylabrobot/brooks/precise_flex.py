@@ -1,15 +1,21 @@
 import asyncio
+import dataclasses
 import logging
 import warnings
 from abc import ABC
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional
 
-from pylabrobot.arms.backend import CanFreedrive, HasJoints, OrientableGripperArmBackend
-from pylabrobot.arms.orientable_arm import OrientableArm
-from pylabrobot.arms.standard import GripperLocation
 from pylabrobot.brooks.error_codes import ERROR_CODES
+from pylabrobot.brooks import kinematics
+from pylabrobot.capabilities.arms.backend import (
+  CanFreedrive,
+  HasJoints,
+  OrientableGripperArmBackend,
+)
+from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.socket import Socket
@@ -25,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 ElbowOrientation = Literal["right", "left"]
+Wrist = Literal["cw", "ccw"]
 
 
 class PFAxis(IntEnum):
@@ -40,41 +47,7 @@ class PFAxis(IntEnum):
 class PreciseFlexGripperLocation(GripperLocation):
   rail: Optional[float] = None
   orientation: Optional[ElbowOrientation] = None
-
-
-@dataclass
-class VerticalAccess:
-  """Access location from above (most common pattern for stacks and tube racks).
-
-  Args:
-    approach_height_mm: Height above the target position to move to before descending to grip
-    clearance_mm: Vertical distance to retract after gripping before lateral movement
-    gripper_offset_mm: Additional vertical offset added when holding a plate
-  """
-
-  approach_height_mm: float = 100
-  clearance_mm: float = 100
-  gripper_offset_mm: float = 10
-
-
-@dataclass
-class HorizontalAccess:
-  """Access location from the side (for hotel-style plate carriers).
-
-  Args:
-    approach_distance_mm: Horizontal distance in front of the target to stop before moving in
-    clearance_mm: Horizontal distance to retract after gripping before lifting
-    lift_height_mm: Vertical distance to lift the plate after horizontal retract
-    gripper_offset_mm: Additional vertical offset added when holding a plate
-  """
-
-  approach_distance_mm: float = 50
-  clearance_mm: float = 50
-  lift_height_mm: float = 100
-  gripper_offset_mm: float = 10
-
-
-AccessPattern = Union[VerticalAccess, HorizontalAccess]
+  wrist: Optional[Wrist] = None
 
 
 # ---------------------------------------------------------------------------
@@ -143,18 +116,32 @@ class PreciseFlexDriver(Driver):
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def setup(self, skip_home: bool = False):
+  @dataclass
+  class SetupParams(BackendParams):
+    """PreciseFlex-specific parameters for ``setup``.
+
+    Args:
+      skip_home: If True, skip the homing step during setup.
+    """
+
+    skip_home: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     """Initialize the PreciseFlex driver.
 
     Opens the socket connection, sets response mode to PC, powers on the
     robot, attaches it, and (optionally) homes it.
     """
+    if not isinstance(backend_params, PreciseFlexDriver.SetupParams):
+      backend_params = PreciseFlexDriver.SetupParams()
+
     await self.io.setup()
     await self.set_response_mode("pc")
     await self.power_on_robot()
     await self.attach(1)
-    if not skip_home:
+    if not backend_params.skip_home:
       await self.home()
+    logger.info("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
   async def stop(self):
     """Stop the PreciseFlex driver."""
@@ -162,6 +149,7 @@ class PreciseFlexDriver(Driver):
     await self.power_off_robot()
     await self.exit()
     await self.io.stop()
+    logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
   # -- device-level commands -------------------------------------------------
 
@@ -317,6 +305,23 @@ class PreciseFlexDriver(Driver):
 # ---------------------------------------------------------------------------
 
 
+def _snap_to_current(
+  ik_joints: Dict[int, float], current: Dict[int, float], wrist: Wrist
+) -> Dict[int, float]:
+  """Shift each rotary joint by 360° multiples toward `current`, then re-enforce
+  the wrist-sign half on J4 so the result still matches `wrist`. Avoids
+  gratuitous full-turn moves when multiple IK solutions are equivalent.
+  """
+  out = dict(ik_joints)
+  for axis in (PFAxis.SHOULDER, PFAxis.ELBOW, PFAxis.WRIST):
+    out[axis] += 360 * round((current[axis] - out[axis]) / 360)
+  if wrist == "ccw" and out[PFAxis.WRIST] < 0:
+    out[PFAxis.WRIST] += 360
+  elif wrist == "cw" and out[PFAxis.WRIST] > 0:
+    out[PFAxis.WRIST] -= 360
+  return out
+
+
 class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, ABC):
   """Backend for the PreciseFlex robotic arm.
 
@@ -330,9 +335,20 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   def __init__(
     self,
     driver: PreciseFlexDriver,
+    gripper_length: float,
+    gripper_z_offset: float,
     is_dual_gripper: bool = False,
     has_rail: bool = False,
   ) -> None:
+    """
+    Args:
+      gripper_length: wrist-axis → TCP distance in mm. Depends on the mounted
+        gripper; the concrete Device wrapper supplies a model-appropriate default
+        (e.g. 162 mm for the stock single gripper on the PF400).
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
+        Depends on the mounted gripper; the concrete Device wrapper supplies a
+        model-appropriate default.
+    """
     super().__init__()
     self.driver = driver
     self.profile_index: int = 1
@@ -342,45 +358,50 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self.horizontal_compliance_torque: int = 0
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
+    self._kinematics_params = kinematics.PF400Params(
+      gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
+    )
     if is_dual_gripper:
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
       )
 
-  # -- coordinate conversion helpers -----------------------------------------
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
+    await super()._on_setup(backend_params=backend_params)
+    await self.stop_freedrive_mode()
 
-  def _convert_to_cartesian_array(
-    self, position: PreciseFlexGripperLocation
-  ) -> tuple[float, float, float, float, float, float, int]:
-    """Convert a PreciseFlexGripperLocation object to a list of cartesian coordinates."""
-    orientation_int = (
-      self._convert_orientation_str_to_int(position.orientation)
-      if position.orientation is not None
-      else 0
+  async def _request_state(
+    self,
+  ) -> tuple[Dict[int, float], PreciseFlexGripperLocation]:
+    """Single-query snapshot of joint state and the derived Cartesian pose."""
+    joints = await self.request_joint_position()
+    pose = kinematics.fk(joints, self._kinematics_params)
+    # PF400 gripper stays level: pitch=90, roll=-180.
+    pose = dataclasses.replace(pose, rotation=Rotation(x=-180, y=90, z=pose.rotation.yaw))
+    return joints, pose
+
+  async def _cart_to_joints(self, cart: PreciseFlexGripperLocation) -> Dict[int, float]:
+    """Convert a Cartesian location into a full joint dict using our IK.
+
+    Any of cart.orientation, cart.wrist, and cart.rail left as None default
+    to the current pose — picks the configuration closest to where the arm
+    is now. Fetches current joint state for the gripper and rail axes so
+    callers can use the result directly with `_move_j` or `_set_joint_angles`.
+    """
+    joints, current = await self._request_state()
+    cart = dataclasses.replace(
+      cart,
+      orientation=current.orientation if cart.orientation is None else cart.orientation,
+      wrist=current.wrist if cart.wrist is None else cart.wrist,
+      rail=current.rail if cart.rail is None else cart.rail,
     )
-    return (
-      position.location.x,
-      position.location.y,
-      position.location.z,
-      position.rotation.yaw,
-      position.rotation.pitch,
-      position.rotation.roll,
-      orientation_int,
-    )
-
-  def _convert_orientation_int_to_str(self, orientation_int: int) -> Optional[ElbowOrientation]:
-    if orientation_int == 1:
-      return "right"
-    if orientation_int == 2:
-      return "left"
-    return None
-
-  def _convert_orientation_str_to_int(self, orientation: ElbowOrientation) -> int:
-    if orientation == "left":
-      return 2
-    if orientation == "right":
-      return 1
-    return 0
+    ik_joints = _snap_to_current(kinematics.ik(cart, p=self._kinematics_params), joints, cart.wrist)
+    joints[PFAxis.BASE] = ik_joints[1]
+    joints[PFAxis.SHOULDER] = ik_joints[2]
+    joints[PFAxis.ELBOW] = ik_joints[3]
+    joints[PFAxis.WRIST] = ik_joints[4]
+    joints[PFAxis.RAIL] = cart.rail
+    return joints
 
   # -- high-level motion API -------------------------------------------------
 
@@ -396,6 +417,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ):
     """Open the gripper to the specified width."""
+    logger.info("[PreciseFlex %s] open_gripper: width_mm=%s", self.driver.io._host, gripper_width)
     await self._set_grip_open_pos(gripper_width)
     await self.driver.send_command("gripper 1")
 
@@ -403,6 +425,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ):
     """Close the gripper to the specified width."""
+    logger.info("[PreciseFlex %s] close_gripper: width_mm=%s", self.driver.io._host, gripper_width)
     await self._set_grip_close_pos(gripper_width)
     await self.driver.send_command("gripper 2")
 
@@ -416,40 +439,6 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     Does not include checks for collision with 3rd party obstacles inside the work volume of the robot.
     """
     await self.driver.send_command("movetosafe")
-
-  async def approach(
-    self,
-    position: Union[PreciseFlexGripperLocation, Dict[int, float]],
-    access: Optional[AccessPattern] = None,
-  ):
-    """Move the arm to an approach position (offset from target).
-
-    Args:
-      position: Target position (PreciseFlexGripperLocation or Dict[int, float])
-      access: Access pattern defining how to approach the target. Defaults to VerticalAccess() if not specified.
-
-    Example:
-      # Simple vertical approach (default)
-      await backend.approach(position)
-
-      # Horizontal hotel-style approach
-      await backend.approach(
-        position,
-        HorizontalAccess(
-          approach_distance_mm=50,
-          clearance_mm=50,
-          lift_height_mm=100
-        )
-      )
-    """
-    if access is None:
-      access = VerticalAccess()
-    if isinstance(position, dict):
-      await self._approach_j(position, access)
-    elif isinstance(position, PreciseFlexGripperLocation):
-      await self._approach_c(position, access)
-    else:
-      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
 
   async def move_rail(self, position: float) -> None:
     """Move the rail to the specified position.
@@ -473,10 +462,21 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   @dataclass
   class PickUpParams(BackendParams):
-    access: Optional[AccessPattern] = None
+    """PreciseFlex arm parameters for plate pickup.
+
+    Args:
+      finger_speed_percent: Finger closing speed as a percentage (0-100). Default 50.0.
+      grasp_force: Grasp force in Newtons. Default 10.0.
+      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+        picks the closest configuration. Only used for Cartesian moves.
+      rail_position: Linear rail position in mm. Required when the arm has a rail.
+        Only used for Cartesian moves.
+    """
+
     finger_speed_percent: float = 50.0
     grasp_force: float = 10.0
     orientation: Optional[ElbowOrientation] = None
+    wrist: Optional[Wrist] = None
     rail_position: Optional[float] = None
 
   async def pick_up_at_joint_position(
@@ -486,20 +486,34 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified joint position."""
+    logger.info(
+      "[PreciseFlex %s] pick_up: joints=%s, resource_width_mm=%s",
+      self.driver.io._host,
+      position,
+      resource_width,
+    )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
-    access = backend_params.access or VerticalAccess()
     await self._set_grasp_data(
       plate_width=resource_width,
       finger_speed_percent=backend_params.finger_speed_percent,
       grasp_force=backend_params.grasp_force,
     )
-    await self._pick_plate_j(position, access)
+    await self._pick_plate_j(position)
 
   @dataclass
   class DropParams(BackendParams):
-    access: Optional[AccessPattern] = None
+    """PreciseFlex arm parameters for plate drop.
+
+    Args:
+      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+        picks the closest configuration. Only used for Cartesian moves.
+      rail_position: Linear rail position in mm. Required when the arm has a rail.
+        Only used for Cartesian moves.
+    """
+
     orientation: Optional[ElbowOrientation] = None
+    wrist: Optional[Wrist] = None
     rail_position: Optional[float] = None
 
   async def drop_at_joint_position(
@@ -509,13 +523,24 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified joint position."""
+    logger.info(
+      "[PreciseFlex %s] drop: joints=%s, resource_width_mm=%s",
+      self.driver.io._host,
+      position,
+      resource_width,
+    )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()
-    access = backend_params.access or VerticalAccess()
-    await self._place_plate_j(position, access)
+    await self._place_plate_j(position)
 
   @dataclass
   class MoveToJointPositionParams(BackendParams):
+    """PreciseFlex arm parameters for joint-space moves.
+
+    Args:
+      speed: Movement speed override. If None, uses the current speed setting.
+    """
+
     speed: Optional[float] = None
 
   async def move_to_joint_position(
@@ -550,27 +575,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> PreciseFlexGripperLocation:
-    """Get the current position of the arm in Cartesian space."""
-    await self.driver._wait_for_eom()
-    num_tries = 2
-    for _ in range(num_tries):
-      data = await self.driver.send_command("wherec")
-      parts = data.split()
-      if len(parts) == 7:
-        break
-    else:
-      raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
-    x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
-    config = int(parts[6])
-    elbow_orientation = self._convert_orientation_int_to_str(config)
-    rail_position = (await self.request_joint_position())[PFAxis.RAIL] if self._has_rail else None
-
-    return PreciseFlexGripperLocation(
-      location=Coordinate(x, y, z),
-      rotation=Rotation(x=roll, y=pitch, z=yaw),
-      orientation=elbow_orientation,
-      rail=rail_position,
-    )
+    """Get the current pose using our kinematics model (no firmware `wherec`)."""
+    _, pose = await self._request_state()
+    return pose
 
   # -- OrientableArmBackend interface (Cartesian) -----------------------------
 
@@ -582,6 +589,15 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Pick up at the specified Cartesian location."""
+    logger.info(
+      "[PreciseFlex %s] pick_up: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
+      self.driver.io._host,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
+    )
     if not isinstance(backend_params, self.PickUpParams):
       backend_params = PreciseFlexArmBackend.PickUpParams()
     if backend_params.rail_position is not None:
@@ -590,16 +606,18 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError(
         "rail_position must be specified for pick_up_at_location when using a rail-equipped arm."
       )
-    access = backend_params.access or VerticalAccess()
     coords = PreciseFlexGripperLocation(
-      location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
+      location=location,
+      rotation=Rotation(z=direction),
+      orientation=backend_params.orientation,
+      wrist=backend_params.wrist,
     )
     await self._set_grasp_data(
       plate_width=resource_width,
       finger_speed_percent=backend_params.finger_speed_percent,
       grasp_force=backend_params.grasp_force,
     )
-    await self._pick_plate_c(cartesian_position=coords, access=access)
+    await self._pick_plate_c(cartesian_position=coords)
 
   async def drop_at_location(
     self,
@@ -609,6 +627,15 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Drop at the specified Cartesian location."""
+    logger.info(
+      "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
+      self.driver.io._host,
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
+    )
     if not isinstance(backend_params, self.DropParams):
       backend_params = PreciseFlexArmBackend.DropParams()
     if backend_params.rail_position is not None:
@@ -617,16 +644,28 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError(
         "rail_position must be specified for drop_at_location when using a rail-equipped arm."
       )
-    access = backend_params.access or VerticalAccess()
     coords = PreciseFlexGripperLocation(
-      location=location, rotation=Rotation(z=direction), orientation=backend_params.orientation
+      location=location,
+      rotation=Rotation(z=direction),
+      orientation=backend_params.orientation,
+      wrist=backend_params.wrist,
     )
-    await self._place_plate_c(cartesian_position=coords, access=access)
+    await self._place_plate_c(cartesian_position=coords)
 
   @dataclass
   class MoveToLocationParams(BackendParams):
+    """PreciseFlex arm parameters for Cartesian-space moves.
+
+    Args:
+      speed: Movement speed override. If None, uses the current speed setting.
+      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+        picks the closest configuration.
+      rail_position: Linear rail position in mm. Required when the arm has a rail.
+    """
+
     speed: Optional[float] = None
     orientation: Optional[ElbowOrientation] = None
+    wrist: Optional[Wrist] = None
     rail_position: Optional[float] = None
 
   async def move_to_location(
@@ -652,8 +691,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       location=location,
       rotation=Rotation(x=-180, y=90, z=direction),
       orientation=backend_params.orientation,
+      wrist=backend_params.wrist,
     )
-    await self._move_c(profile_index=self.profile_index, cartesian_coords=coords)
+    joints = await self._cart_to_joints(coords)
+    await self._move_j(profile_index=self.profile_index, joint_coords=joints)
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
@@ -701,21 +742,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   # -- internal pick/place helpers -------------------------------------------
 
-  async def _approach_j(self, joint_position: Dict[int, float], access: AccessPattern):
-    """Move the arm to a position above the specified coordinates.
-
-    The approach behavior depends on the access pattern:
-    - VerticalAccess: Approaches from above using approach_height_mm
-    - HorizontalAccess: Approaches from the side using approach_distance_mm
-    """
-    await self._set_joint_angles(self.location_index, joint_position)
-    await self._set_grip_detail(access)
-    await self._move_to_stored_location_appro(self.location_index, self.profile_index)
-
-  async def _pick_plate_j(self, joint_position: Dict[int, float], access: AccessPattern):
+  async def _pick_plate_j(self, joint_position: Dict[int, float]):
     """Pick a plate from the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
-    await self._set_grip_detail(access)
+    await self._set_grip_detail()
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     ret_code = await self.driver.send_command(
       f"pickplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
@@ -723,88 +753,28 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     if ret_code == "0":
       raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
 
-  async def _place_plate_j(self, joint_position: Dict[int, float], access: AccessPattern):
+  async def _place_plate_j(self, joint_position: Dict[int, float]):
     """Place a plate at the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
-    await self._set_grip_detail(access)
+    await self._set_grip_detail()
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     await self.driver.send_command(
       f"placeplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
     )
 
-  async def _approach_c(
-    self,
-    cartesian_position: PreciseFlexGripperLocation,
-    access: AccessPattern,
-  ):
-    """Move the arm to a position above the specified coordinates.
+  async def _pick_plate_c(self, cartesian_position: PreciseFlexGripperLocation):
+    """Pick a plate at a Cartesian position via IK + joint-space pickplate."""
+    joints = await self._cart_to_joints(cartesian_position)
+    await self._pick_plate_j(joints)
 
-    The approach behavior depends on the access pattern:
-    - VerticalAccess: Approaches from above using approach_height_mm
-    - HorizontalAccess: Approaches from the side using approach_distance_mm
-    """
-    await self._set_location_xyz(self.location_index, cartesian_position)
-    await self._set_grip_detail(access)
-    if cartesian_position.orientation is not None:
-      orientation_int = self._convert_orientation_str_to_int(cartesian_position.orientation)
-      await self._set_location_config(self.location_index, orientation_int)
-    await self._move_to_stored_location_appro(self.location_index, self.profile_index)
+  async def _place_plate_c(self, cartesian_position: PreciseFlexGripperLocation):
+    """Place a plate at a Cartesian position via IK + joint-space placeplate."""
+    joints = await self._cart_to_joints(cartesian_position)
+    await self._place_plate_j(joints)
 
-  async def _pick_plate_c(
-    self,
-    cartesian_position: PreciseFlexGripperLocation,
-    access: AccessPattern,
-  ):
-    """Pick a plate from the specified position using Cartesian coordinates."""
-    await self._set_location_xyz(self.location_index, cartesian_position)
-    await self._set_grip_detail(access)
-    if cartesian_position.orientation is not None:
-      orientation_int = self._convert_orientation_str_to_int(cartesian_position.orientation)
-      orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
-      await self._set_location_config(self.location_index, orientation_int)
-    horizontal_compliance_int = 1 if self.horizontal_compliance else 0
-    ret_code = await self.driver.send_command(
-      f"pickplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
-    )
-    if ret_code == "0":
-      raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
-
-  async def _place_plate_c(
-    self,
-    cartesian_position: PreciseFlexGripperLocation,
-    access: AccessPattern,
-  ):
-    """Place a plate at the specified position using Cartesian coordinates."""
-    await self._set_location_xyz(self.location_index, cartesian_position)
-    await self._set_grip_detail(access)
-    if cartesian_position.orientation is not None:
-      orientation_int = self._convert_orientation_str_to_int(cartesian_position.orientation)
-      orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
-      await self._set_location_config(self.location_index, orientation_int)
-    horizontal_compliance_int = 1 if self.horizontal_compliance else 0
-    await self.driver.send_command(
-      f"placeplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
-    )
-
-  async def _set_grip_detail(self, access: AccessPattern):
-    """Configure station type for pick/place operations based on access pattern.
-
-    Calls TCS set_station_type command to configure how the robot interprets
-    clearance values and performs approach/retract motions.
-
-    Args:
-      access: Access pattern (VerticalAccess or HorizontalAccess) defining how to approach and retract from the location.
-    """
-    if isinstance(access, VerticalAccess):
-      await self.driver.send_command(
-        f"StationType {self.location_index} 1 0 {access.clearance_mm} 0 {access.gripper_offset_mm}"
-      )
-    elif isinstance(access, HorizontalAccess):
-      await self.driver.send_command(
-        f"StationType {self.location_index} 0 0 {access.clearance_mm} {access.lift_height_mm} {access.gripper_offset_mm}"
-      )
-    else:
-      raise TypeError("Access pattern must be VerticalAccess or HorizontalAccess.")
+  async def _set_grip_detail(self):
+    """Configure a default vertical station type for pick/place operations."""
+    await self.driver.send_command(f"StationType {self.location_index} 1 0 100 0 10")
 
   # -- GENERAL COMMANDS ------------------------------------------------------
 
@@ -1028,7 +998,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     response = await self.driver.send_command("sysState")
     return int(response)
 
-  async def request_tool_transformation_values(self) -> tuple[float, float, float, float, float, float]:
+  async def request_tool_transformation_values(
+    self,
+  ) -> tuple[float, float, float, float, float, float]:
     """Get the current tool transformation values.
 
     Returns:
@@ -1095,66 +1067,6 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         f"{joint_position[PFAxis.WRIST]} "
         f"{joint_position[PFAxis.GRIPPER]}"
       )
-
-  async def _set_location_xyz(
-    self,
-    location_index: int,
-    cartesian_position: PreciseFlexGripperLocation,
-  ) -> None:
-    """Set the Cartesian position values for the specified station index.
-
-    Args:
-      location_index: The station index, from 1 to N_LOC.
-      cartesian_position: The Cartesian position to set.
-    """
-    await self.driver.send_command(
-      f"locXyz {location_index} "
-      f"{cartesian_position.location.x} "
-      f"{cartesian_position.location.y} "
-      f"{cartesian_position.location.z} "
-      f"{cartesian_position.rotation.yaw} "
-      f"{cartesian_position.rotation.pitch} "
-      f"{cartesian_position.rotation.roll}"
-    )
-
-  async def _set_location_config(self, location_index: int, config_value: int) -> None:
-    """Set the Config property for the specified location.
-
-    Args:
-      location_index: The station index, from 1 to N_LOC.
-      config_value: The new Config property value as a bit mask where:
-      - 0 = None (no configuration specified)
-      - 0x01 = GPL_Righty (right shouldered configuration)
-      - 0x02 = GPL_Lefty (left shouldered configuration)
-      - 0x04 = GPL_Above (elbow above the wrist)
-      - 0x08 = GPL_Below (elbow below the wrist)
-      - 0x10 = GPL_Flip (wrist pitched up)
-      - 0x20 = GPL_NoFlip (wrist pitched down)
-      - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
-      Values can be combined using bitwise OR.
-
-    Raises:
-      ValueError: If config_value contains invalid bits or conflicting configurations.
-    """
-    GPL_RIGHTY = 0x01
-    GPL_LEFTY = 0x02
-    GPL_ABOVE = 0x04
-    GPL_BELOW = 0x08
-    GPL_FLIP = 0x10
-    GPL_NOFLIP = 0x20
-    GPL_SINGLE = 0x1000
-    ALL_VALID_BITS = (
-      GPL_RIGHTY | GPL_LEFTY | GPL_ABOVE | GPL_BELOW | GPL_FLIP | GPL_NOFLIP | GPL_SINGLE
-    )
-    if config_value & ~ALL_VALID_BITS:
-      raise ValueError(f"Invalid config bits specified: 0x{config_value:X}")
-    if (config_value & GPL_RIGHTY) and (config_value & GPL_LEFTY):
-      raise ValueError("Cannot specify both GPL_Righty and GPL_Lefty")
-    if (config_value & GPL_ABOVE) and (config_value & GPL_BELOW):
-      raise ValueError("Cannot specify both GPL_Above and GPL_Below")
-    if (config_value & GPL_FLIP) and (config_value & GPL_NOFLIP):
-      raise ValueError("Cannot specify both GPL_Flip and GPL_NoFlip")
-    await self.driver.send_command(f"locConfig {location_index} {config_value}")
 
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:
     """Get the destination or current Cartesian location of the robot.
@@ -1558,35 +1470,6 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """
     await self.driver.send_command(f"moveAppro {location_index} {profile_index}")
 
-  async def _move_c(
-    self,
-    profile_index: int,
-    cartesian_coords: PreciseFlexGripperLocation,
-  ) -> None:
-    """Move the robot to the Cartesian location specified by the arguments.
-
-    Args:
-      profile_index: The profile index to use for this motion.
-      cartesian_coords: The Cartesian coordinates to which the robot should move.
-
-    Note:
-      Requires that the robot be attached.
-    """
-    cmd = (
-      f"moveC {profile_index} "
-      f"{cartesian_coords.location.x} "
-      f"{cartesian_coords.location.y} "
-      f"{cartesian_coords.location.z} "
-      f"{cartesian_coords.rotation.yaw} "
-      f"{cartesian_coords.rotation.pitch} "
-      f"{cartesian_coords.rotation.roll} "
-    )
-    if cartesian_coords.orientation is not None:
-      config_int = self._convert_orientation_str_to_int(cartesian_coords.orientation)
-      config_int |= 0x1000
-      cmd += f"{config_int}"
-    await self.driver.send_command(cmd)
-
   async def _move_j(self, profile_index: int, joint_coords: Dict[int, float]) -> None:
     """Move the robot using joint coordinates, handling rail configuration."""
     if self._has_rail:
@@ -1794,12 +1677,30 @@ class PreciseFlex400(Device):
   """Backend for the PreciseFlex 400 robotic arm."""
 
   def __init__(
-    self, host: str, port: int = 10100, has_rail: bool = False, timeout: int = 20
+    self,
+    host: str,
+    port: int = 10100,
+    has_rail: bool = False,
+    timeout: int = 20,
+    gripper_length: float = 162.0,
+    gripper_z_offset: float = 0.0,
   ) -> None:
+    """
+    Args:
+      gripper_length: wrist-axis → TCP distance in mm. Defaults to 162 mm, which
+        matches the stock single gripper on the PF400.
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
+        Defaults to 0 mm.
+    """
     driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
     self.driver: PreciseFlexDriver = driver
-    backend = PreciseFlexArmBackend(driver=driver, has_rail=has_rail)
+    backend = PreciseFlexArmBackend(
+      driver=driver,
+      has_rail=has_rail,
+      gripper_length=gripper_length,
+      gripper_z_offset=gripper_z_offset,
+    )
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
     self.arm = OrientableArm(backend=backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
@@ -1811,6 +1712,13 @@ class PreciseFlex3400Backend(PreciseFlexArmBackend):
   def __init__(
     self,
     driver: PreciseFlexDriver,
+    gripper_length: float,
+    gripper_z_offset: float,
     has_rail: bool = False,
   ) -> None:
-    super().__init__(driver=driver, has_rail=has_rail)
+    super().__init__(
+      driver=driver,
+      has_rail=has_rail,
+      gripper_length=gripper_length,
+      gripper_z_offset=gripper_z_offset,
+    )

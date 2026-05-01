@@ -44,6 +44,7 @@ molecular_devices/index
 opentrons/index
 qinstruments/index
 thermo_fisher/index
+ufactory/index
 ```
 
 ```{toctree}

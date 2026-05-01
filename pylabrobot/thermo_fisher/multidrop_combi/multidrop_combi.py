@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from pylabrobot.capabilities.bulk_dispensers.peristaltic import PeristalticDispensing
+from pylabrobot.capabilities.bulk_dispensers.peristaltic import PeristalticDispensing8
 from pylabrobot.device import Device
 from pylabrobot.thermo_fisher.multidrop_combi.driver import MultidropCombiDriver
-from pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend import (
-  MultidropCombiPeristalticDispensingBackend,
+from pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8 import (
+  MultidropCombiPeristalticDispensingBackend8,
 )
 
 
@@ -29,7 +29,7 @@ class MultidropCombi(Device):
       driver = MultidropCombiDriver(port=port, timeout=timeout)
     super().__init__(driver=driver)
     self.driver: MultidropCombiDriver = driver
-    self.peristaltic = PeristalticDispensing(
-      backend=MultidropCombiPeristalticDispensingBackend(driver)
+    self.peristaltic_dispenser = PeristalticDispensing8(
+      backend=MultidropCombiPeristalticDispensingBackend8(driver)
     )
-    self._capabilities = [self.peristaltic]
+    self._capabilities = [self.peristaltic_dispenser]

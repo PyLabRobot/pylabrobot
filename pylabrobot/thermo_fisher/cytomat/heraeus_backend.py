@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 try:
   import serial
@@ -13,8 +13,9 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
-from pylabrobot.capabilities.shaking.backend import ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
@@ -29,6 +30,7 @@ class HeraeusCytomatBackend(
   TemperatureControllerBackend,
   HumidityControllerBackend,
   ShakerBackend,
+  HasContinuousShaking,
   Driver,
 ):
   """
@@ -66,8 +68,8 @@ class HeraeusCytomatBackend(
       rtscts=True,
     )
 
-  async def setup(self):
-    await Driver.setup(self)
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await Driver.setup(self, backend_params=backend_params)
     try:
       await self.io.setup()
     except serial.SerialException as e:
@@ -83,8 +85,10 @@ class HeraeusCytomatBackend(
     while time.time() < deadline:
       resp = await self.io.readline()
       if resp.strip() == b"CC":
+        logger.info("[Heraeus %s] connected", self.io.port)
         break
     else:
+      logger.error("No CC response from PLC within %ss", self.init_timeout)
       await self.io.stop()
       raise TimeoutError(f"No CC response from PLC within {self.init_timeout} seconds")
 
@@ -92,6 +96,7 @@ class HeraeusCytomatBackend(
     resp = await self.io.readline()
     if resp.strip() != b"OK":
       await self.io.stop()
+      logger.error("[Heraeus %s] unexpected reply to ST 1801: %r", self.io.port, resp)
       raise RuntimeError(f"Unexpected reply to ST 1801: {resp!r}")
 
     deadline = time.time() + self.start_timeout
@@ -107,6 +112,7 @@ class HeraeusCytomatBackend(
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[Heraeus %s] disconnected", self.io.port)
     await Driver.stop(self)
 
   async def set_racks(self, racks: List[PlateCarrier]):
@@ -116,6 +122,7 @@ class HeraeusCytomatBackend(
   # -- AutomatedRetrievalBackend --
 
   async def fetch_plate_to_loading_tray(self, plate: Plate):
+    logger.info("[Heraeus %s] fetch plate to loading tray: plate='%s'", self.io.port, plate.name)
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
     m, n = self._site_to_m_n(site)
@@ -126,6 +133,9 @@ class HeraeusCytomatBackend(
     await self._send_command("ST 1903")
 
   async def store_plate(self, plate: Plate, site: PlateHolder):
+    logger.info(
+      "[Heraeus %s] store plate: plate='%s', site='%s'", self.io.port, plate.name, site.name
+    )
     m, n = self._site_to_m_n(site)
     await self._send_command(f"WR DM0 {m}")
     await self._send_command(f"WR DM5 {n}")
@@ -172,11 +182,20 @@ class HeraeusCytomatBackend(
   async def unlock_plate(self):
     raise NotImplementedError("Heraeus Cytomat does not support plate locking")
 
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    try:
+      await asyncio.sleep(duration)
+    finally:
+      await self.stop_shaking()
+
   async def start_shaking(self, speed: float):
+    logger.info("[Heraeus %s] start shaking", self.io.port)
     await self._send_command("ST 1607")
     await self._wait_ready()
 
   async def stop_shaking(self):
+    logger.info("[Heraeus %s] stop shaking", self.io.port)
     await self._send_command("RS 1607")
     await self._wait_ready()
 
@@ -192,13 +211,13 @@ class HeraeusCytomatBackend(
 
   async def _send_command(self, command: str) -> str:
     cmd = command.strip() + "\r"
-    logger.debug("Sending Cytomat command: %r", cmd)
     await self.io.write(cmd.encode(self.serial_message_encoding))
     resp = (await self.io.read(128)).decode(self.serial_message_encoding)
     if not resp:
       raise RuntimeError("No response from Cytomat controller")
     resp = resp.strip()
     if resp.startswith("E"):
+      logger.error("[Heraeus %s] controller error: %s", self.io.port, resp)
       raise RuntimeError(f"Cytomat controller error: {resp}")
     return resp
 
@@ -218,6 +237,7 @@ class HeraeusCytomatBackend(
         return
       await asyncio.sleep(0.1)
       if time.time() - start > timeout:
+        logger.error("[Heraeus %s] timed out waiting for ready after %ds", self.io.port, timeout)
         raise TimeoutError("Legacy Cytomat did not become ready in time")
 
   async def initialize(self):

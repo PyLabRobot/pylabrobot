@@ -1,14 +1,16 @@
+import asyncio
 from typing import Optional
 
+from pylabrobot.capabilities.shaking import Shaker as _NewShaker
 from pylabrobot.capabilities.shaking import ShakerBackend as _NewShakerBackend
-from pylabrobot.capabilities.shaking import Shaker
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import ShakerBackend
 
 
-class _ShakingAdapter(_NewShakerBackend):
+class _ShakingAdapter(_NewShakerBackend, HasContinuousShaking):
   def __init__(self, legacy: ShakerBackend):
     self._legacy = legacy
 
@@ -17,6 +19,11 @@ class _ShakingAdapter(_NewShakerBackend):
 
   async def stop(self):
     pass
+
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed)
+    await asyncio.sleep(duration)
+    await self.stop_shaking()
 
   async def start_shaking(self, speed: float):
     await self._legacy.start_shaking(speed)
@@ -61,14 +68,16 @@ class Shaker(ResourceHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend
-    self._shaking_cap = Shaker(backend=_ShakingAdapter(backend))
+    self._shaking_cap = _NewShaker(backend=_ShakingAdapter(backend))
 
   async def setup(self, **backend_kwargs):
     await super().setup(**backend_kwargs)
     await self._shaking_cap._on_setup()
 
   async def shake(self, speed: float, duration: Optional[float] = None, **backend_kwargs):
-    return await self._shaking_cap.shake(speed=speed, duration=duration)
+    if duration is not None:
+      return await self._shaking_cap.shake(speed=speed, duration=duration)
+    return await self._shaking_cap.start_shaking(speed=speed)
 
   async def stop_shaking(self, **backend_kwargs):
     await self._shaking_cap.stop_shaking()

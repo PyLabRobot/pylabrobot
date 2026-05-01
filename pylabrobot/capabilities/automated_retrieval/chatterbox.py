@@ -1,7 +1,7 @@
 import logging
 
-from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.carrier import PlateHolder
+from pylabrobot.resources.plate import Plate
 
 from .backend import AutomatedRetrievalBackend
 

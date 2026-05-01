@@ -51,51 +51,53 @@ Note: Once physically installed on the system it is recommended that you level t
 This code is most easily run in a Jupyter notebook so that you can send the other commands whenever you are ready.
 
 ```python
-from pylabrobot.liquid_handling import LiquidHandler, STARBackend
-from pylabrobot.resources import STARDeck
-star_backend = STARBackend()
-lh = LiquidHandler(backend=star_backend, deck=STARDeck())
-await lh.setup()
+from pylabrobot.hamilton.liquid_handlers.star import STAR
+
+star = STAR()
+await star.setup()
 ```
 
 11. **!!While supporting the iSWAP in the Z axis!!** release the Z axis brake on the iSWAP.
 
 ```python
 input("Confirm the deck is clear and press Enter to continue...")
-await star_backend.position_components_for_free_iswap_y_range()
-await star_backend.move_iswap_y(300)
-x = lh.deck.rails_to_location(deck.num_rails/2).x
-await star_backend.move_iswap_x(x)
+await star.pip.backend.position_components_for_free_iswap_y_range()
+await star.driver.iswap.move_y(y=300)
+x = star.deck.rails_to_location(star.deck.num_rails / 2).x
+await star.driver.iswap.move_x(x=x)
 ```
 
 hold the iSWAP arm in place while you do this, as it will fall if you don't:
 
 ```python
-await star_backend.iswap_dangerous_release_break()  # firmware command "R0BA"
+await star.driver.iswap.dangerous_release_break()  # firmware command "R0BA"
 ```
 
 12. Lower the iSWAP until the gripper fingers are just above the deck surface (2-5mm) but still above the little "submarines".
 13. Reengage the Z axis brake
 
 ```python
-await star_backend.iswap_reengage_break()  # firmware command "R0BO"
+await star.driver.iswap.reengage_break()  # firmware command "R0BO"
 ```
 
 14. Orient the iSWAP with the main arm to the right with the gripper facing you and rotate the iSWAP about the X axis by adjusting the screws until the gripper fingers are equidistant from the deck.
 
 ```python
-await star_backend.iswap_rotate(
-  rotation_drive=STARBackend.RotationDriveOrientation.RIGHT,
-  grip_direction=GripDirection.BACK
+from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
+from pylabrobot.capabilities.arms.standard import GripDirection
+
+await star.driver.iswap.rotate(
+  rotation_drive=iSWAPBackend.RotationDriveOrientation.RIGHT,
+  grip_direction=GripDirection.BACK,
 )
 ```
 
-15. Rotate the main iSWAP are 180 degrees to the left and rotate the gripper hand around until it is facing you. Repeat the X axis rotation until the gripper fingers are equidistant from the deck.
+15. Rotate the main iSWAP arm 180 degrees to the left and rotate the gripper hand around until it is facing you. Repeat the X axis rotation until the gripper fingers are equidistant from the deck.
 
 ```python
-await star_backend.iswap_rotate(
-  rotation_drive=STARBackend.RotationDriveOrientation.LEFT,
-  grip_direction=GripDirection.BACK
+await star.driver.iswap.rotate(
+  rotation_drive=iSWAPBackend.RotationDriveOrientation.LEFT,
+  grip_direction=GripDirection.BACK,
 )
 ```
 
@@ -103,7 +105,7 @@ await star_backend.iswap_rotate(
 17. Make sure there is no chance of Z axis collision and initialize the Z axis of the iSWAP.
 
 ```python
-await star_backend.iswap_initialize_z_axis()  # firmware command "R0ZI"
+await star.driver.iswap.initialize_z_axis()  # firmware command "R0ZI"
 ```
 
 18. Check/Reteach all iSWAP locations in your programs.

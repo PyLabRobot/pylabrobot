@@ -1,12 +1,12 @@
 import unittest
 
+from pylabrobot.resources import Plate, Well, create_ordered_items_2d
+from pylabrobot.resources.well import CrossSectionType, WellBottomType
 from pylabrobot.thermo_fisher.multidrop_combi.helpers import (
   plate_to_pla_params,
   plate_to_type_index,
   plate_well_count,
 )
-from pylabrobot.resources import Plate, Well, create_ordered_items_2d
-from pylabrobot.resources.well import CrossSectionType, WellBottomType
 
 
 def _make_plate(

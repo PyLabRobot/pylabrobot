@@ -24,6 +24,7 @@ class DispensingOrder(enum.IntEnum):
 
   Per-column volumes (set via SCV) are independent of dispensing order.
   """
+
   ROW_WISE = 0
   COLUMN_WISE = 1
 

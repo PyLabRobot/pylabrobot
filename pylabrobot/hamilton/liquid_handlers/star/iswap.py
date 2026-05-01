@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import enum
+import logging
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
-from pylabrobot.arms.backend import OrientableGripperArmBackend
-from pylabrobot.arms.standard import GripDirection, GripperLocation
+from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
+from pylabrobot.capabilities.arms.standard import GripDirection, GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
+
+logger = logging.getLogger(__name__)
 
 
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
@@ -84,7 +87,12 @@ class iSWAPBackend(OrientableGripperArmBackend):
     )
     return GripperLocation(location=location, rotation=Rotation())
 
-  async def _on_setup(self) -> None:
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
+    already_initialized = await self.request_initialization_status()
+    if not already_initialized:
+      await self.initialize()
+    await self.park()
+
     if self._version is None:
       self._version = await self._request_version()
 
@@ -192,7 +200,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     Returns:
       Parsed response dict with key ``"rg"`` (0 = not parked, 1 = parked).
     """
-    return await self.driver.send_command(module="C0", command="RG", fmt="rg#")
+    return await self.driver.send_command(module="C0", command="RG", fmt="rg#")  # type: ignore[no-any-return]
 
   async def request_initialization_status(self) -> bool:
     """Request iSWAP initialization status (R0 QW).
@@ -208,26 +216,26 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     This is equivalent to the Y location of the iSWAP module.
     """
-    if not self.driver.extended_conf.left_x_drive.iswap_installed:
+    if not self.driver.extended_conf.left_x_drive.iswap_installed:  # type: ignore[union-attr]
       raise RuntimeError("iSWAP is not installed")
     resp = await self.driver.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
     return round(self.driver.y_drive_increment_to_mm(iswap_y_pos), 1)
 
-  async def move_x(self, x_position: float) -> None:
+  async def move_x(self, x: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_relative_x(step_size=x_position - loc.x, allow_splitting=True)
+    await self.move_relative_x(step_size=x - loc.x, allow_splitting=True)
 
-  async def move_y(self, y_position: float) -> None:
+  async def move_y(self, y: float) -> None:
     """Move iSWAP Y to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_relative_y(step_size=y_position - loc.y, allow_splitting=True)
+    await self.move_relative_y(step_size=y - loc.y, allow_splitting=True)
 
-  async def move_z(self, z_position: float) -> None:
+  async def move_z(self, z: float) -> None:
     """Move iSWAP Z to an absolute position [mm]."""
     loc = (await self.request_gripper_location()).location
-    await self.move_relative_z(step_size=z_position - loc.z, allow_splitting=True)
+    await self.move_relative_z(step_size=z - loc.z, allow_splitting=True)
 
   # -- rotation / wrist drive ------------------------------------------------
 
@@ -546,6 +554,14 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class ParkParams(BackendParams):
+    """Parameters for parking the iSWAP arm.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement to
+        the park position. If None, uses the backend's ``traversal_height``. Must be
+        between 0 and 360.0.
+    """
+
     minimum_traverse_height: Optional[float] = None
 
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -588,8 +604,20 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class CloseGripperParams(BackendParams):
+    """Parameters for closing the iSWAP gripper.
+
+    The gripper should be at position plate_width + plate_width_tolerance + 2.0 mm
+    before sending this command.
+
+    Args:
+      grip_strength: Grip strength (0 = low, 9 = high). Must be between 0 and 9.
+        Default 5.
+      plate_width_tolerance: Plate width tolerance in mm. Must be between 0.5 and 9.9.
+        Default 2.0.
+    """
+
     grip_strength: int = 5
-    plate_width_tolerance: float = 0
+    plate_width_tolerance: float = 2.0
 
   async def close_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -607,8 +635,8 @@ class iSWAPBackend(OrientableGripperArmBackend):
       raise ValueError("grip_strength must be between 0 and 9")
     if not 0 <= gripper_width <= 999.9:
       raise ValueError("gripper_width must be between 0 and 999.9")
-    if not 0 <= backend_params.plate_width_tolerance <= 9.9:
-      raise ValueError("plate_width_tolerance must be between 0 and 9.9")
+    if not 0.5 <= backend_params.plate_width_tolerance <= 9.9:
+      raise ValueError("plate_width_tolerance must be between 0.5 and 9.9")
 
     await self.driver.send_command(
       module="C0",
@@ -620,6 +648,27 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class PickUpParams(BackendParams):
+    """iSWAP-specific parameters for plate pickup.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+      grip_strength: Grip strength (1 = low, 9 = high). Must be between 1 and 9.
+        Default 4.
+      plate_width_tolerance: Plate width tolerance in mm. Must be between 0 and 9.9.
+        Default 2.0.
+      collision_control_level: Collision control level (0 = low, 1 = high). Must be
+        0 or 1. Default 0.
+      acceleration_index_high_acc: Acceleration index for high acceleration phases.
+        Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: Acceleration index for low acceleration phases.
+        Must be between 0 and 4. Default 1.
+      fold_up_at_end: Whether to fold up the iSWAP at the end of the process.
+        Default False.
+    """
+
     minimum_traverse_height: float = 280.0
     z_position_at_end: float = 280.0
     grip_strength: int = 4
@@ -677,6 +726,15 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
+    logger.info(
+      "[iSWAP] pick up plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
+    )
+
     await self.driver.send_command(
       module="C0",
       command="PP",
@@ -700,6 +758,23 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class DropParams(BackendParams):
+    """iSWAP-specific parameters for plate drop.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+      collision_control_level: Collision control level (0 = low, 1 = high). Must be
+        0 or 1. Default 0.
+      acceleration_index_high_acc: Acceleration index for high acceleration phases.
+        Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: Acceleration index for low acceleration phases.
+        Must be between 0 and 4. Default 1.
+      fold_up_at_end: Whether to fold up the iSWAP at the end of the process.
+        Default False.
+    """
+
     minimum_traverse_height: float = 280.0
     z_position_at_end: float = 280.0
     collision_control_level: int = 0
@@ -748,6 +823,15 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
 
+    logger.info(
+      "[iSWAP] release plate: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg, width=%.1f mm",
+      location.x,
+      location.y,
+      location.z,
+      direction,
+      resource_width,
+    )
+
     await self.driver.send_command(
       module="C0",
       command="PR",
@@ -777,6 +861,19 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   @dataclass
   class MoveToLocationParams(BackendParams):
+    """iSWAP-specific parameters for moving a held plate to a new position.
+
+    Args:
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 360.0.
+      collision_control_level: Collision control level (0 = low, 1 = high). Must be
+        0 or 1. Default 1.
+      acceleration_index_high_acc: Acceleration index for high acceleration phases.
+        Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: Acceleration index for low acceleration phases.
+        Must be between 0 and 4. Default 1.
+    """
+
     minimum_traverse_height: float = 360.0
     collision_control_level: int = 1
     acceleration_index_high_acc: int = 4
@@ -814,6 +911,14 @@ class iSWAPBackend(OrientableGripperArmBackend):
       raise ValueError("acceleration_index_low_acc must be between 0 and 4")
 
     grip_dir = _direction_degrees_to_grip_direction(direction)
+
+    logger.info(
+      "[iSWAP] move held plate to: x=%.1f, y=%.1f, z=%.1f, direction=%.0f deg",
+      location.x,
+      location.y,
+      location.z,
+      direction,
+    )
 
     await self.driver.send_command(
       module="C0",

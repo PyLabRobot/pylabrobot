@@ -1,22 +1,22 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend import (
-  MultidropCombiPeristalticDispensingBackend,
-  _ul_to_tenths,
-)
-from pylabrobot.thermo_fisher.multidrop_combi.enums import DispensingOrder, PrimeMode, EmptyMode
 from pylabrobot.resources import Plate, Well, create_ordered_items_2d
 from pylabrobot.resources.well import CrossSectionType, WellBottomType
+from pylabrobot.thermo_fisher.multidrop_combi.enums import DispensingOrder, EmptyMode, PrimeMode
+from pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8 import (
+  MultidropCombiPeristalticDispensingBackend8,
+  _ul_to_tenths,
+)
 
 
-def _make_backend() -> MultidropCombiPeristalticDispensingBackend:
+def _make_backend() -> MultidropCombiPeristalticDispensingBackend8:
   """Create a backend with a mock driver."""
   driver = MagicMock()
   driver.send_command = AsyncMock(return_value=[])
   driver.send_abort_signal = AsyncMock()
   driver.acknowledge_error = AsyncMock()
-  backend = MultidropCombiPeristalticDispensingBackend(driver=driver)
+  backend = MultidropCombiPeristalticDispensingBackend8(driver=driver)
   return backend
 
 
@@ -65,30 +65,33 @@ class DispenseTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_bare(self):
     await self.backend.dispense(plate=self.plate, volumes={1: 10.0})
-    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]
+    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]  # type: ignore[attr-defined]
     self.assertEqual(calls, ["SCV 1 100", "DIS"])
 
   async def test_dispense_per_column(self):
     await self.backend.dispense(plate=self.plate, volumes={1: 10.0, 3: 20.0})
-    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]
+    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]  # type: ignore[attr-defined]
     self.assertEqual(calls, ["SCV 1 100", "SCV 3 200", "DIS"])
 
   async def test_dispense_with_all_params(self):
-    params = MultidropCombiPeristalticDispensingBackend.DispenseParams(
-      plate_type=3, cassette_type=0, pump_speed=75, dispensing_height=2500,
+    params = MultidropCombiPeristalticDispensingBackend8.DispenseParams(
+      plate_type=3,
+      cassette_type=0,
+      pump_speed=75,
+      dispensing_height=2500,
       dispensing_order=DispensingOrder.COLUMN_WISE,
     )
     await self.backend.dispense(plate=self.plate, volumes={1: 50.0}, backend_params=params)
-    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]
+    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]  # type: ignore[attr-defined]
     # Order: plate_type → cassette_type → pump_speed → dispensing_height → dispensing_order → volumes → DIS
     self.assertEqual(calls, ["SPL 3", "SCT 0", "SPS 75", "SDH 2500", "SDO 1", "SCV 1 500", "DIS"])
 
   async def test_dispense_order(self):
-    params = MultidropCombiPeristalticDispensingBackend.DispenseParams(
+    params = MultidropCombiPeristalticDispensingBackend8.DispenseParams(
       dispensing_order=DispensingOrder.ROW_WISE,
     )
     await self.backend.dispense(plate=self.plate, volumes={1: 10.0}, backend_params=params)
-    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]
+    calls = [c[0][0] for c in self.backend._driver.send_command.call_args_list]  # type: ignore[attr-defined]
     self.assertEqual(calls, ["SDO 0", "SCV 1 100", "DIS"])
 
 
@@ -99,13 +102,13 @@ class PrimeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_prime_standard(self):
     await self.backend.prime(plate=self.plate, volume=50.0)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "PRI 500")
 
   async def test_prime_continuous(self):
-    params = MultidropCombiPeristalticDispensingBackend.PrimeParams(mode=PrimeMode.CONTINUOUS)
+    params = MultidropCombiPeristalticDispensingBackend8.PrimeParams(mode=PrimeMode.CONTINUOUS)
     await self.backend.prime(plate=self.plate, volume=50.0, backend_params=params)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "PRI 500 1")
 
   async def test_prime_duration_not_supported(self):
@@ -124,13 +127,13 @@ class PurgeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_purge_standard(self):
     await self.backend.purge(plate=self.plate, volume=100.0)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "EMP 1000")
 
   async def test_purge_continuous(self):
-    params = MultidropCombiPeristalticDispensingBackend.PurgeParams(mode=EmptyMode.CONTINUOUS)
+    params = MultidropCombiPeristalticDispensingBackend8.PurgeParams(mode=EmptyMode.CONTINUOUS)
     await self.backend.purge(plate=self.plate, volume=100.0, backend_params=params)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "EMP 1000 1")
 
   async def test_purge_duration_not_supported(self):
@@ -148,7 +151,7 @@ class ShakeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_shake(self):
     await self.backend.shake(time=5.0, distance=3, speed=10)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "SHA 500 3 10")
 
 
@@ -158,57 +161,67 @@ class DeviceSpecificTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_plate_out(self):
     await self.backend.move_plate_out()
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "POU")
 
   async def test_set_cassette_type(self):
     await self.backend.set_cassette_type(cassette_type=1)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "SCT 1")
 
   async def test_abort(self):
     await self.backend.abort()
-    self.backend._driver.send_abort_signal.assert_awaited_once()
+    self.backend._driver.send_abort_signal.assert_awaited_once()  # type: ignore[attr-defined]
 
   async def test_set_dispense_offset(self):
     await self.backend.set_dispense_offset(x_offset=100, y_offset=-50)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "SOF 100 -50")
 
   async def test_set_predispense_volume(self):
     await self.backend.set_predispense_volume(volume=10.0)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "SPV 100")
 
   async def test_define_plate(self):
     await self.backend.define_plate(
-      column_positions=12, row_positions=8, rows=8, columns=12,
-      height=1420, max_volume=360.0,
+      column_positions=12,
+      row_positions=8,
+      rows=8,
+      columns=12,
+      height=1420,
+      max_volume=360.0,
     )
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "PLA 12 8 8 12 1420 3600 0 0")
 
   async def test_define_plate_with_offsets(self):
     await self.backend.define_plate(
-      column_positions=12, row_positions=8, rows=8, columns=12,
-      height=1420, max_volume=360.0, x_offset=100, y_offset=-50,
+      column_positions=12,
+      row_positions=8,
+      rows=8,
+      columns=12,
+      height=1420,
+      max_volume=360.0,
+      x_offset=100,
+      y_offset=-50,
     )
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "PLA 12 8 8 12 1420 3600 100 -50")
 
   async def test_start_protocol_bare(self):
     await self.backend.start_protocol()
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "BGN")
 
   async def test_start_protocol_with_plate_type(self):
     await self.backend.start_protocol(plate_type=3)
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "BGN 3")
 
   async def test_start_protocol_with_name(self):
     await self.backend.start_protocol(plate_type=3, protocol_name="MyProtocol")
-    args = self.backend._driver.send_command.call_args
+    args = self.backend._driver.send_command.call_args  # type: ignore[attr-defined]
     self.assertEqual(args[0][0], "BGN 3 MyProtocol")
 
 
@@ -242,10 +255,10 @@ class ParameterValidationTests(unittest.IsolatedAsyncioTestCase):
       await self.backend.shake(time=5.0, distance=3, speed=21)
 
   async def test_dispense_plate_type_out_of_range(self):
-    params = MultidropCombiPeristalticDispensingBackend.DispenseParams(plate_type=-1)
+    params = MultidropCombiPeristalticDispensingBackend8.DispenseParams(plate_type=-1)
     with self.assertRaises(ValueError):
       await self.backend.dispense(plate=self.plate, volumes={1: 10.0}, backend_params=params)
-    params = MultidropCombiPeristalticDispensingBackend.DispenseParams(plate_type=30)
+    params = MultidropCombiPeristalticDispensingBackend8.DispenseParams(plate_type=30)
     with self.assertRaises(ValueError):
       await self.backend.dispense(plate=self.plate, volumes={1: 10.0}, backend_params=params)
 
@@ -256,12 +269,12 @@ class ParameterValidationTests(unittest.IsolatedAsyncioTestCase):
       await self.backend.dispense(plate=self.plate, volumes={49: 10.0})
 
   async def test_dispense_height_out_of_range(self):
-    params = MultidropCombiPeristalticDispensingBackend.DispenseParams(dispensing_height=499)
+    params = MultidropCombiPeristalticDispensingBackend8.DispenseParams(dispensing_height=499)
     with self.assertRaises(ValueError):
       await self.backend.dispense(plate=self.plate, volumes={1: 10.0}, backend_params=params)
 
   async def test_dispense_pump_speed_out_of_range(self):
-    params = MultidropCombiPeristalticDispensingBackend.DispenseParams(pump_speed=0)
+    params = MultidropCombiPeristalticDispensingBackend8.DispenseParams(pump_speed=0)
     with self.assertRaises(ValueError):
       await self.backend.dispense(plate=self.plate, volumes={1: 10.0}, backend_params=params)
 
@@ -289,4 +302,4 @@ class ParameterValidationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_on_setup_calls_acknowledge_error(self):
     await self.backend._on_setup()
-    self.backend._driver.acknowledge_error.assert_awaited_once()
+    self.backend._driver.acknowledge_error.assert_awaited_once()  # type: ignore[attr-defined]

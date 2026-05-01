@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import enum
+import logging
 import time
 from typing import Optional, Set
 
@@ -12,7 +13,8 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.sealing import SealerBackend, Sealer
+from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.sealing import Sealer, SealerBackend
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureController,
   TemperatureControllerBackend,
@@ -21,6 +23,8 @@ from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -85,15 +89,17 @@ class A4SDriver(Driver):
       stopbits=serial.STOPBITS_ONE,
     )
 
-  async def setup(self):
-    await super().setup()  # type: ignore[safe-super]
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await super().setup(backend_params=backend_params)  # type: ignore[safe-super]
     await self.io.setup()
     await self.system_reset()
+    logger.info("[A4S %s] connected and reset", self.port)
 
   async def stop(self):
     await self.set_heater(on=False)
     await super().stop()  # type: ignore[safe-super]
     await self.io.stop()
+    logger.info("[A4S %s] disconnected", self.port)
 
   # -- serial protocol --
 
@@ -131,6 +137,7 @@ class A4SDriver(Driver):
 
     error_code = int(str(parameters[3]))
     if error_code != 0:
+      logger.error("[A4S %s] error code %d in status response: %s", self.port, error_code, message)
       raise RuntimeError(f"An error occurred: response {message}")
 
     sensor_status = int(str(parameters[5]))
@@ -159,6 +166,7 @@ class A4SDriver(Driver):
       status = await self.request_status()
 
       if status.system_status == A4SStatus.SystemStatus.error:
+        logger.error("[A4S %s] device error: %d", self.port, status.error_code)
         raise RuntimeError(f"An error occurred: {status.error_code}")
 
       if status.system_status in statuses:
@@ -211,6 +219,7 @@ class A4SSealerBackend(SealerBackend):
     self.driver = driver
 
   async def seal(self, temperature: int, duration: float):
+    logger.info("[A4S %s] sealing at %d C for %.1fs", self.driver.port, temperature, duration)
     await self.driver.send_command(f"*00DH={round(temperature):04d}zz!")
     await self._wait_for_temperature(temperature, timeout=300)
     await self.driver.set_time(duration)
@@ -221,10 +230,12 @@ class A4SSealerBackend(SealerBackend):
     )
 
   async def open(self):
+    logger.info("[A4S %s] open shuttle", self.driver.port)
     await self.driver.send_command("*00MO=zz!")
     return await self.driver.wait_for_shuttle_open_sensor(True)
 
   async def close(self):
+    logger.info("[A4S %s] close shuttle", self.driver.port)
     await self.driver.send_command("*00MC=zz!")
     return await self.driver.wait_for_shuttle_open_sensor(False)
 
@@ -252,6 +263,7 @@ class A4STemperatureBackend(TemperatureControllerBackend):
   async def set_temperature(self, temperature: float):
     if not (50 <= temperature <= 200):
       raise ValueError("Temperature out of range. Please enter a value between 50 and 200.")
+    logger.info("[A4S %s] setting temperature to %.1f C", self.driver.port, temperature)
     command = f"*00DH={round(temperature):04d}zz!"
     await self.driver.send_command(command)
     await self._wait_for_temperature(temperature, timeout=300)
@@ -268,9 +280,12 @@ class A4STemperatureBackend(TemperatureControllerBackend):
 
   async def request_current_temperature(self) -> float:
     status = await self.driver.request_status()
-    return status.current_temperature
+    temp = status.current_temperature
+    logger.info("[A4S %s] read temperature: actual=%.1f C", self.driver.port, temp)
+    return temp
 
   async def deactivate(self):
+    logger.info("[A4S %s] deactivate heater", self.driver.port)
     await self.driver.set_heater(on=False)
 
 

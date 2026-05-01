@@ -15,7 +15,7 @@ Each subsystem maps to a separate capability in the new architecture.
 
 | Subsystem | Capability | Backend | Status |
 |-----------|-----------|---------|--------|
-| Manifold | `PlateWashingCapability` | `EL406PlateWashingBackend` | Done |
+| Manifold | `PlateWasher96` | `EL406PlateWasher96Backend` | Done |
 | Syringe | TBD | TBD | Not started |
 | Peristaltic | TBD (`PumpingCapability`?) | TBD | Not started |
 | Shaker | `ShakingCapability` (existing) | TBD | Not started |
@@ -31,11 +31,11 @@ EL406 (Device, Resource)
   │     ├── Batch management (batch context manager, start_batch)
   │     └── Device-level ops (reset, home_motors, pause, resume, abort, set_washer_manifold)
   │
-  ├── washer: PlateWashingCapability
-  │     └── backend: EL406PlateWashingBackend
-  │           ├── PlateWashingBackend interface: aspirate, dispense, wash, prime
-  │           ├── Full manifold API: manifold_aspirate, manifold_dispense,
-  │           │   manifold_wash, manifold_prime, manifold_auto_clean
+  ├── washer: PlateWasher96
+  │     └── backend: EL406PlateWasher96Backend
+  │           ├── PlateWasher96Backend interface: aspirate, dispense, wash, prime
+  │           ├── Full manifold API: aspirate, dispense,
+  │           │   wash, prime, auto_clean
   │           └── Command builders (_build_aspirate_command, _build_wash_composite_command, etc.)
   │
   └── plate_holder: PlateHolder
@@ -45,9 +45,9 @@ EL406 (Device, Resource)
 
 ```
 pylabrobot/agilent/biotek/el406/
-├── __init__.py                  # Exports EL406, EL406Driver, EL406PlateWashingBackend
+├── __init__.py                  # Exports EL406, EL406Driver, EL406PlateWasher96Backend
 ├── driver.py                    # EL406Driver — FTDI I/O, lifecycle, device-level ops
-├── plate_washing_backend.py     # EL406PlateWashingBackend — manifold protocol encoding
+├── plate_washing_backend.py     # EL406PlateWasher96Backend — manifold protocol encoding
 ├── el406.py                     # EL406 Device — wires driver + capabilities
 └── architecture.md              # This file
 ```
@@ -92,18 +92,18 @@ await el406.setup()
 
 plate = Plate(...)  # your plate resource
 
-# Simple API (via PlateWashingCapability)
+# Simple API (via PlateWasher96)
 await el406.washer.wash(plate, cycles=3, dispense_volume=300)
 await el406.washer.aspirate(plate)
 await el406.washer.dispense(plate, volume=200)
 
 # Full EL406 manifold API (via backend)
-await el406.washer.backend.manifold_wash(
+await el406.washer.backend.wash(
     plate, cycles=5, buffer="B", dispense_flow_rate=9,
     shake_duration=30, shake_intensity="Medium",
 )
-await el406.washer.backend.manifold_prime(plate, volume=10000, buffer="A")
-await el406.washer.backend.manifold_auto_clean(plate, buffer="A", duration=120)
+await el406.washer.backend.prime(plate, volume=10000, buffer="A")
+await el406.washer.backend.auto_clean(plate, buffer="A", duration=120)
 
 # Device-level ops (via driver)
 await el406._driver.reset()

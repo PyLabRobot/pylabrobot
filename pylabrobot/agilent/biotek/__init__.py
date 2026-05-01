@@ -1,9 +1,11 @@
-from .biotek import BioTekBackend
-from .cytation import (
+from .plate_readers import (
+  BioTekBackend,
   Cytation1,
   Cytation5,
-  CytationBackend,
   CytationImagingConfig,
+  CytationMicroscopyBackend,
+  SynergyH1,
+  SynergyH1Backend,
 )
-from .el406 import EL406, EL406Driver, EL406PlateWashingBackend, EL406ShakingBackend
-from .synergy_h1 import SynergyH1, SynergyH1Backend
+from .loading_tray_backend import BioTekLoadingTrayBackend
+from .el406 import EL406, EL406Driver, EL406PlateWasher96Backend, EL406ShakingBackend

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import logging
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -15,7 +16,7 @@ from pylabrobot.capabilities.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
-from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
+from pylabrobot.hamilton.liquid_handlers.star.liquid_classes import (
   HamiltonLiquidClass,
   get_star_liquid_class,
 )
@@ -32,7 +33,46 @@ from .pip_channel import PIPChannel
 if TYPE_CHECKING:
   from .driver import STARDriver
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Firmware command lock
+# ---------------------------------------------------------------------------
+
+
+class _FirmwareLock:
+  """Coordinates Px and C0 firmware commands.
+
+  Px commands (per-channel) can run in parallel with each other.
+  C0 commands (master module) need exclusive access: no Px or C0 may be in flight.
+  """
+
+  def __init__(self):
+    self._px_count = 0
+    self._px_count_lock = asyncio.Lock()
+    self._exclusive_lock = asyncio.Lock()
+
+  @asynccontextmanager
+  async def px(self):
+    """Run a Px command. Multiple Px can be in flight simultaneously."""
+    async with self._px_count_lock:
+      self._px_count += 1
+      if self._px_count == 1:
+        await self._exclusive_lock.acquire()
+    try:
+      yield
+    finally:
+      async with self._px_count_lock:
+        self._px_count -= 1
+        if self._px_count == 0:
+          self._exclusive_lock.release()
+
+  @asynccontextmanager
+  async def c0(self):
+    """Run a C0 command. Waits for all Px to finish, then runs exclusively."""
+    async with self._exclusive_lock:
+      yield
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +88,7 @@ def _ops_to_fw_positions(
   """Convert ops + use_channels into firmware x/y positions and tip pattern.
 
   Uses absolute coordinates (get_absolute_location) so the driver does not
-  need a ``deck`` reference.  This mirrors HamiltonLiquidHandler._ops_to_fw_positions
+  need a ``deck`` reference.  This mirrors ``HamiltonLiquidHandler._ops_to_fw_positions``
   but is self-contained.
   """
   if use_channels != sorted(use_channels):
@@ -169,6 +209,15 @@ def _fill(val: Optional[List], default: List) -> List:
 
 
 def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
+  """Compute firmware dispensing mode from boolean flags.
+
+  Firmware modes:
+    0 = Partial volume in jet mode
+    1 = Blow out in jet mode (labelled "empty" in VENUS)
+    2 = Partial volume at surface
+    3 = Blow out at surface (labelled "empty" in VENUS)
+    4 = Empty tip at fix position
+  """
   if empty:
     return 4
   if jet:
@@ -194,9 +243,30 @@ class STARPIPBackend(PIPBackend):
     self.driver = driver
     self.traversal_height = traversal_height
     self.channels: List[PIPChannel] = []
+    self._fw_lock = _FirmwareLock()
 
-  async def _on_setup(self):
-    self.channels = [PIPChannel(self.driver, i) for i in range(self.num_channels)]
+  async def send_command(self, module: str, command: str, **kwargs):
+    """Send a firmware command. C0 gets exclusive access; Px commands run in parallel."""
+    if module == "C0":
+      async with self._fw_lock.c0():
+        return await self.driver.send_command(module=module, command=command, **kwargs)
+    async with self._fw_lock.px():
+      return await self.driver.send_command(module=module, command=command, **kwargs)
+
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
+    self.channels = [PIPChannel(self.driver, i, backend=self) for i in range(self.num_channels)]
+
+    # Initialize PIP channels if the instrument was not yet initialized
+    # or if any channel still has a tip mounted (need to discard).
+    initialized = await self.driver.request_instrument_initialization_status()
+    if not initialized:
+      # pre_initialize_instrument already ran in driver.setup() and moved channels to Z safety
+      await self.initialize_pip()
+    else:
+      await self.move_all_channels_in_z_safety()
+      tip_presences = await self.request_tip_presence()
+      if any(tip_presences):
+        await self.initialize_pip()
 
   @contextmanager
   def use_traversal_height(self, height: float):
@@ -244,7 +314,21 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class PickUpTipsParams(BackendParams):
-    """STAR-specific parameters for ``pick_up_tips``."""
+    """STAR-specific parameters for ``pick_up_tips``.
+
+    Args:
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement begins. Applies to all channels regardless of tip pattern. If None,
+        uses the backend's ``traversal_height``. Must be between 0 and 360.0.
+      pickup_method: Tip pickup strategy. If None, uses the default from the HamiltonTip
+        definition.
+      begin_tip_pick_up_process: Z position in mm to begin the tip pickup process (start of
+        Z descent). If None, computed from tip fitting depth + tip spot position. Must be
+        between 0 and 360.0.
+      end_tip_pick_up_process: Z position in mm to end the tip pickup process (final engage
+        depth). If None, computed from tip length + tip spot position. Must be between 0
+        and 360.0.
+    """
 
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
     pickup_method: Optional[TipPickupMethod] = None
@@ -262,6 +346,12 @@ class STARPIPBackend(PIPBackend):
 
     await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "pick_up_tips")
+
+    logger.info(
+      "[STAR PIP] pick_up_tips: resource=%s, channels=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+    )
 
     x_positions, y_positions, channels_involved = _ops_to_fw_positions(
       ops, use_channels, self.num_channels
@@ -345,7 +435,24 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class DropTipsParams(BackendParams):
-    """STAR-specific parameters for ``drop_tips``."""
+    """STAR-specific parameters for ``drop_tips``.
+
+    When the drop method is ``PLACE_SHIFT``, the begin/end deposit positions refer to the
+    tip cone end height. Otherwise, they refer to the stop-disk height.
+
+    Args:
+      drop_method: Tip discard strategy. If None, auto-selected: ``PLACE_SHIFT`` when
+        discarding into a non-TipSpot resource, ``DROP`` when returning to a TipSpot.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement begins. Applies to all channels regardless of tip pattern. If None,
+        uses the backend's ``traversal_height``. Must be between 0 and 360.0.
+      z_position_at_end_of_a_command: Z position in mm at the end of the command. If None,
+        uses the backend's ``traversal_height``. Must be between 0 and 360.0.
+      begin_tip_deposit_process: Z position in mm to begin the tip deposit process.
+        If None, computed from tip geometry and drop method. Must be between 0 and 360.0.
+      end_tip_deposit_process: Z position in mm to end the tip deposit process.
+        If None, computed from tip geometry and drop method. Must be between 0 and 360.0.
+    """
 
     drop_method: Optional[TipDropMethod] = None
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
@@ -364,6 +471,12 @@ class STARPIPBackend(PIPBackend):
 
     await self.driver.ensure_iswap_parked()
     self._ensure_can_reach_position(use_channels, ops, "drop_tips")
+
+    logger.info(
+      "[STAR PIP] drop_tips: resource=%s, channels=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+    )
 
     drop_method = backend_params.drop_method
     if drop_method is None:
@@ -440,7 +553,90 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class AspirateParams(BackendParams):
-    """STAR-specific parameters for ``aspirate``."""
+    """STAR-specific parameters for ``aspirate``.
+
+    All per-channel list parameters accept ``None`` to use sensible defaults (typically
+    derived from liquid classes or container geometry). When provided, lists must have one
+    entry per channel involved in the operation.
+
+    LLD restrictions:
+      - "dP and Dual LLD" are used in aspiration only. During dispensation, pressure-based
+        LLD is set to OFF.
+      - "side touch off" turns LLD and "Z touch off" to OFF and is not available for
+        simultaneous aspirate/dispense commands.
+
+    Args:
+      hamilton_liquid_classes: Per-channel Hamilton liquid class overrides. If None,
+        auto-detected from tip type and liquid.
+      disable_volume_correction: Per-channel flag to disable liquid-class volume correction.
+      aspiration_type: Type of aspiration per channel (0 = simple, 1 = sequence,
+        2 = cup emptied). Must be between 0 and 2.
+      jet: Per-channel flag used for liquid class selection (jet vs surface mode).
+      blow_out: Per-channel flag used for liquid class selection.
+      lld_search_height: LLD search height in mm (relative to well bottom). If None,
+        computed from container geometry. Must be between 0 and 360.0.
+      clot_detection_height: Check height of clot detection above the current liquid
+        surface in mm. If None, uses liquid class default. Must be between 0 and 50.0.
+      pull_out_distance_transport_air: Distance in mm to pull out for transport air when
+        not using LLD. Must be between 0 and 360.0. Default 10.0.
+      second_section_height: Tube 2nd section height measured from minimum_height in mm.
+        Must be between 0 and 360.0. Default 3.2.
+      second_section_ratio: Tube 2nd section ratio: (bottom diameter * 10000) / top
+        diameter. Must be between 0 and 1000.0. Default 618.0.
+      minimum_height: Minimum height (maximum immersion depth) in mm. If None, uses well
+        bottom. Must be between 0 and 360.0.
+      immersion_depth: Immersion depth in mm. Positive = go deeper into liquid,
+        negative = go up out of liquid. Must be between -360.0 and 360.0.
+      surface_following_distance: Surface following distance during aspiration in mm.
+        Must be between 0 and 360.0.
+      transport_air_volume: Transport air volume in uL. If None, uses liquid class
+        default. Must be between 0 and 50.0.
+      pre_wetting_volume: Pre-wetting volume in uL. Must be between 0 and 99.9.
+      lld_mode: LLD mode per channel (OFF, GAMMA, DP, DUAL, Z_TOUCH_OFF). Default OFF.
+      gamma_lld_sensitivity: Gamma LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      dp_lld_sensitivity: Delta-P LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      aspirate_position_above_z_touch_off: Aspirate position above Z touch off in mm.
+        Must be between 0 and 10.0.
+      detection_height_difference_for_dual_lld: Height difference for dual LLD detection
+        in mm. Must be between 0 and 9.9.
+      swap_speed: Swap speed (on leaving liquid) in mm/s. If None, uses liquid class
+        default. Must be between 0.3 and 160.0.
+      settling_time: Settling time in seconds. If None, uses liquid class default.
+        Must be between 0 and 9.9.
+      mix_position_from_liquid_surface: Mix position in Z direction from liquid surface
+        (LLD or absolute terms) in mm. Must be between 0 and 90.0.
+      mix_surface_following_distance: Surface following distance during mix in mm.
+        Must be between 0 and 360.0.
+      limit_curve_index: Limit curve index for TADM. Must be between 0 and 999.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement. If None, uses backend's ``traversal_height``. Must be between
+        0 and 360.0.
+      min_z_endpos: Minimum Z position in mm at end of command. If None, uses backend's
+        ``traversal_height``. Must be between 0 and 360.0.
+      liquid_surface_no_lld: Absolute liquid surface position in mm when not using LLD.
+        If None, computed from well bottom + liquid height.
+      use_2nd_section_aspiration: Per-channel flag to enable 2nd section aspiration.
+      retract_height_over_2nd_section_to_empty_tip: Retract height over 2nd section to
+        empty tip in mm. Must be between 0 and 360.0.
+      dispensation_speed_during_emptying_tip: Dispensation speed during emptying tip in
+        uL/s. Must be between 0.4 and 500.0.
+      dosing_drive_speed_during_2nd_section_search: Dosing drive speed during 2nd section
+        search in uL/s. Must be between 0.4 and 500.0.
+      z_drive_speed_during_2nd_section_search: Z drive speed during 2nd section search in
+        mm/s. Must be between 0.3 and 160.0.
+      cup_upper_edge: Cup upper edge in mm. Must be between 0 and 360.0.
+      tadm_algorithm: Whether to use the TADM algorithm. Default False.
+      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
+        2 = all TADM measurements). Must be between 0 and 2.
+      probe_liquid_height: If True, use gamma LLD to probe the liquid height before
+        aspirating. Cannot be used when liquid heights are already set on operations.
+      auto_surface_following_distance: If True, automatically compute the surface
+        following distance from volume and container geometry. Requires liquid heights
+        to be set (or ``probe_liquid_height=True``) and containers with height/volume
+        conversion functions.
+    """
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
     disable_volume_correction: Optional[List[bool]] = None
@@ -454,7 +650,6 @@ class STARPIPBackend(PIPBackend):
     second_section_ratio: Optional[List[float]] = None
     minimum_height: Optional[List[float]] = None
     immersion_depth: Optional[List[float]] = None
-    """Positive = go deeper into liquid, negative = go up out of liquid."""
     surface_following_distance: Optional[List[float]] = None
     transport_air_volume: Optional[List[float]] = None
     pre_wetting_volume: Optional[List[float]] = None
@@ -557,6 +752,14 @@ class STARPIPBackend(PIPBackend):
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hlcs)
     ]
+
+    logger.info(
+      "[STAR PIP] aspirate: resource=%s, channels=%s, volumes=%s, flow_rates=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+      [round(v, 3) for v in volumes],
+      [round(fr, 3) for fr in flow_rates],
+    )
 
     transport_air_volume = _fill(
       backend_params.transport_air_volume,
@@ -835,7 +1038,83 @@ class STARPIPBackend(PIPBackend):
 
   @dataclass
   class DispenseParams(BackendParams):
-    """STAR-specific parameters for ``dispense``."""
+    """STAR-specific parameters for ``dispense``.
+
+    All per-channel list parameters accept ``None`` to use sensible defaults (typically
+    derived from liquid classes or container geometry). When provided, lists must have one
+    entry per channel involved in the operation.
+
+    Dispensing modes are controlled by the combination of ``jet``, ``blow_out``, and
+    ``empty`` flags:
+      - jet=False, blow_out=False, empty=False: Partial volume at surface (mode 2)
+      - jet=True,  blow_out=False: Partial volume in jet mode (mode 0)
+      - jet=True,  blow_out=True:  Blow out in jet mode (mode 1)
+      - jet=False, blow_out=True:  Blow out at surface (mode 3)
+      - empty=True: Empty tip at fix position (mode 4)
+
+    LLD restrictions:
+      - During dispensation, all pressure-based LLD (dP, Dual) is set to OFF.
+      - "side touch off" turns LLD and "Z touch off" to OFF.
+
+    Args:
+      hamilton_liquid_classes: Per-channel Hamilton liquid class overrides. If None,
+        auto-detected from tip type and liquid.
+      disable_volume_correction: Per-channel flag to disable liquid-class volume correction.
+      jet: Per-channel flag for jet dispensing mode.
+      blow_out: Per-channel flag for blow out dispensing mode.
+      empty: Per-channel flag for empty tip mode.
+      lld_search_height: LLD search height in mm (relative to well bottom). If None,
+        computed from container geometry. Must be between 0 and 360.0.
+      liquid_surface_no_lld: Absolute liquid surface position in mm when not using LLD.
+        If None, computed from well bottom + liquid height.
+      pull_out_distance_transport_air: Distance in mm to pull out for transport air when
+        not using LLD. Must be between 0 and 360.0. Default 10.0.
+      second_section_height: Tube 2nd section height measured from minimum_height in mm.
+        Must be between 0 and 360.0. Default 3.2.
+      second_section_ratio: Tube 2nd section ratio: (bottom diameter * 10000) / top
+        diameter. Must be between 0 and 1000.0. Default 618.0.
+      minimum_height: Minimum height (maximum immersion depth) in mm. If None, uses well
+        bottom. Must be between 0 and 360.0.
+      immersion_depth: Immersion depth in mm. Must be between 0 and 360.0.
+      immersion_depth_direction: Direction of immersion depth per channel (0 = go deeper,
+        1 = go up out of liquid). If None, inferred from sign of immersion_depth.
+      surface_following_distance: Surface following distance during dispensing in mm.
+        Must be between 0 and 360.0.
+      cut_off_speed: Cut-off speed in uL/s. Must be between 0.4 and 500.0.
+      stop_back_volume: Stop back volume in uL. Must be between 0 and 18.0.
+      transport_air_volume: Transport air volume in uL. If None, uses liquid class
+        default. Must be between 0 and 50.0.
+      lld_mode: LLD mode per channel (OFF, GAMMA, DP, DUAL, Z_TOUCH_OFF). Default OFF.
+      side_touch_off_distance: Side touch off distance in mm (0 = OFF). Turns LLD and
+        Z touch off to OFF if enabled. Must be between 0 and 4.5. Default 0.0.
+      dispense_position_above_z_touch_off: Dispense position above Z touch off in mm.
+        Must be between 0 and 10.0.
+      gamma_lld_sensitivity: Gamma LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      dp_lld_sensitivity: Delta-P LLD sensitivity per channel (1 = high, 4 = low).
+        Must be between 1 and 4.
+      swap_speed: Swap speed (on leaving liquid) in mm/s. If None, uses liquid class
+        default. Must be between 0.3 and 160.0.
+      settling_time: Settling time in seconds. If None, uses liquid class default.
+        Must be between 0 and 9.9.
+      mix_position_from_liquid_surface: Mix position in Z direction from liquid surface
+        in mm. Must be between 0 and 90.0.
+      mix_surface_following_distance: Surface following distance during mix in mm.
+        Must be between 0 and 360.0.
+      limit_curve_index: Limit curve index for TADM. Must be between 0 and 999.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum Z clearance in mm before
+        lateral movement. If None, uses backend's ``traversal_height``. Must be between
+        0 and 360.0.
+      min_z_endpos: Minimum Z position in mm at end of command. If None, uses backend's
+        ``traversal_height``. Must be between 0 and 360.0.
+      tadm_algorithm: Whether to use the TADM algorithm. Default False.
+      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
+        2 = all TADM measurements). Must be between 0 and 2.
+      probe_liquid_height: If True, use gamma LLD to probe the liquid height before
+        dispensing. Cannot be used when liquid heights are already set on operations.
+      auto_surface_following_distance: If True, automatically compute the surface
+        following distance from volume and container geometry.
+    """
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
     disable_volume_correction: Optional[List[bool]] = None
@@ -950,6 +1229,14 @@ class STARPIPBackend(PIPBackend):
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
       for op, hlc in zip(ops, hlcs)
     ]
+
+    logger.info(
+      "[STAR PIP] dispense: resource=%s, channels=%s, volumes=%s, flow_rates=%s",
+      ops[0].resource.parent.name if ops[0].resource.parent else ops[0].resource.name,
+      use_channels,
+      [round(v, 3) for v in volumes],
+      [round(fr, 3) for fr in flow_rates],
+    )
 
     cut_off_speed = _fill(backend_params.cut_off_speed, [5.0] * n)
     stop_back_volume = _fill(
@@ -1160,31 +1447,11 @@ class STARPIPBackend(PIPBackend):
 
   async def spread_pip_channels(self):
     """Spread PIP channels (C0:JE)."""
-    return await self.driver.send_command(module="C0", command="JE")
+    return await self.send_command(module="C0", command="JE")
 
   async def move_all_channels_in_z_safety(self):
     """Move all pipetting channels to Z-safety position (C0:ZA)."""
-    return await self.driver.send_command(module="C0", command="ZA")
-
-  async def position_max_free_y_for_n(self, pipetting_channel_index: int):
-    """Position all pipetting channels so that there is maximum free Y range for channel n (C0:JP).
-
-    Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 0 and num_channels - 1.
-    """
-    if self.driver.iswap is not None and not self.driver.iswap.parked:
-      await self.driver.iswap.park()
-
-    if not 0 <= pipetting_channel_index < self.num_channels:
-      raise ValueError("pipetting_channel_index must be between 0 and num_channels - 1")
-    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
-    pipetting_channel_index_fw = pipetting_channel_index + 1
-
-    return await self.driver.send_command(
-      module="C0",
-      command="JP",
-      pn=f"{pipetting_channel_index_fw:02}",
-    )
+    return await self.send_command(module="C0", command="ZA")
 
   async def move_all_pipetting_channels_to_defined_position(
     self,
@@ -1461,24 +1728,43 @@ class STARPIPBackend(PIPBackend):
 
   # -- single-channel movement ------------------------------------------------
 
-  async def move_channel_z(self, channel: int, z: float):
-    """Move a single channel in the Z direction (mm).
+  MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
+  MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)
+  DEFAULT_TIP_FITTING_DEPTH = 8  # mm, for 10, 50, 300, 1000 uL Hamilton tips
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Measure tip presence on all channels using their sleeve sensors."""
+    resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
+    return [bool(v) for v in resp.get("rt")]
+
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    """Prepare for manual channel operation by moving all other channels out of the way (C0:JP).
 
     Args:
       channel: 0-indexed channel index.
-      z: Target Z position in mm.
     """
-    if not 0 <= channel < self.driver.num_channels:
-      raise ValueError(f"channel must be between 0 and {self.driver.num_channels - 1}")
-    if not 0 <= z <= 334.7:
-      raise ValueError("z must be between 0 and 334.7 mm")
+    if self.driver.iswap is not None and not self.driver.iswap.parked:
+      await self.driver.iswap.park()
 
-    return await self.driver.send_command(
+    if not 0 <= channel < self.num_channels:
+      raise ValueError("channel must be between 0 and num_channels - 1")
+
+    await self.driver.send_command(
       module="C0",
-      command="KZ",
+      command="JP",
       pn=f"{channel + 1:02}",
-      zj=f"{round(z * 10):04}",
     )
+
+  # -- C0 multi-channel queries ------------------------------------------------
+
+  async def request_pip_height_last_lld(self) -> List[float]:
+    """Return absolute liquid heights (mm) from the last LLD event for each channel."""
+    resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
+    return [float(v / 10) for v in resp.get("lh")]
+
+  async def position_components_for_free_iswap_y_range(self):
+    """Position all components so that there is maximum free Y range for iSWAP."""
+    return await self.driver.send_command(module="C0", command="FY")
 
   # -- foil piercing ----------------------------------------------------------
 
@@ -1551,6 +1837,7 @@ class STARPIPBackend(PIPBackend):
       ys = [well.get_location_wrt(deck, x="c", y="c").y for well in wells]
       z = absolute_center.z
 
+    assert self.driver.left_x_arm is not None
     await self.driver.left_x_arm.move_to(x)
 
     await self.position_channels_in_y_direction(
@@ -1560,7 +1847,7 @@ class STARPIPBackend(PIPBackend):
     zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
     if one_by_one:
       for channel in piercing_channels:
-        await self.move_channel_z(channel, z + distance_from_bottom)
+        await self.channels[channel].move_tool_z(z + distance_from_bottom)
     else:
       await self.position_channels_in_z_direction(
         {channel: z for channel, z in zip(piercing_channels, zs)}
@@ -1640,8 +1927,21 @@ class STARPIPBackend(PIPBackend):
         }
       )
 
-      await self.move_channel_z(front_channel, z_location)
-      await self.move_channel_z(back_channel, z_location)
+      # Use KZ directly rather than move_tool_z to avoid the extra firmware queries
+      # (tip presence, tip length, etc.) that move_tool_z performs. In this context
+      # we know the channels have tips and the target Z is the plate top.
+      await self.driver.send_command(
+        module="C0",
+        command="KZ",
+        pn=f"{front_channel + 1:02}",
+        zj=f"{round(z_location * 10):04}",
+      )
+      await self.driver.send_command(
+        module="C0",
+        command="KZ",
+        pn=f"{back_channel + 1:02}",
+        zj=f"{round(z_location * 10):04}",
+      )
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
       # the just above the foil, in case the foil pops up.

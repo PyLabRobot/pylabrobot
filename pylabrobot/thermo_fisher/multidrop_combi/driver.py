@@ -7,6 +7,7 @@ import contextlib
 import logging
 from typing import Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.thermo_fisher.multidrop_combi.errors import (
@@ -101,7 +102,7 @@ class MultidropCombiDriver(Driver):
     self._firmware_version: str = ""
     self._serial_number: str = ""
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     self._command_lock = asyncio.Lock()
     await self.io.setup()
     await self._drain_stale_data()

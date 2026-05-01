@@ -25,7 +25,7 @@ class STARWashStation:
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params=None):
     pass
 
   async def _on_stop(self):
@@ -35,6 +35,7 @@ class STARWashStation:
 
   class Type(enum.IntEnum):
     """Pump station type enumeration."""
+
     CORE_96_SINGLE = 0
     DC_SINGLE_REV_02 = 1
     RERERE_SINGLE = 2

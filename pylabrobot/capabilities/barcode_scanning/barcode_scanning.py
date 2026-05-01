@@ -1,4 +1,4 @@
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 from pylabrobot.resources.barcode import Barcode
 
 from .backend import BarcodeScannerBackend
@@ -14,6 +14,7 @@ class BarcodeScanner(Capability):
     super().__init__(backend=backend)
     self.backend: BarcodeScannerBackend = backend
 
+  @need_capability_ready
   async def scan(self) -> Barcode:
     """Scan a barcode and return its value."""
     return await self.backend.scan_barcode()

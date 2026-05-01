@@ -1,5 +1,6 @@
 """STAR firmware response parsing utilities."""
 
+import datetime
 import re
 
 
@@ -120,3 +121,41 @@ def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
     find_param("id####")
 
   return info
+
+
+def parse_star_firmware_version_date(fw_version: str) -> datetime.date:
+  """Extract a date from a firmware version string.
+
+  Supports several common Hamilton firmware version formats:
+    - Full dates: ``"v2021.03.15"`` or ``"2023_01_05"`` or ``"2020-06-12"``
+    - Quarter formats: ``"2023_Q2"`` -> first day of the quarter (2023-04-01)
+    - Year only: ``"2021"`` -> January 1st of that year
+
+  Args:
+    fw_version: Firmware version string.
+
+  Returns:
+    A ``datetime.date`` representing the extracted date.
+
+  Raises:
+    ValueError: If no year can be parsed from the string.
+  """
+  # Prefer full date patterns like YYYY.MM.DD / YYYY_MM_DD / YYYY-MM-DD
+  date_match = re.search(r"(20\d{2})[._-](\d{2})[._-](\d{2})", fw_version)
+  if date_match:
+    y, m, d = map(int, date_match.groups())
+    return datetime.date(y, m, d)
+
+  # Handle quarter formats like 2023_Q2 -> first day of the quarter
+  q_match = re.search(r"(20\d{2})_Q([1-4])", fw_version, flags=re.IGNORECASE)
+  if q_match:
+    y = int(q_match.group(1))
+    q = int(q_match.group(2))
+    month = (q - 1) * 3 + 1
+    return datetime.date(y, month, 1)
+
+  # Fall back to year only -> Jan 1st of that year
+  year_match = re.search(r"(20\d{2})", fw_version)
+  if year_match is None:
+    raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
+  return datetime.date(int(year_match.group(1)), 1, 1)

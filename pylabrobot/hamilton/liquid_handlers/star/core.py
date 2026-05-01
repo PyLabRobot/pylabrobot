@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from pylabrobot.arms.backend import GripperArmBackend
-from pylabrobot.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.backend import GripperArmBackend
+from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 
@@ -31,6 +31,19 @@ class CoreGripper(GripperArmBackend):
 
   @dataclass
   class PickUpParams(BackendParams):
+    """CoRe gripper parameters for plate pickup.
+
+    Args:
+      grip_strength: Grip strength (0 = low, 99 = high). Must be between 0 and 99.
+        Default 15.
+      y_gripping_speed: Y-axis gripping speed in mm/s. Default 5.0.
+      z_speed: Z-axis speed in mm/s. Default 50.0.
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+    """
+
     grip_strength: int = 15
     y_gripping_speed: float = 5.0
     z_speed: float = 50.0
@@ -87,6 +100,18 @@ class CoreGripper(GripperArmBackend):
 
   @dataclass
   class DropParams(BackendParams):
+    """CoRe gripper parameters for plate drop.
+
+    Args:
+      z_press_on_distance: Distance in mm to press down on the plate after placing it.
+        Default 0.0.
+      z_speed: Z-axis speed in mm/s. Default 50.0.
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+    """
+
     z_press_on_distance: float = 0.0
     z_speed: float = 50.0
     minimum_traverse_height: float = 280.0
@@ -137,6 +162,16 @@ class CoreGripper(GripperArmBackend):
 
   @dataclass
   class MoveToLocationParams(BackendParams):
+    """CoRe gripper parameters for moving a held plate to a new position.
+
+    Args:
+      acceleration_index: Acceleration index for movement. Must be between 0 and 4.
+        Default 4.
+      z_speed: Z-axis speed in mm/s. Default 50.0.
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+    """
+
     acceleration_index: int = 4
     z_speed: float = 50.0
     minimum_traverse_height: float = 280.0

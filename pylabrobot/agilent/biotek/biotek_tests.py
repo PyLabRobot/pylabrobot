@@ -10,8 +10,7 @@ import pytest
 
 pytest.importorskip("pylibftdi")
 
-from pylabrobot.agilent.biotek.biotek import BioTekBackend
-from pylabrobot.agilent.biotek.cytation import CytationBackend
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
@@ -24,7 +23,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   """Tests for the Cytation5Backend."""
 
   async def asyncSetUp(self):
-    self.backend = CytationBackend(timeout=0.1)
+    self.backend = BioTekBackend(timeout=0.1)
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()

@@ -6,8 +6,8 @@ from pylabrobot.capabilities.microscopy import AutoExposure as NewAutoExposure
 from pylabrobot.capabilities.microscopy import ImagingMode as NewImagingMode
 from pylabrobot.capabilities.microscopy import ImagingResult as NewImagingResult
 from pylabrobot.capabilities.microscopy import (
-  MicroscopyBackend,
   Microscopy,
+  MicroscopyBackend,
   evaluate_focus_nvmg_sobel,
   fraction_overexposed,
   max_pixel_at_fraction,

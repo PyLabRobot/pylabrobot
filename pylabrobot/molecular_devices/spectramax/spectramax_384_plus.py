@@ -1,7 +1,8 @@
+from pylabrobot.capabilities.loading_tray import HasLoadingTray, LoadingTray
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, PlateHolder, Resource
+from pylabrobot.resources import Coordinate, Resource
 
 from .backend import (
   MolecularDevicesAbsorbanceBackend,
@@ -9,6 +10,7 @@ from .backend import (
   MolecularDevicesSettings,
   MolecularDevicesTemperatureBackend,
 )
+from .loading_tray_backend import MolecularDevicesLoadingTrayBackend
 
 
 class SpectraMax384PlusAbsorbanceBackend(MolecularDevicesAbsorbanceBackend):
@@ -34,7 +36,7 @@ class SpectraMax384PlusAbsorbanceBackend(MolecularDevicesAbsorbanceBackend):
 # ---------------------------------------------------------------------------
 
 
-class SpectraMax384Plus(Resource, Device):
+class SpectraMax384Plus(Resource, Device, HasLoadingTray):
   """Molecular Devices SpectraMax 384 Plus plate reader. Absorbance only."""
 
   def __init__(
@@ -60,17 +62,16 @@ class SpectraMax384Plus(Resource, Device):
     self.driver: MolecularDevicesDriver = driver
     self.absorbance = Absorbance(backend=SpectraMax384PlusAbsorbanceBackend(driver))
     self.tc = TemperatureController(backend=MolecularDevicesTemperatureBackend(driver))
-    self._capabilities = [self.absorbance, self.tc]
-
-    self.plate_holder = PlateHolder(
-      name=name + "_plate_holder",
+    self.loading_tray = LoadingTray(
+      backend=MolecularDevicesLoadingTrayBackend(driver),
+      name=name + "_loading_tray",
       size_x=127.76,
       size_y=85.48,
       size_z=0,  # TODO: measure
-      pedestal_size_z=0,  # TODO: measure
       child_location=Coordinate.zero(),  # TODO: measure
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self._capabilities = [self.absorbance, self.tc, self.loading_tray]
+    self.assign_child_resource(self.loading_tray, location=Coordinate.zero())
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}

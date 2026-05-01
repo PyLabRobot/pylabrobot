@@ -50,21 +50,15 @@ class TestSTARWashStationCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_initialize_valves_station_1(self):
     await self.ws.initialize_valves(station=1)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="EJ", ep=1
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="EJ", ep=1)
 
   async def test_initialize_valves_station_2(self):
     await self.ws.initialize_valves(station=2)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="EJ", ep=2
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="EJ", ep=2)
 
   async def test_initialize_valves_station_3(self):
     await self.ws.initialize_valves(station=3)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="EJ", ep=3
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="EJ", ep=3)
 
   async def test_initialize_valves_invalid_station_0(self):
     with self.assertRaises(ValueError):
@@ -185,21 +179,15 @@ class TestSTARWashStationCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_drain_station_1(self):
     await self.ws.drain(station=1)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="EL", ep=1
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="EL", ep=1)
 
   async def test_drain_station_2(self):
     await self.ws.drain(station=2)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="EL", ep=2
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="EL", ep=2)
 
   async def test_drain_station_3(self):
     await self.ws.drain(station=3)
-    self.mock_driver.send_command.assert_called_once_with(
-      module="C0", command="EL", ep=3
-    )
+    self.mock_driver.send_command.assert_called_once_with(module="C0", command="EL", ep=3)
 
   async def test_drain_invalid_station_0(self):
     with self.assertRaises(ValueError):

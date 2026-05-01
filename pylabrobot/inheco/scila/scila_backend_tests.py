@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.inheco.scila.scila import SCILADrawerLoadingTrayBackend
 from pylabrobot.inheco.scila.scila_backend import SCILADriver, SCILATemperatureBackend
 
 
@@ -48,32 +49,6 @@ class TestSCILADriver(unittest.IsolatedAsyncioTestCase):
     level = await self.driver.request_liquid_level()
     self.assertEqual(level, "High")
     self.mock_sila_interface.send_command.assert_called_with("GetLiquidLevel")
-
-  async def test_open(self):
-    for drawer_id in [1, 2, 3, 4]:
-      with self.subTest(drawer_id=drawer_id):
-        self.mock_sila_interface.send_command.reset_mock()
-        await self.driver.open(drawer_id)
-        self.mock_sila_interface.send_command.assert_any_call("PrepareForInput", position=drawer_id)
-        self.mock_sila_interface.send_command.assert_any_call("OpenDoor")
-
-  async def test_open_invalid_id(self):
-    with self.assertRaises(ValueError):
-      await self.driver.open(5)
-
-  async def test_close(self):
-    for drawer_id in [1, 2, 3, 4]:
-      with self.subTest(drawer_id=drawer_id):
-        self.mock_sila_interface.send_command.reset_mock()
-        await self.driver.close(drawer_id)
-        self.mock_sila_interface.send_command.assert_any_call(
-          "PrepareForOutput", position=drawer_id
-        )
-        self.mock_sila_interface.send_command.assert_any_call("CloseDoor")
-
-  async def test_close_invalid_id(self):
-    with self.assertRaises(ValueError):
-      await self.driver.close(5)
 
   async def test_request_drawer_status(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
@@ -162,14 +137,14 @@ class TestSCILADriver(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(data["client_ip"])
 
   def test_deserialize(self):
-    data = {"scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
+    data = {"type": "SCILADriver", "scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
     SCILADriver.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(
       client_ip="192.168.1.10", machine_ip="169.254.1.117"
     )
 
   def test_deserialize_no_client_ip(self):
-    data = {"scila_ip": "169.254.1.117"}
+    data = {"type": "SCILADriver", "scila_ip": "169.254.1.117"}
     SCILADriver.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 
@@ -249,6 +224,44 @@ class TestSCILATemperatureBackend(unittest.IsolatedAsyncioTestCase):
 
   def test_supports_active_cooling(self):
     self.assertFalse(self.backend.supports_active_cooling)
+
+
+class TestSCILADrawerLoadingTrayBackend(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.patcher = patch("pylabrobot.inheco.scila.scila_backend.InhecoSiLAInterface")
+    self.MockInhecoSiLAInterface = self.patcher.start()
+    self.mock_sila_interface = AsyncMock(spec=InhecoSiLAInterface)
+    self.mock_sila_interface.bound_port = 80
+    self.mock_sila_interface.client_ip = "127.0.0.1"
+    self.MockInhecoSiLAInterface.return_value = self.mock_sila_interface
+    self.driver = SCILADriver(scila_ip="127.0.0.1")
+
+  def tearDown(self):
+    self.patcher.stop()
+
+  async def test_open(self):
+    for drawer_id in [1, 2, 3, 4]:
+      with self.subTest(drawer_id=drawer_id):
+        self.mock_sila_interface.send_command.reset_mock()
+        backend = SCILADrawerLoadingTrayBackend(driver=self.driver, drawer_id=drawer_id)
+        await backend.open()
+        self.mock_sila_interface.send_command.assert_any_call("PrepareForInput", position=drawer_id)
+        self.mock_sila_interface.send_command.assert_any_call("OpenDoor")
+
+  async def test_close(self):
+    for drawer_id in [1, 2, 3, 4]:
+      with self.subTest(drawer_id=drawer_id):
+        self.mock_sila_interface.send_command.reset_mock()
+        backend = SCILADrawerLoadingTrayBackend(driver=self.driver, drawer_id=drawer_id)
+        await backend.close()
+        self.mock_sila_interface.send_command.assert_any_call(
+          "PrepareForOutput", position=drawer_id
+        )
+        self.mock_sila_interface.send_command.assert_any_call("CloseDoor")
+
+  def test_invalid_drawer_id(self):
+    with self.assertRaises(ValueError):
+      SCILADrawerLoadingTrayBackend(driver=self.driver, drawer_id=5)
 
 
 if __name__ == "__main__":

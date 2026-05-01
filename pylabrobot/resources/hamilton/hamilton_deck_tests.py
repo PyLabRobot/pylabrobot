@@ -79,9 +79,9 @@ class HamiltonDeckTests(unittest.TestCase):
     self.assertEqual(
       log.output,
       [
-        "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+        "WARNING:pylabrobot.resources.hamilton.hamilton_decks:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
         "careful when traversing the deck.",
-        "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+        "WARNING:pylabrobot.resources.hamilton.hamilton_decks:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
         "careful when grabbing this resource.",
       ],
     )

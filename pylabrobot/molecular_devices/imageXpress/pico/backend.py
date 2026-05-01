@@ -9,6 +9,7 @@ import time
 from collections import defaultdict
 from typing import Callable, Dict, List, Optional, Tuple, TypeVar
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.microscopy import (
   Exposure,
   FocalPosition,
@@ -438,7 +439,7 @@ class PicoDriver(Driver):
 
   # -- lifecycle --
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     if not HAS_GRPC:
       raise RuntimeError(f"grpcio is required for PicoDriver. Import error: {_GRPC_IMPORT_ERROR}")
     self._channel = grpc.insecure_channel(
@@ -526,7 +527,7 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     self._objectives: Dict[int, Objective] = objectives or {}
     self._filter_cubes: Dict[int, ImagingMode] = filter_cubes or {}
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     installed_obj = await self._request_installed_objectives()
     num_obj = len(installed_obj)
     for pos, obj in self._objectives.items():
@@ -671,6 +672,14 @@ class PicoMicroscopyBackend(MicroscopyBackend):
     plate: Plate,
     backend_params: Optional[SerializableMixin] = None,
   ) -> ImagingResult:
+    logger.info(
+      "[Pico %s:%s] capture: row=%d, col=%d, mode=%s",
+      self.driver._host,
+      self.driver._port,
+      row,
+      column,
+      mode,
+    )
     if mode not in _IMAGING_MODE_MAP:
       raise ValueError(
         f"Unsupported imaging mode {mode} for Pico. Supported: {list(_IMAGING_MODE_MAP.keys())}"

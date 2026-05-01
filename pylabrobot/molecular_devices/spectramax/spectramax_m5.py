@@ -1,7 +1,9 @@
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.loading_tray import HasLoadingTray, LoadingTray
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.fluorescence.backend import FluorescenceBackend
@@ -11,7 +13,7 @@ from pylabrobot.capabilities.plate_reading.luminescence.backend import Luminesce
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
 from pylabrobot.capabilities.temperature_controlling import TemperatureController
 from pylabrobot.device import Device
-from pylabrobot.resources import Coordinate, PlateHolder, Resource
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
@@ -32,6 +34,9 @@ from .backend import (
   SpectrumSettings,
   _MolecularDevicesProtocol,
 )
+from .loading_tray_backend import MolecularDevicesLoadingTrayBackend
+
+logger = logging.getLogger(__name__)
 
 
 class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBackend):
@@ -42,6 +47,30 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
 
   @dataclass
   class FluorescenceParams(BackendParams):
+    """SpectraMax M5 parameters for fluorescence reads.
+
+    Args:
+      excitation_wavelengths: List of excitation wavelengths in nm. If None, uses the
+        wavelength from the ``read_fluorescence`` call.
+      emission_wavelengths: List of emission wavelengths in nm. If None, uses the
+        wavelength from the ``read_fluorescence`` call.
+      cutoff_filters: List of cutoff filter indices. If None, auto-selected from the
+        emission wavelength.
+      read_type: Read type (endpoint, kinetic, spectrum, or well scan). Default ENDPOINT.
+      read_order: Read order (column or row). Default COLUMN.
+      calibrate: Calibration mode (once, always, or never). Default ONCE.
+      shake_settings: Optional shake settings to apply before reading.
+      carriage_speed: Carriage speed (normal or low). Default NORMAL.
+      read_from_bottom: If True, read from the bottom of the plate. Default False.
+      pmt_gain: PMT gain setting (AUTO or a manual integer value). Default AUTO.
+      flashes_per_well: Number of flashes per well. Default 10.
+      kinetic_settings: Optional kinetic read settings (for kinetic read type).
+      spectrum_settings: Optional spectrum scan settings (for spectrum read type).
+      cuvette: If True, read a cuvette instead of a plate. Default False.
+      settling_time: Settling time in milliseconds before reading. Default 0.
+      timeout: Read timeout in seconds. Default 600.
+    """
+
     excitation_wavelengths: Optional[List[int]] = None
     emission_wavelengths: Optional[List[int]] = None
     cutoff_filters: Optional[List[int]] = None
@@ -71,6 +100,14 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     if not isinstance(backend_params, self.FluorescenceParams):
       backend_params = SpectraMaxM5FluorescenceBackend.FluorescenceParams()
 
+    logger.info(
+      "[SpectraMax M5 %s] read fluorescence: plate=%s, ex=%d nm, em=%d nm, wells=%d",
+      self.driver.port,
+      plate.name,
+      excitation_wavelength,
+      emission_wavelength,
+      len(wells),
+    )
     excitation_wavelengths = backend_params.excitation_wavelengths or [excitation_wavelength]
     emission_wavelengths = backend_params.emission_wavelengths or [emission_wavelength]
     cutoff_filters = backend_params.cutoff_filters
@@ -151,6 +188,13 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     timeout: int = 600,
   ) -> List[Dict]:
     """Read fluorescence polarization."""
+    logger.info(
+      "[SpectraMax M5 %s] read fluorescence polarization: plate='%s', ex=%s nm, em=%s nm",
+      self.driver.port,
+      plate.name,
+      excitation_wavelengths,
+      emission_wavelengths,
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.POLAR,
@@ -217,6 +261,13 @@ class SpectraMaxM5FluorescenceBackend(_MolecularDevicesProtocol, FluorescenceBac
     timeout: int = 600,
   ) -> List[Dict]:
     """Read time-resolved fluorescence."""
+    logger.info(
+      "[SpectraMax M5 %s] read time-resolved fluorescence: plate='%s', ex=%s nm, em=%s nm",
+      self.driver.port,
+      plate.name,
+      excitation_wavelengths,
+      emission_wavelengths,
+    )
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.TIME,
@@ -271,6 +322,26 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
 
   @dataclass
   class LuminescenceParams(BackendParams):
+    """SpectraMax M5 parameters for luminescence reads.
+
+    Args:
+      emission_wavelengths: List of emission wavelengths in nm. Required for
+        SpectraMax M5 luminescence reads.
+      read_type: Read type (endpoint, kinetic, spectrum, or well scan). Default ENDPOINT.
+      read_order: Read order (column or row). Default COLUMN.
+      calibrate: Calibration mode (once, always, or never). Default ONCE.
+      shake_settings: Optional shake settings to apply before reading.
+      carriage_speed: Carriage speed (normal or low). Default NORMAL.
+      read_from_bottom: If True, read from the bottom of the plate. Default False.
+      pmt_gain: PMT gain setting (AUTO or a manual integer value). Default AUTO.
+      flashes_per_well: Number of flashes per well. Default 0 (instrument default).
+      kinetic_settings: Optional kinetic read settings (for kinetic read type).
+      spectrum_settings: Optional spectrum scan settings (for spectrum read type).
+      cuvette: If True, read a cuvette instead of a plate. Default False.
+      settling_time: Settling time in milliseconds before reading. Default 0.
+      timeout: Read timeout in seconds. Default 600.
+    """
+
     emission_wavelengths: Optional[List[int]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN
@@ -296,6 +367,12 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
     if not isinstance(backend_params, self.LuminescenceParams):
       backend_params = SpectraMaxM5LuminescenceBackend.LuminescenceParams()
 
+    logger.info(
+      "[SpectraMax M5 %s] read luminescence: plate=%s, wells=%d",
+      self.driver.port,
+      plate.name,
+      len(wells),
+    )
     if backend_params.emission_wavelengths is None:
       raise ValueError("emission_wavelengths is required for SpectraMax M5 luminescence reads")
 
@@ -354,7 +431,7 @@ class SpectraMaxM5LuminescenceBackend(_MolecularDevicesProtocol, LuminescenceBac
 # ---------------------------------------------------------------------------
 
 
-class SpectraMaxM5(Resource, Device):
+class SpectraMaxM5(Resource, Device, HasLoadingTray):
   """Molecular Devices SpectraMax M5 plate reader.
 
   Supports absorbance, fluorescence, and luminescence capabilities.
@@ -385,17 +462,22 @@ class SpectraMaxM5(Resource, Device):
     self.luminescence = Luminescence(backend=SpectraMaxM5LuminescenceBackend(driver))
     self.fluorescence = Fluorescence(backend=SpectraMaxM5FluorescenceBackend(driver))
     self.tc = TemperatureController(backend=MolecularDevicesTemperatureBackend(driver))
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.tc]
-
-    self.plate_holder = PlateHolder(
-      name=name + "_plate_holder",
+    self.loading_tray = LoadingTray(
+      backend=MolecularDevicesLoadingTrayBackend(driver),
+      name=name + "_loading_tray",
       size_x=127.76,
       size_y=85.48,
       size_z=0,  # TODO: measure
-      pedestal_size_z=0,  # TODO: measure
       child_location=Coordinate.zero(),  # TODO: measure
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self._capabilities = [
+      self.absorbance,
+      self.luminescence,
+      self.fluorescence,
+      self.tc,
+      self.loading_tray,
+    ]
+    self.assign_child_resource(self.loading_tray, location=Coordinate.zero())
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}

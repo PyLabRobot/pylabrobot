@@ -1,9 +1,11 @@
-"""STARChatterboxDriver: prints commands instead of sending them over USB."""
+"""STARChatterboxDriver: logs commands instead of sending them over USB."""
 
-from typing import List, Optional
+import logging
 
 from .autoload import STARAutoload
 from .cover import STARCover
+from pylabrobot.resources.hamilton import HamiltonDeck
+
 from .driver import (
   DriveConfiguration,
   ExtendedConfiguration,
@@ -35,16 +37,20 @@ _DEFAULT_EXTENDED_CONF = ExtendedConfiguration(
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 class STARChatterboxDriver(STARDriver):
-  """Chatterbox driver for STAR. Prints firmware commands instead of sending them over USB."""
+  """Chatterbox driver for STAR. Logs firmware commands instead of sending them over USB."""
 
   def __init__(
     self,
+    deck: HamiltonDeck,
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONF,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONF,
   ):
-    super().__init__()
+    super().__init__(deck=deck)
     self._num_channels = num_channels
     self._machine_configuration = machine_configuration
     self._extended_configuration = extended_configuration
@@ -55,7 +61,7 @@ class STARChatterboxDriver(STARDriver):
 
   # -- lifecycle: skip USB, use canned config --------------------------------
 
-  async def setup(self):
+  async def setup(self, backend_params=None):
     # No USB — just set config and create backends.
     self.id_ = 0
     self.machine_conf = self._machine_configuration
@@ -66,7 +72,7 @@ class STARChatterboxDriver(STARDriver):
     self._channels_minimum_y_spacing = [9.0] * self._num_channels
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      self.head96 = STARHead96Backend(self)
+      self.head96 = STARHead96Backend(self, deck=self.deck)
     else:
       self.head96 = None
 
@@ -93,8 +99,7 @@ class STARChatterboxDriver(STARDriver):
 
     self.cover = STARCover(driver=self)
 
-    if (self.machine_conf.wash_station_1_installed or
-        self.machine_conf.wash_station_2_installed):
+    if self.machine_conf.wash_station_1_installed or self.machine_conf.wash_station_2_installed:
       self.wash_station = STARWashStation(driver=self)
     else:
       self.wash_station = None
@@ -118,17 +123,28 @@ class STARChatterboxDriver(STARDriver):
 
   # -- I/O: print instead of USB --------------------------------------------
 
-  async def send_command(self, module, command, auto_id=True, tip_pattern=None,
-                         write_timeout=None, read_timeout=None, wait=True,
-                         fmt=None, **kwargs):
+  async def send_command(
+    self,
+    module,
+    command,
+    auto_id=True,
+    tip_pattern=None,
+    write_timeout=None,
+    read_timeout=None,
+    wait=True,
+    fmt=None,
+    **kwargs,
+  ):
     cmd, _ = self._assemble_command(
-      module=module, command=command, auto_id=auto_id,
-      tip_pattern=tip_pattern, **kwargs,
+      module=module,
+      command=command,
+      auto_id=auto_id,
+      tip_pattern=tip_pattern,
+      **kwargs,
     )
-    print(cmd)
+    logger.debug("chatterbox cmd: %s", cmd)
     return None
 
-  async def send_raw_command(self, command, write_timeout=None, read_timeout=None,
-                             wait=True):
-    print(command)
+  async def send_raw_command(self, command, write_timeout=None, read_timeout=None, wait=True):
+    logger.debug("chatterbox raw: %s", command)
     return None

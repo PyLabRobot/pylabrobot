@@ -606,7 +606,7 @@ class TestTecanInfiniteScanGeometry(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(identifiers, ["A1", "A2", "A3", "B1", "B2", "B3"])
 
   def test_scan_range_serpentine(self):
-    setattr(self.backend, "_map_well_to_stage", lambda well: (well.get_column(), well.get_row()))
+    setattr(self.backend._driver, "map_well_to_stage", lambda well: (well.get_column(), well.get_row()))
     row_index, row_wells = self.backend._group_by_row(self.plate.get_all_items())[0]
     start_x, end_x, count = self.backend._scan_range(row_index, row_wells, serpentine=True)
     self.assertEqual((start_x, end_x, count), (0, 2, 3))
@@ -704,8 +704,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _abs_data_blob(6000, 500, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_absorbance(self.plate, [], wavelength=600)
 
     self.mock_usb.write.assert_has_calls(
@@ -733,9 +733,11 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         call(self._frame("PREPARE REF")),
         # row scans (2 rows in test plate)
         call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("ABSOLUTE MTP,X=3000,Y=8000")),
         call(self._frame("SCAN DIRECTION=ALTUP")),
         call(self._frame("SCANX 3000,23000,3")),
         call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("ABSOLUTE MTP,X=23000,Y=16000")),
         call(self._frame("SCAN DIRECTION=ALTUP")),
         call(self._frame("SCANX 23000,3000,3")),
         # _end_run
@@ -763,11 +765,46 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
         self.backend._pending_bin_events.append((cal_len, cal_blob))
 
-    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend, "_await_scan_terminal", side_effect=mock_terminal):
+    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend._driver, "_await_scan_terminal", side_effect=mock_terminal):
         result = await self.backend.read_absorbance(self.plate, [], wavelength=600)
 
     self.assertAlmostEqual(result[0]["data"][0][0], 0.3010299956639812)
+
+  async def test_read_absorbance_subset_prepositions_to_masked_row_start(self):
+    self.backend._ready = True
+    wells = self.plate.get_wells(["A2", "A3", "B1", "B2"])
+
+    async def mock_await(decoder, row_count, mode):
+      cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
+      if decoder.calibration is None:
+        decoder.feed_bin(cal_len, cal_blob)
+      for _ in range(row_count):
+        data_len, data_blob = _abs_data_blob(6000, 500, 1000)
+        decoder.feed_bin(data_len, data_blob)
+
+    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
+        result = await self.backend.read_absorbance(self.plate, wells, wavelength=600)
+
+    self.mock_usb.write.assert_has_calls(
+      [
+        call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("ABSOLUTE MTP,X=13000,Y=8000")),
+        call(self._frame("SCAN DIRECTION=ALTUP")),
+        call(self._frame("SCANX 13000,23000,2")),
+        call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("ABSOLUTE MTP,X=13000,Y=16000")),
+        call(self._frame("SCAN DIRECTION=ALTUP")),
+        call(self._frame("SCANX 13000,3000,2")),
+      ]
+    )
+    self.assertIsNone(result[0]["data"][0][0])
+    self.assertAlmostEqual(result[0]["data"][0][1], 0.3010299956639812)
+    self.assertAlmostEqual(result[0]["data"][0][2], 0.3010299956639812)
+    self.assertAlmostEqual(result[0]["data"][1][0], 0.3010299956639812)
+    self.assertAlmostEqual(result[0]["data"][1][1], 0.3010299956639812)
+    self.assertIsNone(result[0]["data"][1][2])
 
   async def test_read_fluorescence_commands(self):
     """Test that read_fluorescence sends the correct configuration commands."""
@@ -780,8 +817,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _flr_data_blob(4850, 5200, 500, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_fluorescence(
           self.plate, [], excitation_wavelength=485, emission_wavelength=520
         )
@@ -827,9 +864,11 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         call(self._frame("PREPARE REF")),
         # row scans (2 rows in test plate)
         call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("ABSOLUTE MTP,X=3000,Y=8000")),
         call(self._frame("SCAN DIRECTION=UP")),
         call(self._frame("SCANX 3000,23000,3")),
         call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("ABSOLUTE MTP,X=23000,Y=16000")),
         call(self._frame("SCAN DIRECTION=UP")),
         call(self._frame("SCANX 23000,3000,3")),
         # _end_run
@@ -853,8 +892,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _lum_data_blob(0, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_luminescence(self.plate, [], focal_height=14.62)
 
     self.mock_usb.write.assert_has_calls(
@@ -886,9 +925,11 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         call(self._frame("PREPARE REF")),
         # row scans (2 rows, non-serpentine so both scan left-to-right)
         call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("ABSOLUTE MTP,X=3000,Y=8000")),
         call(self._frame("SCAN DIRECTION=UP")),
         call(self._frame("SCANX 3000,23000,3")),
         call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("ABSOLUTE MTP,X=3000,Y=16000")),
         call(self._frame("SCAN DIRECTION=UP")),
         call(self._frame("SCANX 3000,23000,3")),
         # _end_run
@@ -911,8 +952,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _lum_data_blob(0, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_luminescence(self.plate, [])
 
     self.mock_usb.write.assert_any_call(self._frame("POSITION LUM,Z=20000"))

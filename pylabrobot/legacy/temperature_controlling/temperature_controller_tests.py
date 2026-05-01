@@ -36,8 +36,12 @@ class PassiveCoolingTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
 
-    with self.assertRaises(ValueError):
-      await tc.set_temperature(10)
+    await tc.setup()
+    try:
+      with self.assertRaises(ValueError):
+        await tc.set_temperature(10)
+    finally:
+      await tc.stop()
 
   async def test_passive_cooling_without_support(self):
     backend = TemperatureControllerChatterboxBackend(dummy_temperature=20.0)
@@ -50,9 +54,13 @@ class PassiveCoolingTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
 
-    await tc.set_temperature(10, passive=True)
-    # Temperature should remain unchanged on the backend.
-    self.assertEqual(await backend.get_current_temperature(), 20.0)
+    await tc.setup()
+    try:
+      await tc.set_temperature(10, passive=True)
+      # Temperature should remain unchanged on the backend.
+      self.assertEqual(await backend.get_current_temperature(), 20.0)
+    finally:
+      await tc.stop()
 
 
 class _FakeBackend(TemperatureControllerBackend):
@@ -94,5 +102,9 @@ class PassiveCoolingWithSupportTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
 
-    await tc.set_temperature(20, passive=True)
-    self.assertFalse(backend.set_called)
+    await tc.setup()
+    try:
+      await tc.set_temperature(20, passive=True)
+      self.assertFalse(backend.set_called)
+    finally:
+      await tc.stop()

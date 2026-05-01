@@ -1,4 +1,4 @@
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 
 from .backend import HumidityControllerBackend
 
@@ -13,6 +13,7 @@ class HumidityController(Capability):
     super().__init__(backend=backend)
     self.backend: HumidityControllerBackend = backend
 
+  @need_capability_ready
   async def set_humidity(self, humidity: float):
     """Set the target humidity as a fraction 0.0-1.0.
 
@@ -23,6 +24,7 @@ class HumidityController(Capability):
       raise ValueError("Backend does not support humidity control (read-only).")
     await self.backend.set_humidity(humidity)
 
+  @need_capability_ready
   async def request_humidity(self) -> float:
     """Get the current humidity as a fraction 0.0-1.0."""
     return await self.backend.request_current_humidity()

@@ -15,4 +15,6 @@ class BarcodeScannerChatterboxBackend(BarcodeScannerBackend):
 
   async def scan_barcode(self) -> Barcode:
     logger.info("Scanning barcode.")
-    return Barcode(data=self.barcode, symbology="Code 128 (Subset B and C)", position_on_resource="front")
+    return Barcode(
+      data=self.barcode, symbology="Code 128 (Subset B and C)", position_on_resource="front"
+    )

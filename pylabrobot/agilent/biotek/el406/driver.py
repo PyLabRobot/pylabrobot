@@ -11,12 +11,14 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import NamedTuple, TypedDict, TypeVar
+from dataclasses import dataclass
+from typing import NamedTuple, Optional, TypedDict, TypeVar
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.ftdi import FTDI
-from pylabrobot.resources import Plate
+from pylabrobot.resources import Plate, Resource
 
 from .enums import (
   EL406Motor,
@@ -68,8 +70,43 @@ class EL406Driver(Driver):
     self.io: FTDI | None = None
     self._command_lock: asyncio.Lock | None = None
     self._in_batch: bool = False
+    self._cached_plate: Plate | None = None
 
-  async def setup(self, skip_reset: bool = False) -> None:
+  @property
+  def plate(self) -> Plate:
+    """The plate currently assigned to the EL406.
+
+    Set automatically when a plate is assigned to the device's plate_holder.
+
+    Raises:
+      RuntimeError: If no plate is assigned.
+    """
+    if self._cached_plate is None:
+      raise RuntimeError(
+        "No plate is assigned to the EL406. "
+        "Assign a plate to el406.plate_holder before running commands."
+      )
+    return self._cached_plate
+
+  def _on_plate_assigned(self, resource: Resource) -> None:
+    if isinstance(resource, Plate):
+      self._cached_plate = resource
+
+  def _on_plate_unassigned(self, resource: Resource) -> None:
+    if isinstance(resource, Plate):
+      self._cached_plate = None
+
+  @dataclass
+  class SetupParams(BackendParams):
+    """EL406-specific parameters for ``setup``.
+
+    Args:
+      skip_reset: If True, skip the instrument reset step during setup.
+    """
+
+    skip_reset: bool = False
+
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Set up communication with the EL406.
 
     Configures the FTDI USB interface with the correct parameters:
@@ -80,12 +117,12 @@ class EL406Driver(Driver):
     If ``self.io`` is already set (e.g. injected mock for testing),
     it is used as-is and ``setup()`` is not called on it again.
 
-    Args:
-      skip_reset: If True, skip the instrument reset step.
-
     Raises:
       RuntimeError: If pylibftdi is not installed or communication fails.
     """
+    if not isinstance(backend_params, EL406Driver.SetupParams):
+      backend_params = EL406Driver.SetupParams()
+
     self._command_lock = asyncio.Lock()
 
     logger.info("EL406Driver setting up")
@@ -131,7 +168,7 @@ class EL406Driver(Driver):
       logger.error("  Communication test: FAILED - %s", e)
       raise
 
-    if not skip_reset:
+    if not backend_params.skip_reset:
       logger.info("Performing full instrument reset...")
       await self.reset()
       logger.info("  Instrument reset: DONE")
@@ -630,20 +667,19 @@ class EL406Driver(Driver):
   # ---------------------------------------------------------------------------
 
   @asynccontextmanager
-  async def batch(self, plate: Plate) -> AsyncIterator[None]:
+  async def batch(self) -> AsyncIterator[None]:
     """Context manager for batching step commands.
 
-    Each step command (manifold_wash, syringe_prime, etc.) automatically wraps
+    Each step command (wash, syringe_prime, etc.) automatically wraps
     its execution in a batch. Use this context manager to group multiple step
     commands into a single batch, avoiding repeated start/cleanup cycles.
 
     If already inside a batch, this is a no-op passthrough.
 
-    Args:
-      plate: PLR Plate to configure for this batch.
+    The plate must be assigned to the device's plate_holder before calling this.
 
     Example:
-      >>> async with driver.batch(plate_96):
+      >>> async with driver.batch():
       ...     await driver._send_step_command(framed_cmd)
     """
     if self._in_batch:
@@ -652,7 +688,7 @@ class EL406Driver(Driver):
 
     self._in_batch = True
     try:
-      await self.start_batch(plate_to_wire_byte(plate))
+      await self.start_batch(plate_to_wire_byte(self.plate))
       yield
     finally:
       try:
