@@ -9876,10 +9876,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # plane. R0 RZ is calibrated to the finger plane; the rotation drive sits
   # 13 mm above it.
   iswap_rotation_drive_z_offset_above_finger_mm = 13.0
-  # R0 ZA firmware spec (SFGT.3112): za=-187..+26661 incr (default 24600),
-  # zv=50..15000 incr/sec (default 11000), zr=5..999 in 1000 incr/sec^2 units
-  # (default 60), zw=0..7 (default 6). Position is in finger-plane coords;
-  # `iswap_rotation_drive_move_z` adds the 13 mm offset for the user.
+  
+  # Position is in finger-plane coords; `iswap_rotation_drive_move_z` adds
+  # the 13 mm offset to return the bottom position of the rotation drive.
   iswap_rotation_drive_z_min_increment = -187
   iswap_rotation_drive_z_max_increment = 26_661
   iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
