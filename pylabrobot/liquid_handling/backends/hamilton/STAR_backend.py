@@ -10098,6 +10098,45 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zw=f"{int(current_protection_limiter)}",
     )
 
+  async def iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, int]:
+    """Read the iSWAP rotation-drive Z-axis predefined-position table from EEPROM.
+
+    Sends R0 RA ra=pz. Firmware returns 10 signed-integer slots; all 10 are
+    positions (no length slot, unlike pw/pt). Slots beyond home/parking are
+    extra slots addressable via R0 ZP zp2..zp9.
+
+    Keys (motor increments; Z-drive resolution 0.01072765 mm/incr):
+      "home"     pz[0]  - home position
+      "parking"  pz[1]  - parking pose (firmware requires pz[1] >= iz + 100)
+      "extra_1"  pz[2]  - extra slot, address via R0 ZP zp2
+      "extra_2"  pz[3]  - extra slot, address via R0 ZP zp3
+      "extra_3"  pz[4]  - extra slot, address via R0 ZP zp4
+      "extra_4"  pz[5]  - extra slot, address via R0 ZP zp5
+      "extra_5"  pz[6]  - extra slot, address via R0 ZP zp6
+      "extra_6"  pz[7]  - extra slot, address via R0 ZP zp7
+      "extra_7"  pz[8]  - extra slot, address via R0 ZP zp8
+      "extra_8"  pz[9]  - extra slot, address via R0 ZP zp9
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pz", fmt="pz##### (n)")
+    pz = cast(List[int], resp["pz"])
+    return {
+      "home": pz[0],
+      "parking": pz[1],
+      "extra_1": pz[2],
+      "extra_2": pz[3],
+      "extra_3": pz[4],
+      "extra_4": pz[5],
+      "extra_5": pz[6],
+      "extra_6": pz[7],
+      "extra_7": pz[8],
+      "extra_8": pz[9],
+    }
+
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
