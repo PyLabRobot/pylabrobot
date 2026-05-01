@@ -33,7 +33,7 @@ from pylabrobot.labcyte.echo import (
   _RpcResult,
   build_echo_transfer_plan,
 )
-from pylabrobot.resources import Plate, Well, create_ordered_items_2d, set_volume_tracking
+from pylabrobot.resources import Plate, Resource, Well, create_ordered_items_2d, set_volume_tracking
 
 
 def _soap_response(
@@ -1311,6 +1311,34 @@ class TestEchoPlateMap(unittest.TestCase):
 
 
 class TestEchoDevice(unittest.IsolatedAsyncioTestCase):
+  async def test_device_models_source_and_destination_positions_as_plate_holders(self):
+    echo = Echo(host="192.168.0.25")
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+
+    echo.source_plate = source_plate
+    echo.destination_plate = destination_plate
+
+    self.assertEqual(echo.source_position.role, "source")
+    self.assertEqual(echo.destination_position.role, "destination")
+    self.assertIs(echo.source_plate, source_plate)
+    self.assertIs(echo.destination_plate, destination_plate)
+    self.assertIs(source_plate.parent, echo.source_position)
+    self.assertIs(destination_plate.parent, echo.destination_position)
+    self.assertIn(echo.source_position, echo.deck.children)
+    self.assertIn(echo.destination_position, echo.deck.children)
+
+    echo.source_plate = None
+    self.assertIsNone(echo.source_plate)
+    self.assertIsNone(source_plate.parent)
+
+  async def test_echo_plate_positions_only_accept_plates(self):
+    echo = Echo(host="192.168.0.25")
+    resource = Resource("not-a-plate", size_x=1, size_y=1, size_z=1)
+
+    with self.assertRaisesRegex(TypeError, "only hold PLR Plate"):
+      echo.source_position.assign_child_resource(resource)
+
   async def test_device_delegates_to_driver_and_capability(self):
     echo = Echo(host="192.168.0.25")
     echo._setup_finished = True

@@ -12,6 +12,7 @@ from .echo import (
   EchoPlannedTransfer,
   EchoPlateAccessBackend,
   EchoPlateMap,
+  EchoPlatePosition,
   EchoPlateWorkflowResult,
   EchoProtocolError,
   EchoSkippedWell,

@@ -29,7 +29,10 @@ from typing import (
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_access import PlateAccess, PlateAccessBackend, PlateAccessState
 from pylabrobot.device import Device, Driver, need_setup_finished
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.utils import label_to_row_index, split_identifier
 from pylabrobot.resources.volume_tracker import does_volume_tracking
 from pylabrobot.resources.well import Well
@@ -2542,6 +2545,41 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     await self.driver.close_door(timeout=timeout)
 
 
+class EchoPlatePosition(ResourceHolder):
+  """A physical Echo source or destination plate position."""
+
+  def __init__(self, name: str, role: str):
+    super().__init__(
+      name=name,
+      size_x=127.76,
+      size_y=85.48,
+      size_z=20.0,
+      category="labcyte_echo_plate_position",
+      model=f"labcyte_echo_{role}_position",
+      child_location=Coordinate.zero(),
+    )
+    self.role = role
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
+    if not isinstance(resource, Plate):
+      raise TypeError("Echo plate positions can only hold PLR Plate resources.")
+    return super().assign_child_resource(resource, location, reassign)
+
+  @property
+  def plate(self) -> Optional[Plate]:
+    resource = self.resource
+    return resource if isinstance(resource, Plate) else None
+
+  @plate.setter
+  def plate(self, plate: Optional[Plate]) -> None:
+    self.resource = plate
+
+
 class Echo(Device):
   """Labcyte Echo access-control device frontend."""
 
@@ -2568,6 +2606,42 @@ class Echo(Device):
     self.driver: EchoDriver = driver
     self.plate_access = PlateAccess(backend=EchoPlateAccessBackend(driver))
     self._capabilities = [self.plate_access]
+    self.deck = Resource(
+      name="labcyte_echo",
+      size_x=360.0,
+      size_y=300.0,
+      size_z=260.0,
+      category="labcyte_echo",
+      model="Labcyte Echo",
+    )
+    self.source_position = EchoPlatePosition(name="echo_source_position", role="source")
+    self.destination_position = EchoPlatePosition(
+      name="echo_destination_position",
+      role="destination",
+    )
+    self.deck.assign_child_resource(self.source_position, location=Coordinate(75.0, 120.0, 0.0))
+    self.deck.assign_child_resource(
+      self.destination_position,
+      location=Coordinate(205.0, 120.0, 0.0),
+    )
+
+  @property
+  def source_plate(self) -> Optional[Plate]:
+    """Return the PLR plate assigned to the Echo source position."""
+    return self.source_position.plate
+
+  @source_plate.setter
+  def source_plate(self, plate: Optional[Plate]) -> None:
+    self.source_position.plate = plate
+
+  @property
+  def destination_plate(self) -> Optional[Plate]:
+    """Return the PLR plate assigned to the Echo destination position."""
+    return self.destination_position.plate
+
+  @destination_plate.setter
+  def destination_plate(self, plate: Optional[Plate]) -> None:
+    self.destination_position.plate = plate
 
   @need_setup_finished
   async def get_instrument_info(self) -> EchoInstrumentInfo:
