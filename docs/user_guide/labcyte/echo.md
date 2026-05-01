@@ -56,6 +56,35 @@ Transfer notes:
 - Echo transfer volumes are in nL by default; pass `volume_unit="uL"` to use PLR-style uL inputs
 - successful transfer reports update PLR volume trackers only when PLR volume tracking is enabled
 
+## Live Echo 650 Validation
+
+The non-live unit tests mock the Medman transport. Before relying on a new Echo firmware build or
+new workflow code, run the opt-in live validation tests against an idle Echo 650:
+
+```bash
+PYLABROBOT_ECHO_HOST=192.168.0.25 \
+  uv run --extra dev pytest pylabrobot/labcyte/echo_live_tests.py
+```
+
+By default, the live validation reads identity, configuration, access state, plate catalogs,
+protocol catalogs, and verifies that the event channel can be opened. It does not move plates,
+grippers, or the door.
+
+To include a door open/close lock cycle, run the same test with explicit motion enabled:
+
+```bash
+PYLABROBOT_ECHO_HOST=192.168.0.25 \
+PYLABROBOT_ECHO_VALIDATE_MOTION=1 \
+  uv run --extra dev pytest pylabrobot/labcyte/echo_live_tests.py
+```
+
+The expected model defaults to `Echo 650`. Override it only when validating a compatible
+instrument variant:
+
+```bash
+PYLABROBOT_ECHO_EXPECTED_MODEL="Echo 655"
+```
+
 ## Low-Level Metadata And Controls
 
 ```python
@@ -261,5 +290,5 @@ destination wells.
 
 This integration does not yet implement:
 
-- live validation of the new low-level actuator and workflow calls on every Echo 650 firmware build
+- live validation of every low-level actuator and workflow call on every Echo 650 firmware build
 - a CSV picklist parser or UI layer
