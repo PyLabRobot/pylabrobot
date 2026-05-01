@@ -10253,6 +10253,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="R0", command="RW", fmt="rw######")
     return cast(int, response["rw"])
 
+  async def iswap_rotation_drive_request_angle(self) -> float:
+    """Query the iSWAP rotation drive angle in degrees (signed, 0 deg = FRONT)."""
+    increments = await self.request_iswap_rotation_drive_position_increments()
+    return increments * STARBackend.iswap_rotation_drive_deg_per_increment
+
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
     """Request the iSWAP rotation drive orientation.
 
@@ -10331,6 +10336,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     else:
       raise ValueError(f"Invalid rotation drive orientation: {orientation}")
+
+  async def iswap_rotation_drive_set_angle(
+    self,
+    angle: float,
+    speed: int = 25_000,
+    acceleration: int = 170,
+    current_limit: int = 5,
+  ) -> None:
+    """Rotate the iSWAP rotation drive (Joint 1) to an absolute angle.
+
+    Args:
+      angle: target angle in degrees, signed. Range ~ -93..+93 deg
+        (LEFT..RIGHT). 0 deg is FRONT.
+      speed: max velocity in increments/sec, range 20..75000.
+      acceleration: in 1000 increments/sec^2, range 5..200.
+      current_limit: motor current protection limiter, range 0..7.
+
+    The wrist drive is held at its current position.
+    """
+    max_deg = (
+      STARBackend.iswap_rotation_drive_max_increment
+      * STARBackend.iswap_rotation_drive_deg_per_increment
+    )
+    if not -max_deg <= angle <= max_deg:
+      raise ValueError(f"angle must be between {-max_deg:.2f} and {max_deg:.2f} deg, got {angle}")
+
+    rotation_position = round(angle / STARBackend.iswap_rotation_drive_deg_per_increment)
+    wrist_position = await self.request_iswap_wrist_drive_position_increments()
+
+    await self._iswap_rotate_increments(
+      rotation_position=rotation_position,
+      wrist_position=wrist_position,
+      rotation_speed=speed,
+      rotation_acceleration=acceleration,
+      rotation_current_limit=current_limit,
+    )
 
   # -----------------------------------------------------------------------
   # iSWAP: "Wrist Drive" (Joint 2)
