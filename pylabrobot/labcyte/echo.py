@@ -638,19 +638,19 @@ def _resolve_well_reference(plate: Plate, well: Union[str, Well], role: str) -> 
 
 
 def _make_transfer_protocol_xml(
-  transfers: Sequence[EchoPlannedTransfer], protocol_name: str
+  transfers: Sequence[tuple[str, str, float]], protocol_name: str
 ) -> str:
   protocol = ET.Element("Protocol", {"Name": protocol_name})
   ET.SubElement(protocol, "Name")
   layout = ET.SubElement(protocol, "Layout")
-  for transfer in transfers:
+  for source_identifier, destination_identifier, volume_nl in transfers:
     ET.SubElement(
       layout,
       "wp",
       {
-        "n": transfer.source_identifier,
-        "dn": transfer.destination_identifier,
-        "v": _format_transfer_volume_nl(transfer.volume_nl),
+        "n": source_identifier,
+        "dn": destination_identifier,
+        "v": _format_transfer_volume_nl(volume_nl),
       },
     )
   return '<?xml version="1.0" encoding="utf-8"?>' + ET.tostring(
@@ -673,6 +673,7 @@ def build_echo_transfer_plan(
   """Build Echo protocol XML and source plate map from PLR plates and wells."""
 
   planned_transfers: list[EchoPlannedTransfer] = []
+  protocol_transfers: list[tuple[str, str, float]] = []
   for transfer in transfers:
     if isinstance(transfer, EchoPlannedTransfer):
       planned = transfer
@@ -691,18 +692,23 @@ def build_echo_transfer_plan(
         destination=destination,
         volume_nl=_normalize_volume_nl(float(volume), volume_unit),
       )
+    source_identifier = planned.source_identifier
+    destination_identifier = planned.destination_identifier
     _validate_transfer_volume_nl(
       planned.volume_nl,
-      f"{planned.source_identifier}->{planned.destination_identifier}",
+      f"{source_identifier}->{destination_identifier}",
     )
     planned_transfers.append(planned)
+    protocol_transfers.append((source_identifier, destination_identifier, planned.volume_nl))
 
   if not planned_transfers:
     raise ValueError("At least one transfer is required.")
 
   source_type = _resolve_plate_type(source_plate, source_plate_type, "Source")
   destination_type = _resolve_plate_type(destination_plate, destination_plate_type, "Destination")
-  source_wells = tuple(dict.fromkeys(transfer.source_identifier for transfer in planned_transfers))
+  source_wells = tuple(
+    dict.fromkeys(source for source, _destination, _volume in protocol_transfers)
+  )
   return EchoTransferPlan(
     source_plate=source_plate,
     destination_plate=destination_plate,
@@ -710,7 +716,7 @@ def build_echo_transfer_plan(
     destination_plate_type=destination_type,
     protocol_name=protocol_name,
     transfers=tuple(planned_transfers),
-    protocol_xml=_make_transfer_protocol_xml(planned_transfers, protocol_name),
+    protocol_xml=_make_transfer_protocol_xml(protocol_transfers, protocol_name),
     plate_map=EchoPlateMap(plate_type=source_type, well_identifiers=source_wells),
   )
 
@@ -2509,8 +2515,8 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
-    await self.driver.close_source_plate(
+  ) -> Optional[str]:
+    return await self.driver.close_source_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -2526,8 +2532,8 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode_location: Optional[str] = None,
     barcode: str = "",
     timeout: Optional[float] = None,
-  ) -> None:
-    await self.driver.close_destination_plate(
+  ) -> Optional[str]:
+    return await self.driver.close_destination_plate(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
