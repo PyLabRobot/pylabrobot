@@ -3,7 +3,7 @@ import unittest
 
 from pylabrobot.capabilities.arms.standard import GripperLocation
 from pylabrobot.paa.kx2 import kinematics
-from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperConfig, KX2Config
+from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperParams, KX2Config
 from pylabrobot.paa.kx2.driver import JointMoveDirection
 from pylabrobot.paa.kx2.kinematics import IKError
 from pylabrobot.resources import Coordinate, Rotation
@@ -45,7 +45,7 @@ def _config(
 class FKIKRoundTrip(unittest.TestCase):
   def test_roundtrip(self):
     c = _config()
-    g = GripperConfig(length=15.0, z_offset=3.0)
+    g = GripperParams(length=15.0, z_offset=3.0)
     pose = GripperLocation(
       location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30)
     )
@@ -59,7 +59,7 @@ class FKIKRoundTrip(unittest.TestCase):
   def test_roundtrip_at_origin_yaw_zero(self):
     """Sanity: a pose at (0, R, Z, 0°) lands shoulder=0°."""
     c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
-    g = GripperConfig()
+    g = GripperParams()
     pose = GripperLocation(
       location=Coordinate(x=0, y=300, z=10), rotation=Rotation(z=0)
     )
@@ -73,7 +73,7 @@ class FKIKRoundTrip(unittest.TestCase):
 class IKErrors(unittest.TestCase):
   def test_x_rotation_raises_ikerror(self):
     c = _config()
-    g = GripperConfig()
+    g = GripperParams()
     pose = GripperLocation(
       location=Coordinate(x=0, y=100, z=0), rotation=Rotation(x=10, z=0)
     )
@@ -82,7 +82,7 @@ class IKErrors(unittest.TestCase):
 
   def test_y_rotation_raises_ikerror(self):
     c = _config()
-    g = GripperConfig()
+    g = GripperParams()
     pose = GripperLocation(
       location=Coordinate(x=0, y=100, z=0), rotation=Rotation(y=10, z=0)
     )
@@ -131,8 +131,8 @@ class GripperFingerSide(unittest.TestCase):
   def test_proximity_side_negates_gripper_offset(self):
     """Same joints, opposite finger side -> clamp point reflected through wrist axis."""
     c = _config()
-    g_bc = GripperConfig(length=15.0, z_offset=3.0, finger_side="barcode_reader")
-    g_pr = GripperConfig(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
+    g_bc = GripperParams(length=15.0, z_offset=3.0, finger_side="barcode_reader")
+    g_pr = GripperParams(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
     j = {Axis.SHOULDER: 30.0, Axis.Z: 50.0, Axis.ELBOW: 100.0, Axis.WRIST: 15.0}
     p_bc = kinematics.fk(j, c, g_bc)
     p_pr = kinematics.fk(j, c, g_pr)
@@ -153,7 +153,7 @@ class GripperFingerSide(unittest.TestCase):
 
   def test_proximity_roundtrip(self):
     c = _config()
-    g = GripperConfig(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
+    g = GripperParams(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
     pose = GripperLocation(
       location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30)
     )
@@ -173,8 +173,8 @@ class GripperFingerSide(unittest.TestCase):
       location=Coordinate(x=0, y=300, z=0), rotation=Rotation(z=0)
     )
     c = _config()
-    g_bc = GripperConfig(length=15.0, z_offset=3.0, finger_side="barcode_reader")
-    g_pr = GripperConfig(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
+    g_bc = GripperParams(length=15.0, z_offset=3.0, finger_side="barcode_reader")
+    g_pr = GripperParams(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
     j_bc = kinematics.ik(pose, c, g_bc)
     j_pr = kinematics.ik(pose, c, g_pr)
     self.assertAlmostEqual(j_bc[Axis.SHOULDER], 0.0, places=9)
@@ -186,7 +186,7 @@ class ShoulderSnapAt180(unittest.TestCase):
   def test_negative_180_snaps_to_positive(self):
     """A pose pointing exactly along -y has shoulder = ±180; we snap to +180."""
     c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
-    g = GripperConfig()
+    g = GripperParams()
     pose = GripperLocation(
       location=Coordinate(x=0, y=-100, z=0), rotation=Rotation(z=180)
     )

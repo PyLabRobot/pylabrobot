@@ -19,7 +19,7 @@ from pylabrobot.paa.kx2.config import (
   Axis,
   AxisConfig,
   GripperFingerSide,
-  GripperConfig,
+  GripperParams,
   KX2Config,
   ServoGripperConfig,
 )
@@ -73,7 +73,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self.driver = driver
     # Tooling is user-supplied and known at construction; KX2Config (drive-
     # read calibration) doesn't exist until setup runs.
-    self._gripper_config = GripperConfig(
+    self._gripper_params = GripperParams(
       length=float(gripper_length),
       z_offset=float(gripper_z_offset),
       finger_side=gripper_finger_side,
@@ -792,7 +792,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       current=current,
       target=cmd_pos,
       cfg=self._cfg,
-      gripper_cfg=self._gripper_config,
+      gripper_params=self._gripper_params,
       max_gripper_speed=params.max_gripper_speed,
       max_gripper_acceleration=params.max_gripper_acceleration,
     )
@@ -848,7 +848,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     """Cartesian -> joints, snapping rotary axes to whichever 360° wrap is
     closest to the current joint position."""
     current = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
-    ik_joints = kinematics.ik(pose, self._cfg, self._gripper_config)
+    ik_joints = kinematics.ik(pose, self._cfg, self._gripper_params)
     return kinematics.snap_to_current(ik_joints, current)
 
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
@@ -873,7 +873,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self, backend_params: Optional[BackendParams] = None
   ) -> GripperLocation:
     joints = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
-    return kinematics.fk(joints, self._cfg, self._gripper_config)
+    return kinematics.fk(joints, self._cfg, self._gripper_params)
 
   async def open_gripper(
     self, gripper_width: float, backend_params: Optional[BackendParams] = None
@@ -1155,7 +1155,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         pickup_pose = await self.request_joint_position()
 
         # Auto-windup: rotate wrist to the inward angle (opposite of outward).
-        wrist_inward = 0.0 if self._gripper_config.finger_side == "barcode_reader" else 180.0
+        wrist_inward = 0.0 if self._gripper_params.finger_side == "barcode_reader" else 180.0
         while wrist_inward - pickup_pose[Axis.WRIST] > 180.0:
           wrist_inward -= 360.0
         while wrist_inward - pickup_pose[Axis.WRIST] < -180.0:
@@ -1171,7 +1171,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         joints0 = await self.request_joint_position()
 
         # Outward wrist = kinematic target (180° barcode_reader, 0° proximity).
-        wrist_outward = 180.0 if self._gripper_config.finger_side == "barcode_reader" else 0.0
+        wrist_outward = 180.0 if self._gripper_params.finger_side == "barcode_reader" else 0.0
         while wrist_outward - joints0[Axis.WRIST] > 180.0:
           wrist_outward -= 360.0
         while wrist_outward - joints0[Axis.WRIST] < -180.0:

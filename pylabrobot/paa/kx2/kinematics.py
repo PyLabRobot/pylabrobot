@@ -27,7 +27,7 @@ from typing import Dict, Optional
 
 from pylabrobot.capabilities.arms import kinematics as arm_kinematics
 from pylabrobot.capabilities.arms.standard import GripperLocation
-from pylabrobot.paa.kx2.config import Axis, GripperConfig, KX2Config
+from pylabrobot.paa.kx2.config import Axis, GripperParams, KX2Config
 from pylabrobot.paa.kx2.driver import (
   JointMoveDirection,
   MotorMoveParam,
@@ -40,7 +40,7 @@ class IKError(ValueError):
   """Target pose is unreachable (for now: non-Z rotation requested)."""
 
 
-def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> GripperLocation:
+def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLocation:
   """Forward kinematics.
 
   Args:
@@ -77,7 +77,7 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperConfig) -> GripperLoca
   )
 
 
-def ik(pose: GripperLocation, c: KX2Config, t: GripperConfig) -> Dict[Axis, float]:
+def ik(pose: GripperLocation, c: KX2Config, t: GripperParams) -> Dict[Axis, float]:
   """Inverse kinematics.
 
   Args:
@@ -191,7 +191,7 @@ def plan_joint_move(
   current: Dict[Axis, float],
   target: Dict[Axis, float],
   cfg: KX2Config,
-  gripper_cfg: GripperConfig,
+  gripper_params: GripperParams,
   *,
   max_gripper_speed: Optional[float] = None,
   max_gripper_acceleration: Optional[float] = None,
@@ -298,7 +298,7 @@ def plan_joint_move(
   fk_deltas = {ax: cap_deltas.get(ax, 0.0) for ax in arm_axes if ax in fk_start}
   capped_v: Dict[Axis, float] = {}
   capped_a: Dict[Axis, float] = {}
-  fk_loc = lambda j: fk(j, cfg, gripper_cfg).location
+  fk_loc = lambda j: fk(j, cfg, gripper_params).location
   if max_gripper_speed is not None and fk_start:
     result = arm_kinematics.joint_velocities_for_max_gripper_speed(
       fk=fk_loc,

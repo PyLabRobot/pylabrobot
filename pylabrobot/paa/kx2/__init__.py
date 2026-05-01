@@ -3,7 +3,7 @@ from pylabrobot.paa.kx2.barcode_reader import KX2BarcodeReader
 from pylabrobot.paa.kx2.config import (
   Axis,
   AxisConfig,
-  GripperConfig,
+  GripperParams,
   GripperFingerSide,
   KX2Config,
   ServoGripperConfig,
@@ -14,7 +14,7 @@ from pylabrobot.paa.kx2.kx2 import KX2
 __all__ = [
   "Axis",
   "AxisConfig",
-  "GripperConfig",
+  "GripperParams",
   "GripperFingerSide",
   "IKError",
   "KX2",

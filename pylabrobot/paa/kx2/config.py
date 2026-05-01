@@ -68,11 +68,12 @@ class AxisConfig:
 
 
 @dataclass
-class GripperConfig:
-  """User-supplied gripper geometry — known at construction, never read
+class GripperParams:
+  """User-supplied gripper tooling — known at construction, never read
   from the drives. Lives on :class:`KX2ArmBackend`
-  (``self._gripper_config``) and is passed into kinematics alongside
-  :class:`KX2Config`.
+  (``self._gripper_params``) and is passed into kinematics alongside
+  :class:`KX2Config`. Distinct from :class:`ServoGripperConfig`, which
+  is drive-read motor calibration for the servo gripper itself.
 
   Attributes:
     length: Distance from the wrist axis to the gripper clamp point, in
@@ -113,7 +114,7 @@ class ServoGripperConfig:
 class KX2Config:
   """Drive-read calibration. Strictly contents pulled off the bus at
   setup; tooling (gripper geometry) lives separately on
-  :class:`GripperConfig` and is owned by the backend."""
+  :class:`GripperParams` and is owned by the backend."""
 
   # Geometry (read from the shoulder drive's UF8/UF9/UF10).
   wrist_offset: float
