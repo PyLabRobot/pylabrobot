@@ -9877,6 +9877,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # 13 mm above it.
   iswap_rotation_drive_z_offset_above_finger_mm = 13.0
 
+  # Position is in finger-plane coords; `iswap_rotation_drive_move_z` adds
+  # the 13 mm offset to return the bottom position of the rotation drive.
+  iswap_rotation_drive_z_min_increment = -187
+  iswap_rotation_drive_z_max_increment = 26_661
+  iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
+  iswap_rotation_drive_z_acceleration_increment_range = (5, 999)
+
   async def iswap_rotation_drive_request_z(self) -> float:
     """Request iSWAP rotation drive Z position (deck coordinates), in mm.
 
@@ -10015,6 +10022,80 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       yv=f"{round(speed_increments):04}",
       yr=f"{int(acceleration_level)}",
       yw=f"{int(current_protection_limiter)}",
+    )
+
+  async def iswap_rotation_drive_move_z(
+    self,
+    z: float,
+    speed: float = 118.0,
+    acceleration: float = 643.66,
+    current_protection_limiter: int = 6,
+  ):
+    """Move the iSWAP rotation drive to an absolute Z position (deck coordinates).
+
+    `z` is the rotation-drive plane Z, matching what
+    `iswap_rotation_drive_request_z` returns. The 13 mm offset to the gripper
+    finger plane (where R0 ZA is calibrated) is applied internally.
+
+    Args:
+      z: Target rotation-drive Z coordinate in mm.
+      speed: Max velocity in mm/sec. Default 118.0 (firmware default).
+      acceleration: Acceleration in mm/sec^2. Default 643.66
+        (firmware default 60 in 1000 incr/sec^2 units).
+      current_protection_limiter: Motor current limit, 0-7. Default 6
+        (firmware default).
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    z_min_incr = STARBackend.iswap_rotation_drive_z_min_increment
+    z_max_incr = STARBackend.iswap_rotation_drive_z_max_increment
+    absolute_min_z = (
+      STARBackend.z_drive_increment_to_mm(z_min_incr)
+      + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    )
+    absolute_max_z = (
+      STARBackend.z_drive_increment_to_mm(z_max_incr)
+      + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    )
+    if not (absolute_min_z <= z <= absolute_max_z):
+      raise ValueError(f"z must be between {absolute_min_z} and {absolute_max_z} mm, got {z} mm")
+
+    finger_plane_z = z - STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    z_increments = STARBackend.mm_to_z_drive_increment(finger_plane_z)
+
+    speed_increments = STARBackend.mm_to_z_drive_increment(speed)
+    speed_min, speed_max = STARBackend.iswap_rotation_drive_z_speed_increment_range
+    if not (speed_min <= speed_increments <= speed_max):
+      raise ValueError(
+        f"speed must be between "
+        f"{STARBackend.z_drive_increment_to_mm(speed_min)} and "
+        f"{STARBackend.z_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"got {speed} mm/sec"
+      )
+
+    acceleration_increments = STARBackend.mm_to_z_drive_increment(acceleration / 1000)
+    accel_min, accel_max = STARBackend.iswap_rotation_drive_z_acceleration_increment_range
+    if not (accel_min <= acceleration_increments <= accel_max):
+      raise ValueError(
+        f"acceleration must be between "
+        f"{STARBackend.z_drive_increment_to_mm(accel_min * 1000)} and "
+        f"{STARBackend.z_drive_increment_to_mm(accel_max * 1000)} mm/sec^2, "
+        f"got {acceleration} mm/sec^2"
+      )
+
+    if not (0 <= current_protection_limiter <= 7):
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, got {current_protection_limiter}"
+      )
+
+    await self.send_command(
+      module="R0",
+      command="ZA",
+      za=f"{round(z_increments):+06}",
+      zv=f"{round(speed_increments):05}",
+      zr=f"{round(acceleration_increments):03}",
+      zw=f"{int(current_protection_limiter)}",
     )
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
