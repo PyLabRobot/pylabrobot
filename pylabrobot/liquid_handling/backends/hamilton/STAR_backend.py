@@ -10182,7 +10182,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Keys (motor increments; see `iswap_z_drive_mm_per_increment`):
       "home"     pz[0]  - home position
-      "parking"  pz[1]  - parking pose (top of travel)
+      "parking"  pz[1]  - parking pose
       "extra_1"  pz[2]  - extra slot, address via R0 ZP zp2
       "extra_2"  pz[3]  - extra slot, address via R0 ZP zp3
       "extra_3"  pz[4]  - extra slot, address via R0 ZP zp4
@@ -10226,9 +10226,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     table = await self._iswap_rotation_drive_request_predefined_z_positions()
     offset = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
-    return {
-      k: STARBackend.iswap_z_drive_increment_to_mm(v) + offset for k, v in table.items()
-    }
+    return {k: STARBackend.iswap_z_drive_increment_to_mm(v) + offset for k, v in table.items()}
 
   async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
