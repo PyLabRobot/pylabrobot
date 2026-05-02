@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock
 
 import pylabrobot.hamilton.tcp.introspection as introspection_mod
 from pylabrobot.capabilities.liquid_handling.errors import ChannelizedError
-from pylabrobot.hamilton.tcp.client import HamiltonTCPClient, _HcResultDescriptionHelper
+from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.tcp.hoi_error import (
@@ -36,7 +36,6 @@ from pylabrobot.hamilton.tcp.introspection import (
   MethodInfo,
   ObjectInfo,
   ObjectRegistry,
-  ParameterType,
   StructInfo,
   TypeRegistry,
   flatten_firmware_tree,
@@ -346,44 +345,18 @@ class TestTransportApiAlignment(unittest.TestCase):
     self.assertEqual(raw[0], HoiParams().add(123, I32).build())
 
   def test_get_firmware_tree_uses_cache_and_refresh(self):
-    class Backend:
-      def __init__(self):
-        self._registry = ObjectRegistry()
-        self._registry.set_root_address(Address(1, 1, 100))
-        self._fw_cache = None
-        self._global_object_addresses = ()
+    registry = ObjectRegistry()
+    registry.set_root_address(Address(1, 1, 100))
 
-      @property
-      def registry(self):
-        return self._registry
+    async def _unused(*a, **k):
+      raise RuntimeError("unused in this test")
 
-      @property
-      def global_object_addresses(self):
-        return self._global_object_addresses
-
-      def get_firmware_tree_cache(self):
-        return self._fw_cache
-
-      def set_firmware_tree_cache(self, tree):
-        self._fw_cache = tree
-
-      async def send_command(self, *a, **k):
-        raise RuntimeError("unused in this test")
-
-      async def send_query(self, *a, **k):
-        raise RuntimeError("unused in this test")
-
-      async def send_discovery_command(self, *a, **k):
-        raise RuntimeError("unused in this test")
-
-      async def resolve_path(self, path: str):
-        raise RuntimeError("unused")
-
-      async def get_supported_interface0_method_ids(self, address: Address):
-        raise RuntimeError("unused")
-
-    backend = Backend()
-    intro = HamiltonIntrospection(backend)
+    intro = HamiltonIntrospection(
+      registry=registry,
+      global_object_addresses=[],
+      send_discovery_command=_unused,
+      send_query=_unused,
+    )
     counts = {"obj": 0, "sub": 0}
     root = Address(1, 1, 100)
     child = Address(1, 1, 101)
@@ -460,7 +433,7 @@ class TestHcResultHelperUsesIntrospection(unittest.IsolatedAsyncioTestCase):
       return_value="Simulated"
     )
 
-    iface_name, desc = await client._hc_result_text.describe_entry(entry)
+    iface_name, desc = await client._describe_entry(entry)
     self.assertEqual(iface_name, "ITest")
     self.assertEqual(desc, "Simulated")
 
@@ -475,7 +448,7 @@ class TestHcResultHelperUsesIntrospection(unittest.IsolatedAsyncioTestCase):
     client.introspection.get_method_by_id = AsyncMock(return_value=method)  # type: ignore[method-assign]
     entry = HcResultEntry(1, 1, 257, 1, 6, 0xF08)
 
-    context = await client._hc_result_text.format_entry_context(entry)
+    context = await client._format_entry_context(entry)
     assert context is not None
     self.assertIn("path=Root.Channel", context)
     self.assertIn("DoThing(void) -> void", context)
@@ -692,12 +665,11 @@ class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):
     client = _NimbusClient(host="127.0.0.1", port=0)
     client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
     client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    helper = _HcResultDescriptionHelper(client)
     entry = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4E)
-    _iface, desc = await helper.describe_entry(entry)
+    _iface, desc = await client._describe_entry(entry)
     self.assertIn("Tip Detected Not Correct Tip", desc)
     entry_b = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4B)
-    _iface_b, desc_b = await helper.describe_entry(entry_b)
+    _iface_b, desc_b = await client._describe_entry(entry_b)
     self.assertIn("No Tip Picked Up", desc_b)
 
 
@@ -744,34 +716,26 @@ class TestIntrospectionTypeGridInvariants(unittest.TestCase):
     all_nonzero = [tid for row in introspection_mod._HOI_TYPE_ROWS for tid in row.ids if tid != 0]
     self.assertEqual(len(all_nonzero), len(set(all_nonzero)))
 
-  def test_special_name_and_category_overrides(self):
-    self.assertEqual(introspection_mod.resolve_introspection_type_name(0), "void")
-    self.assertEqual(
-      introspection_mod.resolve_introspection_type_name(113),
-      "List[f32] [In] (empirical)",
-    )
-    self.assertEqual(introspection_mod.get_introspection_type_category(113), "Argument")
+  def test_empirical_id_113_overridden_to_direction_in(self):
+    wire_type, direction = introspection_mod._HOI_ID_TO_WIRE[113]
+    self.assertEqual(wire_type, HamiltonDataType.F32_ARRAY)
+    self.assertEqual(direction, introspection_mod.Direction.In)
 
-  def test_grid_categories_match_directions_with_empirical_exception(self):
-    empirical_argument_ids = {113}
+  def test_grid_directions_match_column_order(self):
     for row in introspection_mod._HOI_TYPE_ROWS:
-      in_id, out_id, inout_id, retval_id = row.ids
-      if row.ids == (0, 0, 0, 0):  # padding row
+      if row.ids == (0, 0, 0, 0):
         continue
-      for tid in (in_id, out_id, inout_id, retval_id):
-        if tid == 0:
-          continue
-        self.assertNotEqual(introspection_mod.get_introspection_type_category(tid), "Unknown")
-
-      self.assertEqual(introspection_mod.get_introspection_type_category(in_id), "Argument")
-      self.assertEqual(introspection_mod.get_introspection_type_category(inout_id), "Argument")
-      self.assertEqual(introspection_mod.get_introspection_type_category(out_id), "ReturnElement")
-      if retval_id in empirical_argument_ids:
-        self.assertEqual(introspection_mod.get_introspection_type_category(retval_id), "Argument")
-      else:
-        self.assertEqual(
-          introspection_mod.get_introspection_type_category(retval_id), "ReturnValue"
-        )
+      in_id, out_id, inout_id, retval_id = row.ids
+      # empirical override for 113 — skip the RetVal column check for that row
+      if 113 not in row.ids:
+        _, d = introspection_mod._HOI_ID_TO_WIRE[retval_id]
+        self.assertEqual(d, introspection_mod.Direction.RetVal)
+      _, d_in = introspection_mod._HOI_ID_TO_WIRE[in_id]
+      _, d_out = introspection_mod._HOI_ID_TO_WIRE[out_id]
+      _, d_inout = introspection_mod._HOI_ID_TO_WIRE[inout_id]
+      self.assertEqual(d_in, introspection_mod.Direction.In)
+      self.assertEqual(d_out, introspection_mod.Direction.Out)
+      self.assertEqual(d_inout, introspection_mod.Direction.InOut)
 
 
 class TestIntrospectionTypeSetsAndClassification(unittest.TestCase):
@@ -791,53 +755,64 @@ class TestIntrospectionTypeSetsAndClassification(unittest.TestCase):
       )
     )
 
-  def test_all_complex_set_is_union_of_method_and_struct_sets(self):
-    self.assertEqual(
-      introspection_mod._ALL_COMPLEX_TYPE_IDS,
-      introspection_mod._COMPLEX_METHOD_TYPE_IDS | introspection_mod._COMPLEX_STRUCT_TYPE_IDS,
-    )
+  def test_method_param_struct_and_enum_ref_types_are_disjoint(self):
+    struct_wire = {HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE_ARRAY}
+    enum_wire = {HamiltonDataType.ENUM, HamiltonDataType.ENUM_ARRAY}
+    self.assertTrue(struct_wire.isdisjoint(enum_wire))
 
-  def test_struct_and_enum_reference_sets_are_disjoint(self):
-    self.assertTrue(
-      introspection_mod._STRUCT_REF_TYPE_IDS.isdisjoint(introspection_mod._ENUM_REF_TYPE_IDS)
-    )
+  def test_method_param_type_struct_refs_cover_all_directions(self):
+    for row in introspection_mod._HOI_TYPE_ROWS:
+      if not row.is_struct_kind:
+        continue
+      for direction, tid in zip(introspection_mod.Direction, row.ids):
+        pt = introspection_mod.MethodParamType(row.wire_type, direction, source_id=2, ref_id=1)
+        self.assertTrue(pt.is_struct_ref)
+        self.assertFalse(pt.is_enum_ref)
 
-  def test_parameter_type_struct_refs_cover_all_directions_and_struct_sentinels(self):
-    struct_ids = self._ids_for_flag("is_struct_kind")
-    for tid in struct_ids + (HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE_ARRAY):
-      pt = ParameterType(tid, source_id=2, ref_id=1)
-      self.assertTrue(pt.is_complex)
-      self.assertTrue(pt.is_struct_ref)
-      self.assertFalse(pt.is_enum_ref)
+  def test_struct_field_type_struct_refs_cover_wire_sentinels(self):
+    for wire_type in (HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE_ARRAY):
+      sft = introspection_mod.StructFieldType(wire_type, source_id=2, ref_id=1)
+      self.assertTrue(sft.is_complex)
+      self.assertTrue(sft.is_struct_ref)
+      self.assertFalse(sft.is_enum_ref)
 
-  def test_parameter_type_enum_refs_cover_all_directions_and_struct_sentinels(self):
-    enum_ids = self._ids_for_flag("is_enum_kind")
-    for tid in enum_ids + (HamiltonDataType.ENUM, HamiltonDataType.ENUM_ARRAY):
-      pt = ParameterType(tid, source_id=2, ref_id=1)
-      self.assertTrue(pt.is_complex)
-      self.assertTrue(pt.is_enum_ref)
-      self.assertFalse(pt.is_struct_ref)
+  def test_method_param_type_enum_refs_cover_all_directions(self):
+    for row in introspection_mod._HOI_TYPE_ROWS:
+      if not row.is_enum_kind:
+        continue
+      for direction, tid in zip(introspection_mod.Direction, row.ids):
+        pt = introspection_mod.MethodParamType(row.wire_type, direction, source_id=2, ref_id=1)
+        self.assertTrue(pt.is_enum_ref)
+        self.assertFalse(pt.is_struct_ref)
 
-  def test_scalar_parameter_type_is_not_complex_or_reference(self):
-    # i32 In ID — first entry from a non-complex row
-    scalar_id = next(
-      row.ids[0]
-      for row in introspection_mod._HOI_TYPE_ROWS
-      if not row.is_complex and row.ids[0] != 0 and row.display_name == "i32"
-    )
-    pt = ParameterType(scalar_id)
-    self.assertFalse(pt.is_complex)
+  def test_struct_field_type_enum_refs_cover_wire_sentinels(self):
+    for wire_type in (HamiltonDataType.ENUM, HamiltonDataType.ENUM_ARRAY):
+      sft = introspection_mod.StructFieldType(wire_type, source_id=2, ref_id=1)
+      self.assertTrue(sft.is_complex)
+      self.assertTrue(sft.is_enum_ref)
+      self.assertFalse(sft.is_struct_ref)
+
+  def test_scalar_method_param_type_is_not_a_reference(self):
+    row = next(r for r in introspection_mod._HOI_TYPE_ROWS if r.display_name == "i32")
+    pt = introspection_mod.MethodParamType(row.wire_type, introspection_mod.Direction.In)
     self.assertFalse(pt.is_struct_ref)
     self.assertFalse(pt.is_enum_ref)
+
+  def test_scalar_struct_field_type_is_not_complex_or_reference(self):
+    sft = introspection_mod.StructFieldType(HamiltonDataType.F32)
+    self.assertFalse(sft.is_complex)
+    self.assertFalse(sft.is_struct_ref)
+    self.assertFalse(sft.is_enum_ref)
 
 
 class TestIntrospectionTypeParsers(unittest.TestCase):
   def test_parse_method_param_types_supports_simple_ref_and_node_global(self):
-    # [i8 simple] + [struct ref source=2 id=1] + [struct ref source=4 id=9 "01" ]
+    # [i8 In] + [struct In source=2 id=1] + [struct In source=4 id=9 "01" ]
     raw = [1, 57, 2, 1, 57, 4, 9, 0x22, 0x30, 0x31, 0x22, 0x20]
     parsed = introspection_mod._parse_method_param_types(raw)
     self.assertEqual(len(parsed), 3)
-    self.assertEqual([pt.type_id for pt in parsed], [1, 57, 57])
+    self.assertEqual([pt.wire_type for pt in parsed], [HamiltonDataType.I8, HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE])
+    self.assertEqual([pt.direction for pt in parsed], [introspection_mod.Direction.In, introspection_mod.Direction.In, introspection_mod.Direction.In])
     self.assertEqual([pt._byte_width for pt in parsed], [1, 3, 8])
     self.assertEqual((parsed[1].source_id, parsed[1].ref_id), (2, 1))
     self.assertEqual((parsed[2].source_id, parsed[2].ref_id), (4, 9))
@@ -847,7 +822,7 @@ class TestIntrospectionTypeParsers(unittest.TestCase):
     raw = [40, 30, 2, 3, 30, 4, 7, 0x00, 0x01, 0x00, 0x02]
     parsed = introspection_mod._parse_struct_field_types(raw)
     self.assertEqual(len(parsed), 3)
-    self.assertEqual([pt.type_id for pt in parsed], [40, 30, 30])
+    self.assertEqual([pt.type_id for pt in parsed], [HamiltonDataType.F32, HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE])
     self.assertEqual([pt._byte_width for pt in parsed], [1, 3, 7])
     self.assertEqual((parsed[1].source_id, parsed[1].ref_id), (2, 3))
     self.assertEqual((parsed[2].source_id, parsed[2].ref_id), (4, 7))
@@ -859,51 +834,19 @@ class TestIntrospectionTypeParsers(unittest.TestCase):
     self.assertEqual(bytes_used, len(raw))
 
 
-class _MinimalIntroBackend:
-  """Protocol-shaped stub for :class:`HamiltonIntrospection` unit tests."""
-
-  def __init__(self) -> None:
-    self._registry = ObjectRegistry()
-
-  @property
-  def registry(self):
-    return self._registry
-
-  @property
-  def global_object_addresses(self):
-    return ()
-
-  def get_firmware_tree_cache(self):
-    return None
-
-  def set_firmware_tree_cache(self, tree):
-    del tree
-
-  async def send_command(self, *a, **k):
-    raise AssertionError("send_command should be patched out in introspection cache tests")
-
-  async def send_query(self, *a, **k):
-    raise AssertionError("send_query should be patched out in introspection cache tests")
-
-  async def send_discovery_command(self, *a, **k):
-    raise AssertionError(
-      "send_discovery_command should be patched out in introspection cache tests"
-    )
-
-  async def resolve_path(self, path: str):
-    del path
-    raise AssertionError("unused")
-
-  async def get_supported_interface0_method_ids(self, address):
-    del address
-    return set()
-
-
 class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.addr = Address(1, 1, 99)
-    self.backend = _MinimalIntroBackend()
-    self.intro = HamiltonIntrospection(self.backend)
+
+    async def _should_not_be_called(*a, **k):
+      raise AssertionError("transport should be patched out in introspection cache tests")
+
+    self.intro = HamiltonIntrospection(
+      registry=ObjectRegistry(),
+      global_object_addresses=[],
+      send_discovery_command=_should_not_be_called,
+      send_query=_should_not_be_called,
+    )
 
   async def test_second_ensure_method_table_skips_get_method(self):
     info = ObjectInfo(name="O", version="", method_count=2, subobject_count=0, address=self.addr)
@@ -929,7 +872,7 @@ class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
 
   async def test_lazy_signature_loads_only_referenced_iface(self):
     st = StructInfo(struct_id=0, name="TipParams", fields={}, interface_id=1)
-    pt = ParameterType(57, source_id=2, ref_id=1)
+    pt = introspection_mod.MethodParamType(HamiltonDataType.STRUCTURE, introspection_mod.Direction.In, source_id=2, ref_id=1)
     m = MethodInfo(1, 0, 3, "Foo", [pt], ["p"], [], [])
     info = ObjectInfo(name="O", version="", method_count=1, subobject_count=0, address=self.addr)
     self.intro.get_object = AsyncMock(return_value=info)  # type: ignore[method-assign]
@@ -955,7 +898,7 @@ class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
 
   async def test_lazy_signature_matches_full_registry_for_local_struct(self):
     st = StructInfo(struct_id=0, name="TipParams", fields={}, interface_id=1)
-    pt = ParameterType(57, source_id=2, ref_id=1)
+    pt = introspection_mod.MethodParamType(HamiltonDataType.STRUCTURE, introspection_mod.Direction.In, source_id=2, ref_id=1)
     m = MethodInfo(1, 0, 3, "Foo", [pt], ["p"], [], [])
     info = ObjectInfo(name="O", version="", method_count=1, subobject_count=0, address=self.addr)
     self.intro.get_object = AsyncMock(return_value=info)  # type: ignore[method-assign]

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Set
+from typing import Any, Dict, Mapping, Optional, Set
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.tcp.client import HamiltonTCPClient
+from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.packets import Address
@@ -15,12 +16,16 @@ from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
 from .commands import (
   GetChannelConfiguration_1,
+  NimbusCommand,
   Park,
+  _UNRESOLVED,
 )
 from .door import NimbusDoor
 from .pip_backend import NimbusPIPBackend
 
 logger = logging.getLogger(__name__)
+
+_EXPECTED_ROOT = "NimbusCORE"
 
 
 def nimbus_interface_specs_for_root(root_name: str) -> Dict[str, InterfacePathSpec]:
@@ -150,9 +155,9 @@ class NimbusDriver(HamiltonTCPClient):
       raise RuntimeError("No root objects discovered during setup.")
 
     root_info = await self.introspection.get_object(root_objects[0])
-    if "nimbus" not in root_info.name.lower():
+    if root_info.name != _EXPECTED_ROOT:
       raise RuntimeError(
-        f"Expected a Nimbus root object, but discovered '{root_info.name}'. Wrong instrument?"
+        f"Expected root '{_EXPECTED_ROOT}' (Nimbus), but discovered '{root_info.name}'. Wrong instrument?"
       )
 
     specs = nimbus_interface_specs_for_root(root_info.name)
@@ -178,9 +183,9 @@ class NimbusDriver(HamiltonTCPClient):
     )
 
     # Query channel configuration
-    config = await self.send_command(GetChannelConfiguration_1(nimbus_core_address))
+    config = await self.send_command(GetChannelConfiguration_1())
     assert config is not None, "GetChannelConfiguration_1 command returned None"
-    num_channels = config["channels"]
+    num_channels = config.channels
     logger.info(f"Channel configuration: {num_channels} channels")
 
     # Create backends — each object stores its own address and state
@@ -189,7 +194,7 @@ class NimbusDriver(HamiltonTCPClient):
     )
 
     if door_address is not None:
-      self.door = NimbusDoor(driver=self, address=door_address)
+      self.door = NimbusDoor(driver=self)
     elif params.require_door_lock:
       raise RuntimeError("DoorLock is required but not available on this instrument.")
 
@@ -205,6 +210,7 @@ class NimbusDriver(HamiltonTCPClient):
     self.door = None
     self._resolved_interfaces = {}
     self._nimbus_resolved = None
+    self._nimbus_core_address = None
 
   async def _assert_required_methods(
     self,
@@ -224,5 +230,39 @@ class NimbusDriver(HamiltonTCPClient):
 
   async def park(self):
     """Park the instrument."""
-    await self.send_command(Park(self.nimbus_core_address))
+    await self.send_command(Park())
     logger.info("Instrument parked successfully")
+
+  async def _send_raw(
+    self,
+    command: TCPCommand,
+    *,
+    ensure_connection: bool,
+    return_raw: bool,
+    raise_on_error: bool,
+    read_timeout: Optional[float] = None,
+  ) -> Any:
+    if isinstance(command, NimbusCommand) and command.dest == _UNRESOLVED:
+      path = type(command).firmware_path
+      if path is None:
+        raise RuntimeError(
+          f"{type(command).__name__} has no firmware_path declared and no "
+          "explicit dest= supplied at construction. Polymorphic-dest commands "
+          "must pass dest= to send_query or send_command."
+        )
+      try:
+        addr = await self.resolve_path(path)
+      except KeyError as exc:
+        raise RuntimeError(
+          f"Cannot send {type(command).__name__}: firmware path {path!r} did not resolve "
+          f"on this instrument ({exc})."
+        ) from exc
+      command.dest = addr
+      command.dest_address = addr
+    return await super()._send_raw(
+      command,
+      ensure_connection=ensure_connection,
+      return_raw=return_raw,
+      raise_on_error=raise_on_error,
+      read_timeout=read_timeout,
+    )

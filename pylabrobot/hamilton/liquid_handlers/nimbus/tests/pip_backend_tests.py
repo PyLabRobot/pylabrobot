@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense
 from pylabrobot.hamilton.liquid_handlers.liquid_class import HamiltonLiquidClass
-from pylabrobot.hamilton.liquid_handlers.nimbus.commands import Aspirate
+from pylabrobot.hamilton.liquid_handlers.nimbus.commands import Aspirate, GetChannelConfiguration
 from pylabrobot.hamilton.liquid_handlers.nimbus.commands import Dispense as DispenseCmd
 from pylabrobot.hamilton.liquid_handlers.nimbus.pip_backend import (
   NimbusPIPAspirateParams,
@@ -75,7 +75,7 @@ def test_nimbus_aspirate_volume_correction_and_param_override():
     )
 
     driver = AsyncMock()
-    driver.send_command = AsyncMock(return_value={"enabled": [True]})
+    driver.send_command = AsyncMock(return_value=GetChannelConfiguration.Response(enabled=[True]))
 
     backend = NimbusPIPBackend(
       driver=driver,  # type: ignore[arg-type]
@@ -139,7 +139,7 @@ def test_nimbus_aspirate_disable_volume_correction_keeps_nominal_volume():
     )
 
     driver = AsyncMock()
-    driver.send_command = AsyncMock(return_value={"enabled": [True]})
+    driver.send_command = AsyncMock(return_value=GetChannelConfiguration.Response(enabled=[True]))
 
     backend = NimbusPIPBackend(
       driver=driver,  # type: ignore[arg-type]
@@ -197,7 +197,7 @@ def test_nimbus_aspirate_explicit_swap_speed_wire_units():
     )
 
     driver = AsyncMock()
-    driver.send_command = AsyncMock(return_value={"enabled": [True]})
+    driver.send_command = AsyncMock(return_value=GetChannelConfiguration.Response(enabled=[True]))
 
     backend = NimbusPIPBackend(
       driver=driver,  # type: ignore[arg-type]
@@ -252,7 +252,7 @@ def test_nimbus_aspirate_no_hlc_uses_25_mm_s_default():
     )
 
     driver = AsyncMock()
-    driver.send_command = AsyncMock(return_value={"enabled": [True]})
+    driver.send_command = AsyncMock(return_value=GetChannelConfiguration.Response(enabled=[True]))
 
     backend = NimbusPIPBackend(
       driver=driver,  # type: ignore[arg-type]
@@ -307,7 +307,7 @@ def test_nimbus_dispense_no_hlc_uses_10_mm_s_default():
     )
 
     driver = AsyncMock()
-    driver.send_command = AsyncMock(return_value={"enabled": [True]})
+    driver.send_command = AsyncMock(return_value=GetChannelConfiguration.Response(enabled=[True]))
 
     backend = NimbusPIPBackend(
       driver=driver,  # type: ignore[arg-type]
@@ -362,7 +362,7 @@ def test_nimbus_aspirate_coerces_star_aspirate_params_swap_speed():
     )
 
     driver = AsyncMock()
-    driver.send_command = AsyncMock(return_value={"enabled": [True]})
+    driver.send_command = AsyncMock(return_value=GetChannelConfiguration.Response(enabled=[True]))
 
     backend = NimbusPIPBackend(
       driver=driver,  # type: ignore[arg-type]

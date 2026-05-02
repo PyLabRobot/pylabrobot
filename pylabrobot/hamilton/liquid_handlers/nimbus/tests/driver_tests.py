@@ -1,10 +1,16 @@
 import asyncio
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from pylabrobot.hamilton.liquid_handlers.nimbus.chatterbox import NimbusChatterboxDriver
-from pylabrobot.hamilton.liquid_handlers.nimbus.commands import GetChannelConfiguration_1
+from pylabrobot.hamilton.liquid_handlers.nimbus.commands import (
+  GetChannelConfiguration_1,
+  NimbusCommand,
+  Park,
+  _UNRESOLVED,
+)
 from pylabrobot.hamilton.liquid_handlers.nimbus.driver import (
   NimbusDriver,
   NimbusResolvedInterfaces,
@@ -23,11 +29,53 @@ def test_chatterbox_setup_and_command_roundtrip():
     assert driver.door is not None
 
     response = await driver.send_command(
-      GetChannelConfiguration_1(driver.nimbus_core_address),
+      GetChannelConfiguration_1(),
       read_timeout=0.1,
     )
-    assert response == {"channels": 8}
+    assert response.channels == 8
 
+    await driver.stop()
+
+  asyncio.run(_run())
+
+
+def test_chatterbox_jit_resolves_dest_after_send():
+  async def _run() -> None:
+    driver = NimbusChatterboxDriver(num_channels=8)
+    await driver.setup()
+    cmd = GetChannelConfiguration_1()
+    assert cmd.dest_address == _UNRESOLVED
+    await driver.send_command(cmd)
+    assert cmd.dest == driver.nimbus_core_address
+    assert cmd.dest_address == driver.nimbus_core_address
+    await driver.stop()
+
+  asyncio.run(_run())
+
+
+def test_send_command_surfaces_clear_error_for_unresolvable_nimbus_path():
+  async def _run() -> None:
+    driver = NimbusDriver(host="127.0.0.1")
+    driver.resolve_path = AsyncMock(side_effect=KeyError("NimbusCORE"))  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="firmware path"):
+      await driver.send_command(Park())
+
+  asyncio.run(_run())
+
+
+def test_chatterbox_allows_explicit_dest_override_when_firmware_path_none():
+  @dataclass
+  class _ExplicitDestCommand(NimbusCommand):
+    command_id = 999
+    firmware_path = None
+
+  async def _run() -> None:
+    driver = NimbusChatterboxDriver(num_channels=8)
+    await driver.setup()
+    cmd = _ExplicitDestCommand(dest=Address(1, 1, 48896))
+    await driver.send_command(cmd)
+    assert cmd.dest == Address(1, 1, 48896)
+    assert cmd.dest_address == Address(1, 1, 48896)
     await driver.stop()
 
   asyncio.run(_run())

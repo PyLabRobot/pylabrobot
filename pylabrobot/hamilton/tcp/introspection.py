@@ -1,11 +1,13 @@
 """Hamilton TCP Introspection API.
 
-Wraps a session backend (:class:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient`)
-to provide dynamic discovery via Interface 0 methods (GetObject, GetMethod,
+Provides dynamic discovery via Interface 0 methods (GetObject, GetMethod,
 GetStructs, GetEnums, GetInterfaces, GetSubobjectAddress).
 
-**Canonical usage:** use :attr:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient.introspection`
-(do not construct :class:`HamiltonIntrospection` from application code).
+:class:`HamiltonIntrospection` receives its transport dependencies (registry,
+send_discovery_command, send_query) as explicit callables — no back-reference
+to the client. The client constructs it via the lazy
+:attr:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient.introspection` property,
+which is the **only** supported entry point from application code.
 
 **Runtime defaults (lazy, cache-friendly):**
 
@@ -39,7 +41,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Set, Tuple, Union, cast
+from enum import IntEnum
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Set, Tuple, Union, cast
 
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 from pylabrobot.hamilton.tcp.messages import (
@@ -65,35 +68,18 @@ from pylabrobot.hamilton.tcp.wire_types import (
 logger = logging.getLogger(__name__)
 
 
-class HamiltonTCPIntrospectionBackend(Protocol):
-  """Structural type for objects passed to :class:`HamiltonIntrospection`.
+class Direction(IntEnum):
+  """Direction of a method parameter in the HOI introspection type system.
 
-  **Production:** :class:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient` implements this
-  Protocol (transport, registry, session caches, ``send_command``).
-
-  **Tests:** provide a minimal object with the same methods/properties so introspection can be
-  exercised without a socket—see ``tcp_tests`` (e.g. fake ``Backend`` with registry roots and
-  patched ``HamiltonIntrospection`` methods). This is a typing contract only; there is no separate
-  runtime "backend" class besides the client.
+  Column order matches ``_HOI_TYPE_ROWS`` ids tuple: ``ids[Direction]`` gives the
+  direction-encoded HOI type ID for that row and direction.
   """
 
-  @property
-  def registry(self) -> ObjectRegistry: ...
+  In = 0
+  Out = 1
+  InOut = 2
+  RetVal = 3
 
-  @property
-  def global_object_addresses(self) -> Sequence[Address]: ...
-
-  async def send_command(
-    self, command: TCPCommand, *, read_timeout: Optional[float] = None
-  ) -> Any: ...
-
-  async def send_query(
-    self, command: TCPCommand, *, read_timeout: Optional[float] = None
-  ) -> Optional[tuple]: ...
-
-  async def send_discovery_command(
-    self, command: TCPCommand, *, read_timeout: Optional[float] = None
-  ) -> Any: ...
 
 
 async def _subobject_address_and_info(
@@ -147,10 +133,9 @@ def resolve_type_id(type_id: int) -> str:
 # ============================================================================
 # INTROSPECTION TYPE MAPPING (2D table from HoiObject.mHoiParamTypes)
 # ============================================================================
-# Introspection type IDs are a unique interface-0 typing system, distinct from
-# the standard HamiltonDataType wire-encoding type IDs.
-# Rows = firmware scalar or array kinds; columns = In, Out, InOut, RetVal
-# (HoiParameterType.Direction). Source: vendor protocol reference mHoiParamTypes[31,4].
+# Each row maps one wire kind (HamiltonDataType) × 4 directions (Direction enum)
+# to the direction-encoded HOI type IDs the firmware uses in GetMethod responses.
+# Source: vendor protocol reference mHoiParamTypes[31,4].
 
 
 @dataclass(frozen=True)
@@ -162,6 +147,10 @@ class _HoiTypeRow:
   interface-0 HOI type system, a unique typing scheme separate from the
   standard ``HamiltonDataType`` wire type IDs.
 
+  ``wire_type``: the ``HamiltonDataType`` that this HOI kind maps to on the wire.
+  This is the bridge between the two type systems: HOI introspection IDs are
+  direction-encoded variants of a ``wire_type`` kind.
+
   ``is_complex``: type requires additional source_id/ref_id bytes in method param encoding.
   ``is_struct_kind``: type references a struct definition (subset of complex).
   ``is_enum_kind``: type references an enum definition (subset of complex).
@@ -169,162 +158,75 @@ class _HoiTypeRow:
 
   display_name: str
   ids: tuple[int, int, int, int]  # Interface-0 column order: [In, Out, InOut, RetVal]
+  wire_type: HamiltonDataType = HamiltonDataType.VOID
   is_complex: bool = False
   is_struct_kind: bool = False
   is_enum_kind: bool = False
 
 
 _HOI_TYPE_ROWS: tuple[_HoiTypeRow, ...] = (
-  _HoiTypeRow("i8", (1, 17, 9, 25)),
-  _HoiTypeRow("i16", (3, 19, 11, 27)),
-  _HoiTypeRow("i32", (5, 21, 13, 29)),
-  _HoiTypeRow("u8", (2, 18, 10, 26)),
-  _HoiTypeRow("u16", (4, 20, 12, 28)),
-  _HoiTypeRow("u32", (6, 22, 14, 30)),
-  _HoiTypeRow("str", (7, 23, 15, 31)),
-  _HoiTypeRow("bool", (33, 35, 34, 36)),
-  _HoiTypeRow("List[i8]", (37, 39, 38, 40)),
-  _HoiTypeRow("List[i16]", (41, 43, 42, 44)),
-  _HoiTypeRow("List[i32]", (49, 51, 50, 52)),
-  _HoiTypeRow("bytes", (8, 24, 16, 32)),
-  _HoiTypeRow("List[u16]", (45, 47, 46, 48)),
-  _HoiTypeRow("List[u32]", (53, 55, 54, 56)),
-  _HoiTypeRow("List[bool]", (66, 68, 67, 69)),
-  _HoiTypeRow("HcResult", (70, 72, 71, 73), is_complex=True),
-  _HoiTypeRow("struct", (57, 59, 58, 60), is_complex=True, is_struct_kind=True),
-  _HoiTypeRow("List[struct]", (61, 63, 62, 64), is_complex=True, is_struct_kind=True),
-  _HoiTypeRow("List[str]", (74, 76, 75, 77), is_complex=True),
-  _HoiTypeRow("enum", (78, 80, 79, 81), is_complex=True, is_enum_kind=True),
-  _HoiTypeRow("List[enum]", (82, 84, 83, 85), is_complex=True, is_enum_kind=True),
-  _HoiTypeRow("i64", (86, 88, 87, 89)),
-  _HoiTypeRow("u64", (90, 92, 91, 93)),
-  _HoiTypeRow("f32", (94, 96, 95, 97)),
-  _HoiTypeRow("f64", (98, 100, 99, 101)),
-  _HoiTypeRow("List[i64]", (102, 104, 103, 105)),
-  _HoiTypeRow("List[u64]", (106, 108, 107, 109)),
-  _HoiTypeRow("List[f32]", (110, 112, 111, 113)),
-  _HoiTypeRow("List[f64]", (114, 116, 115, 117)),
-  _HoiTypeRow("HoiResult", (118, 120, 119, 121), is_complex=True),
-  _HoiTypeRow("padding", (0, 0, 0, 0)),
+  _HoiTypeRow("i8",         (1, 17, 9, 25),       HamiltonDataType.I8),
+  _HoiTypeRow("i16",        (3, 19, 11, 27),      HamiltonDataType.I16),
+  _HoiTypeRow("i32",        (5, 21, 13, 29),      HamiltonDataType.I32),
+  _HoiTypeRow("u8",         (2, 18, 10, 26),      HamiltonDataType.U8),
+  _HoiTypeRow("u16",        (4, 20, 12, 28),      HamiltonDataType.U16),
+  _HoiTypeRow("u32",        (6, 22, 14, 30),      HamiltonDataType.U32),
+  _HoiTypeRow("str",        (7, 23, 15, 31),      HamiltonDataType.STRING),
+  _HoiTypeRow("bool",       (33, 35, 34, 36),     HamiltonDataType.BOOL),
+  _HoiTypeRow("List[i8]",   (37, 39, 38, 40),     HamiltonDataType.I8_ARRAY),
+  _HoiTypeRow("List[i16]",  (41, 43, 42, 44),     HamiltonDataType.I16_ARRAY),
+  _HoiTypeRow("List[i32]",  (49, 51, 50, 52),     HamiltonDataType.I32_ARRAY),
+  _HoiTypeRow("bytes",      (8, 24, 16, 32),      HamiltonDataType.U8_ARRAY),
+  _HoiTypeRow("List[u16]",  (45, 47, 46, 48),     HamiltonDataType.U16_ARRAY),
+  _HoiTypeRow("List[u32]",  (53, 55, 54, 56),     HamiltonDataType.U32_ARRAY),
+  _HoiTypeRow("List[bool]", (66, 68, 67, 69),     HamiltonDataType.BOOL_ARRAY),
+  _HoiTypeRow("HcResult",   (70, 72, 71, 73),     HamiltonDataType.HC_RESULT,   is_complex=True),
+  _HoiTypeRow("struct",     (57, 59, 58, 60),     HamiltonDataType.STRUCTURE,   is_complex=True, is_struct_kind=True),
+  _HoiTypeRow("List[struct]",(61, 63, 62, 64),    HamiltonDataType.STRUCTURE_ARRAY, is_complex=True, is_struct_kind=True),
+  _HoiTypeRow("List[str]",  (74, 76, 75, 77),     HamiltonDataType.STRING_ARRAY, is_complex=True),
+  _HoiTypeRow("enum",       (78, 80, 79, 81),     HamiltonDataType.ENUM,        is_complex=True, is_enum_kind=True),
+  _HoiTypeRow("List[enum]", (82, 84, 83, 85),     HamiltonDataType.ENUM_ARRAY,  is_complex=True, is_enum_kind=True),
+  _HoiTypeRow("i64",        (86, 88, 87, 89),     HamiltonDataType.I64),
+  _HoiTypeRow("u64",        (90, 92, 91, 93),     HamiltonDataType.U64),
+  _HoiTypeRow("f32",        (94, 96, 95, 97),     HamiltonDataType.F32),
+  _HoiTypeRow("f64",        (98, 100, 99, 101),   HamiltonDataType.F64),
+  _HoiTypeRow("List[i64]",  (102, 104, 103, 105), HamiltonDataType.I64_ARRAY),
+  _HoiTypeRow("List[u64]",  (106, 108, 107, 109), HamiltonDataType.U64_ARRAY),
+  _HoiTypeRow("List[f32]",  (110, 112, 111, 113), HamiltonDataType.F32_ARRAY),
+  _HoiTypeRow("List[f64]",  (114, 116, 115, 117), HamiltonDataType.F64_ARRAY),
+  _HoiTypeRow("HoiResult",  (118, 120, 119, 121), HamiltonDataType.HOI_RESULT, is_complex=True),
+  _HoiTypeRow("padding",    (0, 0, 0, 0),         HamiltonDataType.VOID),
 )
 
-_HOI_PARAM_DIRECTION: tuple[str, ...] = ("In", "Out", "InOut", "RetVal")
+# HOI method-param type IDs that require extra source_id/ref_id bytes on the wire
+# (rows where is_complex=True). Used as a parsing guard in _parse_method_param_types.
+_COMPLEX_METHOD_TYPE_IDS: frozenset[int] = frozenset(
+  tid for row in _HOI_TYPE_ROWS if row.is_complex for tid in row.ids if tid != 0
+)
 
+# GetStructs wire sentinels for complex field types (HamiltonDataType namespace, not HOI).
+# Used as a parsing guard in _parse_struct_field_types.
+_COMPLEX_STRUCT_TYPE_IDS: frozenset[int] = frozenset(
+  {
+    HamiltonDataType.STRUCTURE,
+    HamiltonDataType.STRUCTURE_ARRAY,
+    HamiltonDataType.ENUM,
+    HamiltonDataType.ENUM_ARRAY,
+  }
+)
 
-@dataclass(frozen=True)
-class _IntrospectionTypeMaps:
-  """Derived classification maps built once from :data:`_HOI_TYPE_ROWS` at import time."""
+# Reverse lookup: direction-encoded HOI ID → (wire_type, Direction).
+# Built from _HOI_TYPE_ROWS: each row encodes one wire kind × 4 directions.
+# This is the bridge between the HOI introspection namespace and HamiltonDataType.
+_HOI_ID_TO_WIRE: Dict[int, Tuple[HamiltonDataType, Direction]] = {}
+for _row in _HOI_TYPE_ROWS:
+  for _ci, _tid in enumerate(_row.ids):
+    if _tid != 0:
+      _HOI_ID_TO_WIRE[_tid] = (_row.wire_type, Direction(_ci))
+# Empirical: ID 113 (List[f32] RetVal column) observed as In argument on some firmware.
+# TODO: Re-validate against hardware captures and remove if no longer observed.
+_HOI_ID_TO_WIRE[113] = (HamiltonDataType.F32_ARRAY, Direction.In)
 
-  type_names: dict[int, str]
-  argument_type_ids: frozenset[int]
-  return_element_type_ids: frozenset[int]
-  return_value_type_ids: frozenset[int]
-  complex_method_type_ids: frozenset[int]
-  complex_struct_type_ids: frozenset[int]
-  struct_ref_type_ids: frozenset[int]
-  enum_ref_type_ids: frozenset[int]
-  all_complex_type_ids: frozenset[int]
-
-
-def _build_introspection_maps() -> _IntrospectionTypeMaps:
-  names: dict[int, str] = {0: "void"}
-  arg_ids: set[int] = set()
-  ret_el_ids: set[int] = set()
-  ret_val_ids: set[int] = set()
-  complex_method_ids: set[int] = set()
-  struct_ref_ids: set[int] = set()
-  enum_ref_ids: set[int] = set()
-  for row in _HOI_TYPE_ROWS:
-    for ci, tid in enumerate(row.ids):
-      if tid == 0:
-        continue
-      d = _HOI_PARAM_DIRECTION[ci]
-      names[tid] = f"{row.display_name} [{d}]"
-      if ci in (0, 2):
-        arg_ids.add(tid)
-      elif ci == 1:
-        ret_el_ids.add(tid)
-      elif ci == 3:
-        ret_val_ids.add(tid)
-      if row.is_complex:
-        complex_method_ids.add(tid)
-      if row.is_struct_kind:
-        struct_ref_ids.add(tid)
-      if row.is_enum_kind:
-        enum_ref_ids.add(tid)
-
-  # GetStructs sentinels (Parameter.ParameterTypes values) — live in the GetStructs wire format
-  # only, not in _HOI_TYPE_ROWS.
-  complex_struct = frozenset(
-    {
-      HamiltonDataType.STRUCTURE,
-      HamiltonDataType.STRUCTURE_ARRAY,
-      HamiltonDataType.ENUM,
-      HamiltonDataType.ENUM_ARRAY,
-    }
-  )
-  struct_ref_ids |= {HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE_ARRAY}
-  enum_ref_ids |= {HamiltonDataType.ENUM, HamiltonDataType.ENUM_ARRAY}
-
-  # Empirical: type_id=113 (List[f32] column 3 = RetVal) appears as Argument on some firmware.
-  # TODO: Re-validate against hardware captures and remove if no longer observed.
-  names[113] = "List[f32] [In] (empirical)"
-  arg_ids.add(113)
-
-  return _IntrospectionTypeMaps(
-    type_names=names,
-    argument_type_ids=frozenset(arg_ids),
-    return_element_type_ids=frozenset(ret_el_ids),
-    return_value_type_ids=frozenset(ret_val_ids),
-    complex_method_type_ids=frozenset(complex_method_ids),
-    complex_struct_type_ids=complex_struct,
-    struct_ref_type_ids=frozenset(struct_ref_ids),
-    enum_ref_type_ids=frozenset(enum_ref_ids),
-    all_complex_type_ids=frozenset(complex_method_ids | complex_struct),
-  )
-
-
-_MAPS = _build_introspection_maps()
-_INTROSPECTION_TYPE_NAMES = _MAPS.type_names
-_ARGUMENT_TYPE_IDS = _MAPS.argument_type_ids
-_RETURN_ELEMENT_TYPE_IDS = _MAPS.return_element_type_ids
-_RETURN_VALUE_TYPE_IDS = _MAPS.return_value_type_ids
-_COMPLEX_METHOD_TYPE_IDS = _MAPS.complex_method_type_ids
-_COMPLEX_STRUCT_TYPE_IDS = _MAPS.complex_struct_type_ids
-_STRUCT_REF_TYPE_IDS = _MAPS.struct_ref_type_ids
-_ENUM_REF_TYPE_IDS = _MAPS.enum_ref_type_ids
-_ALL_COMPLEX_TYPE_IDS = _MAPS.all_complex_type_ids
-
-
-def get_introspection_type_category(type_id: int) -> str:
-  """Get category for introspection type ID.
-
-  Args:
-      type_id: Introspection type ID
-
-  Returns:
-      Category: "Argument", "ReturnElement", "ReturnValue", or "Unknown"
-  """
-  if type_id in _ARGUMENT_TYPE_IDS:
-    return "Argument"
-  elif type_id in _RETURN_ELEMENT_TYPE_IDS:
-    return "ReturnElement"
-  elif type_id in _RETURN_VALUE_TYPE_IDS:
-    return "ReturnValue"
-  else:
-    return "Unknown"
-
-
-def resolve_introspection_type_name(type_id: int) -> str:
-  """Resolve introspection type ID to readable name.
-
-  Args:
-      type_id: Introspection type ID
-
-  Returns:
-      Human-readable type name
-  """
-  return _INTROSPECTION_TYPE_NAMES.get(type_id, f"UNKNOWN_TYPE_{type_id}")
 
 
 # ============================================================================
@@ -443,67 +345,71 @@ def flatten_firmware_tree(tree: FirmwareTree) -> List[Tuple[str, Address, Object
   return out
 
 
-@dataclass
-class ParameterType:
-  """A resolved type reference from either GetMethod parameterTypes or GetStructs field types.
 
-  Simple types (i8, f32, etc.) have only type_id set.
-  Complex references additionally carry source_id and ref_id:
+@dataclass
+class MethodParamType:
+  """A method parameter or return type from GetMethod, in the HOI introspection namespace.
+
+  ``wire_type`` is the ``HamiltonDataType`` this HOI kind maps to on the wire —
+  the bridge between the direction-encoded HOI IDs and the wire encoding layer.
+  ``direction`` records whether this entry is In/Out/InOut/RetVal in the method signature.
+
+  Struct/enum references additionally carry source_id and ref_id:
     source_id 1=global, 2=local, 3=network, 4=node-global.
     ref_id is the struct/enum index within the pool identified by source_id.
-
-  Wire widths vary by context and source_id (see _parse_method_param_types and
-  _parse_struct_field_types for the exact encoding from HoiObject.cs).
   """
 
-  type_id: int
+  wire_type: HamiltonDataType
+  direction: Direction
   source_id: Optional[int] = None
   ref_id: Optional[int] = None
-  _byte_width: int = 1  # bytes consumed from the wire blob (1=simple, 3=ref, 7=node-global struct field, variable=node-global method param)
-
-  @property
-  def is_complex(self) -> bool:
-    """True if this entry has a source_id/ref_id pair (struct or enum reference)."""
-    return self.type_id in _ALL_COMPLEX_TYPE_IDS
+  _byte_width: int = 1  # bytes consumed from the wire blob
 
   @property
   def is_struct_ref(self) -> bool:
-    """True if this references a struct definition (all directions: In/Out/InOut/RetVal)."""
-    return self.type_id in _STRUCT_REF_TYPE_IDS
+    return self.wire_type in (HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE_ARRAY)
 
   @property
   def is_enum_ref(self) -> bool:
-    """True if this references an enum definition (all directions: In/Out/InOut/RetVal)."""
-    return self.type_id in _ENUM_REF_TYPE_IDS
+    return self.wire_type in (HamiltonDataType.ENUM, HamiltonDataType.ENUM_ARRAY)
+
+  @property
+  def is_argument(self) -> bool:
+    """True if this is an input parameter (In or InOut)."""
+    return self.direction in (Direction.In, Direction.InOut)
+
+  @property
+  def is_return(self) -> bool:
+    """True if this is a return value (Out or RetVal)."""
+    return self.direction in (Direction.Out, Direction.RetVal)
 
   def resolve_name(
     self,
     registry: Optional["TypeRegistry"] = None,
     ho_interface_id: Optional[int] = None,
   ) -> str:
-    """Resolve to a human-readable name, optionally using a TypeRegistry.
-
-    For source_id=2 (local) refs, pass ``ho_interface_id`` (the HOI interface id
-    of the method or struct owning this type) so resolution uses that interface's
-    table only.
-    """
-    base = resolve_introspection_type_name(self.type_id)
-    if not self.is_complex or self.source_id is None or self.ref_id is None:
+    """Resolve to a human-readable name, optionally using a TypeRegistry for struct/enum names."""
+    base = self.wire_type.name.lower()
+    if self.source_id is None or self.ref_id is None:
       return base
-    if registry is None:
-      return f"{base}(iface={self.source_id}, id={self.ref_id})"
     if self.is_struct_ref:
-      s = registry.resolve_struct(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
-      return s.name if s else f"{base}(iface={self.source_id}, id={self.ref_id})"
+      if registry is not None:
+        s = registry.resolve_struct(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
+        if s:
+          return s.name
+      return f"{base}(iface={self.source_id}, id={self.ref_id})"
     if self.is_enum_ref:
-      e = registry.resolve_enum(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
-      return e.name if e else f"{base}(iface={self.source_id}, id={self.ref_id})"
+      if registry is not None:
+        e = registry.resolve_enum(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
+        if e:
+          return e.name
+      return f"{base}(iface={self.source_id}, id={self.ref_id})"
     return f"{base}(iface={self.source_id}, id={self.ref_id})"
 
 
 def _parse_method_param_types(
   data: bytes | list[int],
-) -> List[ParameterType]:
+) -> List[MethodParamType]:
   """Parse GetMethod parameterTypes byte stream.
 
   Source: HoiObject.HandleStruct in HoiObject.cs.
@@ -520,10 +426,11 @@ def _parse_method_param_types(
   _SPACE = 0x20
 
   ints = list(data) if isinstance(data, bytes) else data
-  result: List[ParameterType] = []
+  result: List[MethodParamType] = []
   i = 0
   while i < len(ints):
     tid = ints[i]
+    wire_type, direction = _HOI_ID_TO_WIRE.get(tid, (HamiltonDataType.VOID, Direction.In))
     if tid in _COMPLEX_METHOD_TYPE_IDS and i + 2 < len(ints):
       source_id = ints[i + 1]
       ref_id = ints[i + 2]
@@ -536,21 +443,75 @@ def _parse_method_param_types(
         if end < len(ints) and ints[end] == _SPACE:
           end += 1  # consume trailing ' '
         result.append(
-          ParameterType(tid, source_id=_NODE_GLOBAL, ref_id=ref_id, _byte_width=end - i)
+          MethodParamType(wire_type, direction, source_id=_NODE_GLOBAL, ref_id=ref_id, _byte_width=end - i)
         )
         i = end
       else:
-        result.append(ParameterType(tid, source_id=source_id, ref_id=ref_id, _byte_width=3))
+        result.append(MethodParamType(wire_type, direction, source_id=source_id, ref_id=ref_id, _byte_width=3))
         i += 3
     else:
-      result.append(ParameterType(tid))
+      result.append(MethodParamType(wire_type, direction))
       i += 1
   return result
 
 
+@dataclass
+class StructFieldType:
+  """A struct field type from GetStructs, in the HamiltonDataType wire namespace.
+
+  ``type_id`` is a ``HamiltonDataType`` value — the wire encoding type for this field.
+  Unlike ``MethodParamType``, struct fields have no direction concept.
+
+  Complex references (STRUCTURE/ENUM) additionally carry source_id and ref_id:
+    source_id 1=global, 2=local, 3=network, 4=node-global.
+    ref_id is the struct/enum index within the pool identified by source_id.
+  """
+
+  type_id: HamiltonDataType
+  source_id: Optional[int] = None
+  ref_id: Optional[int] = None
+  _byte_width: int = 1  # bytes consumed from the wire blob (1=simple, 3=ref, 7=node-global)
+
+  @property
+  def is_complex(self) -> bool:
+    return self.type_id in (
+      HamiltonDataType.STRUCTURE,
+      HamiltonDataType.STRUCTURE_ARRAY,
+      HamiltonDataType.ENUM,
+      HamiltonDataType.ENUM_ARRAY,
+    )
+
+  @property
+  def is_struct_ref(self) -> bool:
+    return self.type_id in (HamiltonDataType.STRUCTURE, HamiltonDataType.STRUCTURE_ARRAY)
+
+  @property
+  def is_enum_ref(self) -> bool:
+    return self.type_id in (HamiltonDataType.ENUM, HamiltonDataType.ENUM_ARRAY)
+
+  def resolve_name(
+    self,
+    registry: Optional["TypeRegistry"] = None,
+    ho_interface_id: Optional[int] = None,
+  ) -> str:
+    """Resolve to a human-readable type name, optionally using a TypeRegistry for struct/enum names."""
+    if self.is_complex and self.source_id is not None and self.ref_id is not None:
+      if registry is not None:
+        if self.is_struct_ref:
+          s = registry.resolve_struct(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
+          if s:
+            return f"struct({s.name})"
+        elif self.is_enum_ref:
+          e = registry.resolve_enum(self.source_id, self.ref_id, ho_interface_id=ho_interface_id)
+          if e:
+            return e.name
+      return f"ref(iface={self.source_id}, id={self.ref_id})"
+    return resolve_type_id(self.type_id)
+
+
 def _parse_struct_field_types(
   data: bytes | list[int],
-) -> List[ParameterType]:
+) -> List[StructFieldType]:
   """Parse GetStructs structureElementTypes byte stream.
 
   Source: HoiObject.GetStructs in HoiObject.cs.
@@ -567,29 +528,30 @@ def _parse_struct_field_types(
   _NODE_GLOBAL_WIDTH = 7
 
   ints = list(data) if isinstance(data, bytes) else data
-  result: List[ParameterType] = []
+  result: List[StructFieldType] = []
   i = 0
   while i < len(ints):
     tid = ints[i]
+    wire_type = HamiltonDataType(tid)
     if tid in _COMPLEX_STRUCT_TYPE_IDS and i + 2 < len(ints):
       source_id = ints[i + 1]
       ref_id = ints[i + 2]
       if source_id == _NODE_GLOBAL:
         # [type_id, 4, index, ModHi, ModLo, NodeHi, NodeLo] = 7 bytes
         result.append(
-          ParameterType(tid, source_id=_NODE_GLOBAL, ref_id=ref_id, _byte_width=_NODE_GLOBAL_WIDTH)
+          StructFieldType(wire_type, source_id=_NODE_GLOBAL, ref_id=ref_id, _byte_width=_NODE_GLOBAL_WIDTH)
         )
         i += _NODE_GLOBAL_WIDTH
       else:
-        result.append(ParameterType(tid, source_id=source_id, ref_id=ref_id, _byte_width=3))
+        result.append(StructFieldType(wire_type, source_id=source_id, ref_id=ref_id, _byte_width=3))
         i += 3
     else:
-      result.append(ParameterType(tid))
+      result.append(StructFieldType(wire_type))
       i += 1
   return result
 
 
-def _parse_type_ids(raw: str | bytes | None) -> List[ParameterType]:
+def _parse_type_ids(raw: str | bytes | None) -> List[MethodParamType]:
   """Parse GetMethod parameterTypes blob. Thin wrapper around _parse_method_param_types.
 
   Accepts bytes (preferred) or str — the device sends STRING (15) but the
@@ -624,20 +586,10 @@ class MethodDescriptor:
   def id_string(self) -> str:
     return f"[{self.interface_id}:{self.method_id}]"
 
-  @staticmethod
-  def _signature_type_name(type_name: str) -> str:
-    """Strip direction markers for human-readable signatures."""
-    cleaned = type_name
-    for marker in ("In", "Out", "RetVal"):
-      cleaned = cleaned.replace(f" [{marker}]", "")
-    return cleaned.strip()
-
   def signature_string(self) -> str:
     """Render the canonical method descriptor as a signature string."""
     if self.params:
-      param_str = ", ".join(
-        f"{p.name}: {self._signature_type_name(p.type_name)}" for p in self.params
-      )
+      param_str = ", ".join(f"{p.name}: {p.type_name}" for p in self.params)
     else:
       param_str = "void"
 
@@ -645,12 +597,11 @@ class MethodDescriptor:
       return_str = "void"
     elif self.return_shape == "scalar" and len(self.returns) == 1:
       ret = self.returns[0]
-      ret_type = self._signature_type_name(ret.type_name)
-      return_str = f"{ret.name}: {ret_type}" if ret.name != "ret0" else ret_type
+      return_str = f"{ret.name}: {ret.type_name}" if ret.name != "ret0" else ret.type_name
     else:
       return_str = (
         "{ "
-        + ", ".join(f"{r.name}: {self._signature_type_name(r.type_name)}" for r in self.returns)
+        + ", ".join(f"{r.name}: {r.type_name}" for r in self.returns)
         + " }"
       )
 
@@ -674,9 +625,9 @@ class MethodInfo:
   call_type: int
   method_id: int
   name: str
-  parameter_types: list[ParameterType] = field(default_factory=list)
+  parameter_types: list[MethodParamType] = field(default_factory=list)
   parameter_labels: list[str] = field(default_factory=list)
-  return_types: list[ParameterType] = field(default_factory=list)
+  return_types: list[MethodParamType] = field(default_factory=list)
   return_labels: list[str] = field(default_factory=list)
 
   def describe(self, registry: Optional["TypeRegistry"] = None) -> MethodDescriptor:
@@ -697,14 +648,13 @@ class MethodInfo:
       return_type_names = [
         rt.resolve_name(registry, ho_interface_id=iid) for rt in self.return_types
       ]
-      return_categories = [get_introspection_type_category(rt.type_id) for rt in self.return_types]
       for i, type_name in enumerate(return_type_names):
         label = self.return_labels[i] if i < len(self.return_labels) else None
         returns.append(MethodFieldDescriptor(name=label or f"ret{i}", type_name=type_name))
-      if len(returns) == 1 and not any(cat == "ReturnElement" for cat in return_categories):
+      if len(returns) == 1 and not any(rt.direction == Direction.Out for rt in self.return_types):
         return_shape = "scalar"
       elif len(returns) > 0:
-        # Includes ReturnElement records and explicit multi-return methods.
+        # Includes Out/ReturnElement records and explicit multi-return methods.
         return_shape = "record"
 
     return MethodDescriptor(
@@ -720,7 +670,7 @@ class MethodInfo:
     """Get method signature as a readable string.
 
     If a TypeRegistry is provided, struct/enum references are resolved to
-    their names (e.g. PickupTipParameters instead of struct(iface=1, id=57)).
+    their names (e.g. PickupTipParameters instead of structure(source=2, ref=1)).
     """
     return self.describe(registry).signature_string()
 
@@ -900,28 +850,28 @@ class StructInfo:
   ``interface_id`` records which interface this struct was defined on,
   enabling ``source_id=0`` (same-interface) resolution in the global pool.
 
-  ``fields`` maps field names to ``ParameterType`` instances, preserving the
+  ``fields`` maps field names to ``StructFieldType`` instances, preserving the
   full (type_id, source_id, ref_id) triple for fields that are complex
-  references (type 30=STRUCTURE, 32=ENUM).  Call ``get_struct_string(registry)``
+  references (STRUCTURE/ENUM).  Call ``get_struct_string(registry)``
   to get human-readable names with struct/enum references resolved.
   """
 
   struct_id: int
   name: str
-  fields: Dict[str, "ParameterType"]  # field_name -> ParameterType
+  fields: Dict[str, "StructFieldType"]  # field_name -> StructFieldType
   interface_id: Optional[int] = None  # Interface this struct was defined on
 
   @property
   def field_type_names(self) -> Dict[str, str]:
     """Get human-readable field type names using HamiltonDataType resolver."""
-    return {name: _resolve_struct_field_type(pt) for name, pt in self.fields.items()}
+    return {name: sft.resolve_name() for name, sft in self.fields.items()}
 
   def to_dict(self, registry: Optional["TypeRegistry"] = None) -> dict:
     """Serialize to a plain dict suitable for YAML/JSON export."""
     ho_iid = self.interface_id
     fields = {
-      name: _resolve_struct_field_type(pt, registry, ho_interface_id=ho_iid)
-      for name, pt in self.fields.items()
+      name: sft.resolve_name(registry, ho_interface_id=ho_iid)
+      for name, sft in self.fields.items()
     }
     d: dict = {"name": self.name, "struct_id": self.struct_id, "fields": fields}
     if self.interface_id is not None:
@@ -936,8 +886,8 @@ class StructInfo:
     """
     ho_iid = self.interface_id
     field_strs = [
-      f"{name}: {_resolve_struct_field_type(pt, registry, ho_interface_id=ho_iid)}"
-      for name, pt in self.fields.items()
+      f"{name}: {sft.resolve_name(registry, ho_interface_id=ho_iid)}"
+      for name, sft in self.fields.items()
     ]
     fields_str = "\n  ".join(field_strs) if field_strs else "  (empty)"
     return f"struct {self.name} {{\n  {fields_str}\n}}"
@@ -951,13 +901,13 @@ _NETWORK_STRUCTS[3] = StructInfo(
   struct_id=3,
   name="DateTime",
   fields={
-    "year": ParameterType(type_id=HamiltonDataType.U16),
-    "month": ParameterType(type_id=HamiltonDataType.U8),
-    "day": ParameterType(type_id=HamiltonDataType.U8),
-    "hour": ParameterType(type_id=HamiltonDataType.U8),
-    "minute": ParameterType(type_id=HamiltonDataType.U8),
-    "second": ParameterType(type_id=HamiltonDataType.U8),
-    "millisecond": ParameterType(type_id=HamiltonDataType.U16),
+    "year": StructFieldType(HamiltonDataType.U16),
+    "month": StructFieldType(HamiltonDataType.U8),
+    "day": StructFieldType(HamiltonDataType.U8),
+    "hour": StructFieldType(HamiltonDataType.U8),
+    "minute": StructFieldType(HamiltonDataType.U8),
+    "second": StructFieldType(HamiltonDataType.U8),
+    "millisecond": StructFieldType(HamiltonDataType.U16),
   },
   interface_id=3,
 )
@@ -1020,34 +970,6 @@ class GlobalTypePool:
 #   The HamiltonDataType namespace is used here, NOT the introspection type namespace.
 
 
-def _resolve_struct_field_type(
-  pt: ParameterType,
-  registry: Optional["TypeRegistry"] = None,
-  *,
-  ho_interface_id: Optional[int] = None,
-) -> str:
-  """Resolve a struct field's ParameterType to a human-readable type name.
-
-  Struct field type_ids use the HamiltonDataType wire namespace (e.g. 40=F32,
-  23=BOOL) -- not the method-parameter introspection namespace. Complex
-  references (30=STRUCTURE, 32=ENUM) are resolved via the TypeRegistry when provided.
-
-  Pass ``ho_interface_id`` as the owning struct's HOI interface id for local
-  (source_id=2) field references.
-  """
-  if pt.is_complex and pt.source_id is not None and pt.ref_id is not None:
-    if registry is not None:
-      if pt.is_struct_ref:
-        s = registry.resolve_struct(pt.source_id, pt.ref_id, ho_interface_id=ho_interface_id)
-        if s:
-          return f"struct({s.name})"
-      elif pt.is_enum_ref:
-        e = registry.resolve_enum(pt.source_id, pt.ref_id, ho_interface_id=ho_interface_id)
-        if e:
-          return e.name
-    return f"ref(iface={pt.source_id}, id={pt.ref_id})"
-  return resolve_type_id(pt.type_id)  # HamiltonDataType resolver
-
 
 # ============================================================================
 # INTROSPECTION COMMAND CLASSES
@@ -1102,7 +1024,7 @@ class GetMethodCommand(TCPCommand):
     # The remaining fragments are STRING types containing type IDs as bytes.
     # Complex types (struct/enum refs): 3 bytes [type_id, source_id, ref_id] for source_id 1–3;
     # node-global (source_id=4): variable-length quote-delimited form — see _parse_method_param_types.
-    # Labels are comma-separated, one per *logical* parameter (matching ParameterType count).
+    # Labels are comma-separated, one per *logical* parameter (matching MethodParamType count).
     parameter_labels_str = None
 
     if parser.has_remaining():
@@ -1125,27 +1047,26 @@ class GetMethodCommand(TCPCommand):
     if parameter_labels_str:
       all_labels = [label.strip() for label in parameter_labels_str.split(",") if label.strip()]
 
-    parameter_types: list[ParameterType] = []
+    parameter_types: list[MethodParamType] = []
     parameter_labels: list[str] = []
-    return_types: list[ParameterType] = []
+    return_types: list[MethodParamType] = []
     return_labels: list[str] = []
 
     for i, pt in enumerate(all_types):
-      category = get_introspection_type_category(pt.type_id)
       label = all_labels[i] if i < len(all_labels) else None
 
-      if category == "Argument":
+      if pt.is_argument:
         parameter_types.append(pt)
         if label:
           parameter_labels.append(label)
-      elif category in ("ReturnElement", "ReturnValue"):
+      elif pt.is_return:
         return_types.append(pt)
         if label:
           return_labels.append(label)
       else:
         raise ValueError(
-          f"Unknown introspection type_id={pt.type_id} ({resolve_introspection_type_name(pt.type_id)}); "
-          "not in HoiObject mHoiParamTypes grid — update _HOI_TYPE_ROWS or add an override."
+          f"Unknown HOI wire_type={pt.wire_type!r} direction={pt.direction!r}; "
+          "not in _HOI_ID_TO_WIRE — update _HOI_TYPE_ROWS or add an override."
         )
 
     return {
@@ -1294,18 +1215,24 @@ class HamiltonIntrospection:
   methods are supported and only calls those. Interfaces are per-object;
   there is no aggregation from children.
 
+  Dependencies are injected as explicit callables rather than a back-reference
+  to the client, avoiding the circular reference and the need for a Protocol shim.
   Prefer :attr:`~pylabrobot.hamilton.tcp.client.HamiltonTCPClient.introspection`
-  over constructing this class directly.
+  over constructing this class directly from application code.
   """
 
-  def __init__(self, backend: HamiltonTCPIntrospectionBackend):
-    """Initialize introspection API.
-
-    Args:
-      backend: Session implementing :class:`HamiltonTCPIntrospectionBackend`
-    """
-    self.backend = backend
-    # Session caches (invalidated when the client drops the introspection facet, e.g. reconnect).
+  def __init__(
+    self,
+    registry: ObjectRegistry,
+    global_object_addresses: list[Address],
+    send_discovery_command: Callable,
+    send_query: Callable,
+  ):
+    self._registry = registry
+    self._global_object_addresses = global_object_addresses
+    self._send_discovery_command = send_discovery_command
+    self._send_query = send_query
+    # Session caches (invalidated by replacing the HamiltonIntrospection instance, e.g. reconnect).
     self._method_table_by_address: Dict[Address, List[MethodInfo]] = {}
     self._iface_types: Dict[
       Tuple[Address, int], Tuple[Dict[int, StructInfo], Dict[int, EnumInfo]]
@@ -1346,9 +1273,9 @@ class HamiltonIntrospection:
     seen_structs: Set[Tuple[int, int]] = set()
     max_nodes = 256
 
-    async def walk(types: List[ParameterType], ho_iface: int) -> None:
+    async def walk(types: List[Union[MethodParamType, StructFieldType]], ho_iface: int) -> None:
       for pt in types:
-        if not pt.is_complex or pt.source_id is None or pt.ref_id is None:
+        if pt.source_id is None or pt.ref_id is None:
           continue
         if pt.source_id in (1, 3):
           continue
@@ -1535,7 +1462,7 @@ class HamiltonIntrospection:
     addrs = (
       list(global_addresses)
       if global_addresses is not None
-      else list(self.backend.global_object_addresses)
+      else list(self._global_object_addresses)
     )
     self._global_type_pool_singleton = await self._build_global_type_pool_impl(addrs)
     return self._global_type_pool_singleton
@@ -1587,7 +1514,7 @@ class HamiltonIntrospection:
       object_info=obj,
       supported_interface0_methods=supported,
     )
-    self.backend.registry.register(path, obj)
+    self._registry.register(path, obj)
 
     # Keep this guard even though Interface-0 method 3 (GetSubobjectAddress)
     # appears ubiquitous in current PREP captures.
@@ -1615,7 +1542,7 @@ class HamiltonIntrospection:
     firmware trees do not trigger a full tree walk.
     Raises :exc:`KeyError` if the path cannot be found.
     """
-    cached = self.backend.registry.address_for(path)
+    cached = self._registry.address_for(path)
     if cached is not None:
       return cached
 
@@ -1623,12 +1550,12 @@ class HamiltonIntrospection:
     if not parts:
       raise KeyError(f"Invalid path: '{path}'")
 
-    root_addr = self.backend.registry.get_root_address()
+    root_addr = self._registry.get_root_address()
     if root_addr is None:
       raise KeyError(f"No root address registered; cannot resolve path '{path}'")
 
     root_obj = await self.get_object(root_addr)
-    self.backend.registry.register(root_obj.name, root_obj)
+    self._registry.register(root_obj.name, root_obj)
     if root_obj.name != parts[0]:
       raise KeyError(f"Root object is '{root_obj.name}', not '{parts[0]}'")
     if len(parts) == 1:
@@ -1638,7 +1565,7 @@ class HamiltonIntrospection:
     current_path = parts[0]
     for part in parts[1:]:
       next_path = f"{current_path}.{part}"
-      cached = self.backend.registry.address_for(next_path)
+      cached = self._registry.address_for(next_path)
       if cached is not None:
         current_addr = cached
         current_path = next_path
@@ -1654,7 +1581,7 @@ class HamiltonIntrospection:
       found: Optional[Address] = None
       for i in range(obj.subobject_count):
         sub_addr, sub_obj = await _subobject_address_and_info(self, current_addr, i)
-        self.backend.registry.register(f"{current_path}.{sub_obj.name}", sub_obj)
+        self._registry.register(f"{current_path}.{sub_obj.name}", sub_obj)
         if sub_obj.name == part:
           found = sub_addr
 
@@ -1667,7 +1594,7 @@ class HamiltonIntrospection:
 
   async def _build_firmware_tree(self) -> FirmwareTree:
     """Build a DFS firmware tree from the single registered root address."""
-    root_addr = self.backend.registry.get_root_address()
+    root_addr = self._registry.get_root_address()
     if root_addr is None:
       raise RuntimeError("Cannot build firmware tree: no root address registered")
 
@@ -1722,7 +1649,7 @@ class HamiltonIntrospection:
       Object metadata
     """
     command = GetObjectCommand(address)
-    response = await self.backend.send_discovery_command(command)
+    response = await self._send_discovery_command(command)
     if response is None:
       raise RuntimeError("GetObjectCommand returned None")
 
@@ -1745,7 +1672,7 @@ class HamiltonIntrospection:
       Method signature
     """
     command = GetMethodCommand(address, method_index)
-    response = await self.backend.send_discovery_command(command)
+    response = await self._send_discovery_command(command)
 
     return MethodInfo(
       interface_id=response["interface_id"],
@@ -1769,7 +1696,7 @@ class HamiltonIntrospection:
       Subobject address
     """
     command = GetSubobjectAddressCommand(address, subobject_index)
-    response = await self.backend.send_discovery_command(command)
+    response = await self._send_discovery_command(command)
     if response is None:
       raise RuntimeError("GetSubobjectAddressCommand returned None")
 
@@ -1804,7 +1731,7 @@ class HamiltonIntrospection:
       )
       return []
     command = GetInterfacesCommand(address)
-    response = await self.backend.send_discovery_command(command)
+    response = await self._send_discovery_command(command)
     if response is None:
       raise RuntimeError("GetInterfacesCommand returned None")
 
@@ -1836,7 +1763,7 @@ class HamiltonIntrospection:
       List of enum definitions
     """
     command = GetEnumsCommand(address, interface_id)
-    response = await self.backend.send_discovery_command(command)
+    response = await self._send_discovery_command(command)
     if response is None:
       raise RuntimeError("GetEnumsCommand returned None")
 
@@ -1870,7 +1797,7 @@ class HamiltonIntrospection:
         print(f\"{i}: type_id={f['type_id']} len={f['length']} decoded={f['decoded']!r}\")
     """
     command = GetStructsCommand(address, interface_id)
-    result = await self.backend.send_query(command)
+    result = await self._send_query(command)
     if result is None:
       raise RuntimeError("GetStructs query returned no data.")
     (params,) = result
@@ -1896,7 +1823,7 @@ class HamiltonIntrospection:
       List of struct definitions
     """
     command = GetStructsCommand(address, interface_id)
-    response = await self.backend.send_discovery_command(command)
+    response = await self._send_discovery_command(command)
     if response is None:
       raise RuntimeError("GetStructsCommand returned None")
 
@@ -1990,7 +1917,7 @@ class HamiltonIntrospection:
     Complex type references (e.g. type_57 = PickupTipParameters) may be
     defined on a child object's interface rather than the parent. This method
     builds the parent's registry, then merges in types from each child so
-    that ParameterType.resolve_name() can find them.
+    that MethodParamType.resolve_name() can find them.
 
     Args:
       address: Parent object address or dot-path (e.g. "MLPrepRoot.MphRoot.MPH").

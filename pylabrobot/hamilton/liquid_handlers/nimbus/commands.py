@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import enum
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import ClassVar, Optional, Set
 
 from pylabrobot.hamilton.tcp.commands import TCPCommand
-from pylabrobot.hamilton.tcp.messages import HoiParams, HoiParamsParser
+
 from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.hamilton.tcp.wire_types import (
@@ -29,16 +30,41 @@ from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 
 logger = logging.getLogger(__name__)
 
+_UNRESOLVED = Address(-1, -1, -1)
 
+
+@dataclass
 class NimbusCommand(TCPCommand):
-  """Thin Nimbus command base for namespace clarity."""
+  """Base for all Nimbus instrument commands.
+
+  Subclasses are dataclasses with optional ``Annotated`` payload fields.
+  ``dest`` is inherited here as kw_only so concrete subclasses can freely
+  declare required positional wire fields without default-ordering conflicts.
+  ``build_parameters()`` is inherited from ``TCPCommand`` and serialises all
+  ``Annotated`` fields via ``HoiParams.from_struct(self)`` automatically.
+
+  Firmware target is declared via class-level ``firmware_path`` and resolved
+  JIT in :meth:`NimbusDriver._send_raw` when ``dest`` is the unresolved
+  sentinel. Set ``firmware_path = None`` for polymorphic commands that require
+  explicit ``dest=`` at construction.
+  """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
 
-  def _build_structured_parameters(self) -> HoiParams:
-    """Serialize wire-annotated dataclass payload fields in declaration order."""
-    return HoiParams.from_struct(self)
+  firmware_path: ClassVar[Optional[str]] = None
+  _ALL_PATHS: ClassVar[Set[str]] = set()
+
+  dest: Address = field(default=_UNRESOLVED, kw_only=True)
+
+  def __init_subclass__(cls, **kwargs):
+    super().__init_subclass__(**kwargs)
+    path = cls.__dict__.get("firmware_path")
+    if path is not None:
+      NimbusCommand._ALL_PATHS.add(path)
+
+  def __post_init__(self):
+    super().__init__(self.dest)
 
 
 # ============================================================================
@@ -133,44 +159,41 @@ def _get_default_flow_rate(tip: Tip, is_aspirate: bool) -> float:
 # ============================================================================
 
 
+@dataclass
 class LockDoor(NimbusCommand):
   """Lock door command (DoorLock at 1:1:268, interface_id=1, command_id=1)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 1
+  firmware_path = "NimbusCORE.DoorLock"
 
 
+@dataclass
 class UnlockDoor(NimbusCommand):
   """Unlock door command (DoorLock at 1:1:268, interface_id=1, command_id=2)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 2
+  firmware_path = "NimbusCORE.DoorLock"
 
 
+@dataclass
 class IsDoorLocked(NimbusCommand):
   """Check if door is locked (DoorLock at 1:1:268, interface_id=1, command_id=3)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 3
-  action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
+  firmware_path = "NimbusCORE.DoorLock"
+  action_code = 0
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse IsDoorLocked response."""
-    parser = HoiParamsParser(data)
-    _, locked = parser.parse_next()
-    return {"locked": bool(locked)}
+  @dataclass
+  class Response:
+    locked: Bool
 
 
+@dataclass
 class PreInitializeSmart(NimbusCommand):
   """Pre-initialize smart command (Pipette at 1:1:257, interface_id=1, command_id=32)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 32
+  firmware_path = "NimbusCORE.Pipette"
 
 
 @dataclass
@@ -181,11 +204,9 @@ class InitializeSmartRoll(NimbusCommand):
     - positions/distances: 0.01 mm
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 29
+  firmware_path = "NimbusCORE"
 
-  dest: Address
   x_positions: I32Array
   y_positions: I32Array
   begin_tip_deposit_process: I32Array
@@ -193,64 +214,45 @@ class InitializeSmartRoll(NimbusCommand):
   z_position_at_end_of_a_command: I32Array
   roll_distances: I32Array
 
-  def __post_init__(self):
-    super().__init__(self.dest)
 
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
-
-
+@dataclass
 class IsInitialized(NimbusCommand):
   """Check if instrument is initialized (NimbusCore at 1:1:48896, interface_id=1, command_id=14)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 14
-  action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
+  firmware_path = "NimbusCORE"
+  action_code = 0
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse IsInitialized response."""
-    parser = HoiParamsParser(data)
-    _, initialized = parser.parse_next()
-    return {"initialized": bool(initialized)}
+  @dataclass
+  class Response:
+    initialized: Bool
 
 
+@dataclass
 class IsTipPresent(NimbusCommand):
   """Check tip presence (Pipette at 1:1:257, interface_id=1, command_id=16)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 16
+  firmware_path = "NimbusCORE.Pipette"
   action_code = 0
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse IsTipPresent response - returns List[i16]."""
-    parser = HoiParamsParser(data)
-    # Parse array of i16 values representing tip presence per channel
-    _, tip_presence = parser.parse_next()
-    return {"tip_present": tip_presence}
+  @dataclass
+  class Response:
+    tip_present: I16Array
 
 
+@dataclass
 class GetChannelConfiguration_1(NimbusCommand):
   """Get channel configuration (NimbusCore root, interface_id=1, command_id=15)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 15
+  firmware_path = "NimbusCORE"
   action_code = 0
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse GetChannelConfiguration_1 response.
-
-    Returns: (channels: u16, channel_types: List[i16])
-    """
-    parser = HoiParamsParser(data)
-    _, channels = parser.parse_next()
-    _, channel_types = parser.parse_next()
-    return {"channels": channels, "channel_types": channel_types}
+  @dataclass
+  class Response:
+    channels: U16
+    channel_types: I16Array
 
 
 @dataclass
@@ -263,20 +265,12 @@ class SetChannelConfiguration(NimbusCommand):
     - `enables`: booleans matching `indexes` order.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 67
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   channel: U16
   indexes: I16Array
   enables: BoolArray
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
 
 
 @dataclass
@@ -288,38 +282,24 @@ class GetChannelConfiguration(NimbusCommand):
     - `indexes`: firmware config slots to query.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 66
-  action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
+  firmware_path = "NimbusCORE.Pipette"
+  action_code = 0
 
-  dest: Address
   channel: U16
   indexes: I16Array
 
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse GetChannelConfiguration response.
-
-    Returns: { enabled: List[bool] }
-    """
-    parser = HoiParamsParser(data)
-    _, enabled = parser.parse_next()
-    return {"enabled": enabled}
+  @dataclass
+  class Response:
+    enabled: BoolArray
 
 
+@dataclass
 class Park(NimbusCommand):
   """Park command (NimbusCore at 1:1:48896, interface_id=1, command_id=3)."""
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 3
+  firmware_path = "NimbusCORE"
 
 
 @dataclass
@@ -334,11 +314,9 @@ class PickupTips(NimbusCommand):
     - `tip_types`: per-channel Nimbus tip type IDs.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 4
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   channels_involved: U16Array
   x_positions: I32Array
   y_positions: I32Array
@@ -346,12 +324,6 @@ class PickupTips(NimbusCommand):
   begin_tip_pick_up_process: I32Array
   end_tip_pick_up_process: I32Array
   tip_types: U16Array
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
 
 
 @dataclass
@@ -366,11 +338,9 @@ class DropTips(NimbusCommand):
     - `default_waste`: when true, firmware default waste position is used.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 5
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   channels_involved: U16Array
   x_positions: I32Array
   y_positions: I32Array
@@ -379,12 +349,6 @@ class DropTips(NimbusCommand):
   end_tip_deposit_process: I32Array
   z_position_at_end_of_a_command: I32Array
   default_waste: Bool
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
 
 
 @dataclass
@@ -398,11 +362,9 @@ class DropTipsRoll(NimbusCommand):
     - `channels_involved`: 1=active, 0=inactive.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 82
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   channels_involved: U16Array
   x_positions: I32Array
   y_positions: I32Array
@@ -411,12 +373,6 @@ class DropTipsRoll(NimbusCommand):
   end_tip_deposit_process: I32Array
   z_position_at_end_of_a_command: I32Array
   roll_distances: I32Array
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
 
 
 @dataclass
@@ -427,18 +383,10 @@ class EnableADC(NimbusCommand):
     - `channels_involved`: 1=active, 0=inactive.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 43
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   channels_involved: U16Array
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
 
 
 @dataclass
@@ -449,18 +397,10 @@ class DisableADC(NimbusCommand):
     - `channels_involved`: 1=active, 0=inactive.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 44
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   channels_involved: U16Array
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
 
 
 @dataclass
@@ -481,11 +421,9 @@ class Aspirate(NimbusCommand):
     - `tadm_enabled`: enable Total Aspiration/Dispense Monitoring.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 6
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   # Channel selectors/modes.
   aspirate_type: I16Array
   channels_involved: U16Array
@@ -525,12 +463,6 @@ class Aspirate(NimbusCommand):
   limit_curve_index: U32Array
   recording_mode: U16
 
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()
-
 
 @dataclass
 class Dispense(NimbusCommand):
@@ -550,11 +482,9 @@ class Dispense(NimbusCommand):
     - `tadm_enabled`: enable Total Aspiration/Dispense Monitoring.
   """
 
-  protocol = HamiltonProtocol.OBJECT_DISCOVERY
-  interface_id = 1
   command_id = 7
+  firmware_path = "NimbusCORE.Pipette"
 
-  dest: Address
   # Channel selectors/modes.
   dispense_type: I16Array
   channels_involved: U16Array
@@ -593,9 +523,3 @@ class Dispense(NimbusCommand):
   tadm_enabled: Bool
   limit_curve_index: U32Array
   recording_mode: U16
-
-  def __post_init__(self):
-    super().__init__(self.dest)
-
-  def build_parameters(self) -> HoiParams:
-    return self._build_structured_parameters()

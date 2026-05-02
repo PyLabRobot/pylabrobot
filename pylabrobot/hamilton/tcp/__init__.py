@@ -10,9 +10,12 @@ from pylabrobot.hamilton.tcp.hoi_error import (
 )
 from pylabrobot.hamilton.tcp.interface_bundle import InterfacePathSpec, resolve_interface_path_specs
 from pylabrobot.hamilton.tcp.introspection import (
+  Direction,
   FirmwareTree,
   MethodInfo,
+  MethodParamType,
   ObjectInfo,
+  StructFieldType,
   flatten_firmware_tree,
 )
 from pylabrobot.hamilton.tcp.messages import (
@@ -52,7 +55,10 @@ __all__ = [
   "CommandMessage",
   "CommandResponse",
   "ConnectionPacket",
+  "Direction",
   "FirmwareTree",
+  "MethodParamType",
+  "StructFieldType",
   "flatten_firmware_tree",
   "HAMILTON_PROTOCOL_VERSION_MAJOR",
   "HAMILTON_PROTOCOL_VERSION_MINOR",

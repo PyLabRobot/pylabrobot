@@ -7,8 +7,10 @@ from typing import Any, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.tcp.commands import TCPCommand
+from pylabrobot.hamilton.tcp.introspection import ObjectInfo
 from pylabrobot.hamilton.tcp.packets import Address
 
+from .commands import NimbusCommand, _UNRESOLVED
 from .door import NimbusDoor
 from .driver import NimbusDriver, NimbusResolvedInterfaces, NimbusSetupParams
 
@@ -51,11 +53,24 @@ class NimbusChatterboxDriver(NimbusDriver):
       "door_lock": door_address,
     }
     self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
+    path_to_addr = {
+      "NimbusCORE": nimbus_core_address,
+      "NimbusCORE.Pipette": pipette_address,
+      "NimbusCORE.DoorLock": door_address,
+    }
+    seed_paths = sorted(NimbusCommand._ALL_PATHS | set(path_to_addr))
+    for idx, path in enumerate(seed_paths):
+      leaf = path.rsplit(".", 1)[-1]
+      addr = path_to_addr.get(path, Address(1, 1, 1024 + idx))
+      self.registry.register(
+        path,
+        ObjectInfo(name=leaf, version="", method_count=0, subobject_count=0, address=addr),
+      )
 
     self.pip = NimbusPIPBackend(
       driver=self, deck=params.deck, address=pipette_address, num_channels=self._num_channels
     )
-    self.door = NimbusDoor(driver=self, address=door_address)
+    self.door = NimbusDoor(driver=self)
     if params.require_door_lock and self.door is None:
       raise RuntimeError("DoorLock is required but not available on this instrument.")
 
@@ -65,6 +80,8 @@ class NimbusChatterboxDriver(NimbusDriver):
     self.door = None
     self._resolved_interfaces = {}
     self._nimbus_resolved = None
+    self._nimbus_core_address = None
+    self._invalidate_introspection_session()
 
   async def send_command(
     self,
@@ -77,6 +94,24 @@ class NimbusChatterboxDriver(NimbusDriver):
     del ensure_connection, raise_on_error, read_timeout
     logger.info(f"[Chatterbox] {command.__class__.__name__}")
 
+    if isinstance(command, NimbusCommand) and command.dest == _UNRESOLVED:
+      path = type(command).firmware_path
+      if path is None:
+        raise RuntimeError(
+          f"{type(command).__name__} has no firmware_path declared and no "
+          "explicit dest= supplied at construction. Polymorphic-dest commands "
+          "must pass dest= to send_query or send_command."
+        )
+      try:
+        addr = await self.resolve_path(path)
+      except KeyError as exc:
+        raise RuntimeError(
+          f"Cannot send {type(command).__name__}: firmware path "
+          f"{path!r} did not resolve on this instrument ({exc})."
+        ) from exc
+      command.dest = addr
+      command.dest_address = addr
+
     # Return canned responses for commands that need them
     from .commands import (
       GetChannelConfiguration,
@@ -87,15 +122,15 @@ class NimbusChatterboxDriver(NimbusDriver):
     )
 
     if isinstance(command, GetChannelConfiguration_1):
-      return {"channels": self._num_channels}
+      return GetChannelConfiguration_1.Response(channels=self._num_channels, channel_types=[])
     if isinstance(command, IsInitialized):
-      return {"initialized": True}
+      return IsInitialized.Response(initialized=True)
     if isinstance(command, IsTipPresent):
-      return {"tip_present": [False] * self._num_channels}
+      return IsTipPresent.Response(tip_present=[False] * self._num_channels)
     if isinstance(command, IsDoorLocked):
-      return {"locked": True}
+      return IsDoorLocked.Response(locked=True)
     if isinstance(command, GetChannelConfiguration):
-      return {"enabled": [False]}
+      return GetChannelConfiguration.Response(enabled=[False])
     if return_raw:
       return (b"",)
     return None

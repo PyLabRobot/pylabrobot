@@ -1,8 +1,7 @@
 """Hamilton TCP client for TCP-based instruments (Nimbus, Prep, etc.).
 
 Use :attr:`HamiltonTCPClient.introspection` as the **only** supported entry for
-Interface-0 discovery and type work (do not construct introspection classes
-directly from application code).
+Interface-0 discovery and type work.
 """
 
 from __future__ import annotations
@@ -48,112 +47,6 @@ from pylabrobot.io.socket import Socket
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class HamiltonError:
-  """Hamilton error response."""
-
-  error_code: int
-  error_message: str
-  interface_id: int
-  action_id: int
-
-
-class ErrorParser:
-  """Parse Hamilton error responses."""
-
-  @staticmethod
-  def parse_error(data: bytes) -> HamiltonError:
-    """Parse error response from Hamilton instrument."""
-    if len(data) < 8:
-      raise ValueError("Error response too short")
-
-    error_code = Reader(data).u32()
-    error_message = data[4:].decode("utf-8", errors="replace")
-
-    return HamiltonError(
-      error_code=error_code, error_message=error_message, interface_id=0, action_id=0
-    )
-
-
-class _HcResultDescriptionHelper:
-  """Resolves ``HcResultEntry`` to display strings and optional method context.
-
-  Thin adapter over :attr:`HamiltonTCPClient.introspection` for Interface-0 metadata lookups
-  used after :attr:`HamiltonTCPClient._ERROR_CODES` and :data:`HC_RESULT_PROTOCOL` tables.
-  """
-
-  def __init__(self, client: HamiltonTCPClient) -> None:
-    self._client = client
-
-  def clear(self) -> None:
-    """No-op; introspection owns session caches."""
-    return
-
-  async def describe_entry(self, entry: HcResultEntry) -> Tuple[Optional[str], str]:
-    addr = Address(entry.module_id, entry.node_id, entry.object_id)
-    iface_name = await self._client.introspection.get_interface_name(addr, entry.interface_id)
-
-    # Vendor tables (e.g. :data:`~pylabrobot.hamilton.tcp.error_tables.NIMBUS_ERROR_CODES`)
-    # key on ``(module, node, object_id, interface_id, hc_result)``. The wire ``action_id`` is the
-    # failing method id (e.g. PickupTips) and must not be used for that slot — otherwise we miss
-    # lookups and show raw ``HC_RESULT=0x....`` instead of "No Tip Picked Up." / etc.
-    key_iface = (
-      entry.module_id,
-      entry.node_id,
-      entry.object_id,
-      entry.interface_id,
-      entry.result,
-    )
-    key_action = (
-      entry.module_id,
-      entry.node_id,
-      entry.object_id,
-      entry.action_id,
-      entry.result,
-    )
-    desc = self._client._ERROR_CODES.get(key_iface)
-    if desc is None and key_action != key_iface:
-      desc = self._client._ERROR_CODES.get(key_action)
-    if desc is None:
-      desc = HC_RESULT_PROTOCOL.get(entry.result)
-    if desc is None:
-      desc = await self._client.introspection.get_hc_result_text(
-        addr, entry.interface_id, entry.result
-      )
-    if desc is None:
-      desc = f"HC_RESULT=0x{entry.result:04X}"
-    return iface_name, desc
-
-  async def format_entry_context(self, entry: HcResultEntry) -> Optional[str]:
-    addr = Address(entry.module_id, entry.node_id, entry.object_id)
-    path = self._client._registry.path(addr)
-    path_part = f"path={path}" if path else "path=?"
-    descriptor = await self._lookup_method_descriptor(addr, entry.interface_id, entry.action_id)
-    if descriptor is None:
-      return f"{path_part}, addr={addr}, iface={entry.interface_id}, action={entry.action_id}"
-    return (
-      f"{path_part}, addr={addr}, method={descriptor.id_string} {descriptor.signature_string()}"
-    )
-
-  async def _lookup_method_descriptor(
-    self, addr: Address, interface_id: int, action_id: int
-  ) -> Optional[MethodDescriptor]:
-    try:
-      method = await self._client.introspection.get_method_by_id(addr, interface_id, action_id)
-      if method is None:
-        return None
-      return method.describe(None)
-    except Exception as exc:
-      logger.debug(
-        "Method descriptor lookup failed for %s iface=%d action=%d: %s",
-        addr,
-        interface_id,
-        action_id,
-        exc,
-      )
-      return None
-
-
 class HamiltonTCPClient(Driver):
   """Standalone transport + discovery/introspection client for Hamilton TCP devices."""
 
@@ -193,7 +86,6 @@ class HamiltonTCPClient(Driver):
     self._global_object_addresses: list[Address] = []
     self._event_handlers: list[Callable[[CommandResponse], None]] = []
     self._introspection_impl: Optional[HamiltonIntrospection] = None
-    self._hc_result_text = _HcResultDescriptionHelper(self)
 
   @property
   def registry(self) -> ObjectRegistry:
@@ -206,7 +98,7 @@ class HamiltonTCPClient(Driver):
     return tuple(self._global_object_addresses)
 
   def get_root_object_addresses(self) -> list[Address]:
-    """Root address from the registry as a single-element list (protocol compatibility shim)."""
+    """Root address from the registry as a single-element list."""
     addr = self._registry.get_root_address()
     return [addr] if addr is not None else []
 
@@ -214,11 +106,64 @@ class HamiltonTCPClient(Driver):
   def introspection(self) -> HamiltonIntrospection:
     """Lazy Interface-0 / type introspection facet (canonical entry)."""
     if self._introspection_impl is None:
-      self._introspection_impl = HamiltonIntrospection(self)
+      self._introspection_impl = HamiltonIntrospection(
+        registry=self._registry,
+        global_object_addresses=self._global_object_addresses,
+        send_discovery_command=self.send_discovery_command,
+        send_query=self.send_query,
+      )
     return self._introspection_impl
 
   def _invalidate_introspection_session(self) -> None:
     self._introspection_impl = None
+
+  async def _describe_entry(self, entry: HcResultEntry) -> Tuple[Optional[str], str]:
+    """Resolve an HcResultEntry to (interface_name, description) for error reporting."""
+    addr = Address(entry.module_id, entry.node_id, entry.object_id)
+    iface_name = await self.introspection.get_interface_name(addr, entry.interface_id)
+    # Vendor tables key on (module, node, object_id, interface_id, hc_result). The wire
+    # action_id is the failing method id and must not be used for that slot — otherwise
+    # we miss lookups and show raw HC_RESULT=0x.... instead of "No Tip Picked Up." / etc.
+    key_iface = (entry.module_id, entry.node_id, entry.object_id, entry.interface_id, entry.result)
+    key_action = (entry.module_id, entry.node_id, entry.object_id, entry.action_id, entry.result)
+    desc = self._ERROR_CODES.get(key_iface)
+    if desc is None and key_action != key_iface:
+      desc = self._ERROR_CODES.get(key_action)
+    if desc is None:
+      desc = HC_RESULT_PROTOCOL.get(entry.result)
+    if desc is None:
+      desc = await self.introspection.get_hc_result_text(addr, entry.interface_id, entry.result)
+    if desc is None:
+      desc = f"HC_RESULT=0x{entry.result:04X}"
+    return iface_name, desc
+
+  async def _format_entry_context(self, entry: HcResultEntry) -> Optional[str]:
+    """Resolve an HcResultEntry to a human-readable method context string."""
+    addr = Address(entry.module_id, entry.node_id, entry.object_id)
+    path = self._registry.path(addr)
+    path_part = f"path={path}" if path else "path=?"
+    descriptor = await self._lookup_method_descriptor(addr, entry.interface_id, entry.action_id)
+    if descriptor is None:
+      return f"{path_part}, addr={addr}, iface={entry.interface_id}, action={entry.action_id}"
+    return f"{path_part}, addr={addr}, method={descriptor.id_string} {descriptor.signature_string()}"
+
+  async def _lookup_method_descriptor(
+    self, addr: Address, interface_id: int, action_id: int
+  ) -> Optional[MethodDescriptor]:
+    try:
+      method = await self.introspection.get_method_by_id(addr, interface_id, action_id)
+      if method is None:
+        return None
+      return method.describe(None)
+    except Exception as exc:
+      logger.debug(
+        "Method descriptor lookup failed for %s iface=%d action=%d: %s",
+        addr,
+        interface_id,
+        action_id,
+        exc,
+      )
+      return None
 
   def on_event(self, callback: Callable[[CommandResponse], None]) -> Callable[[], None]:
     """Register a callback for ``Hoi2Action.EVENT`` frames.
@@ -243,7 +188,6 @@ class HamiltonTCPClient(Driver):
         logger.exception("Event handler %r raised: %s", handler, exc)
 
   def _clear_session_state_for_setup(self) -> None:
-    self._hc_result_text.clear()
     self._global_object_addresses = []
     self._invalidate_introspection_session()
 
@@ -645,7 +589,7 @@ class HamiltonTCPClient(Driver):
             context_by_channel: Dict[int, Optional[str]] = {}
             hoi_exceptions: Dict[int, Exception] = {}
             for idx, entry in enumerate(entries):
-              _iface_name, desc = await self._hc_result_text.describe_entry(entry)
+              _iface_name, desc = await self._describe_entry(entry)
               err = hamilton_error_for_entry(entry, desc)
               hoi_exceptions[idx] = err
               channel = command._channel_index_for_entry(idx, entry)
@@ -653,7 +597,7 @@ class HamiltonTCPClient(Driver):
                 channel = idx
               per_channel.setdefault(channel, err)
               if channel not in context_by_channel:
-                context_by_channel[channel] = await self._hc_result_text.format_entry_context(entry)
+                context_by_channel[channel] = await self._format_entry_context(entry)
 
             if raise_on_error:
               channel_summary = ", ".join(
@@ -688,10 +632,10 @@ class HamiltonTCPClient(Driver):
           entry_errors: Dict[int, Exception] = {}
           context_by_idx: Dict[int, Optional[str]] = {}
           for idx, entry in enumerate(entries):
-            _iface_name, desc = await self._hc_result_text.describe_entry(entry)
+            _iface_name, desc = await self._describe_entry(entry)
             err = hamilton_error_for_entry(entry, desc)
             entry_errors[idx] = err
-            context_by_idx[idx] = await self._hc_result_text.format_entry_context(entry)
+            context_by_idx[idx] = await self._format_entry_context(entry)
 
           if raise_on_error:
             summary = ", ".join(
@@ -731,9 +675,9 @@ class HamiltonTCPClient(Driver):
           fatal_per_channel: Dict[int, Exception] = {}
           fatal_context_by_channel: Dict[int, Optional[str]] = {}
           for ch, e in fatal.items():
-            _iface_name, desc = await self._hc_result_text.describe_entry(e)
+            _iface_name, desc = await self._describe_entry(e)
             fatal_per_channel[ch] = hamilton_error_for_entry(e, desc)
-            fatal_context_by_channel[ch] = await self._hc_result_text.format_entry_context(e)
+            fatal_context_by_channel[ch] = await self._format_entry_context(e)
           logger.error(
             "Hamilton command fatal entries: %s",
             ", ".join(

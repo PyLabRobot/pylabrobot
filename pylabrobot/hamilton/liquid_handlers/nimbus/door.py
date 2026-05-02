@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from pylabrobot.hamilton.tcp.packets import Address
-
 from .commands import IsDoorLocked, LockDoor, UnlockDoor
 
 if TYPE_CHECKING:
@@ -22,9 +20,8 @@ class NimbusDoor:
   Owned by NimbusDriver, exposed via convenience methods on the Nimbus device.
   """
 
-  def __init__(self, driver: "NimbusDriver", address: Address):
+  def __init__(self, driver: "NimbusDriver"):
     self.driver = driver
-    self.address = address
 
   async def _on_setup(self):
     """Lock door on setup if available."""
@@ -41,16 +38,16 @@ class NimbusDoor:
 
   async def is_locked(self) -> bool:
     """Check if the door is locked."""
-    status = await self.driver.send_command(IsDoorLocked(self.address))
+    status = await self.driver.send_command(IsDoorLocked())
     assert status is not None, "IsDoorLocked command returned None"
-    return bool(status["locked"])
+    return bool(status.locked)
 
   async def lock(self) -> None:
     """Lock the door."""
-    await self.driver.send_command(LockDoor(self.address))
+    await self.driver.send_command(LockDoor())
     logger.info("Door locked successfully")
 
   async def unlock(self) -> None:
     """Unlock the door."""
-    await self.driver.send_command(UnlockDoor(self.address))
+    await self.driver.send_command(UnlockDoor())
     logger.info("Door unlocked successfully")

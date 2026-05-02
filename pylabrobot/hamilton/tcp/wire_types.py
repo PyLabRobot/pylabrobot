@@ -57,6 +57,9 @@ class HamiltonDataType(IntEnum):
   HC_RESULT = 33  # Same wire format as U16, used for error codes
   ENUM_ARRAY = 35
 
+  # Introspection-only compound result type (no wire codec; used for HOI_RESULT method returns)
+  HOI_RESULT = 44
+
   # Array types
   U8_ARRAY = 22
   I8_ARRAY = 24
