@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass, field
-from typing import ClassVar, Optional, Set
+from typing import Annotated, ClassVar, List, Optional, Set
 
 from pylabrobot.hamilton.tcp.commands import TCPCommand
 
@@ -17,11 +17,15 @@ from pylabrobot.hamilton.tcp.packets import Address
 from pylabrobot.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.hamilton.tcp.wire_types import (
   I32,
+  U8,
   U16,
   Bool,
   BoolArray,
+  Enum,
   I16Array,
   I32Array,
+  Struct,
+  StructArray,
   U16Array,
   U32Array,
 )
@@ -242,17 +246,39 @@ class IsTipPresent(NimbusCommand):
 
 
 @dataclass
-class GetChannelConfiguration_1(NimbusCommand):
-  """Get channel configuration (NimbusCore root, interface_id=1, command_id=15)."""
+class NimbusChannelConfigWire:
+  """Wire-format struct for one entry in the ChannelConfiguration[] array (cmd 30).
 
-  command_id = 15
+  Members (in wire order, from GlobalObjects.ConvertProtocolStructToChannelConfigurationStruct):
+    channel_type  — Enum 0=None 1=300uL 2=1000uL 3=5000uL
+    rail          — Enum 0=Left 1=Right
+    previous_neighbor_spacing — U16
+    next_neighbor_spacing     — U16
+    can_address               — U8
+  """
+
+  channel_type: Enum
+  rail: Enum
+  previous_neighbor_spacing: U16
+  next_neighbor_spacing: U16
+  can_address: U8
+
+
+@dataclass
+class ChannelConfiguration(NimbusCommand):
+  """Channel configuration (NimbusCORE root, interface_id=1, command_id=30).
+
+  Replaces the obsolete GetChannelConfiguration (cmd 15). Returns one entry
+  per physical channel with type, rail, spacing, and CAN address.
+  """
+
+  command_id = 30
   firmware_path = "NimbusCORE"
   action_code = 0
 
   @dataclass
   class Response:
-    channels: U16
-    channel_types: I16Array
+    configurations: Annotated[List[NimbusChannelConfigWire], StructArray()]
 
 
 @dataclass
@@ -292,6 +318,344 @@ class GetChannelConfiguration(NimbusCommand):
   @dataclass
   class Response:
     enabled: BoolArray
+
+
+@dataclass
+class PickupGripperTool(NimbusCommand):
+  """Pick up CoRe gripper tool (Pipette, cmd=9).
+
+  Units:
+    - positions/heights/toolWidth: 0.01 mm
+  """
+
+  command_id = 9
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_position: I32
+  y_position_1st_channel: I32
+  y_position_2nd_channel: I32
+  traverse_height: I32
+  z_start_position: I32
+  z_stop_position: I32
+  tip_type: U16
+  first_channel_number: U16
+  second_channel_number: U16
+  tool_width: I32
+
+
+@dataclass
+class DropGripperTool(NimbusCommand):
+  """Drop CoRe gripper tool (Pipette, cmd=10).
+
+  Units:
+    - positions/heights: 0.01 mm
+  """
+
+  command_id = 10
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_position: I32
+  y_position_1st_channel: I32
+  y_position_2nd_channel: I32
+  traverse_height: I32
+  z_start_position: I32
+  z_stop_position: I32
+  z_final: I32
+  first_channel_number: U16
+  second_channel_number: U16
+
+
+@dataclass
+class PickupPlate(NimbusCommand):
+  """Pick up plate with CoRe gripper (Pipette, cmd=11).
+
+  Units:
+    - positions/heights: 0.01 mm
+    - yPlateWidth, yGripStrength: 0.01 mm (U32)
+    - yGripSpeed, zSpeed: 0.01 mm/s (U32)
+  """
+
+  command_id = 11
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_position: I32
+  y_plate_center_position: I32
+  y_plate_width: U32
+  y_open_position: I32
+  y_grip_speed: U32
+  y_grip_strength: U32
+  traverse_height: I32
+  z_grip_height: I32
+  z_final: I32
+  z_speed: U32
+
+
+@dataclass
+class DropPlate(NimbusCommand):
+  """Drop plate with CoRe gripper (Pipette, cmd=12).
+
+  Units:
+    - positions/heights: 0.01 mm
+    - xAcceleration: scale 1–100 (U32)
+    - zSpeed: 0.01 mm/s (U32)
+  """
+
+  command_id = 12
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_position: I32
+  x_acceleration: U32
+  y_plate_center_position: I32
+  y_open_position: I32
+  traverse_height: I32
+  z_drop_height: I32
+  z_press_distance: I32
+  z_final: I32
+  z_speed: U32
+
+
+@dataclass
+class MovePlate(NimbusCommand):
+  """Move plate with CoRe gripper (Pipette, cmd=13).
+
+  Units:
+    - positions/heights: 0.01 mm
+    - xAcceleration: scale 1–100 (U32)
+    - zSpeed: 0.01 mm/s (U32)
+  """
+
+  command_id = 13
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_position: I32
+  x_acceleration: U32
+  y_plate_center_position: I32
+  traverse_height: I32
+  z_final: I32
+  z_speed: U32
+
+
+@dataclass
+class ReleasePlate(NimbusCommand):
+  """Release plate (open CoRe gripper) (Pipette, cmd=14)."""
+
+  command_id = 14
+  firmware_path = "NimbusCORE.Pipette"
+
+  first_channel_number: U16
+  second_channel_number: U16
+
+
+@dataclass
+class IsCoreGripperToolHeld(NimbusCommand):
+  """Check if CoRe gripper tool is held (Pipette, cmd=17)."""
+
+  command_id = 17
+  firmware_path = "NimbusCORE.Pipette"
+  action_code = 0
+
+  @dataclass
+  class Response:
+    gripped: Bool
+    tip_type: U16Array
+
+
+@dataclass
+class IsCoreGripperPlateGripped(NimbusCommand):
+  """Check if CoRe gripper plate is gripped (Pipette, cmd=18)."""
+
+  command_id = 18
+  firmware_path = "NimbusCORE.Pipette"
+  action_code = 0
+
+  @dataclass
+  class Response:
+    gripped: Bool
+
+
+@dataclass
+class GetPosition(NimbusCommand):
+  """Query current pipette position (Pipette, cmd=20).
+
+  Units:
+    - x_position: 0.01 mm
+    - y_position: 0.01 mm per channel
+    - z_position: 0.01 mm per channel
+  """
+
+  command_id = 20
+  firmware_path = "NimbusCORE.Pipette"
+  action_code = 0
+
+  @dataclass
+  class Response:
+    x_position: I32
+    y_position: I32Array
+    z_position: I32Array
+
+
+@dataclass
+class ParkPipette(NimbusCommand):
+  """Park the pipette head (Pipette, cmd=21)."""
+
+  command_id = 21
+  firmware_path = "NimbusCORE.Pipette"
+
+
+@dataclass
+class MoveOver(NimbusCommand):
+  """Move to position above a location, traversing at traverse_height (Pipette, cmd=22).
+
+  Units:
+    - positions/heights: 0.01 mm
+  """
+
+  command_id = 22
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  x_position: I32
+  y_position: I32Array
+  traverse_height: I32
+  z_position: I32Array
+
+
+@dataclass
+class MoveToPosition(NimbusCommand):
+  """Move to absolute XYZ position (Pipette, cmd=23).
+
+  Units:
+    - positions: 0.01 mm
+  """
+
+  command_id = 23
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  x_position: I32
+  y_position: I32Array
+  z_position: I32Array
+
+
+@dataclass
+class MoveToPositionViaLane(NimbusCommand):
+  """Move to XY position via lane (traverse then lower) (Pipette, cmd=24).
+
+  Units:
+    - positions/heights: 0.01 mm
+  """
+
+  command_id = 24
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  x_position: I32
+  y_position: I32Array
+  traverse_height: I32
+
+
+@dataclass
+class MoveAbsoluteXY(NimbusCommand):
+  """Move to absolute XY position at traverse height (Pipette, cmd=25).
+
+  Units:
+    - positions: 0.01 mm
+  """
+
+  command_id = 25
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  x_position: I32
+  y_position: I32Array
+
+
+@dataclass
+class MoveAbsoluteX(NimbusCommand):
+  """Move X axis to absolute position (Pipette, cmd=26).
+
+  Units:
+    - x_position: 0.01 mm
+  """
+
+  command_id = 26
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_position: I32
+
+
+@dataclass
+class MoveRelativeX(NimbusCommand):
+  """Move X axis by relative distance (Pipette, cmd=27).
+
+  Units:
+    - x_distance: 0.01 mm
+  """
+
+  command_id = 27
+  firmware_path = "NimbusCORE.Pipette"
+
+  x_distance: I32
+
+
+@dataclass
+class MoveAbsoluteY(NimbusCommand):
+  """Move channels to absolute Y positions — the channel spread mechanism (Pipette, cmd=28).
+
+  Units:
+    - y_position: 0.01 mm per channel
+  """
+
+  command_id = 28
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  y_position: I32Array
+
+
+@dataclass
+class MoveRelativeY(NimbusCommand):
+  """Move channels by relative Y distances (Pipette, cmd=29).
+
+  Units:
+    - y_distance: 0.01 mm per channel
+  """
+
+  command_id = 29
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  y_distance: I32Array
+
+
+@dataclass
+class MoveAbsoluteZ(NimbusCommand):
+  """Move channels to absolute Z positions (Pipette, cmd=30).
+
+  Units:
+    - z_position: 0.01 mm per channel
+  """
+
+  command_id = 30
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  z_position: I32Array
+
+
+@dataclass
+class MoveRelativeZ(NimbusCommand):
+  """Move channels by relative Z distances (Pipette, cmd=31).
+
+  Units:
+    - z_distance: 0.01 mm per channel
+  """
+
+  command_id = 31
+  firmware_path = "NimbusCORE.Pipette"
+
+  tips_used: U16Array
+  z_distance: I32Array
 
 
 @dataclass

@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, List, Optional
 
+from pylabrobot.hamilton.tcp.introspection import FirmwareTreeNode
+
 from .commands import ChannelConfiguration, IsInitialized, NimbusChannelConfigWire
 
 if TYPE_CHECKING:
@@ -52,3 +54,7 @@ class NimbusInstrumentInfo:
     if result is None:
       return False
     return bool(result.initialized)
+
+  async def get_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
+    """Firmware object tree. ``print(await nimbus.info.get_firmware_tree())`` for a diagnostic dump."""
+    return await self._driver.introspection.get_firmware_tree(refresh=refresh)

@@ -28,7 +28,6 @@ from pylabrobot.hamilton.tcp.hoi_error import (
 )
 from pylabrobot.hamilton.tcp.introspection import (
   EnumInfo,
-  FirmwareTree,
   FirmwareTreeNode,
   GlobalTypePool,
   HamiltonIntrospection,
@@ -385,8 +384,8 @@ class TestTransportApiAlignment(unittest.TestCase):
 
     self.assertIs(t1, t2)
     self.assertIsNot(t1, t3)
-    self.assertEqual(t1.root.path, "Root")
-    self.assertEqual(len(t1.root.children), 1)
+    self.assertEqual(t1.path, "Root")
+    self.assertEqual(len(t1.children), 1)
     self.assertIn("Root.Child", str(t1))
     self.assertGreaterEqual(counts["obj"], 4)  # built twice (initial + refresh)
     self.assertGreaterEqual(counts["sub"], 2)
@@ -401,8 +400,7 @@ class TestTransportApiAlignment(unittest.TestCase):
     c1 = FirmwareTreeNode(path="R.child", address=a1, object_info=o1, children=[])
     c2 = FirmwareTreeNode(path="R.other", address=a2, object_info=o2, children=[])
     root = FirmwareTreeNode(path="R", address=a0, object_info=o0, children=[c1, c2])
-    tree = FirmwareTree(root=root)
-    flat = flatten_firmware_tree(tree)
+    flat = flatten_firmware_tree(root)
     self.assertEqual([p for p, _, _ in flat], ["R", "R.child", "R.other"])
 
   def test_get_firmware_tree_flat_delegates_to_flatten(self):
@@ -410,11 +408,10 @@ class TestTransportApiAlignment(unittest.TestCase):
     a0 = Address(1, 1, 20)
     o0 = ObjectInfo(name="only", version="v", method_count=0, subobject_count=0, address=a0)
     root = FirmwareTreeNode(path="Only", address=a0, object_info=o0, children=[])
-    tree = FirmwareTree(root=root)
 
     async def fake_get_firmware_tree(refresh: bool = False):
       del refresh
-      return tree
+      return root
 
     client.introspection.get_firmware_tree = fake_get_firmware_tree  # type: ignore[method-assign]
     got = asyncio.run(client.introspection.get_firmware_tree_flat())

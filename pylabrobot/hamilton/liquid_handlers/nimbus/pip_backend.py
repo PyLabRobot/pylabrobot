@@ -20,6 +20,7 @@ from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.trash import Trash
 
+from .channels import ChannelType, NimbusChannelMap
 from .commands import (
   Aspirate,
   DisableADC,
@@ -29,7 +30,6 @@ from .commands import (
   EnableADC,
   GetChannelConfiguration,
   InitializeSmartRoll,
-  IsInitialized,
   IsTipPresent,
   PickupTips,
   SetChannelConfiguration,
@@ -41,6 +41,13 @@ if TYPE_CHECKING:
   from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 
   from .driver import NimbusDriver
+
+_CHANNEL_TYPE_MAX_VOLUME_MAP: dict[ChannelType, float] = {
+  ChannelType.NONE: 0.0,
+  ChannelType.CHANNEL_300UL: 300.0,
+  ChannelType.CHANNEL_1000UL: 1000.0,
+  ChannelType.CHANNEL_5000UL: 5000.0,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -179,12 +186,14 @@ class NimbusPIPBackend(PIPBackend):
     address: Optional["Address"] = None,
     num_channels: int = 8,
     traversal_height: float = 146.0,
+    channel_map: Optional[NimbusChannelMap] = None,
   ):
     self.driver = driver
     self.deck = deck
     self.address = address
     self._num_channels = num_channels
     self.traversal_height = traversal_height
+    self.channel_map = channel_map
     self._channel_configurations: Optional[dict] = None
 
   @property
@@ -204,17 +213,7 @@ class NimbusPIPBackend(PIPBackend):
     return self.deck
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
-    """Initialize SmartRoll if not already initialized."""
-    del backend_params
-    # Query initialization status
-    init_status = await self.driver.send_command(IsInitialized())
-    assert init_status is not None
-    is_initialized = init_status.initialized
-
-    if not is_initialized:
-      await self._initialize_smart_roll()
-    else:
-      logger.info("Instrument already initialized, skipping SmartRoll init")
+    pass
 
   async def _on_stop(self):
     pass
@@ -426,6 +425,11 @@ class NimbusPIPBackend(PIPBackend):
       return False
     if channel_idx >= self._num_channels:
       return False
+    if self.channel_map is not None:
+      ch_type = self.channel_map.channel_type(channel_idx)
+      max_vol = _CHANNEL_TYPE_MAX_VOLUME_MAP.get(ch_type, 0.0)
+      if max_vol > 0.0 and tip.maximal_volume > max_vol:
+        return False
     return True
 
   async def pick_up_tips(

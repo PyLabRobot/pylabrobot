@@ -11,10 +11,19 @@ from pylabrobot.hamilton.tcp.introspection import ObjectInfo
 from pylabrobot.hamilton.tcp.packets import Address
 
 from .commands import NimbusCommand, _UNRESOLVED
-from .door import NimbusDoor
-from .driver import NimbusDriver, NimbusResolvedInterfaces, NimbusSetupParams
+from .driver import NimbusDriver, NimbusSetupParams
 
 logger = logging.getLogger(__name__)
+
+_CHATTERBOX_NIMBUS_CORE = Address(1, 1, 48896)
+_CHATTERBOX_PIPETTE = Address(1, 1, 257)
+_CHATTERBOX_DOOR_LOCK = Address(1, 1, 268)
+
+_CHATTERBOX_PATH_TO_ADDR = {
+  "NimbusCORE": _CHATTERBOX_NIMBUS_CORE,
+  "NimbusCORE.Pipette": _CHATTERBOX_PIPETTE,
+  "NimbusCORE.DoorLock": _CHATTERBOX_DOOR_LOCK,
+}
 
 
 class NimbusChatterboxDriver(NimbusDriver):
@@ -25,13 +34,10 @@ class NimbusChatterboxDriver(NimbusDriver):
   """
 
   def __init__(self, num_channels: int = 8):
-    # Pass dummy host — Socket is created but never opened
     super().__init__(host="chatterbox", port=2000)
     self._num_channels = num_channels
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
-    from .pip_backend import NimbusPIPBackend
-
     if backend_params is None:
       params = NimbusSetupParams()
     elif isinstance(backend_params, NimbusSetupParams):
@@ -41,45 +47,20 @@ class NimbusChatterboxDriver(NimbusDriver):
         "NimbusChatterboxDriver.setup expected NimbusSetupParams | None for backend_params, "
         f"got {type(backend_params).__name__}"
       )
+    del params
 
-    # Use canned addresses (skip TCP connection entirely)
-    pipette_address = Address(1, 1, 257)
-    nimbus_core_address = Address(1, 1, 48896)
-    self._nimbus_core_address = nimbus_core_address
-    door_address = Address(1, 1, 268)
-    self._resolved_interfaces = {
-      "nimbus_core": nimbus_core_address,
-      "pipette": pipette_address,
-      "door_lock": door_address,
-    }
-    self._nimbus_resolved = NimbusResolvedInterfaces.from_resolution_map(self._resolved_interfaces)
-    path_to_addr = {
-      "NimbusCORE": nimbus_core_address,
-      "NimbusCORE.Pipette": pipette_address,
-      "NimbusCORE.DoorLock": door_address,
-    }
-    seed_paths = sorted(NimbusCommand._ALL_PATHS | set(path_to_addr))
+    # Seed introspection registry with canned addresses (skip TCP connection entirely)
+    self._nimbus_core_address = _CHATTERBOX_NIMBUS_CORE
+    seed_paths = sorted(NimbusCommand._ALL_PATHS | set(_CHATTERBOX_PATH_TO_ADDR))
     for idx, path in enumerate(seed_paths):
       leaf = path.rsplit(".", 1)[-1]
-      addr = path_to_addr.get(path, Address(1, 1, 1024 + idx))
+      addr = _CHATTERBOX_PATH_TO_ADDR.get(path, Address(1, 1, 1024 + idx))
       self.registry.register(
         path,
         ObjectInfo(name=leaf, version="", method_count=0, subobject_count=0, address=addr),
       )
 
-    self.pip = NimbusPIPBackend(
-      driver=self, deck=params.deck, address=pipette_address, num_channels=self._num_channels
-    )
-    self.door = NimbusDoor(driver=self)
-    if params.require_door_lock and self.door is None:
-      raise RuntimeError("DoorLock is required but not available on this instrument.")
-
   async def stop(self):
-    if self.door is not None:
-      await self.door._on_stop()
-    self.door = None
-    self._resolved_interfaces = {}
-    self._nimbus_resolved = None
     self._nimbus_core_address = None
     self._invalidate_introspection_session()
 
@@ -112,17 +93,30 @@ class NimbusChatterboxDriver(NimbusDriver):
       command.dest = addr
       command.dest_address = addr
 
-    # Return canned responses for commands that need them
     from .commands import (
+      ChannelConfiguration,
       GetChannelConfiguration,
-      GetChannelConfiguration_1,
+      IsCoreGripperPlateGripped,
+      IsCoreGripperToolHeld,
       IsDoorLocked,
       IsInitialized,
       IsTipPresent,
+      NimbusChannelConfigWire,
     )
 
-    if isinstance(command, GetChannelConfiguration_1):
-      return GetChannelConfiguration_1.Response(channels=self._num_channels, channel_types=[])
+    if isinstance(command, ChannelConfiguration):
+      # 8× Channel300uL, alternating Left/Right rails
+      configs = [
+        NimbusChannelConfigWire(
+          channel_type=1,  # Channel300uL
+          rail=i % 2,  # 0=Left, 1=Right alternating
+          previous_neighbor_spacing=0,
+          next_neighbor_spacing=0,
+          can_address=i,
+        )
+        for i in range(self._num_channels)
+      ]
+      return ChannelConfiguration.Response(configurations=configs)
     if isinstance(command, IsInitialized):
       return IsInitialized.Response(initialized=True)
     if isinstance(command, IsTipPresent):
@@ -131,6 +125,10 @@ class NimbusChatterboxDriver(NimbusDriver):
       return IsDoorLocked.Response(locked=True)
     if isinstance(command, GetChannelConfiguration):
       return GetChannelConfiguration.Response(enabled=[False])
+    if isinstance(command, IsCoreGripperToolHeld):
+      return IsCoreGripperToolHeld.Response(gripped=False, tip_type=[])
+    if isinstance(command, IsCoreGripperPlateGripped):
+      return IsCoreGripperPlateGripped.Response(gripped=False)
     if return_raw:
       return (b"",)
     return None

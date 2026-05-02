@@ -309,39 +309,22 @@ class FirmwareTreeNode:
     return lines
 
   def __str__(self) -> str:
-    return "\n".join(self.format_lines())
+    return "\n".join(self.format_lines(is_root=True))
 
 
-@dataclass
-class FirmwareTree:
-  """Structured firmware tree produced by introspection traversal.
-
-  Both Prep and Nimbus expose exactly one root object; the single-root
-  invariant is enforced at discovery time in the TCP client.
-  """
-
-  root: FirmwareTreeNode
-
-  def format(self) -> str:
-    return "\n".join(self.root.format_lines(prefix="", is_last=True, is_root=True))
-
-  def __str__(self) -> str:
-    return self.format()
-
-
-def flatten_firmware_tree(tree: FirmwareTree) -> List[Tuple[str, Address, ObjectInfo]]:
-  """Preorder flattening of :class:`FirmwareTree` for path-keyed lookups.
+def flatten_firmware_tree(node: FirmwareTreeNode) -> List[Tuple[str, Address, ObjectInfo]]:
+  """Preorder flattening of a :class:`FirmwareTreeNode` for path-keyed lookups.
 
   Returns ``(dot_path, address, object_info)`` for each node (root first, DFS).
   """
   out: List[Tuple[str, Address, ObjectInfo]] = []
 
-  def walk(node: FirmwareTreeNode) -> None:
-    out.append((node.path, node.address, node.object_info))
-    for child in node.children:
+  def walk(n: FirmwareTreeNode) -> None:
+    out.append((n.path, n.address, n.object_info))
+    for child in n.children:
       walk(child)
 
-  walk(tree.root)
+  walk(node)
   return out
 
 
@@ -1241,7 +1224,7 @@ class HamiltonIntrospection:
     self._hc_result_text_by_addr_iface: Dict[Tuple[Address, int], Dict[int, str]] = {}
     self._supported_i0_by_address: Dict[Address, Set[int]] = {}
     self._global_type_pool_singleton: Optional[GlobalTypePool] = None
-    self._firmware_tree_cache: Optional[FirmwareTree] = None
+    self._firmware_tree_cache: Optional[FirmwareTreeNode] = None
 
   def clear_session_caches(self) -> None:
     """Drop cached method tables, per-interface structs/enums, and the global type pool."""
@@ -1592,7 +1575,7 @@ class HamiltonIntrospection:
 
     return current_addr
 
-  async def _build_firmware_tree(self) -> FirmwareTree:
+  async def _build_firmware_tree(self) -> FirmwareTreeNode:
     """Build a DFS firmware tree from the single registered root address."""
     root_addr = self._registry.get_root_address()
     if root_addr is None:
@@ -1602,9 +1585,9 @@ class HamiltonIntrospection:
     node = await self._walk_node(root_addr, None, visited)
     if node is None:
       raise RuntimeError(f"Root node walk returned None for address {root_addr}")
-    return FirmwareTree(root=node)
+    return node
 
-  async def get_firmware_tree(self, refresh: bool = False) -> FirmwareTree:
+  async def get_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Return cached firmware tree, or build and cache it when missing."""
     if not refresh and self._firmware_tree_cache is not None:
       return self._firmware_tree_cache
