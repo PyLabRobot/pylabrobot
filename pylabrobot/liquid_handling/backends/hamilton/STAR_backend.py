@@ -1368,6 +1368,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._channel_traversal_height: float = 245.0
     self._iswap_traversal_height: float = 280.0
     self._iswap_rotation_drive_x_offset_mm: Optional[float] = None
+    self._iswap_rotation_drive_y_max_mm: Optional[float] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1765,6 +1766,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
         self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+        self._iswap_rotation_drive_y_max_mm = await self._iswap_rotation_drive_request_y_max()
 
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
@@ -9865,6 +9867,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
     return cast(int, resp["kg"]) / 10.0
 
+  async def _iswap_rotation_drive_request_y_max(self) -> float:
+    """Read the iSWAP Y-axis upper bound (parking pose) from EEPROM, in mm.
+
+    Parking sits at the back of the usable Y travel; anything past it is in
+    the mechanical-stop region.
+    """
+    py = await self.iswap_rotation_drive_request_predefined_y_positions()
+    return py["parking"]
+
   async def iswap_rotation_drive_request_x(self) -> float:
     """Request iSWAP rotation drive X position (deck coordinates), in mm.
 
@@ -9996,10 +10007,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._channels_minimum_y_spacing[1:]
     )
 
-    max_y = self.extended_conf.pip_maximal_y_position
+    assert self._iswap_rotation_drive_y_max_mm is not None, (
+      "iSWAP Y max not loaded; was setup() called with skip_iswap=False?"
+    )
+    max_y = self._iswap_rotation_drive_y_max_mm
     absolute_min_y = self.extended_conf.left_arm_min_y_position
     if not (absolute_min_y <= y <= max_y):
-      raise ValueError(f"y must be between {absolute_min_y} and {max_y} mm, got {y} mm")
+      raise ValueError(f"y must be between {absolute_min_y} and {max_y} mm, is {y}")
 
     target_channel_0_y = y - channel_0_radius - iswap_radius
     if channel_0_y > target_channel_0_y:
