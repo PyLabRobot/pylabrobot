@@ -11216,6 +11216,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Firmware command for getting iswap version"""
     return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
+  async def measure_iswap_gripper_force(self) -> float:
+    """Measure the force currently exerted by the iSWAP gripper, in Newtons.
+
+    Sends R0 QH (request measured force). The firmware reports force in 1/10 N
+    units (range 0..200, i.e. 0..20.0 N per the §4.8 calibration); this method
+    converts to N and returns a float. Useful for closed-loop grip verification,
+    grip-slip detection, and adaptive grip-strength tuning.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="QH", fmt="qh###")
+    # Firmware precision is 1 decimal place (0.1 N); round to match and avoid
+    # binary-float artifacts like 1.7 → 1.6999999999999999556.
+    return round(cast(int, resp["qh"]) / 10.0, 1)
+
   # -------------- 3.18 Cover and port control --------------
 
   async def lock_cover(self):
