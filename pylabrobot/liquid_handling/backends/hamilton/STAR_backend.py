@@ -10010,9 +10010,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if self._iswap_rotation_drive_y_max_mm is None:
       self._iswap_rotation_drive_y_max_mm = await self._iswap_rotation_drive_request_y_max()
     if self._iswap_rotation_drive_y_max_mm is None:
-      raise RuntimeError(
-        "iSWAP Y max not loaded; was setup() called with skip_iswap=False?"
-      )
+      raise RuntimeError("iSWAP Y max not loaded; was setup() called with skip_iswap=False?")
     max_y = self._iswap_rotation_drive_y_max_mm
     absolute_min_y = self.extended_conf.left_arm_min_y_position
     if not (absolute_min_y <= y <= max_y):
