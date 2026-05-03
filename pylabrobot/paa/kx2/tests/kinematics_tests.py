@@ -367,5 +367,160 @@ class ShoulderSnapAt180(unittest.TestCase):
     self.assertAlmostEqual(joints[Axis.SHOULDER], 180.0, places=9)
 
 
+def _linear_pose(x: float, y: float, z: float, yaw: float = 0.0) -> GripperLocation:
+  return GripperLocation(
+    location=Coordinate(x=x, y=y, z=z), rotation=Rotation(z=yaw),
+  )
+
+
+class SampleLinearPath(unittest.TestCase):
+  """Sampler-level checks for `kinematics.sample_linear_path`. The straight
+  Cartesian line is the contract; we verify endpoints land exact, intermediate
+  samples stay on the line, dt drives sample density, and finite-difference
+  velocity respects the central-difference rule."""
+
+  def setUp(self) -> None:
+    self.cfg = _config()
+    self.gp = GripperParams(length=15.0, z_offset=3.0)
+    self.start = _linear_pose(50.0, 100.0, 30.0, yaw=10.0)
+    self.end = _linear_pose(80.0, 130.0, 60.0, yaw=40.0)
+
+  def test_endpoints_exact_via_fk_roundtrip(self):
+    """First sample's joints FK back to start_pose; last sample's to end_pose.
+    Tightest correctness check — the streamed start/end land where requested."""
+    samples = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.end,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+    )
+    self.assertGreater(len(samples), 2)
+    first_back = kinematics.fk(samples[0].joints, self.cfg, self.gp)
+    last_back = kinematics.fk(samples[-1].joints, self.cfg, self.gp)
+    for got, want in (
+      (first_back.location.x, self.start.location.x),
+      (first_back.location.y, self.start.location.y),
+      (first_back.location.z, self.start.location.z),
+      (last_back.location.x, self.end.location.x),
+      (last_back.location.y, self.end.location.y),
+      (last_back.location.z, self.end.location.z),
+    ):
+      self.assertAlmostEqual(got, want, places=6)
+
+  def test_samples_stay_on_straight_line(self):
+    """FK every sample. Cross-product of (sample - start) with (end - start)
+    is zero iff the sample is colinear; tolerance handles floating-point."""
+    samples = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.end,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+    )
+    sx, sy, sz = self.start.location.x, self.start.location.y, self.start.location.z
+    ex, ey, ez = self.end.location.x, self.end.location.y, self.end.location.z
+    dx, dy, dz = ex - sx, ey - sy, ez - sz
+    L = math.sqrt(dx * dx + dy * dy + dz * dz)
+    for sample in samples:
+      back = kinematics.fk(sample.joints, self.cfg, self.gp)
+      px, py, pz = back.location.x - sx, back.location.y - sy, back.location.z - sz
+      cx = py * dz - pz * dy
+      cy = pz * dx - px * dz
+      cz = px * dy - py * dx
+      cross_norm = math.sqrt(cx * cx + cy * cy + cz * cz)
+      self.assertLess(cross_norm / L, 1e-6,
+                      msg=f"sample at t={sample.time_s:.4f}s off line by {cross_norm:.6f}")
+
+  def test_dt_halves_doubles_sample_count(self):
+    """Two-fold dt change should ~halve sample count. ±2 slop for the trapezoid
+    rounding where the trailing partial step varies."""
+    fast = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.end,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.004,
+    )
+    slow = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.end,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+    )
+    self.assertAlmostEqual(len(fast) / len(slow), 2.0, delta=0.2)
+
+  def test_last_sample_velocity_zero(self):
+    """Drive integrates V over dt; non-zero final V would push past target.
+    Last sample's encoder velocity must be exactly zero on every axis."""
+    samples = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.end,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+    )
+    for ax, v in samples[-1].encoder_velocity.items():
+      self.assertEqual(v, 0, msg=f"axis {ax.name} final velocity {v} != 0")
+
+  def test_zero_length_path_returns_short(self):
+    """Same start and end pose: no motion. Sampler returns a degenerate
+    list (≤1 sample). Runtime guards on len(samples) < 2 and bails."""
+    samples = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.start,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+    )
+    self.assertLessEqual(len(samples), 1)
+
+  def test_invalid_caps_raise(self):
+    """Non-positive vel/accel/dt is a programmer error — fail loud."""
+    with self.assertRaises(ValueError):
+      kinematics.sample_linear_path(
+        self.cfg, self.gp, self.start, self.end,
+        vel_mm_per_s=0.0, accel_mm_per_s2=100.0, dt_s=0.008,
+      )
+    with self.assertRaises(ValueError):
+      kinematics.sample_linear_path(
+        self.cfg, self.gp, self.start, self.end,
+        vel_mm_per_s=20.0, accel_mm_per_s2=-1.0, dt_s=0.008,
+      )
+    with self.assertRaises(ValueError):
+      kinematics.sample_linear_path(
+        self.cfg, self.gp, self.start, self.end,
+        vel_mm_per_s=20.0, accel_mm_per_s2=100.0, dt_s=0.0,
+      )
+
+  def test_velocity_finite_difference_matches_position(self):
+    """Interior samples use central difference: v[i] ≈ (p[i+1] - p[i-1]) / 2dt.
+    Verify the relationship holds for shoulder over an interior sample."""
+    samples = kinematics.sample_linear_path(
+      self.cfg, self.gp, self.start, self.end,
+      vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+    )
+    if len(samples) < 4:
+      self.skipTest("not enough samples for interior check")
+    i = len(samples) // 2
+    expected_v = (
+      samples[i + 1].encoder_position[Axis.SHOULDER]
+      - samples[i - 1].encoder_position[Axis.SHOULDER]
+    ) / (2.0 * 0.008)
+    self.assertAlmostEqual(
+      samples[i].encoder_velocity[Axis.SHOULDER], int(round(expected_v)), delta=1,
+    )
+
+  def test_yaw_lerp_takes_short_way(self):
+    """Yaw 179° -> -179° while ALSO translating is a 2° rotation, not 358°.
+    Sampler must interpolate yaw via the short arc, otherwise wrist angles
+    spin a full unwind alongside the linear translation."""
+    start = _linear_pose(50.0, 100.0, 30.0, yaw=179.0)
+    end = _linear_pose(80.0, 130.0, 60.0, yaw=-179.0)
+    samples = kinematics.sample_linear_path(
+      self.cfg, self.gp, start, end,
+      vel_mm_per_s=10.0, accel_mm_per_s2=100.0, dt_s=0.008,
+    )
+    self.assertGreaterEqual(len(samples), 3)
+    mid_back = kinematics.fk(samples[len(samples) // 2].joints, self.cfg, self.gp)
+    # Short way through ±180° -> midpoint near ±180°, not near 0°.
+    self.assertGreater(abs(mid_back.rotation.z), 170.0)
+
+  def test_pure_rotation_in_place_raises(self):
+    """No translation + non-zero rotation: caps are mm/s, repurposing them
+    as deg/s is a footgun. Surface clearly so the caller switches to
+    move_to_joint_position."""
+    start = _linear_pose(50.0, 100.0, 30.0, yaw=10.0)
+    end = _linear_pose(50.0, 100.0, 30.0, yaw=40.0)
+    with self.assertRaises(NotImplementedError):
+      kinematics.sample_linear_path(
+        self.cfg, self.gp, start, end,
+        vel_mm_per_s=20.0, accel_mm_per_s2=200.0, dt_s=0.008,
+      )
+
+
 if __name__ == "__main__":
   unittest.main()

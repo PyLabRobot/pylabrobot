@@ -16,7 +16,7 @@ from unittest import mock
 from pylabrobot.paa.kx2.driver import (
   EmcyFrame,
   KX2Driver,
-  _PvtEmcyState,
+  _IpmEmcyState,
   _decode_emcy,
 )
 
@@ -29,14 +29,14 @@ def _frame(
 
 class DecodeErrorResetTests(unittest.TestCase):
   def test_zero_err_code_is_error_reset_and_suppresses(self):
-    state = _PvtEmcyState()
+    state = _IpmEmcyState()
     desc, disable, suppress = _decode_emcy(EmcyFrame(0, 0, 0, 0, 0), state)
     self.assertEqual(desc, "Error reset")
     self.assertFalse(disable)
     self.assertTrue(suppress)
 
   def test_zero_err_code_does_not_mutate_state(self):
-    state = _PvtEmcyState()
+    state = _IpmEmcyState()
     state.queue_low = False
     state.queue_full = False
     _decode_emcy(EmcyFrame(0, 0, 0, 0, 0), state)
@@ -51,7 +51,7 @@ class DecodeErrorResetTests(unittest.TestCase):
   def test_zero_err_code_with_nonzero_elmo_still_treated_as_reset(self):
     # Some drives stamp a stale elmo byte on the reset frame; err_code=0 is
     # the canonical signal per DS301 so we treat it as reset regardless.
-    state = _PvtEmcyState()
+    state = _IpmEmcyState()
     desc, disable, suppress = _decode_emcy(
       EmcyFrame(0, 0, 0xFF, 0, 0), state
     )
@@ -61,18 +61,18 @@ class DecodeErrorResetTests(unittest.TestCase):
 
   def test_existing_unknown_code_path_unaffected(self):
     # Sanity: the err_code=0 branch must not steal the unknown-code path.
-    state = _PvtEmcyState()
+    state = _IpmEmcyState()
     desc, _, _ = _decode_emcy(EmcyFrame(0x1234, 0, 0xAB, 0, 0), state)
     self.assertEqual(desc, "Unknown EMCY 0x1234/0xAB")
 
 
 class DispatchEmcyLogLevelTests(unittest.TestCase):
-  """Verify the level matrix in ``_dispatch_emcy`` so PVT housekeeping events
+  """Verify the level matrix in ``_dispatch_emcy`` so IPM housekeeping events
   don't drown ops logs while real faults stay loud."""
 
   def setUp(self):
     self.driver = KX2Driver()
-    self.driver._pvt_emcy[1] = _PvtEmcyState()
+    self.driver._ipm_emcy[1] = _IpmEmcyState()
     self.logger_name = "pylabrobot.paa.kx2.driver"
 
   def _dispatch_at(self, payload: bytes):

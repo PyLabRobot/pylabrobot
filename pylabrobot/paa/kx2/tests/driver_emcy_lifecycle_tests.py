@@ -20,7 +20,7 @@ from pylabrobot.paa.kx2.driver import (
   EmcyFrame,
   KX2Driver,
   _EMCY_COB_BASE,
-  _PvtEmcyState,
+  _IpmEmcyState,
 )
 
 
@@ -88,7 +88,7 @@ class StaleCallbackAfterStopTests(unittest.TestCase):
     drv._network = mock.MagicMock()
     loop = asyncio.new_event_loop()
     drv._loop = loop
-    drv._pvt_emcy[1] = _PvtEmcyState()
+    drv._ipm_emcy[1] = _IpmEmcyState()
     try:
       loop.run_until_complete(drv.stop())
     finally:
@@ -100,7 +100,7 @@ class StaleCallbackAfterStopTests(unittest.TestCase):
 
     self.assertFalse(drv.emcy_move_error_received)
     self.assertEqual(drv.emcy_move_error, "")
-    self.assertEqual(drv._pvt_emcy, {})
+    self.assertEqual(drv._ipm_emcy, {})
     self.assertEqual(drv._emcy_callbacks, [])
 
 
@@ -159,7 +159,7 @@ class SetupOrdersEmcySubscribeBeforeNmtStartTests(unittest.TestCase):
     drv = KX2Driver()
 
     # Short-circuit the parts of setup we don't need (PDO mapping, Elmo
-    # vendor-object writes, pvt_select_mode). The fake's add_node returns a
+    # vendor-object writes, ipm_select_mode). The fake's add_node returns a
     # node whose sdo download/upload are no-ops, so these would technically
     # work, but skipping keeps the test fast and focused on call ordering.
     async def _noop(*a, **k):
@@ -171,7 +171,7 @@ class SetupOrdersEmcySubscribeBeforeNmtStartTests(unittest.TestCase):
          mock.patch.object(KX2Driver, "_tpdo_map", _noop), \
          mock.patch.object(KX2Driver, "_rpdo_map", _noop), \
          mock.patch.object(KX2Driver, "can_sdo_download_elmo_object", _noop), \
-         mock.patch.object(KX2Driver, "pvt_select_mode", _noop), \
+         mock.patch.object(KX2Driver, "ipm_select_mode", _noop), \
          mock.patch("asyncio.sleep", _noop):
       asyncio.new_event_loop().run_until_complete(drv.setup())
 

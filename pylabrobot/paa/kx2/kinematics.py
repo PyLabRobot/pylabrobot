@@ -22,8 +22,9 @@ rotation.x/y must be 0. Sign convention follows right-hand rule about +Z
 (CCW positive looking down).
 """
 
-from math import asin, atan2, cos, degrees, hypot, pi, radians, sin, sqrt, trunc
-from typing import Dict, Optional
+from dataclasses import dataclass, field
+from math import asin, atan2, ceil, cos, degrees, hypot, pi, radians, sin, sqrt, trunc
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.capabilities.arms import kinematics as arm_kinematics
 from pylabrobot.capabilities.arms.standard import GripperLocation
@@ -430,3 +431,201 @@ def plan_joint_move(
       direction=ax_cfg.joint_move_direction,
     ))
   return MotorsMovePlan(moves=moves, move_time=move_time)
+
+
+# --- Cartesian-linear path sampling (for IPM/PVT streaming) ----------------
+#
+# `plan_joint_move` generates a *joint*-space trapezoid: every axis ramps in
+# parallel through its own (v, a) profile, which gives a curvy tool-tip path.
+# `sample_linear_path` instead generates a *Cartesian*-linear path: the
+# gripper travels the straight line from start to end, sampled at fixed dt,
+# and IK at each sample yields the joint-space trajectory. The KX2ArmBackend
+# streams the result into the drive's interpolation buffer (PVT mode) when
+# `CartesianMoveParams(path='linear')` is requested.
+
+# Arm axes that show up in FK/IK and therefore have an entry in every
+# `LinearPathSample.joints`. Servo gripper and rail are not Cartesian-driven.
+_LINEAR_PATH_AXES: Tuple[Axis, ...] = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+
+
+@dataclass
+class LinearPathSample:
+  """One frame of a Cartesian-linear trajectory.
+
+  ``joints`` is in planning units (mm for Z, deg for SHOULDER/WRIST,
+  *linear extension mm* for ELBOW). ``encoder_position`` /
+  ``encoder_velocity`` are post-conversion: ELBOW is converted through
+  ``convert_elbow_position_to_angle`` first because the encoder counts are
+  driven by the rotary actuator, not the linear projection. The runtime
+  feeds these straight into ``ipm_send_pvt_point``.
+  """
+
+  time_s: float
+  joints: Dict[Axis, float] = field(default_factory=dict)
+  encoder_position: Dict[Axis, int] = field(default_factory=dict)
+  encoder_velocity: Dict[Axis, int] = field(default_factory=dict)
+
+
+def _arc_length_trapezoid_times(
+  length: float, vel: float, accel: float, dt_s: float,
+) -> List[float]:
+  """Return arc-length s(t_i) at evenly-spaced t_i = i*dt covering a trapezoidal
+  profile from 0 to ``length`` with peak speed ``vel`` and peak accel ``accel``.
+
+  Falls back to triangular when the path is too short to reach ``vel``.
+
+  The trajectory is **dt-aligned**: the last sample lands at exactly
+  ``ceil(t_total / dt) * dt`` with s = length, and one extra "hold" sample
+  at length is appended so the central-difference velocity at the final
+  point is exactly zero. This matters for IPM streaming — the drive
+  integrates a cubic Hermite spline through (P_i, V_i) → (P_{i+1}, V_{i+1})
+  over each dt; without the hold, the FD-derived V at the last sample
+  would be small-but-nonzero, and the cubic would overshoot the target
+  before snapping back.
+  """
+  if length <= 0 or dt_s <= 0:
+    return [0.0]
+  v, a, t_acc, t_total = _profile(length, vel, accel)
+  if t_total <= 0:
+    return [0.0]
+  d_acc = 0.5 * a * t_acc * t_acc
+  n_motion = max(2, ceil(t_total / dt_s) + 1)
+  out: List[float] = []
+  for i in range(n_motion):
+    t = i * dt_s
+    if t >= t_total:
+      out.append(length)
+    elif t < t_acc:
+      out.append(0.5 * a * t * t)
+    elif t < t_total - t_acc:
+      out.append(d_acc + v * (t - t_acc))
+    else:
+      td = t_total - t
+      out.append(length - 0.5 * a * td * td)
+  out.append(length)  # trailing hold so FD-derived final V is exactly 0
+  return out
+
+
+def _yaw_lerp(yaw_a_deg: float, yaw_b_deg: float, alpha: float) -> float:
+  """Interpolate yaw the short way around the circle. Avoids a 359° unwind
+  when start=+179°, end=-179° (true delta = 2°, naive lerp delta = 358°)."""
+  delta = (yaw_b_deg - yaw_a_deg + 540.0) % 360.0 - 180.0
+  return yaw_a_deg + alpha * delta
+
+
+def sample_linear_path(
+  cfg: KX2Config,
+  gripper_params: GripperParams,
+  start_pose: GripperLocation,
+  end_pose: GripperLocation,
+  *,
+  vel_mm_per_s: float,
+  accel_mm_per_s2: float,
+  dt_s: float,
+  current_joints: Optional[Dict[Axis, float]] = None,
+) -> List[LinearPathSample]:
+  """Sample a straight tool-tip path from ``start_pose`` to ``end_pose`` at dt.
+
+  Args:
+    cfg: drive-read calibration.
+    gripper_params: tooling geometry.
+    start_pose, end_pose: Cartesian endpoints (gripper clamp point + yaw).
+    vel_mm_per_s: peak Cartesian speed along the path.
+    accel_mm_per_s2: peak Cartesian acceleration along the path.
+    dt_s: sample period (matches the dt fed to ``ipm_set_time_interval``).
+    current_joints: pre-move joint snapshot. If supplied, the first sample's
+      WRIST/SHOULDER are 360°-snapped toward ``current_joints`` so the
+      trajectory doesn't begin with a full unwind. ELBOW position passes
+      through unchanged (linear axis).
+
+  Returns:
+    Dense list of samples, one per dt step. The last sample lands exactly
+    on ``end_pose``. ``encoder_position`` / ``encoder_velocity`` are ready
+    to feed straight into ``ipm_send_pvt_point``. Velocity is the central
+    finite difference of encoder positions; the endpoints use one-sided
+    differences and are clamped to zero at the very last sample so the
+    drive ends stationary.
+  """
+  if vel_mm_per_s <= 0 or accel_mm_per_s2 <= 0 or dt_s <= 0:
+    raise ValueError(
+      f"sample_linear_path: vel/accel/dt must be positive (got "
+      f"{vel_mm_per_s}, {accel_mm_per_s2}, {dt_s})"
+    )
+
+  sx, sy, sz = start_pose.location.x, start_pose.location.y, start_pose.location.z
+  ex, ey, ez = end_pose.location.x, end_pose.location.y, end_pose.location.z
+  start_yaw, end_yaw = start_pose.rotation.z, end_pose.rotation.z
+  length = sqrt((ex - sx) ** 2 + (ey - sy) ** 2 + (ez - sz) ** 2)
+
+  # Pure rotation in place is unsupported here: the speed/accel caps are
+  # mm/s and mm/s², so reusing them as deg/s for a wrist spin would silently
+  # command rotational rates the caller didn't intend. Use a joint-space
+  # move for orientation-only changes.
+  rot_delta = abs(((end_yaw - start_yaw + 540.0) % 360.0) - 180.0)
+  if length <= _EPS and rot_delta > _EPS:
+    raise NotImplementedError(
+      "sample_linear_path: pure rotation (no translation) is not supported. "
+      f"Translation length={length:.4f} mm, rotation delta={rot_delta:.2f}°. "
+      "Use move_to_joint_position with the target wrist angle for "
+      "orientation-only changes."
+    )
+
+  # Cartesian arc-length trapezoid. Yaw rides the same s/length ratio so
+  # rotation lands together with translation.
+  s_seq = _arc_length_trapezoid_times(length, vel_mm_per_s, accel_mm_per_s2, dt_s)
+
+  prev_for_snap: Optional[Dict[Axis, float]] = (
+    dict(current_joints) if current_joints is not None else None
+  )
+  poses: List[Dict[Axis, float]] = []
+  for s in s_seq:
+    alpha = (s / length) if length > 0 else 1.0
+    pose_i = GripperLocation(
+      location=Coordinate(
+        x=sx + alpha * (ex - sx),
+        y=sy + alpha * (ey - sy),
+        z=sz + alpha * (ez - sz),
+      ),
+      rotation=Rotation(z=_yaw_lerp(start_yaw, end_yaw, alpha)),
+    )
+    joints = ik(pose_i, cfg, gripper_params)
+    if prev_for_snap is not None:
+      joints = snap_to_current(joints, prev_for_snap)
+    poses.append(joints)
+    prev_for_snap = joints
+
+  # Encoder-space sequence per axis. Elbow's encoder is angle-driven (sine
+  # linkage), so convert position to angle before scaling by motor factor.
+  enc_pos: Dict[Axis, List[int]] = {ax: [] for ax in _LINEAR_PATH_AXES}
+  for joints in poses:
+    for ax in _LINEAR_PATH_AXES:
+      conv = cfg.axes[ax].motor_conversion_factor
+      val = joints[ax]
+      if ax is Axis.ELBOW:
+        val = convert_elbow_position_to_angle(cfg, val)
+      enc_pos[ax].append(int(round(val * conv)))
+
+  # Central finite difference for velocity; one-sided at endpoints. The
+  # trajectory is dt-aligned with a trailing hold sample (s = length),
+  # so the one-sided FD at the last point is naturally zero — no need
+  # to force it. Forcing zero against a non-trivial v[n-2] would create
+  # the cubic-Hermite overshoot the trailing hold is meant to avoid.
+  n = len(poses)
+  enc_vel: Dict[Axis, List[int]] = {ax: [0] * n for ax in _LINEAR_PATH_AXES}
+  for ax in _LINEAR_PATH_AXES:
+    seq = enc_pos[ax]
+    if n >= 2:
+      enc_vel[ax][0] = int(round((seq[1] - seq[0]) / dt_s))
+      for i in range(1, n - 1):
+        enc_vel[ax][i] = int(round((seq[i + 1] - seq[i - 1]) / (2.0 * dt_s)))
+      enc_vel[ax][n - 1] = int(round((seq[n - 1] - seq[n - 2]) / dt_s))
+
+  out: List[LinearPathSample] = []
+  for i in range(n):
+    out.append(LinearPathSample(
+      time_s=i * dt_s,
+      joints=poses[i],
+      encoder_position={ax: enc_pos[ax][i] for ax in _LINEAR_PATH_AXES},
+      encoder_velocity={ax: enc_vel[ax][i] for ax in _LINEAR_PATH_AXES},
+    ))
+  return out

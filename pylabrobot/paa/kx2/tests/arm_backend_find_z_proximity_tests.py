@@ -35,9 +35,15 @@ class _FakeDriver:
     self.motor_stop_calls: List[Axis] = []
     self.configure_il_calls: List[Tuple[Any, int, _InputLogic]] = []
     self.motor_stop_should_raise: Optional[Exception] = None
+    self.ensure_enabled_calls: List[Tuple[int, ...]] = []
 
   async def motor_enable(self, *, node_id: Any, state: bool, use_ds402: bool) -> None:
     self.motor_enable_calls.append((node_id, state, use_ds402))
+
+  async def motors_ensure_enabled(
+    self, node_ids: List[int], *, use_ds402: bool = True,
+  ) -> None:
+    self.ensure_enabled_calls.append(tuple(int(n) for n in node_ids))
 
   async def motor_stop(self, axis: Axis) -> None:
     self.motor_stop_calls.append(axis)
@@ -140,8 +146,8 @@ class FindZSensorTripsCleanupTests(unittest.TestCase):
     self.assertEqual(h.fake_driver.configure_il_calls, [arm, restore])
     # motor_stop ran exactly once on the Z axis.
     self.assertEqual(h.fake_driver.motor_stop_calls, [Axis.Z])
-    # Pre-flight motor_enable still happened.
-    self.assertEqual(h.fake_driver.motor_enable_calls, [(Axis.Z, True, True)])
+    # Pre-flight ensured Z was enabled before descent.
+    self.assertEqual(h.fake_driver.ensure_enabled_calls, [(int(Axis.Z),)])
     # Descent target is z0 - max_descent.
     self.assertEqual(len(h.move_calls), 1)
     self.assertAlmostEqual(h.move_calls[0]["cmd_pos"][Axis.Z], 80.0, places=9)
@@ -235,8 +241,8 @@ class FindZAlreadyTrippedTests(unittest.TestCase):
     # No motor_stop, no descent move spawned.
     self.assertEqual(h.fake_driver.motor_stop_calls, [])
     self.assertEqual(h.move_calls, [])
-    # motor_enable still ran (it's the pre-flight before anything else).
-    self.assertEqual(h.fake_driver.motor_enable_calls, [(Axis.Z, True, True)])
+    # ensure_enabled still ran (it's the pre-flight before anything else).
+    self.assertEqual(h.fake_driver.ensure_enabled_calls, [(int(Axis.Z),)])
 
   def test_z_start_provided_runs_pre_descent_move_then_short_circuits(self):
     """Same as above but with z_start: the pre-positioning move runs, then

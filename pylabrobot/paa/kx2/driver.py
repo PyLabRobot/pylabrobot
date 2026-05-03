@@ -210,14 +210,22 @@ class EmcyFrame:
 
 
 @dataclass
-class _PvtEmcyState:
-  """Per-node PVT-mode queue state, mirrored from `sPVT_EMCY` in clscanmotor.cs:6943-6964."""
+class _IpmEmcyState:
+  """Per-node IPM queue state, mirrored from `sPVT_EMCY` in clscanmotor.cs:6943-6964.
+
+  ``queue_low`` is a proactive warning (drive's IP buffer is approaching
+  empty); ``underflow`` is post-fact (drive ran the buffer dry and
+  short-stopped the trajectory). The streaming runtime treats underflow as
+  a fatal error; queue_low is informational unless we move to event-driven
+  pacing.
+  """
 
   queue_low: bool = False
   queue_low_write_pointer: int = 0
   queue_low_read_pointer: int = 0
   queue_full: bool = False
   queue_full_failed_write_pointer: int = 0
+  underflow: bool = False
   bad_head_pointer: bool = False
   bad_mode_init_data: bool = False
   motion_terminated: bool = False
@@ -285,11 +293,11 @@ _EMCY_STANDARD: Dict[int, Tuple[str, bool]] = {
 
 
 def _decode_emcy(
-  frame: EmcyFrame, state: _PvtEmcyState
+  frame: EmcyFrame, state: _IpmEmcyState
 ) -> Tuple[str, bool, bool]:
   """Decode an EMCY frame into (description, disable_motors, suppress_callback).
 
-  Mutates ``state`` for PVT queue events. Mirrors clscanmotor.cs:1070-1267
+  Mutates ``state`` for IPM queue events. Mirrors clscanmotor.cs:1070-1267
   one-for-one. ``suppress_callback`` corresponds to the C# `flag2` and is only
   set for the elmo 0x8A interpolation underflow under errCode 0xFF02 — that
   case updates internal state but does not raise the user-visible event.
@@ -348,8 +356,10 @@ def _decode_emcy(
       state.bad_head_pointer = True
       return ("Bad Head Pointer", False, False)
     if elmo == 0x8A:
-      # State update only; user callback suppressed (C# flag2=true).
-      state.queue_low = True
+      # State update only; user callback suppressed (C# flag2=true). Sets
+      # `underflow` (post-fact: drive already ran out of points) — distinct
+      # from `queue_low` (proactive: more data needed soon).
+      state.underflow = True
       return ("Position Interpolation buffer underflow", False, True)
     if elmo == 0xA6:
       state.out_of_modulo = True
@@ -442,7 +452,7 @@ class KX2Driver(Driver):
     # garbage Lock from a missed-race insert is immediately discarded.
     self._bi_locks: Dict[Tuple[int, str, int], asyncio.Lock] = {}
 
-    self._pvt_mode: bool = False
+    self._ipm_mode: bool = False
 
     # EMCY (CANopen Emergency, COB-ID 0x80 + node_id) state. Subscribed in
     # setup(); fires on the canopen listener thread, marshalled into the
@@ -451,7 +461,7 @@ class KX2Driver(Driver):
     self.emcy_move_error: str = ""
     self.emcy_move_error_node_id: Optional[int] = None
     self.last_emcy: Optional[EmcyFrame] = None
-    self._pvt_emcy: Dict[int, _PvtEmcyState] = {}
+    self._ipm_emcy: Dict[int, _IpmEmcyState] = {}
     self._emcy_callbacks: List[
       Callable[[int, EmcyFrame, str, bool], None]
     ] = []
@@ -494,7 +504,7 @@ class KX2Driver(Driver):
     # the C# event handler at KX2RobotControl.cs:15384-15425 /
     # clscanmotor.cs:1057-1284.
     for nid in self.node_id_list:
-      self._pvt_emcy[nid] = _PvtEmcyState()
+      self._ipm_emcy[nid] = _IpmEmcyState()
       network.subscribe(_EMCY_COB_BASE + nid, self._make_emcy_callback(nid))
 
     # Reset all nodes, then start scanner so bootup messages populate it,
@@ -531,7 +541,7 @@ class KX2Driver(Driver):
     # when the new event-trigger arms. 1 ms inhibit (10 * 100 us) caps
     # bus traffic — SW changes happen at the ~1-2 ms servo cycle, so the
     # inhibit doesn't lose edges in practice and keeps the bus quiet
-    # during PVT streaming if anyone resurrects the IPM runtime.
+    # during IPM streaming if anyone resurrects the IPM runtime.
     for nid in self.motion_node_ids:
       self._statusword_event[nid] = asyncio.Event()
       network.subscribe(_TPDO3_COB_BASE + nid, self._make_tpdo3_callback(nid))
@@ -548,7 +558,7 @@ class KX2Driver(Driver):
         TPDO.TPDO4, node_id, [TPDOMappedObject.DigitalInputs], TPDOTrigger.DigitalInputEvent
       )
 
-    # Elmo vendor objects: interpolation config for PVT mode.
+    # Elmo vendor objects: interpolation config for IPM.
     for nid in self.motion_node_ids:
       await self.can_sdo_download_elmo_object(nid, 24768, 0, -1, _ElmoObjectDataType.INTEGER16)
       await self.can_sdo_download_elmo_object(nid, 24772, 2, 16, _ElmoObjectDataType.UNSIGNED32)
@@ -569,8 +579,8 @@ class KX2Driver(Driver):
         PDOTransmissionType.EventDrivenDev,
       )
 
-    self._pvt_mode = True
-    await self.pvt_select_mode(False)
+    self._ipm_mode = True
+    await self.ipm_select_mode(False)
 
   async def stop(self) -> None:
     if self._network is not None:
@@ -581,7 +591,7 @@ class KX2Driver(Driver):
       self._network.disconnect()
       self._network = None
       self._nodes = {}
-      self._pvt_emcy = {}
+      self._ipm_emcy = {}
       # Clear callbacks too: _on_setup re-registers on each retry, so leaving
       # them would compound N copies of the same handler across attempts.
       self._emcy_callbacks = []
@@ -737,14 +747,14 @@ class KX2Driver(Driver):
   def clear_emcy_state(self, node_id: Optional[int] = None) -> None:
     """Clear sticky EMCY error fields after a recovery / re-enable.
 
-    If ``node_id`` is given, also resets the per-node PVT queue state for
+    If ``node_id`` is given, also resets the per-node IPM queue state for
     that node. Mirrors clscanmotor.cs:668-669, 3454, 4481.
     """
     self.emcy_move_error_received = False
     self.emcy_move_error = ""
     self.emcy_move_error_node_id = None
-    if node_id is not None and node_id in self._pvt_emcy:
-      self._pvt_emcy[node_id] = _PvtEmcyState()
+    if node_id is not None and node_id in self._ipm_emcy:
+      self._ipm_emcy[node_id] = _IpmEmcyState()
 
   def _make_emcy_callback(self, node_id: int):
     """Return a `canopen.Network.subscribe` callback bound to a specific node."""
@@ -765,9 +775,9 @@ class KX2Driver(Driver):
     frame = EmcyFrame(err_code, err_reg, elmo_err, d1, d2)
     self.last_emcy = frame
 
-    state = self._pvt_emcy.setdefault(node_id, _PvtEmcyState())
+    state = self._ipm_emcy.setdefault(node_id, _IpmEmcyState())
     desc, disable_motors, suppress = _decode_emcy(frame, state)
-    # Tier the level so PVT housekeeping (queue-low/underflow) doesn't drown
+    # Tier the level so IPM housekeeping (queue-low/underflow) doesn't drown
     # ops logs while real faults stay loud. Unknown codes warn so we notice.
     if disable_motors:
       level = logging.ERROR
@@ -1158,7 +1168,7 @@ class KX2Driver(Driver):
       # Clear sticky EMCY state from any prior fault on this drive so the
       # post-enable motion path doesn't re-surface stale errors. Mirrors
       # clscanmotor.cs:4481 ("EmcyMoveErrorReceived = false" before re-enable)
-      # plus the per-axis PVT-queue clear at clscanmotor.cs:4050-4051.
+      # plus the per-axis IPM-queue clear at clscanmotor.cs:4050-4051.
       self.clear_emcy_state(node_id=node_id)
 
     want = 1 if state else 0
@@ -1201,6 +1211,35 @@ class KX2Driver(Driver):
     verb = "enable" if state else "disable"
     raise CanError(f"Motor failed to {verb} (node_id = {node_id}) after {max_attempts} attempts")
 
+  async def motors_ensure_enabled(
+    self, node_ids: List[int], *, use_ds402: bool = True,
+  ) -> None:
+    """Enable every drive in ``node_ids`` that isn't already enabled.
+
+    One ``motor_is_enabled`` SDO read per axis (~5 ms); only drives reading
+    MO=0 pay the full DS402 enable cycle. Per-axis work runs concurrently —
+    each node ID has its own SDO channel so they don't serialize on the bus.
+
+    The cheap path (drive already enabled) is the common case after the
+    first move; the slow path covers post-halt, post-fault, post-freedrive
+    where the drive deliberately landed in Switch On Disabled. Used by
+    every motion-trigger site (PPM, IPM begin) and lifecycle transitions
+    (setup, stop_freedrive_mode, find_z preflight) so they all share one
+    recovery contract.
+    """
+    # Sequential, not gather: motor_enable's DS402 ladder writes intermediate
+    # CW values (0x06/0x07/0x0F) interleaved with SW reads. If one axis
+    # raises mid-cycle, gather cancels the others mid-sequence — leaving
+    # them in an indeterminate state (e.g. 0x07 written but 0x0F never sent)
+    # that the per-call retry budget can't reliably recover from. Sequential
+    # finishes one axis fully before touching the next.
+    for nid in node_ids:
+      nid_int = int(nid)
+      if await self.motor_is_enabled(nid_int):
+        continue
+      logger.warning("node %d: re-enabling (was disabled)", nid_int)
+      await self.motor_enable(node_id=nid_int, state=True, use_ds402=use_ds402)
+
   # --- motion primitives --------------------------------------------------
 
   async def _set_op_mode(self, node_id: int, mode: int, timeout_s: float = 0.05) -> None:
@@ -1227,29 +1266,173 @@ class KX2Driver(Driver):
         )
       await asyncio.sleep(0.005)
 
-  async def pvt_select_mode(self, enable: bool) -> None:
-    """Enable/disable PVT mode on all motion axes via standard SDO writes."""
+  async def ipm_select_mode(self, enable: bool) -> None:
+    """Enable/disable IPM (Interpolated Position Mode, 0x6060=7) on all motion
+    axes via standard SDO writes.
+
+    The ``_ipm_mode`` bookkeeping flag is set *pessimistically*: True before
+    the SDO writes on enable, False after them on disable. So a partial
+    failure mid-sequence still leaves the next caller with an accurate
+    "we tried to be in IPM" signal — they can re-arm rather than assume
+    we cleanly stayed in PPM.
+    """
     if enable:
-      if not self._pvt_mode:
+      # Set the flag first so a partial failure (some axes flipped to mode 7,
+      # others not) leaves bookkeeping consistent with "drive may be in IPM".
+      already_armed = self._ipm_mode
+      self._ipm_mode = True
+      if not already_armed:
         for nid in self.motion_node_ids:
-          # 0x60C4 sub 6 = 0 (disable interpolation buffer)
-          await self._can_sdo_download(nid, 0x60C4, 0x06, [0])
+          await self.ipm_clear_queue(nid)
           await self._set_op_mode(nid, 7)  # interpolated position mode
-        self._pvt_mode = True
       else:
         # Re-arm: drop to PPM, reset the interpolation-buffer pointer, climb
-        # back into IPM. Mirrors C# PVTSelectMode true-and-already-in-PVT
-        # (clscanmotor.cs:6014-6031). Skipping any of the three steps leaves
-        # the drive in the wrong mode or with a stale IP buffer.
+        # back into IPM. Skipping any of the three steps leaves the drive in
+        # the wrong mode or with a stale IP buffer.
         for nid in self.motion_node_ids:
           await self._set_op_mode(nid, 1)
-          await self._can_sdo_download(nid, 0x60C4, 0x06, [0])
+          await self.ipm_clear_queue(nid)
           await self._set_op_mode(nid, 7)
     else:
-      if self._pvt_mode:
-        for nid in self.motion_node_ids:
-          await self._set_op_mode(nid, 1)  # profile position mode
-        self._pvt_mode = False
+      # Always attempt to revert — the cheap mode-display poll inside
+      # _set_op_mode is the authoritative confirmation. Skip the writes only
+      # if we know we never armed (cleaner test semantics; idempotent on
+      # the wire either way).
+      if self._ipm_mode:
+        try:
+          for nid in self.motion_node_ids:
+            await self._set_op_mode(nid, 1)  # profile position mode
+        finally:
+          # Clear bookkeeping even on partial failure — the alternative is
+          # leaving _ipm_mode=True after a teardown attempt, which would
+          # cause the next select_mode(True) to take the re-arm branch
+          # against drives possibly already in PPM.
+          self._ipm_mode = False
+
+  async def ipm_clear_queue(self, node_id: int) -> None:
+    """Reset the drive's interpolation buffer head/tail (0x60C4 sub 6 = 0).
+    Used by `ipm_select_mode` re-arm and post-cancel cleanup so a stale tail
+    pointer doesn't replay old points on the next IPM enable."""
+    await self._can_sdo_download(int(node_id), 0x60C4, 0x06, [0])
+
+  async def ipm_set_time_interval(self, ms: int) -> None:
+    """Program 0x60C2:01 = ms on every motion axis. The 0x60C2:02 = -3 written
+    at setup means the unit is milliseconds; this just sets the count.
+
+    Drive-level: integer ms only (UNSIGNED8). Caller picks dt; runtime passes
+    the same value used to build the trajectory so position/velocity scaling
+    matches what the drive integrates between points."""
+    if not 0 <= int(ms) <= 255:
+      raise ValueError(f"ipm_set_time_interval: ms must fit in UINT8, got {ms}")
+    for nid in self.motion_node_ids:
+      await self.can_sdo_download_elmo_object(
+        nid, 24770, 1, int(ms), _ElmoObjectDataType.UNSIGNED8,
+      )
+
+  def ipm_send_pvt_point(
+    self, node_id: int, position_enc: int, velocity_enc_per_s: int,
+  ) -> None:
+    """Append one PVT (P, V) data point to the drive's interpolation buffer
+    via RPDO3.
+
+    Wire layout (8 bytes, little-endian, RPDO3 COB-ID = 0x400 + node_id):
+      [0..3] TargetPositionIP (INT32 encoder counts)
+      [4..7] TargetVelocityIP (INT32 encoder counts/sec)
+
+    Synchronous — `network.send_message` queues to the kernel CAN buffer in
+    microseconds with no I/O wait, so there's nothing to await. Marking it
+    `async` would mislead callers about the cost (no event-loop yield) and
+    add a coroutine-frame allocation per send.
+
+    RPDO3 is mapped EventDriven (no SYNC needed) at setup. Caller paces the
+    feed; sending faster than the buffer drains raises EMCY 0x34 from the
+    drive (queue-full)."""
+    if self._network is None:
+      raise CanError("ipm_send_pvt_point called before setup()")
+    payload = (
+      int(position_enc).to_bytes(4, "little", signed=True)
+      + int(velocity_enc_per_s).to_bytes(4, "little", signed=True)
+    )
+    cob_id = (int(COBType.RPDO3) << 7) | (int(node_id) & 0x7F)
+    self._network.send_message(cob_id, payload)
+
+  async def ipm_begin_motion(self, node_ids: List[int]) -> None:
+    """Start IPM streaming on the listed axes. CW=0x1F (op-enabled +
+    ip-enable) per axis via RPDO1; one SYNC at the end so the
+    SynchronousCyclic-mapped RPDO1s latch together.
+
+    Auto-recovers from a prior disable (post-halt, post-fault) via
+    ``motors_ensure_enabled``. Single-shot 0x1F to a drive in Switch On
+    Disabled is silently dropped — the state machine needs the 6→7→15
+    transitions visible to its poll loop.
+
+    Resets the per-axis IPM queue counters BEFORE issuing the CW edge so a
+    queue_full/underflow fired between preload and begin (e.g. malformed
+    first point) is preserved for the runtime to inspect and surface."""
+    ids = [int(n) for n in node_ids]
+    if not ids:
+      return
+    await self.motors_ensure_enabled(ids)
+    for nid in ids:
+      if nid in self._ipm_emcy:
+        self._ipm_emcy[nid] = _IpmEmcyState()
+    for nid in ids[:-1]:
+      await self._control_word_set(nid, 0x1F, sync=False)
+    await self._control_word_set(ids[-1], 0x1F, sync=True)
+
+  async def ipm_stop(self, node_ids: Optional[List[int]] = None) -> None:
+    """Drop ip-enable on the listed axes (CW=0x0F via RPDO1, SYNC on last).
+    The drive consumes any already-buffered points before halting — coast
+    can run up to (queued_points * dt_ms) ms past the request. Defaults to
+    every motion axis when ``node_ids`` is None."""
+    ids = [int(n) for n in node_ids] if node_ids is not None else list(self.motion_node_ids)
+    if not ids:
+      return
+    for nid in ids[:-1]:
+      await self._control_word_set(nid, 0x0F, sync=False)
+    await self._control_word_set(ids[-1], 0x0F, sync=True)
+
+  def ipm_check_queue_fault(self, node_ids: List[int]) -> None:
+    """Raise CanError if any axis has a fatal IPM queue condition.
+
+    Inspects the EMCY-driven ``_ipm_emcy`` state for ``queue_full`` (drive
+    rejected our point) or ``underflow`` (drive ran the buffer dry).
+    Either condition means the trajectory is no longer trustworthy — the
+    streaming runtime calls this after each send-batch to surface the fault
+    promptly instead of letting the move silently degrade.
+    """
+    bad: List[str] = []
+    for nid in node_ids:
+      st = self._ipm_emcy.get(int(nid))
+      if st is None:
+        continue
+      if st.queue_full:
+        bad.append(f"Axis {nid} queue_full (failed write @ {st.queue_full_failed_write_pointer})")
+      if st.underflow:
+        bad.append(f"Axis {nid} underflow")
+    if bad:
+      raise CanError("IPM queue fault: " + "; ".join(bad))
+
+  async def ipm_wait_motion_complete(
+    self, node_ids: List[int], timeout_s: float,
+  ) -> None:
+    """Wait until SW bit-10 (motion_complete / target_reached) goes high on
+    every listed axis. The bit goes high once the IP buffer drains and the
+    drive's trajectory generator settles on the last commanded position.
+
+    Polls via the TPDO3-backed StatusWord cache; falls back to SDO probe
+    if the cache hasn't seen a frame within 5 ms. Raises CanError on
+    timeout, naming the offending axis."""
+    async def _wait_one(nid: int) -> None:
+      ok = await self._wait_sw_bit(
+        int(nid), bit_mask=1 << 10, want_high=True, timeout_s=timeout_s,
+      )
+      if not ok:
+        raise CanError(
+          f"Axis {nid}: SW bit-10 (target reached) never went high within "
+          f"{timeout_s:.1f}s — IPM trajectory did not complete"
+        )
+    await asyncio.gather(*(_wait_one(int(n)) for n in node_ids))
 
   async def wait_for_moves_done(
     self, node_ids: List[int], timeout: float
@@ -1277,7 +1460,7 @@ class KX2Driver(Driver):
 
     await asyncio.gather(*(_poll_axis(n) for n in node_ids))
 
-  async def motors_move_start(
+  async def ppm_begin_motion(
     self, node_ids: List[int], *, relative: bool = False
   ) -> None:
     # CiA 402 Profile Position Mode trigger handshake. Per drive:
@@ -1295,16 +1478,12 @@ class KX2Driver(Driver):
     relative_bit = 0x40 if relative else 0
     cw_low = 47 + relative_bit
     cw_high = 47 + 0x10 + relative_bit
+    # Auto-recover from prior disable (post-E-stop, post-find_z IL halt,
+    # post-freedrive). A disabled drive never raises SW bit 12, so the PPM
+    # trigger spins all 10 attempts before failing.
+    await self.motors_ensure_enabled([int(n) for n in node_ids])
     for nid in node_ids:
-      nid = int(nid)
-      # Auto-recover from prior disable (post-E-stop, post-find_z IL halt,
-      # post-freedrive). A disabled drive never raises SW bit 12, so the
-      # PPM trigger spins all 10 attempts before failing. One MO read per
-      # axis is cheap; the heavy DS402 cycle only runs when actually needed.
-      if not await self.motor_is_enabled(nid):
-        logger.warning("node %d: re-enabling before motion (was disabled)", nid)
-        await self.motor_enable(node_id=nid, state=True, use_ds402=True)
-      await self._trigger_new_setpoint(nid, cw_low, cw_high)
+      await self._trigger_new_setpoint(int(nid), cw_low, cw_high)
 
   async def _trigger_new_setpoint(
     self,
