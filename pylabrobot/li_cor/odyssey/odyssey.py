@@ -43,6 +43,7 @@ from pylabrobot.capabilities.scanning.instrument_status import (
 )
 from pylabrobot.capabilities.scanning.scanning import Scanning
 from pylabrobot.device import Device
+from pylabrobot.device_card import DeviceCard, HasDeviceCard
 
 from .chatterbox import (
   OdysseyChatterboxDriver,
@@ -51,6 +52,7 @@ from .chatterbox import (
   OdysseyScanningChatterboxBackend,
   _OdysseyChatterboxState,
 )
+from .device_card import ODYSSEY_CLASSIC_BASE
 from .driver import (
   DEFAULT_GROUP,
   OdysseyDriver,
@@ -72,7 +74,7 @@ logger = logging.getLogger(__name__)
 _TERMINAL_STATES = frozenset({"Idle", "Completed", "Stopped", "Failed"})
 
 
-class OdysseyClassic(Device):
+class OdysseyClassic(Device, HasDeviceCard):
   """LI-COR Odyssey Classic (model 9120) infrared imaging system.
 
   Capabilities:
@@ -83,6 +85,11 @@ class OdysseyClassic(Device):
   Pass ``chatterbox=True`` for an in-memory test path; otherwise the
   device connects to the instrument over HTTP using credentials from
   ODYSSEY_USER / ODYSSEY_PASS (or supplied directly).
+
+  ``card`` accepts an instance-level :class:`DeviceCard` (typically
+  carrying this unit's PIDInst identity). When provided, it is merged
+  on top of :data:`ODYSSEY_CLASSIC_BASE` and exposed as ``self.card``.
+  When omitted, ``self.card`` is the model-base card.
   """
 
   def __init__(
@@ -94,6 +101,7 @@ class OdysseyClassic(Device):
     timeout: float = 60.0,
     group: str = DEFAULT_GROUP,
     chatterbox: bool = False,
+    card: Optional[DeviceCard] = None,
   ) -> None:
     if chatterbox:
       driver: OdysseyDriver = OdysseyChatterboxDriver()
@@ -127,6 +135,11 @@ class OdysseyClassic(Device):
       status_backend = OdysseyInstrumentStatusBackend(driver)
 
     super().__init__(driver=driver)
+
+    self.card = (
+      ODYSSEY_CLASSIC_BASE.merge(card) if card is not None
+      else ODYSSEY_CLASSIC_BASE
+    )
 
     self.scanning = Scanning(backend=scanning_backend)
     self.images = ImageRetrieval(backend=image_backend)

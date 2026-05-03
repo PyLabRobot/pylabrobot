@@ -6,6 +6,7 @@ from pylabrobot.li_cor.odyssey.chatterbox import (
   OdysseyInstrumentStatusChatterboxBackend,
   OdysseyScanningChatterboxBackend,
 )
+from pylabrobot.li_cor.odyssey.device_card import ODYSSEY_CLASSIC_BASE
 from pylabrobot.li_cor.odyssey.driver import (
   DEFAULT_GROUP,
   OdysseyDriver,
@@ -40,6 +41,7 @@ __all__ = [
   "OdysseyClassic",
   "OdysseyDriver",
   "OdysseyScanningParams",
+  "ODYSSEY_CLASSIC_BASE",
   "OdysseyScanningBackend",
   "OdysseyImageRetrievalBackend",
   "OdysseyInstrumentStatusBackend",
