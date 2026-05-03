@@ -197,6 +197,45 @@ def _profile(dist: float, v: float, a: float) -> tuple:
   return v, a, t_acc, t_cruise + 2.0 * t_acc
 
 
+def _directional_delta(target: float, current: float, ax_cfg) -> float:
+  """Signed joint delta honoring `unlimited_travel` direction modes.
+
+  For non-`unlimited_travel` axes the delta is the literal `target − current`.
+  For unlimited axes the delta is rewritten to walk the direction the config
+  asks for (CW=negative, CCW=positive, ShortestWay=≤180°)."""
+  d = target - current
+  if not ax_cfg.unlimited_travel:
+    return d
+  span = ax_cfg.max_travel - ax_cfg.min_travel
+  dir_ = ax_cfg.joint_move_direction
+  if dir_ == JointMoveDirection.Clockwise and d > 0.01:
+    d -= span
+  elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
+    d += span
+  elif dir_ == JointMoveDirection.ShortestWay:
+    if d > 180.0:
+      d -= span
+    elif d < -180.0:
+      d += span
+  return d
+
+
+def _stretch_to_time(dist: float, v: float, a: float, T: float) -> tuple:
+  """Slow a single-axis trapezoidal/triangular profile so it lands at time T.
+
+  Given the pass-1 profile (v, a) for `dist`, scale (v, a) by the same factor
+  k so the new profile takes time T. Preserving the v/a ratio keeps the
+  acceleration-time fixed; only the cruise leg stretches. Returns (v, a) for
+  the stretched profile."""
+  if dist <= 0 or a <= 0 or v <= 0:
+    return v, a
+  denom = v * (T - v / a)
+  if abs(denom) < 1e-12:
+    return v, a
+  k = dist / denom
+  return v * k, a * k
+
+
 def plan_joint_move(
   current: Dict[Axis, float],
   target: Dict[Axis, float],
@@ -288,35 +327,15 @@ def plan_joint_move(
       target[ax] = _wrap_to_range(target[ax], ax_cfg.min_travel, ax_cfg.max_travel)
 
   # Direction-aware deltas in cmd_pos units (elbow as linear extension), for
-  # the gripper-speed cap helper. Identical logic to the dist computation
-  # below, but evaluated against the un-converted joints so the cap helper
-  # sees the trajectory the arm actually walks.
-  cap_deltas: Dict[Axis, float] = {}
-  for ax in axes:
-    ax_cfg = cfg.axes[ax]
-    if ax_cfg.unlimited_travel:
-      d = target_cmd_units[ax] - curr_cmd_units.get(ax, 0.0)
-      span = ax_cfg.max_travel - ax_cfg.min_travel
-      dir_ = ax_cfg.joint_move_direction
-      if dir_ == JointMoveDirection.Clockwise and d > 0.01:
-        d -= span
-      elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
-        d += span
-      elif dir_ == JointMoveDirection.ShortestWay:
-        if d > 180.0:
-          d -= span
-        elif d < -180.0:
-          d += span
-      cap_deltas[ax] = d
-    else:
-      cap_deltas[ax] = target_cmd_units[ax] - curr_cmd_units.get(ax, 0.0)
+  # the gripper-speed cap helper that walks the path in `fk`'s natural units.
+  cap_deltas: Dict[Axis, float] = {
+    ax: _directional_delta(target_cmd_units[ax], curr_cmd_units.get(ax, 0.0), cfg.axes[ax])
+    for ax in axes
+  }
 
-  # Per-axis caps from the gripper-speed limit. Helper iterates the joint
-  # path in `fk`'s natural units. Servo gripper isn't in fk, so it always
-  # runs at firmware max regardless of cap.
+  # Per-axis caps from the gripper-speed/accel limits. Servo gripper isn't in
+  # fk, so it always runs at firmware max regardless of cap.
   arm_axes = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
-  capped_v: Dict[Axis, float] = {}
-  capped_a: Dict[Axis, float] = {}
   cap_requested = max_gripper_speed is not None or max_gripper_acceleration is not None
   cap_relevant = any(ax in arm_axes for ax in axes)
   if cap_requested and cap_relevant:
@@ -330,104 +349,60 @@ def plan_joint_move(
   fk_start = {ax: curr_cmd_units[ax] for ax in arm_axes if ax in curr_cmd_units}
   fk_deltas = {ax: cap_deltas.get(ax, 0.0) for ax in arm_axes if ax in fk_start}
   fk_loc = lambda j: fk(j, cfg, gripper_params).location
-  if max_gripper_speed is not None and fk_start:
+  capped: Dict[str, Dict[Axis, float]] = {"v": {}, "a": {}}
+  for kind, cap, field in (
+    ("v", max_gripper_speed, "max_vel"),
+    ("a", max_gripper_acceleration, "max_accel"),
+  ):
+    if cap is None or not fk_start:
+      continue
     result = arm_kinematics.joint_velocities_for_max_gripper_speed(
       fk=fk_loc,
       joints_start=fk_start,
       joint_deltas=fk_deltas,
-      joint_max_velocities={ax: cfg.axes[ax].max_vel for ax in fk_start},
-      max_gripper_speed=max_gripper_speed,
+      joint_max_velocities={ax: getattr(cfg.axes[ax], field) for ax in fk_start},
+      max_gripper_speed=cap,
       num_samples=1000,
       eps=1e-3,
     )
-    capped_v = {ax: abs(vv) for ax, vv in result.items()}
-  if max_gripper_acceleration is not None and fk_start:
-    result = arm_kinematics.joint_velocities_for_max_gripper_speed(
-      fk=fk_loc,
-      joints_start=fk_start,
-      joint_deltas=fk_deltas,
-      joint_max_velocities={ax: cfg.axes[ax].max_accel for ax in fk_start},
-      max_gripper_speed=max_gripper_acceleration,
-      num_samples=1000,
-      eps=1e-3,
-    )
-    capped_a = {ax: abs(aa) for ax, aa in result.items()}
+    capped[kind] = {ax: abs(x) for ax, x in result.items()}
+  capped_v, capped_a = capped["v"], capped["a"]
 
-  # Distances + initial v/a per axis (planning units = angle for elbow).
+  # Per-axis trajectory (planning units = angle for elbow). Three-pass sync:
+  # (1) profile each axis at its firmware max; (2) match accel-times to the
+  # slowest-accel axis (shrink `a` so all ramps end together); (3) scale (v,a)
+  # together so all axes finish together at the slowest total time.
   dist: Dict[Axis, float] = {}
   v: Dict[Axis, float] = {}
   a: Dict[Axis, float] = {}
-  accel_time: Dict[Axis, float] = {}
-  total_time: Dict[Axis, float] = {}
-  skip_ax: Dict[Axis, bool] = {}
+  ta: Dict[Axis, float] = {}
+  tt: Dict[Axis, float] = {}
   for ax in axes:
     ax_cfg = cfg.axes[ax]
-    if ax_cfg.unlimited_travel:
-      d = target[ax] - curr[ax]
-      span = ax_cfg.max_travel - ax_cfg.min_travel
-      dir_ = ax_cfg.joint_move_direction
-      if dir_ == JointMoveDirection.Clockwise and d > 0.01:
-        d -= span
-      elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
-        d += span
-      elif dir_ == JointMoveDirection.ShortestWay:
-        if d > 180.0:
-          d -= span
-        elif d < -180.0:
-          d += span
-      dist[ax] = abs(d)
-    else:
-      dist[ax] = abs(target[ax] - curr[ax])
-
-    skip_ax[ax] = abs(dist[ax]) < 0.01
+    dist[ax] = abs(_directional_delta(target[ax], curr[ax], ax_cfg))
     v[ax] = capped_v.get(ax, ax_cfg.max_vel)
     a[ax] = capped_a.get(ax, ax_cfg.max_accel)
-    if not skip_ax[ax] and a[ax] > 0:
-      v[ax], a[ax], accel_time[ax], total_time[ax] = _profile(dist[ax], v[ax], a[ax])
+    if dist[ax] >= 0.01 and a[ax] > 0:
+      v[ax], a[ax], ta[ax], tt[ax] = _profile(dist[ax], v[ax], a[ax])
     else:
-      total_time[ax] = 0.0
-      accel_time[ax] = 0.0
-
-  if all(skip_ax[ax] for ax in axes):
+      ta[ax] = tt[ax] = 0.0
+  moving = [ax for ax in axes if tt[ax] > 0.0]
+  if not moving:
     return None
 
-  # Sync accel times to the lead axis so all axes ramp together.
-  lead_acc_ax = max((ax for ax in axes if not skip_ax[ax]), key=lambda ax: accel_time[ax])
-  lead_acc_t = accel_time[lead_acc_ax]
-  for ax in axes:
-    if ax == lead_acc_ax or skip_ax[ax]:
-      continue
-    if accel_time[ax] > lead_acc_t:
-      v[ax] = lead_acc_t * a[ax]
-    elif accel_time[ax] < lead_acc_t:
-      a[ax] = v[ax] / max(lead_acc_t, 1e-9)
+  lead_acc_t = max(ta[ax] for ax in moving)
+  for ax in moving:
+    if ta[ax] < lead_acc_t:
+      a[ax] = v[ax] / lead_acc_t
+    v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
 
-  for ax in axes:
-    if skip_ax[ax]:
-      total_time[ax] = 0.0
-      continue
-    v[ax], a[ax], _, total_time[ax] = _profile(dist[ax], v[ax], a[ax])
+  lead_T = max(tt[ax] for ax in moving)
+  for ax in moving:
+    if tt[ax] < lead_T:
+      v[ax], a[ax] = _stretch_to_time(dist[ax], v[ax], a[ax], lead_T)
+      v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
 
-  # Sync total times to the lead axis so all axes finish together.
-  lead_time_ax = max(axes, key=lambda ax: total_time[ax])
-  lead_T = total_time[lead_time_ax]
-  for ax in axes:
-    if ax == lead_time_ax or skip_ax[ax]:
-      continue
-    denom = v[ax] * (lead_T - (v[ax] / max(a[ax], 1e-9)))
-    if abs(denom) < 1e-12:
-      continue
-    k = dist[ax] / denom
-    v[ax] *= k
-    a[ax] *= k
-
-  for ax in axes:
-    if skip_ax[ax]:
-      total_time[ax] = 0.0
-      continue
-    v[ax], a[ax], _, total_time[ax] = _profile(dist[ax], v[ax], a[ax])
-
-  move_time = max(total_time[ax] for ax in axes)
+  move_time = max(tt[ax] for ax in moving)
 
   # Convert back to encoder units. Elbow target is still in angle space here
   # — the encoder count for an elbow joint is angle * conv, not mm * conv.
