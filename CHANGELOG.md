@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- LI-COR Odyssey Classic (model 9120) infrared imaging system at `pylabrobot.li_cor.odyssey`
+- `Scanning`, `ImageRetrieval`, and `InstrumentStatus` capabilities at `pylabrobot.capabilities.scanning.*`
+- `DeviceCard` class and `HasDeviceCard` mixin at `pylabrobot.device_card` for instrument identity / provenance metadata (model-base + per-instance two-tier cards)
+
 ## 0.2.1
 
 ### Added
