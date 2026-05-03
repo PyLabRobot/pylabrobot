@@ -83,7 +83,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     # Reentrant motion guard. Two callers staging move setpoints
     # (target/vel/accel SDOs) on the same drives interleave and the drives
     # execute some random mix. Compound ops (pick_up_at_location,
-    # find_z_with_proximity_sensor, home_motor) hold this for their full
+    # find_z_with_proximity_sensor, _home_servo_gripper) hold this for their full
     # duration; the inner motion primitive (motors_move_joint /
     # motors_move_absolute_execute) re-enters via _motion_owner. halt()
     # deliberately skips the lock — emergency-stop must interrupt regardless.
@@ -184,169 +184,138 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     b15 = (r & 0x8000) == 0x8000
     return (not b14) and (not b15)
 
-  async def _motor_set_homed_status(self, axis: Axis, status: HomeStatus) -> None:
-    await self.driver.write(axis, "UI", 3, int(status))
+  async def gripper_get_homed_status(self) -> HomeStatus:
+    return HomeStatus(await self.driver.query_int(Axis.SERVO_GRIPPER, "UI", 3))
 
-  async def motor_get_homed_status(self, axis: Axis) -> HomeStatus:
-    return HomeStatus(await self.driver.query_int(axis, "UI", 3))
+  async def _gripper_set_homed_status(self, status: HomeStatus) -> None:
+    await self.driver.write(Axis.SERVO_GRIPPER, "UI", 3, int(status))
 
-  async def _motor_reset_encoder_position(self, axis: Axis, position: float) -> None:
-    nid = axis
-    await self.driver.write(nid, "HM", 1, 0)
-    await self.driver.write(nid, "HM", 3, 0)
-    await self.driver.write(nid, "HM", 4, 0)
-    await self.driver.write(nid, "HM", 5, 0)
+  async def _gripper_reset_encoder_position(self, position: float) -> None:
+    sg = Axis.SERVO_GRIPPER
+    await self.driver.write(sg, "HM", 1, 0)
+    await self.driver.write(sg, "HM", 3, 0)
+    await self.driver.write(sg, "HM", 4, 0)
+    await self.driver.write(sg, "HM", 5, 0)
     # Old code packed `position` as int32 via `int(round(float(str(position))))`;
     # preserve that rounding semantic for callers that pass fractional values.
-    await self.driver.write(nid, "HM", 2, int(round(position)))
-    await self.driver.write(nid, "HM", 1, 1)
+    await self.driver.write(sg, "HM", 2, int(round(position)))
+    await self.driver.write(sg, "HM", 1, 1)
 
-  async def _motor_hard_stop_search(
-    self,
-    axis: Axis,
-    srch_vel: int,
-    srch_acc: int,
-    max_pe: int,
-    hs_pe: int,
-    timeout: float,
+  async def _gripper_hard_stop_search(
+    self, srch_vel: int, srch_acc: int, max_pe: int, hs_pe: int, timeout: float,
   ) -> None:
-    # int() at every driver call: driver's contract is `node_id: int`. Axis
-    # is IntEnum so it works by accident, but Axis.value collides with
-    # _GROUP_NODE_ID == 10 if anyone ever adds Axis.AUX = 10 — broadcast
-    # would silently dispatch to all motion nodes.
-    nid = axis
-    await self.driver.write(nid, "ER", 3, max_pe * 10)
-    await self.driver.write(nid, "AC", 0, srch_acc)
-    await self.driver.write(nid, "DC", 0, srch_acc)
+    sg = Axis.SERVO_GRIPPER
+    await self.driver.write(sg, "ER", 3, max_pe * 10)
+    await self.driver.write(sg, "AC", 0, srch_acc)
+    await self.driver.write(sg, "DC", 0, srch_acc)
     for i in [3, 4, 5, 2]:
-      await self.driver.write(nid, "HM", i, 0)
-    await self.driver.write(nid, "JV", 0, srch_vel)
+      await self.driver.write(sg, "HM", i, 0)
+    await self.driver.write(sg, "JV", 0, srch_vel)
 
     try:
       params: List[Union[int, float]] = [int(hs_pe), int(timeout * 1000)]
       last_line = await self.driver.user_program_run(
-        nid, "Home", params, int(timeout), True
+        sg, "Home", params, int(timeout), True
       )
       if last_line in [1, 2, 3]:
         raise RuntimeError(f"Homing Script Error {34 + last_line}")
 
-      curr_pos = await self.driver.motor_get_current_position(nid)
-      await self.driver.write(nid, "PA", 0, curr_pos)
-      await self.driver.write(nid, "SP", 0, srch_vel)
-      await self.driver.write(nid, "AC", 0, srch_acc)
-      await self.driver.write(nid, "DC", 0, srch_acc)
+      curr_pos = await self.driver.motor_get_current_position(sg)
+      await self.driver.write(sg, "PA", 0, curr_pos)
+      await self.driver.write(sg, "SP", 0, srch_vel)
+      await self.driver.write(sg, "AC", 0, srch_acc)
+      await self.driver.write(sg, "DC", 0, srch_acc)
     finally:
       await asyncio.sleep(0.3)
-      await self.driver.execute(nid, "BG", 0)
+      await self.driver.execute(sg, "BG", 0)
       await asyncio.sleep(0.3)
-      await self.driver.write(nid, "ER", 3, int(max_pe))
+      await self.driver.write(sg, "ER", 3, int(max_pe))
 
-  async def _motor_index_search(
-    self,
-    axis: Axis,
-    srch_vel: int,
-    srch_acc: int,
-    positive_direction: bool,
-    timeout: float,
+  async def _gripper_index_search(
+    self, srch_vel: int, srch_acc: int, positive_direction: bool, timeout: float,
   ) -> tuple:
-    nid = axis
-    await self.driver.write(nid, "HM", 1, 0)
+    sg = Axis.SERVO_GRIPPER
+    await self.driver.write(sg, "HM", 1, 0)
 
-    one_revolution = await self.driver.query_int(nid, "CA", 18)
+    one_revolution = await self.driver.query_int(sg, "CA", 18)
     if not positive_direction:
       one_revolution *= -1
 
-    await self.driver.write(nid, "PR", 1, one_revolution)
-    await self.driver.write(nid, "SP", 0, srch_vel)
-    await self.driver.write(nid, "AC", 0, srch_acc)
-    await self.driver.write(nid, "DC", 0, srch_acc)
+    await self.driver.write(sg, "PR", 1, one_revolution)
+    await self.driver.write(sg, "SP", 0, srch_vel)
+    await self.driver.write(sg, "AC", 0, srch_acc)
+    await self.driver.write(sg, "DC", 0, srch_acc)
 
-    await self.driver.write(nid, "HM", 3, 3)  # index only
-    await self.driver.write(nid, "HM", 4, 0)
-    await self.driver.write(nid, "HM", 5, 0)
-    await self.driver.write(nid, "HM", 2, 0)
-    await self.driver.write(nid, "HM", 1, 1)  # arm
+    await self.driver.write(sg, "HM", 3, 3)  # index only
+    await self.driver.write(sg, "HM", 4, 0)
+    await self.driver.write(sg, "HM", 5, 0)
+    await self.driver.write(sg, "HM", 2, 0)
+    await self.driver.write(sg, "HM", 1, 1)  # arm
 
-    await self.driver.execute(nid, "BG", 0)
-    await self.driver.wait_for_moves_done([nid], timeout)
+    await self.driver.execute(sg, "BG", 0)
+    await self.driver.wait_for_moves_done([sg], timeout)
 
-    left = await self.driver.query_int(nid, "HM", 1)
+    left = await self.driver.query_int(sg, "HM", 1)
     if left != 0:
       raise RuntimeError("Homing Failure: Failed to finish index pulse search.")
 
-    captured_position = await self.driver.query_int(nid, "HM", 7)
+    captured_position = await self.driver.query_int(sg, "HM", 7)
     return one_revolution, captured_position
 
-  async def home_motor(
-    self,
-    axis: Axis,
-    hs_offset: int,
-    ind_offset: int,
-    home_pos: int,
-    srch_vel: int,
-    srch_acc: int,
-    max_pe: int,
-    hs_pe: int,
-    offset_vel: int,
-    offset_acc: int,
-    timeout: float,
-  ) -> None:
-    nid = axis
+  async def _home_servo_gripper(self, sgc: ServoGripperConfig) -> None:
+    """Hard-stop + index-pulse home for the servo gripper."""
+    sg = Axis.SERVO_GRIPPER
+    timeout = sgc.home_timeout_msec / 1000
 
     async with self._motion_guard():
-      left = await self.driver.query_int(nid, "CA", 41)
-      if left == 24:
-        raise RuntimeError("Error 43")
+      ca41 = await self.driver.query_int(sg, "CA", 41)
+      if ca41 == 24:
+        raise RuntimeError(
+          f"Servo gripper not ready to home (drive reports CA[41]={ca41}). "
+          "Power-cycle the drive or re-check homing config."
+        )
 
       try:
-        await self._motor_hard_stop_search(axis, srch_vel, srch_acc, max_pe, hs_pe, timeout)
+        await self._gripper_hard_stop_search(
+          sgc.home_search_vel, sgc.home_search_accel,
+          sgc.home_default_position_error, sgc.home_hard_stop_position_error,
+          timeout,
+        )
       except Exception as e:
         # motor_check_if_move_done already raised with the rich EMCY
         # description ("Motor Fault: ..."). Don't overwrite it with the
         # duller MF-bit register read.
         if str(e).startswith("Motor Fault:"):
           raise
-        fault = await self.driver.motor_get_fault(nid)
+        fault = await self.driver.motor_get_fault(sg)
         if fault is not None:
           raise RuntimeError(fault) from e
         raise
 
-      await self.driver.motor_enable(node_id=nid, state=True, use_ds402=axis.is_motion)
+      await self.driver.motor_enable(node_id=sg, state=True, use_ds402=False)
 
       await self._motors_move_absolute_execute_locked(
-        plan=MotorsMovePlan(
-          moves=[
-            MotorMoveParam(
-              node_id=nid,
-              position=hs_offset,
-              velocity=offset_vel,
-              acceleration=offset_acc,
-              relative=False,
-              direction=JointMoveDirection.ShortestWay,
-            )
-          ],
-        )
+        plan=MotorsMovePlan(moves=[MotorMoveParam(
+          node_id=sg, position=sgc.home_hard_stop_offset,
+          velocity=sgc.home_offset_vel, acceleration=sgc.home_offset_accel,
+          relative=False, direction=JointMoveDirection.ShortestWay,
+        )])
       )
 
-      is_positive = hs_offset > 0
-      await self._motor_index_search(axis, abs(srch_vel), srch_acc, is_positive, timeout)
+      is_positive = sgc.home_hard_stop_offset > 0
+      await self._gripper_index_search(
+        abs(sgc.home_search_vel), sgc.home_search_accel, is_positive, timeout,
+      )
 
       await self._motors_move_absolute_execute_locked(
-        plan=MotorsMovePlan(
-          moves=[
-            MotorMoveParam(
-              node_id=nid,
-              position=ind_offset,
-              velocity=offset_vel,
-              acceleration=offset_acc,
-              relative=False,
-              direction=JointMoveDirection.ShortestWay,
-            )
-          ]
-        )
+        plan=MotorsMovePlan(moves=[MotorMoveParam(
+          node_id=sg, position=sgc.home_index_offset,
+          velocity=sgc.home_offset_vel, acceleration=sgc.home_offset_accel,
+          relative=False, direction=JointMoveDirection.ShortestWay,
+        )])
       )
-      await self._motor_reset_encoder_position(axis, home_pos)
-      await self._motor_set_homed_status(axis, HomeStatus.Homed)
+      await self._gripper_reset_encoder_position(sgc.home_pos)
+      await self._gripper_set_homed_status(HomeStatus.Homed)
 
   # -- servo gripper ------------------------------------------------------
 
@@ -368,19 +337,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.driver.write(sg, "PL", 1, sgc.peak_current)
     await self.driver.write(sg, "CL", 1, sgc.continuous_current)
 
-    await self.home_motor(
-      axis=Axis.SERVO_GRIPPER,
-      hs_offset=sgc.home_hard_stop_offset,
-      ind_offset=sgc.home_index_offset,
-      home_pos=sgc.home_pos,
-      srch_vel=sgc.home_search_vel,
-      srch_acc=sgc.home_search_accel,
-      max_pe=sgc.home_default_position_error,
-      hs_pe=sgc.home_hard_stop_position_error,
-      offset_vel=sgc.home_offset_vel,
-      offset_acc=sgc.home_offset_accel,
-      timeout=sgc.home_timeout_msec / 1000,
-    )
+    await self._home_servo_gripper(sgc)
 
     await self._set_servo_gripper_force_limit(100)
 
