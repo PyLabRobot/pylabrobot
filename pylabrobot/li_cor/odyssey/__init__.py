@@ -7,11 +7,7 @@ from pylabrobot.li_cor.odyssey.chatterbox import (
   OdysseyScanningChatterboxBackend,
 )
 from pylabrobot.li_cor.odyssey.device_card import ODYSSEY_CLASSIC_BASE
-from pylabrobot.li_cor.odyssey.driver import (
-  DEFAULT_GROUP,
-  OdysseyDriver,
-  OdysseyScanningParams,
-)
+from pylabrobot.li_cor.odyssey.driver import OdysseyDriver
 from pylabrobot.li_cor.odyssey.errors import (
   OdysseyError,
   OdysseyImageError,
@@ -28,7 +24,9 @@ from pylabrobot.li_cor.odyssey.instrument_status_backend import (
 )
 from pylabrobot.li_cor.odyssey.odyssey import OdysseyClassic
 from pylabrobot.li_cor.odyssey.scanning_backend import (
+  DEFAULT_GROUP,
   OdysseyScanningBackend,
+  OdysseyScanningParams,
   StopResult,
 )
 from pylabrobot.li_cor.odyssey.tagging import (

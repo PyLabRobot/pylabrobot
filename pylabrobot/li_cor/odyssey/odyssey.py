@@ -53,17 +53,17 @@ from .chatterbox import (
   _OdysseyChatterboxState,
 )
 from .device_card import ODYSSEY_CLASSIC_BASE
-from .driver import (
-  DEFAULT_GROUP,
-  OdysseyDriver,
-  OdysseyScanningParams,
-)
+from .driver import OdysseyDriver
 from .image_retrieval_backend import OdysseyImageRetrievalBackend
 from .instrument_status_backend import (
   OdysseyInstrumentStatusBackend,
   normalize_state,
 )
-from .scanning_backend import OdysseyScanningBackend
+from .scanning_backend import (
+  DEFAULT_GROUP,
+  OdysseyScanningBackend,
+  OdysseyScanningParams,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,6 @@ class OdysseyClassic(Device, HasDeviceCard):
     password: Optional[str] = None,
     port: int = 80,
     timeout: float = 60.0,
-    group: str = DEFAULT_GROUP,
     chatterbox: bool = False,
     card: Optional[DeviceCard] = None,
   ) -> None:
@@ -128,7 +127,6 @@ class OdysseyClassic(Device, HasDeviceCard):
         password=resolved_pass,
         port=port,
         timeout=timeout,
-        group=group,
       )
       scanning_backend = OdysseyScanningBackend(driver)
       image_backend = OdysseyImageRetrievalBackend(driver)

@@ -24,8 +24,9 @@ from pylabrobot.capabilities.scanning.instrument_status import (
 from pylabrobot.capabilities.scanning.scanning import ScanningBackend
 from pylabrobot.serializer import SerializableMixin
 
-from .driver import DEFAULT_GROUP, OdysseyDriver, OdysseyScanningParams
+from .driver import OdysseyDriver
 from .instrument_status_backend import OdysseyState
+from .scanning_backend import DEFAULT_GROUP, OdysseyScanningParams
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,6 @@ class OdysseyChatterboxDriver(OdysseyDriver):
     self._auth = None
     self._timeout = None
     self._session = None
-    self._group = DEFAULT_GROUP
-    self._last_status_html = ""
-    self._last_status_http = 0
-    self._last_configure_url = ""
-    self._last_configure_http = 0
-    self._last_configure_body = ""
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     return None
