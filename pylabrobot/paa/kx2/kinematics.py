@@ -157,10 +157,14 @@ def convert_elbow_position_to_angle(cfg: KX2Config, elbow_pos: float) -> float:
 
 def convert_elbow_angle_to_position(cfg: KX2Config, elbow_angle_deg: float) -> float:
   max_travel = cfg.axes[Axis.ELBOW].max_travel
-  elbow_pos = (max_travel + cfg.elbow_zero_offset) * sin(elbow_angle_deg * (pi / 180.0)) - cfg.elbow_zero_offset
+  denom = max_travel + cfg.elbow_zero_offset
   if elbow_angle_deg > 90.0:
-    elbow_pos = 2.0 * max_travel - elbow_pos
-  return elbow_pos
+    # Inverse of `90 + asin((2·max − pos + zero)/(max + zero))`. The `+ zero`
+    # term has to appear on both sides of the reflection or the round-trip
+    # drifts by ~zero·(max+zero)/max — silent encoder-read miscalibration
+    # when the joint is past peak extension.
+    return 2.0 * max_travel + cfg.elbow_zero_offset - denom * sin((elbow_angle_deg - 90.0) * (pi / 180.0))
+  return denom * sin(elbow_angle_deg * (pi / 180.0)) - cfg.elbow_zero_offset
 
 
 # --- trajectory planning ---------------------------------------------------

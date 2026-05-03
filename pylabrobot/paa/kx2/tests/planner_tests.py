@@ -314,16 +314,12 @@ class ElbowConversion(unittest.TestCase):
       back = kinematics.convert_elbow_angle_to_position(cfg, angle)
       self.assertAlmostEqual(back, pos, places=6, msg=f"pos={pos}")
 
-  @unittest.expectedFailure
   def test_round_trip_above_90(self):
-    """Same identity for the piecewise-reflected branch (angle > 90).
+    """Inverse identity for the piecewise-reflected branch (angle > 90).
 
-    The pos->angle formula uses ``(2*max - pos + zero_offset)``; the
-    angle->pos formula reflects via ``2*max - pos`` (no zero_offset
-    correction). The two are not strict inverses when zero_offset != 0,
-    so this test is currently expected to fail. The planner only calls
-    pos->angle, so this asymmetry is not on a hot path; flagging it
-    here as a regression candidate.
+    Forward maps pos > max via ``90 + asin((2*max - pos + zero) / (max + zero))``;
+    the inverse must include the matching ``+ zero`` term so that pos -> angle
+    -> pos is the identity for any pos in the second-half domain.
     """
     cfg = _config(elbow=_axis(min_travel=0.0, max_travel=300.0), elbow_zero_offset=5.0)
     for pos in (300.5, 320.0, 380.0, 450.0, 550.0, 600.0):
