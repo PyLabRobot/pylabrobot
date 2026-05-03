@@ -1168,11 +1168,22 @@ class KX2Driver(Driver):
       if not use_ds402:
         await self.write(node_id, "MO", 0, want)
       elif state:
-        # DS402 enable sequence: Fault -> Shutdown -> Switched On -> Op Enabled.
-        # Matches the C# reference (clscanmotor.cs:4495-4509): back-to-back
-        # CW writes, a single 100 ms settle at the end, then MO query.
-        for cw in (0, 128, 6, 7, 15):
-          await self._control_word_set(node_id=node_id, value=cw)
+        # DS402 enable: edge-pulsed CW writes with SW confirmation between
+        # transitions. CiA 402 §6.1: Fault -> Switch on disabled fires on
+        # the rising edge of CW bit 7 (Fault Reset). RPDO1 is mapped
+        # SynchronousCyclic, so back-to-back writes within one servo cycle
+        # can be coalesced and the drive never sees the edge — fault never
+        # clears and the retry loop spins. Polling SW between transitions
+        # forces each CW write to land on the wire before the next one.
+        await self._control_word_set(node_id=node_id, value=0x00)  # clear bits
+        await self._control_word_set(node_id=node_id, value=0x80)  # fault reset
+        await self._wait_sw_bit(node_id, bit_mask=1 << 3, want_high=False)
+        await self._control_word_set(node_id=node_id, value=0x06)  # Shutdown
+        await self._wait_sw_bit(node_id, bit_mask=1 << 0, want_high=True)
+        await self._control_word_set(node_id=node_id, value=0x07)  # Switch on
+        await self._wait_sw_bit(node_id, bit_mask=1 << 1, want_high=True)
+        await self._control_word_set(node_id=node_id, value=0x0F)  # Enable op
+        # Bit 2 (Operation enabled) is confirmed by the MO query below.
       else:
         # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
         # Matches C# (clscanmotor.cs:4540-4543) — back-to-back, no inter-CW sleep.
@@ -1336,31 +1347,36 @@ class KX2Driver(Driver):
       f"rising edge)"
     )
 
-  async def _wait_setpoint_ack(
-    self, node_id: int, *, want_high: bool, timeout: float = 0.05
+  async def _wait_sw_bit(
+    self,
+    node_id: int,
+    *,
+    bit_mask: int,
+    want_high: bool,
+    timeout_s: float = 0.05,
   ) -> bool:
-    """Wait until 0x6041 bit 12 matches ``want_high`` (or timeout).
+    """Wait until ``self._statusword[node_id] & bit_mask`` matches ``want_high``.
 
-    TPDO3 maps StatusWord with the StatusWordEvent trigger; the canopen
-    listener thread parses each frame into self._statusword[node_id] and
-    signals self._statusword_event[node_id]. We wait on the event, with
+    TPDO3 maps StatusWord (0x6041) with the StatusWordEvent trigger; the
+    canopen listener thread parses each frame into self._statusword[node_id]
+    and signals self._statusword_event[node_id]. We wait on the event, with
     a 5 ms grace before falling back to an SDO probe — covers the case
-    where the drive's event-trigger config didn't take and TPDO3 is
-    silent. 50 ms total is plenty: bit 12 flips within a servo cycle
-    (~1-2 ms) once the drive sees the edge.
+    where the drive's event-trigger config didn't take and TPDO3 is silent.
+    Returns True on a match, False on timeout.
     """
     assert self._loop is not None
     ev = self._statusword_event.get(node_id)
-    deadline = self._loop.time() + timeout
+    deadline = self._loop.time() + timeout_s
     while self._loop.time() < deadline:
       sw = self._statusword.get(node_id)
-      if sw is not None and bool(sw & (1 << 12)) == want_high:
+      if sw is not None and bool(sw & bit_mask) == want_high:
         return True
       if ev is None:
         # No subscription (drive outside motion_node_ids); SDO poll only.
         raw = await self._can_sdo_upload(node_id, 0x6041, 0x00)
         sw = int.from_bytes(raw[:2], "little")
-        if bool(sw & (1 << 12)) == want_high:
+        self._statusword[node_id] = sw
+        if bool(sw & bit_mask) == want_high:
           return True
         await asyncio.sleep(0.001)
         continue
@@ -1375,6 +1391,19 @@ class KX2Driver(Driver):
         sw = int.from_bytes(raw[:2], "little")
         self._statusword[node_id] = sw
     return False
+
+  async def _wait_setpoint_ack(
+    self, node_id: int, *, want_high: bool, timeout: float = 0.05
+  ) -> bool:
+    """Wait until 0x6041 bit 12 (setpoint_ack) matches ``want_high``.
+
+    Thin specialization of :meth:`_wait_sw_bit` for the PPM trigger
+    handshake. 50 ms total is plenty: bit 12 flips within a servo cycle
+    (~1-2 ms) once the drive sees the CW bit-4 edge.
+    """
+    return await self._wait_sw_bit(
+      node_id, bit_mask=1 << 12, want_high=want_high, timeout_s=timeout
+    )
 
   async def user_program_run(
     self,
