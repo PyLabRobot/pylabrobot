@@ -59,10 +59,12 @@ from .instrument_status_backend import (
   OdysseyInstrumentStatusBackend,
   normalize_state,
 )
+from .errors import OdysseyScanError
 from .scanning_backend import (
   DEFAULT_GROUP,
   OdysseyScanningBackend,
   OdysseyScanningParams,
+  StopResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,10 @@ logger = logging.getLogger(__name__)
 # finishes — it never reports ``Completed``. The fresh-terminal-state
 # guard in :meth:`OdysseyClassic.wait_until_done` makes Idle safe.
 _TERMINAL_STATES = frozenset({"Idle", "Completed", "Stopped", "Failed"})
+
+# Bound on the post-Stop "settle to Idle" wait used by :meth:`stop_and_save`.
+_STOP_IDLE_TIMEOUT_SEC = 15.0
+_STOP_IDLE_POLL_SEC = 1.0
 
 
 class OdysseyClassic(Device, HasDeviceCard):
@@ -218,4 +224,58 @@ class OdysseyClassic(Device, HasDeviceCard):
       poll_interval=poll_interval,
       on_progress=on_progress,
       require_fresh=False,
+    )
+
+  async def stop_and_save(self) -> StopResult:
+    """Graceful Stop that saves whatever has been acquired.
+
+    Cross-capability orchestration:
+      1. Issue the scanning Stop command (saves partial output).
+      2. Poll status until the instrument reports Idle (bounded by
+         ``_STOP_IDLE_TIMEOUT_SEC``) — what makes "auto-return to
+         idle" real.
+      3. Probe which channel TIFFs were written.
+
+    Lives on the device because it spans three capabilities; no
+    single backend should hold references to the other two.
+
+    Raises :class:`OdysseyScanError` if the instrument does not
+    settle at Idle within the timeout.
+    """
+    scanning_backend = self.scanning.backend
+    group, name = scanning_backend.current_scan  # type: ignore[attr-defined]
+    if not group or not name:
+      await self.scanning.stop()
+      return StopResult(state="Stopped", partial=False, channels_available=[])
+
+    await self.scanning.stop()
+
+    deadline = asyncio.get_event_loop().time() + _STOP_IDLE_TIMEOUT_SEC
+    while True:
+      reading = await self.status.read_status()
+      state = reading.state.strip().lower()
+      if state in ("idle", "stopped"):
+        break
+      if asyncio.get_event_loop().time() > deadline:
+        raise OdysseyScanError(
+          f"Instrument did not return to Idle within "
+          f"{_STOP_IDLE_TIMEOUT_SEC:.0f} s after Stop "
+          f"(last state={reading.state!r})"
+        )
+      await asyncio.sleep(_STOP_IDLE_POLL_SEC)
+
+    image_backend = self.images.backend
+    channels_available: list[int] = []
+    for ch in (700, 800):
+      try:
+        data = await image_backend.download_channel(group, name, ch)  # type: ignore[attr-defined]
+        if data:
+          channels_available.append(ch)
+      except Exception as e:
+        logger.info("Channel %d not available after Stop: %s", ch, e)
+
+    return StopResult(
+      state="Stopped",
+      partial=bool(channels_available),
+      channels_available=channels_available,
     )

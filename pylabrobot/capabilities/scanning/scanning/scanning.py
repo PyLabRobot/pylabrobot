@@ -12,10 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Scanning(Capability):
-  """Flatbed scanning capability — fluorescence / luminescence imager control.
-
-  See :doc:`/user_guide/capabilities/scanning` for a walkthrough.
-  """
+  """Flatbed scanning capability — fluorescence / luminescence imager control."""
 
   def __init__(self, backend: ScanningBackend):
     super().__init__(backend=backend)

@@ -137,6 +137,11 @@ class OdysseyScanningChatterboxBackend(ScanningBackend):
     self._state.configured = False
     self._state.stop_was_partial = False
 
+  @property
+  def current_scan(self) -> tuple[str, str]:
+    """Return ``(group, name)`` for the most recently configured scan."""
+    return self._state.current_group, self._state.current_scan_name
+
   def _save_scan(self, partial: bool) -> None:
     group = self._state.current_group or DEFAULT_GROUP
     name = self._state.current_scan_name or "scan"
@@ -169,6 +174,17 @@ class OdysseyImageRetrievalChatterboxBackend(ImageRetrievalBackend):
         f"Scan '{scan_name}' not found in group '{group}'"
       )
     return scans[scan_name]
+
+  async def download_channel(
+    self, group: str, scan_name: str, channel: int
+  ) -> bytes:
+    """Mirrors the real backend's per-channel download.
+
+    The chatterbox stores one blob per scan rather than per channel,
+    so we return that blob for any requested channel — sufficient for
+    cross-capability orchestration tests (e.g. ``stop_and_save``).
+    """
+    return await self.download(group, scan_name)
 
 
 class OdysseyInstrumentStatusChatterboxBackend(InstrumentStatusBackend):

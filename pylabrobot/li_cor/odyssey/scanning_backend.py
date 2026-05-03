@@ -42,10 +42,6 @@ _INIT_POLL_STEPS = 7
 # Default operational scan group on the Odyssey.
 DEFAULT_GROUP = "odyssey"
 
-# Bound on the post-Stop "settle to Idle" wait.
-_STOP_IDLE_TIMEOUT_SEC = 15.0
-_STOP_IDLE_POLL_SEC = 1.0
-
 
 @dataclass
 class OdysseyScanningParams(BackendParams):
@@ -353,58 +349,7 @@ class OdysseyScanningBackend(ScanningBackend):
     )
     return _parse_info_html(html)
 
-  async def stop_and_save(
-    self,
-    image_retrieval_backend,
-    instrument_status_backend,
-  ) -> StopResult:
-    """Graceful Stop that saves whatever has been acquired.
-
-    1. Issue the Stop command.
-    2. Poll status until the instrument reports Idle (bounded by
-       _STOP_IDLE_TIMEOUT_SEC) — what makes "auto-return to idle" real.
-    3. Probe which channel TIFFs were written.
-
-    Cross-capability — needs the image_retrieval and instrument_status
-    backends as collaborators (the scanning backend doesn't own those
-    protocols). Pass them in from the device or call site.
-
-    Raises :class:`OdysseyScanError` if the instrument does not
-    settle at Idle within the timeout.
-    """
-    if not self._current_scan or not self._current_group:
-      await self.stop()
-      return StopResult(state="Stopped", partial=False, channels_available=[])
-
-    await self.stop()
-
-    deadline = asyncio.get_event_loop().time() + _STOP_IDLE_TIMEOUT_SEC
-    while True:
-      reading = await instrument_status_backend.read_status()
-      state = reading.state.strip().lower()
-      if state in ("idle", "stopped"):
-        break
-      if asyncio.get_event_loop().time() > deadline:
-        raise OdysseyScanError(
-          f"Instrument did not return to Idle within "
-          f"{_STOP_IDLE_TIMEOUT_SEC:.0f} s after Stop "
-          f"(last state={reading.state!r})"
-        )
-      await asyncio.sleep(_STOP_IDLE_POLL_SEC)
-
-    channels_available: list[int] = []
-    for ch in (700, 800):
-      try:
-        data = await image_retrieval_backend.download_channel(
-          self._current_group, self._current_scan, ch,
-        )
-        if data:
-          channels_available.append(ch)
-      except Exception as e:
-        logger.info("Channel %d not available after Stop: %s", ch, e)
-
-    return StopResult(
-      state="Stopped",
-      partial=bool(channels_available),
-      channels_available=channels_available,
-    )
+  @property
+  def current_scan(self) -> tuple[str, str]:
+    """Return ``(group, name)`` for the most recently configured scan."""
+    return self._current_group, self._current_scan
