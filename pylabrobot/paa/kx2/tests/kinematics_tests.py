@@ -124,6 +124,125 @@ class FKIKRoundTrip(unittest.TestCase):
       )
 
 
+class FKIKAnchors(unittest.TestCase):
+  """Anchor points pinning FK and IK output values for representative
+  joints/poses. Values were snapshotted from the current implementation —
+  if you change the FK or IK formula and these tests fail, the new
+  output is provably different from the old one and needs explicit
+  hardware verification."""
+
+  def _cfg(self):
+    def ax(min_travel=-180.0, max_travel=180.0, unlimited_travel=False):
+      return AxisConfig(
+        motor_conversion_factor=1.0, max_travel=max_travel, min_travel=min_travel,
+        unlimited_travel=unlimited_travel, absolute_encoder=True,
+        max_vel=100.0, max_accel=100.0,
+        joint_move_direction=JointMoveDirection.Normal,
+        digital_inputs={}, analog_inputs={}, outputs={},
+      )
+    return KX2Config(
+      wrist_offset=10.0, elbow_offset=20.0, elbow_zero_offset=5.0,
+      axes={
+        Axis.SHOULDER: ax(),
+        Axis.Z: ax(min_travel=0.0, max_travel=750.0),
+        Axis.ELBOW: ax(min_travel=0.0, max_travel=300.0),
+        Axis.WRIST: ax(unlimited_travel=True),
+      },
+      base_to_gripper_clearance_z=0.0, base_to_gripper_clearance_arm=0.0,
+      robot_on_rail=False, servo_gripper=None,
+    )
+
+  def _gripper(self):
+    return GripperParams(length=15.0, z_offset=3.0, finger_side="barcode_reader")
+
+  def test_fk_zero_pose(self):
+    """All joints at 0 → gripper at (0, 20, -3, 0°) for the default
+    barcode-reader gripper (15 mm length, 3 mm z_offset)."""
+    p = kinematics.fk(
+      {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 0.0, Axis.WRIST: 0.0},
+      self._cfg(), self._gripper(),
+    )
+    self.assertAlmostEqual(p.location.x, 0.0, places=6)
+    self.assertAlmostEqual(p.location.y, 20.0, places=6)
+    self.assertAlmostEqual(p.location.z, -3.0, places=6)
+    self.assertAlmostEqual(p.rotation.z, 0.0, places=6)
+
+  def test_fk_q1_mid(self):
+    p = kinematics.fk(
+      {Axis.SHOULDER: 30.0, Axis.Z: 100.0, Axis.ELBOW: 80.0, Axis.WRIST: 0.0},
+      self._cfg(), self._gripper(),
+    )
+    self.assertAlmostEqual(p.location.x, -50.0, places=6)
+    self.assertAlmostEqual(p.location.y, 86.6025, places=4)
+    self.assertAlmostEqual(p.location.z, 97.0, places=6)
+    self.assertAlmostEqual(p.rotation.z, 30.0, places=6)
+
+  def test_fk_q2_mid(self):
+    p = kinematics.fk(
+      {Axis.SHOULDER: -45.0, Axis.Z: 50.0, Axis.ELBOW: 120.0, Axis.WRIST: 30.0},
+      self._cfg(), self._gripper(),
+    )
+    self.assertAlmostEqual(p.location.x, 105.7193, places=4)
+    self.assertAlmostEqual(p.location.y, 95.1127, places=4)
+    self.assertAlmostEqual(p.location.z, 47.0, places=6)
+    self.assertAlmostEqual(p.rotation.z, -15.0, places=6)
+
+  def test_fk_max_extension_with_wrist(self):
+    p = kinematics.fk(
+      {Axis.SHOULDER: 90.0, Axis.Z: 200.0, Axis.ELBOW: 250.0, Axis.WRIST: -45.0},
+      self._cfg(), self._gripper(),
+    )
+    self.assertAlmostEqual(p.location.x, -274.3934, places=4)
+    self.assertAlmostEqual(p.location.y, -10.6066, places=4)
+    self.assertAlmostEqual(p.location.z, 197.0, places=6)
+    self.assertAlmostEqual(p.rotation.z, 45.0, places=6)
+
+  def test_fk_wrist_180_keeps_yaw_in_range(self):
+    """Wrist at 180° + shoulder at 0° gives yaw=180° (not -180° via the
+    boundary snap)."""
+    p = kinematics.fk(
+      {Axis.SHOULDER: 0.0, Axis.Z: 0.0, Axis.ELBOW: 100.0, Axis.WRIST: 180.0},
+      self._cfg(), self._gripper(),
+    )
+    self.assertAlmostEqual(p.location.x, 0.0, places=6)
+    self.assertAlmostEqual(p.location.y, 150.0, places=6)
+    self.assertAlmostEqual(p.rotation.z, 180.0, places=6)
+
+  def test_ik_on_plus_y_axis(self):
+    """Target on +Y axis → shoulder = 0; elbow = y - sum_of_offsets."""
+    pose = GripperLocation(location=Coordinate(x=0, y=300, z=50), rotation=Rotation(z=0))
+    j = kinematics.ik(pose, self._cfg(), self._gripper())
+    self.assertAlmostEqual(j[Axis.SHOULDER], 0.0, places=6)
+    self.assertAlmostEqual(j[Axis.Z], 53.0, places=6)
+    self.assertAlmostEqual(j[Axis.ELBOW], 280.0, places=4)
+    self.assertAlmostEqual(j[Axis.WRIST], 0.0, places=6)
+
+  def test_ik_q1_target(self):
+    pose = GripperLocation(location=Coordinate(x=100, y=200, z=100), rotation=Rotation(z=30))
+    j = kinematics.ik(pose, self._cfg(), self._gripper())
+    self.assertAlmostEqual(j[Axis.SHOULDER], -23.474916, places=4)
+    self.assertAlmostEqual(j[Axis.Z], 103.0, places=6)
+    self.assertAlmostEqual(j[Axis.ELBOW], 197.209286, places=4)
+    self.assertAlmostEqual(j[Axis.WRIST], 53.474916, places=4)
+
+  def test_ik_q2_target(self):
+    pose = GripperLocation(location=Coordinate(x=-150, y=150, z=75), rotation=Rotation(z=-45))
+    j = kinematics.ik(pose, self._cfg(), self._gripper())
+    self.assertAlmostEqual(j[Axis.SHOULDER], 40.955309, places=4)
+    self.assertAlmostEqual(j[Axis.Z], 78.0, places=6)
+    self.assertAlmostEqual(j[Axis.ELBOW], 177.661703, places=4)
+    self.assertAlmostEqual(j[Axis.WRIST], -85.955309, places=4)
+
+  def test_ik_negative_quadrant(self):
+    """Target in negative-Y region — shoulder rotates past 90°."""
+    pose = GripperLocation(location=Coordinate(x=-50, y=-200, z=120), rotation=Rotation(z=90))
+    j = kinematics.ik(pose, self._cfg(), self._gripper())
+    self.assertAlmostEqual(j[Axis.SHOULDER], 161.995838, places=4)
+    self.assertAlmostEqual(j[Axis.Z], 123.0, places=6)
+    self.assertAlmostEqual(j[Axis.ELBOW], 175.297408, places=4)
+    self.assertAlmostEqual(j[Axis.WRIST], -71.995838, places=4)
+
+
 class IKErrors(unittest.TestCase):
   def test_x_rotation_raises_ikerror(self):
     c = _config()
