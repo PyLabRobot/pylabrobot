@@ -14,9 +14,7 @@ class RecordingScanningBackend(ScanningBackend):
   def __init__(self):
     self.calls: List[Tuple[str, Optional[SerializableMixin]]] = []
 
-  async def configure(
-    self, backend_params: Optional[SerializableMixin] = None
-  ) -> None:
+  async def configure(self, backend_params: Optional[SerializableMixin] = None) -> None:
     self.calls.append(("configure", backend_params))
 
   async def start(self) -> None:

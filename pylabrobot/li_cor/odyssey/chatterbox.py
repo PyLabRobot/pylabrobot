@@ -22,6 +22,7 @@ from pylabrobot.capabilities.scanning.instrument_status import (
   InstrumentStatusReading,
 )
 from pylabrobot.capabilities.scanning.scanning import ScanningBackend
+from pylabrobot.device import Driver
 from pylabrobot.serializer import SerializableMixin
 
 from .driver import OdysseyDriver
@@ -63,7 +64,7 @@ class OdysseyChatterboxDriver(OdysseyDriver):
   def __init__(self) -> None:
     # Skip OdysseyDriver.__init__ — it requires real credentials.
     # Call Driver.__init__ directly for instance-set registration.
-    OdysseyDriver.__bases__[0].__init__(self)
+    Driver.__init__(self)
     self._host = "chatterbox"
     self._port = 0
     self._timeout_seconds = 0.0
@@ -91,11 +92,10 @@ class OdysseyScanningChatterboxBackend(ScanningBackend):
     super().__init__()
     self._state = state
 
-  async def configure(
-    self, backend_params: Optional[SerializableMixin] = None
-  ) -> None:
+  async def configure(self, backend_params: Optional[SerializableMixin] = None) -> None:
     params = (
-      backend_params if isinstance(backend_params, OdysseyScanningParams)
+      backend_params
+      if isinstance(backend_params, OdysseyScanningParams)
       else OdysseyScanningParams()
     )
     self._state.configured = True
@@ -147,10 +147,7 @@ class OdysseyScanningChatterboxBackend(ScanningBackend):
     name = self._state.current_scan_name or "scan"
     if group not in self._state.scans:
       self._state.scans[group] = {}
-    payload = (
-      b"CHATTERBOX_PARTIAL_TIFF_DATA" if partial
-      else b"CHATTERBOX_TIFF_DATA"
-    )
+    payload = b"CHATTERBOX_PARTIAL_TIFF_DATA" if partial else b"CHATTERBOX_TIFF_DATA"
     self._state.scans[group][name] = payload
 
 
@@ -170,14 +167,10 @@ class OdysseyImageRetrievalChatterboxBackend(ImageRetrievalBackend):
   async def download(self, group: str, scan_name: str) -> bytes:
     scans = self._state.scans.get(group, {})
     if scan_name not in scans:
-      raise FileNotFoundError(
-        f"Scan '{scan_name}' not found in group '{group}'"
-      )
+      raise FileNotFoundError(f"Scan '{scan_name}' not found in group '{group}'")
     return scans[scan_name]
 
-  async def download_channel(
-    self, group: str, scan_name: str, channel: int
-  ) -> bytes:
+  async def download_channel(self, group: str, scan_name: str, channel: int) -> bytes:
     """Mirrors the real backend's per-channel download.
 
     The chatterbox stores one blob per scan rather than per channel,

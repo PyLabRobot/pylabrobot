@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Optional
+from typing import Any, Awaitable, Callable, Optional, TypeVar
 
 import aiohttp
 
@@ -34,6 +34,8 @@ RETRYABLE_EXCEPTIONS = (
 )
 _HTTP_RETRY_ATTEMPTS = 3
 _HTTP_RETRY_DELAY = 0.25
+
+_T = TypeVar("_T")
 
 # Environment variables for credentials.
 _CRED_ENV_USER = "ODYSSEY_USER"
@@ -75,7 +77,9 @@ class OdysseyDriver(Driver):
     self._session: Optional[aiohttp.ClientSession] = None
     logger.info(
       "OdysseyDriver initialised: host=%s %s=%s",
-      host, _CRED_ENV_USER, username,
+      host,
+      _CRED_ENV_USER,
+      username,
     )
 
   def serialize(self) -> dict:
@@ -103,21 +107,24 @@ class OdysseyDriver(Driver):
     password = os.environ.get(_CRED_ENV_PASS, "")
     if not username or not password:
       missing = [
-        name for name, val in (
+        name
+        for name, val in (
           (_CRED_ENV_USER, username),
           (_CRED_ENV_PASS, password),
-        ) if not val
+        )
+        if not val
       ]
-      raise ValueError(
-        f"Missing required environment variable(s): {', '.join(missing)}."
-      )
+      raise ValueError(f"Missing required environment variable(s): {', '.join(missing)}.")
     if host is None:
       host = os.environ.get("ODYSSEY_HOST", "")
       if not host:
         raise ValueError("No host provided and ODYSSEY_HOST is unset.")
     return cls(
-      host=host, username=username, password=password,
-      port=port, timeout=timeout,
+      host=host,
+      username=username,
+      password=password,
+      port=port,
+      timeout=timeout,
     )
 
   @property
@@ -143,9 +150,7 @@ class OdysseyDriver(Driver):
     )
     async with self._session.get(self._base_url) as resp:
       if resp.status != 200:
-        raise ConnectionError(
-          f"Cannot reach Odyssey at {self._base_url} (HTTP {resp.status})"
-        )
+        raise ConnectionError(f"Cannot reach Odyssey at {self._base_url} (HTTP {resp.status})")
     logger.info("Connected to Odyssey at %s", self._base_url)
 
   async def stop(self) -> None:
@@ -182,9 +187,7 @@ class OdysseyDriver(Driver):
   ) -> tuple[int, str, dict[str, str]]:
     session = self._check_session()
     url = f"{self._base_url}{path}"
-    async with session.post(
-      url, data=form_data, allow_redirects=allow_redirects
-    ) as resp:
+    async with session.post(url, data=form_data, allow_redirects=allow_redirects) as resp:
       body = await resp.text()
       return resp.status, body, dict(resp.headers)
 
@@ -209,9 +212,7 @@ class OdysseyDriver(Driver):
   ) -> tuple[int, str, dict[str, str]]:
     session = self._check_session()
     url = f"{self._base_url}{path}"
-    async with session.get(
-      url, params=params, allow_redirects=allow_redirects
-    ) as resp:
+    async with session.get(url, params=params, allow_redirects=allow_redirects) as resp:
       body = await resp.text()
       return resp.status, body, dict(resp.headers)
 
@@ -243,7 +244,11 @@ class OdysseyDriver(Driver):
       data = await resp.read()
       return resp.status, data, dict(resp.headers), resp.content_length
 
-  async def _retry(self, method, *args):
+  async def _retry(
+    self,
+    method: Callable[..., Awaitable[_T]],
+    *args: Any,
+  ) -> _T:
     last_exc: Optional[Exception] = None
     for attempt in range(_HTTP_RETRY_ATTEMPTS):
       try:
@@ -253,14 +258,21 @@ class OdysseyDriver(Driver):
         if attempt < _HTTP_RETRY_ATTEMPTS - 1:
           logger.warning(
             "%s attempt %d/%d failed (%s) — retrying",
-            method.__name__, attempt + 1, _HTTP_RETRY_ATTEMPTS, exc,
+            method.__name__,
+            attempt + 1,
+            _HTTP_RETRY_ATTEMPTS,
+            exc,
           )
           await asyncio.sleep(_HTTP_RETRY_DELAY)
           continue
     assert last_exc is not None
     raise last_exc
 
-  async def _retry_bytes(self, path, params):
+  async def _retry_bytes(
+    self,
+    path: str,
+    params: Optional[dict[str, str]],
+  ) -> tuple[int, bytes, dict[str, str], Optional[int]]:
     last_exc: Optional[Exception] = None
     for attempt in range(_HTTP_RETRY_ATTEMPTS):
       try:
@@ -270,7 +282,10 @@ class OdysseyDriver(Driver):
         if attempt < _HTTP_RETRY_ATTEMPTS - 1:
           logger.warning(
             "GET bytes %s attempt %d/%d failed (%s) — retrying",
-            path, attempt + 1, _HTTP_RETRY_ATTEMPTS, exc,
+            path,
+            attempt + 1,
+            _HTTP_RETRY_ATTEMPTS,
+            exc,
           )
           await asyncio.sleep(_HTTP_RETRY_DELAY)
           continue

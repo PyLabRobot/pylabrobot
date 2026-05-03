@@ -4,9 +4,7 @@ import unittest
 
 from pylabrobot.device_card import DeviceCard, HasDeviceCard
 from pylabrobot.li_cor.odyssey import (
-  ODYSSEY_CLASSIC_BASE,
   OdysseyClassic,
-  OdysseyScanError,
   OdysseyScanningParams,
   StopResult,
 )
@@ -26,30 +24,35 @@ class TestOdysseyDeviceCard(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(odyssey.card.has("instrument_status"))
 
   def test_instance_card_merges_identity(self):
-    instance = DeviceCard.instance(identity={
-      "pid": "http://hdl.handle.net/21.11157/test",
-      "landing_page": "https://example.org/test",
-      "name": "Test Lab Odyssey",
-    })
+    instance = DeviceCard.instance(
+      identity={
+        "pid": "http://hdl.handle.net/21.11157/test",
+        "landing_page": "https://example.org/test",
+        "name": "Test Lab Odyssey",
+      }
+    )
     odyssey = OdysseyClassic(chatterbox=True, card=instance)
-    self.assertEqual(odyssey.card.identity["pid"],
-                     "http://hdl.handle.net/21.11157/test")
+    self.assertEqual(odyssey.card.identity["pid"], "http://hdl.handle.net/21.11157/test")
     self.assertEqual(odyssey.card.identity["name"], "Test Lab Odyssey")
     # model-base preserved
     self.assertEqual(odyssey.card.vendor, "LI-COR Biosciences")
     self.assertTrue(odyssey.card.has("scanning"))
 
   def test_instance_card_can_override_capability_specs(self):
-    custom = DeviceCard.instance(capabilities={
-      "scanning": {"resolutions_um": [42, 84]},  # subset
-    })
+    custom = DeviceCard.instance(
+      capabilities={
+        "scanning": {"resolutions_um": [42, 84]},  # subset
+      }
+    )
     odyssey = OdysseyClassic(chatterbox=True, card=custom)
     self.assertEqual(
-      odyssey.card.get("scanning", "resolutions_um"), [42, 84],
+      odyssey.card.get("scanning", "resolutions_um"),
+      [42, 84],
     )
     # other scanning specs from the base survive
     self.assertEqual(
-      odyssey.card.get("scanning", "scan_area_cm"), [25, 25],
+      odyssey.card.get("scanning", "scan_area_cm"),
+      [25, 25],
     )
 
   def test_implements_has_device_card_mixin(self):

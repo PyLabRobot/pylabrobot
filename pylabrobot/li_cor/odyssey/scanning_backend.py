@@ -145,7 +145,8 @@ def _parse_error_block(body: str) -> Optional[str]:
   """Extract <Error shorterror="X">message</Error> if present."""
   m = re.search(
     r'<Error\s+shorterror="([^"]+)"\s*>\s*(.*?)\s*</Error>',
-    body, re.IGNORECASE | re.DOTALL,
+    body,
+    re.IGNORECASE | re.DOTALL,
   )
   if m:
     short = m.group(1).strip()
@@ -156,10 +157,12 @@ def _parse_error_block(body: str) -> Optional[str]:
 
 def _parse_info_html(html: str) -> dict[str, str]:
   """Parse the imaging info panel HTML."""
+
   def _extract(label: str) -> str:
     pattern = rf"{label}\s*[:]\s*(?:<[^>]+>)*\s*([^<\n]+)"
     match = re.search(pattern, html, re.IGNORECASE)
     return match.group(1).strip() if match else ""
+
   return {
     "dimensions": _extract("Dimensions"),
     "file_size": _extract("File Size"),
@@ -182,9 +185,7 @@ class OdysseyScanningBackend(ScanningBackend):
     self._current_scan: str = ""
     self._current_group: str = ""
 
-  def _coerce_params(
-    self, backend_params: Optional[SerializableMixin]
-  ) -> OdysseyScanningParams:
+  def _coerce_params(self, backend_params: Optional[SerializableMixin]) -> OdysseyScanningParams:
     """Accept None / OdysseyScanningParams; reject anything else."""
     if backend_params is None:
       return OdysseyScanningParams()
@@ -195,9 +196,7 @@ class OdysseyScanningBackend(ScanningBackend):
       f"got {type(backend_params).__name__}"
     )
 
-  async def configure(
-    self, backend_params: Optional[SerializableMixin] = None
-  ) -> None:
+  async def configure(self, backend_params: Optional[SerializableMixin] = None) -> None:
     params = self._coerce_params(backend_params)
 
     # If a previous session left the scanner Paused, release it first.
@@ -217,7 +216,10 @@ class OdysseyScanningBackend(ScanningBackend):
     form_data = params.to_form_data()
     logger.info(
       "Configuring scan: name=%s group=%s res=%s quality=%s",
-      params.name, params.group, params.resolution, params.quality,
+      params.name,
+      params.group,
+      params.resolution,
+      params.quality,
     )
     logger.debug("Form data: %s", form_data)
 
@@ -238,18 +240,14 @@ class OdysseyScanningBackend(ScanningBackend):
       return
 
     if status >= 400:
-      raise OdysseyScanError(
-        f"Scanner rejected configuration: HTTP {status}."
-      )
+      raise OdysseyScanError(f"Scanner rejected configuration: HTTP {status}.")
 
     # 2xx body — instrument may have embedded a structured error.
     if "busy" in body.lower() or "<TITLE>Error</TITLE>" in body:
       parsed = _parse_error_block(body)
       if parsed:
         raise OdysseyScanError(f"Scanner rejected configuration — {parsed}")
-      raise OdysseyScanError(
-        f"Scanner rejected configuration: {body[:500]}"
-      )
+      raise OdysseyScanError(f"Scanner rejected configuration: {body[:500]}")
 
   async def _wait_initialization(
     self,
@@ -263,7 +261,9 @@ class OdysseyScanningBackend(ScanningBackend):
       params = {"scan": scan_name, "scangroup": group, "timeout": str(t)}
       logger.info("initializing.pl?timeout=%d", t)
       status, _, headers = await self._driver.get(
-        _INITIALIZING_URL_PATH, params=params, allow_redirects=False,
+        _INITIALIZING_URL_PATH,
+        params=params,
+        allow_redirects=False,
       )
       if status == 302 and t <= 1:
         redirect = headers.get("Location", "")
@@ -304,9 +304,7 @@ class OdysseyScanningBackend(ScanningBackend):
       return
     if "<Error" in body or "not configured" in body.lower():
       parsed = _parse_error_block(body)
-      raise OdysseyScanError(
-        f"Scan command '{action}' failed: {parsed or body[:500]}"
-      )
+      raise OdysseyScanError(f"Scan command '{action}' failed: {parsed or body[:500]}")
 
   async def _on_stop(self) -> None:
     """Safety on lifecycle stop: cancel any in-flight scan."""
@@ -317,20 +315,20 @@ class OdysseyScanningBackend(ScanningBackend):
 
   # -- Vendor extensions ---------------------------------------------------
 
-  async def estimate_time(
-    self, backend_params: Optional[SerializableMixin] = None
-  ) -> str:
+  async def estimate_time(self, backend_params: Optional[SerializableMixin] = None) -> str:
     """Return the instrument's time estimate for the configured scan.
 
     Returns the time string, e.g. "0 hours 2 minutes 15 seconds".
     """
     params = self._coerce_params(backend_params)
     _, html, _ = await self._driver.get(
-      _TIME_URL_PATH, params=params.to_time_params(),
+      _TIME_URL_PATH,
+      params=params.to_time_params(),
     )
     match = re.search(
       r"Estimated Scan Time.*?(\d+ hours? \d+ minutes? \d+ seconds?)",
-      html, re.DOTALL | re.IGNORECASE,
+      html,
+      re.DOTALL | re.IGNORECASE,
     )
     return match.group(1) if match else html
 

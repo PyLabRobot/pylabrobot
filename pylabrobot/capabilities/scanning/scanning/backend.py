@@ -26,9 +26,7 @@ class ScanningBackend(CapabilityBackend, metaclass=ABCMeta):
   """
 
   @abstractmethod
-  async def configure(
-    self, backend_params: Optional[SerializableMixin] = None
-  ) -> None:
+  async def configure(self, backend_params: Optional[SerializableMixin] = None) -> None:
     """Set up the next scan with vendor-specific parameters."""
 
   @abstractmethod

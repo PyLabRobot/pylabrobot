@@ -34,7 +34,7 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -162,4 +162,4 @@ class HasDeviceCard:
   — a Device-attribute marker mixin, not a Backend mixin.
   """
 
-  card: Optional[DeviceCard] = None
+  card: DeviceCard

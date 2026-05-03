@@ -34,14 +34,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Awaitable, Callable, Optional
+from typing import Callable, Optional
 
-from pylabrobot.capabilities.scanning.image_retrieval import ImageRetrieval
+from pylabrobot.capabilities.scanning.image_retrieval import (
+  ImageRetrieval,
+  ImageRetrievalBackend,
+)
 from pylabrobot.capabilities.scanning.instrument_status import (
   InstrumentStatus,
+  InstrumentStatusBackend,
   InstrumentStatusReading,
 )
-from pylabrobot.capabilities.scanning.scanning import Scanning
+from pylabrobot.capabilities.scanning.scanning import Scanning, ScanningBackend
 from pylabrobot.device import Device
 from pylabrobot.device_card import DeviceCard, HasDeviceCard
 
@@ -61,7 +65,6 @@ from .instrument_status_backend import (
 )
 from .errors import OdysseyScanError
 from .scanning_backend import (
-  DEFAULT_GROUP,
   OdysseyScanningBackend,
   OdysseyScanningParams,
   StopResult,
@@ -108,8 +111,13 @@ class OdysseyClassic(Device, HasDeviceCard):
     chatterbox: bool = False,
     card: Optional[DeviceCard] = None,
   ) -> None:
+    driver: OdysseyDriver
+    scanning_backend: ScanningBackend
+    image_backend: ImageRetrievalBackend
+    status_backend: InstrumentStatusBackend
+
     if chatterbox:
-      driver: OdysseyDriver = OdysseyChatterboxDriver()
+      driver = OdysseyChatterboxDriver()
       state = _OdysseyChatterboxState()
       scanning_backend = OdysseyScanningChatterboxBackend(state)
       image_backend = OdysseyImageRetrievalChatterboxBackend(state)
@@ -117,9 +125,7 @@ class OdysseyClassic(Device, HasDeviceCard):
     else:
       resolved_host = host or os.environ.get("ODYSSEY_HOST", "")
       if not resolved_host:
-        raise ValueError(
-          "OdysseyClassic requires a host (or ODYSSEY_HOST env var)."
-        )
+        raise ValueError("OdysseyClassic requires a host (or ODYSSEY_HOST env var).")
       resolved_user = username or os.environ.get("ODYSSEY_USER", "")
       resolved_pass = password or os.environ.get("ODYSSEY_PASS", "")
       if not resolved_user or not resolved_pass:
@@ -140,10 +146,7 @@ class OdysseyClassic(Device, HasDeviceCard):
 
     super().__init__(driver=driver)
 
-    self.card = (
-      ODYSSEY_CLASSIC_BASE.merge(card) if card is not None
-      else ODYSSEY_CLASSIC_BASE
-    )
+    self.card = ODYSSEY_CLASSIC_BASE.merge(card) if card is not None else ODYSSEY_CLASSIC_BASE
 
     self.scanning = Scanning(backend=scanning_backend)
     self.images = ImageRetrieval(backend=image_backend)
@@ -180,10 +183,7 @@ class OdysseyClassic(Device, HasDeviceCard):
     initial = await self.status.read_status()
     if on_progress is not None:
       on_progress(initial)
-    require_state_change = (
-      require_fresh
-      and normalize_state(initial.state) in _TERMINAL_STATES
-    )
+    require_state_change = require_fresh and normalize_state(initial.state) in _TERMINAL_STATES
 
     while True:
       status = await self.status.read_status()

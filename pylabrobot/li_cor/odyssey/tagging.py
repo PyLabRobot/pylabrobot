@@ -32,9 +32,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SOFTWARE_TAG = "PyLabRobot Odyssey"
 
 
-def _resolve_identity(
-  source: Union[DeviceCard, dict[str, Any], None]
-) -> dict[str, Any]:
+def _resolve_identity(source: Union[DeviceCard, dict[str, Any], None]) -> dict[str, Any]:
   """Coerce the identity source into a plain dict.
 
   Accepts a :class:`DeviceCard` (reads ``card.identity``), a plain
@@ -103,14 +101,20 @@ def tag_tiff_with_identity(
     logger.info("TIFF re-tag skipped (parse failed): %s", e)
     return raw_bytes
   description = build_identity_description(
-    resolved, scan_name=scan_name, channel=channel,
+    resolved,
+    scan_name=scan_name,
+    channel=channel,
   )
   try:
     out = io.BytesIO()
-    img.save(out, format="TIFF", tiffinfo={
-      270: description,
-      305: software_tag,
-    })
+    img.save(
+      out,
+      format="TIFF",
+      tiffinfo={
+        270: description,
+        305: software_tag,
+      },
+    )
     return out.getvalue()
   except Exception as e:
     logger.info("TIFF re-tag skipped (save failed): %s", e)

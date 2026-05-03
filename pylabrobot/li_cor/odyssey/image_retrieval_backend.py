@@ -71,10 +71,7 @@ def _jpeg_xml(
 
 def _parse_select_options(html: str, select_name: str) -> List[str]:
   """Extract <option value="..."> values from an HTML <select>."""
-  pattern = (
-    rf'<select[^>]*name=["\']?{select_name}["\']?[^>]*>'
-    r"(.*?)</select>"
-  )
+  pattern = rf'<select[^>]*name=["\']?{select_name}["\']?[^>]*>' r"(.*?)</select>"
   match = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
   if not match:
     return []
@@ -108,9 +105,7 @@ class OdysseyImageRetrievalBackend(ImageRetrievalBackend):
 
   # -- Vendor extensions ---------------------------------------------------
 
-  async def download_channel(
-    self, group: str, scan_name: str, channel: int
-  ) -> bytes:
+  async def download_channel(self, group: str, scan_name: str, channel: int) -> bytes:
     """Download a single channel TIFF (700 or 800).
 
     Verifies the byte count matches the server's Content-Length when
@@ -122,19 +117,22 @@ class OdysseyImageRetrievalBackend(ImageRetrievalBackend):
     logger.info("Downloading TIFF: %s channel %d", scan_name, channel)
 
     status, data, _, content_length = await self._driver.get_bytes(
-      path, params={"xml": xml}, with_retry=True,
+      path,
+      params={"xml": xml},
+      with_retry=True,
     )
     if status != 200:
-      raise OdysseyImageError(
-        f"TIFF download failed for {scan_name}-{channel}: HTTP {status}"
-      )
+      raise OdysseyImageError(f"TIFF download failed for {scan_name}-{channel}: HTTP {status}")
     if content_length is not None and len(data) != content_length:
       raise OdysseyImageError(
         f"Truncated TIFF for {scan_name}-{channel}: got {len(data)} bytes, "
         f"expected {content_length} (Content-Length)"
       )
     logger.info(
-      "Downloaded %s-%d.tif: %d bytes", scan_name, channel, len(data),
+      "Downloaded %s-%d.tif: %d bytes",
+      scan_name,
+      channel,
+      len(data),
     )
     return data
 
@@ -149,14 +147,16 @@ class OdysseyImageRetrievalBackend(ImageRetrievalBackend):
   ) -> bytes:
     """Fetch a JPEG preview rendered server-side."""
     xml = _jpeg_xml(
-      group, scan_name,
+      group,
+      scan_name,
       contrast_700=contrast_700,
       contrast_800=contrast_800,
       channels=channels,
       background=background,
     )
     status, data, _, _ = await self._driver.get_bytes(
-      _SCAN_IMAGE_PATH, params={"xml": xml},
+      _SCAN_IMAGE_PATH,
+      params={"xml": xml},
     )
     if status != 200:
       raise OdysseyImageError(f"JPEG preview failed: HTTP {status}")

@@ -28,8 +28,14 @@ _STOP_FROM_STATUS_PATH = f"{_STATUS_BASE}/status"
 
 # Canonical Odyssey state literal exposed in :class:`InstrumentStatusReading`.
 OdysseyState = Literal[
-  "Idle", "Configured", "Initializing", "Scanning",
-  "Paused", "Stopped", "Completed", "Failed",
+  "Idle",
+  "Configured",
+  "Initializing",
+  "Scanning",
+  "Paused",
+  "Stopped",
+  "Completed",
+  "Failed",
 ]
 
 # Map raw instrument strings (lowercase) to the canonical literal.
@@ -58,9 +64,7 @@ def normalize_state(raw: str) -> OdysseyState:
   key = (raw or "").strip().lower()
   if key in _STATE_MAP:
     return _STATE_MAP[key]
-  logger.warning(
-    "Unknown instrument state %r — mapping to 'Idle' (parser miss?)", raw
-  )
+  logger.warning("Unknown instrument state %r — mapping to 'Idle' (parser miss?)", raw)
   return "Idle"
 
 
@@ -72,11 +76,12 @@ def _parse_status_html(html: str) -> dict[str, str]:
   whitespace until it hits the first non-empty text run. Handles
   plain text, tags between label and colon, and table layouts.
   """
+
   def _extract(label: str) -> str:
     idx = html.lower().find(label.lower())
     if idx < 0:
       return ""
-    rest = html[idx + len(label):]
+    rest = html[idx + len(label) :]
     rest = re.sub(r"^(?:\s|<[^>]+>)*:?", "", rest, count=1)
     text = re.sub(r"<[^>]+>", "|", rest)
     for fragment in text.split("|"):
@@ -84,6 +89,7 @@ def _parse_status_html(html: str) -> dict[str, str]:
       if trimmed:
         return trimmed.split("\n")[0].strip()
     return ""
+
   return {
     "state": _extract("Scanner Status") or "Unknown",
     "current_user": _extract("Current User"),
@@ -111,7 +117,8 @@ class OdysseyInstrumentStatusBackend(InstrumentStatusBackend):
     if parsed["state"] == "Unknown":
       logger.warning(
         "Status parser missed 'Scanner Status' (HTTP %s, %d bytes).",
-        status, len(html),
+        status,
+        len(html),
       )
     state = normalize_state(parsed["state"])
     try:

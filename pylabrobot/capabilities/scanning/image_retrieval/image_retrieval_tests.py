@@ -42,7 +42,8 @@ class TestImageRetrieval(unittest.IsolatedAsyncioTestCase):
 
   async def test_list_scans(self):
     self.assertEqual(
-      sorted(await self.cap.list_scans("odyssey")), ["scan_a", "scan_b"],
+      sorted(await self.cap.list_scans("odyssey")),
+      ["scan_a", "scan_b"],
     )
     self.assertEqual(await self.cap.list_scans("missing"), [])
 
