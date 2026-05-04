@@ -13,7 +13,10 @@ import logging
 import math
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+  from .model import FluidQuantity
 
 from pylabrobot.capabilities.thermocycling.standard import (
   Overshoot,
