@@ -645,22 +645,30 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def find_z_with_proximity_sensor(
     self,
-    max_descent: float,
-    z_start: Optional[float] = None,
+    z_start: float,
+    z_end: float,
     max_gripper_speed: float = 25.0,
     max_gripper_acceleration: float = 100.0,
   ) -> float:
-    """Descend Z up to `max_descent`; halt when the IR breakbeam trips.
+    """Pre-position to ``z_start``, then descend toward ``z_end``; halt when
+    the IR breakbeam trips.
 
-    `max_gripper_speed`/`max_gripper_acceleration` cap Z descent in mm/s
-    and mm/s^2 (Z is linear, so gripper speed equals |v_z|). If `z_start`
-    is given, first move Z to that height (same caps) and search from
-    there; otherwise search from the current Z. Arms IL[4]=StopForward so
-    the Elmo drive halts the motor itself on the input edge (sub-ms
-    latency, no software in the loop). IL is restored to GeneralPurpose
-    afterwards even if the move raises. Returns the Z position where the
-    drive halted; raises RuntimeError if the beam never tripped.
+    ``z_start > z_end`` (search descends in world frame). The search
+    bounds are absolute Z so the caller never has to compute a delta.
+    ``max_gripper_speed`` / ``max_gripper_acceleration`` cap Z motion in
+    mm/s and mm/s² (Z is linear, so gripper speed equals |v_z|).
+
+    Arms IL[4]=StopForward so the drive halts the motor itself on the
+    input edge (sub-ms latency, no software in the loop). IL is restored
+    to GeneralPurpose afterwards even if the move raises. Returns the Z
+    position where the drive halted; raises RuntimeError if the beam
+    never tripped (descent ran the full ``z_start → z_end`` range).
     """
+    if z_end >= z_start:
+      raise ValueError(
+        f"find_z_with_proximity_sensor: z_end ({z_end}) must be below "
+        f"z_start ({z_start}) — search descends."
+      )
     move_params = KX2ArmBackend.JointMoveParams(
       max_gripper_speed=max_gripper_speed,
       max_gripper_acceleration=max_gripper_acceleration,
@@ -676,17 +684,15 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       # search could have left it in Fault/Quick Stop where new moves
       # silently fail (Z barely moves).
       await self.driver.motors_ensure_enabled([int(Axis.Z)])
-      if z_start is not None:
-        await self._motors_move_joint_locked({Axis.Z: z_start}, params=move_params)
-      z0 = await self.motor_get_current_position(Axis.Z)
+      await self._motors_move_joint_locked({Axis.Z: z_start}, params=move_params)
       if await self.read_proximity_sensor():
-        return z0
+        return await self.motor_get_current_position(Axis.Z)
       await self.driver.configure_input_logic(
         self._PROXIMITY_SENSOR_AXIS, self._PROXIMITY_SENSOR_INPUT, _InputLogic.StopForward,
       )
       move_task = asyncio.create_task(
         self._motors_move_joint_locked(
-          {Axis.Z: z0 - max_descent}, params=move_params
+          {Axis.Z: z_end}, params=move_params
         )
       )
       tripped = False
@@ -724,9 +730,10 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         # `motor_check_if_move_done` raises immediately on a stale flag.
         self.driver.clear_emcy_state(int(Axis.Z))
       if not tripped:
-        z_end = await self.motor_get_current_position(Axis.Z)
+        z_actual_end = await self.motor_get_current_position(Axis.Z)
         raise RuntimeError(
-          f"proximity sensor never tripped within {max_descent} (Z {z0:.2f} -> {z_end:.2f})"
+          f"proximity sensor never tripped on Z {z_start:.2f} → {z_end:.2f} "
+          f"(stopped at {z_actual_end:.2f})"
         )
       return await self.motor_get_current_position(Axis.Z)
 

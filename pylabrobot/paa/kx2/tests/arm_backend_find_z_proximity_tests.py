@@ -75,6 +75,7 @@ def _build_harness(
   z_positions: List[float],
   move_behavior: str = "long_sleep",
   move_exception: Optional[Exception] = None,
+  pre_position_completes: bool = False,
 ) -> _FindZHarness:
   """Construct a KX2ArmBackend wired for find_z testing.
 
@@ -88,6 +89,10 @@ def _build_harness(
       as the task is scheduled — used for the "sensor never trips" test).
     move_exception: If set, ``_motors_move_joint_locked`` raises this from
       inside the spawned task before it would otherwise sleep.
+    pre_position_completes: If True, the first move call (the pre-position
+      to ``z_start``) completes immediately regardless of ``move_behavior``;
+      subsequent moves (the descent) follow ``move_behavior``. Without this,
+      a ``long_sleep`` behavior would block on the awaited pre-position.
   """
   backend = KX2ArmBackend.__new__(KX2ArmBackend)
   fake_driver = _FakeDriver()
@@ -116,6 +121,9 @@ def _build_harness(
 
   async def _fake_move(cmd_pos: Dict[Axis, float], params: Any = None) -> None:
     move_calls.append({"cmd_pos": dict(cmd_pos), "params": params})
+    is_first = len(move_calls) == 1
+    if pre_position_completes and is_first:
+      return  # Pre-position always completes when this flag is set.
     if move_exception is not None:
       raise move_exception
     if move_behavior == "completes_immediately":
@@ -132,50 +140,53 @@ def _build_harness(
 class FindZSensorTripsCleanupTests(unittest.TestCase):
   def test_trip_cancels_descent_and_runs_cleanup(self):
     """Sensor returns False on the pre-check, then True after one poll
-    cycle. Verify: descent task is spawned, cancelled, motor_stop runs,
-    IL is restored to GeneralPurpose."""
+    cycle. Verify: pre-position move ran, descent task spawned then
+    cancelled, motor_stop ran, IL restored to GeneralPurpose."""
     h = _build_harness(
-      # Pre-check (False), then one poll iteration True (trip).
+      # Pre-position move (completes_immediately so the descent path is
+      # reached), pre-check sensor=False, poll sensor=True (trip).
       proximity_script=[False, True],
-      # z0 read after motor_enable; final z read after the task is cancelled.
-      z_positions=[100.0, 95.5],
+      # Z read once at the end after cleanup, returns the stop position.
+      z_positions=[95.5],
+      pre_position_completes=True,
     )
 
-    z = asyncio.run(h.backend.find_z_with_proximity_sensor(max_descent=20.0))
+    z = asyncio.run(h.backend.find_z_with_proximity_sensor(
+      z_start=100.0, z_end=80.0,
+    ))
 
     self.assertAlmostEqual(z, 95.5, places=9)
-    # IL was armed once, then restored once.
     arm = (Axis.Z, h.backend._PROXIMITY_SENSOR_INPUT, _InputLogic.StopForward)
     restore = (Axis.Z, h.backend._PROXIMITY_SENSOR_INPUT, _InputLogic.GeneralPurpose)
     self.assertEqual(h.fake_driver.configure_il_calls, [arm, restore])
-    # motor_stop ran exactly once on the Z axis.
     self.assertEqual(h.fake_driver.motor_stop_calls, [Axis.Z])
-    # Pre-flight ensured Z was enabled before descent.
     self.assertEqual(h.fake_driver.ensure_enabled_calls, [(int(Axis.Z),)])
-    # Descent target is z0 - max_descent.
-    self.assertEqual(len(h.move_calls), 1)
-    self.assertAlmostEqual(h.move_calls[0]["cmd_pos"][Axis.Z], 80.0, places=9)
+    # Two moves: pre-position to z_start, descent to z_end.
+    self.assertEqual(len(h.move_calls), 2)
+    self.assertAlmostEqual(h.move_calls[0]["cmd_pos"][Axis.Z], 100.0, places=9)
+    self.assertAlmostEqual(h.move_calls[1]["cmd_pos"][Axis.Z], 80.0, places=9)
 
 
 class FindZSensorNeverTripsTests(unittest.TestCase):
   def test_never_trips_raises_runtime_error_with_range(self):
-    """Move completes (no trip), sensor stayed False -> raises with the
-    descent range and start/end Z values in the message."""
+    """Descent completes without a trip → raises with z_start, z_end, and
+    the actual stop position in the message."""
     h = _build_harness(
-      proximity_script=[False],     # always False
-      z_positions=[100.0, 79.5],    # z0=100, z_end after descent=79.5
-      move_behavior="completes_immediately",
+      proximity_script=[False],
+      z_positions=[79.5],
+      move_behavior="completes_immediately",  # both moves complete immediately
     )
 
     with self.assertRaises(RuntimeError) as ctx:
-      asyncio.run(h.backend.find_z_with_proximity_sensor(max_descent=20.0))
+      asyncio.run(h.backend.find_z_with_proximity_sensor(
+        z_start=100.0, z_end=80.0,
+      ))
 
     msg = str(ctx.exception)
-    self.assertIn("proximity sensor never tripped", msg)
-    self.assertIn("20.0", msg)
+    self.assertIn("never tripped", msg)
     self.assertIn("100.00", msg)
+    self.assertIn("80.00", msg)
     self.assertIn("79.50", msg)
-    # Cleanup still ran.
     self.assertEqual(h.fake_driver.motor_stop_calls, [Axis.Z])
     self.assertIn(
       (Axis.Z, h.backend._PROXIMITY_SENSOR_INPUT, _InputLogic.GeneralPurpose),
@@ -185,22 +196,21 @@ class FindZSensorNeverTripsTests(unittest.TestCase):
 
 class FindZMoveRaisesCanErrorTests(unittest.TestCase):
   def test_canerror_in_descent_is_swallowed_cleanup_runs(self):
-    """The descent task raises CanError. ``await move_task`` swallows it
-    (per the ``except (asyncio.CancelledError, CanError): pass``). Sensor
-    stayed False -> the function then raises the standard RuntimeError
-    *after* cleanup. motor_stop + IL restore still ran."""
+    """Descent task raises CanError. ``await move_task`` swallows it; sensor
+    stayed False, so the function raises RuntimeError *after* cleanup.
+    motor_stop + IL restore still ran."""
     h = _build_harness(
       proximity_script=[False],
-      z_positions=[100.0, 100.0],
+      z_positions=[100.0],
       move_exception=CanError("synthetic descent failure"),
+      pre_position_completes=True,  # Only the descent should raise, not the pre-position.
     )
 
     with self.assertRaises(RuntimeError) as ctx:
-      asyncio.run(h.backend.find_z_with_proximity_sensor(max_descent=20.0))
+      asyncio.run(h.backend.find_z_with_proximity_sensor(
+        z_start=100.0, z_end=80.0,
+      ))
 
-    # The post-cleanup "never tripped" branch runs because the swallow
-    # at `await move_task` masked the CanError; sensor stayed False so
-    # `tripped` is False.
     self.assertIn("never tripped", str(ctx.exception))
     self.assertEqual(h.fake_driver.motor_stop_calls, [Axis.Z])
     self.assertEqual(
@@ -213,14 +223,16 @@ class FindZMoveRaisesCanErrorTests(unittest.TestCase):
     the function still completes its happy-path return (sensor tripped)."""
     h = _build_harness(
       proximity_script=[False, True],
-      z_positions=[100.0, 95.5],
+      z_positions=[95.5],
+      pre_position_completes=True,
     )
     h.fake_driver.motor_stop_should_raise = CanError("synthetic stop failure")
 
-    z = asyncio.run(h.backend.find_z_with_proximity_sensor(max_descent=20.0))
+    z = asyncio.run(h.backend.find_z_with_proximity_sensor(
+      z_start=100.0, z_end=80.0,
+    ))
 
     self.assertAlmostEqual(z, 95.5, places=9)
-    # IL restore still ran despite motor_stop raising.
     self.assertEqual(
       h.fake_driver.configure_il_calls[-1],
       (Axis.Z, h.backend._PROXIMITY_SENSOR_INPUT, _InputLogic.GeneralPurpose),
@@ -228,49 +240,42 @@ class FindZMoveRaisesCanErrorTests(unittest.TestCase):
 
 
 class FindZAlreadyTrippedTests(unittest.TestCase):
-  def test_already_tripped_short_circuits_no_il_change(self):
-    """The pre-check sees the sensor already tripped: returns z0 without
-    configuring IL or spawning a descent task."""
-    h = _build_harness(
-      proximity_script=[True],     # tripped on the very first read
-      z_positions=[42.0],
-    )
-
-    z = asyncio.run(h.backend.find_z_with_proximity_sensor(max_descent=20.0))
-
-    self.assertAlmostEqual(z, 42.0, places=9)
-    # No IL configure calls (neither arm nor restore) — short-circuit hits
-    # before the StopForward arm.
-    self.assertEqual(h.fake_driver.configure_il_calls, [])
-    # No motor_stop, no descent move spawned.
-    self.assertEqual(h.fake_driver.motor_stop_calls, [])
-    self.assertEqual(h.move_calls, [])
-    # ensure_enabled still ran (it's the pre-flight before anything else).
-    self.assertEqual(h.fake_driver.ensure_enabled_calls, [(int(Axis.Z),)])
-
-  def test_z_start_provided_runs_pre_descent_move_then_short_circuits(self):
-    """Same as above but with z_start: the pre-positioning move runs, then
-    the sensor reads tripped on the pre-check -> still no IL arm or
-    descent task."""
+  def test_pre_check_already_tripped_skips_descent(self):
+    """After the pre-position move, the sensor reads tripped: returns
+    current Z without arming IL or spawning a descent task."""
     h = _build_harness(
       proximity_script=[True],
       z_positions=[55.0],
-      # Pre-positioning move must complete on its own (it's awaited inline,
-      # not spawned as a cancellable task). long_sleep would deadlock.
-      move_behavior="completes_immediately",
+      move_behavior="completes_immediately",  # pre-position completes, then trip
     )
 
     z = asyncio.run(h.backend.find_z_with_proximity_sensor(
-      max_descent=20.0, z_start=80.0,
+      z_start=80.0, z_end=20.0,
     ))
 
     self.assertAlmostEqual(z, 55.0, places=9)
-    # The pre-position move ran (z_start path), but no descent move.
+    # Pre-position ran, but no descent — only one move call.
     self.assertEqual(len(h.move_calls), 1)
     self.assertAlmostEqual(h.move_calls[0]["cmd_pos"][Axis.Z], 80.0, places=9)
-    # Still no IL change, still no motor_stop.
+    # No IL configure (short-circuit hits before the StopForward arm),
+    # no motor_stop. ensure_enabled still ran as pre-flight.
     self.assertEqual(h.fake_driver.configure_il_calls, [])
     self.assertEqual(h.fake_driver.motor_stop_calls, [])
+    self.assertEqual(h.fake_driver.ensure_enabled_calls, [(int(Axis.Z),)])
+
+
+class FindZArgValidationTests(unittest.TestCase):
+  def test_z_end_above_z_start_raises(self):
+    """Search must descend (z_end < z_start). Surface the typo before any
+    drive interaction."""
+    h = _build_harness(proximity_script=[False], z_positions=[0.0])
+    with self.assertRaises(ValueError):
+      asyncio.run(h.backend.find_z_with_proximity_sensor(
+        z_start=80.0, z_end=100.0,
+      ))
+    # Nothing happened on the drive side.
+    self.assertEqual(h.fake_driver.ensure_enabled_calls, [])
+    self.assertEqual(h.move_calls, [])
 
 
 if __name__ == "__main__":
