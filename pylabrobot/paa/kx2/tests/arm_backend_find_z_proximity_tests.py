@@ -278,5 +278,134 @@ class FindZArgValidationTests(unittest.TestCase):
     self.assertEqual(h.move_calls, [])
 
 
+class _FindGenericHarness(NamedTuple):
+  backend: KX2ArmBackend
+  fake_driver: _FakeDriver
+  joint_move_calls: List[Dict[str, Any]]
+  linear_move_calls: List[Dict[str, Any]]
+
+
+def _build_generic_harness(
+  *,
+  proximity_script: List[bool],
+  gripper_locations: List[Any],
+  linear_behavior: str = "long_sleep",
+) -> _FindGenericHarness:
+  """Harness for ``find_with_proximity_sensor``. Fakes _run_linear_path
+  (the IPM streaming runtime), _cart_to_joints (IK), and
+  request_gripper_location (FK) so the test exercises the polling-and-
+  cancel logic without spinning up a real driver."""
+  from pylabrobot.capabilities.arms.standard import GripperLocation
+  from pylabrobot.resources import Rotation
+
+  backend = KX2ArmBackend.__new__(KX2ArmBackend)
+  fake_driver = _FakeDriver()
+  backend.driver = fake_driver  # type: ignore[assignment]
+  backend._motion_lock = asyncio.Lock()
+  backend._motion_owner = None
+  backend._gripper_params = None  # type: ignore[assignment]
+
+  prox = list(proximity_script)
+  locs = list(gripper_locations)
+
+  async def _read_proximity() -> bool:
+    await asyncio.sleep(0)
+    return prox[0] if len(prox) == 1 else prox.pop(0)
+
+  async def _request_gripper_location():
+    val = locs[0] if len(locs) == 1 else locs.pop(0)
+    if isinstance(val, GripperLocation):
+      return val
+    return GripperLocation(location=val, rotation=Rotation(z=0))
+
+  async def _cart_to_joints(pose):
+    return {Axis.SHOULDER: 0.0, Axis.Z: pose.location.z, Axis.ELBOW: 100.0,
+            Axis.WRIST: pose.rotation.z}
+
+  joint_calls: List[Dict[str, Any]] = []
+  linear_calls: List[Dict[str, Any]] = []
+
+  async def _fake_joint_move(cmd_pos, params=None):
+    joint_calls.append({"cmd_pos": dict(cmd_pos), "params": params})
+
+  async def _fake_run_linear(target_pose, params):
+    linear_calls.append({"pose": target_pose, "params": params})
+    if linear_behavior == "completes_immediately":
+      return
+    try:
+      await asyncio.sleep(10.0)
+    finally:
+      # Mirror the real method's finally-block behavior.
+      pass
+
+  backend.read_proximity_sensor = _read_proximity  # type: ignore[assignment]
+  backend.request_gripper_location = _request_gripper_location  # type: ignore[assignment]
+  backend._cart_to_joints = _cart_to_joints  # type: ignore[assignment]
+  backend._motors_move_joint_locked = _fake_joint_move  # type: ignore[assignment]
+  backend._run_linear_path = _fake_run_linear  # type: ignore[assignment]
+  return _FindGenericHarness(backend, fake_driver, joint_calls, linear_calls)
+
+
+class FindGenericTests(unittest.TestCase):
+  def test_trip_cancels_sweep_returns_gripper_location(self):
+    """Sensor trips during the sweep: linear-path task is cancelled,
+    EMCY state cleared, and the gripper location at halt is returned."""
+    from pylabrobot.resources import Coordinate
+    h = _build_generic_harness(
+      proximity_script=[False, True],
+      gripper_locations=[Coordinate(x=110.0, y=200.0, z=50.0)],
+    )
+
+    result = asyncio.run(h.backend.find_with_proximity_sensor(
+      start=Coordinate(x=100, y=200, z=50),
+      end=Coordinate(x=200, y=200, z=50),
+      direction=0.0,
+    ))
+
+    self.assertAlmostEqual(result.x, 110.0, places=6)
+    self.assertEqual(len(h.joint_move_calls), 1)  # Pre-position only.
+    self.assertEqual(len(h.linear_move_calls), 1)  # Sweep itself.
+    # Sticky EMCY cleared so the next motion call doesn't raise on a
+    # halt-induced frame.
+    self.assertEqual(h.fake_driver.clear_emcy_calls, [None])
+
+  def test_never_trips_raises_with_endpoints(self):
+    from pylabrobot.resources import Coordinate
+    h = _build_generic_harness(
+      proximity_script=[False],
+      gripper_locations=[Coordinate(x=200.0, y=200.0, z=50.0)],
+      linear_behavior="completes_immediately",
+    )
+
+    with self.assertRaises(RuntimeError) as ctx:
+      asyncio.run(h.backend.find_with_proximity_sensor(
+        start=Coordinate(x=100, y=200, z=50),
+        end=Coordinate(x=200, y=200, z=50),
+        direction=0.0,
+      ))
+
+    msg = str(ctx.exception)
+    self.assertIn("never tripped", msg)
+    self.assertIn("100.0", msg)
+    self.assertIn("200.0", msg)
+
+  def test_pre_check_already_tripped_skips_sweep(self):
+    from pylabrobot.resources import Coordinate
+    h = _build_generic_harness(
+      proximity_script=[True],
+      gripper_locations=[Coordinate(x=100.0, y=200.0, z=50.0)],
+    )
+
+    result = asyncio.run(h.backend.find_with_proximity_sensor(
+      start=Coordinate(x=100, y=200, z=50),
+      end=Coordinate(x=200, y=200, z=50),
+      direction=0.0,
+    ))
+
+    self.assertAlmostEqual(result.x, 100.0, places=6)
+    self.assertEqual(len(h.joint_move_calls), 1)  # Pre-position ran.
+    self.assertEqual(len(h.linear_move_calls), 0)  # No sweep.
+
+
 if __name__ == "__main__":
   unittest.main()

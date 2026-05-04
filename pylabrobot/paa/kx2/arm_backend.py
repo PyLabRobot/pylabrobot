@@ -737,6 +737,87 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         )
       return await self.motor_get_current_position(Axis.Z)
 
+  async def find_with_proximity_sensor(
+    self,
+    start: Coordinate,
+    end: Coordinate,
+    direction: float,
+    *,
+    max_gripper_speed: float = 25.0,
+    max_gripper_acceleration: float = 100.0,
+  ) -> Coordinate:
+    """Sweep the gripper from ``start`` to ``end`` along a straight Cartesian
+    line; halt when the IR breakbeam trips. Yaw is held at ``direction``
+    for the whole sweep. Returns the gripper location at halt; raises
+    ``RuntimeError`` if the beam never tripped over the full path.
+
+    Generic Cartesian counterpart to :meth:`find_z_with_proximity_sensor`.
+    The Z-only descent has a hardware fast-path (``IL[4]=StopForward`` on
+    the Z drive halts the motor sub-ms on the input edge); X/Y motion can't
+    use that — the breakbeam is wired only to the Z drive's I/O — so this
+    method polls the sensor in software (~10 ms latency at 100 Hz). At the
+    default 25 mm/s sweep that's ~0.25 mm of overshoot before cancellation,
+    plus ~64 ms of post-cancel buffer-drain (8 PVT frames × 8 ms). For
+    Z-only descents where mm-precision into labware matters, prefer
+    ``find_z_with_proximity_sensor``.
+    """
+    move_params = KX2ArmBackend.CartesianMoveParams(
+      max_gripper_speed=max_gripper_speed,
+      max_gripper_acceleration=max_gripper_acceleration,
+      path="linear",
+    )
+    start_pose = GripperLocation(location=start, rotation=Rotation(z=direction))
+    end_pose = GripperLocation(location=end, rotation=Rotation(z=direction))
+
+    async with self._motion_guard():
+      await self.driver.motors_ensure_enabled([int(a) for a in MOTION_AXES])
+      # Pre-position to start (joint move — path doesn't matter, just get there).
+      pre_pos = await self._cart_to_joints(start_pose)
+      await self._motors_move_joint_locked(
+        cmd_pos=pre_pos,
+        params=KX2ArmBackend.JointMoveParams(
+          max_gripper_speed=max_gripper_speed,
+          max_gripper_acceleration=max_gripper_acceleration,
+        ),
+      )
+      if await self.read_proximity_sensor():
+        return (await self.request_gripper_location()).location
+
+      sweep_task = asyncio.create_task(
+        self._run_linear_path(end_pose, move_params)
+      )
+      tripped = False
+      try:
+        # Drive runs the streamed PVT trajectory; we poll the sensor in
+        # parallel and cancel on trip. The sweep task's finally clause
+        # then sends ipm_stop + reverts to PPM, leaving the drive ready
+        # for the next motion call.
+        while not sweep_task.done():
+          if await self.read_proximity_sensor():
+            tripped = True
+            break
+          await asyncio.sleep(0.01)
+        sweep_task.cancel()
+        try:
+          await sweep_task
+        except (asyncio.CancelledError, CanError):
+          pass
+      finally:
+        # PVT-stop coasts up to 8 frames; halt() is too aggressive (drops
+        # all motion-axis MO=0). The sweep task's own cleanup already
+        # handled IPM teardown; clear sticky EMCY so next motion call's
+        # `motor_check_if_move_done` doesn't raise on the stop-induced frame.
+        self.driver.clear_emcy_state()
+      if not tripped:
+        end_loc = (await self.request_gripper_location()).location
+        raise RuntimeError(
+          f"proximity sensor never tripped on "
+          f"({start.x:.1f},{start.y:.1f},{start.z:.1f}) → "
+          f"({end.x:.1f},{end.y:.1f},{end.z:.1f}) "
+          f"(stopped at ({end_loc.x:.1f},{end_loc.y:.1f},{end_loc.z:.1f}))"
+        )
+      return (await self.request_gripper_location()).location
+
   async def motors_move_joint(
     self,
     cmd_pos: Dict[Axis, float],
