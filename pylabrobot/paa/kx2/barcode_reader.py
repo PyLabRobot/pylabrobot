@@ -261,15 +261,13 @@ class KX2BarcodeReaderDriver(Driver):
 class KX2BarcodeReaderBackend(BarcodeScannerBackend):
   """Adapts :class:`KX2BarcodeReaderDriver` to the BarcodeScanner capability."""
 
-  def __init__(self, driver: KX2BarcodeReaderDriver, read_time: int = 2):
+  # Wait bound when the caller doesn't specify a read_time. Long enough that
+  # any reasonable on-device read window (Y1..Y9) finishes inside it.
+  _DEFAULT_SCAN_WAIT = 10.0
+
+  def __init__(self, driver: KX2BarcodeReaderDriver):
     super().__init__()
     self.driver = driver
-    self._read_time = read_time
-
-  async def set_read_time(self, seconds: int) -> None:
-    """Update both the reader's read window and our scan timeout."""
-    await self.driver.set_read_time(seconds)
-    self._read_time = seconds
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     # Handshake: version query (mirrors KX2RobotControl.cs:15617).
@@ -281,14 +279,19 @@ class KX2BarcodeReaderBackend(BarcodeScannerBackend):
       )
     logger.info("[KX2 BCR %s] software version: %s", self.driver.io.port, version)
     await self.driver.set_read_mode("single")
-    await self.set_read_time(self._read_time)
 
-  async def scan_barcode(self) -> Barcode:
-    # Fire the trigger, then listen for the decoded line. The reader delivers
-    # data asynchronously (not as a command-response), so we read-until-CR
-    # rather than sending another command.
+  async def scan_barcode(self, read_time: Optional[float] = None) -> Barcode:
+    # Reader's Y-command only takes integer seconds 1..9 (YM=indefinite). When
+    # the caller specifies read_time, push it to the device first so the
+    # on-device window matches our wait bound. Otherwise leave whatever's
+    # currently configured and wait long enough for any in-range setting.
+    if read_time is not None:
+      if read_time <= 0:
+        raise ValueError("read_time must be > 0")
+      await self.driver.set_read_time(int(round(read_time)))
     await self.driver.trigger(True)
-    data = await self.driver.read_decoded_barcode(timeout=float(self._read_time + 1))
+    timeout = (read_time + 1.0) if read_time is not None else self._DEFAULT_SCAN_WAIT
+    data = await self.driver.read_decoded_barcode(timeout=timeout)
     if not data:
       raise BarcodeScannerError("KX2 barcode reader: no read within read-time window")
     return Barcode(data=data, symbology="ANY 1D", position_on_resource="front")
@@ -302,16 +305,13 @@ class KX2BarcodeReader(Device):
       ``/dev/tty.PL2303G-USBtoUART<n>`` (after the Prolific driver is
       installed and approved — see module docstring). On Linux it's
       usually ``/dev/ttyUSB<n>``.
-    read_time: Default read window in seconds (1–9, or 0 for indefinite).
-      The reader returns the decoded barcode if it sees one within this
-      window, otherwise the scan call raises.
     baudrate: Serial baud rate; the reader's factory default is 9600.
 
   Usage::
 
-      bcr = KX2BarcodeReader(port="/dev/tty.PL2303G-USBtoUART11240", read_time=8)
+      bcr = KX2BarcodeReader(port="/dev/tty.PL2303G-USBtoUART11240")
       await bcr.setup()
-      barcode = await bcr.barcode_scanning.scan()
+      barcode = await bcr.barcode_scanning.scan(read_time=8)
       print(barcode.data)
       await bcr.stop()
   """
@@ -319,23 +319,14 @@ class KX2BarcodeReader(Device):
   def __init__(
     self,
     port: str,
-    read_time: int = 2,
     baudrate: int = KX2BarcodeReaderDriver.default_baudrate,
   ):
     driver = KX2BarcodeReaderDriver(port=port, baudrate=baudrate)
     super().__init__(driver=driver)
     self.driver: KX2BarcodeReaderDriver = driver
-    self._backend = KX2BarcodeReaderBackend(driver, read_time=read_time)
+    self._backend = KX2BarcodeReaderBackend(driver)
     self.barcode_scanning = BarcodeScanner(backend=self._backend)
     self._capabilities = [self.barcode_scanning]
-
-  async def set_read_time(self, seconds: int) -> None:
-    """Set the read-window timeout (1–9 seconds, or 0 for indefinite).
-
-    Updates both the reader and the scan-completion timeout in lockstep,
-    so subsequent ``barcode_scanning.scan()`` calls wait long enough.
-    """
-    await self._backend.set_read_time(seconds)
 
   async def set_read_mode(self, mode: ReadMode) -> None:
     """Set the trigger mode: ``"single"`` (default), ``"multiple"``, or

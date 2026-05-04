@@ -28,7 +28,6 @@ class KX2(Device):
     has_rail: bool = False,
     has_servo_gripper: bool = True,
     barcode_port: Optional[str] = None,
-    barcode_read_time: int = 2,
     barcode_baudrate: int = KX2BarcodeReaderDriver.default_baudrate,
   ) -> None:
     driver = KX2Driver(has_rail=has_rail, has_servo_gripper=has_servo_gripper)
@@ -54,9 +53,7 @@ class KX2(Device):
       self._bcr_driver = KX2BarcodeReaderDriver(
         port=barcode_port, baudrate=barcode_baudrate,
       )
-      bcr_backend = KX2BarcodeReaderBackend(
-        self._bcr_driver, read_time=barcode_read_time,
-      )
+      bcr_backend = KX2BarcodeReaderBackend(self._bcr_driver)
       self.barcode_scanning = BarcodeScanner(backend=bcr_backend)
       self._capabilities.append(self.barcode_scanning)
 
