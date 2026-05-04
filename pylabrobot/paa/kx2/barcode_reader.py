@@ -280,7 +280,7 @@ class KX2BarcodeReaderBackend(BarcodeScannerBackend):
     logger.info("[KX2 BCR %s] software version: %s", self.driver.io.port, version)
     await self.driver.set_read_mode("single")
 
-  async def scan_barcode(self, read_time: Optional[float] = None) -> Barcode:
+  async def scan_barcode(self, read_time: Optional[float] = None) -> Optional[Barcode]:
     # Reader's Y-command only takes integer seconds 1..9 (YM=indefinite). When
     # the caller specifies read_time, push it to the device first so the
     # on-device window matches our wait bound. Otherwise leave whatever's
@@ -291,9 +291,15 @@ class KX2BarcodeReaderBackend(BarcodeScannerBackend):
       await self.driver.set_read_time(int(round(read_time)))
     await self.driver.trigger(True)
     timeout = (read_time + 1.0) if read_time is not None else self._DEFAULT_SCAN_WAIT
-    data = await self.driver.read_decoded_barcode(timeout=timeout)
+    try:
+      data = await self.driver.read_decoded_barcode(timeout=timeout)
+    except BarcodeScannerError:
+      # Driver raises on serial-read timeout. At this layer that's the
+      # "nothing decoded within the window" signal — return None instead of
+      # propagating. Real comms failures aren't reported via this path.
+      return None
     if not data:
-      raise BarcodeScannerError("KX2 barcode reader: no read within read-time window")
+      return None
     return Barcode(data=data, symbology="ANY 1D", position_on_resource="front")
 
 
