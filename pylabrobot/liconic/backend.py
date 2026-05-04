@@ -398,7 +398,7 @@ class LiconicBackend(
 
   async def read_barcode_inline(
     self, cassette: int, plt_position: int, barcode_scanner: BarcodeScannerBackend
-  ) -> Barcode:
+  ) -> Optional[Barcode]:
     await self._send_command("ST 1910")
     await self._wait_ready()
     barcode = await barcode_scanner.scan_barcode()
@@ -406,7 +406,7 @@ class LiconicBackend(
       "Read barcode from plate at cassette %d, position %d: %s",
       cassette,
       plt_position,
-      barcode.data,
+      barcode,
     )
     reset = await self._send_command("RS 1910")
     if reset != "OK":
@@ -416,7 +416,7 @@ class LiconicBackend(
 
   async def scan_barcode(
     self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend
-  ) -> Barcode:
+  ) -> Optional[Barcode]:
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
     await self._send_command(f"WR DM0 {m}")
@@ -425,7 +425,7 @@ class LiconicBackend(
     await self._send_command(f"WR DM5 {n}")
     await self._send_command("ST 1910")
     barcode = await barcode_scanner.scan_barcode()
-    logger.info("Scanned barcode: %s", barcode.data)
+    logger.info("Scanned barcode: %s", barcode)
     return barcode
 
   async def request_target_temperature(self) -> float:

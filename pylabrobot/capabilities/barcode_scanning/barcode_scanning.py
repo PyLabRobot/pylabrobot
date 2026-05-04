@@ -17,13 +17,18 @@ class BarcodeScanner(Capability):
     self.backend: BarcodeScannerBackend = backend
 
   @need_capability_ready
-  async def scan(self, read_time: Optional[float] = None) -> Barcode:
-    """Scan a barcode and return its value.
+  async def scan(self, read_time: Optional[float] = None) -> Optional[Barcode]:
+    """Scan a barcode and return its value, or ``None`` if nothing decoded
+    within the read window.
 
     Args:
       read_time: Optional read-window in seconds for this scan. If omitted,
         the backend uses the device's current default. Backends for scanners
         without a configurable window may ignore this argument.
+
+    Returns:
+      The decoded :class:`Barcode`, or ``None`` if the read window elapsed
+      without a successful decode.
     """
     return await self.backend.scan_barcode(read_time=read_time)
 
