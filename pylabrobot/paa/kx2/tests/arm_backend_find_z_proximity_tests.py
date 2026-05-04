@@ -359,7 +359,6 @@ class FindGenericTests(unittest.TestCase):
     result = asyncio.run(h.backend.find_with_proximity_sensor(
       start=Coordinate(x=100, y=200, z=50),
       end=Coordinate(x=200, y=200, z=50),
-      direction=0.0,
     ))
 
     self.assertAlmostEqual(result.x, 110.0, places=6)
@@ -381,7 +380,6 @@ class FindGenericTests(unittest.TestCase):
       asyncio.run(h.backend.find_with_proximity_sensor(
         start=Coordinate(x=100, y=200, z=50),
         end=Coordinate(x=200, y=200, z=50),
-        direction=0.0,
       ))
 
     msg = str(ctx.exception)
@@ -399,7 +397,6 @@ class FindGenericTests(unittest.TestCase):
     result = asyncio.run(h.backend.find_with_proximity_sensor(
       start=Coordinate(x=100, y=200, z=50),
       end=Coordinate(x=200, y=200, z=50),
-      direction=0.0,
     ))
 
     self.assertAlmostEqual(result.x, 100.0, places=6)

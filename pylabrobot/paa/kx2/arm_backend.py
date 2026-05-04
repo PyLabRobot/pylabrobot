@@ -741,15 +741,17 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     self,
     start: Coordinate,
     end: Coordinate,
-    direction: float,
     *,
     max_gripper_speed: float = 25.0,
     max_gripper_acceleration: float = 100.0,
   ) -> Coordinate:
     """Sweep the gripper from ``start`` to ``end`` along a straight Cartesian
-    line; halt when the IR breakbeam trips. Yaw is held at ``direction``
-    for the whole sweep. Returns the gripper location at halt; raises
-    ``RuntimeError`` if the beam never tripped over the full path.
+    line; halt when the IR breakbeam trips. Yaw is held at whatever the
+    gripper is currently at — proximity sensing doesn't care about
+    orientation, and asking the caller to specify a direction would force
+    them to think about wrist angle they don't otherwise need to. Returns
+    the gripper location at halt; raises ``RuntimeError`` if the beam
+    never tripped over the full path.
 
     Generic Cartesian counterpart to :meth:`find_z_with_proximity_sensor`.
     The Z-only descent has a hardware fast-path (``IL[4]=StopForward`` on
@@ -766,11 +768,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       max_gripper_acceleration=max_gripper_acceleration,
       path="linear",
     )
-    start_pose = GripperLocation(location=start, rotation=Rotation(z=direction))
-    end_pose = GripperLocation(location=end, rotation=Rotation(z=direction))
 
     async with self._motion_guard():
       await self.driver.motors_ensure_enabled([int(a) for a in MOTION_AXES])
+      current_yaw = (await self.request_gripper_location()).rotation.z
+      start_pose = GripperLocation(location=start, rotation=Rotation(z=current_yaw))
+      end_pose = GripperLocation(location=end, rotation=Rotation(z=current_yaw))
       # Pre-position to start (joint move — path doesn't matter, just get there).
       pre_pos = await self._cart_to_joints(start_pose)
       await self._motors_move_joint_locked(
