@@ -718,6 +718,11 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           )
         except Exception as e:
           logger.warning("find_z: IL restore failed: %s", e)
+        # The IL-trip and the motor_stop fire EMCY frames that mark the
+        # move as a fault; the trip was *expected*, not a real fault, so
+        # clear the sticky state — otherwise the next motion call's
+        # `motor_check_if_move_done` raises immediately on a stale flag.
+        self.driver.clear_emcy_state(int(Axis.Z))
       if not tripped:
         z_end = await self.motor_get_current_position(Axis.Z)
         raise RuntimeError(
@@ -923,8 +928,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         # Log with EMCY state for post-mortem: if the drive was already
         # mid-fault when we tried to stop, the EMCY counters tell us why.
         emcy_snap = {
-          ax: vars(self.driver._ipm_emcy[ax]) for ax in active_axes
-          if ax in self.driver._ipm_emcy
+          ax: vars(self.driver._emcy[ax]) for ax in active_axes
+          if ax in self.driver._emcy
         }
         logger.exception(
           "ipm_stop cleanup failed; drive may still be in IPM with ip-enable "

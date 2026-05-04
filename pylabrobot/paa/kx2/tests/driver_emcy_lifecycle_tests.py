@@ -20,7 +20,7 @@ from pylabrobot.paa.kx2.driver import (
   EmcyFrame,
   KX2Driver,
   _EMCY_COB_BASE,
-  _IpmEmcyState,
+  _NodeEmcyState,
 )
 
 
@@ -88,7 +88,7 @@ class StaleCallbackAfterStopTests(unittest.TestCase):
     drv._network = mock.MagicMock()
     loop = asyncio.new_event_loop()
     drv._loop = loop
-    drv._ipm_emcy[1] = _IpmEmcyState()
+    drv._emcy[1] = _NodeEmcyState()
     try:
       loop.run_until_complete(drv.stop())
     finally:
@@ -98,9 +98,8 @@ class StaleCallbackAfterStopTests(unittest.TestCase):
     # resurrect any state.
     cb(_EMCY_COB_BASE + 1, _frame(0x5441), 0.0)
 
-    self.assertFalse(drv.emcy_move_error_received)
-    self.assertEqual(drv.emcy_move_error, "")
-    self.assertEqual(drv._ipm_emcy, {})
+    self.assertIsNone(drv.emcy_move_error)
+    self.assertEqual(drv._emcy, {})
     self.assertEqual(drv._emcy_callbacks, [])
 
 

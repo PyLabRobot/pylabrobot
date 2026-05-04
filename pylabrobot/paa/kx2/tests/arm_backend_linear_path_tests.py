@@ -220,7 +220,7 @@ class LinearPathHappyPath(unittest.TestCase):
 
   def test_queue_fault_checked_after_preload_and_each_send(self):
     """After preload and after every streamed send, the runtime must
-    inspect _ipm_emcy via ipm_check_queue_fault — otherwise queue_full /
+    inspect _emcy via ipm_check_queue_fault — otherwise queue_full /
     underflow EMCYs are silently swallowed and the move appears to
     succeed even when the drive rejected our points."""
     fake = _FakeDriver()

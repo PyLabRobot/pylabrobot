@@ -36,6 +36,7 @@ class _FakeDriver:
     self.configure_il_calls: List[Tuple[Any, int, _InputLogic]] = []
     self.motor_stop_should_raise: Optional[Exception] = None
     self.ensure_enabled_calls: List[Tuple[int, ...]] = []
+    self.clear_emcy_calls: List[Optional[int]] = []
 
   async def motor_enable(self, *, node_id: Any, state: bool, use_ds402: bool) -> None:
     self.motor_enable_calls.append((node_id, state, use_ds402))
@@ -44,6 +45,9 @@ class _FakeDriver:
     self, node_ids: List[int], *, use_ds402: bool = True,
   ) -> None:
     self.ensure_enabled_calls.append(tuple(int(n) for n in node_ids))
+
+  def clear_emcy_state(self, node_id: Optional[int] = None) -> None:
+    self.clear_emcy_calls.append(node_id)
 
   async def motor_stop(self, axis: Axis) -> None:
     self.motor_stop_calls.append(axis)

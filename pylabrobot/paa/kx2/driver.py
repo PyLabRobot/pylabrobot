@@ -210,14 +210,21 @@ class EmcyFrame:
 
 
 @dataclass
-class _IpmEmcyState:
-  """Per-node IPM queue state, mirrored from `sPVT_EMCY` in clscanmotor.cs:6943-6964.
+class _NodeEmcyState:
+  """All EMCY state we track for one drive node — single source of truth.
 
-  ``queue_low`` is a proactive warning (drive's IP buffer is approaching
-  empty); ``underflow`` is post-fact (drive ran the buffer dry and
-  short-stopped the trajectory). The streaming runtime treats underflow as
-  a fatal error; queue_low is informational unless we move to event-driven
-  pacing.
+  Three flavors of consumer pull from this:
+  - **Streaming runtime** reads ``queue_full`` / ``underflow`` to detect
+    IPM backpressure. ``queue_low`` is a proactive warning (drive's IP
+    buffer approaching empty); ``underflow`` is post-fact (drive ran the
+    buffer dry and short-stopped the trajectory).
+  - **Motion-poll path** reads ``move_error`` to raise on the next
+    ``motor_check_if_move_done`` after a fault-class EMCY arrived. The
+    string is preformatted with axis context.
+  - **Diagnostics** read ``last_frame`` for the last raw EMCY received
+    from this node.
+
+  Reset (whole struct) on re-enable / fault clear / find_z post-IL-trip.
   """
 
   queue_low: bool = False
@@ -230,6 +237,8 @@ class _IpmEmcyState:
   bad_mode_init_data: bool = False
   motion_terminated: bool = False
   out_of_modulo: bool = False
+  move_error: Optional[str] = None
+  last_frame: Optional["EmcyFrame"] = None
 
 
 # Standard CANopen error codes that don't depend on the Elmo byte.
@@ -293,7 +302,7 @@ _EMCY_STANDARD: Dict[int, Tuple[str, bool]] = {
 
 
 def _decode_emcy(
-  frame: EmcyFrame, state: _IpmEmcyState
+  frame: EmcyFrame, state: _NodeEmcyState
 ) -> Tuple[str, bool, bool]:
   """Decode an EMCY frame into (description, disable_motors, suppress_callback).
 
@@ -456,12 +465,14 @@ class KX2Driver(Driver):
 
     # EMCY (CANopen Emergency, COB-ID 0x80 + node_id) state. Subscribed in
     # setup(); fires on the canopen listener thread, marshalled into the
-    # asyncio loop via _make_emcy_callback.
-    self.emcy_move_error_received: bool = False
-    self.emcy_move_error: str = ""
-    self.emcy_move_error_node_id: Optional[int] = None
-    self.last_emcy: Optional[EmcyFrame] = None
-    self._ipm_emcy: Dict[int, _IpmEmcyState] = {}
+    # asyncio loop via _make_emcy_callback. Per-node `_NodeEmcyState` is
+    # the single source of truth (queue counters, sticky fault, last raw
+    # frame); `emcy_move_error` and `last_emcy` are derived properties.
+    self._emcy: Dict[int, _NodeEmcyState] = {}
+    # Tracks which node fired the most recent EMCY frame, so `last_emcy`
+    # can resolve to the right node's `last_frame`. Cheaper than scanning
+    # the dict on every read.
+    self._last_emcy_node_id: Optional[int] = None
     self._emcy_callbacks: List[
       Callable[[int, EmcyFrame, str, bool], None]
     ] = []
@@ -479,6 +490,30 @@ class KX2Driver(Driver):
     if self._loop is None:
       raise RuntimeError("KX2Driver event loop not initialized; call setup() first.")
     return self._loop
+
+  @property
+  def emcy_move_error(self) -> Optional[str]:
+    """First pending fault across all nodes; ``None`` if no fault.
+
+    Pre-formatted with axis context (``"Axis {nid} {description}"``).
+    `motor_check_if_move_done` raises on this; recovery paths clear it
+    via `clear_emcy_state`.
+    """
+    for st in self._emcy.values():
+      if st.move_error is not None:
+        return st.move_error
+    return None
+
+  @property
+  def last_emcy(self) -> Optional[EmcyFrame]:
+    """Most recent EMCY frame received from any node; ``None`` if none yet.
+
+    Diagnostic only — motion logic uses `emcy_move_error` for fault
+    detection and `_emcy[nid]` for per-axis IPM queue state."""
+    if self._last_emcy_node_id is None:
+      return None
+    st = self._emcy.get(self._last_emcy_node_id)
+    return st.last_frame if st is not None else None
 
   # --- lifecycle -----------------------------------------------------------
 
@@ -504,7 +539,7 @@ class KX2Driver(Driver):
     # the C# event handler at KX2RobotControl.cs:15384-15425 /
     # clscanmotor.cs:1057-1284.
     for nid in self.node_id_list:
-      self._ipm_emcy[nid] = _IpmEmcyState()
+      self._emcy[nid] = _NodeEmcyState()
       network.subscribe(_EMCY_COB_BASE + nid, self._make_emcy_callback(nid))
 
     # Reset all nodes, then start scanner so bootup messages populate it,
@@ -591,14 +626,11 @@ class KX2Driver(Driver):
       self._network.disconnect()
       self._network = None
       self._nodes = {}
-      self._ipm_emcy = {}
+      self._emcy = {}
+      self._last_emcy_node_id = None
       # Clear callbacks too: _on_setup re-registers on each retry, so leaving
       # them would compound N copies of the same handler across attempts.
       self._emcy_callbacks = []
-      self.emcy_move_error_received = False
-      self.emcy_move_error = ""
-      self.emcy_move_error_node_id = None
-      self.last_emcy = None
       self._statusword = {}
       self._statusword_event = {}
 
@@ -745,16 +777,19 @@ class KX2Driver(Driver):
     self._emcy_callbacks.append(cb)
 
   def clear_emcy_state(self, node_id: Optional[int] = None) -> None:
-    """Clear sticky EMCY error fields after a recovery / re-enable.
+    """Clear EMCY state.
 
-    If ``node_id`` is given, also resets the per-node IPM queue state for
-    that node. Mirrors clscanmotor.cs:668-669, 3454, 4481.
+    With ``node_id``: reset that one node's `_NodeEmcyState` (queue
+    counters + sticky fault + last_frame). Without: clear the sticky
+    fault on every node — leaves queue counters intact since they're
+    stream-scoped and reset by `ipm_begin_motion`.
     """
-    self.emcy_move_error_received = False
-    self.emcy_move_error = ""
-    self.emcy_move_error_node_id = None
-    if node_id is not None and node_id in self._ipm_emcy:
-      self._ipm_emcy[node_id] = _IpmEmcyState()
+    if node_id is not None:
+      if node_id in self._emcy:
+        self._emcy[node_id] = _NodeEmcyState()
+      return
+    for st in self._emcy.values():
+      st.move_error = None
 
   def _make_emcy_callback(self, node_id: int):
     """Return a `canopen.Network.subscribe` callback bound to a specific node."""
@@ -773,9 +808,10 @@ class KX2Driver(Driver):
       return
     err_code, err_reg, elmo_err, d1, d2 = struct.unpack("<HBBHH", data[:8])
     frame = EmcyFrame(err_code, err_reg, elmo_err, d1, d2)
-    self.last_emcy = frame
 
-    state = self._ipm_emcy.setdefault(node_id, _IpmEmcyState())
+    state = self._emcy.setdefault(node_id, _NodeEmcyState())
+    state.last_frame = frame
+    self._last_emcy_node_id = node_id
     desc, disable_motors, suppress = _decode_emcy(frame, state)
     # Tier the level so IPM housekeeping (queue-low/underflow) doesn't drown
     # ops logs while real faults stay loud. Unknown codes warn so we notice.
@@ -794,9 +830,10 @@ class KX2Driver(Driver):
     )
 
     if disable_motors:
-      self.emcy_move_error_received = True
-      self.emcy_move_error = desc
-      self.emcy_move_error_node_id = node_id
+      # Pre-format with axis context: motor_check_if_move_done just raises
+      # `f"Motor Fault: {emcy_move_error}"` and the consumer expects the
+      # axis to be named.
+      state.move_error = f"Axis {node_id} {desc}"
 
     if suppress:
       return
@@ -1090,10 +1127,9 @@ class KX2Driver(Driver):
     # them — the poll loop times out before ever consulting EMCY state.
     # Check sticky EMCY first so any fatal frame raises on the next poll
     # iteration regardless of MS.
-    if self.emcy_move_error_received and self.emcy_move_error:
-      nid = self.emcy_move_error_node_id
-      prefix = f"Axis {nid} " if nid is not None else ""
-      raise RuntimeError(f"Motor Fault: {prefix}{self.emcy_move_error}")
+    pending = self.emcy_move_error
+    if pending is not None:
+      raise RuntimeError(f"Motor Fault: {pending}")
     ms_val = await self.query_int(node_id, "MS", 0)
     if ms_val == 0:
       return True
@@ -1374,8 +1410,8 @@ class KX2Driver(Driver):
       return
     await self.motors_ensure_enabled(ids)
     for nid in ids:
-      if nid in self._ipm_emcy:
-        self._ipm_emcy[nid] = _IpmEmcyState()
+      if nid in self._emcy:
+        self._emcy[nid] = _NodeEmcyState()
     for nid in ids[:-1]:
       await self._control_word_set(nid, 0x1F, sync=False)
     await self._control_word_set(ids[-1], 0x1F, sync=True)
@@ -1395,7 +1431,7 @@ class KX2Driver(Driver):
   def ipm_check_queue_fault(self, node_ids: List[int]) -> None:
     """Raise CanError if any axis has a fatal IPM queue condition.
 
-    Inspects the EMCY-driven ``_ipm_emcy`` state for ``queue_full`` (drive
+    Inspects the EMCY-driven ``_emcy`` state for ``queue_full`` (drive
     rejected our point) or ``underflow`` (drive ran the buffer dry).
     Either condition means the trajectory is no longer trustworthy — the
     streaming runtime calls this after each send-batch to surface the fault
@@ -1403,7 +1439,7 @@ class KX2Driver(Driver):
     """
     bad: List[str] = []
     for nid in node_ids:
-      st = self._ipm_emcy.get(int(nid))
+      st = self._emcy.get(int(nid))
       if st is None:
         continue
       if st.queue_full:
