@@ -180,16 +180,40 @@ def _transform_stages(
   default_lid_temp: float,
   apply_overshoot: bool = True,
 ) -> List[Stage]:
-  """Recursively transform all steps in a stage tree, computing slopes and overshoot."""
+  """Recursively transform all steps in a stage tree, computing slopes and overshoot.
+
+  Steps and inner_stages are processed in the same interleaved execution order
+  used by ``_flatten_one_stage``: steps[0], inner[0], steps[1], inner[1], …,
+  then any remaining steps. This ensures each overshoot is computed against the
+  actual preceding temperature the device will see.
+  """
   result = []
   for stage in stages:
-    new_inner = _transform_stages(
-      stage.inner_stages, prev_temp_box, variant, fluid_quantity,
-      default_heating_slope, default_cooling_slope, default_lid_temp,
-      apply_overshoot,
-    )
-    new_steps = []
-    for step in stage.steps:
+    steps = stage.steps
+    inner_stages = stage.inner_stages or []
+
+    new_steps: List[Step] = []
+    new_inner: List[Stage] = []
+
+    # Interleave: steps[gi] → inner[gi] → steps[gi+1] → inner[gi+1] → …
+    for gi, inner in enumerate(inner_stages):
+      if gi < len(steps):
+        new_step = _transform_step(
+          steps[gi], prev_temp_box[0], variant, fluid_quantity,
+          default_heating_slope, default_cooling_slope, default_lid_temp,
+          apply_overshoot,
+        )
+        prev_temp_box[0] = steps[gi].temperature
+        new_steps.append(new_step)
+      transformed_inner = _transform_stages(
+        [inner], prev_temp_box, variant, fluid_quantity,
+        default_heating_slope, default_cooling_slope, default_lid_temp,
+        apply_overshoot,
+      )
+      new_inner.extend(transformed_inner)
+
+    # Remaining steps after all inner stages (or all steps when no inner_stages)
+    for step in steps[len(inner_stages):]:
       new_step = _transform_step(
         step, prev_temp_box[0], variant, fluid_quantity,
         default_heating_slope, default_cooling_slope, default_lid_temp,
@@ -197,6 +221,7 @@ def _transform_stages(
       )
       prev_temp_box[0] = step.temperature
       new_steps.append(new_step)
+
     result.append(Stage(steps=new_steps, repeats=stage.repeats, inner_stages=new_inner))
   return result
 

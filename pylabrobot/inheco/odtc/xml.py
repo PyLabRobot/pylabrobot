@@ -548,7 +548,7 @@ def _odtc_protocol_to_method_xml(odtc_protocol: ODTCProtocol, parent: ET.Element
 
   ET.SubElement(elem, "Variant").text = str(_variant_to_device_code(odtc_protocol.variant))
   ET.SubElement(elem, "PlateType").text = str(odtc_protocol.plate_type)
-  ET.SubElement(elem, "FluidQuantity").text = str(odtc_protocol.fluid_quantity)
+  ET.SubElement(elem, "FluidQuantity").text = str(int(odtc_protocol.fluid_quantity))
   ET.SubElement(elem, "PostHeating").text = "true" if odtc_protocol.post_heating else "false"
   ET.SubElement(elem, "StartBlockTemperature").text = _format_value(odtc_protocol.start_block_temperature)
   ET.SubElement(elem, "StartLidTemperature").text = _format_value(odtc_protocol.start_lid_temperature)

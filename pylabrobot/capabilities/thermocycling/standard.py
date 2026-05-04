@@ -71,8 +71,11 @@ class Step(SerializableMixin):
 
   Args:
     temperature: Target block temperature in °C.
-    hold_seconds: Seconds to hold at target. Use ``float('inf')`` for
-      an indefinite hold (wait until continued).
+    hold_seconds: Finite positive number of seconds to hold at the target
+      temperature. Must be a real number (e.g. 30, 300). For an indefinite
+      hold after a protocol completes, use the device's post-heating
+      mechanism instead (e.g. ``post_heating=True`` on ``RunProtocolParams``
+      or ``ODTCProtocol`` for the ODTC).
     ramp: Transition profile into this step's temperature.
       Defaults to FULL_SPEED (full device speed, no overshoot).
     lid_temperature: Optional lid/cover target temperature in °C.

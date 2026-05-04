@@ -275,7 +275,8 @@ class ODTCProtocol(Protocol):
   roundtrip. This is both the compiled output of from_protocol() and
   the parsed representation of device XML.
 
-  Protocol fields inherited: stages, name, lid_temperature.
+  Protocol fields inherited: stages, lid_temperature.
+  name is overridden below with a non-empty default.
 
   Validation runs in __post_init__ (previously in ODTCConfig).
   """
@@ -290,6 +291,9 @@ class ODTCProtocol(Protocol):
   pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
 
   # Identity / metadata
+  # Override Protocol.name default ("") so directly-constructed ODTCProtocols always
+  # have a valid non-empty name for SetParameters / ExecuteMethod.
+  name: str = field(default="plr_currentProtocol")
   kind: Literal["method", "premethod"] = field(default="method")
   is_scratch: bool = field(default=True)
   creator: Optional[str] = field(default=None)

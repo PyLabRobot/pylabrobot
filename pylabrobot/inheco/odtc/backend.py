@@ -138,6 +138,25 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     await self._driver.send_command("SetParameters", paramsXML=params_xml)
 
   # ------------------------------------------------------------------
+  # Execution helper
+  # ------------------------------------------------------------------
+
+  async def _execute_method(self, odtc_protocol: ODTCProtocol) -> None:
+    """Clear state, start ExecuteMethod, and register tracking callbacks.
+
+    All fire-and-forget execution paths funnel through here so that
+    _clear_execution_state, protocol/request-id recording, and the done
+    callback are always applied in the correct order.
+    """
+    self._clear_execution_state()
+    self._current_odtc_protocol = odtc_protocol
+    fut, request_id = await self._driver.send_command_async(
+      "ExecuteMethod", methodName=odtc_protocol.name
+    )
+    self._current_request_id = request_id
+    fut.add_done_callback(lambda _: self._clear_execution_state())
+
+  # ------------------------------------------------------------------
   # ThermocyclerBackend abstract methods
   # ------------------------------------------------------------------
 
@@ -151,20 +170,11 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
       backend_params = ODTCThermocyclerBackend.RunProtocolParams(variant=self._variant)
 
     odtc = self._resolve_odtc_protocol(protocol, backend_params)
-
-    # Upload as method set
-    if odtc.kind == "method":
-      ms = ODTCMethodSet(methods=[odtc])
-    else:
-      ms = ODTCMethodSet(premethods=[odtc])
-    await self._upload_method_set(ms, dynamic_pre_method_duration=backend_params.dynamic_pre_method_duration)
-
-    # Execute
-    self._clear_execution_state()
-    self._current_odtc_protocol = odtc
-    fut, request_id = await self._driver.send_command_async("ExecuteMethod", methodName=odtc.name)
-    self._current_request_id = request_id
-    fut.add_done_callback(lambda _: self._clear_execution_state())
+    await self.upload_protocol(
+      odtc,
+      dynamic_pre_method_duration=backend_params.dynamic_pre_method_duration,
+    )
+    await self._execute_method(odtc)
 
   async def set_block_temperature(
     self,
@@ -172,7 +182,6 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Set block temperature via a premethod protocol."""
-    from .model import ODTCHardwareConstraints
     params = (
       backend_params
       if isinstance(backend_params, ODTCThermocyclerBackend.RunProtocolParams)
@@ -189,28 +198,23 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
       start_lid_temperature=lid_temp,
       pid_set=list(params.pid_set),
       kind="premethod",
+      is_scratch=True,
       target_block_temperature=temperature,
       target_lid_temperature=lid_temp,
     )
-    ms = ODTCMethodSet(premethods=[premethod])
-    await self._upload_method_set(ms)
-    fut, request_id = await self._driver.send_command_async(
-      "ExecuteMethod", methodName=premethod.name
-    )
-    self._current_request_id = request_id
-    self._current_odtc_protocol = premethod
-    fut.add_done_callback(lambda _: self._clear_execution_state())
+    await self.upload_protocol(premethod)
+    await self._execute_method(premethod)
 
   async def deactivate_block(self, backend_params: Optional[BackendParams] = None) -> None:
     await self._driver.send_command("StopMethod")
     self._clear_execution_state()
 
   async def request_block_temperature(self) -> float:
-    sensor_values = await self._request_temperatures()
+    sensor_values = await self.request_temperatures()
     return sensor_values.mount
 
   async def request_lid_temperature(self) -> float:
-    sensor_values = await self._request_temperatures()
+    sensor_values = await self.request_temperatures()
     return sensor_values.lid
 
   async def request_progress(self) -> Optional[Any]:
@@ -236,7 +240,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
   # ODTC-specific public methods (available on the backend directly)
   # ------------------------------------------------------------------
 
-  async def _request_temperatures(self) -> ODTCSensorValues:
+  async def request_temperatures(self) -> ODTCSensorValues:
     resp = await self._driver.send_command("ReadActualTemperature")
     if resp is None:
       raise RuntimeError("ReadActualTemperature returned no data")
@@ -382,8 +386,4 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
         f"Protocol {name!r} not found on device. "
         f"Upload it first with upload_protocol()."
       )
-    self._clear_execution_state()
-    self._current_odtc_protocol = resolved
-    fut, request_id = await self._driver.send_command_async("ExecuteMethod", methodName=name)
-    self._current_request_id = request_id
-    fut.add_done_callback(lambda _: self._clear_execution_state())
+    await self._execute_method(resolved)
