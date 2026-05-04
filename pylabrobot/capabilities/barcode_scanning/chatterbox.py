@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from pylabrobot.resources.barcode import Barcode
 
@@ -13,8 +14,8 @@ class BarcodeScannerChatterboxBackend(BarcodeScannerBackend):
   def __init__(self, barcode: str = "CHATTERBOX-001"):
     self.barcode = barcode
 
-  async def scan_barcode(self) -> Barcode:
-    logger.info("Scanning barcode.")
+  async def scan_barcode(self, read_time: Optional[float] = None) -> Barcode:
+    logger.info("Scanning barcode (read_time=%s).", read_time)
     return Barcode(
       data=self.barcode, symbology="Code 128 (Subset B and C)", position_on_resource="front"
     )
