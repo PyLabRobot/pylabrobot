@@ -55,11 +55,18 @@ def volume_to_fluid_quantity(volume_ul: float) -> FluidQuantity:
   """Map volume in µL to ODTC FluidQuantity.
 
   Args:
-    volume_ul: Volume in microliters (maximum 100 µL).
+    volume_ul: Volume in microliters (must be > 0 and ≤ 100 µL).
 
   Returns:
     FluidQuantity matching the volume range.
+
+  Raises:
+    ValueError: If volume_ul is <= 0 or > 100.
   """
+  if volume_ul <= 0:
+    raise ValueError(
+      f"Volume must be > 0 µL, got {volume_ul} µL."
+    )
   if volume_ul > 100:
     raise ValueError(
       f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL."

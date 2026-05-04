@@ -32,17 +32,21 @@ class Thermocycler(Capability):
   async def run_protocol(
     self,
     protocol: Protocol,
+    volume_ul: Optional[float] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Execute a thermocycler protocol.
 
     Args:
       protocol: The protocol to run.
-      backend_params: Optional backend-specific parameters (e.g. variant,
-        fluid_quantity for ODTC).
+      volume_ul: Maximum sample volume in wells (µL). Backends that apply
+        volume-dependent thermal compensation (e.g. ODTC overshoot) use this
+        to select the appropriate mode. Ignored by backends that do not support
+        it. Overridden by an explicit fluid_quantity in backend_params.
+      backend_params: Optional backend-specific parameters.
     """
     self._current_protocol = protocol
-    await self.backend.run_protocol(protocol, backend_params=backend_params)
+    await self.backend.run_protocol(protocol, volume_ul=volume_ul, backend_params=backend_params)
 
   @need_capability_ready
   async def stop_protocol(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -91,6 +95,25 @@ class Thermocycler(Capability):
   async def request_progress(self) -> Optional[Any]:
     """Return backend-specific progress for the running protocol, or None."""
     return await self.backend.request_progress()
+
+  async def wait_for_completion(self, timeout: Optional[float] = None) -> None:
+    """Block until the running protocol completes, or timeout expires.
+
+    Returns immediately if no protocol is running. Delegates to the backend's
+    ``wait_for_completion`` if it exists (e.g. ``ODTCThermocyclerBackend``).
+
+    Args:
+      timeout: Maximum seconds to wait. None means the backend's own default
+        (typically 3 hours for ODTC). Pass a smaller value to fail faster.
+
+    Raises:
+      RuntimeError: If capability is not set up.
+      asyncio.TimeoutError: If the protocol does not complete within timeout.
+    """
+    if not self._setup_finished:
+      raise RuntimeError("Thermocycler capability is not set up.")
+    if hasattr(self.backend, "wait_for_completion"):
+      await self.backend.wait_for_completion(timeout=timeout)
 
   async def wait_for_first_progress(self, timeout: float = 60.0) -> Any:
     """Block until the backend reports non-None progress, or raise TimeoutError.

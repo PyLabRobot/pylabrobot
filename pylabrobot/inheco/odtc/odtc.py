@@ -36,10 +36,14 @@ class ODTC(Resource, Device):
     await odtc.door.open()
     # load plate onto odtc.door ...
     await odtc.door.close()
-    await odtc.tc.run_protocol(
-        protocol,
-        backend_params=ODTCThermocyclerBackend.RunProtocolParams(variant=96, fluid_quantity=1),
-    )
+    await odtc.tc.run_protocol(protocol)
+    # or with explicit params:
+    # await odtc.tc.run_protocol(
+    #     protocol,
+    #     backend_params=ODTCThermocyclerBackend.RunProtocolParams(
+    #         fluid_quantity=FluidQuantity.UL_30_TO_74,
+    #     ),
+    # )
     await odtc.stop()
 
   Physical dimensions (mm): x=156.5, y=248.0, z=124.3.

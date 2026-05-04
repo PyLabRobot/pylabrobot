@@ -17,10 +17,21 @@ class ThermocyclerBackend(CapabilityBackend, metaclass=ABCMeta):
   async def run_protocol(
     self,
     protocol: Protocol,
+    volume_ul: Optional[float] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Execute a thermocycler protocol. Fire-and-forget by default; backends
-    may support a ``wait`` flag via ``backend_params``."""
+    may support a ``wait`` flag via ``backend_params``.
+
+    Args:
+      protocol: The protocol to run.
+      volume_ul: Maximum sample volume in wells (µL). Backends that apply
+        volume-dependent thermal compensation (e.g. ODTC overshoot) use this
+        to select the appropriate compensation mode. Ignored by backends that
+        do not support it. Overridden by an explicit ``fluid_quantity`` (or
+        equivalent) in ``backend_params`` when provided.
+      backend_params: Backend-specific per-call parameters.
+    """
 
   @abstractmethod
   async def set_block_temperature(

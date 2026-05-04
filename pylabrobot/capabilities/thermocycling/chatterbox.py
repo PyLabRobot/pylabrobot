@@ -33,6 +33,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
   async def run_protocol(
     self,
     protocol: Protocol,
+    volume_ul: Optional[float] = None,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     logger.info("ThermocyclerChatterbox: run_protocol name=%r", protocol.name)
