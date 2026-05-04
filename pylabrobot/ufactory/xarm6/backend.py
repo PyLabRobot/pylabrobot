@@ -277,7 +277,9 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   # -- CanFreedrive ----------------------------------------------------------
 
   async def start_freedrive_mode(
-    self, free_axes: List[int], backend_params: Optional[BackendParams] = None
+    self,
+    free_axes: Optional[List[int]] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Enter freedrive (manual teaching) mode.
 

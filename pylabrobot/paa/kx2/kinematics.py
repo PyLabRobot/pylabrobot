@@ -1,0 +1,631 @@
+"""
+KX2 kinematics: FK and IK.
+
+The KX2 is *not* a dual-link SCARA. The elbow is a prismatic radial slide
+(not a revolute J3), Z is a separate prismatic axis, and the rail is
+outside this kinematic model. So the math is closed-form and trivially
+cheap — no two-link cosine law, no elbow-up/elbow-down branch, no
+unreachable-pose check beyond "rotation must be about +Z". The wrist is
+a continuous-rotation drive with no winding, so J4 has no preferred sign
+either — `ik` returns one canonical value, `snap_to_current` then pulls
+it to whichever 360° wrap is closest to the current J4.
+
+Joint dict keys match the drive node-IDs and the `KX2ArmBackend.Axis` enum:
+  1: shoulder [deg]
+  2: Z [mm]
+  3: elbow [mm] (radial extension)
+  4: wrist [deg]
+
+Task pose is a `GripperLocation`. The gripper clamp point is in world
+coordinates; rotation.z is yaw in degrees about world +Z, and
+rotation.x/y must be 0. Sign convention follows right-hand rule about +Z
+(CCW positive looking down).
+"""
+
+from dataclasses import dataclass, field
+from math import asin, atan2, ceil, cos, degrees, hypot, pi, radians, sin, sqrt, trunc
+from typing import Dict, List, Optional, Tuple
+
+from pylabrobot.capabilities.arms import kinematics as arm_kinematics
+from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.paa.kx2.config import Axis, GripperParams, KX2Config
+from pylabrobot.paa.kx2.driver import (
+  JointMoveDirection,
+  MotorMoveParam,
+  MotorsMovePlan,
+)
+from pylabrobot.resources import Coordinate, Rotation
+
+
+class IKError(ValueError):
+  """Target pose is unreachable (for now: non-Z rotation requested)."""
+
+
+# Floating-point fudge for boundary checks (e.g. snap shoulder to ±180°).
+_EPS = 1e-6
+
+
+def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLocation:
+  """Forward kinematics.
+
+  Args:
+    joints: {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
+    c: arm configuration (drive-read calibration).
+    t: gripper tooling (user-supplied geometry).
+  Returns:
+    GripperLocation with the gripper clamp point and a yaw equivalent to
+    the joints' net world orientation.
+  """
+  r = c.wrist_offset + c.elbow_offset + c.elbow_zero_offset + joints[Axis.ELBOW]
+  sh_deg = joints[Axis.SHOULDER]
+  sh = radians(sh_deg)
+
+  wrist_x = -r * sin(sh)
+  wrist_y = r * cos(sh)
+  wrist_z = joints[Axis.Z]
+
+  yaw_deg = joints[Axis.WRIST] + sh_deg
+  if yaw_deg > 180.0:
+    yaw_deg -= 360.0
+  if yaw_deg < -180.0:
+    yaw_deg += 360.0
+
+  yaw = radians(yaw_deg)
+  gl = t.length if t.finger_side == "barcode_reader" else -t.length
+  return GripperLocation(
+    location=Coordinate(
+      x=wrist_x + gl * sin(yaw),
+      y=wrist_y - gl * cos(yaw),
+      z=wrist_z - t.z_offset,
+    ),
+    rotation=Rotation(z=yaw_deg),
+  )
+
+
+def ik(pose: GripperLocation, c: KX2Config, t: GripperParams) -> Dict[Axis, float]:
+  """Inverse kinematics.
+
+  Args:
+    pose: target gripper pose. rotation.x/y must be 0.
+    c: arm configuration (drive-read calibration).
+    t: gripper tooling (user-supplied geometry).
+  Returns:
+    joints dict {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
+    J4 is the canonical (-180°, 180°] solution; `snap_to_current` shifts
+    it to the closest 360° wrap of the current J4 for actual motion.
+  Raises:
+    IKError if the requested rotation has an x or y component.
+  """
+  if pose.rotation.x != 0 or pose.rotation.y != 0:
+    raise IKError("Only Z rotation is supported for KX2")
+
+  # Gripper -> wrist: the incoming pose describes the gripper clamp point;
+  # the joint-space math operates on the wrist axis. Rigid offset with the
+  # gripper length on the radial axis (governed by world rotation z) and
+  # the gripper z offset downward. Sign tracks which finger is the radial
+  # "front".
+  yaw = radians(pose.rotation.z)
+  gl = t.length if t.finger_side == "barcode_reader" else -t.length
+  x = pose.location.x - gl * sin(yaw)
+  y = pose.location.y + gl * cos(yaw)
+  wrist_z = pose.location.z + t.z_offset
+
+  # atan2 returns (-π, π]; on the -Y axis it yields -180°. Snap to +180°
+  # so the boundary lands on the "in-range" side of an exclusive max
+  # convention and downstream sign comparisons are stable.
+  shoulder = -degrees(atan2(x, y))
+  if abs(shoulder + 180.0) < _EPS:
+    shoulder = 180.0
+
+  elbow = hypot(x, y) - c.wrist_offset - c.elbow_offset - c.elbow_zero_offset
+  wrist = pose.rotation.z - shoulder
+
+  return {Axis.SHOULDER: shoulder, Axis.Z: wrist_z, Axis.ELBOW: elbow, Axis.WRIST: wrist}
+
+
+def snap_to_current(
+  joints: Dict[Axis, float], current: Dict[Axis, float]
+) -> Dict[Axis, float]:
+  """Shift rotary joints by 360° multiples toward `current`. Z and elbow
+  are prismatic and pass through unchanged."""
+  out = dict(joints)
+  for axis in (Axis.SHOULDER, Axis.WRIST):
+    out[axis] += 360 * round((current[axis] - out[axis]) / 360)
+  return out
+
+
+# --- elbow encoder/joint frame conversion ----------------------------------
+#
+# The elbow is exposed to FK/IK as a linear radial extension (mm), but the
+# physical motor is a rotary actuator driving a sine linkage — so the encoder
+# count is sin-related to the mm-space joint value. These two functions sit
+# at the encoder/joint boundary; FK/IK above and the planner below both
+# operate in the linear (mm) domain. Mirrors C# `ConvertElbowPositionToAngle`
+# / `ConvertElbowAngleToPosition` (KX2RobotControl.cs:2944, 2974).
+
+def convert_elbow_position_to_angle(cfg: KX2Config, elbow_pos: float) -> float:
+  max_travel = cfg.axes[Axis.ELBOW].max_travel
+  denom = max_travel + cfg.elbow_zero_offset
+  # Clamp to [-1, 1]: floating-point overshoot at the joint limit (e.g.
+  # encoder reads max_travel + 1e-12) would otherwise raise ValueError
+  # from asin even though the position is physically reachable.
+  if elbow_pos > max_travel:
+    x = max(-1.0, min(1.0, (2.0 * max_travel - elbow_pos + cfg.elbow_zero_offset) / denom))
+    return 90.0 + asin(x) * (180.0 / pi)
+  x = max(-1.0, min(1.0, (elbow_pos + cfg.elbow_zero_offset) / denom))
+  return asin(x) * (180.0 / pi)
+
+
+def convert_elbow_angle_to_position(cfg: KX2Config, elbow_angle_deg: float) -> float:
+  max_travel = cfg.axes[Axis.ELBOW].max_travel
+  denom = max_travel + cfg.elbow_zero_offset
+  if elbow_angle_deg > 90.0:
+    # Inverse of `90 + asin((2·max − pos + zero)/(max + zero))`. The `+ zero`
+    # term has to appear on both sides of the reflection or the round-trip
+    # drifts by ~zero·(max+zero)/max — silent encoder-read miscalibration
+    # when the joint is past peak extension.
+    return 2.0 * max_travel + cfg.elbow_zero_offset - denom * sin((elbow_angle_deg - 90.0) * (pi / 180.0))
+  return denom * sin(elbow_angle_deg * (pi / 180.0)) - cfg.elbow_zero_offset
+
+
+# --- trajectory planning ---------------------------------------------------
+
+def _wrap_to_range(x: float, lo: float, hi: float) -> float:
+  span = hi - lo
+  if span == 0:
+    return lo
+  k = trunc(x / span)
+  x = x - k * span
+  if x < lo:
+    x += span
+  if x == hi:
+    x -= span
+  return x
+
+
+def _profile(dist: float, v: float, a: float) -> tuple:
+  """Return (v, a, t_acc, t_total) with triangular fallback. If the
+  distance is short, you can't reach v before you must decelerate."""
+  if dist <= 0:
+    return v, a, 0.0, 0.0
+  if a <= 0:
+    # degenerate; avoid crash
+    return max(v, 1e-9), 1e-9, 0.0, dist / max(v, 1e-9)
+  t_acc = v / a
+  d_acc = 0.5 * a * t_acc * t_acc
+  if 2.0 * d_acc > dist:  # triangular
+    t_acc = sqrt(dist / a)
+    v = a * t_acc
+    return v, a, t_acc, 2.0 * t_acc
+  d_cruise = dist - 2.0 * d_acc
+  t_cruise = d_cruise / max(v, 1e-9)
+  return v, a, t_acc, t_cruise + 2.0 * t_acc
+
+
+def _directional_delta(target: float, current: float, ax_cfg) -> float:
+  """Signed joint delta honoring `unlimited_travel` direction modes.
+
+  For non-`unlimited_travel` axes the delta is the literal `target − current`.
+  For unlimited axes the delta is rewritten to walk the direction the config
+  asks for (CW=negative, CCW=positive, ShortestWay=≤180°)."""
+  d = target - current
+  if not ax_cfg.unlimited_travel:
+    return d
+  span = ax_cfg.max_travel - ax_cfg.min_travel
+  dir_ = ax_cfg.joint_move_direction
+  if dir_ == JointMoveDirection.Clockwise and d > 0.01:
+    d -= span
+  elif dir_ == JointMoveDirection.Counterclockwise and d < -0.01:
+    d += span
+  elif dir_ == JointMoveDirection.ShortestWay:
+    if d > 180.0:
+      d -= span
+    elif d < -180.0:
+      d += span
+  return d
+
+
+def _stretch_to_time(dist: float, v: float, a: float, T: float) -> tuple:
+  """Slow a single-axis trapezoidal/triangular profile so it lands at time T.
+
+  Given the pass-1 profile (v, a) for `dist`, scale (v, a) by the same factor
+  k so the new profile takes time T. Preserving the v/a ratio keeps the
+  acceleration-time fixed; only the cruise leg stretches. Returns (v, a) for
+  the stretched profile."""
+  if dist <= 0 or a <= 0 or v <= 0:
+    return v, a
+  denom = v * (T - v / a)
+  if abs(denom) < 1e-12:
+    return v, a
+  k = dist / denom
+  return v * k, a * k
+
+
+def plan_joint_move(
+  current: Dict[Axis, float],
+  target: Dict[Axis, float],
+  cfg: KX2Config,
+  gripper_params: GripperParams,
+  *,
+  max_gripper_speed: Optional[float] = None,
+  max_gripper_acceleration: Optional[float] = None,
+) -> Optional[MotorsMovePlan]:
+  """Pure planner: joint-space target -> per-axis encoder plan.
+
+  Caller owns the driver round-trip — pass ``current`` from
+  ``request_joint_position`` (linear-extension units for elbow). Returns
+  ``None`` if every axis would be a no-op (within 0.01 of current).
+
+  ``target`` may be a subset of axes (e.g. ``{Axis.Z: 100}``) — unspecified
+  axes don't move.
+
+  ``current`` must include all four arm axes (SHOULDER/Z/ELBOW/WRIST) when
+  a gripper-speed/accel cap is given: the cap helper evaluates the FK
+  Jacobian at the start pose, and the column for any moving axis depends
+  on the absolute position of every other arm axis (the radius from the
+  shoulder enters the shoulder Jacobian, etc.). The orchestrator always
+  passes a full ``current`` from ``request_joint_position``; tests calling
+  this function directly must do the same.
+
+  ``max_gripper_speed`` / ``max_gripper_acceleration`` cap joint velocities
+  so the worst-case Cartesian gripper speed/accel along the trajectory
+  stays at or under the cap.
+  """
+  if max_gripper_speed is not None and max_gripper_speed <= 0.0:
+    raise ValueError(f"max_gripper_speed must be positive, got {max_gripper_speed}")
+  if max_gripper_acceleration is not None and max_gripper_acceleration <= 0.0:
+    raise ValueError(f"max_gripper_acceleration must be positive, got {max_gripper_acceleration}")
+
+  target = dict(target)
+  axes = list(target.keys())
+
+  # Travel-limit bounds check. Mirrors C# MoveAbsoluteSingleAxisPrivate
+  # (KX2RobotControl.cs:4624-4649): snap if within 0.1 of the limit, raise
+  # otherwise. Without this, an out-of-range target (e.g. gripper width 600
+  # when max_travel ~30) parks the drive trying to reach an unreachable
+  # position — MS never returns to 0 and every subsequent command on that
+  # axis hangs until full re-setup. Run before the elbow position->angle
+  # conversion so max/min_travel are compared in the units the user passed.
+  for ax in axes:
+    ax_cfg = cfg.axes[ax]
+    if ax_cfg.unlimited_travel:
+      continue
+    t = target[ax]
+    if t > ax_cfg.max_travel:
+      if t - ax_cfg.max_travel < 0.1:
+        target[ax] = ax_cfg.max_travel
+      else:
+        raise ValueError(f"Axis {ax.name} target {t} exceeds max_travel {ax_cfg.max_travel}")
+    elif t < ax_cfg.min_travel:
+      if ax_cfg.min_travel - t < 0.1:
+        target[ax] = ax_cfg.min_travel
+      else:
+        raise ValueError(f"Axis {ax.name} target {t} below min_travel {ax_cfg.min_travel}")
+
+  # Snapshot in cmd_pos units (elbow as linear extension) for the gripper-
+  # speed cap helper, which iterates the path in `fk`'s natural units.
+  target_cmd_units = dict(target)
+  curr_cmd_units = dict(current)
+
+  # Convert elbow target+current from position->angle for planning math —
+  # the motor's vel/accel limits are encoder-rate, which is angle-rate, not
+  # mm-rate. Time math is done in angle units; we convert back at the end.
+  if Axis.ELBOW in axes:
+    target[Axis.ELBOW] = convert_elbow_position_to_angle(cfg, target[Axis.ELBOW])
+  curr = dict(current)
+  if Axis.ELBOW in curr:
+    curr[Axis.ELBOW] = convert_elbow_position_to_angle(cfg, curr[Axis.ELBOW])
+
+  # Clearance check (in angle space for elbow, since base_to_gripper_clearance_arm
+  # is defined in the same domain in C#).
+  if Axis.Z in axes:
+    if (
+      target[Axis.Z] < cfg.axes[Axis.Z].min_travel + cfg.base_to_gripper_clearance_z
+      and target[Axis.ELBOW] < cfg.base_to_gripper_clearance_arm
+    ):
+      raise ValueError("Base-to-gripper clearance violated")
+
+  # Unlimited-travel normalization for non-NORMAL direction modes.
+  for ax in axes:
+    ax_cfg = cfg.axes[ax]
+    if ax_cfg.unlimited_travel and ax_cfg.joint_move_direction != JointMoveDirection.Normal:
+      target[ax] = _wrap_to_range(target[ax], ax_cfg.min_travel, ax_cfg.max_travel)
+
+  # Direction-aware deltas in cmd_pos units (elbow as linear extension), for
+  # the gripper-speed cap helper that walks the path in `fk`'s natural units.
+  cap_deltas: Dict[Axis, float] = {
+    ax: _directional_delta(target_cmd_units[ax], curr_cmd_units.get(ax, 0.0), cfg.axes[ax])
+    for ax in axes
+  }
+
+  # Per-axis caps from the gripper-speed/accel limits. Servo gripper isn't in
+  # fk, so it always runs at firmware max regardless of cap.
+  arm_axes = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+  cap_requested = max_gripper_speed is not None or max_gripper_acceleration is not None
+  cap_relevant = any(ax in arm_axes for ax in axes)
+  if cap_requested and cap_relevant:
+    missing = [ax for ax in arm_axes if ax not in curr_cmd_units]
+    if missing:
+      raise ValueError(
+        f"max_gripper_speed/acceleration requires `current` to include all "
+        f"four arm axes (SHOULDER/Z/ELBOW/WRIST); missing: "
+        f"{[ax.name for ax in missing]}"
+      )
+  fk_start = {ax: curr_cmd_units[ax] for ax in arm_axes if ax in curr_cmd_units}
+  fk_deltas = {ax: cap_deltas.get(ax, 0.0) for ax in arm_axes if ax in fk_start}
+  fk_loc = lambda j: fk(j, cfg, gripper_params).location
+  capped: Dict[str, Dict[Axis, float]] = {"v": {}, "a": {}}
+  for kind, cap, field in (
+    ("v", max_gripper_speed, "max_vel"),
+    ("a", max_gripper_acceleration, "max_accel"),
+  ):
+    if cap is None or not fk_start:
+      continue
+    result = arm_kinematics.joint_velocities_for_max_gripper_speed(
+      fk=fk_loc,
+      joints_start=fk_start,
+      joint_deltas=fk_deltas,
+      joint_max_velocities={ax: getattr(cfg.axes[ax], field) for ax in fk_start},
+      max_gripper_speed=cap,
+      num_samples=1000,
+      eps=1e-3,
+    )
+    capped[kind] = {ax: abs(x) for ax, x in result.items()}
+  capped_v, capped_a = capped["v"], capped["a"]
+
+  # Per-axis trajectory (planning units = angle for elbow). Three-pass sync:
+  # (1) profile each axis at its firmware max; (2) match accel-times to the
+  # slowest-accel axis (shrink `a` so all ramps end together); (3) scale (v,a)
+  # together so all axes finish together at the slowest total time.
+  dist: Dict[Axis, float] = {}
+  v: Dict[Axis, float] = {}
+  a: Dict[Axis, float] = {}
+  ta: Dict[Axis, float] = {}
+  tt: Dict[Axis, float] = {}
+  for ax in axes:
+    ax_cfg = cfg.axes[ax]
+    dist[ax] = abs(_directional_delta(target[ax], curr[ax], ax_cfg))
+    v[ax] = capped_v.get(ax, ax_cfg.max_vel)
+    a[ax] = capped_a.get(ax, ax_cfg.max_accel)
+    if dist[ax] >= 0.01 and a[ax] > 0:
+      v[ax], a[ax], ta[ax], tt[ax] = _profile(dist[ax], v[ax], a[ax])
+    else:
+      ta[ax] = tt[ax] = 0.0
+  moving = [ax for ax in axes if tt[ax] > 0.0]
+  if not moving:
+    return None
+
+  lead_acc_t = max(ta[ax] for ax in moving)
+  for ax in moving:
+    if ta[ax] < lead_acc_t:
+      a[ax] = v[ax] / lead_acc_t
+    v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
+
+  lead_T = max(tt[ax] for ax in moving)
+  for ax in moving:
+    if tt[ax] < lead_T:
+      v[ax], a[ax] = _stretch_to_time(dist[ax], v[ax], a[ax], lead_T)
+      v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
+
+  move_time = max(tt[ax] for ax in moving)
+
+  # Convert back to encoder units. Elbow target is still in angle space here
+  # — the encoder count for an elbow joint is angle * conv, not mm * conv.
+  moves = []
+  for ax in axes:
+    ax_cfg = cfg.axes[ax]
+    conv = ax_cfg.motor_conversion_factor
+    enc_pos = target[ax] * conv
+    # Skipped axes get firmware max — same formula as moving axes. They
+    # don't move (dist < 0.01), so vel/accel are nominal; the previous
+    # 1000.0 constant was 0.03–4% of firmware max across axes, leaving
+    # the drive's profile registers in a pathologically slow state if a
+    # follow-up step ever picked them up.
+    enc_vel = max(v[ax] * abs(conv), 1.0)
+    enc_accel = max(a[ax] * abs(conv), 1.0)
+    moves.append(MotorMoveParam(
+      node_id=int(ax),
+      position=int(round(enc_pos)),
+      velocity=int(round(enc_vel)),
+      acceleration=int(round(enc_accel)),
+      direction=ax_cfg.joint_move_direction,
+    ))
+  return MotorsMovePlan(moves=moves, move_time=move_time)
+
+
+# --- Cartesian-linear path sampling (for IPM/PVT streaming) ----------------
+#
+# `plan_joint_move` generates a *joint*-space trapezoid: every axis ramps in
+# parallel through its own (v, a) profile, which gives a curvy tool-tip path.
+# `sample_linear_path` instead generates a *Cartesian*-linear path: the
+# gripper travels the straight line from start to end, sampled at fixed dt,
+# and IK at each sample yields the joint-space trajectory. The KX2ArmBackend
+# streams the result into the drive's interpolation buffer (PVT mode) when
+# `CartesianMoveParams(path='linear')` is requested.
+
+# Arm axes that show up in FK/IK and therefore have an entry in every
+# `LinearPathSample.joints`. Servo gripper and rail are not Cartesian-driven.
+_LINEAR_PATH_AXES: Tuple[Axis, ...] = (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)
+
+
+@dataclass
+class LinearPathSample:
+  """One frame of a Cartesian-linear trajectory.
+
+  ``joints`` is in planning units (mm for Z, deg for SHOULDER/WRIST,
+  *linear extension mm* for ELBOW). ``encoder_position`` /
+  ``encoder_velocity`` are post-conversion: ELBOW is converted through
+  ``convert_elbow_position_to_angle`` first because the encoder counts are
+  driven by the rotary actuator, not the linear projection. The runtime
+  feeds these straight into ``ipm_send_pvt_point``.
+  """
+
+  time_s: float
+  joints: Dict[Axis, float] = field(default_factory=dict)
+  encoder_position: Dict[Axis, int] = field(default_factory=dict)
+  encoder_velocity: Dict[Axis, int] = field(default_factory=dict)
+
+
+def _arc_length_trapezoid_times(
+  length: float, vel: float, accel: float, dt_s: float,
+) -> List[float]:
+  """Return arc-length s(t_i) at evenly-spaced t_i = i*dt covering a trapezoidal
+  profile from 0 to ``length`` with peak speed ``vel`` and peak accel ``accel``.
+
+  Falls back to triangular when the path is too short to reach ``vel``.
+
+  The trajectory is **dt-aligned**: the last sample lands at exactly
+  ``ceil(t_total / dt) * dt`` with s = length, and one extra "hold" sample
+  at length is appended so the central-difference velocity at the final
+  point is exactly zero. This matters for IPM streaming — the drive
+  integrates a cubic Hermite spline through (P_i, V_i) → (P_{i+1}, V_{i+1})
+  over each dt; without the hold, the FD-derived V at the last sample
+  would be small-but-nonzero, and the cubic would overshoot the target
+  before snapping back.
+  """
+  if length <= 0 or dt_s <= 0:
+    return [0.0]
+  v, a, t_acc, t_total = _profile(length, vel, accel)
+  if t_total <= 0:
+    return [0.0]
+  d_acc = 0.5 * a * t_acc * t_acc
+  n_motion = max(2, ceil(t_total / dt_s) + 1)
+  out: List[float] = []
+  for i in range(n_motion):
+    t = i * dt_s
+    if t >= t_total:
+      out.append(length)
+    elif t < t_acc:
+      out.append(0.5 * a * t * t)
+    elif t < t_total - t_acc:
+      out.append(d_acc + v * (t - t_acc))
+    else:
+      td = t_total - t
+      out.append(length - 0.5 * a * td * td)
+  out.append(length)  # trailing hold so FD-derived final V is exactly 0
+  return out
+
+
+def _yaw_lerp(yaw_a_deg: float, yaw_b_deg: float, alpha: float) -> float:
+  """Interpolate yaw the short way around the circle. Avoids a 359° unwind
+  when start=+179°, end=-179° (true delta = 2°, naive lerp delta = 358°)."""
+  delta = (yaw_b_deg - yaw_a_deg + 540.0) % 360.0 - 180.0
+  return yaw_a_deg + alpha * delta
+
+
+def sample_linear_path(
+  cfg: KX2Config,
+  gripper_params: GripperParams,
+  start_pose: GripperLocation,
+  end_pose: GripperLocation,
+  *,
+  vel_mm_per_s: float,
+  accel_mm_per_s2: float,
+  dt_s: float,
+  current_joints: Optional[Dict[Axis, float]] = None,
+) -> List[LinearPathSample]:
+  """Sample a straight tool-tip path from ``start_pose`` to ``end_pose`` at dt.
+
+  Args:
+    cfg: drive-read calibration.
+    gripper_params: tooling geometry.
+    start_pose, end_pose: Cartesian endpoints (gripper clamp point + yaw).
+    vel_mm_per_s: peak Cartesian speed along the path.
+    accel_mm_per_s2: peak Cartesian acceleration along the path.
+    dt_s: sample period (matches the dt fed to ``ipm_set_time_interval``).
+    current_joints: pre-move joint snapshot. If supplied, the first sample's
+      WRIST/SHOULDER are 360°-snapped toward ``current_joints`` so the
+      trajectory doesn't begin with a full unwind. ELBOW position passes
+      through unchanged (linear axis).
+
+  Returns:
+    Dense list of samples, one per dt step. The last sample lands exactly
+    on ``end_pose``. ``encoder_position`` / ``encoder_velocity`` are ready
+    to feed straight into ``ipm_send_pvt_point``. Velocity is the central
+    finite difference of encoder positions; the endpoints use one-sided
+    differences and are clamped to zero at the very last sample so the
+    drive ends stationary.
+  """
+  if vel_mm_per_s <= 0 or accel_mm_per_s2 <= 0 or dt_s <= 0:
+    raise ValueError(
+      f"sample_linear_path: vel/accel/dt must be positive (got "
+      f"{vel_mm_per_s}, {accel_mm_per_s2}, {dt_s})"
+    )
+
+  sx, sy, sz = start_pose.location.x, start_pose.location.y, start_pose.location.z
+  ex, ey, ez = end_pose.location.x, end_pose.location.y, end_pose.location.z
+  start_yaw, end_yaw = start_pose.rotation.z, end_pose.rotation.z
+  length = sqrt((ex - sx) ** 2 + (ey - sy) ** 2 + (ez - sz) ** 2)
+
+  # Pure rotation in place is unsupported here: the speed/accel caps are
+  # mm/s and mm/s², so reusing them as deg/s for a wrist spin would silently
+  # command rotational rates the caller didn't intend. Use a joint-space
+  # move for orientation-only changes.
+  rot_delta = abs(((end_yaw - start_yaw + 540.0) % 360.0) - 180.0)
+  if length <= _EPS and rot_delta > _EPS:
+    raise NotImplementedError(
+      "sample_linear_path: pure rotation (no translation) is not supported. "
+      f"Translation length={length:.4f} mm, rotation delta={rot_delta:.2f}°. "
+      "Use move_to_joint_position with the target wrist angle for "
+      "orientation-only changes."
+    )
+
+  # Cartesian arc-length trapezoid. Yaw rides the same s/length ratio so
+  # rotation lands together with translation.
+  s_seq = _arc_length_trapezoid_times(length, vel_mm_per_s, accel_mm_per_s2, dt_s)
+
+  prev_for_snap: Optional[Dict[Axis, float]] = (
+    dict(current_joints) if current_joints is not None else None
+  )
+  poses: List[Dict[Axis, float]] = []
+  for s in s_seq:
+    alpha = (s / length) if length > 0 else 1.0
+    pose_i = GripperLocation(
+      location=Coordinate(
+        x=sx + alpha * (ex - sx),
+        y=sy + alpha * (ey - sy),
+        z=sz + alpha * (ez - sz),
+      ),
+      rotation=Rotation(z=_yaw_lerp(start_yaw, end_yaw, alpha)),
+    )
+    joints = ik(pose_i, cfg, gripper_params)
+    if prev_for_snap is not None:
+      joints = snap_to_current(joints, prev_for_snap)
+    poses.append(joints)
+    prev_for_snap = joints
+
+  # Encoder-space sequence per axis. Elbow's encoder is angle-driven (sine
+  # linkage), so convert position to angle before scaling by motor factor.
+  enc_pos: Dict[Axis, List[int]] = {ax: [] for ax in _LINEAR_PATH_AXES}
+  for joints in poses:
+    for ax in _LINEAR_PATH_AXES:
+      conv = cfg.axes[ax].motor_conversion_factor
+      val = joints[ax]
+      if ax is Axis.ELBOW:
+        val = convert_elbow_position_to_angle(cfg, val)
+      enc_pos[ax].append(int(round(val * conv)))
+
+  # Central finite difference for velocity; one-sided at endpoints. The
+  # trajectory is dt-aligned with a trailing hold sample (s = length),
+  # so the one-sided FD at the last point is naturally zero — no need
+  # to force it. Forcing zero against a non-trivial v[n-2] would create
+  # the cubic-Hermite overshoot the trailing hold is meant to avoid.
+  n = len(poses)
+  enc_vel: Dict[Axis, List[int]] = {ax: [0] * n for ax in _LINEAR_PATH_AXES}
+  for ax in _LINEAR_PATH_AXES:
+    seq = enc_pos[ax]
+    if n >= 2:
+      enc_vel[ax][0] = int(round((seq[1] - seq[0]) / dt_s))
+      for i in range(1, n - 1):
+        enc_vel[ax][i] = int(round((seq[i + 1] - seq[i - 1]) / (2.0 * dt_s)))
+      enc_vel[ax][n - 1] = int(round((seq[n - 1] - seq[n - 2]) / dt_s))
+
+  out: List[LinearPathSample] = []
+  for i in range(n):
+    out.append(LinearPathSample(
+      time_s=i * dt_s,
+      joints=poses[i],
+      encoder_position={ax: enc_pos[ax][i] for ax in _LINEAR_PATH_AXES},
+      encoder_velocity={ax: enc_vel[ax][i] for ax in _LINEAR_PATH_AXES},
+    ))
+  return out
