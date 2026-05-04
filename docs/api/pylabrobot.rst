@@ -45,4 +45,5 @@ Manufacturers
     pylabrobot.opentrons
     pylabrobot.paa
     pylabrobot.qinstruments
+    pylabrobot.tecan
     pylabrobot.thermo_fisher

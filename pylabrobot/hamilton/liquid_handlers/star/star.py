@@ -27,7 +27,7 @@ class _HamiltonSTAR(Device):
   """
 
   def __init__(self, deck: HamiltonDeck, chatterbox: bool = False):
-    driver = STARChatterboxDriver() if chatterbox else STARDriver()
+    driver = STARChatterboxDriver(deck=deck) if chatterbox else STARDriver(deck=deck)
     super().__init__(driver=driver)
     self.driver: STARDriver = driver
     self.deck = deck
@@ -36,10 +36,10 @@ class _HamiltonSTAR(Device):
     self.iswap: Optional[OrientableArm] = None  # set in setup() if installed
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
-    await self.driver.setup(deck=self.deck, backend_params=backend_params)
+    await self.driver.setup(backend_params=backend_params)
 
     # PIP is always present.
-    self.pip = PIP(backend=self.driver.pip)
+    self.pip = PIP(backend=self.driver.pip, deck=self.deck)
     self._capabilities = [self.pip]
 
     # Head96 only if the hardware has a 96-head installed.

@@ -83,20 +83,6 @@ class SCILADriver(Driver):
 
   # -- drawers --
 
-  async def open(self, drawer_id: int) -> None:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    logger.info("[SCILA %s] open drawer: drawer_id=%d", self._sila_interface.machine_ip, drawer_id)
-    await self.send_command("PrepareForInput", position=drawer_id)
-    await self.send_command("OpenDoor")
-
-  async def close(self, drawer_id: int) -> None:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    logger.info("[SCILA %s] close drawer: drawer_id=%d", self._sila_interface.machine_ip, drawer_id)
-    await self.send_command("PrepareForOutput", position=drawer_id)
-    await self.send_command("CloseDoor")
-
   async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
     root = await self.send_command("GetDoorStatus")
     params = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])

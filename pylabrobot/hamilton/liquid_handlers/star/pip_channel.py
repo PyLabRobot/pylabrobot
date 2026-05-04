@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import enum
-import re
 from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple
 
 from .errors import STARFirmwareError
+from .fw_parsing import parse_star_firmware_version_date
 
 if TYPE_CHECKING:
   from .driver import STARDriver
@@ -101,14 +102,14 @@ class PIPChannel:
 
   # -- Px:RF  firmware version ------------------------------------------------
 
-  async def request_firmware_version(self) -> str:
+  async def request_firmware_version(self) -> datetime.date:
     """Query the firmware version of this channel (Px:RF)."""
     resp = await self.send_command(
       module=self.module_id,
       command="RF",
       fmt="rf" + "&" * 17,
     )
-    return str(resp["rf"])
+    return parse_star_firmware_version_date(str(resp["rf"]))
 
   # -- Px:RV  cycle counts ----------------------------------------------------
 
@@ -334,20 +335,17 @@ class PIPChannel:
       zj=f"{round(z * 10):04}",
     )
 
-  # -- C0:RA  request X position ------------------------------------------------
-
+  # -- delegate to left_x_arm (C0 RX) — channels share the X carriage ----------
+  # TODO: we assume `C0RX` references the center of the x-arm, figure out what it
+  # references for half-arms (see issue 822 and new Fluid Motion STAR)
+  
   async def request_x_pos(self) -> float:
     """Request current X-position of this channel (mm).
 
     All PIP channels share the same X arm, so this returns the arm position.
     """
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RA",
-      fmt="ra#####",
-      pn=f"{self.index + 1:02}",
-    )
-    return float(resp["ra"] / 10)
+    assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
+    return await self.driver.left_x_arm.request_position()
 
   # -- C0:RB  request Y position ------------------------------------------------
 
@@ -1123,14 +1121,11 @@ class PIPChannel:
     assert self.backend is not None, "backend reference required for ztouch_probe_z_height"
 
     version = await self.request_firmware_version()
-    year_matches = re.search(r"\b\d{4}\b", version)
-    if year_matches is not None:
-      year = int(year_matches.group())
-      if year < 2022:
-        raise ValueError(
-          "Z-touch probing is not supported for PIP versions predating 2022, "
-          f"found version '{version}'"
-        )
+    if version.year < 2022:
+      raise ValueError(
+        "Z-touch probing is not supported for PIP versions predating 2022, "
+        f"found version '{version}'"
+      )
 
     if tip_len is None:
       tip_len = await self.request_tip_length()

@@ -382,7 +382,10 @@ class STARBackend(HamiltonLiquidHandler):
 
     from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 
+    # Deck arrives via set_deck() (legacy flow), so construct the driver without one
+    # and attach it in set_deck(). STARDriver.setup() asserts deck is set.
     self.driver = STARDriver(
+      deck=None,  # type: ignore[arg-type]
       device_address=device_address,
       serial_number=serial_number,
       packet_read_timeout=packet_read_timeout,
@@ -616,7 +619,13 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_pip_channel_version(self, channel: int) -> str:
     """Deprecated: use ``star.pip.backend.channels[n].request_firmware_version()``."""
-    return await self._pip_channels[channel].request_firmware_version()
+    pip_channel = self._pip_channels[channel]
+    resp = await pip_channel.send_command(
+      module=pip_channel.module_id,
+      command="RF",
+      fmt="rf" + "&" * 17,
+    )
+    return str(resp["rf"])
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -740,6 +749,10 @@ class STARBackend(HamiltonLiquidHandler):
     if year_match is None:
       raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
     return datetime.date(int(year_match.group(1)), 1, 1)
+
+  def set_deck(self, deck):
+    super().set_deck(deck)
+    self.driver.deck = deck  # type: ignore[assignment]
 
   async def setup(
     self,

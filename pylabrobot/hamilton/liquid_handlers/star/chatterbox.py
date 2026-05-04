@@ -4,6 +4,8 @@ import logging
 
 from .autoload import STARAutoload
 from .cover import STARCover
+from pylabrobot.resources.hamilton import HamiltonDeck
+
 from .driver import (
   DriveConfiguration,
   ExtendedConfiguration,
@@ -43,11 +45,12 @@ class STARChatterboxDriver(STARDriver):
 
   def __init__(
     self,
+    deck: HamiltonDeck,
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONF,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONF,
   ):
-    super().__init__()
+    super().__init__(deck=deck)
     self._num_channels = num_channels
     self._machine_configuration = machine_configuration
     self._extended_configuration = extended_configuration
@@ -58,18 +61,18 @@ class STARChatterboxDriver(STARDriver):
 
   # -- lifecycle: skip USB, use canned config --------------------------------
 
-  async def setup(self, deck=None, backend_params=None):  # type: ignore[override]
+  async def setup(self, backend_params=None):
     # No USB — just set config and create backends.
     self.id_ = 0
     self.machine_conf = self._machine_configuration
     self.extended_conf = self._extended_configuration
 
-    self.pip = STARPIPBackend(self, deck=deck)
+    self.pip = STARPIPBackend(self)
 
     self._channels_minimum_y_spacing = [9.0] * self._num_channels
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
-      self.head96 = STARHead96Backend(self)
+      self.head96 = STARHead96Backend(self, deck=self.deck)
     else:
       self.head96 = None
 

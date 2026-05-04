@@ -68,10 +68,17 @@ A standalone arm (like PreciseFlex) is a Device with a single arm capability:
 
 ```python
 class PreciseFlex400(Device):
-  def __init__(self, host, port=10100, has_rail=False, timeout=20):
+  def __init__(
+    self, host, port=10100, has_rail=False, timeout=20, gripper_length=162.0, gripper_z_offset=0.0
+  ):
     driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
-    backend = PreciseFlexArmBackend(driver=driver, has_rail=has_rail)
+    backend = PreciseFlexArmBackend(
+      driver=driver,
+      has_rail=has_rail,
+      gripper_length=gripper_length,
+      gripper_z_offset=gripper_z_offset,
+    )
     self.arm = OrientableArm(backend=backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
 

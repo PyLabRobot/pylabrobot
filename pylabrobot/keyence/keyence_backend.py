@@ -100,7 +100,11 @@ class KeyenceBarcodeScannerBarcodeScanningBackend(BarcodeScannerBackend):
         "Failed to initialize Keyence barcode scanner: Timeout waiting for motor to turn on."
       )
 
-  async def scan_barcode(self) -> Barcode:
+  async def scan_barcode(self, read_time: Optional[float] = None) -> Barcode:
+    # Keyence BL-series LON command doesn't take a read window — the scanner
+    # uses its own configured read mode/timeout. Accept and ignore for
+    # capability-API compatibility.
+    del read_time
     data = await self.driver.send_command("LON")
     if data.startswith("NG"):
       logger.error("[Keyence %s] barcode reader is off: cannot read barcode", self.driver.io.port)
