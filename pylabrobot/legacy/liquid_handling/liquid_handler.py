@@ -23,7 +23,7 @@ from typing import (
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
 from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
 from pylabrobot.capabilities.arms.standard import GripDirection as _NewGripDirection
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.head96_backend import (
   Head96Backend as _NewHead96Backend,
@@ -74,8 +74,6 @@ from pylabrobot.legacy.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
 )
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
-from pylabrobot.legacy.plate_reading import PlateReader
-from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -83,7 +81,6 @@ from pylabrobot.resources import (
   Lid,
   Plate,
   PlateAdapter,
-  PlateHolder,
   Resource,
   ResourceHolder,
   ResourceStack,
@@ -317,16 +314,12 @@ class _ArmAdapter(OrientableGripperArmBackend):
   def __init__(self, legacy: LiquidHandlerBackend):
     self._legacy = legacy
 
-  async def pick_up_at_location(
-    self, location, direction, resource_width, backend_params=None
-  ):
+  async def pick_up_at_location(self, location, direction, resource_width, backend_params=None):
     kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
     pickup = kw.pop("_pickup")
     await self._legacy.pick_up_resource(pickup=pickup, **kw)
 
-  async def drop_at_location(
-    self, location, direction, resource_width, backend_params=None
-  ):
+  async def drop_at_location(self, location, direction, resource_width, backend_params=None):
     kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
     drop = kw.pop("_drop")
     await self._legacy.drop_resource(drop=drop, **kw)
@@ -350,7 +343,7 @@ class _ArmAdapter(OrientableGripperArmBackend):
   async def park(self, backend_params=None):
     pass
 
-  async def request_gripper_location(self, backend_params=None) -> GripperLocation:
+  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
     raise NotImplementedError("request_gripper_location not available via legacy adapter")
 
   async def open_gripper(self, gripper_width, backend_params=None):
@@ -453,9 +446,7 @@ class LiquidHandler(Resource, Machine):
 
     # Create arm capability with adapter backend
     if self.backend.num_arms > 0:
-      self._arm_cap = OrientableArm(
-        backend=_ArmAdapter(self.backend), reference_resource=self.deck
-      )
+      self._arm_cap = OrientableArm(backend=_ArmAdapter(self.backend), reference_resource=self.deck)
       await self._arm_cap._on_setup()
 
   def serialize_state(self) -> Dict[str, Any]:

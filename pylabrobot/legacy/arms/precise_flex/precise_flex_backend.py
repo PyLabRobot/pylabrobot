@@ -20,9 +20,9 @@ PreciseFlexError = _new_module.PreciseFlexError
 
 def _to_new_cartesian(
   position: PreciseFlexCartesianCoords,
-) -> _new_module.PreciseFlexGripperLocation:
-  """Convert legacy CartesianCoords to new module's GripperLocation."""
-  return _new_module.PreciseFlexGripperLocation(
+) -> _new_module.PreciseFlexCartesianPose:
+  """Convert legacy CartesianCoords to new module's CartesianPose."""
+  return _new_module.PreciseFlexCartesianPose(
     location=position.location,
     rotation=position.rotation,
     orientation=position.orientation.value if position.orientation is not None else None,
@@ -31,7 +31,7 @@ def _to_new_cartesian(
 
 def _to_new_coords(
   position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
-) -> Union[_new_module.PreciseFlexGripperLocation, Dict[int, float]]:
+) -> Union[_new_module.PreciseFlexCartesianPose, Dict[int, float]]:
   """Convert legacy CartesianCoords to new module's CartesianCoords."""
   if isinstance(position, PreciseFlexCartesianCoords):
     return _to_new_cartesian(position)
@@ -59,9 +59,9 @@ def _to_new_access(access: Optional[AccessPattern]) -> Optional[_new_module.Acce
 
 
 def _from_new_coords(
-  position: _new_module.PreciseFlexGripperLocation,
+  position: _new_module.PreciseFlexCartesianPose,
 ) -> PreciseFlexCartesianCoords:
-  """Convert new module's GripperLocation to legacy CartesianCoords."""
+  """Convert new module's CartesianPose to legacy CartesianCoords."""
   orientation = None
   if position.orientation is not None:
     orientation = ElbowOrientation(position.orientation)
@@ -162,7 +162,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._new_driver.home()
 
   async def move_to_safe(self) -> None:
-    await self._new_backend.move_to_safe()
+    await self._new_backend.park()
 
   def _convert_orientation_int_to_enum(self, orientation_int: int) -> Optional[ElbowOrientation]:
     if orientation_int == 1:
@@ -218,7 +218,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       await self._new_backend.pick_up_at_joint_position(
         converted, plate_width, backend_params=params
       )
-    elif isinstance(converted, _new_module.PreciseFlexGripperLocation):
+    elif isinstance(converted, _new_module.PreciseFlexCartesianPose):
       new_access = _to_new_access(access) or _new_module.VerticalAccess()
       await self._new_backend._set_grasp_data(
         plate_width=plate_width,
@@ -227,7 +227,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       )
       await self._new_backend._pick_plate_c(cartesian_position=converted, access=new_access)
     else:
-      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
+      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexCartesianPose.")
 
   async def drop_resource(
     self,
@@ -240,22 +240,22 @@ class PreciseFlexBackend(SCARABackend, ABC):
       await self._new_backend.drop_at_joint_position(
         converted, resource_width=0, backend_params=params
       )
-    elif isinstance(converted, _new_module.PreciseFlexGripperLocation):
+    elif isinstance(converted, _new_module.PreciseFlexCartesianPose):
       new_access = _to_new_access(access) or _new_module.VerticalAccess()
       await self._new_backend._place_plate_c(cartesian_position=converted, access=new_access)
     else:
-      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
+      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexCartesianPose.")
 
   async def move_to(self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]):
     converted = _to_new_coords(position)
     if isinstance(converted, dict):
       await self._new_backend.move_to_joint_position(converted)
-    elif isinstance(converted, _new_module.PreciseFlexGripperLocation):
+    elif isinstance(converted, _new_module.PreciseFlexCartesianPose):
       await self._new_backend._move_c(
         profile_index=self._new_backend.profile_index, cartesian_coords=converted
       )
     else:
-      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexGripperLocation.")
+      raise TypeError("Position must be of type Dict[int, float] or PreciseFlexCartesianPose.")
 
   async def get_joint_position(self) -> Dict[int, float]:
     return await self._new_backend.request_joint_position()
@@ -380,7 +380,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def set_location_xyz(self, location_index, cartesian_position):
     converted = _to_new_coords(cartesian_position)
-    if not isinstance(converted, _new_module.PreciseFlexGripperLocation):
+    if not isinstance(converted, _new_module.PreciseFlexCartesianPose):
       raise TypeError("Expected cartesian coordinates, got joint position dict")
     await self._new_backend._set_location_xyz(location_index, converted)
 
@@ -517,7 +517,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def move_c(self, profile_index, cartesian_coords):
     converted = _to_new_coords(cartesian_coords)
-    if not isinstance(converted, _new_module.PreciseFlexGripperLocation):
+    if not isinstance(converted, _new_module.PreciseFlexCartesianPose):
       raise TypeError("Expected cartesian coordinates, got joint position dict")
     await self._new_backend._move_c(profile_index, converted)
 

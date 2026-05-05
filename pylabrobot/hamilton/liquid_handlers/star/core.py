@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.capabilities.arms.backend import GripperArmBackend
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 
@@ -24,7 +24,7 @@ class CoreGripper(GripperArmBackend):
 
   # -- lifecycle --------------------------------------------------------------
 
-  async def request_gripper_location(self, backend_params=None) -> GripperLocation:
+  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
     raise NotImplementedError("CoreGripper does not support request_gripper_location")
 
   # -- ArmBackend interface ---------------------------------------------------

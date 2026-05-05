@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.capabilities.capability import BackendParams, CapabilityBackend
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -56,7 +56,7 @@ class HasJoints(metaclass=ABCMeta):
   @abstractmethod
   async def pick_up_at_joint_position(
     self,
-    position: Dict[int, float],
+    position: JointPose,
     resource_width: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
@@ -65,7 +65,7 @@ class HasJoints(metaclass=ABCMeta):
   @abstractmethod
   async def drop_at_joint_position(
     self,
-    position: Dict[int, float],
+    position: JointPose,
     resource_width: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
@@ -73,14 +73,14 @@ class HasJoints(metaclass=ABCMeta):
 
   @abstractmethod
   async def move_to_joint_position(
-    self, position: Dict[int, float], backend_params: Optional[BackendParams] = None
+    self, position: JointPose, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Move the arm to the specified joint position."""
 
   @abstractmethod
   async def request_joint_position(
     self, backend_params: Optional[BackendParams] = None
-  ) -> Dict[int, float]:
+  ) -> JointPose:
     """Get the current position of the arm in joint space."""
 
 
@@ -119,7 +119,7 @@ class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
   @abstractmethod
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     """Get the current location and rotation of the gripper."""
 
 

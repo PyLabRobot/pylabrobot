@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.standard import GripDirection, GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose, GripDirection
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -71,11 +71,11 @@ class iSWAPBackend(OrientableGripperArmBackend):
     finally:
       self.traversal_height = original
 
-  async def request_gripper_location(self, backend_params=None) -> GripperLocation:
+  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
     """Request iSWAP grip center position (C0 QG).
 
     Returns:
-      GripperLocation with position in mm and a default rotation.
+      CartesianPose with position in mm and a default rotation.
     """
     resp = await self.driver.send_command(
       module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#"
@@ -85,7 +85,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       y=(resp["yj"] / 10) * (1 if resp["yd"] == 0 else -1),
       z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
     )
-    return GripperLocation(location=location, rotation=Rotation())
+    return CartesianPose(location=location, rotation=Rotation())
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     already_initialized = await self.request_initialization_status()

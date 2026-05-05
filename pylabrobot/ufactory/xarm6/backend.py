@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from pylabrobot.capabilities.arms.backend import (
   ArticulatedGripperArmBackend,
   CanFreedrive,
   HasJoints,
 )
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -168,10 +168,10 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     """Get the current gripper location and rotation."""
     pose = await self._driver._call_sdk(self._driver._arm.get_position, op="get_position")
-    return GripperLocation(
+    return CartesianPose(
       location=Coordinate(x=pose[0], y=pose[1], z=pose[2]),
       rotation=Rotation(x=pose[3], y=pose[4], z=pose[5]),
     )
@@ -225,7 +225,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   # -- HasJoints -------------------------------------------------------------
 
   async def move_to_joint_position(
-    self, position: Dict[int, float], backend_params: Optional[BackendParams] = None
+    self, position: JointPose, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Move to the specified joint angles.
 
@@ -249,14 +249,14 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   async def request_joint_position(
     self, backend_params: Optional[BackendParams] = None
-  ) -> Dict[int, float]:
+  ) -> JointPose:
     """Get current joint angles as ``{1: j1_deg, 2: j2_deg, ...}``."""
     angles = await self._driver._call_sdk(self._driver._arm.get_servo_angle, op="get_servo_angle")
     return {i + 1: angles[i] for i in range(6)}
 
   async def pick_up_at_joint_position(
     self,
-    position: Dict[int, float],
+    position: JointPose,
     resource_width: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
@@ -266,7 +266,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   async def drop_at_joint_position(
     self,
-    position: Dict[int, float],
+    position: JointPose,
     resource_width: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
