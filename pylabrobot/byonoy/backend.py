@@ -27,6 +27,33 @@ class ByonoySlotState(enum.IntEnum):
   UNDETERMINED = 3
 
 
+class Lum96IntegrationMode(enum.Enum):
+  RAPID = "rapid"
+  SENSITIVE = "sensitive"
+  ULTRA_SENSITIVE = "ultra_sensitive"
+  CUSTOM = "custom"
+
+
+# Preset integration times (matches byonoy_device_library: hidmeasurements.cpp)
+LUM96_PRESET_S = {
+  Lum96IntegrationMode.RAPID: 0.1,
+  Lum96IntegrationMode.SENSITIVE: 2.0,
+  Lum96IntegrationMode.ULTRA_SENSITIVE: 20.0,
+}
+
+
+def encode_well_bitmask(selected: List[bool], n: int = 96) -> bytes:
+  """Pack a length-n bool list into a little-endian bitmask, LSB-first within each byte."""
+  if len(selected) != n:
+    raise ValueError(f"expected {n} bools, got {len(selected)}")
+  nbytes = (n + 7) // 8
+  out = bytearray(nbytes)
+  for i, b in enumerate(selected):
+    if b:
+      out[i // 8] |= 1 << (i % 8)
+  return bytes(out)
+
+
 @dataclass
 class ByonoyStatus:
   is_initialized: bool

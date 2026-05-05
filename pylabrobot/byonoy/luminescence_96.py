@@ -3,7 +3,13 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
+from pylabrobot.byonoy.backend import (
+  LUM96_PRESET_S,
+  ByonoyBase,
+  ByonoyDevice,
+  Lum96IntegrationMode,
+  encode_well_bitmask,
+)
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.luminescence import (
   Luminescence,
@@ -38,10 +44,18 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     """Byonoy Luminescence 96 parameters for luminescence reads.
 
     Args:
-      integration_time: Integration time in seconds. Default 2.
+      mode: One of RAPID (100 ms), SENSITIVE (2 s, default), ULTRA_SENSITIVE
+        (20 s), or CUSTOM. Presets match the byonoy_device_library mapping.
+      integration_time: Integration time in seconds. If set, forces CUSTOM
+        mode regardless of `mode`. Required when `mode == CUSTOM`.
+      selected_wells: Optional 96-bool mask in plate row-major order (A1..H12).
+        If None, the wells passed to `read_luminescence` decide which wells
+        are sampled (defaulting to all 96).
     """
 
-    integration_time: float = 2
+    mode: Lum96IntegrationMode = Lum96IntegrationMode.SENSITIVE
+    integration_time: Optional[float] = None
+    selected_wells: Optional[List[bool]] = None
 
   async def read_luminescence(
     self,
@@ -61,14 +75,33 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     if not isinstance(backend_params, self.LuminescenceParams):
       backend_params = ByonoyLuminescence96Backend.LuminescenceParams()
 
-    integration_time = backend_params.integration_time
+    # Resolve mode + integration time
+    if backend_params.integration_time is not None:
+      mode = Lum96IntegrationMode.CUSTOM
+      integration_time = backend_params.integration_time
+    elif backend_params.mode == Lum96IntegrationMode.CUSTOM:
+      raise ValueError("CUSTOM mode requires integration_time to be set.")
+    else:
+      mode = backend_params.mode
+      integration_time = LUM96_PRESET_S[mode]
+
+    # Resolve well mask
+    if backend_params.selected_wells is not None:
+      mask_bools = backend_params.selected_wells
+    else:
+      all_items = plate.get_all_items()
+      well_set = set(id(w) for w in wells)
+      mask_bools = [id(w) in well_set for w in all_items]
+
+    well_mask = encode_well_bitmask(mask_bools, n=96)
     logger.info(
-      "[Byonoy L96 pid=0x%04X] reading luminescence: plate='%s', integration_time=%.1fs, wells=%d/%d",
+      "[Byonoy L96 pid=0x%04X] reading luminescence: plate='%s', mode=%s, "
+      "integration_time=%.3fs, wells=%d/96",
       self.io.pid,
       plate.name,
+      mode.name,
       integration_time,
-      len(wells),
-      plate.num_items,
+      sum(mask_bools),
     )
 
     await self.send_command(
@@ -85,7 +118,12 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     )
 
     payload3 = (
-      Writer().i32(int(integration_time * 1000 * 1000)).raw_bytes(b"\xff" * 12).u8(0).u8(0).finish()
+      Writer()
+      .i32(int(integration_time * 1_000_000))
+      .raw_bytes(well_mask)
+      .u8(0)  # is_reference_measurement
+      .u8(0)  # flags
+      .finish()
     )
     await self.send_command(
       report_id=0x0340,

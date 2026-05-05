@@ -1,3 +1,4 @@
+from .backend import Lum96IntegrationMode
 from .absorbance_96 import (
   ByonoyAbsorbance96,
   ByonoyAbsorbance96Backend,
