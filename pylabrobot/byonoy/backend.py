@@ -156,7 +156,9 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
 
   async def get_status(self) -> ByonoyStatus:
     """Read REP_STATUS_IN (0x0300): init/slot/error/uptime/measuring/boot."""
-    response = await self.send_command(report_id=0x0300, payload=b"\x00" * 60)
+    response = await self.send_command(
+      report_id=0x0300, payload=b"\x00" * 60, routing_info=b"\x80\x40"
+    )
     assert response is not None
     r = Reader(response[2:])
     return ByonoyStatus(
@@ -170,7 +172,9 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
 
   async def get_environment(self) -> ByonoyEnvironment:
     """Read REP_ENVIRONMENT_IN (0x0310): temperature, humidity, acceleration."""
-    response = await self.send_command(report_id=0x0310, payload=b"\x00" * 60)
+    response = await self.send_command(
+      report_id=0x0310, payload=b"\x00" * 60, routing_info=b"\x80\x40"
+    )
     assert response is not None
     r = Reader(response[2:])
     temp_c = r.i16() / 100.0
@@ -184,7 +188,9 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
 
   async def get_versions(self) -> ByonoyVersions:
     """Read REP_VERSIONS_IN (0x0080): system / STM / ESP / bootloader versions."""
-    response = await self.send_command(report_id=0x0080, payload=b"\x00" * 60)
+    response = await self.send_command(
+      report_id=0x0080, payload=b"\x00" * 60, routing_info=b"\x80\x40"
+    )
     assert response is not None
     r = Reader(response[2:])
     return ByonoyVersions(
