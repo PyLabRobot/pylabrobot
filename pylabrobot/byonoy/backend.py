@@ -5,7 +5,7 @@ import threading
 import time
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
@@ -60,6 +60,11 @@ class ByonoyVersions:
   @property
   def is_production(self) -> bool:
     return self.stm_dev_version == 0 and self.esp_dev_version == 0
+
+
+@dataclass
+class ByonoyApiVersion:
+  version_no: int
 
 
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
@@ -185,6 +190,48 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
       humidity=humidity,
       acceleration_g=(ax / _ACCEL_LSB_PER_G, ay / _ACCEL_LSB_PER_G, az / _ACCEL_LSB_PER_G),
     )
+
+  async def get_api_version(self) -> ByonoyApiVersion:
+    """Read REP_API_VERSION_IN (0x0050): a single u32."""
+    response = await self.send_command(
+      report_id=0x0050, payload=b"\x00" * 60, routing_info=b"\x80\x40"
+    )
+    assert response is not None
+    r = Reader(response[2:])
+    return ByonoyApiVersion(version_no=r.u32())
+
+  async def get_supported_reports(self) -> List[int]:
+    """Read REP_SUPPORTED_REPORTS_IN (0x0010): list of report IDs the device supports.
+
+    Reply is delivered in seq/seq_len chunks of up to 29 u16 ids; zero-valued
+    entries are padding. Returns the deduplicated, ordered union.
+    """
+    cmd = self._assemble_command(report_id=0x0010, payload=b"\x00" * 60, routing_info=b"\x80\x40")
+    await self.io.write(cmd)
+
+    seen: List[int] = []
+    t0 = time.time()
+    while True:
+      if time.time() - t0 > 30:
+        raise TimeoutError("Timed out reading supported reports.")
+      chunk = await self.io.read(64, timeout=10)
+      if len(chunk) == 0:
+        continue
+      r = Reader(chunk)
+      if r.u16() != 0x0010:
+        continue
+      seq = r.u8()
+      seq_len = r.u8()
+      ids = [r.u16() for _ in range(29)]
+      seen.extend(i for i in ids if i != 0)
+      if seq == seq_len - 1:
+        break
+    # Preserve order, drop dupes
+    out: List[int] = []
+    for i in seen:
+      if i not in out:
+        out.append(i)
+    return out
 
   async def get_versions(self) -> ByonoyVersions:
     """Read REP_VERSIONS_IN (0x0080): system / STM / ESP / bootloader versions."""
