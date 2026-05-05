@@ -357,9 +357,11 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
   async def set_led_colours(self, colours: List[Tuple[int, int, int]]) -> None:
     """Set the 20-LED bar colours via REP_LED_BAR_COLOURS_OUT (0x0350).
 
-    Pads with black if fewer than 20 are given; truncates if more.
-    Also enables manual mode by setting LedEffect.SOLID with FLAG_LED_MANUAL.
+    First switches the bar into manual SOLID mode (FLAG_LED_MANUAL) so the
+    firmware doesn't overwrite the colours with its own animation, then
+    sends the 20-pixel buffer. Pads with black if fewer than 20 are given.
     """
+    await self.set_led_effect(LedEffect.SOLID, manual=True)
     pixels = list(colours[:20]) + [(0, 0, 0)] * max(0, 20 - len(colours))
     w = Writer()
     for r_, g, b in pixels:
