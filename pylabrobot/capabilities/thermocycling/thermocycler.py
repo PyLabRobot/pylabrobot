@@ -96,7 +96,11 @@ class Thermocycler(Capability):
     """Return backend-specific progress for the running protocol, or None."""
     return await self.backend.request_progress()
 
-  async def wait_for_completion(self, timeout: Optional[float] = None) -> None:
+  async def wait_for_completion(
+    self,
+    timeout: Optional[float] = None,
+    report_interval: float = 300.0,
+  ) -> None:
     """Block until the running protocol completes, or timeout expires.
 
     Returns immediately if no protocol is running. Delegates to the backend's
@@ -105,6 +109,9 @@ class Thermocycler(Capability):
     Args:
       timeout: Maximum seconds to wait. None means the backend's own default
         (typically 3 hours for ODTC). Pass a smaller value to fail faster.
+      report_interval: Log a progress update every this many seconds
+        (default 300 = 5 minutes). Pass 0 to disable. Forwarded to the
+        backend if it supports it.
 
     Raises:
       RuntimeError: If capability is not set up.
@@ -113,7 +120,7 @@ class Thermocycler(Capability):
     if not self._setup_finished:
       raise RuntimeError("Thermocycler capability is not set up.")
     if hasattr(self.backend, "wait_for_completion"):
-      await self.backend.wait_for_completion(timeout=timeout)
+      await self.backend.wait_for_completion(timeout=timeout, report_interval=report_interval)
 
   async def wait_for_first_progress(self, timeout: float = 60.0) -> Any:
     """Block until the backend reports non-None progress, or raise TimeoutError.

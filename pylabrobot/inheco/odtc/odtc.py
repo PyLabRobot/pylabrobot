@@ -40,7 +40,7 @@ class ODTC(Resource, Device):
     # or with explicit params:
     # await odtc.tc.run_protocol(
     #     protocol,
-    #     backend_params=ODTCThermocyclerBackend.RunProtocolParams(
+    #     backend_params=ODTCBackendParams(
     #         fluid_quantity=FluidQuantity.UL_30_TO_74,
     #     ),
     # )

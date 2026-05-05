@@ -228,32 +228,27 @@ def _transform_stages(
 
 def _from_protocol(
   protocol: Protocol,
-  variant: ODTCVariant = 96,
-  fluid_quantity: Optional["FluidQuantity"] = None,
-  plate_type: int = 0,
-  post_heating: bool = True,
-  pid_set: Optional[List[ODTCPID]] = None,
+  variant: ODTCVariant,
+  fluid_quantity: "FluidQuantity",
+  plate_type: int,
+  post_heating: bool,
+  pid_set: List[ODTCPID],
+  apply_overshoot: bool,
   name: Optional[str] = None,
   lid_temperature: Optional[float] = None,
   start_lid_temperature: Optional[float] = None,
   default_heating_slope: Optional[float] = None,
   default_cooling_slope: Optional[float] = None,
-  apply_overshoot: bool = True,
   creator: Optional[str] = None,
   description: Optional[str] = None,
   datetime: Optional[str] = None,
 ) -> ODTCProtocol:
   """Private implementation of ODTCProtocol.from_protocol().
 
-  Use ODTCProtocol.from_protocol() as the public API.
+  All compilation config params are required — callers must resolve defaults
+  from ODTCBackendParams before calling. Use ODTCProtocol.from_protocol() as
+  the public API.
   """
-  from .model import FluidQuantity as _FQ
-  if fluid_quantity is None:
-    fluid_quantity = _FQ.UL_30_TO_74
-
-  if pid_set is None:
-    pid_set = [ODTCPID(number=1)]
-
   constraints = get_constraints(variant)
   effective_lid = lid_temperature if lid_temperature is not None else constraints.max_lid_temp
 
@@ -662,4 +657,5 @@ def build_progress_from_data_event(
     remaining_hold_s=position.get("remaining_hold_s") or 0.0,
     estimated_duration_s=est_s,
     remaining_duration_s=rem_s,
+    is_premethod=(odtc_protocol.kind == "premethod"),
   )

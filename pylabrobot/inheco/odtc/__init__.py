@@ -5,6 +5,7 @@ from .door import DoorStateUnknownError, ODTCDoorBackend
 from .driver import ODTCDriver
 from .model import (
   FluidQuantity,
+  ODTCBackendParams,
   ODTCPID,
   ODTCMethodSet,
   ODTCProgress,
@@ -22,6 +23,7 @@ __all__ = [
   "ODTCDoorBackend",
   "DoorStateUnknownError",
   "FluidQuantity",
+  "ODTCBackendParams",
   "ODTCProtocol",
   "ODTCPID",
   "ODTCMethodSet",

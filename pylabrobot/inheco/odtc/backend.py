@@ -16,6 +16,7 @@ from pylabrobot.inheco.scila.inheco_sila_interface import SiLAState
 from .driver import ODTCDriver
 from .model import (
   FluidQuantity,
+  ODTCBackendParams,
   ODTCPID,
   ODTCMethodSet,
   ODTCProgress,
@@ -43,35 +44,11 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
   via ODTCProtocol.from_protocol) or ODTCProtocol directly (used as-is).
 
   Device variant is fixed at construction time (via ODTC(variant=...)).
-  Per-call config uses atomic params classes:
-  - RunProtocolParams   → run_protocol()
-  - SetBlockTempParams  → set_block_temperature()
-  - StepParams          → Step.backend_params (per-step PID override)
+  Per-call compilation and execution config uses ODTCBackendParams (defined in
+  model.py — the single source of truth for compilation defaults).
+  Per-call temperature-control config uses SetBlockTempParams.
+  Per-step PID overrides use StepParams.
   """
-
-  @dataclass
-  class RunProtocolParams(BackendParams):
-    """Per-call params for run_protocol(). Controls protocol compilation and execution.
-
-    Pass as backend_params to run_protocol(). Device variant is taken from the
-    backend's construction-time variant (ODTC(variant=...)) and is not per-call.
-
-    fluid_quantity takes precedence over the volume_ul arg on run_protocol() when
-    both are provided. If neither is set, defaults to FluidQuantity.UL_30_TO_74.
-    """
-    fluid_quantity: Optional[FluidQuantity] = None
-    plate_type: int = 0
-    post_heating: bool = True
-    pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
-    dynamic_pre_method_duration: bool = True
-    default_heating_slope: Optional[float] = None   # None = hardware max
-    default_cooling_slope: Optional[float] = None   # None = hardware max
-    name: Optional[str] = None
-    creator: Optional[str] = None
-    apply_overshoot: bool = True
-    """If True (default), auto-compute overshoot for steps without an explicit Ramp.overshoot.
-    If False, no overshoot is applied regardless of ramp rate or fluid quantity.
-    Explicit Ramp.overshoot values are always honoured either way."""
 
   @dataclass
   class SetBlockTempParams(BackendParams):
@@ -123,8 +100,8 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
   def _resolve_odtc_protocol(
     self,
     protocol: Protocol,
-    params: "ODTCThermocyclerBackend.RunProtocolParams",
-    fluid_quantity: "FluidQuantity",
+    params: ODTCBackendParams,
+    fluid_quantity: FluidQuantity,
   ) -> ODTCProtocol:
     """Return ODTCProtocol, compiling from generic Protocol if needed.
 
@@ -134,7 +111,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     """
     if isinstance(protocol, ODTCProtocol):
       # Pre-compiled protocol: fluid_quantity is already baked into the XML.
-      # volume_ul and RunProtocolParams.fluid_quantity have no effect here.
+      # volume_ul and ODTCBackendParams.fluid_quantity have no effect here.
       return protocol
     return _from_protocol(
       protocol,
@@ -144,9 +121,9 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
       post_heating=params.post_heating,
       pid_set=list(params.pid_set),
       name=params.name,
+      apply_overshoot=params.apply_overshoot,
       default_heating_slope=params.default_heating_slope,
       default_cooling_slope=params.default_cooling_slope,
-      apply_overshoot=params.apply_overshoot,
       creator=params.creator,
     )
 
@@ -194,6 +171,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     protocol: Protocol,
     volume_ul: Optional[float] = None,
     backend_params: Optional[BackendParams] = None,
+    dynamic_pre_method_duration: bool = True,
   ) -> None:
     """Upload and start a protocol. Non-blocking (fire-and-forget).
 
@@ -202,10 +180,13 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
       volume_ul: Maximum sample volume in wells (µL). Used to auto-select
         FluidQuantity when backend_params.fluid_quantity is not set explicitly.
         Overridden by an explicit fluid_quantity in backend_params.
-      backend_params: ODTC-specific compilation and execution options.
+      backend_params: ODTCBackendParams with compilation options. Defaults to
+        ODTCBackendParams() when not provided or wrong type.
+      dynamic_pre_method_duration: When True (default), the device reports live
+        pre-heat remaining time. When False, uses the fixed 600 s estimate.
     """
-    if not isinstance(backend_params, ODTCThermocyclerBackend.RunProtocolParams):
-      backend_params = ODTCThermocyclerBackend.RunProtocolParams()
+    if not isinstance(backend_params, ODTCBackendParams):
+      backend_params = ODTCBackendParams()
 
     if backend_params.fluid_quantity is not None:
       fq = backend_params.fluid_quantity
@@ -217,7 +198,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     odtc = self._resolve_odtc_protocol(protocol, backend_params, fluid_quantity=fq)
     await self.upload_protocol(
       odtc,
-      dynamic_pre_method_duration=backend_params.dynamic_pre_method_duration,
+      dynamic_pre_method_duration=dynamic_pre_method_duration,
     )
     await self._execute_method(odtc)
 
@@ -278,7 +259,11 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     await self._driver.send_command("StopMethod")
     self._clear_execution_state()
 
-  async def wait_for_completion(self, timeout: Optional[float] = None) -> None:
+  async def wait_for_completion(
+    self,
+    timeout: Optional[float] = None,
+    report_interval: float = 300.0,
+  ) -> None:
     """Block until the running method/premethod completes.
 
     Returns immediately if no method is currently running. Uses
@@ -288,6 +273,9 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     Args:
       timeout: Maximum seconds to wait. Defaults to the backend timeout
         (3 hours). Pass a smaller value to fail faster.
+      report_interval: Log a progress update every this many seconds via
+        self.logger at INFO level (default 300 = 5 minutes). Pass 0 to
+        disable periodic reporting.
 
     Raises:
       asyncio.TimeoutError: If the method does not complete within timeout.
@@ -295,7 +283,25 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     if self._current_fut is None or self._current_fut.done():
       return
     effective = timeout if timeout is not None else self._timeout
-    await asyncio.wait_for(asyncio.shield(self._current_fut), timeout=effective)
+    if not report_interval:
+      await asyncio.wait_for(asyncio.shield(self._current_fut), timeout=effective)
+      return
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + effective
+    while not self._current_fut.done():
+      remaining = deadline - loop.time()
+      if remaining <= 0:
+        raise asyncio.TimeoutError()
+      wait_s = min(report_interval, remaining)
+      try:
+        await asyncio.wait_for(asyncio.shield(self._current_fut), timeout=wait_s)
+        return
+      except asyncio.TimeoutError:
+        pass
+      progress = await self.request_progress()
+      if progress is not None:
+        self.logger.info(str(progress))
 
   # ------------------------------------------------------------------
   # ODTC-specific public methods (available on the backend directly)
@@ -401,8 +407,12 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     Typical workflow::
 
         odtc_p = ODTCProtocol.from_protocol(
-            protocol, name="StandardPCR",
-            fluid_quantity=FluidQuantity.UL_30_TO_74,
+            protocol,
+            variant=96,
+            params=ODTCBackendParams(
+                fluid_quantity=FluidQuantity.UL_30_TO_74,
+                name="StandardPCR",
+            ),
         )
         await odtc.tc.backend.upload_protocol(odtc_p)
         # later:

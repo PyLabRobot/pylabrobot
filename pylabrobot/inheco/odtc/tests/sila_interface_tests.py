@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pylabrobot.capabilities.thermocycling.standard import Protocol, Ramp, Stage, Step
 from pylabrobot.inheco.odtc.backend import ODTCThermocyclerBackend
 from pylabrobot.inheco.odtc.driver import ODTCDriver
-from pylabrobot.inheco.odtc.model import ODTCPID, ODTCProtocol
+from pylabrobot.inheco.odtc.model import FluidQuantity, ODTCBackendParams, ODTCPID, ODTCProtocol
 from pylabrobot.inheco.scila.inheco_sila_interface import SiLAError, SiLAState
 
 
@@ -166,21 +166,18 @@ class TestODTCDriverEvents(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestRunProtocolParams(unittest.TestCase):
+class TestODTCBackendParams(unittest.TestCase):
   def test_default_params(self):
-    p = ODTCThermocyclerBackend.RunProtocolParams()
-    self.assertEqual(p.variant, 96)
-    self.assertEqual(p.fluid_quantity, 1)
+    p = ODTCBackendParams()
+    self.assertIsNone(p.fluid_quantity)
     self.assertTrue(p.post_heating)
-    self.assertTrue(p.dynamic_pre_method_duration)
     self.assertIsNone(p.name)
+    self.assertEqual(p.plate_type, 0)
+    self.assertTrue(p.apply_overshoot)
 
   def test_custom_params(self):
-    p = ODTCThermocyclerBackend.RunProtocolParams(
-      variant=384, fluid_quantity=2, name="PCR_384"
-    )
-    self.assertEqual(p.variant, 384)
-    self.assertEqual(p.fluid_quantity, 2)
+    p = ODTCBackendParams(fluid_quantity=FluidQuantity.UL_75_TO_100, name="PCR_384")
+    self.assertEqual(p.fluid_quantity, FluidQuantity.UL_75_TO_100)
     self.assertEqual(p.name, "PCR_384")
 
   def test_step_params_default(self):
@@ -200,8 +197,8 @@ class TestBackendResolvesProtocol(unittest.TestCase):
       stages=[Stage(steps=[Step(95.0, 30.0)], repeats=1)],
       name="TestPCR",
     )
-    params = ODTCThermocyclerBackend.RunProtocolParams(variant=96, fluid_quantity=1)
-    odtc = backend._resolve_odtc_protocol(protocol, params)
+    params = ODTCBackendParams(fluid_quantity=FluidQuantity.UL_30_TO_74)
+    odtc = backend._resolve_odtc_protocol(protocol, params, fluid_quantity=FluidQuantity.UL_30_TO_74)
     self.assertIsInstance(odtc, ODTCProtocol)
     self.assertEqual(len(odtc.stages), 1)
 
@@ -214,8 +211,8 @@ class TestBackendResolvesProtocol(unittest.TestCase):
       start_block_temperature=25.0, start_lid_temperature=110.0,
       pid_set=[ODTCPID(number=1)],
     )
-    params = ODTCThermocyclerBackend.RunProtocolParams()
-    resolved = backend._resolve_odtc_protocol(odtc, params)
+    params = ODTCBackendParams()
+    resolved = backend._resolve_odtc_protocol(odtc, params, fluid_quantity=FluidQuantity.UL_30_TO_74)
     self.assertIs(resolved, odtc)
 
 

@@ -18,6 +18,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.thermocycling.standard import Protocol, Stage, Step
 
 ODTCVariant = Literal[96, 384]
@@ -197,6 +198,29 @@ class ODTCPID:
 
 
 @dataclass
+class ODTCBackendParams(BackendParams):
+  """ODTC-specific backend parameters. Single source of truth for compilation defaults.
+
+  Use as backend_params in run_protocol() or as params in ODTCProtocol.from_protocol().
+  Both paths accept this object — defaults are defined here and nowhere else.
+
+  Device variant is fixed at ODTC construction time and is not a per-call field.
+  fluid_quantity takes precedence over the volume_ul arg on run_protocol() when both
+  are provided. If neither is set, defaults to FluidQuantity.UL_30_TO_74.
+  """
+
+  fluid_quantity: Optional[FluidQuantity] = None
+  plate_type: int = 0
+  post_heating: bool = True
+  pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
+  default_heating_slope: Optional[float] = None   # None = hardware max
+  default_cooling_slope: Optional[float] = None   # None = hardware max
+  name: Optional[str] = None
+  creator: Optional[str] = None
+  apply_overshoot: bool = True
+
+
+@dataclass
 class ODTCMethodSet:
   """Container for all methods and premethods uploaded as a set."""
 
@@ -352,65 +376,55 @@ class ODTCProtocol(Protocol):
     cls,
     protocol: "Protocol",
     variant: ODTCVariant = 96,
-    fluid_quantity: Optional["FluidQuantity"] = None,
-    plate_type: int = 0,
-    post_heating: bool = True,
-    pid_set: Optional[List["ODTCPID"]] = None,
-    name: Optional[str] = None,
+    params: Optional["ODTCBackendParams"] = None,
     lid_temperature: Optional[float] = None,
     start_lid_temperature: Optional[float] = None,
-    default_heating_slope: Optional[float] = None,
-    default_cooling_slope: Optional[float] = None,
-    apply_overshoot: bool = True,
-    creator: Optional[str] = None,
     description: Optional[str] = None,
     datetime: Optional[str] = None,
   ) -> "ODTCProtocol":
     """Compile a Protocol into a device-ready ODTCProtocol.
 
-    When ``name`` is provided, ``is_scratch=False`` and the method persists
-    on the device across sessions. Without a name it is uploaded as a
+    Compilation defaults (fluid_quantity, post_heating, pid_set, etc.) are
+    taken from ``params`` (an ODTCBackendParams). This is the same object
+    accepted by run_protocol(), so defaults can never drift between the two
+    paths.
+
+    When ``params.name`` is provided, ``is_scratch=False`` and the method
+    persists on the device across sessions. Without a name it is uploaded as a
     temporary scratch method (deleted on next Reset).
 
     Args:
       protocol: Source protocol with stages/steps.
       variant: ODTC variant (96 or 384).
-      fluid_quantity: Fluid volume range for thermal compensation.
-        Defaults to FluidQuantity.UL_30_TO_74.
-      plate_type: Plate type code.
-      post_heating: Whether to keep the block warm after the method.
-      pid_set: PID configurations. Defaults to [ODTCPID(number=1)].
-      name: Method name stored on the device. None = scratch/unnamed.
+      params: Compilation configuration. Defaults to ODTCBackendParams() when
+        not provided. See ODTCBackendParams for field descriptions.
       lid_temperature: Default lid temperature (°C). None = hardware max.
-      start_lid_temperature: Lid temperature during preheat (if different).
-      default_heating_slope: Default heating rate (°C/s). None = hardware max.
-      default_cooling_slope: Default cooling rate (°C/s). None = hardware max.
-      apply_overshoot: If True (default), automatically compute overshoot for
-        steps that do not specify an explicit Ramp.overshoot. If False, no
-        overshoot is applied regardless of ramp rate or fluid quantity.
-        Explicit Ramp.overshoot values are always honoured either way.
-      creator: Author string for metadata.
-      description: Description for metadata.
-      datetime: ISO timestamp; generated if None.
+        Advanced override; most callers do not need this.
+      start_lid_temperature: Lid temperature during preheat. None = lid_temperature.
+        Advanced override; most callers do not need this.
+      description: Description string stored in device metadata.
+      datetime: ISO timestamp stored in device metadata; auto-generated if None.
 
     Returns:
       ODTCProtocol ready for upload or direct execution.
     """
     from .protocol import _from_protocol  # lazy import — avoids circular dependency
+    p = params if params is not None else ODTCBackendParams()
+    fq = p.fluid_quantity if p.fluid_quantity is not None else FluidQuantity.UL_30_TO_74
     return _from_protocol(
       protocol,
       variant=variant,
-      fluid_quantity=fluid_quantity,
-      plate_type=plate_type,
-      post_heating=post_heating,
-      pid_set=pid_set,
-      name=name,
+      fluid_quantity=fq,
+      plate_type=p.plate_type,
+      post_heating=p.post_heating,
+      pid_set=list(p.pid_set),
+      name=p.name,
+      apply_overshoot=p.apply_overshoot,
+      default_heating_slope=p.default_heating_slope,
+      default_cooling_slope=p.default_cooling_slope,
+      creator=p.creator,
       lid_temperature=lid_temperature,
       start_lid_temperature=start_lid_temperature,
-      default_heating_slope=default_heating_slope,
-      default_cooling_slope=default_cooling_slope,
-      apply_overshoot=apply_overshoot,
-      creator=creator,
       description=description,
       datetime=datetime,
     )
@@ -419,6 +433,13 @@ class ODTCProtocol(Protocol):
 # =============================================================================
 # ODTCProgress
 # =============================================================================
+
+
+def _fmt_duration(seconds: float) -> str:
+  """Format a duration in seconds as 'Xm YYs'."""
+  m = int(seconds) // 60
+  s = int(seconds) % 60
+  return f"{m}m {s:02d}s"
 
 
 @dataclass
@@ -436,25 +457,38 @@ class ODTCProgress:
   remaining_hold_s: float = 0.0
   estimated_duration_s: Optional[float] = None
   remaining_duration_s: Optional[float] = None
+  is_premethod: bool = False
 
   def format_progress_log_message(self) -> str:
-    step_total = self.total_step_count
-    cycle_total = self.total_cycle_count
-    step_idx = self.current_step_index
-    cycle_idx = self.current_cycle_index
-    setpoint = self.target_temp_c if self.target_temp_c is not None else 0.0
-    block = self.current_temp_c or 0.0
-    lid = self.lid_temp_c or 0.0
-    if step_total and cycle_total:
-      return (
-        f"ODTC progress: elapsed {self.elapsed_s:.0f}s, step {step_idx + 1}/{step_total}, "
-        f"cycle {cycle_idx + 1}/{cycle_total}, setpoint {setpoint:.1f}°C, "
-        f"block {block:.1f}°C, lid {lid:.1f}°C"
+    elapsed_str = _fmt_duration(self.elapsed_s)
+    if self.estimated_duration_s is not None:
+      time_bracket = f"[{elapsed_str} / ~{_fmt_duration(self.estimated_duration_s)}]"
+    else:
+      time_bracket = f"[{elapsed_str} elapsed]"
+
+    temp_parts = []
+    if self.current_temp_c is not None:
+      t = f"block {self.current_temp_c:.1f}C"
+      if self.target_temp_c is not None:
+        t += f" (target {self.target_temp_c:.1f}C)"
+      temp_parts.append(t)
+    elif self.target_temp_c is not None:
+      temp_parts.append(f"target {self.target_temp_c:.1f}C")
+    if self.lid_temp_c is not None:
+      temp_parts.append(f"lid {self.lid_temp_c:.1f}C")
+    temp_str = ", ".join(temp_parts)
+
+    if self.total_step_count and self.total_cycle_count:
+      ctx = (
+        f"step {self.current_step_index + 1}/{self.total_step_count}, "
+        f"cycle {self.current_cycle_index + 1}/{self.total_cycle_count}"
       )
-    return (
-      f"ODTC progress: elapsed {self.elapsed_s:.0f}s, block {block:.1f}°C "
-      f"(target {setpoint:.1f}°C), lid {lid:.1f}°C"
-    )
+      return f"ODTC {time_bracket} {ctx}" + (f", {temp_str}" if temp_str else "")
+
+    if self.is_premethod:
+      return f"ODTC {time_bracket} preheating" + (f", {temp_str}" if temp_str else "")
+
+    return f"ODTC {time_bracket}" + (f" {temp_str}" if temp_str else "")
 
   def __str__(self) -> str:
     return self.format_progress_log_message()

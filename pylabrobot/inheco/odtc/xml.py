@@ -464,7 +464,13 @@ def _step_to_xml_element(
 
 
 def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
-  """Parse a <Method> element into ODTCProtocol with Stage tree."""
+  """Parse a <Method> element into ODTCProtocol with Stage tree.
+
+  Note: missing-field fallbacks here (post_heating=False, fluid_quantity=0 /
+  UL_10_TO_29) reflect whatever the device stored. They are intentionally
+  different from ODTCBackendParams compilation defaults and should not be
+  changed to match them.
+  """
   name = elem.attrib["methodName"]
   creator = elem.attrib.get("creator")
   description = elem.attrib.get("description")
@@ -505,7 +511,11 @@ def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
 
 
 def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
-  """Parse a <PreMethod> element into ODTCProtocol (kind='premethod')."""
+  """Parse a <PreMethod> element into ODTCProtocol (kind='premethod').
+
+  Note: fluid_quantity=0 and post_heating=False are device-storage values, not
+  compilation defaults. See ODTCBackendParams for compilation defaults.
+  """
   name = elem.attrib.get("methodName") or ""
   creator = elem.attrib.get("creator")
   description = elem.attrib.get("description")

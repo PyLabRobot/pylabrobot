@@ -74,7 +74,7 @@ class Step(SerializableMixin):
     hold_seconds: Finite positive number of seconds to hold at the target
       temperature. Must be a real number (e.g. 30, 300). For an indefinite
       hold after a protocol completes, use the device's post-heating
-      mechanism instead (e.g. ``post_heating=True`` on ``RunProtocolParams``
+      mechanism instead (e.g. ``post_heating=True`` on ``ODTCBackendParams``
       or ``ODTCProtocol`` for the ODTC).
     ramp: Transition profile into this step's temperature.
       Defaults to FULL_SPEED (full device speed, no overshoot).
