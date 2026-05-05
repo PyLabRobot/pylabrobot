@@ -214,6 +214,9 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn(b"POST /Medman HTTP/1.1\nHost: ", request)
     self.assertIn(b'Content-Type: text/xml; charset="utf-8"\n', request)
     self.assertIn(b'SOAPAction: "Some-URI"\r\n\r\n', request)
+    payload = gzip.decompress(request.split(b"\r\n\r\n", 1)[1]).decode("utf-8")
+    root = ET.fromstring(payload)
+    self.assertEqual(root.tag, "{http://schemas.xmlsoap.org/soap/envelope/}Envelope")
 
   async def test_get_echo_configuration_returns_raw_config(self):
     await self.driver.setup()

@@ -1147,6 +1147,7 @@ def _print_options_xml(options: EchoTransferPrintOptions) -> str:
     "PrintOptions",
     {
       "xmlns:SOAP-ENV": "http://schemas.xmlsoap.org/soap/envelope/",
+      "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
       "SOAP-ENV:encodingStyle": "http://schemas.xmlsoap.org/soap/encoding/",
     },
   )
@@ -1161,6 +1162,18 @@ def _print_options_xml(options: EchoTransferPrintOptions) -> str:
     )
     child.text = value
   return ET.tostring(root, encoding="unicode", short_empty_elements=True)
+
+
+def _strip_fragment_namespace_expansions(element: ET.Element) -> ET.Element:
+  soap_encoding_style = "{http://schemas.xmlsoap.org/soap/envelope/}encodingStyle"
+  for node in element.iter():
+    encoding_style = node.attrib.pop(soap_encoding_style, None)
+    if encoding_style is not None:
+      attributes = {"SOAP-ENV:encodingStyle": encoding_style}
+      attributes.update(node.attrib)
+      node.attrib.clear()
+      node.attrib.update(attributes)
+  return element
 
 
 def _dump_malformed_xml_response(
@@ -2469,6 +2482,8 @@ class EchoDriver(Driver):
     envelope = ET.Element(
       "SOAP-ENV:Envelope",
       {
+        "xmlns:SOAP-ENV": "http://schemas.xmlsoap.org/soap/envelope/",
+        "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
         "SOAP-ENV:encodingStyle": "http://schemas.xmlsoap.org/soap/encoding/",
         "xmlns:SOAPSDK1": "http://www.w3.org/2001/XMLSchema",
         "xmlns:SOAPSDK2": "http://www.w3.org/2001/XMLSchema-instance",
@@ -2488,7 +2503,7 @@ class EchoDriver(Driver):
     for name, value_type, value in params:
       if value_type == "xml_element":
         try:
-          param = ET.fromstring(value)
+          param = _strip_fragment_namespace_expansions(ET.fromstring(value))
         except ET.ParseError as exc:
           raise EchoProtocolError(f"Invalid XML payload for {method}.{name}.") from exc
         method_el.append(param)
