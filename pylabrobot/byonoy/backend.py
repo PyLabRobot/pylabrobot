@@ -4,7 +4,8 @@ import logging
 import threading
 import time
 from abc import ABCMeta
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
@@ -17,6 +18,30 @@ logger = logging.getLogger(__name__)
 class ByonoyDevice(enum.Enum):
   ABSORBANCE_96 = enum.auto()
   LUMINESCENCE_96 = enum.auto()
+
+
+class ByonoySlotState(enum.IntEnum):
+  UNKNOWN = 0
+  EMPTY = 1
+  OCCUPIED = 2
+  UNDETERMINED = 3
+
+
+@dataclass
+class ByonoyStatus:
+  is_initialized: bool
+  slot_state: ByonoySlotState
+  error_code: int
+  uptime_s: int
+  is_measuring: bool
+  boot_completed: bool
+
+
+@dataclass
+class ByonoyEnvironment:
+  temperature_c: float
+  humidity: float  # 0..1
+  acceleration_xyz: Tuple[int, int, int]
 
 
 class ByonoyBase(Driver, metaclass=ABCMeta):
@@ -107,3 +132,28 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
 
   def _stop_background_pings(self) -> None:
     self._sending_pings = False
+
+  async def get_status(self) -> ByonoyStatus:
+    """Read REP_STATUS_IN (0x0300): init/slot/error/uptime/measuring/boot."""
+    response = await self.send_command(report_id=0x0300, payload=b"\x00" * 60)
+    assert response is not None
+    r = Reader(response[2:])
+    return ByonoyStatus(
+      is_initialized=r.u8() != 0,
+      slot_state=ByonoySlotState(r.u8()),
+      error_code=r.u8(),
+      uptime_s=r.u32(),
+      is_measuring=r.u8() != 0,
+      boot_completed=r.u8() != 0,
+    )
+
+  async def get_environment(self) -> ByonoyEnvironment:
+    """Read REP_ENVIRONMENT_IN (0x0310): temperature, humidity, acceleration."""
+    response = await self.send_command(report_id=0x0310, payload=b"\x00" * 60)
+    assert response is not None
+    r = Reader(response[2:])
+    return ByonoyEnvironment(
+      temperature_c=r.i16() / 100.0,
+      humidity=r.i16() / 1000.0,
+      acceleration_xyz=(r.i16(), r.i16(), r.i16()),
+    )
