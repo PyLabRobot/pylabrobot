@@ -41,7 +41,28 @@ class ByonoyStatus:
 class ByonoyEnvironment:
   temperature_c: float
   humidity: float  # 0..1
-  acceleration_xyz: Tuple[int, int, int]
+  acceleration_g: Tuple[float, float, float]
+
+
+@dataclass
+class ByonoyVersions:
+  system_version: int
+  stm_version: int
+  stm_dev_version: int
+  esp_version: int
+  esp_dev_version: int
+  stm_bootloader_version: int
+
+  @property
+  def system_version_known(self) -> bool:
+    return self.system_version != 0
+
+  @property
+  def is_production(self) -> bool:
+    return self.stm_dev_version == 0 and self.esp_dev_version == 0
+
+
+_ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
 
 
 class ByonoyBase(Driver, metaclass=ABCMeta):
@@ -152,8 +173,25 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     response = await self.send_command(report_id=0x0310, payload=b"\x00" * 60)
     assert response is not None
     r = Reader(response[2:])
+    temp_c = r.i16() / 100.0
+    humidity = r.i16() / 1000.0
+    ax, ay, az = r.i16(), r.i16(), r.i16()
     return ByonoyEnvironment(
-      temperature_c=r.i16() / 100.0,
-      humidity=r.i16() / 1000.0,
-      acceleration_xyz=(r.i16(), r.i16(), r.i16()),
+      temperature_c=temp_c,
+      humidity=humidity,
+      acceleration_g=(ax / _ACCEL_LSB_PER_G, ay / _ACCEL_LSB_PER_G, az / _ACCEL_LSB_PER_G),
+    )
+
+  async def get_versions(self) -> ByonoyVersions:
+    """Read REP_VERSIONS_IN (0x0080): system / STM / ESP / bootloader versions."""
+    response = await self.send_command(report_id=0x0080, payload=b"\x00" * 60)
+    assert response is not None
+    r = Reader(response[2:])
+    return ByonoyVersions(
+      system_version=r.u32(),
+      stm_version=r.u32(),
+      stm_dev_version=r.u32(),
+      esp_version=r.u32(),
+      esp_dev_version=r.u32(),
+      stm_bootloader_version=r.u32(),
     )
