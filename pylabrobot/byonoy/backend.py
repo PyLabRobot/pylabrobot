@@ -94,6 +94,42 @@ class ByonoyApiVersion:
   version_no: int
 
 
+@dataclass
+class ByonoyDeviceInfo:
+  device_id: str
+  device_name: str
+  manufacturer: str
+  serial_no: str
+  firmware_version: str
+  ref_number: str
+
+
+# device_data_field_id (byonoyusbhid.h)
+_DD_DEVICE_ID = 0
+_DD_DEVICE_NAME = 1
+_DD_DEVICE_MANUFACTURER = 2
+_DD_SERIAL_NO = 3
+_DD_FIRMWARE_VERSION = 4
+_DD_REF_NUMBER = 8
+
+# device_data_field_flags (byonoyusbhid.h)
+_FLAG_TYPE_MASK = 0x0F
+_FLAG_TYPE_STRING = 0x02
+_FLAG_TYPE_INTEGER = 0x01
+_FLAG_TYPE_FLOAT = 0x04
+_FLAG_TYPE_BOOLEAN = 0x03
+_FLAG_HAS_MORE_DATA = 0x10
+
+
+class LedEffect(enum.IntEnum):
+  SOLID = 0x00
+  PROGRESS = 0x01
+  CYLON = 0x02
+  RAINBOW = 0x03
+  BLINKING = 0x04
+  BREATHING = 0x05
+
+
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
 
 
@@ -259,6 +295,103 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
       if i not in out:
         out.append(i)
     return out
+
+  async def read_data_field(self, field_index: int) -> object:
+    """Read a named device-data field via REP_DEVICE_DATA_READ_IN (0x0200).
+
+    Returns the field's value typed per the response flags
+    (str / int / float / bool / bytes). Truncates if HAS_MORE_DATA is set
+    (shouldn't happen for the short identity strings; log if it does).
+    """
+    payload = Writer().u16(field_index).u8(0).raw_bytes(b"\x00" * 57).finish()
+    response = await self.send_command(
+      report_id=0x0200, payload=payload, routing_info=b"\x80\x40"
+    )
+    assert response is not None
+    r = Reader(response[2:])
+    _ = r.u16()  # echoed field_index
+    flags = r.u8()
+    data_type = flags & _FLAG_TYPE_MASK
+    if flags & _FLAG_HAS_MORE_DATA:
+      logger.warning(
+        "[Byonoy] field 0x%04X has more data than fits in one report; truncating",
+        field_index,
+      )
+    raw = r.raw_bytes(52)
+    if data_type == _FLAG_TYPE_STRING:
+      return raw.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+    if data_type == _FLAG_TYPE_INTEGER:
+      return int.from_bytes(raw[:4], "little", signed=False)
+    if data_type == _FLAG_TYPE_FLOAT:
+      return Reader(raw[:4]).f32()
+    if data_type == _FLAG_TYPE_BOOLEAN:
+      return raw[0] != 0
+    return raw  # TypeBytes
+
+  async def get_device_info(self) -> ByonoyDeviceInfo:
+    """Read identity strings (matches C lib's byonoy_get_device_information)."""
+
+    async def s(idx: int) -> str:
+      v = await self.read_data_field(idx)
+      return v if isinstance(v, str) else str(v)
+
+    return ByonoyDeviceInfo(
+      device_id=await s(_DD_DEVICE_ID),
+      device_name=await s(_DD_DEVICE_NAME),
+      manufacturer=await s(_DD_DEVICE_MANUFACTURER),
+      serial_no=await s(_DD_SERIAL_NO),
+      firmware_version=await s(_DD_FIRMWARE_VERSION),
+      ref_number=await s(_DD_REF_NUMBER),
+    )
+
+  async def cancel(self, report_id: int = 0x0340) -> None:
+    """Abort an in-progress measurement via REP_ABORT_REPORT_OUT (0x0060).
+
+    `report_id` is the trigger report whose execution should be aborted.
+    Defaults to the lum96 trigger (0x0340).
+    """
+    payload = Writer().u16(report_id).raw_bytes(b"\x00" * 58).finish()
+    await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
+    logger.info("[Byonoy] sent abort for report 0x%04X", report_id)
+
+  async def set_led_colours(self, colours: List[Tuple[int, int, int]]) -> None:
+    """Set the 20-LED bar colours via REP_LED_BAR_COLOURS_OUT (0x0350).
+
+    Pads with black if fewer than 20 are given; truncates if more.
+    Also enables manual mode by setting LedEffect.SOLID with FLAG_LED_MANUAL.
+    """
+    pixels = list(colours[:20]) + [(0, 0, 0)] * max(0, 20 - len(colours))
+    w = Writer()
+    for r_, g, b in pixels:
+      w.u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
+    await self.send_command(
+      report_id=0x0350, payload=w.finish(), wait_for_response=False
+    )
+
+  async def set_led_effect(
+    self,
+    effect: LedEffect,
+    effect_state: int = 0,
+    manual: bool = False,
+    duration_ms: int = 0,
+  ) -> None:
+    """Set the LED bar effect via REP_LED_BAR_EFFECTS_OUT (0x0351).
+
+    Set `manual=True` when driving dynamic effects (PROGRESS, CYLON, ...)
+    where you want to advance frames yourself via `effect_state`.
+    """
+    flags = 0x02 if manual else 0  # FLAG_LED_MANUAL
+    payload = (
+      Writer()
+      .u8(int(effect))
+      .u8(effect_state & 0xFF)
+      .u8(flags)
+      .u32(int(duration_ms))
+      .finish()
+    )
+    await self.send_command(
+      report_id=0x0351, payload=payload, wait_for_response=False
+    )
 
   async def get_versions(self) -> ByonoyVersions:
     """Read REP_VERSIONS_IN (0x0080): system / STM / ESP / bootloader versions."""
