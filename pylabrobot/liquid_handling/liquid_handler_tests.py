@@ -113,11 +113,13 @@ def _make_disp(
   )
 
 
-class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
+class TestLiquidHandlerLayout(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.backend, deck=self.deck)
+    await stack.enter_async_context(self.lh)
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
@@ -1212,10 +1214,11 @@ class TestLiquidHandlerSerializeState(AnyioTestBase):
     self.lh.load_state(old_state)  # should not raise
 
 
-class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
+class TestNoGoZoneIntegration(AnyioTestBase):
   """Integration tests for no-go zone channel distribution through LiquidHandler."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.backend = _create_mock_backend(num_channels=8)
     self.backend.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
     self.deck = STARLetDeck()
@@ -1236,7 +1239,7 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
   async def test_aspirate_2_channels_avoids_no_go_zone(self):
     """2 channels on a trough with a center divider should be placed in separate compartments."""

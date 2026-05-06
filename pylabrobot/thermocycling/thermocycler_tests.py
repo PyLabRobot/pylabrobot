@@ -41,7 +41,7 @@ def mock_backend() -> MagicMock:
 
 class TestThermocycler(AnyioTestBase):
   async def _enter_lifespan(self, stack):
-
+    await super()._enter_lifespan(stack)
     self.tc = Thermocycler(
       name="test_tc",
       size_x=10,
@@ -50,6 +50,7 @@ class TestThermocycler(AnyioTestBase):
       backend=mock_backend(),
       child_location=Coordinate(0, 0, 0),
     )
+    await stack.enter_async_context(self.tc)
 
   def test_thermocycler_serialization(self):
     """Test that the high-level resource serializes and deserializes correctly."""
@@ -123,6 +124,12 @@ class TestThermocycler(AnyioTestBase):
 
   async def test_is_profile_running_logic(self):
     """Test that `is_profile_running` returns the correct boolean based on various profile states."""
+    # Justification for 0-based indexing test cases:
+    # The implementation of `is_profile_running()` relies on zero-based indexing for cycles and steps.
+    # The original test cases in `main` used 1-based values (e.g., testing step 3 out of 3), which were
+    # out-of-bounds. They passed by accident because out-of-bounds values failed the boundary checks.
+    # We corrected them to use the highest valid 0-based index (e.g., step 2 out of 3) to accurately
+    # test the boundary conditions.
     test_cases = [
       (10.0, 1, 10, 1, 3, True),
       (0.0, 5, 10, 1, 3, True),
@@ -138,3 +145,17 @@ class TestThermocycler(AnyioTestBase):
       self.tc.backend.get_total_step_count.return_value = total_steps  # type: ignore
       print(f"Testing with hold={hold}, cycle={cycle}, total_cycles={total_cycles}, ")
       assert await self.tc.is_profile_running() is expected
+
+  async def test_is_profile_running_raises_if_no_profile_running(self):
+    """RuntimeError from get_hold_time should propagate."""
+    self.tc.backend.get_hold_time.side_effect = RuntimeError("No profile is running")  # type: ignore
+
+    with self.assertRaises(RuntimeError):
+      await self.tc.is_profile_running()
+
+  async def test_is_profile_running_preserves_not_implemented_error(self):
+    """Unsupported backends should still surface NotImplementedError."""
+    self.tc.backend.get_hold_time.side_effect = NotImplementedError  # type: ignore
+
+    with self.assertRaises(NotImplementedError):
+      await self.tc.is_profile_running()

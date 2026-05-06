@@ -104,6 +104,14 @@ class AnyioTestBase(_AsyncResourceBase):
         msg or f"{first} != {second} within {places} places"
       )
 
+  def assertNotAlmostEqual(self, first, second, places=7, msg=None, delta=None):
+    if delta is not None:
+      assert abs(first - second) > delta, msg or f"{first} == {second} within {delta}"
+    else:
+      assert round(abs(first - second), places) != 0, (
+        msg or f"{first} == {second} within {places} places"
+      )
+
   def assertIsInstance(self, obj, cls, msg=None):
     assert isinstance(obj, cls), msg or f"{obj!r} is not an instance of {cls.__name__}"
 
@@ -121,6 +129,19 @@ class AnyioTestBase(_AsyncResourceBase):
 
   def assertIsNotNone(self, obj, msg=None):
     assert obj is not None, msg or f"{obj!r} is None"
+
+  @contextmanager
+  def subTest(self, msg=None, **kwargs):
+    try:
+      yield
+    except Exception as e:
+      parts = []
+      if msg:
+        parts.append(f"msg={msg}")
+      if kwargs:
+        parts.append(", ".join(f"{k}={v}" for k, v in kwargs.items()))
+      err_msg = f"subTest failed: {', '.join(parts)}" if parts else "subTest failed"
+      raise AssertionError(f"{err_msg}\nOriginal error: {e}") from e
 
   @contextmanager
   def assertRaises(self, exc_type, exc_value=None, msg=None):

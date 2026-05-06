@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from pylabrobot.testing.concurrency import AnyioTestBase
+from pylabrobot.machines.backend import MachineBackend
 
 pytest.importorskip("ot_api")
 from pylabrobot.resources.itemized_resource import ItemizedResource
@@ -11,9 +12,16 @@ from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBack
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 
+class MockOpentronsThermocyclerBackend(OpentronsThermocyclerBackend):
+  async def _enter_lifespan(self, stack):
+    await MachineBackend._enter_lifespan(self, stack)
+
+
 class TestOpentronsThermocyclerBackend(AnyioTestBase):
   async def _enter_lifespan(self, stack):
-    self.thermocycler_backend = OpentronsThermocyclerBackend(opentrons_id="test_id")
+    await super()._enter_lifespan(stack)
+    self.thermocycler_backend = MockOpentronsThermocyclerBackend(opentrons_id="test_id")
+    await stack.enter_async_context(self.thermocycler_backend)
 
   def test_opentrons_v1_serialization(self):
     """Test that the Opentrons-specific resource model serializes correctly."""
@@ -108,3 +116,11 @@ class TestOpentronsThermocyclerBackend(AnyioTestBase):
     # assert await self.thermocycler_backend.get_total_cycle_count() == 10
     assert await self.thermocycler_backend.get_current_step_index() == 0  # 1 - 1 = 0 (zero-based)
     assert await self.thermocycler_backend.get_total_step_count() == 3
+
+  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
+  async def test_get_hold_time_raises_if_not_running(self, mock_list_connected_modules):
+    mock_list_connected_modules.return_value = [{"id": "test_id", "data": {}}]
+
+    with self.assertRaises(RuntimeError) as e:
+      await self.thermocycler_backend.get_hold_time()
+    self.assertEqual(str(e.exception), "Hold time is not available. Is a profile running?")
