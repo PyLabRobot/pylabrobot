@@ -59,6 +59,18 @@ Transfer notes:
 - Echo transfer volumes are in nL by default; pass `volume_unit="uL"` to use PLR-style uL inputs
 - successful transfer reports update PLR volume trackers only when PLR volume tracking is enabled
 
+## Architecture
+
+The integration follows the PLR device/driver/capability split:
+
+- `Echo` is the user-facing device frontend. It exposes Echo operations, owns the source and
+  destination PLR plate holders, and delegates instrument I/O to its driver.
+- `EchoDriver` owns the Medman protocol details: SOAP envelope construction, gzip framing,
+  lock tokens, polling, event streams, survey parsing, and transfer report parsing.
+- `EchoPlateAccessBackend` adapts the Echo driver to the generic `PlateAccess` capability.
+- Application code, web services, and workcell controllers should call the `Echo` frontend or the
+  `PlateAccess` capability instead of duplicating Medman transport logic.
+
 ## Live Echo 650 Validation
 
 The non-live unit tests mock the Medman transport. Before relying on a new Echo firmware build or

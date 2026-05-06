@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type,func-returns-value,method-assign,union-attr"
 import gzip
 import html
 import unittest
@@ -42,7 +43,7 @@ def _soap_response(
 ) -> bytes:
   body = (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
-    '<SOAP-ENV:Envelope '
+    "<SOAP-ENV:Envelope "
     'xmlns:SOAPSDK1="http://www.w3.org/2001/XMLSchema" '
     'xmlns:SOAPSDK2="http://www.w3.org/2001/XMLSchema-instance" '
     'xmlns:SOAPSDK3="http://schemas.xmlsoap.org/soap/encoding/" '
@@ -70,7 +71,7 @@ def _soap_response(
 def _soap_request(inner_xml: str) -> bytes:
   body = (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
-    '<SOAP-ENV:Envelope '
+    "<SOAP-ENV:Envelope "
     'xmlns:SOAPSDK1="http://www.w3.org/2001/XMLSchema" '
     'xmlns:SOAPSDK2="http://www.w3.org/2001/XMLSchema-instance" '
     'xmlns:SOAPSDK3="http://schemas.xmlsoap.org/soap/encoding/" '
@@ -171,9 +172,11 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     set_volume_tracking(False)
 
   async def test_setup_builds_token_from_resolved_ip(self):
-    with patch("pylabrobot.labcyte.echo.socket.gethostbyname", return_value="192.168.0.25"), \
-         patch("pylabrobot.labcyte.echo.time.time", return_value=1775092000), \
-         patch("pylabrobot.labcyte.echo.os.getpid", return_value=4242):
+    with (
+      patch("pylabrobot.labcyte.echo.socket.gethostbyname", return_value="192.168.0.25"),
+      patch("pylabrobot.labcyte.echo.time.time", return_value=1775092000),
+      patch("pylabrobot.labcyte.echo.os.getpid", return_value=4242),
+    ):
       await self.driver.setup()
 
     self.assertEqual(self.driver.token, "192.168.0.25:15588:8240:1775092000:4242")
@@ -226,7 +229,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
         "<GetEchoConfigurationResponse><GetEchoConfiguration>"
         "<SUCCEEDED>True</SUCCEEDED><Status>OK</Status>"
         "<xmlEchoConfig>"
-        '&lt;Configuration internal=&quot;true&quot;&gt;&lt;/Configuration&gt;'
+        "&lt;Configuration internal=&quot;true&quot;&gt;&lt;/Configuration&gt;"
         "</xmlEchoConfig>"
         "</GetEchoConfiguration></GetEchoConfigurationResponse>"
       )
@@ -409,12 +412,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   async def test_unlock_tolerates_stale_local_lock_state(self):
     await self.driver.setup()
     self.driver._lock_held = True
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="UnlockInstrument",
-      values={"SUCCEEDED": False, "Status": "Caller does not own the lock"},
-      succeeded=False,
-      status="Caller does not own the lock",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="UnlockInstrument",
+        values={"SUCCEEDED": False, "Status": "Caller does not own the lock"},
+        succeeded=False,
+        status="Caller does not own the lock",
+      )
+    )
 
     await self.driver.unlock()
 
@@ -458,12 +463,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   async def test_close_source_plate_with_plate_uses_loaded_timeout(self):
     await self.driver.setup()
     self.driver._lock_held = True
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="RetractSrcPlateGripper",
-      values={"SUCCEEDED": True, "Status": "OK"},
-      succeeded=True,
-      status="OK",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="RetractSrcPlateGripper",
+        values={"SUCCEEDED": True, "Status": "OK"},
+        succeeded=True,
+        status="OK",
+      )
+    )
 
     await self.driver.close_source_plate(plate_type="384PP_DMSO2")
 
@@ -505,12 +512,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     await self.driver.setup()
     self.driver._lock_held = True
     params = EchoSurveyParams(plate_type="384PP_DMSO2", num_rows=16, num_cols=24)
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="PlateSurvey",
-      values={"SUCCEEDED": True, "Status": "OK"},
-      succeeded=True,
-      status="OK",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="PlateSurvey",
+        values={"SUCCEEDED": True, "Status": "OK"},
+        succeeded=True,
+        status="OK",
+      )
+    )
 
     result = await self.driver.survey_plate(params)
 
@@ -648,9 +657,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   async def test_get_survey_data_parses_escaped_survey_xml(self):
     await self.driver.setup()
     survey_xml = (
-      '<platesurvey p="384PP_DMSO2">'
-      '<Well n="A1" r="0" c="0" comp="1.83" />'
-      "</platesurvey>"
+      '<platesurvey p="384PP_DMSO2"><Well n="A1" r="0" c="0" comp="1.83" /></platesurvey>'
     )
     fake_writer = _FakeWriter()
     fake_reader = _FakeReader(
@@ -679,12 +686,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     await self.driver.setup()
     self.driver._lock_held = True
     params = EchoDryPlateParams(mode=EchoDryPlateMode.TWO_PASS, timeout=45.0)
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="DryPlate",
-      values={"SUCCEEDED": True, "Status": "OK"},
-      succeeded=True,
-      status="OK",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="DryPlate",
+        values={"SUCCEEDED": True, "Status": "OK"},
+        succeeded=True,
+        status="OK",
+      )
+    )
 
     await self.driver.dry_plate(params)
 
@@ -697,12 +706,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   async def test_dry_plate_uses_default_timeout(self):
     await self.driver.setup()
     self.driver._lock_held = True
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="DryPlate",
-      values={"SUCCEEDED": True, "Status": "OK"},
-      succeeded=True,
-      status="OK",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="DryPlate",
+        values={"SUCCEEDED": True, "Status": "OK"},
+        succeeded=True,
+        status="OK",
+      )
+    )
 
     await self.driver.dry_plate()
 
@@ -715,12 +726,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   async def test_low_level_actuator_commands_serialize_expected_rpc(self):
     await self.driver.setup()
     self.driver._lock_held = True
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="AnyCommand",
-      values={"SUCCEEDED": True, "Status": "OK"},
-      succeeded=True,
-      status="OK",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="AnyCommand",
+        values={"SUCCEEDED": True, "Status": "OK"},
+        succeeded=True,
+        status="OK",
+      )
+    )
 
     await self.driver.home_axes()
     await self.driver.open_door(timeout=2.0)
@@ -733,18 +746,20 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     await self.driver.actuate_vacuum_nozzle(False)
     await self.driver.actuate_ionizer(True, timeout=6.0)
 
-    self.driver._rpc.assert_has_awaits([
-      call("HomeAxes", timeout=DEFAULT_HOME_TIMEOUT),
-      call("OpenDoor", timeout=2.0),
-      call("SetPumpDir", (("Value", "boolean", "False"),), timeout=3.0),
-      call("EnableBubblerPump", (("Value", "boolean", "True"),), timeout=None),
-      call("ActuateBubblerNozzle", (("Value", "boolean", "False"),), timeout=4.0),
-      call("ActuateBubblerNozzle", (("Value", "boolean", "True"),), timeout=5.0),
-      call("ActuateBubblerNozzle", (("Value", "boolean", "False"),), timeout=None),
-      call("EnableVacuumNozzle", (("Value", "boolean", "True"),), timeout=None),
-      call("ActuateVacuumNozzle", (("Value", "boolean", "False"),), timeout=None),
-      call("ActuateIonizer", (("Value", "boolean", "True"),), timeout=6.0),
-    ])
+    self.driver._rpc.assert_has_awaits(
+      [
+        call("HomeAxes", timeout=DEFAULT_HOME_TIMEOUT),
+        call("OpenDoor", timeout=2.0),
+        call("SetPumpDir", (("Value", "boolean", "False"),), timeout=3.0),
+        call("EnableBubblerPump", (("Value", "boolean", "True"),), timeout=None),
+        call("ActuateBubblerNozzle", (("Value", "boolean", "False"),), timeout=4.0),
+        call("ActuateBubblerNozzle", (("Value", "boolean", "True"),), timeout=5.0),
+        call("ActuateBubblerNozzle", (("Value", "boolean", "False"),), timeout=None),
+        call("EnableVacuumNozzle", (("Value", "boolean", "True"),), timeout=None),
+        call("ActuateVacuumNozzle", (("Value", "boolean", "False"),), timeout=None),
+        call("ActuateIonizer", (("Value", "boolean", "True"),), timeout=6.0),
+      ]
+    )
 
   async def test_soap_fault_raises_command_error_with_fault_string(self):
     await self.driver.setup()
@@ -771,20 +786,22 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_current_plate_type_helpers_return_strings(self):
     await self.driver.setup()
-    self.driver._rpc = AsyncMock(side_effect=[
-      _RpcResult(
-        method="GetCurrentSrcPlateType",
-        values={"SUCCEEDED": True, "Status": "OK", "GetCurrentSrcPlateType": "384PP_DMSO2"},
-        succeeded=True,
-        status="OK",
-      ),
-      _RpcResult(
-        method="GetCurrentDstPlateType",
-        values={"SUCCEEDED": True, "Status": "OK", "GetCurrentDstPlateType": "1536LDV_Dest"},
-        succeeded=True,
-        status="OK",
-      ),
-    ])
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetCurrentSrcPlateType",
+          values={"SUCCEEDED": True, "Status": "OK", "GetCurrentSrcPlateType": "384PP_DMSO2"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetCurrentDstPlateType",
+          values={"SUCCEEDED": True, "Status": "OK", "GetCurrentDstPlateType": "1536LDV_Dest"},
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
 
     source = await self.driver.get_current_source_plate_type()
     destination = await self.driver.get_current_destination_plate_type()
@@ -794,20 +811,22 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
   async def test_plate_presence_helpers_treat_none_as_empty(self):
     await self.driver.setup()
-    self.driver._rpc = AsyncMock(side_effect=[
-      _RpcResult(
-        method="GetCurrentSrcPlateType",
-        values={"SUCCEEDED": True, "Status": "OK", "PlateType": "None"},
-        succeeded=True,
-        status="OK",
-      ),
-      _RpcResult(
-        method="GetCurrentDstPlateType",
-        values={"SUCCEEDED": True, "Status": "OK", "PlateType": "1536LDV_Dest"},
-        succeeded=True,
-        status="OK",
-      ),
-    ])
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetCurrentSrcPlateType",
+          values={"SUCCEEDED": True, "Status": "OK", "PlateType": "None"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetCurrentDstPlateType",
+          values={"SUCCEEDED": True, "Status": "OK", "PlateType": "1536LDV_Dest"},
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
 
     self.assertFalse(await self.driver.is_source_plate_present())
     self.assertTrue(await self.driver.is_destination_plate_present())
@@ -857,47 +876,53 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_protocol_and_power_calibration_return_raw_payloads(self):
     await self.driver.setup()
-    self.driver._rpc = AsyncMock(side_effect=[
-      _RpcResult(
-        method="GetProtocol",
-        values={"SUCCEEDED": True, "Status": "OK", "Protocol": "<Protocol />"},
-        succeeded=True,
-        status="OK",
-      ),
-      _RpcResult(
-        method="GetPwrCal",
-        values={"SUCCEEDED": True, "Status": "OK", "PwrCal": "current"},
-        succeeded=True,
-        status="OK",
-      ),
-    ])
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetProtocol",
+          values={"SUCCEEDED": True, "Status": "OK", "Protocol": "<Protocol />"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetPwrCal",
+          values={"SUCCEEDED": True, "Status": "OK", "PwrCal": "current"},
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
 
     protocol = await self.driver.get_protocol("baseline")
     power_calibration = await self.driver.get_power_calibration()
 
-    self.driver._rpc.assert_has_awaits([
-      call("GetProtocol", (("ProtocolName", "string", "baseline"),)),
-      call("GetPwrCal"),
-    ])
+    self.driver._rpc.assert_has_awaits(
+      [
+        call("GetProtocol", (("ProtocolName", "string", "baseline"),)),
+        call("GetPwrCal"),
+      ]
+    )
     self.assertEqual(protocol["Protocol"], "<Protocol />")
     self.assertEqual(power_calibration["PwrCal"], "current")
 
   async def test_get_fluid_info_parses_response(self):
     await self.driver.setup()
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="GetFluidInfo",
-      values={
-        "SUCCEEDED": True,
-        "Status": "OK",
-        "FluidName": "DMSO",
-        "Description": "Dimethyl sulfoxide",
-        "FCMin": "0.0",
-        "FCMax": "100.0",
-        "FCUnits": "%",
-      },
-      succeeded=True,
-      status="OK",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="GetFluidInfo",
+        values={
+          "SUCCEEDED": True,
+          "Status": "OK",
+          "FluidName": "DMSO",
+          "Description": "Dimethyl sulfoxide",
+          "FCMin": "0.0",
+          "FCMax": "100.0",
+          "FCUnits": "%",
+        },
+        succeeded=True,
+        status="OK",
+      )
+    )
 
     info = await self.driver.get_fluid_info("DMSO")
 
@@ -1092,12 +1117,14 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_instrument_lock_state_returns_raw_payload(self):
     await self.driver.setup()
-    self.driver._rpc = AsyncMock(return_value=_RpcResult(
-      method="GetInstrumentLockState",
-      values={"SUCCEEDED": False, "Status": "Instrument is not locked.", "UnlockInstrument": ""},
-      succeeded=False,
-      status="Instrument is not locked.",
-    ))
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="GetInstrumentLockState",
+        values={"SUCCEEDED": False, "Status": "Instrument is not locked.", "UnlockInstrument": ""},
+        succeeded=False,
+        status="Instrument is not locked.",
+      )
+    )
 
     values = await self.driver.get_instrument_lock_state(lock_id=self.driver.token)
 
@@ -1246,23 +1273,25 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.driver.get_plate_info = AsyncMock(return_value={})
     self.driver.get_dio_ex2 = AsyncMock(return_value={})
     self.driver.get_dio = AsyncMock(return_value={})
-    self.driver.do_well_transfer = AsyncMock(return_value=EchoTransferResult(
-      report_xml=None,
-      raw={},
-      succeeded=True,
-      status="OK",
-      transfers=[
-        EchoTransferredWell(
-          source_identifier="A1",
-          source_row=0,
-          source_column=0,
-          destination_identifier="B1",
-          destination_row=1,
-          destination_column=0,
-          actual_volume_nl=5.0,
-        )
-      ],
-    ))
+    self.driver.do_well_transfer = AsyncMock(
+      return_value=EchoTransferResult(
+        report_xml=None,
+        raw={},
+        succeeded=True,
+        status="OK",
+        transfers=[
+          EchoTransferredWell(
+            source_identifier="A1",
+            source_row=0,
+            source_column=0,
+            destination_identifier="B1",
+            destination_row=1,
+            destination_column=0,
+            actual_volume_nl=5.0,
+          )
+        ],
+      )
+    )
 
     result = await self.driver.transfer_wells(
       source_plate,
@@ -1344,12 +1373,16 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.driver._lock_held = True
     calls: list[str] = []
     self.driver.eject_source_plate = AsyncMock(
-      side_effect=lambda **_kwargs: calls.append("source")
-      or EchoPlateWorkflowResult(side="source", plate_type=None, plate_present=False)
+      side_effect=lambda **_kwargs: (
+        calls.append("source")
+        or EchoPlateWorkflowResult(side="source", plate_type=None, plate_present=False)
+      )
     )
     self.driver.eject_destination_plate = AsyncMock(
-      side_effect=lambda **_kwargs: calls.append("destination")
-      or EchoPlateWorkflowResult(side="destination", plate_type=None, plate_present=False)
+      side_effect=lambda **_kwargs: (
+        calls.append("destination")
+        or EchoPlateWorkflowResult(side="destination", plate_type=None, plate_present=False)
+      )
     )
     self.driver.close_door = AsyncMock(side_effect=lambda *_args, **_kwargs: calls.append("door"))
 
@@ -1441,13 +1474,15 @@ class TestEchoDevice(unittest.IsolatedAsyncioTestCase):
   async def test_device_delegates_low_level_methods_to_driver(self):
     echo = Echo(host="192.168.0.25")
     echo._setup_finished = True
-    echo.driver.get_fluid_info = AsyncMock(return_value=EchoFluidInfo(
-      name="DMSO",
-      description="",
-      fc_min=None,
-      fc_max=None,
-      fc_units="",
-    ))
+    echo.driver.get_fluid_info = AsyncMock(
+      return_value=EchoFluidInfo(
+        name="DMSO",
+        description="",
+        fc_min=None,
+        fc_max=None,
+        fc_units="",
+      )
+    )
     echo.driver.get_echo_configuration = AsyncMock(return_value="<Configuration />")
     echo.driver.get_all_protocol_names = AsyncMock(return_value=["baseline"])
     echo.driver.open_door = AsyncMock()
