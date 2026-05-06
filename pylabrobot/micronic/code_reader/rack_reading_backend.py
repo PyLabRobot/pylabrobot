@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading import (
@@ -95,8 +95,13 @@ class MicronicDirectRackReadingBackend(MicronicRackReadingBackend):
     driver: Optional[MicronicDirectDriver] = None,
     twain_scanner_path: Optional[str] = None,
     twain_source: str = "AVA6PlusG",
+    sane_device: Optional[str] = None,
+    scanner_backend: str = "auto",
+    scan_command: Optional[Sequence[str]] = None,
+    image_extension: Optional[str] = None,
     image_dir: Optional[str] = None,
     serial_port: str = "COM4",
+    rack_id_command: Optional[Sequence[str]] = None,
     scanner_timeout_ms: int = 90000,
     serial_timeout_ms: int = 2500,
     min_wells: int = 96,
@@ -108,8 +113,13 @@ class MicronicDirectRackReadingBackend(MicronicRackReadingBackend):
       driver = MicronicDirectDriver(
         twain_scanner_path=twain_scanner_path,
         twain_source=twain_source,
+        sane_device=sane_device,
+        scanner_backend=scanner_backend,
+        scan_command=scan_command,
+        image_extension=image_extension,
         image_dir=image_dir,
         serial_port=serial_port,
+        rack_id_command=rack_id_command,
         scanner_timeout_ms=scanner_timeout_ms,
         serial_timeout_ms=serial_timeout_ms,
         min_wells=min_wells,

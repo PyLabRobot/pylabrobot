@@ -54,7 +54,7 @@ namespaces = false
 exclude = ["tools*", "docs*"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "version.txt", "micronic/code_reader/native/*"]
+pylabrobot = ["visualizer/*", "version.txt"]
 
 [tool.ruff]
 line-length = 100

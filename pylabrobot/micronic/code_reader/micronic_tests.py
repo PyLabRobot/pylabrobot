@@ -1,6 +1,8 @@
 import json
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib import error
 
@@ -15,6 +17,9 @@ from pylabrobot.micronic.code_reader.direct_driver import (
   DecodeResult,
   MicronicDirectDriver,
   MicronicDirectRackReaderError,
+  choose_image_extension,
+  read_rack_id,
+  run_scan,
 )
 from pylabrobot.micronic.code_reader.driver import (
   MicronicError,
@@ -196,6 +201,11 @@ class TestMicronicIOMonitorRackReadingBackend(unittest.IsolatedAsyncioTestCase):
 
 
 class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
+  def test_direct_driver_does_not_default_to_packaged_twain_helper(self):
+    driver = MicronicDirectDriver()
+    self.assertIsNone(driver.twain_scanner_path)
+    self.assertIsNone(driver.scan_command)
+
   async def test_direct_driver_scan_populates_standard_rack_result(self):
     with tempfile.TemporaryDirectory() as image_dir:
       driver = MicronicDirectDriver(
@@ -235,6 +245,85 @@ class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
       run_scan.assert_called_once()
       read_rack_id.assert_called_once()
       decode_image.assert_called_once()
+
+  async def test_run_scan_uses_explicit_command(self):
+    with tempfile.TemporaryDirectory() as image_dir:
+      output_path = Path(image_dir) / "rack.bmp"
+      metadata = run_scan(
+        output_path=output_path,
+        timeout_ms=1000,
+        scan_command=[
+          sys.executable,
+          "-c",
+          "from pathlib import Path; Path(r'{output_path}').write_bytes(b'image')",
+        ],
+      )
+
+      self.assertEqual(metadata["source"], "command")
+      self.assertTrue(output_path.exists())
+
+  async def test_run_scan_uses_sane_scanimage_when_requested(self):
+    output_path = Path("/tmp/micronic-test.tiff")
+    with (
+      patch(
+        "pylabrobot.micronic.code_reader.direct_driver.shutil.which",
+        return_value="/usr/bin/scanimage",
+      ),
+      patch(
+        "pylabrobot.micronic.code_reader.direct_driver.run_scan_command",
+        return_value={"source": "sane"},
+      ) as run_scan_command,
+    ):
+      metadata = run_scan(
+        output_path=output_path,
+        timeout_ms=1000,
+        scanner_backend="sane",
+        sane_device="avision:libusb:001:004",
+      )
+
+    self.assertEqual(metadata["source"], "sane")
+    run_scan_command.assert_called_once_with(
+      [
+        "/usr/bin/scanimage",
+        "--device-name",
+        "avision:libusb:001:004",
+        "--format=tiff",
+        "--output-file",
+        str(output_path),
+      ],
+      output_path,
+      1000,
+      source="sane",
+    )
+
+  async def test_run_scan_requires_configured_acquisition(self):
+    with (
+      patch("pylabrobot.micronic.code_reader.direct_driver.shutil.which", return_value=None),
+      self.assertRaises(MicronicDirectRackReaderError),
+    ):
+      run_scan(
+        output_path=Path("/tmp/micronic-test.bmp"),
+        timeout_ms=1000,
+        scanner_backend="twain",
+      )
+
+  async def test_choose_image_extension_prefers_sane_tiff_on_non_windows_auto(self):
+    extension = choose_image_extension(
+      image_extension=None,
+      image_input=None,
+      scanner_backend="auto",
+      scan_command=None,
+      twain_scanner_path=None,
+      sane_device="avision:libusb:001:004",
+    )
+    self.assertEqual(extension, "tiff")
+
+  async def test_read_rack_id_uses_configured_command(self):
+    rack_id = read_rack_id(
+      timeout_ms=1000,
+      rack_id_command=[sys.executable, "-c", "print('rack 9500017722')"],
+    )
+    self.assertEqual(rack_id, "9500017722")
 
   async def test_direct_driver_raises_when_scan_result_is_not_ready(self):
     driver = MicronicDirectDriver()
