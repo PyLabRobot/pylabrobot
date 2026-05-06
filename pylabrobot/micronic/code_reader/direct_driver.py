@@ -106,8 +106,15 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
   async def stop(self):
     scan_task = self._scan_task
     if scan_task is not None and not scan_task.done():
-      await scan_task
+      try:
+        await scan_task
+      except asyncio.CancelledError:
+        pass
+      except Exception:
+        pass
     self._complete_finished_scan_task()
+    if self._scan_error is not None:
+      raise self._scan_error
 
   def serialize(self) -> dict:
     return {
@@ -142,6 +149,7 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
     self._complete_finished_scan_task()
     if self._scan_task is not None and not self._scan_task.done():
       raise MicronicDirectRackReaderError("Direct Micronic rack scan is already in progress.")
+    self._last_result = None
     self._state = RackReaderState.SCANNING
     self._scan_error = None
     self._reported_scanning_since_trigger = False
@@ -169,6 +177,11 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
     return self._last_result
 
   async def get_rack_id(self) -> str:
+    self._complete_finished_scan_task()
+    if self._scan_error is not None:
+      raise self._scan_error
+    if self._state == RackReaderState.SCANNING:
+      raise MicronicDirectRackReaderError("Direct Micronic rack scan is still in progress.")
     if self._last_result is not None:
       return self._last_result.rack_id
     return await self.scan_rack_id(timeout=0, poll_interval=0)
