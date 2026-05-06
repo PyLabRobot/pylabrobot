@@ -144,6 +144,7 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     self._ping_interval = 1.0
     self._sending_pings = False
     self._device_type = device_type
+    self._abort_requested = False
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
@@ -347,9 +348,15 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
   async def cancel(self, report_id: int = 0x0340) -> None:
     """Abort an in-progress measurement via REP_ABORT_REPORT_OUT (0x0060).
 
+    Empirically the firmware stops emitting result chunks but does not send
+    any closing notification, so we also raise an `_abort_requested` flag
+    that subclasses' read loops poll to bail out instead of waiting 120 s
+    for the hard timeout.
+
     `report_id` is the trigger report whose execution should be aborted.
     Defaults to the lum96 trigger (0x0340).
     """
+    self._abort_requested = True
     payload = Writer().u16(report_id).raw_bytes(b"\x00" * 58).finish()
     await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
     logger.info("[Byonoy] sent abort for report 0x%04X", report_id)

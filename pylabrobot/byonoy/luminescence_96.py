@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -128,6 +129,7 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
       .u8(0)  # flags
       .finish()
     )
+    self._abort_requested = False
     await self.send_command(
       report_id=0x0340,
       payload=payload3,
@@ -138,11 +140,15 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     all_rows: List[Optional[float]] = []
 
     while True:
+      if self._abort_requested:
+        self._abort_requested = False
+        logger.info("[Byonoy L96 pid=0x%04X] read aborted by cancel()", self.io.pid)
+        raise asyncio.CancelledError("Luminescence read aborted via cancel().")
       if time.time() - t0 > 120:
         logger.error("[Byonoy L96 pid=0x%04X] luminescence read timed out after 120s", self.io.pid)
         raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
 
-      chunk = await self.io.read(64, timeout=30)
+      chunk = await self.io.read(64, timeout=2)
       if len(chunk) == 0:
         continue
 
