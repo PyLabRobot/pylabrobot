@@ -3,8 +3,7 @@
 The `rack_reading` capability standardizes rack-scale code readers that trigger a rack scan,
 report normalized state while scanning, and return structured per-position scan results.
 
-Unlike the single-barcode `barcode_scanning` capability, rack reading is job-oriented and returns
-the full decoded rack map.
+Unlike one-at-a-time code reads, rack reading is job-oriented and returns the full decoded rack map.
 
 ## Public API
 
@@ -35,9 +34,13 @@ Lower-level methods are also available:
 ## Example With Micronic
 
 ```python
-from pylabrobot.micronic import MicronicCodeReader
+from pylabrobot.micronic import MicronicDirectCodeReader
 
-reader = MicronicCodeReader(host="localhost", port=2500)
+reader = MicronicDirectCodeReader(
+  scanner_backend="sane",
+  sane_device="avision:libusb:001:004",
+  serial_port="/dev/ttyUSB0",
+)
 await reader.setup()
 
 try:
