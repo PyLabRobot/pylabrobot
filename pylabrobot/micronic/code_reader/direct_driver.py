@@ -3,8 +3,8 @@
 This driver does not call Micronic Code Reader or IO Monitor. It owns the local
 scanner path directly:
 
-- acquire a rack image through a configured scan command, Windows TWAIN helper,
-  or SANE ``scanimage`` command,
+- acquire a rack image through a user-supplied scan command, Windows TWAIN
+  helper, or SANE ``scanimage`` command,
 - read the rack ID through the side serial barcode reader,
 - decode tube DataMatrix codes locally, and
 - return the standard PLR rack-reading result.
@@ -16,7 +16,7 @@ import asyncio
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - local scanner/rack-id helper execution is the interface.
 import tempfile
 import time
 from dataclasses import dataclass
@@ -92,6 +92,9 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
     self.rack_id_override = rack_id_override
     self._state = RackReaderState.IDLE
     self._last_result: Optional[RackScanResult] = None
+    self._scan_task: Optional[asyncio.Future[RackScanResult]] = None
+    self._scan_error: Optional[Exception] = None
+    self._reported_scanning_since_trigger = False
     self.last_image_path: Optional[Path] = None
     self.last_scan_metadata: dict[str, object] = {}
     self.last_decode_metadata: dict[str, object] = {}
@@ -101,7 +104,10 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
     self.image_dir.mkdir(parents=True, exist_ok=True)
 
   async def stop(self):
-    pass
+    scan_task = self._scan_task
+    if scan_task is not None and not scan_task.done():
+      await scan_task
+    self._complete_finished_scan_task()
 
   def serialize(self) -> dict:
     return {
@@ -124,16 +130,23 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
     }
 
   async def get_rack_reader_state(self) -> RackReaderState:
+    if self._state == RackReaderState.SCANNING and not self._reported_scanning_since_trigger:
+      self._reported_scanning_since_trigger = True
+      return self._state
+    self._complete_finished_scan_task()
+    if self._scan_error is not None:
+      raise self._scan_error
     return self._state
 
   async def trigger_rack_scan(self) -> None:
+    self._complete_finished_scan_task()
+    if self._scan_task is not None and not self._scan_task.done():
+      raise MicronicDirectRackReaderError("Direct Micronic rack scan is already in progress.")
     self._state = RackReaderState.SCANNING
-    try:
-      self._last_result = await asyncio.to_thread(self._scan_rack_blocking)
-      self._state = RackReaderState.DATAREADY
-    except Exception:
-      self._state = RackReaderState.IDLE
-      raise
+    self._scan_error = None
+    self._reported_scanning_since_trigger = False
+    loop = asyncio.get_running_loop()
+    self._scan_task = loop.run_in_executor(None, self._scan_rack_blocking)
 
   async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
     del timeout, poll_interval
@@ -142,9 +155,15 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
       serial_port=self.serial_port,
       timeout_ms=self.serial_timeout_ms,
       rack_id_override=self.rack_id_override,
+      rack_id_command=self.rack_id_command,
     )
 
   async def get_scan_result(self) -> RackScanResult:
+    self._complete_finished_scan_task()
+    if self._scan_error is not None:
+      raise self._scan_error
+    if self._state == RackReaderState.SCANNING:
+      raise MicronicDirectRackReaderError("Direct Micronic rack scan is still in progress.")
     if self._last_result is None:
       raise MicronicDirectRackReaderError("No direct Micronic rack scan has completed yet.")
     return self._last_result
@@ -153,6 +172,27 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
     if self._last_result is not None:
       return self._last_result.rack_id
     return await self.scan_rack_id(timeout=0, poll_interval=0)
+
+  def _complete_finished_scan_task(self) -> None:
+    if self._scan_task is not None and self._scan_task.done():
+      self._complete_scan_task(self._scan_task)
+
+  def _complete_scan_task(self, task: asyncio.Future[RackScanResult]) -> None:
+    if task is not self._scan_task:
+      return
+
+    self._scan_task = None
+    try:
+      self._last_result = task.result()
+    except asyncio.CancelledError:
+      self._scan_error = MicronicDirectRackReaderError("Direct Micronic rack scan was cancelled.")
+      self._state = RackReaderState.IDLE
+    except Exception as exc:
+      self._scan_error = exc
+      self._state = RackReaderState.IDLE
+    else:
+      self._scan_error = None
+      self._state = RackReaderState.DATAREADY
 
   async def get_layouts(self) -> list[LayoutInfo]:
     return [LayoutInfo(name="8x12")]
@@ -308,7 +348,7 @@ def run_scan_command(
   source: str,
 ) -> dict[str, object]:
   try:
-    completed = subprocess.run(
+    completed = subprocess.run(  # nosec B603 - operator-configured command, shell=False.
       list(command),
       check=False,
       capture_output=True,
@@ -392,7 +432,7 @@ def read_rack_id_pyserial(serial_port: str, timeout_ms: int) -> str:
 
 def read_rack_id_command(command: Sequence[str], timeout_ms: int) -> str:
   try:
-    completed = subprocess.run(
+    completed = subprocess.run(  # nosec B603 - operator-configured command, shell=False.
       list(command),
       check=False,
       capture_output=True,
@@ -416,9 +456,14 @@ def read_rack_id_powershell(serial_port: str, timeout_ms: int) -> str:
       "PowerShell rack ID serial read is only supported on Windows."
     )
 
+  quoted_serial_port = powershell_single_quote(serial_port)
+  powershell_path = shutil.which("powershell.exe") or shutil.which("powershell")
+  if powershell_path is None:
+    raise MicronicDirectRackReaderError("PowerShell executable was not found on PATH.")
+
   ps_script = rf"""
 $ErrorActionPreference = 'Stop'
-$port = New-Object System.IO.Ports.SerialPort '{serial_port}', 9600, ([System.IO.Ports.Parity]::Even), 7, ([System.IO.Ports.StopBits]::One)
+$port = New-Object System.IO.Ports.SerialPort {quoted_serial_port}, 9600, ([System.IO.Ports.Parity]::Even), 7, ([System.IO.Ports.StopBits]::One)
 $port.ReadTimeout = 100
 $port.WriteTimeout = 1000
 $port.Open()
@@ -443,8 +488,8 @@ try {{
   if ($port.IsOpen) {{ $port.Close() }}
 }}
 """
-  completed = subprocess.run(
-    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+  completed = subprocess.run(  # nosec B603 - fixed PowerShell path with escaped port input.
+    [powershell_path, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
     check=False,
     capture_output=True,
     text=True,
@@ -454,6 +499,10 @@ try {{
     raise MicronicDirectRackReaderError(f"Rack ID serial read failed: {completed.stderr.strip()}")
 
   return extract_rack_id(completed.stdout)
+
+
+def powershell_single_quote(value: str) -> str:
+  return "'" + value.replace("'", "''") + "'"
 
 
 def extract_rack_id(text: str) -> str:
@@ -519,7 +568,8 @@ def format_command(command: Sequence[str], **values: object) -> list[str]:
 
 def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, object]]:
   cv2, np, zxingcpp, Image, ImageOps = import_decode_dependencies()
-  image = Image.open(image_path).convert("L")
+  with Image.open(image_path) as loaded_image:
+    image = loaded_image.convert("L")
   full_results = zxingcpp.read_barcodes(
     image,
     formats=zxingcpp.BarcodeFormat.DataMatrix,

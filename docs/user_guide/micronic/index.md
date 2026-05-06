@@ -15,7 +15,8 @@ There are two rack-reader drivers:
   Ubuntu/Linux SANE `scanimage`; reads the side rack barcode through the serial
   reader; decodes tube DataMatrix codes locally; and returns the same
   `RackScanResult` shape through the standard `rack_reading` capability. It does
-  not call Micronic Code Reader or IO Monitor.
+  not call Micronic Code Reader or IO Monitor, and PyLabRobot does not package
+  any scanner helper executable.
 
 Both drivers plug into `MicronicCodeReader` through the same `rack_reading`
 capability. `MicronicDirectCodeReader` is a convenience frontend that constructs
@@ -67,7 +68,10 @@ finally:
 
 Use `MicronicDirectDriver` when the host should own scanner acquisition, rack-ID
 reads, and tube decoding without the Micronic application. The direct path
-exposes `rack_reading`; it does not expose `barcode_scanning`.
+exposes `rack_reading`; it does not expose `barcode_scanning`. The operator is
+responsible for installing any OS-level scanner bridge (`twain_scan`,
+`scanimage`, or a custom command) and the local Python decode dependencies in
+the runtime environment.
 
 ```python
 from pylabrobot.micronic import MicronicCodeReader, MicronicDirectDriver
@@ -123,9 +127,13 @@ formatted with `{output_path}`, `{timeout_ms}`, `{twain_source}`, and
   it typically takes tens of seconds. `scan_rack_id` only reads the rack
   barcode and completes in a few seconds.
 - TWAIN is a Windows scanner-driver API. PyLabRobot does not ship a TWAIN
-  bridge binary; configure `twain_scanner_path`, set `MICRONIC_TWAIN_SCANNER_PATH`,
-  or put a local helper named `twain_scan`/`twain_scan.exe` on PATH when using
-  the `twain` backend.
+  bridge binary and does not install one for you; configure
+  `twain_scanner_path`, set `MICRONIC_TWAIN_SCANNER_PATH`, or put a local helper
+  named `twain_scan`/`twain_scan.exe` on PATH when using the `twain` backend.
 - Ubuntu/Linux scanner control should use SANE `scanimage` or a custom
-  `scan_command`. Rack-ID reads use `pyserial` on non-Windows systems.
+  `scan_command`. PyLabRobot does not install SANE or vendor scanner drivers.
+  Rack-ID reads use `pyserial` on non-Windows systems.
+- Direct image decoding imports `pillow`, `opencv-python-headless`, `numpy`, and
+  `zxing-cpp` at runtime. Install them in the environment that runs PyLabRobot
+  when using the direct driver.
 - Use `image_input` for offline decode checks without touching scanner hardware.
