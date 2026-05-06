@@ -90,7 +90,8 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     }
 
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
-    await super()._enter_lifespan(stack, skip_home=skip_home)
+    # Skip OpentronsOT2Backend._enter_lifespan (requires ot_api); call grandparent directly.
+    await LiquidHandlerBackend._enter_lifespan(self, stack)
     self._setup_pipettes()
     logger.info(
       "OpentronsOT2Simulator setup: left=%s, right=%s",
