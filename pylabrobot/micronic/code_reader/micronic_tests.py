@@ -1,14 +1,20 @@
 import json
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 from urllib import error
 
 from pylabrobot.capabilities.barcode_scanning.backend import BarcodeScannerError
 from pylabrobot.capabilities.rack_reading import RackReaderState
-from pylabrobot.micronic import MicronicCodeReader
+from pylabrobot.micronic import MicronicCodeReader, MicronicDirectCodeReader
 from pylabrobot.micronic.code_reader.barcode_scanning_backend import (
   MicronicBarcodeScannerError,
   MicronicIOMonitorBarcodeScannerBackend,
+)
+from pylabrobot.micronic.code_reader.direct_driver import (
+  DecodeResult,
+  MicronicDirectDriver,
+  MicronicDirectRackReaderError,
 )
 from pylabrobot.micronic.code_reader.driver import (
   MicronicError,
@@ -17,6 +23,7 @@ from pylabrobot.micronic.code_reader.driver import (
 )
 from pylabrobot.micronic.code_reader.rack_reading_backend import (
   MicronicIOMonitorRackReadingBackend,
+  MicronicRackReadingBackend,
 )
 from pylabrobot.resources.barcode import Barcode
 
@@ -186,6 +193,66 @@ class TestMicronicIOMonitorRackReadingBackend(unittest.IsolatedAsyncioTestCase):
       headers={"Content-Type": "application/json; charset=utf-8"},
       expect_json=False,
     )
+
+
+class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
+  async def test_direct_driver_scan_populates_standard_rack_result(self):
+    with tempfile.TemporaryDirectory() as image_dir:
+      driver = MicronicDirectDriver(
+        image_dir=image_dir,
+        min_wells=2,
+        keep_images=True,
+      )
+      decoded = {
+        "A01": DecodeResult(tube_id="1111111111", method="test"),
+        "A02": DecodeResult(tube_id="2222222222", method="test"),
+      }
+      with (
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.run_scan",
+          return_value={"source": "test"},
+        ) as run_scan,
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.read_rack_id",
+          return_value="9500017722",
+        ) as read_rack_id,
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.decode_image",
+          return_value=(decoded, {"decodedWells": 2}),
+        ) as decode_image,
+      ):
+        await driver.setup()
+        await driver.trigger_rack_scan()
+        result = await driver.get_scan_result()
+
+      self.assertEqual(await driver.get_rack_reader_state(), RackReaderState.DATAREADY)
+      self.assertEqual(result.rack_id, "9500017722")
+      self.assertEqual(result.entries[0].position, "A01")
+      self.assertEqual(result.entries[0].tube_id, "1111111111")
+      self.assertEqual(result.entries[1].tube_id, "2222222222")
+      self.assertEqual(driver.last_scan_metadata, {"source": "test"})
+      self.assertEqual(driver.last_decode_metadata, {"decodedWells": 2})
+      run_scan.assert_called_once()
+      read_rack_id.assert_called_once()
+      decode_image.assert_called_once()
+
+  async def test_direct_driver_raises_when_scan_result_is_not_ready(self):
+    driver = MicronicDirectDriver()
+    with self.assertRaises(MicronicDirectRackReaderError):
+      await driver.get_scan_result()
+
+  async def test_direct_driver_rejects_unknown_layout(self):
+    driver = MicronicDirectDriver()
+    with self.assertRaises(MicronicDirectRackReaderError):
+      await driver.set_current_layout("384")
+
+  async def test_generic_backend_delegates_to_direct_driver(self):
+    driver = MicronicDirectDriver(rack_id_override="9500017722")
+    backend = MicronicRackReadingBackend(driver=driver)
+    with patch.object(driver, "scan_rack_id", return_value="9500017722") as scan_rack_id:
+      rack_id = await backend.scan_rack_id(timeout=5.0, poll_interval=0.5)
+    self.assertEqual(rack_id, "9500017722")
+    scan_rack_id.assert_called_once_with(timeout=5.0, poll_interval=0.5)
 
 
 class TestMicronicIOMonitorBarcodeScannerBackend(unittest.IsolatedAsyncioTestCase):
@@ -361,6 +428,30 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(rack_id, "5500135415")
     scan_rack_id.assert_called_once_with(timeout=12.0, poll_interval=0.25)
+
+  async def test_device_accepts_direct_driver_without_barcode_capability(self):
+    with tempfile.TemporaryDirectory() as image_dir:
+      reader = MicronicCodeReader(
+        timeout=12.0,
+        poll_interval=0.25,
+        driver=MicronicDirectDriver(image_dir=image_dir),
+      )
+      with patch.object(
+        reader.driver,
+        "get_rack_reader_state",
+        return_value=RackReaderState.IDLE,
+      ):
+        await reader.setup()
+      try:
+        self.assertIn(reader.rack_reading, reader._capabilities)
+        self.assertFalse(hasattr(reader, "barcode_scanning"))
+      finally:
+        await reader.stop()
+
+  async def test_direct_frontend_uses_direct_driver(self):
+    reader = MicronicDirectCodeReader(rack_id_override="9500017722")
+    self.assertIsInstance(reader.driver, MicronicDirectDriver)
+    self.assertFalse(hasattr(reader, "barcode_scanning"))
 
 
 if __name__ == "__main__":

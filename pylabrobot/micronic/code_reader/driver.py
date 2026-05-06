@@ -1,4 +1,4 @@
-"""HTTP driver for the Micronic Code Reader IO Monitor server."""
+"""Drivers for Micronic Code Reader rack and barcode integrations."""
 
 from __future__ import annotations
 
@@ -7,15 +7,22 @@ import enum
 import http.client
 import json
 import time
+from abc import abstractmethod
 from typing import Any, Optional
 from urllib import error, parse, request
 
 from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.rack_reading import (
+  LayoutInfo,
+  RackReaderState,
+  RackScanEntry,
+  RackScanResult,
+)
 from pylabrobot.device import Driver
 
 
 class MicronicError(Exception):
-  """Raised when the Micronic IO Monitor HTTP server returns an error."""
+  """Raised when Micronic driver operations fail."""
 
 
 class MicronicIOMonitorState(enum.Enum):
@@ -30,7 +37,50 @@ class MicronicIOMonitorState(enum.Enum):
   DATAREADY = "dataready"
 
 
-class MicronicIOMonitorDriver(Driver):
+class MicronicRackReaderDriver(Driver):
+  """Driver contract used by the Micronic rack-reading backend."""
+
+  @abstractmethod
+  async def get_rack_reader_state(self) -> RackReaderState:
+    """Return the current rack-reader state."""
+
+  @abstractmethod
+  async def trigger_rack_scan(self) -> None:
+    """Initiate a rack-wide scan."""
+
+  @abstractmethod
+  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
+    """Perform a rack-barcode-only scan and return the rack identifier."""
+
+  @abstractmethod
+  async def get_scan_result(self) -> RackScanResult:
+    """Return the most recent rack scan result."""
+
+  @abstractmethod
+  async def get_rack_id(self) -> str:
+    """Return the rack identifier reported by the scanner."""
+
+  @abstractmethod
+  async def get_layouts(self) -> list[LayoutInfo]:
+    """Return supported layouts."""
+
+  @abstractmethod
+  async def get_current_layout(self) -> str:
+    """Return the active layout."""
+
+  @abstractmethod
+  async def set_current_layout(self, layout: str) -> None:
+    """Set the active layout."""
+
+
+_IOMONITOR_TO_RACK_READER_STATE = {
+  MicronicIOMonitorState.IDLE: RackReaderState.IDLE,
+  MicronicIOMonitorState.SCANNING: RackReaderState.SCANNING,
+  MicronicIOMonitorState.DATAREADY: RackReaderState.DATAREADY,
+}
+
+
+class MicronicIOMonitorDriver(MicronicRackReaderDriver):
   """HTTP transport for the Micronic Code Reader IO Monitor server."""
 
   def __init__(
@@ -75,6 +125,70 @@ class MicronicIOMonitorDriver(Driver):
     except ValueError as exc:
       raise MicronicError(f"Unknown Micronic state: {state}") from exc
 
+  async def get_rack_reader_state(self) -> RackReaderState:
+    return _IOMONITOR_TO_RACK_READER_STATE[await self.get_iomonitor_state()]
+
+  async def trigger_rack_scan(self) -> None:
+    await self.request("POST", "/scanbox", data=b"", headers=None, expect_json=False)
+
+  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
+    # IO Monitor's GET /rackid is a one-shot trigger+result on the side barcode reader,
+    # so timeout/poll_interval are unused here (the HTTP timeout controls the read).
+    del timeout, poll_interval
+    return await self.get_rack_id()
+
+  async def get_scan_result(self) -> RackScanResult:
+    payload = await self.request_json("GET", "/scanresult")
+    return self._parse_scan_result(payload)
+
+  async def get_rack_id(self) -> str:
+    payload = await self.request_json("GET", "/rackid", data=None, headers=None)
+
+    if isinstance(payload, dict):
+      for key in ("RackID", "rackid", "rack_id"):
+        value = payload.get(key)
+        if isinstance(value, str):
+          return value
+
+    raise MicronicError("Micronic rack ID response had an unexpected shape.")
+
+  async def get_layouts(self) -> list[LayoutInfo]:
+    payload = await self.request_json("GET", "/layoutlist")
+
+    if isinstance(payload, list):
+      return [LayoutInfo(name=str(item)) for item in payload]
+
+    if isinstance(payload, dict):
+      for key in ("Layout", "layouts", "layoutlist", "data"):
+        value = payload.get(key)
+        if isinstance(value, list):
+          return [LayoutInfo(name=str(item)) for item in value]
+
+    raise MicronicError("Micronic layout list response had an unexpected shape.")
+
+  async def get_current_layout(self) -> str:
+    payload = await self.request_json("GET", "/currentlayout")
+
+    if isinstance(payload, str):
+      return payload
+
+    if isinstance(payload, dict):
+      for key in ("Layout", "layout", "currentlayout", "name"):
+        value = payload.get(key)
+        if isinstance(value, str):
+          return value
+
+    raise MicronicError("Micronic current layout response had an unexpected shape.")
+
+  async def set_current_layout(self, layout: str) -> None:
+    await self.request(
+      "PUT",
+      "/currentlayout",
+      data=json.dumps({"Layout": layout}).encode("utf-8"),
+      headers={"Content-Type": "application/json; charset=utf-8"},
+      expect_json=False,
+    )
+
   async def wait_for_fresh_data_ready(
     self,
     initial_state: MicronicIOMonitorState,
@@ -115,6 +229,56 @@ class MicronicIOMonitorDriver(Driver):
       return barcode
 
     raise MicronicError("Micronic single-tube scan result had an unexpected shape.")
+
+  def _parse_scan_result(self, payload: dict[str, Any]) -> RackScanResult:
+    positions = self._get_list(payload, "Position")
+    tube_ids = self._get_list(payload, "TubeID")
+    statuses = self._get_list(payload, "Status")
+    free_texts = self._get_list(payload, "FreeText")
+
+    if not positions:
+      raise MicronicError("Micronic scan result did not include any positions.")
+
+    entries: list[RackScanEntry] = []
+    for idx, position in enumerate(positions):
+      tube_id = self._get_optional_item(tube_ids, idx)
+      entries.append(
+        RackScanEntry(
+          position=str(position),
+          tube_id=None if tube_id in (None, "") else str(tube_id),
+          status=str(self._get_required_item(statuses, idx, "Status")),
+          free_text=str(self._get_optional_item(free_texts, idx) or ""),
+        )
+      )
+
+    rack_id = payload.get("RackID")
+    date = payload.get("Date")
+    time = payload.get("Time")
+    if not isinstance(rack_id, str) or not isinstance(date, str) or not isinstance(time, str):
+      raise MicronicError("Micronic scan result did not include RackID/Date/Time.")
+
+    return RackScanResult(rack_id=rack_id, date=date, time=time, entries=entries)
+
+  def _get_list(self, payload: dict[str, Any], key: str) -> list[Any]:
+    value = payload.get(key)
+    if value is None:
+      return []
+    if not isinstance(value, list):
+      raise MicronicError(f"Micronic field {key} was not a list.")
+    return value
+
+  def _get_required_item(self, items: list[Any], index: int, field_name: str) -> Any:
+    try:
+      return items[index]
+    except IndexError as exc:
+      raise MicronicError(
+        f"Micronic field {field_name} was missing an item for position index {index}."
+      ) from exc
+
+  def _get_optional_item(self, items: list[Any], index: int) -> Any:
+    if index >= len(items):
+      return None
+    return items[index]
 
   async def request(
     self,
