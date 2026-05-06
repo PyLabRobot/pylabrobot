@@ -5,7 +5,7 @@ import threading
 import time
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
@@ -130,11 +130,58 @@ class LedEffect(enum.IntEnum):
   BREATHING = 0x05
 
 
+# --- Firmware error codes (per Byonoy hid-reports source) -------------------
+#
+# The status_in_t.error_code byte is device-specific. Byonoy's own C library
+# defines a Status base class that just stringifies the hex code, with per-
+# device subclasses (Abs96Status, Abs1Status) providing named tables. There
+# is no documented Lum96 table — Lum96 inherits the generic stringifier.
+#
+# These mirror the enums in:
+#   hid-reports/src/hid/report/request/abs96status.cpp
+#   hid-reports/src/hid/report/request/abs1status.cpp
+
+
+class Abs96StatusError(enum.IntEnum):
+  NO_ERROR = 0
+  ERROR_CALIB = 1
+  ERROR_AMBIENT = 2
+  ERROR_USB = 3
+  ERROR_HARDWARE = 4
+  ERROR_TEMPERATURE = 5
+  ERROR_NO_MEASUREMENTUNIT = 6
+  ERROR_NO_ACK = 10
+
+
+class Abs1StatusError(enum.IntFlag):
+  """AbsOne errors are a bit-flag set — multiple can be raised at once."""
+  NO_ERROR = 0
+  AMBIENT_LIGHT = 1
+  MIN_LIGHT = 2
+  USB = 4
+  HARDWARE = 8
+  EEPROM = 16
+  TIMEOUT = 32
+  POWER_CALIBRATION = 64
+  NOISE_LIMIT = 128
+
+
+_GENERIC_ERROR_NAMES: Dict[int, str] = {0: "NO_ERROR"}
+ABS96_ERROR_NAMES: Dict[int, str] = {e.value: e.name for e in Abs96StatusError}
+ABS1_ERROR_NAMES: Dict[int, str] = {e.value: e.name for e in Abs1StatusError}
+
+
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
 
 
 class ByonoyBase(Driver, metaclass=ABCMeta):
   """Shared HID communication logic for Byonoy plate readers."""
+
+  # Firmware error-code → name mapping. Default mirrors Byonoy's generic
+  # Status::firmwareErrorId (only NO_ERROR is documented). Subclasses for
+  # specific devices (e.g. ByonoyAbsorbance96Backend) override with their
+  # documented tables. Lum96 has no documented table; inherits the default.
+  _ERROR_NAMES: Dict[int, str] = _GENERIC_ERROR_NAMES
 
   def __init__(self, pid: int, device_type: ByonoyDevice) -> None:
     super().__init__()
@@ -238,6 +285,20 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
       is_measuring=r.u8() != 0,
       boot_completed=r.u8() != 0,
     )
+
+  def describe_error_code(self, code: int) -> str:
+    """Return a human-readable name for a firmware error_code byte.
+
+    Looks up `code` in this backend's `_ERROR_NAMES` table. Unknown codes
+    fall back to `"errorCode=0xNN"` matching the C library's generic
+    Status::firmwareErrorId. The default table only has NO_ERROR (0);
+    subclasses for documented devices (Abs96, AbsOne) populate richer
+    tables. Lum96 has no documented table — codes other than 0 will
+    surface as the hex sentinel, which is the honest answer.
+    """
+    if code in self._ERROR_NAMES:
+      return self._ERROR_NAMES[code]
+    return f"errorCode=0x{code:02x}"
 
   async def get_environment(self) -> ByonoyEnvironment:
     """Read REP_ENVIRONMENT_IN (0x0310): temperature, humidity, acceleration."""

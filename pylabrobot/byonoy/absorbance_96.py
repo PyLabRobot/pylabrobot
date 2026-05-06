@@ -2,7 +2,7 @@ import logging
 import time
 from typing import List, Optional, Tuple
 
-from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
+from pylabrobot.byonoy.backend import ABS96_ERROR_NAMES, ByonoyBase, ByonoyDevice
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import (
   Absorbance,
@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
   """Backend for the Byonoy Absorbance 96 Automate plate reader."""
+
+  _ERROR_NAMES = ABS96_ERROR_NAMES
 
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96)

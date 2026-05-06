@@ -1,4 +1,6 @@
 from .backend import (
+  Abs1StatusError,
+  Abs96StatusError,
   ByonoyDeviceInfo,
   ByonoyEnvironment,
   ByonoyStatus,
