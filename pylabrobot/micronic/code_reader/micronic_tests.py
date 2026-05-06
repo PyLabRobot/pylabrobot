@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from pylabrobot.micronic.code_reader.direct_driver import (
   MicronicDirectDriver,
   MicronicDirectRackReaderError,
   choose_image_extension,
+  powershell_single_quote,
   read_rack_id,
   run_scan,
 )
@@ -31,6 +33,14 @@ from pylabrobot.micronic.code_reader.rack_reading_backend import (
   MicronicRackReadingBackend,
 )
 from pylabrobot.resources.barcode import Barcode
+
+
+async def wait_for_direct_dataready(driver: MicronicDirectDriver) -> None:
+  for _ in range(100):
+    if await driver.get_rack_reader_state() == RackReaderState.DATAREADY:
+      return
+    await asyncio.sleep(0.01)
+  raise AssertionError("Direct Micronic test scan did not reach dataready.")
 
 
 class TestMicronicIOMonitorDriver(unittest.IsolatedAsyncioTestCase):
@@ -233,6 +243,7 @@ class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
       ):
         await driver.setup()
         await driver.trigger_rack_scan()
+        await wait_for_direct_dataready(driver)
         result = await driver.get_scan_result()
 
       self.assertEqual(await driver.get_rack_reader_state(), RackReaderState.DATAREADY)
@@ -245,6 +256,38 @@ class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
       run_scan.assert_called_once()
       read_rack_id.assert_called_once()
       decode_image.assert_called_once()
+
+  async def test_direct_reader_can_scan_twice_after_dataready(self):
+    with tempfile.TemporaryDirectory() as image_dir:
+      reader = MicronicCodeReader(
+        driver=MicronicDirectDriver(
+          image_dir=image_dir,
+          min_wells=1,
+          keep_images=True,
+        )
+      )
+      decoded = {"A01": DecodeResult(tube_id="1111111111", method="test")}
+      with (
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.run_scan",
+          return_value={"source": "test"},
+        ) as run_scan,
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.read_rack_id",
+          return_value="9500017722",
+        ),
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.decode_image",
+          return_value=(decoded, {"decodedWells": 1}),
+        ),
+      ):
+        await reader.setup()
+        first = await reader.rack_reading.scan_rack(timeout=1.0, poll_interval=0.01)
+        second = await reader.rack_reading.scan_rack(timeout=1.0, poll_interval=0.01)
+
+      self.assertEqual(first.rack_id, "9500017722")
+      self.assertEqual(second.rack_id, "9500017722")
+      self.assertEqual(run_scan.call_count, 2)
 
   async def test_run_scan_uses_explicit_command(self):
     with tempfile.TemporaryDirectory() as image_dir:
@@ -263,49 +306,51 @@ class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
       self.assertTrue(output_path.exists())
 
   async def test_run_scan_uses_sane_scanimage_when_requested(self):
-    output_path = Path("/tmp/micronic-test.tiff")
-    with (
-      patch(
-        "pylabrobot.micronic.code_reader.direct_driver.shutil.which",
-        return_value="/usr/bin/scanimage",
-      ),
-      patch(
-        "pylabrobot.micronic.code_reader.direct_driver.run_scan_command",
-        return_value={"source": "sane"},
-      ) as run_scan_command,
-    ):
-      metadata = run_scan(
-        output_path=output_path,
-        timeout_ms=1000,
-        scanner_backend="sane",
-        sane_device="avision:libusb:001:004",
-      )
+    with tempfile.TemporaryDirectory() as image_dir:
+      output_path = Path(image_dir) / "micronic-test.tiff"
+      with (
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.shutil.which",
+          return_value="/usr/bin/scanimage",
+        ),
+        patch(
+          "pylabrobot.micronic.code_reader.direct_driver.run_scan_command",
+          return_value={"source": "sane"},
+        ) as run_scan_command,
+      ):
+        metadata = run_scan(
+          output_path=output_path,
+          timeout_ms=1000,
+          scanner_backend="sane",
+          sane_device="avision:libusb:001:004",
+        )
 
-    self.assertEqual(metadata["source"], "sane")
-    run_scan_command.assert_called_once_with(
-      [
-        "/usr/bin/scanimage",
-        "--device-name",
-        "avision:libusb:001:004",
-        "--format=tiff",
-        "--output-file",
-        str(output_path),
-      ],
-      output_path,
-      1000,
-      source="sane",
-    )
+      self.assertEqual(metadata["source"], "sane")
+      run_scan_command.assert_called_once_with(
+        [
+          "/usr/bin/scanimage",
+          "--device-name",
+          "avision:libusb:001:004",
+          "--format=tiff",
+          "--output-file",
+          str(output_path),
+        ],
+        output_path,
+        1000,
+        source="sane",
+      )
 
   async def test_run_scan_requires_configured_acquisition(self):
-    with (
-      patch("pylabrobot.micronic.code_reader.direct_driver.shutil.which", return_value=None),
-      self.assertRaises(MicronicDirectRackReaderError),
-    ):
-      run_scan(
-        output_path=Path("/tmp/micronic-test.bmp"),
-        timeout_ms=1000,
-        scanner_backend="twain",
-      )
+    with tempfile.TemporaryDirectory() as image_dir:
+      with (
+        patch("pylabrobot.micronic.code_reader.direct_driver.shutil.which", return_value=None),
+        self.assertRaises(MicronicDirectRackReaderError),
+      ):
+        run_scan(
+          output_path=Path(image_dir) / "micronic-test.bmp",
+          timeout_ms=1000,
+          scanner_backend="twain",
+        )
 
   async def test_choose_image_extension_prefers_sane_tiff_on_non_windows_auto(self):
     extension = choose_image_extension(
@@ -324,6 +369,16 @@ class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
       rack_id_command=[sys.executable, "-c", "print('rack 9500017722')"],
     )
     self.assertEqual(rack_id, "9500017722")
+
+  def test_powershell_single_quote_escapes_serial_port(self):
+    self.assertEqual(powershell_single_quote("COM4"), "'COM4'")
+    self.assertEqual(powershell_single_quote("COM'4"), "'COM''4'")
+
+  async def test_direct_driver_scan_rack_id_uses_configured_command(self):
+    driver = MicronicDirectDriver(
+      rack_id_command=[sys.executable, "-c", "print('rack 9500017722')"]
+    )
+    self.assertEqual(await driver.scan_rack_id(timeout=1.0, poll_interval=0.1), "9500017722")
 
   async def test_direct_driver_raises_when_scan_result_is_not_ready(self):
     driver = MicronicDirectDriver()
