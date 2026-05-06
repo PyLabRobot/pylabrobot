@@ -50,7 +50,10 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
         mode regardless of `mode`. Required when `mode == CUSTOM`.
       selected_wells: Optional 96-bool mask in plate row-major order (A1..H12).
         If None, the wells passed to `read_luminescence` decide which wells
-        are sampled (defaulting to all 96).
+        are reported (defaulting to all 96). Note: this is an output filter,
+        not a measurement optimisation — the firmware scans all 96 wells in
+        every read and zero-fills the unselected ones in the result. Useful
+        for cleaner downstream processing; does not reduce read time.
     """
 
     mode: Lum96IntegrationMode = Lum96IntegrationMode.SENSITIVE
