@@ -10,11 +10,12 @@ There are two rack-reader drivers:
   Windows application. It supports rack reading and single-tube barcode
   scanning.
 - `MicronicDirectDriver`
-  controls the local Windows hardware directly. It acquires the rack image
-  through the Avision TWAIN source, reads the side rack barcode through the
-  serial reader, decodes tube DataMatrix codes locally, and returns the same
-  `RackScanResult` shape through the standard `rack_reading` capability. It
-  does not call Micronic Code Reader or IO Monitor.
+  controls the local hardware directly. It acquires the rack image through a
+  configured scanner command, a Windows TWAIN helper available on PATH, or
+  Ubuntu/Linux SANE `scanimage`; reads the side rack barcode through the serial
+  reader; decodes tube DataMatrix codes locally; and returns the same
+  `RackScanResult` shape through the standard `rack_reading` capability. It does
+  not call Micronic Code Reader or IO Monitor.
 
 Both drivers plug into `MicronicCodeReader` through the same `rack_reading`
 capability. `MicronicDirectCodeReader` is a convenience frontend that constructs
@@ -64,15 +65,17 @@ finally:
 
 ## Direct hardware example
 
-Use `MicronicDirectDriver` when the Windows host should own scanner
-acquisition, rack-ID reads, and tube decoding without the Micronic application.
-The direct path exposes `rack_reading`; it does not expose `barcode_scanning`.
+Use `MicronicDirectDriver` when the host should own scanner acquisition, rack-ID
+reads, and tube decoding without the Micronic application. The direct path
+exposes `rack_reading`; it does not expose `barcode_scanning`.
 
 ```python
 from pylabrobot.micronic import MicronicCodeReader, MicronicDirectDriver
 
 reader = MicronicCodeReader(
   driver=MicronicDirectDriver(
+    scanner_backend="twain",
+    twain_scanner_path=r"C:\Tools\twain_scan.exe",
     twain_source="AVA6PlusG",
     image_dir=r"C:\ProgramData\Alakascan\data\direct-images",
     serial_port="COM4",
@@ -92,6 +95,24 @@ finally:
   await reader.stop()
 ```
 
+On Ubuntu/Linux, use SANE if the scanner is exposed by a SANE backend:
+
+```python
+reader = MicronicCodeReader(
+  driver=MicronicDirectDriver(
+    scanner_backend="sane",
+    sane_device="avision:libusb:001:004",
+    serial_port="/dev/ttyUSB0",
+    image_extension="tiff",
+  )
+)
+```
+
+For any other acquisition stack, pass `scan_command`. Each command argument is
+formatted with `{output_path}`, `{timeout_ms}`, `{twain_source}`, and
+`{sane_device}` before execution. The command must write the rack image to
+`{output_path}`.
+
 ## Notes
 
 - The Micronic server is path-based. Use `POST /scanbox`, not `POST /` with raw text.
@@ -101,6 +122,10 @@ finally:
 - `scan_rack` reads every tube barcode and finishes by reading the rack ID, so
   it typically takes tens of seconds. `scan_rack_id` only reads the rack
   barcode and completes in a few seconds.
-- The direct reader is Windows-only for live hardware scans because it calls the
-  installed TWAIN stack and the Windows serial-port APIs. Use `image_input` for
-  offline decode checks.
+- TWAIN is a Windows scanner-driver API. PyLabRobot does not ship a TWAIN
+  bridge binary; configure `twain_scanner_path`, set `MICRONIC_TWAIN_SCANNER_PATH`,
+  or put a local helper named `twain_scan`/`twain_scan.exe` on PATH when using
+  the `twain` backend.
+- Ubuntu/Linux scanner control should use SANE `scanimage` or a custom
+  `scan_command`. Rack-ID reads use `pyserial` on non-Windows systems.
+- Use `image_input` for offline decode checks without touching scanner hardware.
