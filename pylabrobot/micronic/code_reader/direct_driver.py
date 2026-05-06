@@ -105,14 +105,26 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
 
   async def stop(self):
     scan_task = self._scan_task
-    if scan_task is not None and not scan_task.done():
+    if scan_task is None:
+      if self._scan_error is not None:
+        raise self._scan_error
+      return
+    if scan_task.done():
+      self._complete_scan_task(scan_task)
+    else:
       try:
-        await scan_task
+        self._last_result = await scan_task
       except asyncio.CancelledError:
-        pass
-      except Exception:
-        pass
-    self._complete_finished_scan_task()
+        self._scan_error = MicronicDirectRackReaderError("Direct Micronic rack scan was cancelled.")
+        self._state = RackReaderState.IDLE
+      except Exception as exc:
+        self._scan_error = exc
+        self._state = RackReaderState.IDLE
+      else:
+        self._scan_error = None
+        self._state = RackReaderState.DATAREADY
+      finally:
+        self._scan_task = None
     if self._scan_error is not None:
       raise self._scan_error
 
@@ -406,12 +418,7 @@ def read_rack_id(
   try:
     return read_rack_id_pyserial(serial_port=serial_port, timeout_ms=timeout_ms)
   except ImportError as exc:
-    if os.name != "nt":
-      raise MicronicDirectRackReaderError(
-        "Rack ID serial read requires pyserial on non-Windows systems."
-      ) from exc
-
-  return read_rack_id_powershell(serial_port=serial_port, timeout_ms=timeout_ms)
+    raise MicronicDirectRackReaderError("Rack ID serial read requires pyserial.") from exc
 
 
 def read_rack_id_pyserial(serial_port: str, timeout_ms: int) -> str:
@@ -461,61 +468,6 @@ def read_rack_id_command(command: Sequence[str], timeout_ms: int) -> str:
       f"{completed.returncode}: {completed.stderr.strip() or completed.stdout.strip()}"
     )
   return extract_rack_id(completed.stdout)
-
-
-def read_rack_id_powershell(serial_port: str, timeout_ms: int) -> str:
-  if os.name != "nt":
-    raise MicronicDirectRackReaderError(
-      "PowerShell rack ID serial read is only supported on Windows."
-    )
-
-  quoted_serial_port = powershell_single_quote(serial_port)
-  powershell_path = shutil.which("powershell.exe") or shutil.which("powershell")
-  if powershell_path is None:
-    raise MicronicDirectRackReaderError("PowerShell executable was not found on PATH.")
-
-  ps_script = rf"""
-$ErrorActionPreference = 'Stop'
-$port = New-Object System.IO.Ports.SerialPort {quoted_serial_port}, 9600, ([System.IO.Ports.Parity]::Even), 7, ([System.IO.Ports.StopBits]::One)
-$port.ReadTimeout = 100
-$port.WriteTimeout = 1000
-$port.Open()
-try {{
-  $port.DiscardInBuffer()
-  $bytes = [byte[]](60,116,62,13,10)
-  $port.Write($bytes, 0, $bytes.Length)
-  $sw = [Diagnostics.Stopwatch]::StartNew()
-  $chars = New-Object System.Collections.Generic.List[char]
-  while ($sw.ElapsedMilliseconds -lt {timeout_ms}) {{
-    try {{
-      $value = $port.ReadByte()
-      if ($value -ge 0) {{
-        $chars.Add([char]$value)
-        if ($value -eq 10) {{ break }}
-      }}
-    }} catch [System.TimeoutException] {{
-    }}
-  }}
-  -join $chars
-}} finally {{
-  if ($port.IsOpen) {{ $port.Close() }}
-}}
-"""
-  completed = subprocess.run(  # nosec B603 - fixed PowerShell path with escaped port input.
-    [powershell_path, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-    check=False,
-    capture_output=True,
-    text=True,
-    timeout=(timeout_ms / 1000) + 5,
-  )
-  if completed.returncode != 0:
-    raise MicronicDirectRackReaderError(f"Rack ID serial read failed: {completed.stderr.strip()}")
-
-  return extract_rack_id(completed.stdout)
-
-
-def powershell_single_quote(value: str) -> str:
-  return "'" + value.replace("'", "''") + "'"
 
 
 def extract_rack_id(text: str) -> str:
