@@ -238,10 +238,12 @@ supported = await reader.driver.get_supported_reports()  # list of HID report ID
 
 print(f"{info.device_name} sn={info.serial_no} fw={info.firmware_version}")
 print(f"  uptime {status.uptime_s} s, T={env.temperature_c:.1f}°C, RH={env.humidity*100:.0f}%")
-print(f"  slot: {status.slot_state.name}")
+print(f"  slot: {status.slot_state.name}, error: {reader.driver.describe_error_code(status.error_code)}")
 ```
 
 > **`slot_state` interpretation**: `OCCUPIED` when a plate is loaded, `UNKNOWN` when nothing is in the reader (the firmware can't tell empty from missing). Don't treat `UNKNOWN` as an error — it's just "no plate".
+
+> **`error_code` interpretation**: `0` is `NO_ERROR`. The Lum96 firmware doesn't publish a documented table for non-zero values, so non-zero codes surface as `errorCode=0xNN` (matching what Byonoy's own C library returns). For Abs96 / AbsOne backends, names like `ERROR_CALIB` / `AMBIENT_LIGHT` are decoded automatically.
 
 ---
 
