@@ -16,21 +16,19 @@ Device
   :recursive:
 
     MicronicCodeReader
-    MicronicDirectCodeReader
 
 
 Driver
 ------
 
-.. currentmodule:: pylabrobot.micronic.code_reader.direct_driver
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    MicronicDirectDriver
-    MicronicDirectRackReaderError
+    MicronicDriver
     MicronicError
 
 

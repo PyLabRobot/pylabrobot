@@ -7,45 +7,14 @@ from typing import Optional, Sequence
 from pylabrobot.capabilities.rack_reading import RackReader
 from pylabrobot.device import Device
 
-from .direct_driver import MicronicDirectDriver
+from .driver import MicronicDriver
 from .rack_reading_backend import MicronicRackReadingBackend
 
 
 class MicronicCodeReader(Device):
   """Micronic rack reader device.
 
-  The rack-reading capability is driven by ``driver``. By default this uses
-  ``MicronicDirectDriver`` to control the scanner hardware directly.
-  """
-
-  def __init__(
-    self,
-    timeout: float = 60.0,
-    poll_interval: float = 1.0,
-    driver: Optional[MicronicDirectDriver] = None,
-  ):
-    if driver is None:
-      driver = MicronicDirectDriver(scanner_timeout_ms=int(timeout * 1000))
-    super().__init__(driver=driver)
-    self.driver: MicronicDirectDriver = driver
-    self.default_timeout = timeout
-    self.default_poll_interval = poll_interval
-    self.rack_reading = RackReader(backend=MicronicRackReadingBackend(driver))
-    self._capabilities = [self.rack_reading]
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "timeout": self.default_timeout,
-      "poll_interval": self.default_poll_interval,
-    }
-
-
-class MicronicDirectCodeReader(MicronicCodeReader):
-  """Micronic rack reader that controls scanner hardware directly.
-
-  This frontend follows the same v1b1 rack-reading capability surface as
-  ``MicronicCodeReader`` while exposing direct-driver setup options.
+  The rack-reading capability is driven by ``MicronicDriver``.
   """
 
   def __init__(
@@ -66,10 +35,10 @@ class MicronicDirectCodeReader(MicronicCodeReader):
     keep_images: bool = False,
     image_input: Optional[str] = None,
     rack_id_override: Optional[str] = None,
-    driver: Optional[MicronicDirectDriver] = None,
+    driver: Optional[MicronicDriver] = None,
   ):
     if driver is None:
-      driver = MicronicDirectDriver(
+      driver = MicronicDriver(
         twain_scanner_path=twain_scanner_path,
         twain_source=twain_source,
         sane_device=sane_device,
@@ -86,5 +55,16 @@ class MicronicDirectCodeReader(MicronicCodeReader):
         image_input=image_input,
         rack_id_override=rack_id_override,
       )
-    super().__init__(timeout=timeout, poll_interval=poll_interval, driver=driver)
-    self.driver: MicronicDirectDriver = driver
+    super().__init__(driver=driver)
+    self.driver: MicronicDriver = driver
+    self.default_timeout = timeout
+    self.default_poll_interval = poll_interval
+    self.rack_reading = RackReader(backend=MicronicRackReadingBackend(driver))
+    self._capabilities = [self.rack_reading]
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "timeout": self.default_timeout,
+      "poll_interval": self.default_poll_interval,
+    }
