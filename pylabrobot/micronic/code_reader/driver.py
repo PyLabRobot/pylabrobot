@@ -1,4 +1,4 @@
-"""Direct hardware driver for the Micronic rack scanner.
+"""Hardware driver for the Micronic rack scanner.
 
 This driver does not call Micronic Code Reader or IO Monitor. It owns the local
 scanner path directly:
@@ -45,17 +45,13 @@ class MicronicError(Exception):
   """Raised when Micronic driver operations fail."""
 
 
-class MicronicDirectRackReaderError(MicronicError):
-  """Raised when direct Micronic hardware control fails."""
-
-
 @dataclass(frozen=True)
 class DecodeResult:
   tube_id: str
   method: str
 
 
-class MicronicDirectDriver(Driver):
+class MicronicDriver(Driver):
   """Driver that controls the Micronic scanner without the OEM app."""
 
   def __init__(
@@ -84,7 +80,7 @@ class MicronicDirectDriver(Driver):
     self.scan_command = list(scan_command) if scan_command is not None else None
     self.image_extension = normalize_image_extension(image_extension) if image_extension else None
     self.image_dir = (
-      Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "alakascan-direct"
+      Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "alakascan-micronic"
     )
     self.serial_port = serial_port
     self.rack_id_command = list(rack_id_command) if rack_id_command is not None else None
@@ -119,7 +115,7 @@ class MicronicDirectDriver(Driver):
       try:
         self._last_result = await scan_task
       except asyncio.CancelledError:
-        self._scan_error = MicronicDirectRackReaderError("Direct Micronic rack scan was cancelled.")
+        self._scan_error = MicronicError("Micronic rack scan was cancelled.")
         self._state = RackReaderState.IDLE
       except Exception as exc:
         self._scan_error = exc
@@ -164,7 +160,7 @@ class MicronicDirectDriver(Driver):
   async def trigger_rack_scan(self) -> None:
     self._complete_finished_scan_task()
     if self._scan_task is not None and not self._scan_task.done():
-      raise MicronicDirectRackReaderError("Direct Micronic rack scan is already in progress.")
+      raise MicronicError("Micronic rack scan is already in progress.")
     self._last_result = None
     self._state = RackReaderState.SCANNING
     self._scan_error = None
@@ -196,9 +192,9 @@ class MicronicDirectDriver(Driver):
     if self._scan_error is not None:
       raise self._scan_error
     if self._state == RackReaderState.SCANNING:
-      raise MicronicDirectRackReaderError("Direct Micronic rack scan is still in progress.")
+      raise MicronicError("Micronic rack scan is still in progress.")
     if self._last_result is None:
-      raise MicronicDirectRackReaderError("No direct Micronic rack scan has completed yet.")
+      raise MicronicError("No Micronic rack scan has completed yet.")
     return self._last_result
 
   async def get_rack_id(self) -> str:
@@ -206,7 +202,7 @@ class MicronicDirectDriver(Driver):
     if self._scan_error is not None:
       raise self._scan_error
     if self._state == RackReaderState.SCANNING:
-      raise MicronicDirectRackReaderError("Direct Micronic rack scan is still in progress.")
+      raise MicronicError("Micronic rack scan is still in progress.")
     if self._last_result is not None:
       return self._last_result.rack_id
     return await self.scan_rack_id(timeout=0, poll_interval=0)
@@ -223,7 +219,7 @@ class MicronicDirectDriver(Driver):
     try:
       self._last_result = task.result()
     except asyncio.CancelledError:
-      self._scan_error = MicronicDirectRackReaderError("Direct Micronic rack scan was cancelled.")
+      self._scan_error = MicronicError("Micronic rack scan was cancelled.")
       self._state = RackReaderState.IDLE
     except Exception as exc:
       self._scan_error = exc
@@ -241,7 +237,7 @@ class MicronicDirectDriver(Driver):
   async def set_current_layout(self, layout: str) -> None:
     normalized = layout.strip().lower().replace(" ", "")
     if normalized not in {"8x12", "96(8x12)", "96"}:
-      raise MicronicDirectRackReaderError(f"Unsupported direct Micronic rack layout: {layout}")
+      raise MicronicError(f"Unsupported Micronic rack layout: {layout}")
 
   def _scan_rack_blocking(self) -> RackScanResult:
     self.image_dir.mkdir(parents=True, exist_ok=True)
@@ -254,8 +250,7 @@ class MicronicDirectDriver(Driver):
       sane_device=self.sane_device,
     )
     image_path = (
-      self.image_dir
-      / f"micronic_direct_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.{image_extension}"
+      self.image_dir / f"micronic_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.{image_extension}"
     )
 
     self.last_scan_metadata = run_scan(
@@ -279,8 +274,8 @@ class MicronicDirectDriver(Driver):
     decoded, self.last_decode_metadata = decode_image(image_path)
     if len(decoded) < self.min_wells:
       missing = ", ".join(position for position in iter_positions() if position not in decoded)
-      raise MicronicDirectRackReaderError(
-        f"Direct Micronic decode found {len(decoded)} wells; expected at least {self.min_wells}. "
+      raise MicronicError(
+        f"Micronic decode found {len(decoded)} wells; expected at least {self.min_wells}. "
         f"Missing: {missing}"
       )
 
@@ -325,7 +320,7 @@ def run_scan(
   if image_input:
     source_path = Path(image_input)
     if not source_path.exists():
-      raise MicronicDirectRackReaderError(f"Image input does not exist: {source_path}")
+      raise MicronicError(f"Image input does not exist: {source_path}")
     output_path.write_bytes(source_path.read_bytes())
     return {"stdout": "", "stderr": "", "source": str(source_path)}
 
@@ -341,9 +336,7 @@ def run_scan(
 
   backend = normalize_scanner_backend(scanner_backend)
   if backend == "command":
-    raise MicronicDirectRackReaderError(
-      "Command scan requested, but scan_command was not configured."
-    )
+    raise MicronicError("Command scan requested, but scan_command was not configured.")
 
   if backend in {"auto", "twain"}:
     resolved_twain_path = resolve_twain_scanner_path(twain_scanner_path)
@@ -355,7 +348,7 @@ def run_scan(
         source="twain",
       )
     if backend == "twain":
-      raise MicronicDirectRackReaderError(
+      raise MicronicError(
         "TWAIN scan requested, but no TWAIN helper was configured. Set "
         "twain_scanner_path, MICRONIC_TWAIN_SCANNER_PATH, or put twain_scan on PATH."
       )
@@ -369,12 +362,10 @@ def run_scan(
       command.extend(["--format=tiff", "--output-file", str(output_path)])
       return run_scan_command(command, output_path, timeout_ms, source="sane")
     if backend == "sane":
-      raise MicronicDirectRackReaderError(
-        "SANE scan requested, but scanimage was not found on PATH."
-      )
+      raise MicronicError("SANE scan requested, but scanimage was not found on PATH.")
 
-  raise MicronicDirectRackReaderError(
-    "No direct scan acquisition method is available. Configure scan_command, "
+  raise MicronicError(
+    "No scan acquisition method is available. Configure scan_command, "
     "twain_scanner_path/MICRONIC_TWAIN_SCANNER_PATH, or install SANE scanimage."
   )
 
@@ -394,15 +385,15 @@ def run_scan_command(
       timeout=(timeout_ms / 1000) + 15,
     )
   except FileNotFoundError as exc:
-    raise MicronicDirectRackReaderError(f"Scan command was not found: {command[0]}") from exc
+    raise MicronicError(f"Scan command was not found: {command[0]}") from exc
 
   if completed.returncode != 0:
-    raise MicronicDirectRackReaderError(
+    raise MicronicError(
       "Scan command failed with exit code "
       f"{completed.returncode}: {completed.stderr.strip() or completed.stdout.strip()}"
     )
   if not output_path.exists():
-    raise MicronicDirectRackReaderError(f"Scan command did not create image: {output_path}")
+    raise MicronicError(f"Scan command did not create image: {output_path}")
   return {
     "stdout": completed.stdout.strip(),
     "stderr": completed.stderr.strip(),
@@ -455,7 +446,7 @@ async def read_rack_id_plr_serial(serial_port: str, timeout_ms: int) -> str:
         if value in {b"\r", b"\n"}:
           break
   except Exception as exc:
-    raise MicronicDirectRackReaderError(
+    raise MicronicError(
       "Rack ID serial read failed. Install the PLR serial extra with "
       "`pip install pylabrobot[serial]` and verify the serial port: "
       f"{exc}"
@@ -476,10 +467,10 @@ def read_rack_id_command(command: Sequence[str], timeout_ms: int) -> str:
       timeout=(timeout_ms / 1000) + 5,
     )
   except FileNotFoundError as exc:
-    raise MicronicDirectRackReaderError(f"Rack ID command was not found: {command[0]}") from exc
+    raise MicronicError(f"Rack ID command was not found: {command[0]}") from exc
 
   if completed.returncode != 0:
-    raise MicronicDirectRackReaderError(
+    raise MicronicError(
       "Rack ID command failed with exit code "
       f"{completed.returncode}: {completed.stderr.strip() or completed.stdout.strip()}"
     )
@@ -494,7 +485,7 @@ def extract_rack_id(text: str) -> str:
 def normalize_scanner_backend(scanner_backend: str) -> str:
   backend = scanner_backend.strip().lower()
   if backend not in {"auto", "twain", "sane", "command"}:
-    raise MicronicDirectRackReaderError(
+    raise MicronicError(
       "Unsupported scanner backend "
       f"{scanner_backend!r}; expected 'auto', 'twain', 'sane', or 'command'."
     )
@@ -504,7 +495,7 @@ def normalize_scanner_backend(scanner_backend: str) -> str:
 def normalize_image_extension(image_extension: str) -> str:
   normalized = image_extension.strip().lstrip(".")
   if not normalized:
-    raise MicronicDirectRackReaderError("image_extension must not be empty.")
+    raise MicronicError("image_extension must not be empty.")
   return normalized
 
 
@@ -578,9 +569,7 @@ def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, o
     )
 
   if len(detected) < 24:
-    raise MicronicDirectRackReaderError(
-      f"Only {len(detected)} DataMatrix codes were found in the full image."
-    )
+    raise MicronicError(f"Only {len(detected)} DataMatrix codes were found in the full image.")
 
   xs = fitted_axis(cluster_axis([item[0] for item in detected], RACK_ROWS, 90), RACK_ROWS)
   ys = fitted_axis(cluster_axis([item[1] for item in detected], RACK_COLS, 90), RACK_COLS)
@@ -615,7 +604,7 @@ def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, o
 
   duplicate_ids = find_duplicate_ids(decoded)
   if duplicate_ids:
-    raise MicronicDirectRackReaderError(
+    raise MicronicError(
       f"Duplicate tube IDs decoded from more than one well: {', '.join(duplicate_ids)}"
     )
 
@@ -637,8 +626,8 @@ def import_decode_dependencies():
     import zxingcpp  # type: ignore
     from PIL import Image, ImageOps  # type: ignore
   except ImportError as exc:
-    raise MicronicDirectRackReaderError(
-      "Direct Micronic decode dependencies are missing. Install pillow, "
+    raise MicronicError(
+      "Micronic decode dependencies are missing. Install pillow, "
       "opencv-python-headless, numpy, and zxing-cpp."
     ) from exc
   return cv2, np, zxingcpp, Image, ImageOps
@@ -646,9 +635,7 @@ def import_decode_dependencies():
 
 def cluster_axis(values: list[float], expected_count: int, tolerance: float) -> list[float]:
   if not values:
-    raise MicronicDirectRackReaderError(
-      "No decoded barcode positions are available for grid calibration."
-    )
+    raise MicronicError("No decoded barcode positions are available for grid calibration.")
 
   clusters: list[list[float]] = []
   for value in sorted(values):
@@ -669,7 +656,7 @@ def cluster_axis(values: list[float], expected_count: int, tolerance: float) -> 
       means[0] + index * (means[-1] - means[0]) / (expected_count - 1)
       for index in range(expected_count)
     ]
-  raise MicronicDirectRackReaderError(
+  raise MicronicError(
     f"Could not fit {expected_count} grid clusters from {len(values)} decoded positions."
   )
 
