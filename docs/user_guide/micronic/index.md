@@ -26,8 +26,9 @@ Rack reading (large scanner that decodes 96 tubes plus the side rack barcode):
 ## Direct hardware example
 
 The operator is responsible for installing any OS-level scanner bridge
-(`twain_scan`, `scanimage`, or a custom command), pyserial, and the local Python
-decode dependencies in the runtime environment.
+(`twain_scan`, `scanimage`, or a custom command), the PLR serial extra
+(`pylabrobot[serial]`), and the local Python decode dependencies in the runtime
+environment.
 
 ```python
 from pylabrobot.micronic import MicronicCodeReader, MicronicDirectDriver
@@ -84,7 +85,8 @@ formatted with `{output_path}`, `{timeout_ms}`, `{twain_source}`, and
   named `twain_scan`/`twain_scan.exe` on PATH when using the `twain` backend.
 - Ubuntu/Linux scanner control should use SANE `scanimage` or a custom
   `scan_command`. PyLabRobot does not install SANE or vendor scanner drivers.
-  Rack-ID reads use `pyserial`.
+  Rack-ID reads use `pylabrobot.io.Serial`, which is installed through the
+  `pylabrobot[serial]` extra.
 - Direct image decoding imports `pillow`, `opencv-python-headless`, `numpy`, and
   `zxing-cpp` at runtime. Install them in the environment that runs PyLabRobot
   when using the direct driver.
