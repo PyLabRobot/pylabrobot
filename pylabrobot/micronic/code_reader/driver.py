@@ -80,7 +80,7 @@ class MicronicDriver(Driver):
     self.scan_command = list(scan_command) if scan_command is not None else None
     self.image_extension = normalize_image_extension(image_extension) if image_extension else None
     self.image_dir = (
-      Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "alakascan-micronic"
+      Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "pylabrobot-micronic"
     )
     self.serial_port = serial_port
     self.rack_id_command = list(rack_id_command) if rack_id_command is not None else None
