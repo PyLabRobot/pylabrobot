@@ -34,9 +34,9 @@ Lower-level methods are also available:
 ## Example With Micronic
 
 ```python
-from pylabrobot.micronic import MicronicDirectCodeReader
+from pylabrobot.micronic import MicronicCodeReader
 
-reader = MicronicDirectCodeReader(
+reader = MicronicCodeReader(
   scanner_backend="sane",
   sane_device="avision:libusb:001:004",
   serial_port="/dev/ttyUSB0",
