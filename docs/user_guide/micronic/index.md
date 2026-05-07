@@ -34,7 +34,7 @@ reader = MicronicCodeReader(
   scanner_backend="twain",
   twain_scanner_path=r"C:\Tools\twain_scan.exe",
   twain_source="AVA6PlusG",
-  image_dir=r"C:\ProgramData\Alakascan\data\micronic-images",
+  image_dir=r"C:\ProgramData\PyLabRobot\micronic-images",
   serial_port="COM4",
   keep_images=True,
 )
