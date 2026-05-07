@@ -31,15 +31,18 @@ from pylabrobot.capabilities.rack_reading import (
   RackScanEntry,
   RackScanResult,
 )
+from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
-
-from .driver import MicronicError, MicronicRackReaderDriver
 
 
 ROWS = "ABCDEFGH"
 COLS = 12
 RACK_ROWS = 8
 RACK_COLS = 12
+
+
+class MicronicError(Exception):
+  """Raised when Micronic driver operations fail."""
 
 
 class MicronicDirectRackReaderError(MicronicError):
@@ -52,7 +55,7 @@ class DecodeResult:
   method: str
 
 
-class MicronicDirectDriver(MicronicRackReaderDriver):
+class MicronicDirectDriver(Driver):
   """Driver that controls the Micronic scanner without the OEM app."""
 
   def __init__(

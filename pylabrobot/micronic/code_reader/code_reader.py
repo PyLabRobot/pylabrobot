@@ -8,7 +8,6 @@ from pylabrobot.capabilities.rack_reading import RackReader
 from pylabrobot.device import Device
 
 from .direct_driver import MicronicDirectDriver
-from .driver import MicronicRackReaderDriver
 from .rack_reading_backend import MicronicRackReadingBackend
 
 
@@ -23,12 +22,12 @@ class MicronicCodeReader(Device):
     self,
     timeout: float = 60.0,
     poll_interval: float = 1.0,
-    driver: Optional[MicronicRackReaderDriver] = None,
+    driver: Optional[MicronicDirectDriver] = None,
   ):
     if driver is None:
       driver = MicronicDirectDriver(scanner_timeout_ms=int(timeout * 1000))
     super().__init__(driver=driver)
-    self.driver: MicronicRackReaderDriver = driver
+    self.driver: MicronicDirectDriver = driver
     self.default_timeout = timeout
     self.default_poll_interval = poll_interval
     self.rack_reading = RackReader(backend=MicronicRackReadingBackend(driver))

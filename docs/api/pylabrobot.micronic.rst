@@ -31,15 +31,6 @@ Driver
 
     MicronicDirectDriver
     MicronicDirectRackReaderError
-
-.. currentmodule:: pylabrobot.micronic.code_reader.driver
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    MicronicRackReaderDriver
     MicronicError
 
 

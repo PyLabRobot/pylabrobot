@@ -1,4 +1,4 @@
-"""Rack-reading backend for Micronic rack-reader drivers."""
+"""Rack-reading backend for the Micronic direct driver."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pylabrobot.capabilities.rack_reading import (
   RackScanResult,
 )
 
-from .driver import MicronicError, MicronicRackReaderDriver
+from .direct_driver import MicronicDirectDriver, MicronicError
 
 
 class MicronicRackReaderError(MicronicError, RackReaderError):
@@ -21,9 +21,9 @@ class MicronicRackReaderError(MicronicError, RackReaderError):
 
 
 class MicronicRackReadingBackend(RackReaderBackend):
-  """Rack-reading backend that delegates to a Micronic rack-reader driver."""
+  """Rack-reading backend that delegates to the Micronic direct driver."""
 
-  def __init__(self, driver: MicronicRackReaderDriver):
+  def __init__(self, driver: MicronicDirectDriver):
     super().__init__()
     self.driver = driver
 
