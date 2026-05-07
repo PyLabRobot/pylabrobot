@@ -73,7 +73,12 @@ class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
     Args:
       plate: The plate being read.
       wells: Wells to measure.
-      focal_height: Focal height in mm.
+      focal_height: Required by the abstract :class:`LuminescenceBackend`
+        contract but **ignored on the Byonoy L96** — the device has a
+        fixed optical configuration (the detector unit clamps onto the
+        base; the optical path is determined by plate + base + detector
+        geometry, not user-tunable). Passing any value is harmless;
+        passing 0 is conventional.
       backend_params: Backend-specific parameters.
     """
     if not isinstance(backend_params, self.LuminescenceParams):
