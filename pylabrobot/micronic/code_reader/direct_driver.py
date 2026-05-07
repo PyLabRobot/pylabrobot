@@ -31,6 +31,7 @@ from pylabrobot.capabilities.rack_reading import (
   RackScanEntry,
   RackScanResult,
 )
+from pylabrobot.io.serial import Serial
 
 from .driver import MicronicError, MicronicRackReaderDriver
 
@@ -170,12 +171,21 @@ class MicronicDirectDriver(MicronicRackReaderDriver):
 
   async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
     del timeout, poll_interval
-    return await asyncio.to_thread(
-      read_rack_id,
+    if self.rack_id_override:
+      return self.rack_id_override
+    if self.rack_id_command is not None:
+      return await asyncio.to_thread(
+        read_rack_id_command,
+        format_command(
+          self.rack_id_command,
+          serial_port=self.serial_port,
+          timeout_ms=self.serial_timeout_ms,
+        ),
+        self.serial_timeout_ms,
+      )
+    return await read_rack_id_plr_serial(
       serial_port=self.serial_port,
       timeout_ms=self.serial_timeout_ms,
-      rack_id_override=self.rack_id_override,
-      rack_id_command=self.rack_id_command,
     )
 
   async def get_scan_result(self) -> RackScanResult:
@@ -415,37 +425,40 @@ def read_rack_id(
     )
     return read_rack_id_command(command, timeout_ms)
 
-  try:
-    return read_rack_id_pyserial(serial_port=serial_port, timeout_ms=timeout_ms)
-  except ImportError as exc:
-    raise MicronicDirectRackReaderError("Rack ID serial read requires pyserial.") from exc
+  return asyncio.run(read_rack_id_plr_serial(serial_port=serial_port, timeout_ms=timeout_ms))
 
 
-def read_rack_id_pyserial(serial_port: str, timeout_ms: int) -> str:
-  import serial  # type: ignore
-
+async def read_rack_id_plr_serial(serial_port: str, timeout_ms: int) -> str:
   deadline = time.monotonic() + timeout_ms / 1000
   chunks: list[bytes] = []
+  io = Serial(
+    human_readable_device_name="Micronic rack ID reader",
+    port=serial_port,
+    baudrate=9600,
+    bytesize=7,
+    parity="E",
+    stopbits=1,
+    timeout=0.1,
+    write_timeout=1.0,
+  )
   try:
-    with serial.Serial(
-      port=serial_port,
-      baudrate=9600,
-      bytesize=serial.SEVENBITS,
-      parity=serial.PARITY_EVEN,
-      stopbits=serial.STOPBITS_ONE,
-      timeout=0.1,
-      write_timeout=1.0,
-    ) as port:
-      port.reset_input_buffer()
-      port.write(b"<t>\r\n")
-      while time.monotonic() < deadline:
-        value = port.read(1)
-        if value:
-          chunks.append(value)
-          if value in {b"\r", b"\n"}:
-            break
+    await io.setup()
+    await io.reset_input_buffer()
+    await io.write(b"<t>\r\n")
+    while time.monotonic() < deadline:
+      value = await io.read(1)
+      if value:
+        chunks.append(value)
+        if value in {b"\r", b"\n"}:
+          break
   except Exception as exc:
-    raise MicronicDirectRackReaderError(f"Rack ID serial read failed: {exc}") from exc
+    raise MicronicDirectRackReaderError(
+      "Rack ID serial read failed. Install the PLR serial extra with "
+      "`pip install pylabrobot[serial]` and verify the serial port: "
+      f"{exc}"
+    ) from exc
+  finally:
+    await io.stop()
 
   return extract_rack_id(b"".join(chunks).decode("utf-8", errors="ignore"))
 

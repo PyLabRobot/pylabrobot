@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 from pylabrobot.capabilities.rack_reading import RackReaderState
@@ -13,6 +14,7 @@ from pylabrobot.micronic.code_reader.direct_driver import (
   MicronicDirectRackReaderError,
   choose_image_extension,
   read_rack_id,
+  read_rack_id_plr_serial,
   run_scan,
 )
 from pylabrobot.micronic.code_reader.rack_reading_backend import MicronicRackReadingBackend
@@ -240,6 +242,45 @@ class TestMicronicDirectDriver(unittest.IsolatedAsyncioTestCase):
       rack_id_command=[sys.executable, "-c", "print('rack 9500017722')"],
     )
     self.assertEqual(rack_id, "9500017722")
+
+  async def test_read_rack_id_uses_plr_serial(self):
+    instances: list[object] = []
+
+    class FakeSerial:
+      def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.reads = iter([b"9", b"5", b"0", b"0", b"0", b"1", b"7", b"7", b"2", b"2", b"\r"])
+        self.calls: list[str] = []
+        instances.append(self)
+
+      async def setup(self):
+        self.calls.append("setup")
+
+      async def reset_input_buffer(self):
+        self.calls.append("reset_input_buffer")
+
+      async def write(self, data: bytes):
+        self.calls.append(f"write:{data!r}")
+
+      async def read(self, num_bytes: int = 1) -> bytes:
+        self.calls.append(f"read:{num_bytes}")
+        return next(self.reads)
+
+      async def stop(self):
+        self.calls.append("stop")
+
+    with patch("pylabrobot.micronic.code_reader.direct_driver.Serial", FakeSerial):
+      rack_id = await read_rack_id_plr_serial(serial_port="COM4", timeout_ms=1000)
+
+    self.assertEqual(len(instances), 1)
+    fake_serial = cast(FakeSerial, instances[0])
+    self.assertEqual(rack_id, "9500017722")
+    self.assertEqual(fake_serial.kwargs["port"], "COM4")
+    self.assertEqual(fake_serial.kwargs["bytesize"], 7)
+    self.assertEqual(fake_serial.kwargs["parity"], "E")
+    self.assertIn("reset_input_buffer", fake_serial.calls)
+    self.assertIn("write:b'<t>\\r\\n'", fake_serial.calls)
+    self.assertEqual(fake_serial.calls[-1], "stop")
 
   async def test_direct_driver_scan_rack_id_uses_configured_command(self):
     driver = MicronicDirectDriver(
