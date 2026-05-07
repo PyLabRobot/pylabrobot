@@ -4,7 +4,6 @@ from pylabrobot.micronic.code_reader import (
   MicronicDirectDriver,
   MicronicDirectRackReaderError,
   MicronicError,
-  MicronicRackReaderDriver,
   MicronicRackReadingBackend,
   MicronicRackReaderError,
 )
