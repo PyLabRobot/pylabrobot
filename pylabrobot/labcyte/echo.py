@@ -33,7 +33,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
-from pylabrobot.resources.utils import label_to_row_index, split_identifier
+from pylabrobot.resources.utils import create_ordered_items_2d, label_to_row_index, split_identifier
 from pylabrobot.resources.volume_tracker import does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -107,6 +107,99 @@ class EchoFluidInfo:
 
 
 @dataclass(frozen=True)
+class EchoPowerCalibration:
+  """Power calibration values returned by ``GetPwrCal``."""
+
+  amplitude: Optional[float]
+  reference_energy: Optional[float]
+  amp_feedback: Optional[float]
+  system_gain: Optional[float]
+  raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EchoPowerCalibrationResult:
+  """Measured values returned by ``CalibratePower``."""
+
+  amp_feedback: Optional[float]
+  pulse_energy: Optional[float]
+  vpp: Optional[float]
+  status: str = ""
+  raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EchoScanPositions:
+  """Scanner calibration position flags returned by ``GetScanPositions``."""
+
+  left_up: Optional[bool] = None
+  left_down: Optional[bool] = None
+  right_up: Optional[bool] = None
+  right_down: Optional[bool] = None
+  bottom_up: Optional[bool] = None
+  bottom_down: Optional[bool] = None
+  raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EchoFocusState:
+  """Read-side Echo focus and calibration state."""
+
+  tof_focus: Optional[float]
+  duo_tof_focus: Tuple[Optional[float], Optional[float]]
+  coupling_fluid_sound_velocity: Optional[float]
+  scan_positions: EchoScanPositions
+  power_calibration: EchoPowerCalibration
+
+
+@dataclass(frozen=True)
+class EchoScannerCalibrationResult:
+  """Result returned by ``CalibrateScanner``."""
+
+  barcode: Optional[str]
+  status: str = ""
+  raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EchoPlateInfo:
+  """Plate metadata returned by the Echo instrument catalog."""
+
+  name: str
+  rows: int
+  columns: int
+  well_capacity: Optional[float] = None
+  fluid: str = ""
+  plate_format: str = ""
+  usage: str = ""
+  barcode_location: Optional[str] = None
+  raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EchoPlateCatalog:
+  """Source and destination plate definitions registered on the Echo."""
+
+  source: Dict[str, EchoPlateInfo]
+  destination: Dict[str, EchoPlateInfo]
+
+  def for_side(self, side: str) -> Dict[str, EchoPlateInfo]:
+    normalized = _normalize_plate_side(side)
+    return self.source if normalized == "source" else self.destination
+
+
+@dataclass(frozen=True)
+class EchoResolvedPlateType:
+  """A PLR plate reconciled against an Echo plate type."""
+
+  side: str
+  plate_type: str
+  info: EchoPlateInfo
+  requested_plate_type: Optional[str] = None
+  derived_from: str = "explicit"
+
+
+@dataclass(frozen=True)
 class EchoPlateMap:
   """Echo plate-map payload built from canonical PLR well identifiers."""
 
@@ -171,6 +264,22 @@ class EchoDryPlateParams(BackendParams):
   """Parameters for Echo ``DryPlate``."""
 
   mode: EchoDryPlateMode = EchoDryPlateMode.TWO_PASS
+  timeout: Optional[float] = None
+
+
+@dataclass
+class EchoFocalSweepParams(BackendParams):
+  """Parameters for the low-level Echo ``FocalSweep`` calibration RPC."""
+
+  plate_type: str
+  well_row: int
+  well_column: int
+  start_tof: float
+  stop_tof: float
+  increment_z: float
+  start_z: float
+  stop_z: float
+  feature: int = 0
   timeout: Optional[float] = None
 
 
@@ -569,6 +678,27 @@ def _element_value(element: ET.Element) -> Any:
   )
 
 
+def _value_list(value: Any) -> list[Any]:
+  if isinstance(value, list):
+    return value
+  if value in (None, ""):
+    return []
+  return [value]
+
+
+def _bool_or_none(value: Any) -> Optional[bool]:
+  if isinstance(value, bool):
+    return value
+  if value in (None, ""):
+    return None
+  normalized = str(value).strip().lower()
+  if normalized == "true":
+    return True
+  if normalized == "false":
+    return False
+  return None
+
+
 def _float_or_none(value: Any) -> Optional[float]:
   if value in (None, ""):
     return None
@@ -576,6 +706,22 @@ def _float_or_none(value: Any) -> Optional[float]:
     return float(value)
   except (TypeError, ValueError):
     return None
+
+
+def _float_values(value: Any) -> list[float]:
+  values: list[float] = []
+  for item in _value_list(value):
+    numeric = _float_or_none(item)
+    if numeric is not None:
+      values.append(numeric)
+  return values
+
+
+def _format_numeric_string(value: float) -> str:
+  numeric = float(value)
+  if numeric.is_integer():
+    return str(int(numeric))
+  return f"{numeric:g}"
 
 
 def _int_or_zero(value: Any) -> int:
@@ -622,6 +768,314 @@ def _resolve_plate_type(plate: Plate, plate_type: Optional[str], role: str) -> s
     return plate.model
   raise ValueError(
     f"{role} plate type is required when the PLR plate has no model matching an Echo plate type."
+  )
+
+
+def _normalize_plate_side(side: str) -> str:
+  normalized = side.strip().lower()
+  if normalized in {"source", "src"}:
+    return "source"
+  if normalized in {"destination", "dest", "dst"}:
+    return "destination"
+  raise ValueError("side must be 'source' or 'destination'.")
+
+
+def _format_plate_catalog_names(names: Iterable[str]) -> str:
+  ordered = sorted(str(name) for name in names)
+  return ", ".join(ordered) if ordered else "<empty catalog>"
+
+
+def _optional_string(value: Any) -> Optional[str]:
+  if value in (None, ""):
+    return None
+  return str(value)
+
+
+def _value_by_any_key(values: Dict[str, Any], *keys: str) -> Any:
+  normalized_values = {key.lower(): value for key, value in values.items()}
+  for key in keys:
+    if key in values:
+      return values[key]
+    lowered = key.lower()
+    if lowered in normalized_values:
+      return normalized_values[lowered]
+  return None
+
+
+def _record_from_xml_fragment(root_name: str, fragment: str) -> Dict[str, Any]:
+  text = fragment.strip()
+  if not text:
+    return {}
+  if text.startswith(f"<{root_name}"):
+    xml_text = text
+  else:
+    xml_text = f"<{root_name}>{text}</{root_name}>"
+  try:
+    root = ET.fromstring(xml_text)
+  except ET.ParseError as exc:
+    raise EchoProtocolError(f"Malformed {root_name} XML in Echo response.") from exc
+  return {_local_name(child.tag): _element_value(child) for child in root}
+
+
+def _plate_info_from_values(plate_type: str, values: Dict[str, Any]) -> EchoPlateInfo:
+  name = _value_by_any_key(values, "Name", "PlateName", "PlateType", "PlateTypeEx")
+  if isinstance(name, str) and "<" in name:
+    name = plate_type
+  return EchoPlateInfo(
+    name=str(name or plate_type),
+    rows=_int_or_zero(_value_by_any_key(values, "Rows", "RowCount")),
+    columns=_int_or_zero(_value_by_any_key(values, "Columns", "Cols", "ColumnCount")),
+    well_capacity=_float_or_none(_value_by_any_key(values, "WellCapacity", "Capacity")),
+    fluid=str(_value_by_any_key(values, "Fluid", "FluidType") or ""),
+    plate_format=str(_value_by_any_key(values, "PlateFormat", "Format") or ""),
+    usage=str(_value_by_any_key(values, "PlateUsage", "Usage") or ""),
+    barcode_location=_optional_string(
+      _value_by_any_key(values, "BarcodeLoc", "BarcodeLocation", "BarCodeLocation")
+    ),
+    raw=values,
+  )
+
+
+def _power_calibration_from_values(values: Dict[str, Any]) -> EchoPowerCalibration:
+  record = values
+  pwr_cal = _value_by_any_key(values, "PwrCal")
+  if isinstance(pwr_cal, str) and "<" in pwr_cal:
+    record = _record_from_xml_fragment("PwrCal", pwr_cal)
+  return EchoPowerCalibration(
+    amplitude=_float_or_none(_value_by_any_key(record, "Amp", "Amplitude", "AmpV")),
+    reference_energy=_float_or_none(
+      _value_by_any_key(record, "Reference", "ReferenceEnergy", "PulseEnergy")
+    ),
+    amp_feedback=_float_or_none(_value_by_any_key(record, "AmpFeedback", "CurrentAmpFeedback")),
+    system_gain=_float_or_none(_value_by_any_key(record, "SysGain", "SystemGain")),
+    raw=values,
+  )
+
+
+def _power_calibration_result_from_values(values: Dict[str, Any]) -> EchoPowerCalibrationResult:
+  return EchoPowerCalibrationResult(
+    amp_feedback=_float_or_none(_value_by_any_key(values, "AmpFeedback", "CurrentAmpFeedback")),
+    pulse_energy=_float_or_none(_value_by_any_key(values, "PulseEnergy", "ReferenceEnergy")),
+    vpp=_float_or_none(_value_by_any_key(values, "Vpp", "VPP")),
+    status=str(_value_by_any_key(values, "Status") or ""),
+    raw=values,
+  )
+
+
+def _scan_positions_from_values(values: Dict[str, Any]) -> EchoScanPositions:
+  record = values
+  scan_positions = _value_by_any_key(values, "ScanPositions")
+  if isinstance(scan_positions, str) and "<" in scan_positions:
+    record = _record_from_xml_fragment("ScanPositions", scan_positions)
+  return EchoScanPositions(
+    left_up=_bool_or_none(_value_by_any_key(record, "LeftUp")),
+    left_down=_bool_or_none(_value_by_any_key(record, "LeftDown")),
+    right_up=_bool_or_none(_value_by_any_key(record, "RightUp")),
+    right_down=_bool_or_none(_value_by_any_key(record, "RightDown")),
+    bottom_up=_bool_or_none(_value_by_any_key(record, "BottomUp")),
+    bottom_down=_bool_or_none(_value_by_any_key(record, "BottomDown")),
+    raw=values,
+  )
+
+
+def _fluid_info_from_record(record: Dict[str, Any]) -> Optional[EchoFluidInfo]:
+  name = _value_by_any_key(record, "FluidName", "Name", "FluidType")
+  if name in (None, ""):
+    return None
+  return EchoFluidInfo(
+    name=str(name),
+    description=str(_value_by_any_key(record, "Description") or ""),
+    fc_min=_float_or_none(_value_by_any_key(record, "FCMin")),
+    fc_max=_float_or_none(_value_by_any_key(record, "FCMax")),
+    fc_units=str(_value_by_any_key(record, "FCUnits") or ""),
+    raw=record,
+  )
+
+
+def _fluid_record_from_xml_fragment(fragment: str) -> Dict[str, Any]:
+  return _record_from_xml_fragment("FluidType", fragment)
+
+
+def _fluid_infos_from_values(values: Dict[str, Any]) -> list[EchoFluidInfo]:
+  nested_fluids = _value_by_any_key(values, "FluidType")
+  if nested_fluids not in (None, ""):
+    fluids: list[EchoFluidInfo] = []
+    for fluid_value in _value_list(nested_fluids):
+      if isinstance(fluid_value, dict):
+        record = fluid_value
+      elif isinstance(fluid_value, str) and "<" in fluid_value:
+        record = _fluid_record_from_xml_fragment(fluid_value)
+      else:
+        record = {"FluidName": fluid_value}
+      fluid = _fluid_info_from_record(record)
+      if fluid is not None:
+        fluids.append(fluid)
+    return fluids
+
+  names = _value_list(_value_by_any_key(values, "FluidName", "Name"))
+  descriptions = _value_list(_value_by_any_key(values, "Description"))
+  fc_mins = _value_list(_value_by_any_key(values, "FCMin"))
+  fc_maxes = _value_list(_value_by_any_key(values, "FCMax"))
+  fc_units = _value_list(_value_by_any_key(values, "FCUnits"))
+  fluids: list[EchoFluidInfo] = []
+  for index, name in enumerate(names):
+    fluid_name = str(name)
+    fluids.append(
+      EchoFluidInfo(
+        name=fluid_name,
+        description=str(descriptions[index]) if index < len(descriptions) else "",
+        fc_min=_float_or_none(fc_mins[index]) if index < len(fc_mins) else None,
+        fc_max=_float_or_none(fc_maxes[index]) if index < len(fc_maxes) else None,
+        fc_units=str(fc_units[index]) if index < len(fc_units) else "",
+        raw={
+          "FluidName": fluid_name,
+          "Description": descriptions[index] if index < len(descriptions) else "",
+          "FCMin": fc_mins[index] if index < len(fc_mins) else None,
+          "FCMax": fc_maxes[index] if index < len(fc_maxes) else None,
+          "FCUnits": fc_units[index] if index < len(fc_units) else "",
+        },
+      )
+    )
+  return fluids
+
+
+_PLATE_TYPE_EX_FIELD_TYPES: Tuple[Tuple[str, str], ...] = (
+  ("Name", "string"),
+  ("Mfg", "string"),
+  ("LotNum", "string"),
+  ("PartNum", "string"),
+  ("Rows", "int"),
+  ("Columns", "int"),
+  ("A1OffsetX", "double"),
+  ("A1OffsetY", "double"),
+  ("CenterX", "double"),
+  ("CenterY", "double"),
+  ("SkirtHeight", "double"),
+  ("PlateHeight", "double"),
+  ("WellWidth", "double"),
+  ("CenterSpacingX", "double"),
+  ("CenterSpacingY", "double"),
+  ("WellCapacity", "double"),
+  ("SoundVelocity", "double"),
+  ("BottomInset", "double"),
+  ("BarcodeLoc", "string"),
+  ("MinWellVolumeUL", "double"),
+  ("MaxWellVolumeUL", "double"),
+  ("MaxVolumeTotalNL", "double"),
+  ("WellLength", "double"),
+  ("ParentPlate", "string"),
+  ("PlateFormat", "string"),
+  ("Fluid", "string"),
+  ("PlateUsage", "string"),
+)
+
+_PLATE_TYPE_EX_ALIASES: Dict[str, Tuple[str, ...]] = {
+  "Name": ("Name", "PlateName", "PlateType", "PlateTypeEx"),
+  "Mfg": ("Mfg", "Manufacturer"),
+  "LotNum": ("LotNum", "LotNumber"),
+  "PartNum": ("PartNum", "PartNumber"),
+  "CenterX": ("CenterX", "CenterWellPosX"),
+  "CenterY": ("CenterY", "CenterWellPosY"),
+  "BarcodeLoc": ("BarcodeLoc", "BarcodeLocation", "BarCodeLocation"),
+  "Fluid": ("Fluid", "FluidName", "FluidType"),
+  "PlateUsage": ("PlateUsage", "PlateUse", "Usage"),
+}
+
+
+def _plate_type_ex_values_from_rpc_values(values: Dict[str, Any]) -> Dict[str, Any]:
+  normalized = dict(values)
+  plate_type_ex = values.get("PlateTypeEx")
+  if not isinstance(plate_type_ex, str) or "<" not in plate_type_ex:
+    return normalized
+  try:
+    root = ET.fromstring(f"<PlateTypeEx>{plate_type_ex}</PlateTypeEx>")
+  except ET.ParseError:
+    return normalized
+  for child in root:
+    normalized[_local_name(child.tag)] = _element_value(child)
+  return normalized
+
+
+def _plate_type_ex_value(values: Dict[str, Any], field: str, value_type: str) -> Any:
+  if field == "Name":
+    return _value_by_any_key(values, *_PLATE_TYPE_EX_ALIASES[field])
+  keys = _PLATE_TYPE_EX_ALIASES.get(field, (field,))
+  value = _value_by_any_key(values, *keys)
+  if value not in (None, ""):
+    return value
+  return 0 if value_type in {"int", "double"} else ""
+
+
+def _plate_type_ex_xml(plate_type: str, values: Dict[str, Any]) -> str:
+  soap_encoding_style = "{http://schemas.xmlsoap.org/soap/envelope/}encodingStyle"
+  encoding = "http://schemas.xmlsoap.org/soap/encoding/"
+  root = ET.Element("PlateTypeEx", {soap_encoding_style: encoding})
+  normalized = _plate_type_ex_values_from_rpc_values(values)
+  normalized["Name"] = plate_type
+  for field, value_type in _PLATE_TYPE_EX_FIELD_TYPES:
+    value = _plate_type_ex_value(normalized, field, value_type)
+    child = ET.SubElement(
+      root,
+      field,
+      {
+        soap_encoding_style: encoding,
+        "type": f"xsd:{value_type}",
+      },
+    )
+    child.text = "" if value is None else str(value)
+  return ET.tostring(root, encoding="unicode", short_empty_elements=False)
+
+
+def _validate_echo_plate_dimensions(plate: Plate, info: EchoPlateInfo, side: str) -> None:
+  if info.rows <= 0 or info.columns <= 0:
+    raise EchoCommandError(
+      "ResolveEchoPlateType",
+      f"Echo {side} plate type {info.name!r} did not report usable Rows/Columns.",
+    )
+  if info.columns != plate.num_items_x or info.rows != plate.num_items_y:
+    raise EchoCommandError(
+      "ResolveEchoPlateType",
+      f"PLR {side} plate {plate.name!r} dimensions are "
+      f"{plate.num_items_x} columns x {plate.num_items_y} rows, but Echo plate type "
+      f"{info.name!r} is {info.columns} columns x {info.rows} rows.",
+    )
+
+
+def create_plate_from_echo_info(info: EchoPlateInfo, name: Optional[str] = None) -> Plate:
+  """Create a minimal PLR plate from Echo catalog geometry.
+
+  The generated plate is suitable for Echo transfer planning. It is not a
+  manufacturer-precise labware definition.
+  """
+
+  if info.rows <= 0 or info.columns <= 0:
+    raise ValueError("EchoPlateInfo must include positive rows and columns.")
+  plate_name = name or re.sub(r"\W+", "_", info.name).strip("_") or "echo_plate"
+  size_x = 127.76
+  size_y = 85.48
+  size_z = 14.0
+  spacing_x = size_x / info.columns
+  spacing_y = size_y / info.rows
+  well_size = min(spacing_x, spacing_y) * 0.65
+  return Plate(
+    name=plate_name,
+    size_x=size_x,
+    size_y=size_y,
+    size_z=size_z,
+    model=info.name,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=info.columns,
+      num_items_y=info.rows,
+      dx=spacing_x / 2,
+      dy=spacing_y / 2,
+      dz=0,
+      item_dx=spacing_x,
+      item_dy=spacing_y,
+      size_x=well_size,
+      size_y=well_size,
+      size_z=size_z,
+    ),
   )
 
 
@@ -1426,6 +1880,11 @@ class EchoDriver(Driver):
     self._ensure_success("GetDIO", result)
     return result.values
 
+  async def get_dio_ex(self) -> Dict[str, Any]:
+    result = await self._rpc("GetDIOEx")
+    self._ensure_success("GetDIOEx", result)
+    return result.values
+
   async def get_dio_ex2(self) -> Dict[str, Any]:
     result = await self._rpc("GetDIOEx2")
     self._ensure_success("GetDIOEx2", result)
@@ -1447,6 +1906,10 @@ class EchoDriver(Driver):
     result = await self._rpc("GetPwrCal")
     self._ensure_success("GetPwrCal", result)
     return result.values
+
+  async def get_echo_power_calibration(self) -> EchoPowerCalibration:
+    """Return typed power calibration values from ``GetPwrCal``."""
+    return _power_calibration_from_values(await self.get_power_calibration())
 
   async def get_access_state(self) -> PlateAccessState:
     raw = await self.get_dio_ex2()
@@ -1513,7 +1976,162 @@ class EchoDriver(Driver):
       (("PlateTypeEx", "string", plate_type_ex),),
     )
     self._ensure_success("GetPlateInfoEx", result)
-    return result.values
+    return _plate_type_ex_values_from_rpc_values(result.values)
+
+  async def get_echo_plate_info(self, plate_type: str) -> EchoPlateInfo:
+    """Return typed Echo catalog metadata for a registered plate type."""
+    return _plate_info_from_values(plate_type, await self.get_plate_info(plate_type))
+
+  async def set_plate_info_ex(self, plate_type: str, values: Dict[str, Any]) -> None:
+    """Create or update an Echo plate definition through ``SetPlateInfoEx``.
+
+    The payload shape was captured from Echo Client Utility. Use the higher-level
+    destination helpers for normal PLR workflows.
+    """
+    result = await self._rpc(
+      "SetPlateInfoEx",
+      (
+        ("PlateTypeEx", "string", plate_type),
+        ("PlateTypeEx", "xml_element", _plate_type_ex_xml(plate_type, values)),
+      ),
+    )
+    self._ensure_success("SetPlateInfoEx", result)
+
+  async def remove_plate_info(self, plate_type: str) -> None:
+    """Remove an Echo plate definition through ``RemovePlateInfo``."""
+    result = await self._rpc(
+      "RemovePlateInfo",
+      (("PlateType", "string", plate_type),),
+    )
+    self._ensure_success("RemovePlateInfo", result)
+
+  async def clone_destination_plate_definition(
+    self,
+    base_plate_type: str,
+    new_plate_type: str,
+  ) -> EchoPlateInfo:
+    """Clone an existing destination plate definition under a new destination name."""
+    catalog = await self.get_echo_plate_catalog()
+    if base_plate_type not in catalog.destination:
+      valid_names = _format_plate_catalog_names(catalog.destination.keys())
+      raise EchoCommandError(
+        "SetPlateInfoEx",
+        f"Base destination plate type {base_plate_type!r} is not registered. "
+        f"Valid destination plate types: {valid_names}.",
+      )
+    if new_plate_type in catalog.source or new_plate_type in catalog.destination:
+      raise EchoCommandError(
+        "SetPlateInfoEx",
+        f"Echo plate type {new_plate_type!r} is already registered.",
+      )
+
+    values = await self.get_plate_info(base_plate_type)
+    await self.set_plate_info_ex(new_plate_type, values)
+    updated_catalog = await self.get_echo_plate_catalog()
+    if new_plate_type not in updated_catalog.destination:
+      raise EchoCommandError(
+        "SetPlateInfoEx",
+        f"Echo accepted {new_plate_type!r}, but it did not appear in the destination catalog.",
+      )
+    return updated_catalog.destination[new_plate_type]
+
+  async def delete_destination_plate_definition(self, plate_type: str) -> bool:
+    """Delete a destination plate definition and verify it leaves the destination catalog."""
+    catalog = await self.get_echo_plate_catalog()
+    if plate_type in catalog.source:
+      raise EchoCommandError(
+        "RemovePlateInfo",
+        f"Refusing to delete source plate type {plate_type!r} through the destination helper.",
+      )
+    if plate_type not in catalog.destination:
+      valid_names = _format_plate_catalog_names(catalog.destination.keys())
+      raise EchoCommandError(
+        "RemovePlateInfo",
+        f"Destination plate type {plate_type!r} is not registered. "
+        f"Valid destination plate types: {valid_names}.",
+      )
+    await self.remove_plate_info(plate_type)
+    updated_catalog = await self.get_echo_plate_catalog()
+    return plate_type not in updated_catalog.destination
+
+  async def get_echo_plate_catalog(self) -> EchoPlateCatalog:
+    """Read the source and destination plate catalogs registered on the Echo."""
+    source_names = await self.get_all_source_plate_names()
+    destination_names = await self.get_all_destination_plate_names()
+    source: Dict[str, EchoPlateInfo] = {}
+    destination: Dict[str, EchoPlateInfo] = {}
+    for plate_type in source_names:
+      source[plate_type] = await self.get_echo_plate_info(plate_type)
+    for plate_type in destination_names:
+      destination[plate_type] = await self.get_echo_plate_info(plate_type)
+    return EchoPlateCatalog(source=source, destination=destination)
+
+  async def resolve_echo_plate_type(
+    self,
+    plate: Plate,
+    side: str,
+    plate_type: Optional[str] = None,
+  ) -> EchoResolvedPlateType:
+    """Resolve and validate a PLR plate against the Echo instrument catalog."""
+    return self._resolve_echo_plate_type_from_catalog(
+      plate,
+      side,
+      plate_type,
+      await self.get_echo_plate_catalog(),
+    )
+
+  def _resolve_echo_plate_type_from_catalog(
+    self,
+    plate: Plate,
+    side: str,
+    plate_type: Optional[str],
+    catalog: EchoPlateCatalog,
+  ) -> EchoResolvedPlateType:
+    normalized_side = _normalize_plate_side(side)
+    side_catalog = catalog.for_side(normalized_side)
+    candidate = plate_type or plate.model
+    derived_from = "explicit" if plate_type is not None else "plate.model"
+    if candidate in (None, ""):
+      valid_names = _format_plate_catalog_names(side_catalog.keys())
+      raise EchoCommandError(
+        "ResolveEchoPlateType",
+        f"No Echo {normalized_side} plate type was supplied and PLR plate {plate.name!r} "
+        f"has no model. Pass {normalized_side}_plate_type explicitly. Valid Echo "
+        f"{normalized_side} plate types: {valid_names}.",
+      )
+    if candidate not in side_catalog:
+      valid_names = _format_plate_catalog_names(side_catalog.keys())
+      raise EchoCommandError(
+        "ResolveEchoPlateType",
+        f"Echo {normalized_side} plate type {candidate!r} is not registered on this "
+        f"instrument. Pass {normalized_side}_plate_type with one of: {valid_names}.",
+      )
+    info = side_catalog[candidate]
+    _validate_echo_plate_dimensions(plate, info, normalized_side)
+    return EchoResolvedPlateType(
+      side=normalized_side,
+      plate_type=candidate,
+      requested_plate_type=plate_type,
+      derived_from=derived_from,
+      info=info,
+    )
+
+  async def _require_registered_echo_plate_type(
+    self,
+    plate_type: str,
+    side: str,
+  ) -> EchoPlateInfo:
+    normalized_side = _normalize_plate_side(side)
+    catalog = await self.get_echo_plate_catalog()
+    side_catalog = catalog.for_side(normalized_side)
+    if plate_type not in side_catalog:
+      valid_names = _format_plate_catalog_names(side_catalog.keys())
+      raise EchoCommandError(
+        "ResolveEchoPlateType",
+        f"Echo {normalized_side} plate type {plate_type!r} is not registered on this "
+        f"instrument. Pass one of: {valid_names}.",
+      )
+    return side_catalog[plate_type]
 
   async def get_plate_insert(self, plate_type: str) -> Any:
     result = await self._rpc(
@@ -1527,6 +2145,173 @@ class EchoDriver(Driver):
     result = await self._rpc("GetCurrentPlateInsert")
     self._ensure_success("GetCurrentPlateInsert", result)
     return _first_result_value(result)
+
+  async def get_all_plate_inserts(self) -> list[str]:
+    result = await self._rpc("GetAllPlateInserts")
+    self._ensure_success("GetAllPlateInserts", result)
+    return _name_list_from_value(result.values.get("InsertName", _first_result_value(result)))
+
+  async def get_coupling_fluid_sound_velocity(self) -> Optional[float]:
+    result = await self._rpc("GetCouplingFluidSoundVelocity")
+    self._ensure_success("GetCouplingFluidSoundVelocity", result)
+    return _float_or_none(
+      _value_by_any_key(result.values, "CouplingFluidSoundVelocity", "Value")
+    )
+
+  async def get_focus_tof(self) -> Optional[float]:
+    result = await self._rpc("GetTOFFocus")
+    self._ensure_success("GetTOFFocus", result)
+    return _float_or_none(_value_by_any_key(result.values, "TOFFocus", "FocusTOF", "Value"))
+
+  async def set_focus_tof(self, value: float) -> None:
+    self._require_lock("SetTOFFocus")
+    result = await self._rpc(
+      "SetTOFFocus",
+      (("TOFFocus", "string", _format_numeric_string(value)),),
+    )
+    self._ensure_success("SetTOFFocus", result)
+
+  async def get_duo_focus_tof(self) -> Tuple[Optional[float], Optional[float]]:
+    result = await self._rpc("GetDuoTOFFocus")
+    self._ensure_success("GetDuoTOFFocus", result)
+    values = _float_values(_value_by_any_key(result.values, "TOFFocus", "DuoFocusTOF", "Value"))
+    first = values[0] if len(values) >= 1 else None
+    second = values[1] if len(values) >= 2 else None
+    return first, second
+
+  async def set_duo_focus_tof(self, first: float, second: float) -> None:
+    self._require_lock("SetDuoTOFFocus")
+    result = await self._rpc(
+      "SetDuoTOFFocus",
+      (
+        ("TOFFocus", "string", _format_numeric_string(first)),
+        ("TOFFocus", "string", _format_numeric_string(second)),
+      ),
+    )
+    self._ensure_success("SetDuoTOFFocus", result)
+
+  async def get_scan_positions(self) -> EchoScanPositions:
+    result = await self._rpc("GetScanPositions")
+    self._ensure_success("GetScanPositions", result)
+    return _scan_positions_from_values(result.values)
+
+  async def get_calibration_plate_names(self) -> list[str]:
+    result = await self._rpc("GetCalPlateNames")
+    self._ensure_success("GetCalPlateNames", result)
+    return _name_list_from_value(result.values.get("PlateType", _first_result_value(result)))
+
+  async def get_focus_state(self) -> EchoFocusState:
+    """Read focus, sound-velocity, scanner, and power-calibration state."""
+    tof_focus = await self.get_focus_tof()
+    duo_tof_focus = await self.get_duo_focus_tof()
+    coupling_fluid_sound_velocity = await self.get_coupling_fluid_sound_velocity()
+    scan_positions = await self.get_scan_positions()
+    power_calibration = await self.get_echo_power_calibration()
+    return EchoFocusState(
+      tof_focus=tof_focus,
+      duo_tof_focus=duo_tof_focus,
+      coupling_fluid_sound_velocity=coupling_fluid_sound_velocity,
+      scan_positions=scan_positions,
+      power_calibration=power_calibration,
+    )
+
+  async def calibrate_power(
+    self,
+    timeout: Optional[float] = None,
+  ) -> EchoPowerCalibrationResult:
+    self._require_lock("CalibratePower")
+    result = await self._rpc("CalibratePower", timeout=timeout)
+    self._ensure_success("CalibratePower", result)
+    return _power_calibration_result_from_values(result.values)
+
+  async def commit_power_calibration(
+    self,
+    amp_feedback: float,
+    pulse_energy: float,
+    vpp: float,
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("CommitPwrCal")
+    result = await self._rpc(
+      "CommitPwrCal",
+      (
+        ("AmpFeedback", "double", _format_numeric_string(amp_feedback)),
+        ("PulseEnergy", "double", _format_numeric_string(pulse_energy)),
+        ("Vpp", "double", _format_numeric_string(vpp)),
+      ),
+      timeout=timeout,
+    )
+    self._ensure_success("CommitPwrCal", result)
+
+  async def retract_source_gripper_for_scan_calibration(
+    self,
+    barcode_location: str = "Right-Side",
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("RetractSrcGripper4ScanCal")
+    result = await self._rpc(
+      "RetractSrcGripper4ScanCal",
+      (("BarCodeLocation", "string", barcode_location),),
+      timeout=timeout,
+    )
+    self._ensure_success("RetractSrcGripper4ScanCal", result)
+
+  async def retract_destination_gripper_for_scan_calibration(
+    self,
+    barcode_location: str = "Right-Side",
+    timeout: Optional[float] = None,
+  ) -> None:
+    self._require_lock("RetractDstGripper4ScanCal")
+    result = await self._rpc(
+      "RetractDstGripper4ScanCal",
+      (("BarCodeLocation", "string", barcode_location),),
+      timeout=timeout,
+    )
+    self._ensure_success("RetractDstGripper4ScanCal", result)
+
+  async def calibrate_scanner(
+    self,
+    barcode_location: str = "Right-Side",
+    timeout: Optional[float] = None,
+  ) -> EchoScannerCalibrationResult:
+    self._require_lock("CalibrateScanner")
+    result = await self._rpc(
+      "CalibrateScanner",
+      (("BarCodeLocation", "string", barcode_location),),
+      timeout=timeout,
+    )
+    self._ensure_success("CalibrateScanner", result)
+    barcode = _value_by_any_key(result.values, "BarCode", "Barcode")
+    return EchoScannerCalibrationResult(
+      barcode=str(barcode) if barcode not in (None, "") else None,
+      status=str(result.status or ""),
+      raw=result.values,
+    )
+
+  async def cancel_scanner_calibration(self, timeout: Optional[float] = None) -> None:
+    self._require_lock("CancelCalibrateScanner")
+    result = await self._rpc("CancelCalibrateScanner", timeout=timeout)
+    self._ensure_success("CancelCalibrateScanner", result)
+
+  async def focal_sweep(self, params: EchoFocalSweepParams) -> Dict[str, Any]:
+    self._require_lock("FocalSweep")
+    result = await self._rpc(
+      "FocalSweep",
+      (
+        ("PlateType", "string", params.plate_type),
+        ("WellRow", "int", str(params.well_row)),
+        ("WellCol", "int", str(params.well_column)),
+        ("StartToF", "double", _format_numeric_string(params.start_tof)),
+        ("StopToF", "double", _format_numeric_string(params.stop_tof)),
+        ("IncrZ", "double", _format_numeric_string(params.increment_z)),
+        ("StartZ", "double", _format_numeric_string(params.start_z)),
+        ("StopZ", "double", _format_numeric_string(params.stop_z)),
+        ("Feature", "int", str(params.feature)),
+      ),
+      timeout=params.timeout,
+    )
+    self._ensure_success("FocalSweep", result)
+    return result.values
 
   async def get_all_protocol_names(self) -> list[str]:
     result = await self._rpc("GetAllProtocolNames")
@@ -1596,6 +2381,19 @@ class EchoDriver(Driver):
       raw=result.values,
     )
 
+  async def get_all_fluid_types(self) -> list[EchoFluidInfo]:
+    result = await self._rpc("GetAllFluidTypes")
+    self._ensure_success("GetAllFluidTypes", result)
+    return _fluid_infos_from_values(result.values)
+
+  async def get_fluids_for_plate(self, plate_type: str) -> list[EchoFluidInfo]:
+    result = await self._rpc(
+      "GetFluidsForPlate",
+      (("PlateType", "string", plate_type),),
+    )
+    self._ensure_success("GetFluidsForPlate", result)
+    return _fluid_infos_from_values(result.values)
+
   async def get_transfer_volume_max_nl(self, plate_type: str) -> Any:
     result = await self._rpc(
       "GetTransferVolMaximumNl",
@@ -1619,6 +2417,15 @@ class EchoDriver(Driver):
     )
     self._ensure_success("GetTransferVolIncrNl", result)
     return _first_result_value(result)
+
+  async def get_transfer_volume_resolution_nl(self, plate_type: str) -> Any:
+    result = await self._rpc(
+      "GetTransferVolResolutionNl",
+      (("Value", "string", plate_type),),
+    )
+    self._ensure_success("GetTransferVolResolutionNl", result)
+    value = _first_result_value(result)
+    return _float_or_none(value) if value not in (None, "") else value
 
   async def check_source_plate_insert_compatibility(self, plate_type: str) -> Dict[str, Any]:
     result = await self._rpc(
@@ -2006,12 +2813,25 @@ class EchoDriver(Driver):
     update_volume_trackers: bool = True,
   ) -> EchoTransferResult:
     self._require_lock("TransferWells")
+    catalog = await self.get_echo_plate_catalog()
+    source_resolved = self._resolve_echo_plate_type_from_catalog(
+      source_plate,
+      "source",
+      source_plate_type,
+      catalog,
+    )
+    destination_resolved = self._resolve_echo_plate_type_from_catalog(
+      destination_plate,
+      "destination",
+      destination_plate_type,
+      catalog,
+    )
     plan = self.build_transfer_plan(
       source_plate,
       destination_plate,
       transfers,
-      source_plate_type=source_plate_type,
-      destination_plate_type=destination_plate_type,
+      source_plate_type=source_resolved.plate_type,
+      destination_plate_type=destination_resolved.plate_type,
       protocol_name=protocol_name,
       volume_unit=volume_unit,
     )
@@ -2034,7 +2854,7 @@ class EchoDriver(Driver):
           start_row=0,
           start_col=0,
           num_rows=max_source_row + 1,
-          num_cols=source_plate.num_items_x,
+          num_cols=source_resolved.info.columns,
           save=True,
           check_source=False,
           timeout=survey_timeout,
@@ -2113,6 +2933,7 @@ class EchoDriver(Driver):
     retract_timeout: Optional[float] = None,
   ) -> EchoPlateWorkflowResult:
     self._require_lock("LoadSourcePlate")
+    await self._require_registered_echo_plate_type(plate_type, "source")
     if open_door_first:
       await self.open_door()
     await self.open_source_plate(timeout=present_timeout)
@@ -2150,6 +2971,7 @@ class EchoDriver(Driver):
     retract_timeout: Optional[float] = None,
   ) -> EchoPlateWorkflowResult:
     self._require_lock("LoadDestinationPlate")
+    await self._require_registered_echo_plate_type(plate_type, "destination")
     if open_door_first:
       await self.open_door()
     await self.open_destination_plate(timeout=present_timeout)
@@ -2593,11 +3415,33 @@ class EchoPlateAccessBackend(PlateAccessBackend):
 
   async def close_door(self, timeout: Optional[float] = None) -> None:
     state = await self.driver.get_access_state()
-    if state.active_access_paths:
-      active_paths = ", ".join(state.active_access_paths)
+    open_paths = [
+      path
+      for path, is_open in (
+        ("source", state.source_access_open),
+        ("destination", state.destination_access_open),
+      )
+      if is_open
+    ]
+    if open_paths:
+      active_paths = ", ".join(open_paths)
       raise EchoCommandError(
         "CloseDoor",
         f"Cannot close the door while {active_paths} access is still open.",
+      )
+    unknown_paths = [
+      path
+      for path, is_open in (
+        ("source", state.source_access_open),
+        ("destination", state.destination_access_open),
+      )
+      if is_open is None
+    ]
+    if unknown_paths:
+      unknown = ", ".join(unknown_paths)
+      raise EchoCommandError(
+        "CloseDoor",
+        f"Cannot confirm {unknown} access is closed before closing the door.",
       )
     await self.driver.close_door(timeout=timeout)
 
@@ -2711,6 +3555,11 @@ class Echo(Device):
     return await self.driver.get_dio()
 
   @need_setup_finished
+  async def get_dio_ex(self) -> Dict[str, Any]:
+    """Return the raw ``GetDIOEx`` status payload."""
+    return await self.driver.get_dio_ex()
+
+  @need_setup_finished
   async def get_dio_ex2(self) -> Dict[str, Any]:
     """Return the raw ``GetDIOEx2`` status payload."""
     return await self.driver.get_dio_ex2()
@@ -2727,6 +3576,11 @@ class Echo(Device):
   async def get_power_calibration(self) -> Dict[str, Any]:
     """Return the raw ``GetPwrCal`` payload."""
     return await self.driver.get_power_calibration()
+
+  @need_setup_finished
+  async def get_echo_power_calibration(self) -> EchoPowerCalibration:
+    """Return typed power calibration values."""
+    return await self.driver.get_echo_power_calibration()
 
   @need_setup_finished
   async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
@@ -2789,6 +3643,50 @@ class Echo(Device):
     return await self.driver.get_plate_info(plate_type_ex)
 
   @need_setup_finished
+  async def get_echo_plate_info(self, plate_type: str) -> EchoPlateInfo:
+    """Return typed Echo catalog metadata for a registered plate type."""
+    return await self.driver.get_echo_plate_info(plate_type)
+
+  @need_setup_finished
+  async def set_plate_info_ex(self, plate_type: str, values: Dict[str, Any]) -> None:
+    """Create or update an Echo plate definition through ``SetPlateInfoEx``."""
+    await self.driver.set_plate_info_ex(plate_type, values)
+
+  @need_setup_finished
+  async def remove_plate_info(self, plate_type: str) -> None:
+    """Remove an Echo plate definition through ``RemovePlateInfo``."""
+    await self.driver.remove_plate_info(plate_type)
+
+  @need_setup_finished
+  async def clone_destination_plate_definition(
+    self,
+    base_plate_type: str,
+    new_plate_type: str,
+  ) -> EchoPlateInfo:
+    """Clone an existing destination plate definition under a new destination name."""
+    return await self.driver.clone_destination_plate_definition(base_plate_type, new_plate_type)
+
+  @need_setup_finished
+  async def delete_destination_plate_definition(self, plate_type: str) -> bool:
+    """Delete a destination plate definition and verify it leaves the catalog."""
+    return await self.driver.delete_destination_plate_definition(plate_type)
+
+  @need_setup_finished
+  async def get_echo_plate_catalog(self) -> EchoPlateCatalog:
+    """Return the source and destination plate catalogs registered on the Echo."""
+    return await self.driver.get_echo_plate_catalog()
+
+  @need_setup_finished
+  async def resolve_echo_plate_type(
+    self,
+    plate: Plate,
+    side: str,
+    plate_type: Optional[str] = None,
+  ) -> EchoResolvedPlateType:
+    """Resolve and validate a PLR plate against the Echo instrument catalog."""
+    return await self.driver.resolve_echo_plate_type(plate, side, plate_type=plate_type)
+
+  @need_setup_finished
   async def get_plate_insert(self, plate_type: str) -> Any:
     """Return the plate-insert information for the given plate type."""
     return await self.driver.get_plate_insert(plate_type)
@@ -2797,6 +3695,121 @@ class Echo(Device):
   async def get_current_plate_insert(self) -> Any:
     """Return the current plate-insert selection."""
     return await self.driver.get_current_plate_insert()
+
+  @need_setup_finished
+  async def get_all_plate_inserts(self) -> list[str]:
+    """Return all registered plate inserts."""
+    return await self.driver.get_all_plate_inserts()
+
+  @need_setup_finished
+  async def get_coupling_fluid_sound_velocity(self) -> Optional[float]:
+    """Return the Echo coupling-fluid sound velocity."""
+    return await self.driver.get_coupling_fluid_sound_velocity()
+
+  @need_setup_finished
+  async def get_focus_tof(self) -> Optional[float]:
+    """Return the Echo focus time-of-flight value."""
+    return await self.driver.get_focus_tof()
+
+  @need_setup_finished
+  async def set_focus_tof(self, value: float) -> None:
+    """Set the Echo focus time-of-flight value."""
+    await self.driver.set_focus_tof(value)
+
+  @need_setup_finished
+  async def get_duo_focus_tof(self) -> Tuple[Optional[float], Optional[float]]:
+    """Return the Echo duo focus time-of-flight values."""
+    return await self.driver.get_duo_focus_tof()
+
+  @need_setup_finished
+  async def set_duo_focus_tof(self, first: float, second: float) -> None:
+    """Set the Echo duo focus time-of-flight values."""
+    await self.driver.set_duo_focus_tof(first, second)
+
+  @need_setup_finished
+  async def get_scan_positions(self) -> EchoScanPositions:
+    """Return scanner calibration position flags."""
+    return await self.driver.get_scan_positions()
+
+  @need_setup_finished
+  async def get_calibration_plate_names(self) -> list[str]:
+    """Return Echo calibration plate type names."""
+    return await self.driver.get_calibration_plate_names()
+
+  @need_setup_finished
+  async def get_focus_state(self) -> EchoFocusState:
+    """Return read-side Echo focus and calibration state."""
+    return await self.driver.get_focus_state()
+
+  @need_setup_finished
+  async def calibrate_power(
+    self,
+    timeout: Optional[float] = None,
+  ) -> EchoPowerCalibrationResult:
+    """Run low-level Echo power calibration."""
+    return await self.driver.calibrate_power(timeout=timeout)
+
+  @need_setup_finished
+  async def commit_power_calibration(
+    self,
+    amp_feedback: float,
+    pulse_energy: float,
+    vpp: float,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Commit low-level Echo power calibration values."""
+    await self.driver.commit_power_calibration(
+      amp_feedback=amp_feedback,
+      pulse_energy=pulse_energy,
+      vpp=vpp,
+      timeout=timeout,
+    )
+
+  @need_setup_finished
+  async def retract_source_gripper_for_scan_calibration(
+    self,
+    barcode_location: str = "Right-Side",
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Retract the source gripper using the scanner-calibration path."""
+    await self.driver.retract_source_gripper_for_scan_calibration(
+      barcode_location=barcode_location,
+      timeout=timeout,
+    )
+
+  @need_setup_finished
+  async def retract_destination_gripper_for_scan_calibration(
+    self,
+    barcode_location: str = "Right-Side",
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Retract the destination gripper using the scanner-calibration path."""
+    await self.driver.retract_destination_gripper_for_scan_calibration(
+      barcode_location=barcode_location,
+      timeout=timeout,
+    )
+
+  @need_setup_finished
+  async def calibrate_scanner(
+    self,
+    barcode_location: str = "Right-Side",
+    timeout: Optional[float] = None,
+  ) -> EchoScannerCalibrationResult:
+    """Run low-level Echo scanner calibration."""
+    return await self.driver.calibrate_scanner(
+      barcode_location=barcode_location,
+      timeout=timeout,
+    )
+
+  @need_setup_finished
+  async def cancel_scanner_calibration(self, timeout: Optional[float] = None) -> None:
+    """Cancel scanner calibration in progress."""
+    await self.driver.cancel_scanner_calibration(timeout=timeout)
+
+  @need_setup_finished
+  async def focal_sweep(self, params: EchoFocalSweepParams) -> Dict[str, Any]:
+    """Run the low-level Echo ``FocalSweep`` calibration RPC."""
+    return await self.driver.focal_sweep(params)
 
   @need_setup_finished
   async def get_all_protocol_names(self) -> list[str]:
@@ -2839,6 +3852,16 @@ class Echo(Device):
     return await self.driver.get_fluid_info(fluid_type)
 
   @need_setup_finished
+  async def get_all_fluid_types(self) -> list[EchoFluidInfo]:
+    """Return all Echo fluid types."""
+    return await self.driver.get_all_fluid_types()
+
+  @need_setup_finished
+  async def get_fluids_for_plate(self, plate_type: str) -> list[EchoFluidInfo]:
+    """Return Echo fluid types compatible with the requested plate."""
+    return await self.driver.get_fluids_for_plate(plate_type)
+
+  @need_setup_finished
   async def get_transfer_volume_max_nl(self, plate_type: str) -> Any:
     """Return the maximum transfer volume, in nL, for the given plate type."""
     return await self.driver.get_transfer_volume_max_nl(plate_type)
@@ -2852,6 +3875,11 @@ class Echo(Device):
   async def get_transfer_volume_increment_nl(self, plate_type: str) -> Any:
     """Return the transfer increment, in nL, for the given plate type."""
     return await self.driver.get_transfer_volume_increment_nl(plate_type)
+
+  @need_setup_finished
+  async def get_transfer_volume_resolution_nl(self, plate_type: str) -> Any:
+    """Return the transfer resolution, in nL, for the given plate type."""
+    return await self.driver.get_transfer_volume_resolution_nl(plate_type)
 
   @need_setup_finished
   async def check_source_plate_insert_compatibility(self, plate_type: str) -> Dict[str, Any]:

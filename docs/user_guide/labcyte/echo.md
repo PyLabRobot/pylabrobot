@@ -8,6 +8,12 @@ Supported operations:
 
 - fetch instrument identity with `get_instrument_info()`
 - fetch Echo configuration, power calibration, protocol names, protocol payloads, and fluid metadata
+- fetch typed power calibration, focus time-of-flight, scan-position, fluid, and plate-insert
+  metadata
+- fetch typed Echo source/destination plate catalogs with `get_echo_plate_catalog()`
+- reconcile PLR plates against Echo-defined plate types with `resolve_echo_plate_type()`
+- clone/delete destination plate definitions through the direct Echo `SetPlateInfoEx` /
+  `RemovePlateInfo` API
 - lock and unlock the instrument session
 - poll `GetDIOEx2` through `get_access_state()`
 - check registered source and destination plate presence
@@ -17,6 +23,8 @@ Supported operations:
 - home all axes
 - control the coupling-fluid pump direction, bubbler pump, and bubbler nozzle
 - control the vacuum pump/nozzle and ionizer
+- read and set Echo focus time-of-flight values, and expose low-level power/scanner calibration
+  RPCs
 - upload source plate maps with `set_plate_map()`
 - run `PlateSurvey`, retrieve `GetSurveyData`, and run `DryPlate`
 - build Echo protocol XML from PLR source wells, destination wells, and volumes
@@ -58,6 +66,17 @@ Transfer notes:
 - `EchoTransferPrintOptions` controls the nested `PrintOptions` payload
 - Echo transfer volumes are in nL by default; pass `volume_unit="uL"` to use PLR-style uL inputs
 - successful transfer reports update PLR volume trackers only when PLR volume tracking is enabled
+
+Plate catalog notes:
+
+- the Echo instrument catalog is authoritative for Echo protocol plate type names
+- if `source_plate_type` or `destination_plate_type` is omitted, PLR uses the plate resource's
+  `model` only when that exact name exists in the relevant Echo catalog
+- transfer and load workflows fail before motion or mutation when the Echo does not know the
+  requested plate type
+- PLR validates Echo `Rows` / `Columns` against the PLR plate grid before transfer planning
+- source survey dimensions use Echo-reported columns, while PLR wells and volume trackers remain the
+  source of transfer intent and local state
 
 ## Architecture
 
@@ -315,9 +334,75 @@ source survey, status reads, protocol XML generation, `DoWellTransfer`, and stru
 parsing. When volume tracking is enabled, survey data can set measured source volumes and successful
 transfer report entries move actual dispensed volume from source wells to destination wells.
 
+## Focus And Calibration
+
+PyEcho covers the same Medman transport and most normal operation calls, but its Focus tab is not
+implemented. The PLR Echo driver includes the Focus/Calibration RPCs decoded from the installed Echo
+client binaries and verified with packet capture on `echo-win`.
+
+Read-side helpers:
+
+- `get_echo_power_calibration()` parses `GetPwrCal` into typed amplitude, reference-energy,
+  feedback, and system-gain values
+- `get_focus_tof()` / `get_duo_focus_tof()` read `GetTOFFocus` / `GetDuoTOFFocus`
+- `get_coupling_fluid_sound_velocity()` reads `GetCouplingFluidSoundVelocity`
+- `get_scan_positions()` reads `GetScanPositions`
+- `get_calibration_plate_names()` reads `GetCalPlateNames`
+- `get_focus_state()` gathers the focus, scan-position, sound-velocity, and power-calibration
+  reads into one state object
+
+Low-level calibration controls:
+
+- `set_focus_tof()` and `set_duo_focus_tof()` send Echo's string-valued numeric focus setters
+- `calibrate_power()` and `commit_power_calibration()` expose `CalibratePower` / `CommitPwrCal`
+- `retract_source_gripper_for_scan_calibration()` and
+  `retract_destination_gripper_for_scan_calibration()` expose the scan-calibration retract paths
+- `calibrate_scanner()` and `cancel_scanner_calibration()` expose scanner calibration control
+- `focal_sweep()` exposes the low-level `FocalSweep` RPC
+
+The read-side calls and no-op focus setter shape were live-verified. The calibration calls are
+deliberately low-level and require an instrument lock because they can move hardware or change
+calibration state.
+
+Additional catalog helpers decoded during the same pass:
+
+- `get_dio_ex()` for raw `GetDIOEx`
+- `get_all_fluid_types()` and `get_fluids_for_plate()`
+- `get_all_plate_inserts()`
+- `get_transfer_volume_resolution_nl()`
+
+## Echo Plate Definitions
+
+PLR reads the source and destination plate definitions already registered on the Echo. It can create
+a minimal transfer-compatible `Plate` from `EchoPlateInfo` with `create_plate_from_echo_info()`, but
+that helper is not a manufacturer-precise labware definition.
+
+PLR can clone/delete destination plate definitions through the direct Echo Medman API, without Echo
+Client Utility or vendor DLLs:
+
+- `clone_destination_plate_definition(base_plate_type, new_plate_type)` reads the existing
+  destination definition, sends the captured `SetPlateInfoEx` payload shape, and verifies the new
+  name appears in the destination catalog
+- `delete_destination_plate_definition(plate_type)` sends `RemovePlateInfo` and verifies the name
+  leaves the destination catalog
+- `set_plate_info_ex()` and `remove_plate_info()` remain low-level escape hatches
+
+Source plate definition writes are not exposed by PLR. In testing, the Echo Client Utility write
+surface sent `SetPlateInfoEx`, accepted a cloned source definition, but registered it in the
+destination catalog even when the source usage fields were preserved. Treat source definitions as
+read-only from PLR for now.
+
+No pcapng capture is needed for catalog reconciliation, validation, transfer, survey, loading
+existing Echo-defined plates, or cloning/deleting destination definitions. The destination write path
+was decoded from an Echo Client Utility capture and verified by sending `SetPlateInfoEx` /
+`RemovePlateInfo` directly to the instrument. A future capture is still useful if source
+plate-definition writes need to be decoded beyond the observed `SetPlateInfoEx` behavior.
+
 ## Scope
 
 This integration does not yet implement:
 
 - live validation of every low-level actuator and workflow call on every Echo 650 firmware build
 - a CSV picklist parser or UI layer
+- arbitrary plate-definition editing beyond cloning an existing destination definition
+- source plate-definition writes

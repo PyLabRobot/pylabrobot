@@ -17,11 +17,20 @@ from pylabrobot.labcyte.echo import (
   EchoDryPlateMode,
   EchoDryPlateParams,
   EchoEvent,
+  EchoFocalSweepParams,
+  EchoFocusState,
   EchoFluidInfo,
   EchoPlateAccessBackend,
+  EchoPlateCatalog,
+  EchoPlateInfo,
   EchoPlateMap,
   EchoPlateWorkflowResult,
+  EchoPowerCalibration,
+  EchoPowerCalibrationResult,
   EchoProtocolError,
+  EchoResolvedPlateType,
+  EchoScanPositions,
+  EchoScannerCalibrationResult,
   EchoSurveyData,
   EchoSurveyParams,
   EchoSurveyRunResult,
@@ -31,6 +40,7 @@ from pylabrobot.labcyte.echo import (
   EchoTransferPrintOptions,
   EchoTransferResult,
   build_echo_transfer_plan,
+  create_plate_from_echo_info,
 )
 from pylabrobot.resources import Plate, Resource, Well, create_ordered_items_2d, set_volume_tracking
 
@@ -164,6 +174,20 @@ def _make_plate(name: str, model: str) -> Plate:
   )
 
 
+def _make_echo_plate_info(name: str, *, rows: int = 2, columns: int = 3) -> EchoPlateInfo:
+  return EchoPlateInfo(
+    name=name,
+    rows=rows,
+    columns=columns,
+    well_capacity=65.0,
+    fluid="DMSO",
+    plate_format=f"{rows * columns}",
+    usage="Source",
+    barcode_location="Right-Side",
+    raw={"Rows": rows, "Columns": columns},
+  )
+
+
 class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.driver = EchoDriver(host="echo.local", timeout=1.0)
@@ -245,6 +269,185 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn("<GetEchoConfiguration", payload)
     self.assertIn('&lt;Configuration internal="true"&gt;', payload)
     self.assertEqual(config, '<Configuration internal="true"></Configuration>')
+
+  async def test_get_dio_ex_returns_raw_payload(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="GetDIOEx",
+        values={"MAP": True, "FSS": False},
+        succeeded=None,
+        status=None,
+      )
+    )
+
+    values = await self.driver.get_dio_ex()
+
+    self.assertEqual(values, {"MAP": True, "FSS": False})
+    self.driver._rpc.assert_awaited_once_with("GetDIOEx")
+
+  async def test_get_echo_power_calibration_parses_payload(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="GetPwrCal",
+        values={
+          "SUCCEEDED": True,
+          "Status": "OK",
+          "PwrCal": (
+            '<Amp type="xsd:double">1.60000002384186</Amp>'
+            '<Reference type="xsd:double">1.02825951576233</Reference>'
+            '<AmpFeedback type="xsd:double">1.01453804969788</AmpFeedback>'
+            '<SysGain type="xsd:double">1</SysGain>'
+          ),
+        },
+        succeeded=True,
+        status="OK",
+      )
+    )
+
+    calibration = await self.driver.get_echo_power_calibration()
+
+    self.assertEqual(
+      calibration,
+      EchoPowerCalibration(
+        amplitude=1.60000002384186,
+        reference_energy=1.02825951576233,
+        amp_feedback=1.01453804969788,
+        system_gain=1.0,
+        raw={
+          "SUCCEEDED": True,
+          "Status": "OK",
+          "PwrCal": (
+            '<Amp type="xsd:double">1.60000002384186</Amp>'
+            '<Reference type="xsd:double">1.02825951576233</Reference>'
+            '<AmpFeedback type="xsd:double">1.01453804969788</AmpFeedback>'
+            '<SysGain type="xsd:double">1</SysGain>'
+          ),
+        },
+      ),
+    )
+
+  async def test_get_focus_state_fetches_read_side_focus_payloads(self):
+    await self.driver.setup()
+    self.driver.get_focus_tof = AsyncMock(return_value=35.1115)
+    self.driver.get_duo_focus_tof = AsyncMock(return_value=(0.0, 35.1115))
+    self.driver.get_coupling_fluid_sound_velocity = AsyncMock(return_value=1488.3)
+    scan_positions = EchoScanPositions(left_up=True, right_up=False)
+    power_calibration = EchoPowerCalibration(
+      amplitude=1.6,
+      reference_energy=1.0,
+      amp_feedback=1.01,
+      system_gain=1.0,
+    )
+    self.driver.get_scan_positions = AsyncMock(return_value=scan_positions)
+    self.driver.get_echo_power_calibration = AsyncMock(return_value=power_calibration)
+
+    state = await self.driver.get_focus_state()
+
+    self.assertEqual(
+      state,
+      EchoFocusState(
+        tof_focus=35.1115,
+        duo_tof_focus=(0.0, 35.1115),
+        coupling_fluid_sound_velocity=1488.3,
+        scan_positions=scan_positions,
+        power_calibration=power_calibration,
+      ),
+    )
+
+  async def test_focus_tof_methods_parse_and_serialize_echo_string_values(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetTOFFocus",
+          values={"SUCCEEDED": True, "Status": "OK", "TOFFocus": "35.1115"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetDuoTOFFocus",
+          values={"SUCCEEDED": True, "Status": "OK", "TOFFocus": ["0", "35.1115"]},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="SetTOFFocus",
+          values={"SUCCEEDED": True, "Status": "OK"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="SetDuoTOFFocus",
+          values={"SUCCEEDED": True, "Status": "OK"},
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
+
+    self.assertEqual(await self.driver.get_focus_tof(), 35.1115)
+    self.assertEqual(await self.driver.get_duo_focus_tof(), (0.0, 35.1115))
+    with self.assertRaisesRegex(EchoCommandError, "active lock"):
+      await self.driver.set_focus_tof(35.1115)
+    self.driver._lock_held = True
+    await self.driver.set_focus_tof(35.1115)
+    await self.driver.set_duo_focus_tof(0, 35.1115)
+
+    self.assertEqual(
+      self.driver._rpc.await_args_list[2].args,
+      ("SetTOFFocus", (("TOFFocus", "string", "35.1115"),)),
+    )
+    self.assertEqual(
+      self.driver._rpc.await_args_list[3].args,
+      (
+        "SetDuoTOFFocus",
+        (("TOFFocus", "string", "0"), ("TOFFocus", "string", "35.1115")),
+      ),
+    )
+
+  async def test_scan_positions_and_cal_plate_names_parse_payloads(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetScanPositions",
+          values={
+            "SUCCEEDED": True,
+            "Status": "OK",
+            "ScanPositions": (
+              '<LeftUp type="xsd:boolean">True</LeftUp>'
+              '<LeftDown type="xsd:boolean">False</LeftDown>'
+              '<RightUp type="xsd:boolean">False</RightUp>'
+              '<RightDown type="xsd:boolean">True</RightDown>'
+              '<BottomUp type="xsd:boolean">True</BottomUp>'
+              '<BottomDown type="xsd:boolean">False</BottomDown>'
+            ),
+          },
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetCalPlateNames",
+          values={
+            "SUCCEEDED": True,
+            "Status": "Unspecified Error.",
+            "PlateType": ["InternalRegistration", "Labcyte_Reference_Plate"],
+          },
+          succeeded=True,
+          status="Unspecified Error.",
+        ),
+      ]
+    )
+
+    scan_positions = await self.driver.get_scan_positions()
+    names = await self.driver.get_calibration_plate_names()
+
+    self.assertEqual(scan_positions.left_up, True)
+    self.assertEqual(scan_positions.left_down, False)
+    self.assertEqual(scan_positions.right_down, True)
+    self.assertEqual(names, ["InternalRegistration", "Labcyte_Reference_Plate"])
 
   async def test_get_access_state_parses_known_signals(self):
     await self.driver.setup()
@@ -852,6 +1055,246 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(names, ["1536LDV_Dest", "Corning 3764 Black Clear Bottom"])
 
+  async def test_get_echo_plate_info_parses_typed_payload(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="GetPlateInfoEx",
+        values={
+          "SUCCEEDED": True,
+          "Status": "OK",
+          "Rows": "16",
+          "Columns": "24",
+          "WellCapacity": "65.0",
+          "Fluid": "DMSO",
+          "PlateFormat": "384",
+          "PlateUsage": "Source",
+          "BarcodeLoc": "Right-Side",
+        },
+        succeeded=True,
+        status="OK",
+      )
+    )
+
+    info = await self.driver.get_echo_plate_info("384PP_DMSO2")
+
+    self.assertEqual(info.name, "384PP_DMSO2")
+    self.assertEqual(info.rows, 16)
+    self.assertEqual(info.columns, 24)
+    self.assertEqual(info.well_capacity, 65.0)
+    self.assertEqual(info.fluid, "DMSO")
+    self.assertEqual(info.barcode_location, "Right-Side")
+    self.assertEqual(info.raw["Rows"], "16")
+
+  async def test_get_plate_info_flattens_nested_plate_type_ex_payload(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="GetPlateInfoEx",
+        values={
+          "SUCCEEDED": True,
+          "Status": "OK",
+          "PlateTypeEx": (
+            '<Name type="xsd:string">384PP_Dest</Name>'
+            '<Rows type="xsd:int">16</Rows>'
+            '<Columns type="xsd:int">24</Columns>'
+            '<WellCapacity type="xsd:double">50</WellCapacity>'
+            '<PlateFormat type="xsd:string">384PP_Dest</PlateFormat>'
+            '<PlateUsage type="xsd:string">DEST</PlateUsage>'
+          ),
+        },
+        succeeded=True,
+        status="OK",
+      )
+    )
+
+    values = await self.driver.get_plate_info("384PP_Dest")
+    info = await self.driver.get_echo_plate_info("384PP_Dest")
+
+    self.assertEqual(values["Name"], "384PP_Dest")
+    self.assertEqual(values["Rows"], 16)
+    self.assertEqual(values["Columns"], 24)
+    self.assertEqual(info.name, "384PP_Dest")
+    self.assertEqual(info.rows, 16)
+    self.assertEqual(info.columns, 24)
+    self.assertEqual(info.plate_format, "384PP_Dest")
+
+  async def test_get_echo_plate_catalog_fetches_source_and_destination_info(self):
+    await self.driver.setup()
+    self.driver.get_all_source_plate_names = AsyncMock(return_value=["SRC_A"])
+    self.driver.get_all_destination_plate_names = AsyncMock(return_value=["DST_A"])
+    self.driver.get_echo_plate_info = AsyncMock(
+      side_effect=[
+        _make_echo_plate_info("SRC_A"),
+        _make_echo_plate_info("DST_A"),
+      ]
+    )
+
+    catalog = await self.driver.get_echo_plate_catalog()
+
+    self.assertEqual(set(catalog.source), {"SRC_A"})
+    self.assertEqual(set(catalog.destination), {"DST_A"})
+    self.assertEqual(catalog.source["SRC_A"].columns, 3)
+    self.assertEqual(catalog.destination["DST_A"].rows, 2)
+
+  async def test_set_plate_info_ex_serializes_captured_payload_shape(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="SetPlateInfoEx",
+        values={"SUCCEEDED": True, "Status": "OK"},
+        succeeded=True,
+        status="OK",
+      )
+    )
+
+    await self.driver.set_plate_info_ex(
+      "CODEX_TMP_DST",
+      {
+        "Name": "384PP_Dest",
+        "Mfg": "Labcyte",
+        "Rows": 16,
+        "Columns": 24,
+        "WellCapacity": 50,
+        "BarcodeLoc": "Left-Side",
+        "PlateFormat": "384PP_Dest",
+        "PlateUsage": "DEST",
+      },
+    )
+
+    self.driver._rpc.assert_awaited_once()
+    method, params = self.driver._rpc.await_args.args
+    self.assertEqual(method, "SetPlateInfoEx")
+    self.assertEqual(params[0], ("PlateTypeEx", "string", "CODEX_TMP_DST"))
+    self.assertEqual(params[1][0], "PlateTypeEx")
+    self.assertEqual(params[1][1], "xml_element")
+    plate_type_ex = ET.fromstring(params[1][2])
+    values = {child.tag.rsplit("}", 1)[-1]: child.text or "" for child in plate_type_ex}
+    self.assertEqual(values["Name"], "CODEX_TMP_DST")
+    self.assertEqual(values["Mfg"], "Labcyte")
+    self.assertEqual(values["Rows"], "16")
+    self.assertEqual(values["Columns"], "24")
+    self.assertEqual(values["PlateUsage"], "DEST")
+
+  async def test_clone_destination_plate_definition_uses_direct_set_plate_info_ex(self):
+    await self.driver.setup()
+    base_info = _make_echo_plate_info("384PP_Dest")
+    cloned_info = _make_echo_plate_info("CODEX_TMP_DST")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      side_effect=[
+        EchoPlateCatalog(source={}, destination={"384PP_Dest": base_info}),
+        EchoPlateCatalog(
+          source={},
+          destination={"384PP_Dest": base_info, "CODEX_TMP_DST": cloned_info},
+        ),
+      ]
+    )
+    raw_values = {"Name": "384PP_Dest", "Rows": 2, "Columns": 3, "PlateUsage": "DEST"}
+    self.driver.get_plate_info = AsyncMock(return_value=raw_values)
+    self.driver.set_plate_info_ex = AsyncMock()
+
+    info = await self.driver.clone_destination_plate_definition(
+      "384PP_Dest",
+      "CODEX_TMP_DST",
+    )
+
+    self.assertEqual(info.name, "CODEX_TMP_DST")
+    self.driver.get_plate_info.assert_awaited_once_with("384PP_Dest")
+    self.driver.set_plate_info_ex.assert_awaited_once_with("CODEX_TMP_DST", raw_values)
+
+  async def test_delete_destination_plate_definition_removes_and_verifies(self):
+    await self.driver.setup()
+    dest_info = _make_echo_plate_info("CODEX_TMP_DST")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      side_effect=[
+        EchoPlateCatalog(source={}, destination={"CODEX_TMP_DST": dest_info}),
+        EchoPlateCatalog(source={}, destination={}),
+      ]
+    )
+    self.driver.remove_plate_info = AsyncMock()
+
+    deleted = await self.driver.delete_destination_plate_definition("CODEX_TMP_DST")
+
+    self.assertTrue(deleted)
+    self.driver.remove_plate_info.assert_awaited_once_with("CODEX_TMP_DST")
+
+  async def test_delete_destination_plate_definition_refuses_source_type(self):
+    await self.driver.setup()
+    src_info = _make_echo_plate_info("384PP_DMSO2")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(source={"384PP_DMSO2": src_info}, destination={})
+    )
+    self.driver.remove_plate_info = AsyncMock()
+
+    with self.assertRaisesRegex(EchoCommandError, "Refusing to delete source"):
+      await self.driver.delete_destination_plate_definition("384PP_DMSO2")
+
+    self.driver.remove_plate_info.assert_not_awaited()
+
+  async def test_resolve_echo_plate_type_accepts_explicit_registered_type(self):
+    await self.driver.setup()
+    plate = _make_plate("source", "WrongLocalModel")
+    info = _make_echo_plate_info("SRC_A")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(source={"SRC_A": info}, destination={})
+    )
+
+    resolved = await self.driver.resolve_echo_plate_type(
+      plate,
+      "source",
+      plate_type="SRC_A",
+    )
+
+    self.assertEqual(
+      resolved,
+      EchoResolvedPlateType(
+        side="source",
+        plate_type="SRC_A",
+        requested_plate_type="SRC_A",
+        derived_from="explicit",
+        info=info,
+      ),
+    )
+
+  async def test_resolve_echo_plate_type_uses_plate_model_when_registered(self):
+    await self.driver.setup()
+    plate = _make_plate("source", "SRC_A")
+    info = _make_echo_plate_info("SRC_A")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(source={"SRC_A": info}, destination={})
+    )
+
+    resolved = await self.driver.resolve_echo_plate_type(plate, "src")
+
+    self.assertEqual(resolved.plate_type, "SRC_A")
+    self.assertEqual(resolved.derived_from, "plate.model")
+
+  async def test_resolve_echo_plate_type_rejects_missing_catalog_type(self):
+    await self.driver.setup()
+    plate = _make_plate("source", "NOT_REGISTERED")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(
+        source={"SRC_A": _make_echo_plate_info("SRC_A")},
+        destination={},
+      )
+    )
+
+    with self.assertRaisesRegex(EchoCommandError, "NOT_REGISTERED.*SRC_A"):
+      await self.driver.resolve_echo_plate_type(plate, "source")
+
+  async def test_resolve_echo_plate_type_rejects_dimension_mismatch(self):
+    await self.driver.setup()
+    plate = _make_plate("source", "SRC_A")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(
+        source={"SRC_A": _make_echo_plate_info("SRC_A", rows=16, columns=24)},
+        destination={},
+      )
+    )
+
+    with self.assertRaisesRegex(EchoCommandError, "3 columns x 2 rows.*24 columns x 16 rows"):
+      await self.driver.resolve_echo_plate_type(plate, "source")
+
   async def test_get_all_protocol_names_preserves_duplicate_tags(self):
     await self.driver.setup()
     fake_writer = _FakeWriter()
@@ -948,6 +1391,252 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
           "FCUnits": "%",
         },
       ),
+    )
+
+  async def test_get_all_fluid_types_and_fluids_for_plate_parse_repeated_payload(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetAllFluidTypes",
+          values={
+            "SUCCEEDED": True,
+            "Status": "OK",
+            "FluidType": [
+              '<FluidName type="xsd:string">DMSO</FluidName>'
+              '<Description type="xsd:string">Dimethyl sulfoxide</Description>'
+              '<FCMin type="xsd:double">70</FCMin>'
+              '<FCMax type="xsd:double">100</FCMax>'
+              '<FCUnits type="xsd:string">Percent</FCUnits>',
+              '<FluidName type="xsd:string">AQ</FluidName>'
+              '<Description type="xsd:string">Aqueous</Description>'
+              '<FCMin type="xsd:double">100</FCMin>'
+              '<FCMax type="xsd:double">100</FCMax>'
+              '<FCUnits type="xsd:string">Percent</FCUnits>',
+            ],
+          },
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetFluidsForPlate",
+          values={
+            "SUCCEEDED": True,
+            "Status": "OK",
+            "FluidType": (
+              '<FluidName type="xsd:string">DMSO</FluidName>'
+              '<Description type="xsd:string">Dimethyl sulfoxide</Description>'
+              '<FCMin type="xsd:double">70</FCMin>'
+              '<FCMax type="xsd:double">100</FCMax>'
+              '<FCUnits type="xsd:string">Percent</FCUnits>'
+            ),
+          },
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
+
+    all_fluids = await self.driver.get_all_fluid_types()
+    plate_fluids = await self.driver.get_fluids_for_plate("384PP_DMSO2")
+
+    self.assertEqual([fluid.name for fluid in all_fluids], ["DMSO", "AQ"])
+    self.assertEqual(all_fluids[0].fc_min, 70.0)
+    self.assertEqual(plate_fluids[0].name, "DMSO")
+    self.driver._rpc.assert_has_awaits(
+      [
+        call("GetAllFluidTypes"),
+        call("GetFluidsForPlate", (("PlateType", "string", "384PP_DMSO2"),)),
+      ]
+    )
+
+  async def test_plate_insert_and_transfer_resolution_helpers(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="GetAllPlateInserts",
+          values={"SUCCEEDED": True, "Status": "OK", "InsertName": ["Universal Insert"]},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="GetTransferVolResolutionNl",
+          values={"SUCCEEDED": True, "Status": "OK", "Value": "2.5"},
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
+
+    inserts = await self.driver.get_all_plate_inserts()
+    resolution = await self.driver.get_transfer_volume_resolution_nl("384PP_DMSO2")
+
+    self.assertEqual(inserts, ["Universal Insert"])
+    self.assertEqual(resolution, 2.5)
+    self.driver._rpc.assert_has_awaits(
+      [
+        call("GetAllPlateInserts"),
+        call("GetTransferVolResolutionNl", (("Value", "string", "384PP_DMSO2"),)),
+      ]
+    )
+
+  async def test_calibration_methods_require_lock_and_serialize_expected_rpc(self):
+    await self.driver.setup()
+    self.driver._rpc = AsyncMock(
+      side_effect=[
+        _RpcResult(
+          method="CalibratePower",
+          values={
+            "SUCCEEDED": True,
+            "Status": "OK",
+            "AmpFeedback": "1.01",
+            "PulseEnergy": "1.02",
+            "Vpp": "1.03",
+          },
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="CommitPwrCal",
+          values={"SUCCEEDED": True, "Status": "OK"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="RetractSrcGripper4ScanCal",
+          values={"SUCCEEDED": True, "Status": "OK"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="RetractDstGripper4ScanCal",
+          values={"SUCCEEDED": True, "Status": "OK"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="CalibrateScanner",
+          values={"SUCCEEDED": True, "Status": "OK", "BarCode": "CAL123"},
+          succeeded=True,
+          status="OK",
+        ),
+        _RpcResult(
+          method="CancelCalibrateScanner",
+          values={"SUCCEEDED": True, "Status": "OK"},
+          succeeded=True,
+          status="OK",
+        ),
+      ]
+    )
+
+    with self.assertRaisesRegex(EchoCommandError, "active lock"):
+      await self.driver.calibrate_power()
+    self.driver._lock_held = True
+    power = await self.driver.calibrate_power(timeout=30.0)
+    await self.driver.commit_power_calibration(1.01, 1.02, 1.03, timeout=30.0)
+    await self.driver.retract_source_gripper_for_scan_calibration("Right-Side")
+    await self.driver.retract_destination_gripper_for_scan_calibration("Left-Side")
+    scanner = await self.driver.calibrate_scanner("Right-Side", timeout=60.0)
+    await self.driver.cancel_scanner_calibration(timeout=5.0)
+
+    self.assertEqual(
+      power,
+      EchoPowerCalibrationResult(
+        amp_feedback=1.01,
+        pulse_energy=1.02,
+        vpp=1.03,
+        status="OK",
+        raw={
+          "SUCCEEDED": True,
+          "Status": "OK",
+          "AmpFeedback": "1.01",
+          "PulseEnergy": "1.02",
+          "Vpp": "1.03",
+        },
+      ),
+    )
+    self.assertEqual(
+      scanner,
+      EchoScannerCalibrationResult(
+        barcode="CAL123",
+        status="OK",
+        raw={"SUCCEEDED": True, "Status": "OK", "BarCode": "CAL123"},
+      ),
+    )
+    self.driver._rpc.assert_has_awaits(
+      [
+        call("CalibratePower", timeout=30.0),
+        call(
+          "CommitPwrCal",
+          (
+            ("AmpFeedback", "double", "1.01"),
+            ("PulseEnergy", "double", "1.02"),
+            ("Vpp", "double", "1.03"),
+          ),
+          timeout=30.0,
+        ),
+        call(
+          "RetractSrcGripper4ScanCal",
+          (("BarCodeLocation", "string", "Right-Side"),),
+          timeout=None,
+        ),
+        call(
+          "RetractDstGripper4ScanCal",
+          (("BarCodeLocation", "string", "Left-Side"),),
+          timeout=None,
+        ),
+        call(
+          "CalibrateScanner",
+          (("BarCodeLocation", "string", "Right-Side"),),
+          timeout=60.0,
+        ),
+        call("CancelCalibrateScanner", timeout=5.0),
+      ]
+    )
+
+  async def test_focal_sweep_serializes_params(self):
+    await self.driver.setup()
+    self.driver._lock_held = True
+    self.driver._rpc = AsyncMock(
+      return_value=_RpcResult(
+        method="FocalSweep",
+        values={"SUCCEEDED": True, "Status": "OK", "FocalSweepData": "<data />"},
+        succeeded=True,
+        status="OK",
+      )
+    )
+
+    values = await self.driver.focal_sweep(
+      EchoFocalSweepParams(
+        plate_type="384PP_DMSO2",
+        well_row=0,
+        well_column=1,
+        start_tof=30.0,
+        stop_tof=40.5,
+        increment_z=0.5,
+        start_z=1.0,
+        stop_z=2.0,
+        feature=3,
+        timeout=45.0,
+      )
+    )
+
+    self.assertEqual(values["FocalSweepData"], "<data />")
+    self.driver._rpc.assert_awaited_once_with(
+      "FocalSweep",
+      (
+        ("PlateType", "string", "384PP_DMSO2"),
+        ("WellRow", "int", "0"),
+        ("WellCol", "int", "1"),
+        ("StartToF", "double", "30"),
+        ("StopToF", "double", "40.5"),
+        ("IncrZ", "double", "0.5"),
+        ("StartZ", "double", "1"),
+        ("StopZ", "double", "2"),
+        ("Feature", "int", "3"),
+      ),
+      timeout=45.0,
     )
 
   async def test_build_echo_transfer_plan_generates_protocol_and_sparse_plate_map(self):
@@ -1266,6 +1955,12 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     destination_plate.get_well("B1").set_volume(0.0)
     set_volume_tracking(True)
 
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(
+        source={"384PP_DMSO2": _make_echo_plate_info("384PP_DMSO2")},
+        destination={"1536LDV_Dest": _make_echo_plate_info("1536LDV_Dest")},
+      )
+    )
     self.driver.get_current_source_plate_type = AsyncMock(return_value="384PP_DMSO2")
     self.driver.get_current_destination_plate_type = AsyncMock(return_value="1536LDV_Dest")
     self.driver.retrieve_parameter = AsyncMock(return_value=False)
@@ -1311,6 +2006,64 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     protocol_xml = self.driver.do_well_transfer.await_args.args[0]
     self.assertIn('<wp n="A1" dn="B1" v="5" />', protocol_xml)
 
+  async def test_transfer_wells_uses_echo_catalog_columns_for_survey(self):
+    await self.driver.setup()
+    self.driver._lock_held = True
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+    source_info = _make_echo_plate_info("384PP_DMSO2", rows=2, columns=3)
+    destination_info = _make_echo_plate_info("1536LDV_Dest", rows=2, columns=3)
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(
+        source={"384PP_DMSO2": source_info},
+        destination={"1536LDV_Dest": destination_info},
+      )
+    )
+    self.driver.get_current_source_plate_type = AsyncMock(return_value="384PP_DMSO2")
+    self.driver.get_current_destination_plate_type = AsyncMock(return_value="1536LDV_Dest")
+    self.driver.retrieve_parameter = AsyncMock(return_value=False)
+    self.driver.set_plate_map = AsyncMock()
+    self.driver.get_plate_info = AsyncMock(return_value={})
+    self.driver.close_door = AsyncMock()
+    self.driver.survey_plate = AsyncMock(return_value=None)
+    self.driver.get_dio_ex2 = AsyncMock(return_value={})
+    self.driver.get_dio = AsyncMock(return_value={})
+    self.driver.do_well_transfer = AsyncMock(
+      return_value=EchoTransferResult(report_xml=None, raw={}, succeeded=True, status="OK")
+    )
+
+    await self.driver.transfer_wells(
+      source_plate,
+      destination_plate,
+      [("A1", "B1", 5.0)],
+      do_survey=True,
+    )
+
+    survey_params = self.driver.survey_plate.await_args.args[0]
+    self.assertEqual(survey_params.num_cols, source_info.columns)
+
+  async def test_transfer_wells_rejects_unknown_echo_plate_type_before_mutation(self):
+    await self.driver.setup()
+    self.driver._lock_held = True
+    source_plate = _make_plate("source", "NOT_REGISTERED")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+    self.driver.get_echo_plate_catalog = AsyncMock(
+      return_value=EchoPlateCatalog(
+        source={"384PP_DMSO2": _make_echo_plate_info("384PP_DMSO2")},
+        destination={"1536LDV_Dest": _make_echo_plate_info("1536LDV_Dest")},
+      )
+    )
+    self.driver.set_plate_map = AsyncMock()
+
+    with self.assertRaisesRegex(EchoCommandError, "NOT_REGISTERED"):
+      await self.driver.transfer_wells(
+        source_plate,
+        destination_plate,
+        [("A1", "B1", 5.0)],
+      )
+
+    self.driver.set_plate_map.assert_not_awaited()
+
   async def test_survey_source_plate_can_update_source_plate_volumes(self):
     await self.driver.setup()
     self.driver._lock_held = True
@@ -1341,6 +2094,9 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     async def operator_pause(message: str):
       calls.append(message)
 
+    self.driver._require_registered_echo_plate_type = AsyncMock(
+      side_effect=lambda *_args, **_kwargs: calls.append("validate")
+    )
     self.driver.open_door = AsyncMock(side_effect=lambda *_args, **_kwargs: calls.append("door"))
     self.driver.open_source_plate = AsyncMock(
       side_effect=lambda *_args, **_kwargs: calls.append("present")
@@ -1358,7 +2114,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       retract_timeout=45.0,
     )
 
-    self.assertEqual(calls, ["door", "present", "source plate presented"])
+    self.assertEqual(calls, ["validate", "door", "present", "source plate presented"])
     self.assertTrue(result.plate_present)
     self.assertEqual(result.barcode, "BC123")
     self.driver.close_source_plate.assert_awaited_once_with(
@@ -1367,6 +2123,21 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       barcode="",
       timeout=45.0,
     )
+
+  async def test_load_source_plate_rejects_unknown_type_before_motion(self):
+    await self.driver.setup()
+    self.driver._lock_held = True
+    self.driver._require_registered_echo_plate_type = AsyncMock(
+      side_effect=EchoCommandError("ResolveEchoPlateType", "Unknown source plate")
+    )
+    self.driver.open_door = AsyncMock()
+    self.driver.open_source_plate = AsyncMock()
+
+    with self.assertRaisesRegex(EchoCommandError, "Unknown source plate"):
+      await self.driver.load_source_plate("NOT_REGISTERED")
+
+    self.driver.open_door.assert_not_awaited()
+    self.driver.open_source_plate.assert_not_awaited()
 
   async def test_eject_all_plates_ejects_source_before_destination(self):
     await self.driver.setup()
@@ -1407,6 +2178,39 @@ class TestEchoPlateAccessBackend(unittest.IsolatedAsyncioTestCase):
 
     driver.close_door.assert_not_awaited()
 
+  async def test_close_door_rejects_when_access_state_is_unknown(self):
+    driver = EchoDriver(host="192.168.0.25")
+    backend = EchoPlateAccessBackend(driver)
+    driver.get_access_state = AsyncMock(
+      return_value=PlateAccessState(
+        source_access_open=False,
+        destination_access_open=None,
+      )
+    )
+    driver.close_door = AsyncMock()
+
+    with self.assertRaisesRegex(EchoCommandError, "Cannot confirm destination access"):
+      await backend.close_door()
+
+    driver.close_door.assert_not_awaited()
+
+  async def test_close_door_sends_rpc_when_access_paths_are_known_closed(self):
+    driver = EchoDriver(host="192.168.0.25")
+    backend = EchoPlateAccessBackend(driver)
+    driver.get_access_state = AsyncMock(
+      return_value=PlateAccessState(
+        source_access_open=False,
+        source_access_closed=True,
+        destination_access_open=False,
+        destination_access_closed=True,
+      )
+    )
+    driver.close_door = AsyncMock()
+
+    await backend.close_door(timeout=5.0)
+
+    driver.close_door.assert_awaited_once_with(timeout=5.0)
+
 
 class TestEchoPlateMap(unittest.TestCase):
   def test_from_plate_uses_canonical_identifiers(self):
@@ -1420,6 +2224,19 @@ class TestEchoPlateMap(unittest.TestCase):
 
     self.assertEqual(plate_map.plate_type, "384PP_DMSO2")
     self.assertEqual(plate_map.well_identifiers, ("B2", "A1"))
+
+
+class TestEchoPlateFactory(unittest.TestCase):
+  def test_create_plate_from_echo_info_builds_minimal_transfer_plate(self):
+    info = _make_echo_plate_info("Custom 6", rows=2, columns=3)
+
+    plate = create_plate_from_echo_info(info)
+
+    self.assertEqual(plate.model, "Custom 6")
+    self.assertEqual(plate.num_items_x, 3)
+    self.assertEqual(plate.num_items_y, 2)
+    self.assertIs(plate.get_well("A1").parent, plate)
+    self.assertIs(plate.get_well("B3").parent, plate)
 
 
 class TestEchoDevice(unittest.IsolatedAsyncioTestCase):
