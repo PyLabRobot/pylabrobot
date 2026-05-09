@@ -5,4 +5,5 @@ from .plateloc import (
   PlateLocError,
   PlateLocSealerBackend,
   PlateLocSerialProfile,
+  PlateLocStatus,
 )

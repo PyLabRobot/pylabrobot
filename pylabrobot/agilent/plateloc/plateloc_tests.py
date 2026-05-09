@@ -9,6 +9,7 @@ from pylabrobot.agilent.plateloc import (
   PlateLocDriver,
   PlateLocError,
   PlateLocSerialProfile,
+  PlateLocStatus,
 )
 
 
@@ -132,6 +133,28 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(await driver.check_cycle_complete())
     self.assertEqual(driver.io.writes, [b"CC 00\r"])
 
+  async def test_status_snapshot_tracks_setpoints_and_live_cycle_complete(self):
+    driver = self.make_driver()
+    await driver.setup()
+
+    await driver.set_sealing_temperature(30)
+    await driver.set_sealing_time(0.5)
+    await driver.move_stage_out()
+    driver.io.queue_response(b"CCAK\r")
+
+    status = await driver.request_status()
+
+    self.assertIsInstance(status, PlateLocStatus)
+    self.assertEqual(status.port, "COM6")
+    self.assertTrue(status.connected)
+    self.assertEqual(status.target_temperature, 30)
+    self.assertEqual(status.sealing_time, 0.5)
+    self.assertEqual(status.stage_position, "open")
+    self.assertTrue(status.cycle_complete)
+    self.assertEqual(status.last_command, "check_cycle_complete")
+    self.assertEqual(status.last_response, "CCAK")
+    self.assertEqual(driver.io.writes, [b"ST 0.030\r", b"SS 0.05\r", b"SO 00\r", b"CC 00\r"])
+
   async def test_custom_command_profile(self):
     driver = self.make_driver(
       commands={
@@ -156,15 +179,29 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     device = PlateLoc(name="plateloc", port="COM6", profile=profile, serial_cls=FakeSerial)
 
     await device.setup()
+    await device.set_sealing_temperature(100)
+    await device.set_sealing_time(0.5)
     await device.sealer.seal(120, 1.2)
     await device.sealer.open()
     await device.sealer.close()
+    status = device.status_snapshot()
     await device.stop()
 
     self.assertEqual(
       device.driver.io.writes,
-      [b"ST 0.120\r", b"SS 0.12\r", b"GO 00\r", b"SO 00\r", b"SI 00\r"],
+      [
+        b"ST 0.100\r",
+        b"SS 0.05\r",
+        b"ST 0.120\r",
+        b"SS 0.12\r",
+        b"GO 00\r",
+        b"SO 00\r",
+        b"SI 00\r",
+      ],
     )
+    self.assertEqual(status.target_temperature, 120)
+    self.assertEqual(status.sealing_time, 1.2)
+    self.assertEqual(status.stage_position, "closed")
     self.assertTrue(device.driver.io.stop_called)
 
 
