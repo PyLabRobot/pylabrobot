@@ -11,6 +11,10 @@ They prevent **evaporation**, **cross-contamination**, and **spillage**, especia
 
 PyLabRobot supports integration with various sealer machines, allowing you to programmatically seal plates as part of your automation workflows.
 
+Supported serial sealers include:
+
+- Agilent PlateLoc through `pylabrobot.agilent.PlateLoc`
+
 ---
 
 ## Types of Sealers
