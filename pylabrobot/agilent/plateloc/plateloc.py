@@ -6,7 +6,7 @@ import dataclasses
 import logging
 import re
 import time
-from typing import Mapping, Optional
+from typing import Mapping, Optional, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.sealing import Sealer, SealerBackend
@@ -167,7 +167,7 @@ class PlateLocDriver(Driver):
 
   @property
   def port(self) -> str:
-    return self.io.port
+    return cast(str, self.io.port)
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()

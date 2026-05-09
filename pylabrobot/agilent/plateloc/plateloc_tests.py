@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import unittest
 from collections import deque
+from typing import Deque
 
 from pylabrobot.agilent.plateloc import (
   DEFAULT_PLATELOC_COMMANDS,
@@ -18,7 +19,7 @@ class FakeSerial:
     self.kwargs = kwargs
     self._port = kwargs["port"]
     self.writes = []
-    self.responses = deque()
+    self.responses: Deque[bytes] = deque()
     self.setup_called = False
     self.stop_called = False
     self.timeout = kwargs["timeout"]
