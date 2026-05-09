@@ -14,8 +14,9 @@ from pylabrobot.agilent import PlateLoc
 plateloc = PlateLoc(name="plateloc", port="COM6")
 
 await plateloc.setup()
-await plateloc.driver.set_sealing_temperature(175)
-await plateloc.driver.set_sealing_time(0.5)
+await plateloc.set_sealing_temperature(175)
+await plateloc.set_sealing_time(0.5)
+status = await plateloc.request_status()
 await plateloc.stop()
 ```
 
@@ -29,6 +30,20 @@ await plateloc.sealer.close()
 
 `sealer.open()` and `sealer.close()` move the stage and wait for the default stage-settle delay.
 `sealer.seal()` starts a sealing cycle after writing the requested temperature and time.
+
+The PlateLoc-specific frontend also exposes independent setpoint and status helpers:
+
+```python
+await plateloc.set_sealing_temperature(160)
+await plateloc.set_sealing_time(1.0)
+
+status = await plateloc.request_status()
+print(status.target_temperature, status.sealing_time, status.cycle_complete)
+```
+
+`request_status()` returns the best-known PLR state plus a live cycle-complete query. The direct
+serial protocol decoded here does not expose actual block temperature or actual stored time reads,
+so PLR reports the last successfully written target temperature and sealing time.
 
 ## Serial command profile
 

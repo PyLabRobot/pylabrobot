@@ -44,6 +44,20 @@ class PlateLocError(RuntimeError):
 
 
 @dataclasses.dataclass(frozen=True)
+class PlateLocStatus:
+  """Best-known PlateLoc state from direct serial control."""
+
+  port: str
+  connected: bool
+  target_temperature: Optional[float]
+  sealing_time: Optional[float]
+  stage_position: Optional[str]
+  cycle_complete: Optional[bool]
+  last_command: Optional[str]
+  last_response: Optional[str]
+
+
+@dataclasses.dataclass(frozen=True)
 class PlateLocSerialProfile:
   """Serial settings and command codes for a PlateLoc controller.
 
@@ -127,6 +141,12 @@ class PlateLocDriver(Driver):
       profile = PlateLocSerialProfile.deserialize(profile)
     self.profile = profile or PlateLocSerialProfile()
     self.timeout = timeout
+    self._connected = False
+    self._target_temperature: Optional[float] = None
+    self._sealing_time: Optional[float] = None
+    self._stage_position: Optional[str] = None
+    self._last_command: Optional[str] = None
+    self._last_response: Optional[str] = None
     self.io = serial_cls(
       human_readable_device_name="Agilent PlateLoc Sealer",
       port=port,
@@ -149,10 +169,12 @@ class PlateLocDriver(Driver):
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
+    self._connected = True
     logger.info("[PlateLoc %s] connected", self.port)
 
   async def stop(self):
     await self.io.stop()
+    self._connected = False
     logger.info("[PlateLoc %s] disconnected", self.port)
 
   @contextlib.contextmanager
@@ -181,6 +203,8 @@ class PlateLocDriver(Driver):
       timeout=self.profile.response_timeout if expect_response else self.profile.ack_timeout,
       required=expect_response,
     )
+    self._last_command = command
+    self._last_response = response
     if response is not None and raise_on_nak:
       self._raise_for_error(command, response)
     return response
@@ -219,22 +243,29 @@ class PlateLocDriver(Driver):
   async def set_sealing_temperature(self, temperature: float):
     if not (20 <= temperature <= 235):
       raise ValueError("Temperature out of range. Please enter a value between 20 and 235 C.")
-    payload = f"0.{round(temperature):03d}"
+    target_temperature = round(temperature)
+    payload = f"0.{target_temperature:03d}"
     logger.info("[PlateLoc %s] setting sealing temperature to %.1f C", self.port, temperature)
-    return await self.send_command("set_sealing_temperature", payload=payload)
+    response = await self.send_command("set_sealing_temperature", payload=payload)
+    self._target_temperature = float(target_temperature)
+    return response
 
   async def set_sealing_time(self, duration: float):
     if not (0.5 <= duration <= 12.0):
       raise ValueError("Duration out of range. Please enter a value between 0.5 and 12.0 s.")
-    payload = f"0.{round(duration * 10):02d}"
+    sealing_time_deciseconds = round(duration * 10)
+    payload = f"0.{sealing_time_deciseconds:02d}"
     logger.info("[PlateLoc %s] setting sealing time to %.2f s", self.port, duration)
-    return await self.send_command("set_sealing_time", payload=payload)
+    response = await self.send_command("set_sealing_time", payload=payload)
+    self._sealing_time = sealing_time_deciseconds / 10
+    return response
 
   async def move_stage_out(self):
     logger.info("[PlateLoc %s] moving stage out", self.port)
     response = await self.send_command("move_stage_out")
     if self.profile.stage_move_delay > 0:
       await asyncio.sleep(self.profile.stage_move_delay)
+    self._stage_position = "open"
     return response
 
   async def move_stage_in(self):
@@ -242,6 +273,7 @@ class PlateLocDriver(Driver):
     response = await self.send_command("move_stage_in")
     if self.profile.stage_move_delay > 0:
       await asyncio.sleep(self.profile.stage_move_delay)
+    self._stage_position = "closed"
     return response
 
   async def start_cycle(self):
@@ -268,6 +300,22 @@ class PlateLocDriver(Driver):
     )
     match = _ACK_RE.match(response or "")
     return match is not None and match.group("status") == "A"
+
+  def status_snapshot(self, cycle_complete: Optional[bool] = None) -> PlateLocStatus:
+    return PlateLocStatus(
+      port=self.port,
+      connected=self._connected,
+      target_temperature=self._target_temperature,
+      sealing_time=self._sealing_time,
+      stage_position=self._stage_position,
+      cycle_complete=cycle_complete,
+      last_command=self._last_command,
+      last_response=self._last_response,
+    )
+
+  async def request_status(self, query_cycle_complete: bool = True) -> PlateLocStatus:
+    cycle_complete = await self.check_cycle_complete() if query_cycle_complete else None
+    return self.status_snapshot(cycle_complete=cycle_complete)
 
   def serialize(self) -> dict:
     return {
@@ -323,5 +371,21 @@ class PlateLoc(Device):
     self.sealer = Sealer(backend=PlateLocSealerBackend(driver))
     self._capabilities = [self.sealer]
 
+  async def set_sealing_temperature(self, temperature: float):
+    return await self.driver.set_sealing_temperature(temperature)
+
+  async def set_sealing_time(self, duration: float):
+    return await self.driver.set_sealing_time(duration)
+
+  def status_snapshot(self, cycle_complete: Optional[bool] = None) -> PlateLocStatus:
+    return self.driver.status_snapshot(cycle_complete=cycle_complete)
+
+  async def request_status(self, query_cycle_complete: bool = True) -> PlateLocStatus:
+    return await self.driver.request_status(query_cycle_complete=query_cycle_complete)
+
   def serialize(self) -> dict:
-    return {**super().serialize(), "name": self.name}
+    return {
+      **super().serialize(),
+      "name": self.name,
+      "status": dataclasses.asdict(self.status_snapshot()),
+    }

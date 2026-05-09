@@ -18,5 +18,6 @@ from .plateloc import (
   PlateLocError,
   PlateLocSealerBackend,
   PlateLocSerialProfile,
+  PlateLocStatus,
 )
 from .vspin import Access2, Access2Driver, VSpin, VSpinCentrifugeBackend, VSpinDriver
