@@ -67,15 +67,16 @@ class FakeSerial:
 
 
 class PlateLocTests(unittest.IsolatedAsyncioTestCase):
-  def make_driver(self, commands=None, ack_timeout=0):
+  def make_driver(self, commands=None, ack_timeout=0, timeout=30):
     profile = PlateLocSerialProfile(
       response_timeout=0.01,
       ack_timeout=ack_timeout,
       read_delay=0,
       stage_move_delay=0,
+      cycle_poll_interval=0,
       commands=commands or DEFAULT_PLATELOC_COMMANDS,
     )
-    return PlateLocDriver(port="COM6", profile=profile, serial_cls=FakeSerial)
+    return PlateLocDriver(port="COM6", profile=profile, timeout=timeout, serial_cls=FakeSerial)
 
   async def test_setup_uses_plr_serial_wrapper_settings(self):
     driver = self.make_driver()
@@ -169,18 +170,64 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(driver.io.writes, [b"TP 0.120\r", b"TM 0.12\r"])
 
+  async def test_custom_command_acknowledgement_codes_are_parsed(self):
+    commands = {
+      **DEFAULT_PLATELOC_COMMANDS,
+      "set_sealing_temperature": "TP",
+      "check_cycle_complete": "CP",
+    }
+    driver = self.make_driver(commands=commands, ack_timeout=0.01)
+    await driver.setup()
+    driver.io.queue_response(b"TPNK(Desired Temperature is Out of Range)\r")
+
+    with self.assertRaisesRegex(PlateLocError, "Desired Temperature is Out of Range"):
+      await driver.set_sealing_temperature(120)
+
+    driver.io.queue_response(b"CPAK\r")
+    self.assertTrue(await driver.check_cycle_complete())
+    self.assertEqual(driver.io.writes, [b"TP 0.120\r", b"CP 00\r"])
+
+  async def test_seal_waits_for_cycle_completion(self):
+    profile = PlateLocSerialProfile(
+      response_timeout=0.01,
+      ack_timeout=0,
+      read_delay=0,
+      stage_move_delay=0,
+      cycle_poll_interval=0,
+    )
+    device = PlateLoc(name="plateloc", port="COM6", profile=profile, timeout=1, serial_cls=FakeSerial)
+
+    await device.setup()
+    device.driver.io.queue_response(b"CCNK\r")
+    device.driver.io.queue_response(b"CCAK\r")
+
+    await device.sealer.seal(120, 1.2)
+
+    self.assertEqual(
+      device.driver.io.writes,
+      [
+        b"ST 0.120\r",
+        b"SS 0.12\r",
+        b"GO 00\r",
+        b"CC 00\r",
+        b"CC 00\r",
+      ],
+    )
+
   async def test_device_exposes_sealer_capability(self):
     profile = PlateLocSerialProfile(
       response_timeout=0.01,
       ack_timeout=0,
       read_delay=0,
       stage_move_delay=0,
+      cycle_poll_interval=0,
     )
     device = PlateLoc(name="plateloc", port="COM6", profile=profile, serial_cls=FakeSerial)
 
     await device.setup()
     await device.set_sealing_temperature(100)
     await device.set_sealing_time(0.5)
+    device.driver.io.queue_response(b"CCAK\r")
     await device.sealer.seal(120, 1.2)
     await device.sealer.open()
     await device.sealer.close()
@@ -195,6 +242,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
         b"ST 0.120\r",
         b"SS 0.12\r",
         b"GO 00\r",
+        b"CC 00\r",
         b"SO 00\r",
         b"SI 00\r",
       ],

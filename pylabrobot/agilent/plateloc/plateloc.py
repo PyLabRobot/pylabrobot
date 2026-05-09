@@ -36,7 +36,7 @@ DEFAULT_PLATELOC_COMMANDS: Mapping[str, str] = {
   "check_cycle_complete": "CC",
 }
 
-_ACK_RE = re.compile(r"^\s*(?P<code>AC|AS|CC|CL|GO|SI|SO|SS|ST)(?P<status>[AN])K(?:\((?P<message>.*)\))?\s*$")
+_ACK_RE = re.compile(r"^\s*(?P<code>[A-Z0-9]{2})(?P<status>[AN])K(?:\((?P<message>.*)\))?\s*$")
 
 
 class PlateLocError(RuntimeError):
@@ -79,6 +79,7 @@ class PlateLocSerialProfile:
   ack_timeout: float = 10
   response_timeout: float = 2
   stage_move_delay: float = 6
+  cycle_poll_interval: float = 0.5
   command_terminator: str = "\r"
   response_terminator: bytes = b"\r"
   commands: Mapping[str, str] = dataclasses.field(
@@ -106,6 +107,7 @@ class PlateLocSerialProfile:
       "ack_timeout": self.ack_timeout,
       "response_timeout": self.response_timeout,
       "stage_move_delay": self.stage_move_delay,
+      "cycle_poll_interval": self.cycle_poll_interval,
       "command_terminator": self.command_terminator,
       "response_terminator": self.response_terminator.decode("latin1"),
       "commands": dict(self.commands),
@@ -299,7 +301,24 @@ class PlateLocDriver(Driver):
       raise_on_nak=False,
     )
     match = _ACK_RE.match(response or "")
-    return match is not None and match.group("status") == "A"
+    if match is None:
+      return False
+    expected_code = self.profile.commands.get("check_cycle_complete")
+    if expected_code is not None and match.group("code") != expected_code:
+      raise PlateLocError(
+        f"PlateLoc replied with {match.group('code')!r} to 'check_cycle_complete': {response!r}"
+      )
+    return match.group("status") == "A"
+
+  async def wait_for_cycle_complete(self, timeout: Optional[float] = None) -> bool:
+    deadline = time.time() + (self.timeout if timeout is None else timeout)
+    while True:
+      if await self.check_cycle_complete():
+        return True
+      remaining = deadline - time.time()
+      if remaining <= 0:
+        raise TimeoutError("Timeout while waiting for PlateLoc cycle to complete")
+      await asyncio.sleep(min(max(self.profile.cycle_poll_interval, 0), remaining))
 
   def status_snapshot(self, cycle_complete: Optional[bool] = None) -> PlateLocStatus:
     return PlateLocStatus(
@@ -335,7 +354,9 @@ class PlateLocSealerBackend(SealerBackend):
   async def seal(self, temperature: int, duration: float):
     await self.driver.set_sealing_temperature(temperature)
     await self.driver.set_sealing_time(duration)
-    return await self.driver.start_cycle()
+    response = await self.driver.start_cycle()
+    await self.driver.wait_for_cycle_complete()
+    return response
 
   async def open(self):
     return await self.driver.move_stage_out()
