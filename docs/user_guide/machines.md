@@ -152,7 +152,7 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|----------|-------------|--------|
 | Opentrons | Temperature Module | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | {doc}`PLR <01_material-handling/temperature-controllers/ot-temperature-controller>` / [OEM](https://opentrons.com/products/temperature-module-gen2) |
 | Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [OEM](https://www.inheco.com/cpac.html) |
-| Hamilton | Heater/Cooler | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full (v1b1) | [OEM](https://www.hamiltoncompany.com/temperature-control/heater-cooler) |
+| Hamilton | Heater/Cooler | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full (v1b1) | [OEM](https://www.hamiltoncompany.com/temperature-control/hamilton-heater-cooler) |
 
 ### Tilting
 
@@ -181,8 +181,8 @@ tr > td:nth-child(5) { width: 15%; }
 | Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | {doc}`PLR <02_analytical/plate-reading/pico>` / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
 | Molecular Devices | ImageXpress Micro | <span class="badge badge-microscopy">microscopy</span> | WIP | [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-micro-4) |
 | Molecular Devices | ImageXpress Nano | <span class="badge badge-microscopy">microscopy</span> | WIP | [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-nano) |
-| Tecan | Infinite 200 PRO | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Mostly | {doc}`PLR <02_analytical/plate-reading/tecan-infinite>` / [OEM](https://lifesciences.tecan.com/infinite-200-pro) |
-| Tecan | Spark 20M | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> | Mostly | {doc}`PLR <02_analytical/plate-reading/tecan-spark>` / [OEM](https://lifesciences.tecan.com/spark-multimode-microplate-reader) |
+| Tecan | Infinite 200 PRO | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Mostly | {doc}`PLR <02_analytical/plate-reading/tecan-infinite>` / [OEM](https://lifesciences.tecan.com/plate_readers/infinite_200_pro) |
+| Tecan | Spark 20M | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> | Mostly | {doc}`PLR <02_analytical/plate-reading/tecan-spark>` / [OEM](https://lifesciences.tecan.com/multimode-plate-reader) |
 
 
 ### Flow Cytometers

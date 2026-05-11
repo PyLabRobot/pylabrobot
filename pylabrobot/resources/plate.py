@@ -88,7 +88,7 @@ class Plate(ItemizedResource["Well"]):
       well_size_y: Size of the wells in the y direction.
       lid: Immediately assign a lid to the plate.
       plate_type: Type of the plate. One of "skirted", "semi-skirted", or "non-skirted". A
-        WIP: https://github.com/PyLabRobot/pylabrobot/pull/152#discussion_r1625831517
+        more complete description is still pending.
     """
 
     super().__init__(
