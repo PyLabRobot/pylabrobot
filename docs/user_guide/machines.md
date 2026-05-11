@@ -91,7 +91,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
 | Agilent | VSpin | Mostly | {doc}`PLR <01_material-handling/centrifuge/agilent_vspin>` / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
-| Agilent | VSpin Access2 Loader | Full | [PLR](01_material-handling/centrifuge/agilent_vspin#loader) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
+| Agilent | VSpin Access2 Loader | Full | [PLR](01_material-handling/centrifuge/agilent_vspin.ipynb#loader) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
 
 ### Fans
 
@@ -173,7 +173,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Agilent (BioTek) | Cytation 5 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | {doc}`PLR <02_analytical/plate-reading/cytation>` / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202) |
 | Agilent (BioTek) | Synergy H1 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Full | {doc}`PLR <02_analytical/plate-reading/synergyh1>` / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-h1-multimode-reader-1623193) |
 | Agilent (BioTek) | Synergy HT | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Full | [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194) |
-| Byonoy | Absorbance 96 Automate | <span class="badge badge-absorbance">absorbance</span> | Full | {doc}`PLR <02_analytical/plate-reading/byonoy/absorbance>` / [OEM](https://byonoy.com/absorbance-96-automate/) |
+| Byonoy | Absorbance 96 Automate | <span class="badge badge-absorbance">absorbance</span> | Full | {doc}`PLR <02_analytical/plate-reading/byonoy/absorbance>` / [OEM](https://byonoy.com/absorbance-automate/) |
 | Byonoy | Luminescence 96 | <span class="badge badge-luminescence">luminescence</span> | Full | {doc}`PLR <02_analytical/plate-reading/byonoy/luminescence>` / [OEM](https://byonoy.com/luminescence-96/) |
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | Full | {doc}`PLR <02_analytical/plate-reading/byonoy/luminescence>` / [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
