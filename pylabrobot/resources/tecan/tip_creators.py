@@ -30,8 +30,7 @@ class TecanTip(Tip):
   ):
     if total_tip_length <= 0:
       warnings.warn(
-        "WARNING: total_tip_length <= 0. "
-        "Please get in touch at https://discuss.pylabrobot.org",
+        "WARNING: total_tip_length <= 0. Please get in touch at https://discuss.pylabrobot.org",
         UserWarning,
         stacklevel=3,
       )
