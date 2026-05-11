@@ -162,7 +162,10 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
       return BlockStatus.IDLE
 
   async def get_hold_time(self) -> float:
-    return cast(float, self._find_module().get("holdTime", 0.0))
+    hold_time = self._find_module().get("holdTime")
+    if hold_time is None:
+      raise RuntimeError("Hold time is not available. Is a profile running?")
+    return cast(float, hold_time)
 
   async def get_current_cycle_index(self) -> int:
     """Get the zero-based index of the current cycle from the Opentrons API."""
