@@ -1,11 +1,14 @@
 import enum
 from dataclasses import dataclass
+from typing import Dict
 
 from pylabrobot.resources import Coordinate, Rotation
 
+JointPose = Dict[int, float]
+
 
 @dataclass
-class GripperLocation:
+class CartesianPose:
   """Location and rotation of the gripper. Subclass for robot-specific fields."""
 
   location: Coordinate

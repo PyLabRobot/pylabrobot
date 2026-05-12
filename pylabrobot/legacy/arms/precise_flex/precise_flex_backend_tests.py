@@ -262,7 +262,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approach_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexCartesianPose."
     ):
       await self.backend.approach("invalid")  # type: ignore
 
@@ -293,7 +293,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 OK\r\n",  # For set_grasp_data
     ]
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexCartesianPose."
     ):
       await self.backend.pick_up_resource("invalid", plate_width=1.0)  # type: ignore
 
@@ -317,7 +317,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_place_plate_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexCartesianPose."
     ):
       await self.backend.drop_resource("invalid")  # type: ignore
 
@@ -349,7 +349,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexCartesianPose."
     ):
       await self.backend.move_to("invalid")  # type: ignore
 

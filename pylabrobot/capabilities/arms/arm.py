@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
 from pylabrobot.capabilities.arms.backend import GripperArmBackend, _BaseArmBackend
-from pylabrobot.capabilities.arms.standard import GripDirection, GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose, GripDirection
 from pylabrobot.capabilities.capability import BackendParams, Capability
 from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
@@ -74,7 +74,7 @@ class _BaseArm(Capability):
 
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     """Get the current location and rotation of the gripper."""
     return await self.backend.request_gripper_location(backend_params=backend_params)
 
@@ -170,7 +170,9 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: float,
   ) -> Coordinate:
-    return to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
+    return (
+      to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
+    )
 
   def _resolve_pickup_distance(
     self, resource: Resource, pickup_distance_from_bottom: Optional[float]
@@ -264,7 +266,9 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: Optional[float],
   ) -> Tuple[Coordinate, float]:
-    pickup_distance_from_bottom = self._resolve_pickup_distance(resource, pickup_distance_from_bottom)
+    pickup_distance_from_bottom = self._resolve_pickup_distance(
+      resource, pickup_distance_from_bottom
+    )
     assert resource.get_absolute_rotation().x == 0 and resource.get_absolute_rotation().y == 0
     assert resource.get_absolute_rotation().z % 90 == 0
     location = self._pickup_location(resource, offset, pickup_distance_from_bottom)

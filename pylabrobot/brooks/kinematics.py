@@ -1,12 +1,12 @@
 """
 PF400 kinematics: FK and IK for a 4-DOF SCARA + prismatic Z + optional rail.
 
-Joint dict keys match the firmware and `PFAxis` enum:
+Joint dict keys match the firmware and `Axis` enum:
   1: J1 (Z lift) [mm]
   2: J2 (shoulder) [deg]
   3: J3 (elbow) [deg]
   4: J4 (wrist) [deg]
-  6: rail [mm] (optional; 0 if missing)
+  6: rail position [mm] (optional; 0 if missing)
 
 Task pose p = (x, y, z, yaw) with yaw in degrees. The gripper stays level
 (all revolute axes parallel to world +Z), so IK is closed-form:
@@ -17,10 +17,12 @@ Sign conventions follow right-hand rule about +Z (CCW positive looking down).
 
 from dataclasses import dataclass
 from math import atan2, cos, hypot, pi, radians, degrees, sin
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
+
+from pylabrobot.capabilities.arms.standard import JointPose
 
 if TYPE_CHECKING:
-  from pylabrobot.brooks.precise_flex import PreciseFlexGripperLocation
+  from pylabrobot.brooks.precise_flex import PreciseFlexCartesianPose
 
 
 @dataclass
@@ -38,51 +40,51 @@ class IKError(ValueError):
   """Target pose is unreachable."""
 
 
-def fk(joints: Dict[int, float], p: PF400Params) -> "PreciseFlexGripperLocation":
+def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
   """Forward kinematics.
 
   Args:
-    joints: {1: J1 mm, 2: J2 deg, 3: J3 deg, 4: J4 deg, 6: rail mm (optional)}.
+    joints: {1: J1 mm, 2: J2 deg, 3: J3 deg, 4: J4 deg, 6: rail position mm (optional)}.
     p: kinematic parameters.
   Returns:
-    PreciseFlexGripperLocation with location, rotation.yaw, rail, and
+    PreciseFlexCartesianPose with location, rotation.yaw, rail_position, and
     orientation/wrist derived from the joint configuration (J3 sign and
     wrapped J4 sign, respectively).
   """
-  from pylabrobot.brooks.precise_flex import PreciseFlexGripperLocation
+  from pylabrobot.brooks.precise_flex import PreciseFlexCartesianPose
   from pylabrobot.resources import Coordinate, Rotation
 
   j1 = joints[1]
   j2 = radians(joints[2])
   j3 = radians(joints[3])
   j4 = radians(joints[4])
-  rail = joints.get(6, 0.0)
+  rail_position = joints.get(6, 0.0)
   yaw = j2 + j3 + j4
-  x = rail + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.gripper_length * cos(yaw)
+  x = rail_position + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.gripper_length * cos(yaw)
   y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
   j3_wrapped = (joints[3] + 180) % 360 - 180
   orientation = "right" if j3_wrapped >= 0 else "left"
   wrist = "ccw" if joints[4] >= 0 else "cw"
-  return PreciseFlexGripperLocation(
+  return PreciseFlexCartesianPose(
     location=Coordinate(x, y, z),
     rotation=Rotation(-180, 90, z=degrees(yaw)),
     orientation=orientation,
     wrist=wrist,
-    rail=rail,
+    rail_position=rail_position,
   )
 
 
-def ik(pose: "PreciseFlexGripperLocation", p: PF400Params) -> Dict[int, float]:
+def ik(pose: "PreciseFlexCartesianPose", p: PF400Params) -> JointPose:
   """Inverse kinematics.
 
   Args:
-    pose: PreciseFlexGripperLocation. Requires location.{x,y,z}, rotation.yaw,
+    pose: PreciseFlexCartesianPose. Requires location.{x,y,z}, rotation.yaw,
       orientation ("right"/"left" — elbow branch), wrist ("cw"/"ccw" —
-      absolute J4 sign), and rail (mm, arm's X origin).
+      absolute J4 sign), and rail_position (mm, arm's X origin).
     p: kinematic parameters.
   Returns:
-    joints dict {1: J1 mm, 2: J2 deg, 3: J3 deg, 4: J4 deg, 6: rail mm}.
+    joints dict {1: J1 mm, 2: J2 deg, 3: J3 deg, 4: J4 deg, 6: rail position mm}.
     J4 is in (-360°, 0°] for wrist="cw" and [0°, 360°) for wrist="ccw"
     (J4=0 qualifies for both).
   Raises:
@@ -93,12 +95,12 @@ def ik(pose: "PreciseFlexGripperLocation", p: PF400Params) -> Dict[int, float]:
     raise ValueError(f"pose.orientation must be 'right' or 'left', got {pose.orientation!r}")
   if pose.wrist not in ("cw", "ccw"):
     raise ValueError(f"pose.wrist must be 'cw' or 'ccw', got {pose.wrist!r}")
-  if pose.rail is None:
-    raise ValueError("pose.rail must be set")
+  if pose.rail_position is None:
+    raise ValueError("pose.rail_position must be set")
   yaw = radians(pose.rotation.yaw)
 
-  # Shoulder is at (pose.rail, 0) in world; work in shoulder-centered coords.
-  x_w = pose.location.x - pose.rail - p.gripper_length * cos(yaw)
+  # Shoulder is at (pose.rail_position, 0) in world; work in shoulder-centered coords.
+  x_w = pose.location.x - pose.rail_position - p.gripper_length * cos(yaw)
   y_w = pose.location.y - p.gripper_length * sin(yaw)
 
   r = hypot(x_w, y_w)
@@ -130,7 +132,7 @@ def ik(pose: "PreciseFlexGripperLocation", p: PF400Params) -> Dict[int, float]:
     2: degrees(j2),
     3: degrees(j3),
     4: degrees(j4),
-    6: pose.rail,
+    6: pose.rail_position,
   }
 
 
