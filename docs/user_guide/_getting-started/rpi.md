@@ -33,4 +33,4 @@ This adds permissions to all USB devices. This is useful when you control the de
 
 ## Setting up PLR
 
-- See [installation instructions](https://docs.pylabrobot.org/user_guide/installation.html#installing-pylabrobot).
+- See [installation instructions](installation.md#installing-pylabrobot).
