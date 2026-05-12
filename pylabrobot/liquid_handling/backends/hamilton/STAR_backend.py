@@ -1368,6 +1368,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._channel_traversal_height: float = 245.0
     self._iswap_traversal_height: float = 280.0
     self._iswap_rotation_drive_x_offset_mm: Optional[float] = None
+    self._iswap_rotation_drive_predefined_increments: Optional[
+      Dict[STARBackend.RotationDriveOrientation, int]
+    ] = None
+    self._iswap_wrist_drive_predefined_increments: Optional[
+      Dict[STARBackend.WristDriveOrientation, int]
+    ] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1765,6 +1771,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
         self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+
+        rot_predefined = await self._iswap_rotation_drive_request_predefined_increments()
+        self._iswap_rotation_drive_predefined_increments = {
+          STARBackend.RotationDriveOrientation.LEFT: rot_predefined["left"],
+          STARBackend.RotationDriveOrientation.FRONT: rot_predefined["front"],
+          STARBackend.RotationDriveOrientation.RIGHT: rot_predefined["right"],
+          STARBackend.RotationDriveOrientation.PARKED_RIGHT: rot_predefined["parking"],
+        }
+
+        wrist_predefined = await self._iswap_wrist_drive_request_predefined_increments()
+        self._iswap_wrist_drive_predefined_increments = {
+          STARBackend.WristDriveOrientation.RIGHT: wrist_predefined["right"],
+          STARBackend.WristDriveOrientation.STRAIGHT: wrist_predefined["straight"],
+          STARBackend.WristDriveOrientation.LEFT: wrist_predefined["left"],
+          STARBackend.WristDriveOrientation.REVERSE: wrist_predefined["reverse"],
+        }
 
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
@@ -10210,7 +10232,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       k: STARBackend.iswap_z_drive_increment_to_mm(pz[i]) + offset for i, k in enumerate(keys)
     }
 
-  async def iswap_rotation_drive_request_predefined_positions(self) -> Dict[str, int]:
+  async def _iswap_rotation_drive_request_predefined_increments(self) -> Dict[str, int]:
     """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; the 9 position
@@ -10248,59 +10270,113 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_4": pw[8],
     }
 
-  async def request_iswap_rotation_drive_position_increments(self) -> int:
+  async def _request_iswap_rotation_drive_position_increments(self) -> int:
     """Query the iSWAP rotation drive position (units: increments) from the firmware."""
     response = await self.send_command(module="R0", command="RW", fmt="rw######")
     return cast(int, response["rw"])
 
+  @staticmethod
+  def _iswap_rotation_drive_increments_to_angle(
+    increments: int,
+    predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+  ) -> float:
+    """Piecewise-linear map encoder increments -> degrees.
+
+    [LEFT, FRONT] -> [-90, 0] and [FRONT, RIGHT] -> [0, +90]. Increments outside
+    [LEFT, RIGHT] extrapolate using each segment's slope (e.g. PARKED_RIGHT ~+91
+    deg). Anchored on the calibrated stops, so they report exactly -90/0/+90.
+    """
+    front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
+    if increments < front:
+      left = predefined_increments[STARBackend.RotationDriveOrientation.LEFT]
+      return -90.0 * (front - increments) / (front - left)
+    else:
+      right = predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]
+      return 90.0 * (increments - front) / (right - front)
+
+  @staticmethod
+  def _iswap_rotation_drive_angle_to_increments(
+    angle: float,
+    predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+  ) -> int:
+    """Inverse of `_iswap_rotation_drive_increments_to_angle`; rounds to the nearest
+    integer increment. The named stop angles (-90 / 0 / +90) return exactly the
+    EEPROM stop increments (rounding is a no-op for the stop values themselves)."""
+    front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
+    if angle < 0:
+      left = predefined_increments[STARBackend.RotationDriveOrientation.LEFT]
+      return round(front - (front - left) * (-angle / 90.0))
+    else:
+      right = predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]
+      return round(front + (right - front) * (angle / 90.0))
+
   async def iswap_rotation_drive_request_angle(self) -> float:
-    """Query the iSWAP rotation drive angle in degrees (signed, 0 deg = FRONT)."""
-    increments = await self.request_iswap_rotation_drive_position_increments()
-    return increments * STARBackend.iswap_rotation_drive_deg_per_increment
+    """Query the iSWAP rotation drive angle in degrees (signed, 0 deg = calibrated FRONT).
+
+    See `_iswap_rotation_drive_increments_to_angle` for the conversion. On a
+    calibrated STAR the FRONT stop can sit ~+/-300 incr (~1 deg) off the
+    Hamilton-default zero.
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+    """
+    if self._iswap_rotation_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    increments = await self._request_iswap_rotation_drive_position_increments()
+    return STARBackend._iswap_rotation_drive_increments_to_angle(
+      increments, self._iswap_rotation_drive_predefined_increments
+    )
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
     """Request the iSWAP rotation drive orientation.
 
-    Uses nearest-neighbour classification against firmware default `pw`
-    values. Each machine's EEPROM stores its own `pw` adjustment so the
-    actual stop position can drift by up to a few hundred increments per
-    machine; an earlier implementation used +/-50 windows and faulted on
-    machines calibrated outside that band. We now pick whichever predefined
-    stop is closest and only raise if the drive is more than ~5 deg
-    (~1700 incr) from any of them, which catches "drive is mid-transit /
-    undefined" cases without being brittle to per-machine calibration.
+    Uses nearest-neighbour classification against the per-machine EEPROM `pw`
+    values populated at setup. An earlier implementation used +/-50 windows
+    around the Hamilton factory defaults and faulted on machines calibrated
+    outside that band; we now pick whichever predefined stop is closest and
+    only raise if the drive is more than 5 deg from any predefined stop.
 
-    Defaults (W-drive resolution = 0.00310 deg/incr):
-      LEFT          W1      -29068 incr  (~ -90 deg)
-      FRONT         W2          +0 incr  (~   0 deg)
-      RIGHT         W3      +29068 incr  (~ +90 deg)
-      PARKED_RIGHT  park    +29500 incr  (~ +91 deg, beyond W3 at the stop)
+    Hamilton factory-default values shown below for reference only; the
+    per-machine EEPROM table is queried at setup and used at runtime in place
+    of these (W-drive resolution = 0.00310 deg/incr):
+      LEFT          W1      -29068 incr  (-90 deg)
+      FRONT         W2          +0 incr  ( +0 deg)
+      RIGHT         W3      +29068 incr  (+90 deg)
+      PARKED_RIGHT  park    +29500 incr  (+91 deg, beyond W3 at the stop)
 
     Returns:
       RotationDriveOrientation: The interpreted rotation orientation
         (LEFT, FRONT, RIGHT, or PARKED_RIGHT).
 
     Raises:
-      ValueError: if the measured position is more than 1700 incr (~5 deg)
-        from any predefined stop (drive is in transit or drifted).
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the measured position is more than 5 deg from any
+        predefined stop (drive is in transit or drifted).
     """
-    # Nearest-neighbour reference positions (firmware `pw` defaults).
     # PARKED_RIGHT is kept as a distinct neighbour so we can report "parked"
     # explicitly when the drive sits at the parking stop rather than the W3
     # work stop.
     # TODO: add PARKED_LEFT reference for STAR(let)s that park on the left.
-    rotation_reference_positions = {
-      STARBackend.RotationDriveOrientation.LEFT: -29068,
-      STARBackend.RotationDriveOrientation.FRONT: 0,
-      STARBackend.RotationDriveOrientation.RIGHT: 29068,
-      STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
-    }
-    tolerance_incr = 1700  # ~5 deg at iswap_rotation_drive_deg_per_increment
+    if self._iswap_rotation_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_rotation_drive_predefined_increments
+    front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
+    # Compute the per-machine increment delta for 5 deg via the same piecewise mapping the
+    # angle methods use, so the tolerance reflects the calibrated FRONT->RIGHT slope.
+    tolerance_incr = (
+      STARBackend._iswap_rotation_drive_angle_to_increments(5.0, predefined_increments) - front
+    )
 
-    motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
+    motor_position_increments = await self._request_iswap_rotation_drive_position_increments()
 
     orientation, offset = min(
-      ((o, abs(p - motor_position_increments)) for o, p in rotation_reference_positions.items()),
+      ((o, abs(p - motor_position_increments)) for o, p in predefined_increments.items()),
       key=lambda pair: pair[1],
     )
     if offset > tolerance_incr:
@@ -10308,7 +10384,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"Unknown rotation orientation: {motor_position_increments} incr is "
         f"{offset} incr (~{offset * STARBackend.iswap_rotation_drive_deg_per_increment:.2f} deg) "
         f"from the nearest predefined "
-        f"stop ({orientation.name} at {rotation_reference_positions[orientation]}). "
+        f"stop ({orientation.name} at {predefined_increments[orientation]}). "
         "Is the rotation drive in transit or mis-calibrated?"
       )
     return orientation
@@ -10337,37 +10413,78 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       raise ValueError(f"Invalid rotation drive orientation: {orientation}")
 
-  async def iswap_rotation_drive_set_angle(
+  async def iswap_rotation_drive_rotate_to_angle(
     self,
-    angle: float,
+    angle: Union[RotationDriveOrientation, float],
     speed: int = 25_000,
     acceleration: int = 170,
     current_limit: int = 5,
   ) -> None:
-    """Rotate the iSWAP rotation drive (Joint 1) to an absolute angle.
+    """Rotate the iSWAP rotation drive (Joint 1) to an absolute angle or named stop.
+
+    Passing a `RotationDriveOrientation` (LEFT / FRONT / RIGHT / PARKED_RIGHT)
+    sends the drive to the exact EEPROM-stored increment for that stop. Passing
+    a float interprets it as degrees signed from the calibrated FRONT (0 deg),
+    using piecewise-linear interpolation between the three working stops (LEFT
+    -> FRONT for negative angles, FRONT -> RIGHT for non-negative); the named
+    stop angles (-90 / 0 / +90) thus round-trip exactly. Angles beyond +/-90
+    extrapolate using each segment's slope. The wrist drive is held at its
+    current position.
+
+    Note on PARKED_RIGHT: this method moves only the rotation drive joint to
+    the parking increment via an absolute-position command - it does NOT invoke
+    the full gripper-park procedure provided by `park_iswap()` (which also
+    closes the gripper, applies a traverse-height constraint, and sets the
+    internal `_iswap_parked` state). Use `rotate_to_angle(PARKED_RIGHT)` when
+    you want only the joint motion; use `park_iswap()` when you want the full
+    safe-park.
 
     Args:
-      angle: target angle in degrees, signed. Range ~ -93..+93 deg
-        (LEFT..RIGHT). 0 deg is FRONT.
+      angle: either a `RotationDriveOrientation` member, or a float in degrees
+        signed from the calibrated FRONT (~+/-93 deg achievable window;
+        per-machine, depends on the EEPROM-stored stops populated at setup).
       speed: max velocity in increments/sec, range 20..75000.
       acceleration: in 1000 increments/sec^2, range 5..200.
       current_limit: motor current protection limiter, range 0..7.
 
-    The wrist drive is held at its current position.
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the resulting target increment is outside the hardware range.
     """
-    max_deg = (
-      STARBackend.iswap_rotation_drive_max_increment
-      * STARBackend.iswap_rotation_drive_deg_per_increment
-    )
-    if not -max_deg <= angle <= max_deg:
-      raise ValueError(f"angle must be between {-max_deg:.2f} and {max_deg:.2f} deg, got {angle}")
-
-    rotation_position = round(angle / STARBackend.iswap_rotation_drive_deg_per_increment)
-    wrist_position = await self.request_iswap_wrist_drive_position_increments()
+    if self._iswap_rotation_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_rotation_drive_predefined_increments
+    if isinstance(angle, STARBackend.RotationDriveOrientation):
+      rotation_position_increments = predefined_increments[angle]
+    else:
+      rotation_position_increments = STARBackend._iswap_rotation_drive_angle_to_increments(
+        angle, predefined_increments
+      )
+    if not (
+      STARBackend.iswap_rotation_drive_min_increment
+      <= rotation_position_increments
+      <= STARBackend.iswap_rotation_drive_max_increment
+    ):
+      rotation_position_deg = STARBackend._iswap_rotation_drive_increments_to_angle(
+        rotation_position_increments, predefined_increments
+      )
+      raise ValueError(
+        f"angle {angle} maps to {rotation_position_increments} incr ({rotation_position_deg:.2f} deg) "
+        f"(stops LEFT/FRONT/RIGHT="
+        f"{predefined_increments[STARBackend.RotationDriveOrientation.LEFT]}/"
+        f"{predefined_increments[STARBackend.RotationDriveOrientation.FRONT]}/"
+        f"{predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]}), "
+        f"outside hardware range [{STARBackend.iswap_rotation_drive_min_increment}, "
+        f"{STARBackend.iswap_rotation_drive_max_increment}]"
+      )
+    wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
 
     await self._iswap_rotate_increments(
-      rotation_position=rotation_position,
-      wrist_position=wrist_position,
+      rotation_position_increments=rotation_position_increments,
+      wrist_position_increments=wrist_position_increments,
       rotation_speed=speed,
       rotation_acceleration=acceleration,
       rotation_current_limit=current_limit,
@@ -10387,12 +10504,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     LEFT = 3
     REVERSE = 4
 
-  async def request_iswap_wrist_drive_position_increments(self) -> int:
+  async def _request_iswap_wrist_drive_position_increments(self) -> int:
     """Query the iSWAP wrist drive position (units: increments) from the firmware."""
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
 
-  async def iswap_wrist_drive_request_predefined_positions(self) -> Dict[str, int]:
+  async def _iswap_wrist_drive_request_predefined_increments(self) -> Dict[str, int]:
     """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
 
     Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; the 9 position
@@ -10444,41 +10561,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     3) RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
        => wrist points to the left of the machine.
 
-    Uses nearest-neighbour classification against firmware default `pt`
-    values. Each machine's EEPROM stores its own `pt` adjustment so the
-    actual stop position can drift by up to a few hundred increments per
-    machine; an earlier implementation used +/-50 windows and faulted on
-    machines calibrated outside that band. We now pick whichever predefined
-    stop is closest and only raise if the wrist is more than ~5 deg
-    (~1000 incr) from any of them.
+    Uses nearest-neighbour classification against the per-machine EEPROM `pt`
+    values populated at setup. An earlier implementation used +/-50 windows
+    around the Hamilton factory defaults and faulted on machines calibrated
+    outside that band; we now pick whichever predefined stop is closest and
+    only raise if the wrist is more than 5 deg from any predefined stop.
 
-    Defaults (T-drive resolution = 0.00508 deg/incr):
-      RIGHT     T1   -26577 incr  (~ -135 deg)
-      STRAIGHT  T2    -8859 incr  (~  -45 deg)
-      LEFT      T3    +8859 incr  (~  +45 deg)
-      REVERSE   T4   +26577 incr  (~ +135 deg)
+    Hamilton factory-default values shown below for reference only; the
+    per-machine EEPROM table is queried at setup and used at runtime in place
+    of these (T-drive resolution = 0.00508 deg/incr):
+      RIGHT     T1   -26577 incr  (-135 deg)
+      STRAIGHT  T2    -8859 incr  ( -45 deg)
+      LEFT      T3    +8859 incr  ( +45 deg)
+      REVERSE   T4   +26577 incr  (+135 deg)
 
     Returns:
       WristDriveOrientation: The interpreted wrist orientation
         (RIGHT, STRAIGHT, LEFT, or REVERSE).
 
     Raises:
-      ValueError: if the measured position is more than 1000 incr (~5 deg)
-        from any predefined stop (drive is in transit or drifted).
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the measured position is more than 5 deg from any
+        predefined stop (drive is in transit or drifted).
     """
-    # Nearest-neighbour reference positions (firmware `pt` defaults).
-    wrist_reference_positions = {
-      STARBackend.WristDriveOrientation.RIGHT: -26577,
-      STARBackend.WristDriveOrientation.STRAIGHT: -8859,
-      STARBackend.WristDriveOrientation.LEFT: 8859,
-      STARBackend.WristDriveOrientation.REVERSE: 26577,
-    }
-    tolerance_incr = 1000  # ~5 deg at iswap_wrist_drive_deg_per_increment
+    if self._iswap_wrist_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_wrist_drive_predefined_increments
+    tolerance_incr = round(5.0 / STARBackend.iswap_wrist_drive_deg_per_increment)  # ~1000
 
-    motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
+    motor_position_increments = await self._request_iswap_wrist_drive_position_increments()
 
     orientation, offset = min(
-      ((o, abs(p - motor_position_increments)) for o, p in wrist_reference_positions.items()),
+      ((o, abs(p - motor_position_increments)) for o, p in predefined_increments.items()),
       key=lambda pair: pair[1],
     )
     if offset > tolerance_incr:
@@ -10486,7 +10603,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"Unknown wrist orientation: {motor_position_increments} incr is "
         f"{offset} incr (~{offset * STARBackend.iswap_wrist_drive_deg_per_increment:.2f} deg) "
         f"from the nearest predefined "
-        f"stop ({orientation.name} at {wrist_reference_positions[orientation]}). "
+        f"stop ({orientation.name} at {predefined_increments[orientation]}). "
         "Is the wrist drive in transit or mis-calibrated?"
       )
     return orientation
@@ -10506,8 +10623,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def _iswap_rotate_increments(
     self,
-    rotation_position: int,  # units: increments
-    wrist_position: int,  # units: increments
+    rotation_position_increments: int,  # units: increments
+    wrist_position_increments: int,  # units: increments
     rotation_speed: int = 25_000,  # units: increments/sec
     wrist_speed: int = 20_000,  # units: increments/sec
     rotation_acceleration: int = 170,  # units: 1000 increments/sec^2
@@ -10518,8 +10635,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Absolute parallel move of rotation (Joint 1) + wrist (Joint 2) drives.
 
     Args:
-      rotation_position [increments]: signed destination, range -30032..+30032.
-      wrist_position [increments]: signed destination, range -30000..+30000.
+      rotation_position_increments: signed destination, range -30032..+30032.
+      wrist_position_increments: signed destination, range -30000..+30000.
       rotation_speed [increments/sec]: max velocity, range 20..75000.
       wrist_speed [increments/sec]: max velocity, range 20..65000.
       rotation_acceleration [1000 increments/sec^2]: range 5..200.
@@ -10530,17 +10647,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    if abs(rotation_position) > STARBackend.iswap_rotation_drive_max_increment:
+    if abs(rotation_position_increments) > STARBackend.iswap_rotation_drive_max_increment:
       raise ValueError(
-        f"rotation_position must be between "
+        f"rotation_position_increments must be between "
         f"{-STARBackend.iswap_rotation_drive_max_increment} and "
-        f"{STARBackend.iswap_rotation_drive_max_increment}; got {rotation_position}"
+        f"{STARBackend.iswap_rotation_drive_max_increment}; got {rotation_position_increments}"
       )
-    if abs(wrist_position) > STARBackend.iswap_wrist_drive_max_increment:
+    if abs(wrist_position_increments) > STARBackend.iswap_wrist_drive_max_increment:
       raise ValueError(
-        f"wrist_position must be between "
+        f"wrist_position_increments must be between "
         f"{-STARBackend.iswap_wrist_drive_max_increment} and "
-        f"{STARBackend.iswap_wrist_drive_max_increment}; got {wrist_position}"
+        f"{STARBackend.iswap_wrist_drive_max_increment}; got {wrist_position_increments}"
       )
 
     if not 20 <= rotation_speed <= 75000:
@@ -10563,11 +10680,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.send_command(
       module="R0",
       command="PA",
-      wa=f"{rotation_position:+06}",
+      wa=f"{rotation_position_increments:+06}",
       wv=f"{rotation_speed:05}",
       wr=f"{rotation_acceleration:03}",
       ww=f"{rotation_current_limit}",
-      ta=f"{wrist_position:+06}",
+      ta=f"{wrist_position_increments:+06}",
       tv=f"{wrist_speed:05}",
       tr=f"{wrist_acceleration:03}",
       tw=f"{wrist_current_limit}",
