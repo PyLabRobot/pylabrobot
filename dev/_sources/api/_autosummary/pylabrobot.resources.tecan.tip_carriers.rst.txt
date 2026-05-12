@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.tecan.tip\_carriers
+﻿:orphan:
+
+pylabrobot.resources.tecan.tip\_carriers
 ========================================
 
 .. currentmodule:: pylabrobot.resources.tecan

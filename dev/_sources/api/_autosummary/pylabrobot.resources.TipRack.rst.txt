@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.TipRack
+﻿:orphan:
+
+pylabrobot.resources.TipRack
 ============================
 
 .. currentmodule:: pylabrobot.resources

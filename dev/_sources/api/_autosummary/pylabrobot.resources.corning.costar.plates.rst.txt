@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.corning.costar.plates
+﻿:orphan:
+
+pylabrobot.resources.corning.costar.plates
 ==========================================
 
 .. currentmodule:: pylabrobot.resources.corning.costar

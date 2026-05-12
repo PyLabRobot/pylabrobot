@@ -1,4 +1,6 @@
-﻿pylabrobot.only\_fans.fan.Fan
+﻿:orphan:
+
+pylabrobot.only\_fans.fan.Fan
 =============================
 
 .. currentmodule:: pylabrobot.only_fans.fan

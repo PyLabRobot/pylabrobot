@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.tecan.tecan\_decks
+﻿:orphan:
+
+pylabrobot.resources.tecan.tecan\_decks
 =======================================
 
 .. currentmodule:: pylabrobot.resources.tecan

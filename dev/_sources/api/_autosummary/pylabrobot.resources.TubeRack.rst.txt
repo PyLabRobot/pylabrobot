@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.TubeRack
+﻿:orphan:
+
+pylabrobot.resources.TubeRack
 =============================
 
 .. currentmodule:: pylabrobot.resources

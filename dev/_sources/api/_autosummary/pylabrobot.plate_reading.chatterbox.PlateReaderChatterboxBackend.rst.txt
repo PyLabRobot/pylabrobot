@@ -1,4 +1,6 @@
-﻿pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend
+﻿:orphan:
+
+pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend
 =================================================================
 
 .. currentmodule:: pylabrobot.plate_reading.chatterbox

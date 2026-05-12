@@ -1,4 +1,6 @@
-﻿pylabrobot.io.sila.discovery.SiLADevice
+﻿:orphan:
+
+pylabrobot.io.sila.discovery.SiLADevice
 =======================================
 
 .. currentmodule:: pylabrobot.io.sila.discovery

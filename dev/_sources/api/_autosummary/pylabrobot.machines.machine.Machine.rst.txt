@@ -1,4 +1,6 @@
-﻿pylabrobot.machines.machine.Machine
+﻿:orphan:
+
+pylabrobot.machines.machine.Machine
 ===================================
 
 .. currentmodule:: pylabrobot.machines.machine

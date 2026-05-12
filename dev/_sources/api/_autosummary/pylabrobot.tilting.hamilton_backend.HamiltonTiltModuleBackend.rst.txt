@@ -1,4 +1,6 @@
-﻿pylabrobot.tilting.hamilton\_backend.HamiltonTiltModuleBackend
+﻿:orphan:
+
+pylabrobot.tilting.hamilton\_backend.HamiltonTiltModuleBackend
 ==============================================================
 
 .. currentmodule:: pylabrobot.tilting.hamilton_backend

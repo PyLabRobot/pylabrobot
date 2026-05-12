@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.corning.axygen.plates
+﻿:orphan:
+
+pylabrobot.resources.corning.axygen.plates
 ==========================================
 
 .. currentmodule:: pylabrobot.resources.corning.axygen

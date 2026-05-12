@@ -1,4 +1,6 @@
-﻿pylabrobot.tilting.tilter.Tilter
+﻿:orphan:
+
+pylabrobot.tilting.tilter.Tilter
 ================================
 
 .. currentmodule:: pylabrobot.tilting.tilter

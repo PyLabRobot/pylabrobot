@@ -1,4 +1,6 @@
-﻿pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage
+﻿:orphan:
+
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage
 ======================================================================
 
 .. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend

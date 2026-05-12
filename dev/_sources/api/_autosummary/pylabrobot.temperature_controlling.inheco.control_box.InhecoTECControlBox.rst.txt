@@ -1,4 +1,6 @@
-﻿pylabrobot.temperature\_controlling.inheco.control\_box.InhecoTECControlBox
+﻿:orphan:
+
+pylabrobot.temperature\_controlling.inheco.control\_box.InhecoTECControlBox
 ===========================================================================
 
 .. currentmodule:: pylabrobot.temperature_controlling.inheco.control_box

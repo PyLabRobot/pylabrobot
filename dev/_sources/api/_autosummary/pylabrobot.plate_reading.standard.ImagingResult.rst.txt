@@ -1,4 +1,6 @@
-﻿pylabrobot.plate\_reading.standard.ImagingResult
+﻿:orphan:
+
+pylabrobot.plate\_reading.standard.ImagingResult
 ================================================
 
 .. currentmodule:: pylabrobot.plate_reading.standard

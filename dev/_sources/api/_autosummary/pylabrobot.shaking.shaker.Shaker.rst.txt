@@ -1,4 +1,6 @@
-﻿pylabrobot.shaking.shaker.Shaker
+﻿:orphan:
+
+pylabrobot.shaking.shaker.Shaker
 ================================
 
 .. currentmodule:: pylabrobot.shaking.shaker

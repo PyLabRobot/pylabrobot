@@ -1,4 +1,6 @@
-﻿pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker
+﻿:orphan:
+
+pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker
 =======================================================
 
 .. currentmodule:: pylabrobot.heating_shaking.heater_shaker

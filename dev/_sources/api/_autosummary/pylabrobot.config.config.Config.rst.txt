@@ -1,4 +1,6 @@
-﻿pylabrobot.config.config.Config
+﻿:orphan:
+
+pylabrobot.config.config.Config
 ===============================
 
 .. currentmodule:: pylabrobot.config.config

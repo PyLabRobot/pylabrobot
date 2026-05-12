@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.tip\_tracker.TipTracker
+﻿:orphan:
+
+pylabrobot.resources.tip\_tracker.TipTracker
 ============================================
 
 .. currentmodule:: pylabrobot.resources.tip_tracker

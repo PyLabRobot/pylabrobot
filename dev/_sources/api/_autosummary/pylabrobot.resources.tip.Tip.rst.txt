@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.tip.Tip
+﻿:orphan:
+
+pylabrobot.resources.tip.Tip
 ============================
 
 .. currentmodule:: pylabrobot.resources.tip

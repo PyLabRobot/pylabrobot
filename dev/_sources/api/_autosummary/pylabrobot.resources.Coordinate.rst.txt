@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.Coordinate
+﻿:orphan:
+
+pylabrobot.resources.Coordinate
 ===============================
 
 .. currentmodule:: pylabrobot.resources

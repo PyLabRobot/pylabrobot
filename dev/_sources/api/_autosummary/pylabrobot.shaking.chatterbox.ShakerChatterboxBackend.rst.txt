@@ -1,4 +1,6 @@
-﻿pylabrobot.shaking.chatterbox.ShakerChatterboxBackend
+﻿:orphan:
+
+pylabrobot.shaking.chatterbox.ShakerChatterboxBackend
 =====================================================
 
 .. currentmodule:: pylabrobot.shaking.chatterbox

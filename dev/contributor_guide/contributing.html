@@ -635,7 +635,7 @@ make<span class="w"> </span>format-check
 <section id="writing-documentation">
 <h2>Writing documentation<a class="headerlink" href="#writing-documentation" title="Link to this heading">#</a></h2>
 <p>It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses <a class="reference external" href="https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html">Google Style Python Docstrings</a>. In addition, PyLabRobot uses <a class="reference external" href="https://docs.python.org/3/library/typing.html">type hints</a> to document the types of variables.</p>
-<p>To build the documentation, run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">docs</span></code> in the root directory. The documentation will be built in <code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code>. Run <code class="docutils literal notranslate"><span class="pre">open</span> <span class="pre">docs/_build/html/index.html</span></code> to open the documentation in your browser.</p>
+<p>To build the documentation, run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">docs</span></code> in the root directory. The documentation will be built in <code class="docutils literal notranslate"><span class="pre">docs/build</span></code>. Run <code class="docutils literal notranslate"><span class="pre">open</span> <span class="pre">docs/build/index.html</span></code> to open the documentation in your browser.</p>
 </section>
 <section id="common-tasks">
 <h2>Common Tasks<a class="headerlink" href="#common-tasks" title="Link to this heading">#</a></h2>
@@ -646,7 +646,7 @@ make<span class="w"> </span>format-check
 </section>
 <section id="adding-resources">
 <h3>Adding resources<a class="headerlink" href="#adding-resources" title="Link to this heading">#</a></h3>
-<p>If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial">partial function</a> is enough. There are many examples, like <a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/liquid_handling/resources/hamilton/tipracks.py">tipracks.py</a>. If you are writing a new kind of resource, you should probably subclass resource in a new file.</p>
+<p>If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial">partial function</a> is enough. There are many examples, like <a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/resources/hamilton/tip_racks.py">tip_racks.py</a>. If you are writing a new kind of resource, you should probably subclass resource in a new file.</p>
 <p>Make sure to add your file to the imports in <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code> of your resources package.</p>
 </section>
 <section id="writing-a-new-backend">

@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.corning.falcon.tubes
+﻿:orphan:
+
+pylabrobot.resources.corning.falcon.tubes
 =========================================
 
 .. currentmodule:: pylabrobot.resources.corning.falcon

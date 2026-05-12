@@ -1,4 +1,6 @@
-﻿pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1
+﻿:orphan:
+
+pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1
 ================================================================
 
 .. currentmodule:: pylabrobot.thermocycling.opentrons

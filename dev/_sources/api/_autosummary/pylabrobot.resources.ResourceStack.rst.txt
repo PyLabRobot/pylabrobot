@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.ResourceStack
+﻿:orphan:
+
+pylabrobot.resources.ResourceStack
 ==================================
 
 .. currentmodule:: pylabrobot.resources

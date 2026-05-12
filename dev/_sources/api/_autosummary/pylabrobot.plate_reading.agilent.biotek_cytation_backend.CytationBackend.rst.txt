@@ -1,4 +1,6 @@
-﻿pylabrobot.plate\_reading.agilent.biotek\_cytation\_backend.CytationBackend
+﻿:orphan:
+
+pylabrobot.plate\_reading.agilent.biotek\_cytation\_backend.CytationBackend
 ===========================================================================
 
 .. currentmodule:: pylabrobot.plate_reading.agilent.biotek_cytation_backend

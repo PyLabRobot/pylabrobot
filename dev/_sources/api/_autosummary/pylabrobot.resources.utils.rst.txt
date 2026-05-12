@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.utils
+﻿:orphan:
+
+pylabrobot.resources.utils
 ==========================
 
 .. currentmodule:: pylabrobot.resources

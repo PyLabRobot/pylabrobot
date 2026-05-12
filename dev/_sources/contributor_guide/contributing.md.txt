@@ -6,7 +6,7 @@ Thank you for your interest in contributing to PyLabRobot! This document will he
 
 See the installation instructions [here](../user_guide/_getting-started/installation.md). For contributing, you should install PyLabRobot from source.
 
-If this is your first time contributing to open source, check out [How to Open Source](/contributor_guide/how-to-open-source.md) for an easy introduction.
+If this is your first time contributing to open source, check out [How to Open Source](how-to-open-source.md) for an easy introduction.
 
 It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
 
@@ -55,7 +55,7 @@ PyLabRobot uses [pre-commit](https://pre-commit.com/) to run the above commands 
 
 It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses [Google Style Python Docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). In addition, PyLabRobot uses [type hints](https://docs.python.org/3/library/typing.html) to document the types of variables.
 
-To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/_build/html`. Run `open docs/_build/html/index.html` to open the documentation in your browser.
+To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/build`. Run `open docs/build/index.html` to open the documentation in your browser.
 
 ## Common Tasks
 
@@ -67,7 +67,7 @@ Make sure you write a test that fails before your fix and passes after your fix.
 
 ### Adding resources
 
-If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tipracks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/liquid_handling/resources/hamilton/tipracks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
+If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tip_racks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/resources/hamilton/tip_racks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
 
 Make sure to add your file to the imports in `__init__.py` of your resources package.
 

@@ -1,4 +1,6 @@
-﻿pylabrobot.temperature\_controlling.opentrons\_backend.OpentronsTemperatureModuleBackend
+﻿:orphan:
+
+pylabrobot.temperature\_controlling.opentrons\_backend.OpentronsTemperatureModuleBackend
 ========================================================================================
 
 .. currentmodule:: pylabrobot.temperature_controlling.opentrons_backend

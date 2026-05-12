@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.hamilton.tip\_racks
+﻿:orphan:
+
+pylabrobot.resources.hamilton.tip\_racks
 ========================================
 
 .. currentmodule:: pylabrobot.resources.hamilton

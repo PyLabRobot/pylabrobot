@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.volume\_tracker.VolumeTracker
+﻿:orphan:
+
+pylabrobot.resources.volume\_tracker.VolumeTracker
 ==================================================
 
 .. currentmodule:: pylabrobot.resources.volume_tracker

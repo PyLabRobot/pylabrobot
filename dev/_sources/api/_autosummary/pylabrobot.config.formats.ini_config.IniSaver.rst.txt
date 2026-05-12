@@ -1,4 +1,6 @@
-﻿pylabrobot.config.formats.ini\_config.IniSaver
+﻿:orphan:
+
+pylabrobot.config.formats.ini\_config.IniSaver
 ==============================================
 
 .. currentmodule:: pylabrobot.config.formats.ini_config

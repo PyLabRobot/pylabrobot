@@ -1,4 +1,6 @@
-﻿pylabrobot.thermocycling.backend.ThermocyclerBackend
+﻿:orphan:
+
+pylabrobot.thermocycling.backend.ThermocyclerBackend
 ====================================================
 
 .. currentmodule:: pylabrobot.thermocycling.backend

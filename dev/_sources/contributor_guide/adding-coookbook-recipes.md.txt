@@ -1,7 +1,7 @@
 # Contributing a New Recipe
 
 This page explains how to contribute a new **Cookbook-Recipe** to PyLabRobot.
-It is assumed you are already familiar with the general contributor workflow as outlined in the Contributor Guide (see [Contributing to PyLabRobot](https://docs.pylabrobot.org/contributor_guide/contributing.html)).
+It is assumed you are already familiar with the general contributor workflow as outlined in the Contributor Guide (see [Contributing to PyLabRobot](contributing.md)).
 
 <hr>
 

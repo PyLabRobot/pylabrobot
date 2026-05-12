@@ -1,4 +1,6 @@
-﻿pylabrobot.config.formats.json\_config.JsonSaver
+﻿:orphan:
+
+pylabrobot.config.formats.json\_config.JsonSaver
 ================================================
 
 .. currentmodule:: pylabrobot.config.formats.json_config

@@ -1,4 +1,6 @@
-﻿pylabrobot.centrifuge.vspin\_backend.VSpinBackend
+﻿:orphan:
+
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend
 =================================================
 
 .. currentmodule:: pylabrobot.centrifuge.vspin_backend

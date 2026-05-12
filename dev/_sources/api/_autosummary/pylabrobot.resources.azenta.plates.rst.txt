@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.azenta.plates
+﻿:orphan:
+
+pylabrobot.resources.azenta.plates
 ==================================
 
 .. currentmodule:: pylabrobot.resources.azenta

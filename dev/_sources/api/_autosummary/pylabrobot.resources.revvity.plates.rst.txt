@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.revvity.plates
+﻿:orphan:
+
+pylabrobot.resources.revvity.plates
 ===================================
 
 .. currentmodule:: pylabrobot.resources.revvity

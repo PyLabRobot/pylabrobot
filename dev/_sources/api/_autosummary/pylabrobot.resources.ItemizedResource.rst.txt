@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.ItemizedResource
+﻿:orphan:
+
+pylabrobot.resources.ItemizedResource
 =====================================
 
 .. currentmodule:: pylabrobot.resources

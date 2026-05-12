@@ -1,4 +1,6 @@
-﻿pylabrobot.scales.scale.Scale
+﻿:orphan:
+
+pylabrobot.scales.scale.Scale
 =============================
 
 .. currentmodule:: pylabrobot.scales.scale

@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.vwr.troughs
+﻿:orphan:
+
+pylabrobot.resources.vwr.troughs
 ================================
 
 .. currentmodule:: pylabrobot.resources.vwr

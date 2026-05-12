@@ -1,4 +1,6 @@
-﻿pylabrobot.tilting.chatterbox.TilterChatterboxBackend
+﻿:orphan:
+
+pylabrobot.tilting.chatterbox.TilterChatterboxBackend
 =====================================================
 
 .. currentmodule:: pylabrobot.tilting.chatterbox

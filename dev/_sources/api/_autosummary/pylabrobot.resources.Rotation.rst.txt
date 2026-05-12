@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.Rotation
+﻿:orphan:
+
+pylabrobot.resources.Rotation
 =============================
 
 .. currentmodule:: pylabrobot.resources

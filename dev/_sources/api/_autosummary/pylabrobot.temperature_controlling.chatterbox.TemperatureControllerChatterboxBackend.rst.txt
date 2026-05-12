@@ -1,4 +1,6 @@
-﻿pylabrobot.temperature\_controlling.chatterbox.TemperatureControllerChatterboxBackend
+﻿:orphan:
+
+pylabrobot.temperature\_controlling.chatterbox.TemperatureControllerChatterboxBackend
 =====================================================================================
 
 .. currentmodule:: pylabrobot.temperature_controlling.chatterbox

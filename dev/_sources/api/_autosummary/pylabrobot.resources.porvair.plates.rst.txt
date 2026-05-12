@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.porvair.plates
+﻿:orphan:
+
+pylabrobot.resources.porvair.plates
 ===================================
 
 .. currentmodule:: pylabrobot.resources.porvair

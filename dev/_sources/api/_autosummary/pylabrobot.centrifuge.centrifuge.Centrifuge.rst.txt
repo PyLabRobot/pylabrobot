@@ -1,4 +1,6 @@
-﻿pylabrobot.centrifuge.centrifuge.Centrifuge
+﻿:orphan:
+
+pylabrobot.centrifuge.centrifuge.Centrifuge
 ===========================================
 
 .. currentmodule:: pylabrobot.centrifuge.centrifuge

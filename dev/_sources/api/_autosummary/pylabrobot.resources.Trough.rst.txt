@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.Trough
+﻿:orphan:
+
+pylabrobot.resources.Trough
 ===========================
 
 .. currentmodule:: pylabrobot.resources

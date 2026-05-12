@@ -1,4 +1,6 @@
-﻿pylabrobot.liquid\_handling.backends.hamilton.base.HamiltonLiquidHandler
+﻿:orphan:
+
+pylabrobot.liquid\_handling.backends.hamilton.base.HamiltonLiquidHandler
 ========================================================================
 
 .. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.base

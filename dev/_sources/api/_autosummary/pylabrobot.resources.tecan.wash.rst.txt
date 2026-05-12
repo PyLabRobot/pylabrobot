@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.tecan.wash
+﻿:orphan:
+
+pylabrobot.resources.tecan.wash
 ===============================
 
 .. currentmodule:: pylabrobot.resources.tecan

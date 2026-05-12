@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.PetriDish
+﻿:orphan:
+
+pylabrobot.resources.PetriDish
 ==============================
 
 .. currentmodule:: pylabrobot.resources

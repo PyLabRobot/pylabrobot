@@ -1,4 +1,6 @@
-﻿pylabrobot.pumps.chatterbox.PumpChatterboxBackend
+﻿:orphan:
+
+pylabrobot.pumps.chatterbox.PumpChatterboxBackend
 =================================================
 
 .. currentmodule:: pylabrobot.pumps.chatterbox

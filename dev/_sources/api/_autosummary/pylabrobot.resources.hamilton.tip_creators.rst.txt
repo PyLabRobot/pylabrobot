@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.hamilton.tip\_creators
+﻿:orphan:
+
+pylabrobot.resources.hamilton.tip\_creators
 ===========================================
 
 .. currentmodule:: pylabrobot.resources.hamilton

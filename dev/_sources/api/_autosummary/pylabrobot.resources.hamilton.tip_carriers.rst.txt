@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.hamilton.tip\_carriers
+﻿:orphan:
+
+pylabrobot.resources.hamilton.tip\_carriers
 ===========================================
 
 .. currentmodule:: pylabrobot.resources.hamilton
