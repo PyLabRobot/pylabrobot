@@ -177,11 +177,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     interpreter. Bits 14/15 encode the stop/safety state.
     """
     r = await self.driver.query_int(Axis.SHOULDER, "SR", 1)
-    if r != 8438016:
-      logger.warning("get_estop_state: SR register unexpected value %d (expected 8438016)", r)
-    b14 = (r & 0x4000) == 0x4000
-    b15 = (r & 0x8000) == 0x8000
-    return (not b14) and (not b15)
+    return (r & 0x4000) == 0 or (r & 0x8000) == 0
 
   async def gripper_get_homed_status(self) -> HomeStatus:
     return HomeStatus(await self.driver.query_int(Axis.SERVO_GRIPPER, "UI", 3))
