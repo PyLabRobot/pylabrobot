@@ -16,7 +16,7 @@ Joint dict keys match the drive node-IDs and the `KX2ArmBackend.Axis` enum:
   3: elbow [mm] (radial extension)
   4: wrist [deg]
 
-Task pose is a `GripperLocation`. The gripper clamp point is in world
+Task pose is a `CartesianPose`. The gripper clamp point is in world
 coordinates; rotation.z is yaw in degrees about world +Z, and
 rotation.x/y must be 0. Sign convention follows right-hand rule about +Z
 (CCW positive looking down).
@@ -27,7 +27,7 @@ from math import asin, atan2, ceil, cos, degrees, hypot, pi, radians, sin, sqrt,
 from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.capabilities.arms import kinematics as arm_kinematics
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.paa.kx2.config import Axis, GripperParams, KX2Config
 from pylabrobot.paa.kx2.driver import (
   JointMoveDirection,
@@ -45,7 +45,7 @@ class IKError(ValueError):
 _EPS = 1e-6
 
 
-def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLocation:
+def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> CartesianPose:
   """Forward kinematics.
 
   Args:
@@ -53,7 +53,7 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLoca
     c: arm configuration (drive-read calibration).
     t: gripper tooling (user-supplied geometry).
   Returns:
-    GripperLocation with the gripper clamp point and a yaw equivalent to
+    CartesianPose with the gripper clamp point and a yaw equivalent to
     the joints' net world orientation.
   """
   r = c.wrist_offset + c.elbow_offset + c.elbow_zero_offset + joints[Axis.ELBOW]
@@ -72,7 +72,7 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLoca
 
   yaw = radians(yaw_deg)
   gl = t.length if t.finger_side == "barcode_reader" else -t.length
-  return GripperLocation(
+  return CartesianPose(
     location=Coordinate(
       x=wrist_x + gl * sin(yaw),
       y=wrist_y - gl * cos(yaw),
@@ -82,7 +82,7 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> GripperLoca
   )
 
 
-def ik(pose: GripperLocation, c: KX2Config, t: GripperParams) -> Dict[Axis, float]:
+def ik(pose: CartesianPose, c: KX2Config, t: GripperParams) -> Dict[Axis, float]:
   """Inverse kinematics.
 
   Args:
@@ -516,8 +516,8 @@ def _yaw_lerp(yaw_a_deg: float, yaw_b_deg: float, alpha: float) -> float:
 def sample_linear_path(
   cfg: KX2Config,
   gripper_params: GripperParams,
-  start_pose: GripperLocation,
-  end_pose: GripperLocation,
+  start_pose: CartesianPose,
+  end_pose: CartesianPose,
   *,
   vel_mm_per_s: float,
   accel_mm_per_s2: float,
@@ -580,7 +580,7 @@ def sample_linear_path(
   poses: List[Dict[Axis, float]] = []
   for s in s_seq:
     alpha = (s / length) if length > 0 else 1.0
-    pose_i = GripperLocation(
+    pose_i = CartesianPose(
       location=Coordinate(
         x=sx + alpha * (ex - sx),
         y=sy + alpha * (ey - sy),

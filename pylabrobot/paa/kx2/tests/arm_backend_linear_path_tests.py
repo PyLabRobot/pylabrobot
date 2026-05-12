@@ -22,7 +22,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.paa.kx2.arm_backend import KX2ArmBackend
 from pylabrobot.paa.kx2.config import (
   Axis, AxisConfig, GripperParams, KX2Config,
@@ -138,10 +138,10 @@ def _build_backend(
   return backend
 
 
-def _target_pose() -> GripperLocation:
+def _target_pose() -> CartesianPose:
   """A pose ~30 mm away from the harness's current_joints — long enough that
   the arc-length trapezoid produces well over the 8-frame preload."""
-  return GripperLocation(
+  return CartesianPose(
     location=Coordinate(x=20.0, y=110.0, z=80.0),
     rotation=Rotation(z=15.0),
   )

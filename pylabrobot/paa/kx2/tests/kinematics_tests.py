@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperParams, KX2Config
 from pylabrobot.paa.kx2.driver import JointMoveDirection
@@ -46,7 +46,7 @@ class FKIKRoundTrip(unittest.TestCase):
   def test_roundtrip(self):
     c = _config()
     g = GripperParams(length=15.0, z_offset=3.0)
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30)
     )
     joints = kinematics.ik(pose, c, g)
@@ -60,7 +60,7 @@ class FKIKRoundTrip(unittest.TestCase):
     """Sanity: a pose at (0, R, Z, 0°) lands shoulder=0°."""
     c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
     g = GripperParams()
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=0, y=300, z=10), rotation=Rotation(z=0)
     )
     joints = kinematics.ik(pose, c, g)
@@ -83,7 +83,7 @@ class FKIKRoundTrip(unittest.TestCase):
       kinematics.fk(joints, c, g_high).location.z,
       "FK: increasing z_offset should lower the gripper",
     )
-    pose = GripperLocation(location=Coordinate(x=0, y=300, z=50), rotation=Rotation(z=0))
+    pose = CartesianPose(location=Coordinate(x=0, y=300, z=50), rotation=Rotation(z=0))
     self.assertGreater(
       kinematics.ik(pose, c, g_high)[Axis.Z],
       kinematics.ik(pose, c, g_low)[Axis.Z],
@@ -114,7 +114,7 @@ class FKIKRoundTrip(unittest.TestCase):
       ("Q2 (-x, +y)", -100.0,  100.0,  45.0),
     ]
     for label, x, y, expected_shoulder in cases:
-      pose = GripperLocation(
+      pose = CartesianPose(
         location=Coordinate(x=x, y=y, z=0), rotation=Rotation(z=0),
       )
       joints = kinematics.ik(pose, c, g)
@@ -210,7 +210,7 @@ class FKIKAnchors(unittest.TestCase):
 
   def test_ik_on_plus_y_axis(self):
     """Target on +Y axis → shoulder = 0; elbow = y - sum_of_offsets."""
-    pose = GripperLocation(location=Coordinate(x=0, y=300, z=50), rotation=Rotation(z=0))
+    pose = CartesianPose(location=Coordinate(x=0, y=300, z=50), rotation=Rotation(z=0))
     j = kinematics.ik(pose, self._cfg(), self._gripper())
     self.assertAlmostEqual(j[Axis.SHOULDER], 0.0, places=6)
     self.assertAlmostEqual(j[Axis.Z], 53.0, places=6)
@@ -218,7 +218,7 @@ class FKIKAnchors(unittest.TestCase):
     self.assertAlmostEqual(j[Axis.WRIST], 0.0, places=6)
 
   def test_ik_q1_target(self):
-    pose = GripperLocation(location=Coordinate(x=100, y=200, z=100), rotation=Rotation(z=30))
+    pose = CartesianPose(location=Coordinate(x=100, y=200, z=100), rotation=Rotation(z=30))
     j = kinematics.ik(pose, self._cfg(), self._gripper())
     self.assertAlmostEqual(j[Axis.SHOULDER], -23.474916, places=4)
     self.assertAlmostEqual(j[Axis.Z], 103.0, places=6)
@@ -226,7 +226,7 @@ class FKIKAnchors(unittest.TestCase):
     self.assertAlmostEqual(j[Axis.WRIST], 53.474916, places=4)
 
   def test_ik_q2_target(self):
-    pose = GripperLocation(location=Coordinate(x=-150, y=150, z=75), rotation=Rotation(z=-45))
+    pose = CartesianPose(location=Coordinate(x=-150, y=150, z=75), rotation=Rotation(z=-45))
     j = kinematics.ik(pose, self._cfg(), self._gripper())
     self.assertAlmostEqual(j[Axis.SHOULDER], 40.955309, places=4)
     self.assertAlmostEqual(j[Axis.Z], 78.0, places=6)
@@ -235,7 +235,7 @@ class FKIKAnchors(unittest.TestCase):
 
   def test_ik_negative_quadrant(self):
     """Target in negative-Y region — shoulder rotates past 90°."""
-    pose = GripperLocation(location=Coordinate(x=-50, y=-200, z=120), rotation=Rotation(z=90))
+    pose = CartesianPose(location=Coordinate(x=-50, y=-200, z=120), rotation=Rotation(z=90))
     j = kinematics.ik(pose, self._cfg(), self._gripper())
     self.assertAlmostEqual(j[Axis.SHOULDER], 161.995838, places=4)
     self.assertAlmostEqual(j[Axis.Z], 123.0, places=6)
@@ -247,7 +247,7 @@ class IKErrors(unittest.TestCase):
   def test_x_rotation_raises_ikerror(self):
     c = _config()
     g = GripperParams()
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=0, y=100, z=0), rotation=Rotation(x=10, z=0)
     )
     with self.assertRaises(IKError):
@@ -256,7 +256,7 @@ class IKErrors(unittest.TestCase):
   def test_y_rotation_raises_ikerror(self):
     c = _config()
     g = GripperParams()
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=0, y=100, z=0), rotation=Rotation(y=10, z=0)
     )
     with self.assertRaises(IKError):
@@ -327,7 +327,7 @@ class GripperFingerSide(unittest.TestCase):
   def test_proximity_roundtrip(self):
     c = _config()
     g = GripperParams(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=100, y=200, z=50), rotation=Rotation(z=30)
     )
     joints = kinematics.ik(pose, c, g)
@@ -342,7 +342,7 @@ class GripperFingerSide(unittest.TestCase):
     shoulder=0 but the wrist sits 2*gripper_length further out for
     barcode_reader (gripper points +y away from base) than for
     proximity_sensor (gripper points -y back toward base)."""
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=0, y=300, z=0), rotation=Rotation(z=0)
     )
     c = _config()
@@ -360,15 +360,15 @@ class ShoulderSnapAt180(unittest.TestCase):
     """A pose pointing exactly along -y has shoulder = ±180; we snap to +180."""
     c = _config(wrist_offset=0, elbow_offset=0, elbow_zero_offset=0)
     g = GripperParams()
-    pose = GripperLocation(
+    pose = CartesianPose(
       location=Coordinate(x=0, y=-100, z=0), rotation=Rotation(z=180)
     )
     joints = kinematics.ik(pose, c, g)
     self.assertAlmostEqual(joints[Axis.SHOULDER], 180.0, places=9)
 
 
-def _linear_pose(x: float, y: float, z: float, yaw: float = 0.0) -> GripperLocation:
-  return GripperLocation(
+def _linear_pose(x: float, y: float, z: float, yaw: float = 0.0) -> CartesianPose:
+  return CartesianPose(
     location=Coordinate(x=x, y=y, z=z), rotation=Rotation(z=yaw),
   )
 

@@ -38,5 +38,5 @@ Types
   :nosignatures:
   :recursive:
 
-    standard.GripperLocation
+    standard.CartesianPose
     standard.GripDirection

@@ -12,7 +12,7 @@ from pylabrobot.capabilities.arms.backend import (
   HasJoints,
   OrientableGripperArmBackend,
 )
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import (
@@ -768,8 +768,8 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     async with self._motion_guard():
       await self.driver.motors_ensure_enabled([int(a) for a in MOTION_AXES])
       current_yaw = (await self.request_gripper_location()).rotation.z
-      start_pose = GripperLocation(location=start, rotation=Rotation(z=current_yaw))
-      end_pose = GripperLocation(location=end, rotation=Rotation(z=current_yaw))
+      start_pose = CartesianPose(location=start, rotation=Rotation(z=current_yaw))
+      end_pose = CartesianPose(location=end, rotation=Rotation(z=current_yaw))
       # Pre-position to start (joint move — path doesn't matter, just get there).
       pre_pos = await self._cart_to_joints(start_pose)
       await self._motors_move_joint_locked(
@@ -892,7 +892,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     await self.driver.ppm_begin_motion(node_ids)
     await self.driver.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
-  async def _cart_to_joints(self, pose: GripperLocation) -> Dict[Axis, float]:
+  async def _cart_to_joints(self, pose: CartesianPose) -> Dict[Axis, float]:
     """Cartesian -> joints, snapping rotary axes to whichever 360° wrap is
     closest to the current joint position."""
     current = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
@@ -901,7 +901,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def _run_linear_path(
     self,
-    target_pose: GripperLocation,
+    target_pose: CartesianPose,
     params: "KX2ArmBackend.CartesianMoveParams",
   ) -> None:
     """Stream a Cartesian-linear trajectory through the drive's IPM buffer.
@@ -1050,7 +1050,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     joints = {Axis(k): v for k, v in (await self.request_joint_position()).items()}
     return kinematics.fk(joints, self._cfg, self._gripper_params)
 
@@ -1126,7 +1126,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     if not isinstance(backend_params, KX2ArmBackend.CartesianMoveParams):
       backend_params = KX2ArmBackend.CartesianMoveParams()
-    pose = GripperLocation(location=location, rotation=Rotation(z=direction))
+    pose = CartesianPose(location=location, rotation=Rotation(z=direction))
     if backend_params.path == "linear":
       async with self._motion_guard():
         await self._run_linear_path(pose, backend_params)

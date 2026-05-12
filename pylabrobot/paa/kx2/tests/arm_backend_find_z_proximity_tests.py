@@ -295,7 +295,7 @@ def _build_generic_harness(
   (the IPM streaming runtime), _cart_to_joints (IK), and
   request_gripper_location (FK) so the test exercises the polling-and-
   cancel logic without spinning up a real driver."""
-  from pylabrobot.capabilities.arms.standard import GripperLocation
+  from pylabrobot.capabilities.arms.standard import CartesianPose
   from pylabrobot.resources import Rotation
 
   backend = KX2ArmBackend.__new__(KX2ArmBackend)
@@ -314,9 +314,9 @@ def _build_generic_harness(
 
   async def _request_gripper_location():
     val = locs[0] if len(locs) == 1 else locs.pop(0)
-    if isinstance(val, GripperLocation):
+    if isinstance(val, CartesianPose):
       return val
-    return GripperLocation(location=val, rotation=Rotation(z=0))
+    return CartesianPose(location=val, rotation=Rotation(z=0))
 
   async def _cart_to_joints(pose):
     return {Axis.SHOULDER: 0.0, Axis.Z: pose.location.z, Axis.ELBOW: 100.0,
