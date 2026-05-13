@@ -10563,6 +10563,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_3": pt[8],
     }
 
+  @staticmethod
+  def _iswap_wrist_drive_increments_to_angle(increments: int) -> float:
+    """Linear map encoder increments -> degrees, anchored on motor zero (0 incr = 0 deg).
+
+    Symmetric around the motor's raw zero, so the achievable range is
+    ~+/-152 deg (the +/-30000 incr hardware limits). Named EEPROM stops
+    report approximately:
+
+      RIGHT     ~ -135 deg
+      STRAIGHT  ~  -45 deg
+      LEFT      ~  +45 deg
+      REVERSE   ~ +135 deg
+
+    with small per-machine drift from the factory defaults. Callers that
+    need an exact named-stop landing should pass the `WristDriveOrientation`
+    member to `iswap_wrist_drive_rotate_to_angle` rather than a float -- the
+    enum path uses the calibrated EEPROM increment directly.
+    """
+    return increments * STARBackend.iswap_wrist_drive_deg_per_increment
+
+  @staticmethod
+  def _iswap_wrist_drive_angle_to_increments(angle: float) -> int:
+    """Inverse of `_iswap_wrist_drive_increments_to_angle`; rounds to nearest int."""
+    return round(angle / STARBackend.iswap_wrist_drive_deg_per_increment)
+
+  async def iswap_wrist_drive_request_angle(self) -> float:
+    """Query the iSWAP wrist drive angle in degrees (signed, 0 deg = motor zero).
+
+    See `_iswap_wrist_drive_increments_to_angle` for the conversion. The
+    motor's raw zero sits between STRAIGHT and LEFT; this convention keeps
+    the achievable range symmetric (~+/-152 deg).
+    """
+    increments = await self._request_iswap_wrist_drive_position_increments()
+    return STARBackend._iswap_wrist_drive_increments_to_angle(increments)
+
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Request the iSWAP wrist drive orientation (relative to the rotation drive).
 
@@ -10632,6 +10667,72 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       command="TP",
       auto_id=False,
       tp=orientation.value,
+    )
+
+  async def iswap_wrist_drive_rotate_to_angle(
+    self,
+    angle: Union[WristDriveOrientation, float],
+    speed: int = 20_000,
+    acceleration: int = 145,
+    current_limit: int = 5,
+  ) -> None:
+    """Rotate the iSWAP wrist drive (Joint 2) to an absolute angle or named stop.
+
+    Passing a `WristDriveOrientation` (RIGHT / STRAIGHT / LEFT / REVERSE) sends
+    the drive to the exact EEPROM-stored increment for that stop -- use this
+    when you need a calibrated landing. Passing a float interprets it as
+    degrees signed from motor zero (0 deg = 0 incr), via the linear
+    `deg_per_increment` conversion. Achievable range is ~+/-152 deg (the
+    +/-30000 incr hardware limits). The rotation drive is held at its
+    current position.
+
+    Args:
+      angle: either a `WristDriveOrientation` member (uses EEPROM stop), or
+        a float in degrees signed from motor zero.
+      speed: max velocity in increments/sec, range 20..65000.
+      acceleration: in 1000 increments/sec^2, range 5..200.
+      current_limit: motor current protection limiter, range 0..7.
+
+    Raises:
+      RuntimeError: when an orientation is passed and `setup()` has not
+        populated the predefined positions yet.
+      ValueError: if the resulting target increment is outside the hardware range.
+    """
+    if isinstance(angle, STARBackend.WristDriveOrientation):
+      if self._iswap_wrist_drive_predefined_increments is None:
+        raise RuntimeError(
+          "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
+          "is installed and `setup()` has run."
+        )
+      wrist_position_increments = self._iswap_wrist_drive_predefined_increments[angle]
+    else:
+      wrist_position_increments = STARBackend._iswap_wrist_drive_angle_to_increments(angle)
+    if not (
+      STARBackend.iswap_wrist_drive_min_increment
+      <= wrist_position_increments
+      <= STARBackend.iswap_wrist_drive_max_increment
+    ):
+      wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        wrist_position_increments
+      )
+      min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        STARBackend.iswap_wrist_drive_min_increment
+      )
+      max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        STARBackend.iswap_wrist_drive_max_increment
+      )
+      raise ValueError(
+        f"angle {angle} ({wrist_position_deg:+.2f} deg) is outside the hardware "
+        f"range [{min_deg:+.2f}, {max_deg:+.2f}] deg"
+      )
+    rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
+
+    await self._iswap_rotate_increments(
+      rotation_position_increments=rotation_position_increments,
+      wrist_position_increments=wrist_position_increments,
+      wrist_speed=speed,
+      wrist_acceleration=acceleration,
+      wrist_current_limit=current_limit,
     )
 
   # -----------------------------------------------------------------------
