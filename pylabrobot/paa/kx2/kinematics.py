@@ -16,10 +16,25 @@ Joint dict keys match the drive node-IDs and the `KX2ArmBackend.Axis` enum:
   3: elbow [mm] (radial extension)
   4: wrist [deg]
 
-Task pose is a `CartesianPose`. The gripper clamp point is in world
-coordinates; rotation.z is yaw in degrees about world +Z, and
-rotation.x/y must be 0. Sign convention follows right-hand rule about +Z
-(CCW positive looking down).
+Task pose is a `CartesianPose`. ``location`` is the gripper's *grip
+center* (the geometric midpoint between the two jaws, where a held
+plate sits) in world coordinates; rotation.z is yaw in degrees about
+world +Z, and rotation.x/y must be 0. Sign convention follows right-hand
+rule about +Z (CCW positive looking down).
+
+`rotation.z` is the world direction in which the *front* finger
+of the gripper points — where "front" is whichever finger
+:attr:`GripperParams.finger_side` names. The gripper assembly hangs
+``t.length`` away from the wrist axis along its extension direction;
+the *grip center* is at that offset, and the two fingers cluster
+around it. Flipping `finger_side` is just a 180° relabel of which
+finger is the "front", so for the same joint state the grip center
+stays put and only the reported yaw flips by 180°. For the same
+(grip center, yaw) target, the wrist *axis* lands on opposite sides
+of the grip center for the two side choices (separated by
+``2·t.length`` along the front-finger axis), because the gripper
+assembly has to swing around the wrist motor to point the chosen
+finger forward.
 """
 
 from dataclasses import dataclass, field
@@ -53,8 +68,12 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> CartesianPo
     c: arm configuration (drive-read calibration).
     t: gripper tooling (user-supplied geometry).
   Returns:
-    CartesianPose with the gripper clamp point and a yaw equivalent to
-    the joints' net world orientation.
+    CartesianPose where ``location`` is the gripper's *grip center*
+    (geometric midpoint of the jaws) and ``rotation.z`` is the world
+    yaw of the *front* finger (the one named by ``t.finger_side``).
+    Yaw is wrapped to ``[-180, 180]``. The grip center depends only
+    on the joint state — flipping ``t.finger_side`` for fixed joints
+    leaves it unchanged and shifts only the reported yaw by 180°.
   """
   r = c.wrist_offset + c.elbow_offset + c.elbow_zero_offset + joints[Axis.ELBOW]
   sh_deg = joints[Axis.SHOULDER]
@@ -64,18 +83,25 @@ def fk(joints: Dict[Axis, float], c: KX2Config, t: GripperParams) -> CartesianPo
   wrist_y = r * cos(sh)
   wrist_z = joints[Axis.Z]
 
-  yaw_deg = joints[Axis.WRIST] + sh_deg
-  if yaw_deg > 180.0:
+  # Gripper assembly hangs t.length off the wrist axis along the
+  # extension direction (= world angle of the wrist motor = WRIST+SHOULDER).
+  # finger_side just relabels which physical finger is "front", so it
+  # only shifts the reported yaw by 180°; the grip center is fixed.
+  ext_deg = joints[Axis.WRIST] + sh_deg
+  ext = radians(ext_deg)
+
+  yaw_deg = ext_deg
+  if t.finger_side == "proximity_sensor":
+    yaw_deg += 180.0
+  while yaw_deg > 180.0:
     yaw_deg -= 360.0
-  if yaw_deg < -180.0:
+  while yaw_deg < -180.0:
     yaw_deg += 360.0
 
-  yaw = radians(yaw_deg)
-  gl = t.length if t.finger_side == "barcode_reader" else -t.length
   return CartesianPose(
     location=Coordinate(
-      x=wrist_x + gl * sin(yaw),
-      y=wrist_y - gl * cos(yaw),
+      x=wrist_x + t.length * sin(ext),
+      y=wrist_y - t.length * cos(ext),
       z=wrist_z - t.z_offset,
     ),
     rotation=Rotation(z=yaw_deg),
@@ -86,28 +112,40 @@ def ik(pose: CartesianPose, c: KX2Config, t: GripperParams) -> Dict[Axis, float]
   """Inverse kinematics.
 
   Args:
-    pose: target gripper pose. rotation.x/y must be 0.
+    pose: target gripper pose. ``location`` is the *grip center*
+      (geometric midpoint of the jaws). ``rotation.z`` is the world
+      direction the *front* finger should face (per ``t.finger_side``).
+      ``rotation.x/y`` must be 0.
     c: arm configuration (drive-read calibration).
     t: gripper tooling (user-supplied geometry).
   Returns:
     joints dict {Axis.SHOULDER: deg, Axis.Z: mm, Axis.ELBOW: mm, Axis.WRIST: deg}.
-    J4 is the canonical (-180°, 180°] solution; `snap_to_current` shifts
-    it to the closest 360° wrap of the current J4 for actual motion.
+    Shoulder and elbow differ between the two finger-side choices for
+    the same target — the gripper assembly swings around the wrist
+    motor, so the wrist axis lands on opposite sides of the grip
+    center (separated by ``2·t.length`` along the front-finger axis).
+    J4 is the canonical (-180°, 180°] solution; `snap_to_current`
+    then pulls it to whichever 360° wrap is closest to the current J4.
   Raises:
     IKError if the requested rotation has an x or y component.
   """
   if pose.rotation.x != 0 or pose.rotation.y != 0:
     raise IKError("Only Z rotation is supported for KX2")
 
-  # Gripper -> wrist: the incoming pose describes the gripper clamp point;
-  # the joint-space math operates on the wrist axis. Rigid offset with the
-  # gripper length on the radial axis (governed by world rotation z) and
-  # the gripper z offset downward. Sign tracks which finger is the radial
-  # "front".
-  yaw = radians(pose.rotation.z)
-  gl = t.length if t.finger_side == "barcode_reader" else -t.length
-  x = pose.location.x - gl * sin(yaw)
-  y = pose.location.y + gl * cos(yaw)
+  # The incoming pose describes the grip center; the joint-space math
+  # operates on the wrist axis. The gripper assembly hangs ``t.length``
+  # off the wrist axis along its *extension direction*, so the grip
+  # center sits at wrist + t.length·<extension>. For barcode_reader
+  # the extension direction == the front-finger direction; for
+  # proximity_sensor the front finger has been swung 180° to the other
+  # side, so the extension (and therefore grip-center offset) points
+  # 180° opposite the front finger.
+  ext_deg = pose.rotation.z
+  if t.finger_side == "proximity_sensor":
+    ext_deg -= 180.0
+  ext = radians(ext_deg)
+  x = pose.location.x - t.length * sin(ext)
+  y = pose.location.y + t.length * cos(ext)
   wrist_z = pose.location.z + t.z_offset
 
   # atan2 returns (-π, π]; on the -Y axis it yields -180°. Snap to +180°
@@ -118,7 +156,9 @@ def ik(pose: CartesianPose, c: KX2Config, t: GripperParams) -> Dict[Axis, float]
     shoulder = 180.0
 
   elbow = hypot(x, y) - c.wrist_offset - c.elbow_offset - c.elbow_zero_offset
-  wrist = pose.rotation.z - shoulder
+  # Wrist motor's world angle == extension direction. Joint space:
+  # wrist_joint = ext_world - shoulder.
+  wrist = ext_deg - shoulder
 
   return {Axis.SHOULDER: shoulder, Axis.Z: wrist_z, Axis.ELBOW: elbow, Axis.WRIST: wrist}
 

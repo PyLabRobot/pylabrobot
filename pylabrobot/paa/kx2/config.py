@@ -76,14 +76,24 @@ class GripperParams:
   is drive-read motor calibration for the servo gripper itself.
 
   Attributes:
-    length: Distance from the wrist axis to the gripper clamp point, in
-      mm. Sign tracks which finger is the radial "front" via
-      :attr:`finger_side`.
-    z_offset: Vertical offset from the wrist plate to the clamp point,
-      in mm. Positive = clamp sits below the wrist plate.
-    finger_side: Which finger is treated as the radial "front" by IK/FK.
-      The fingers are physically symmetric, so flipping side just
-      negates the gripper-length offset in the wrist frame.
+    length: Distance from the wrist axis to the gripper's *grip center*
+      (the geometric midpoint between the jaws, where a held plate
+      sits), in mm. Always non-negative — the "which side" choice is
+      encoded in :attr:`finger_side`, not the sign of this length.
+      The gripper assembly hangs off the wrist axis along its
+      extension direction, with both fingers clustered around the
+      grip center; FK/IK route ``location`` through this offset.
+    z_offset: Vertical offset from the wrist plate to the grip center,
+      in mm. Positive = grip center sits below the wrist plate.
+    finger_side: Which finger is treated as the gripper's "front" —
+      i.e., the one the reported world yaw (``rotation.z``) points at.
+      Flipping side is just a 180° relabel: for the same joints the
+      grip center is unchanged and only the reported yaw shifts by
+      180°. For the same target ``(location, rotation.z)``, IK puts
+      the wrist axis on opposite sides of the grip center (separated
+      by ``2·length`` along the front-finger axis) — the gripper
+      assembly has to swing around the wrist motor to point the
+      chosen finger forward.
   """
 
   length: float = 0.0

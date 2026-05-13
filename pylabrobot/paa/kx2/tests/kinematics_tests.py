@@ -301,8 +301,11 @@ class SnapToCurrent(unittest.TestCase):
 
 
 class GripperFingerSide(unittest.TestCase):
-  def test_proximity_side_negates_gripper_offset(self):
-    """Same joints, opposite finger side -> clamp point reflected through wrist axis."""
+  def test_proximity_side_keeps_grip_center_flips_yaw(self):
+    """Same joints, opposite finger side -> identical grip center (the
+    location field is the geometric midpoint between the jaws, not a
+    finger tip), but reported yaw flips 180° because the front finger
+    swaps to the opposite physical sensor."""
     c = _config()
     g_bc = GripperParams(length=15.0, z_offset=3.0, finger_side="barcode_reader")
     g_pr = GripperParams(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
@@ -310,19 +313,12 @@ class GripperFingerSide(unittest.TestCase):
     p_bc = kinematics.fk(j, c, g_bc)
     p_pr = kinematics.fk(j, c, g_pr)
 
-    # Wrist position is the midpoint between the two clamp points.
-    wrist_x = (p_bc.location.x + p_pr.location.x) / 2
-    wrist_y = (p_bc.location.y + p_pr.location.y) / 2
-    yaw_deg = j[Axis.WRIST] + j[Axis.SHOULDER]
-    yaw = math.radians(yaw_deg)
-    self.assertAlmostEqual(
-      p_bc.location.x - wrist_x, g_bc.length * math.sin(yaw), delta=1e-5
-    )
-    self.assertAlmostEqual(
-      p_bc.location.y - wrist_y, -g_bc.length * math.cos(yaw), delta=1e-5
-    )
+    self.assertAlmostEqual(p_bc.location.x, p_pr.location.x, places=9)
+    self.assertAlmostEqual(p_bc.location.y, p_pr.location.y, places=9)
     self.assertAlmostEqual(p_bc.location.z, p_pr.location.z, places=9)
-    self.assertAlmostEqual(p_bc.rotation.z, p_pr.rotation.z, places=9)
+    # Yaws are normalized to [-180, 180]; flipping finger_side rotates
+    # the *labelled* front by 180°, so the absolute difference is 180.
+    self.assertAlmostEqual(abs(p_bc.rotation.z - p_pr.rotation.z), 180.0, places=9)
 
   def test_proximity_roundtrip(self):
     c = _config()
@@ -337,11 +333,13 @@ class GripperFingerSide(unittest.TestCase):
     self.assertAlmostEqual(back.location.z, pose.location.z, places=9)
     self.assertAlmostEqual(back.rotation.z, pose.rotation.z, places=9)
 
-  def test_ik_elbow_differs_by_twice_gripper_length(self):
-    """For a clamp point on the +y axis with yaw=0, both sides give
-    shoulder=0 but the wrist sits 2*gripper_length further out for
-    barcode_reader (gripper points +y away from base) than for
-    proximity_sensor (gripper points -y back toward base)."""
+  def test_ik_wrist_axis_lands_on_opposite_sides_of_grip_center(self):
+    """Same target ``(location, direction)``, opposite finger side ->
+    wrist axis lands on opposite sides of the grip center along the
+    front-finger axis, separated by ``2·t.length``. The gripper assembly
+    has to swing around the wrist motor so the chosen finger faces the
+    target direction; both solutions still place the grip center exactly
+    at the requested location (verified by FK round-trip)."""
     pose = CartesianPose(
       location=Coordinate(x=0, y=300, z=0), rotation=Rotation(z=0)
     )
@@ -350,9 +348,29 @@ class GripperFingerSide(unittest.TestCase):
     g_pr = GripperParams(length=15.0, z_offset=3.0, finger_side="proximity_sensor")
     j_bc = kinematics.ik(pose, c, g_bc)
     j_pr = kinematics.ik(pose, c, g_pr)
-    self.assertAlmostEqual(j_bc[Axis.SHOULDER], 0.0, places=9)
-    self.assertAlmostEqual(j_pr[Axis.SHOULDER], 0.0, places=9)
-    self.assertAlmostEqual(j_bc[Axis.ELBOW] - j_pr[Axis.ELBOW], 2 * g_bc.length, places=9)
+
+    # Both solutions land the grip center on the requested point.
+    back_bc = kinematics.fk(j_bc, c, g_bc)
+    back_pr = kinematics.fk(j_pr, c, g_pr)
+    for back in (back_bc, back_pr):
+      self.assertAlmostEqual(back.location.x, pose.location.x, places=9)
+      self.assertAlmostEqual(back.location.y, pose.location.y, places=9)
+      self.assertAlmostEqual(back.location.z, pose.location.z, places=9)
+      self.assertAlmostEqual(back.rotation.z, pose.rotation.z, places=9)
+
+    # Wrist axes (= grip center − t.length·<extension>) sit on opposite
+    # sides of the grip center → distance between them is 2·t.length.
+    def wrist_xy(j):
+      r = (
+        c.wrist_offset + c.elbow_offset + c.elbow_zero_offset + j[Axis.ELBOW]
+      )
+      sh = math.radians(j[Axis.SHOULDER])
+      return (-r * math.sin(sh), r * math.cos(sh))
+
+    wx_bc, wy_bc = wrist_xy(j_bc)
+    wx_pr, wy_pr = wrist_xy(j_pr)
+    sep = math.hypot(wx_bc - wx_pr, wy_bc - wy_pr)
+    self.assertAlmostEqual(sep, 2.0 * g_bc.length, places=6)
 
 
 class ShoulderSnapAt180(unittest.TestCase):

@@ -30,6 +30,31 @@ class KX2(Device):
     barcode_port: Optional[str] = None,
     barcode_baudrate: int = KX2BarcodeReaderDriver.default_baudrate,
   ) -> None:
+    """
+    Args:
+      gripper_length: distance from the wrist axis to the gripper's
+        *grip center* (geometric midpoint of the jaws) in mm.
+        Non-negative; ``gripper_finger_side`` selects which side, not
+        the sign of ``gripper_length``. For the same target
+        ``(location, direction)``, IK puts the wrist on opposite sides
+        of the grip center for the two finger-side choices.
+      gripper_z_offset: vertical offset from the wrist plate to the
+        grip center in mm. Positive = grip center below the wrist plate.
+      gripper_finger_side: which finger is treated as the gripper's
+        "front". The world yaw returned by
+        :meth:`arm.request_gripper_location` (and the ``direction``
+        argument to :meth:`arm.move_to_location`) points at this
+        finger. Flipping side is a 180° relabel of which finger is
+        "front" — for the same joints the grip center is unchanged
+        and only the reported yaw shifts by 180°.
+      has_rail: True if the arm is mounted on the optional linear
+        rail (axis 5).
+      has_servo_gripper: True if a servo-driven plate gripper is on
+        the bus (axis 6).
+      barcode_port: optional serial port of the onboard barcode reader.
+        When set, exposes :attr:`barcode_scanning`.
+      barcode_baudrate: barcode-reader serial baud rate.
+    """
     driver = KX2Driver(has_rail=has_rail, has_servo_gripper=has_servo_gripper)
     super().__init__(driver=driver)
     self.driver: KX2Driver = driver

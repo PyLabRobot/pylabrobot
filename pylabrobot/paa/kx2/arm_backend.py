@@ -69,6 +69,26 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     gripper_z_offset: float = 0.0,
     gripper_finger_side: GripperFingerSide = "barcode_reader",
   ) -> None:
+    """
+    Args:
+      driver: low-level KX2 CAN transport.
+      gripper_length: distance from the wrist axis to the gripper's
+        *grip center* (geometric midpoint of the jaws) in mm.
+        Non-negative; the side is encoded in ``gripper_finger_side``,
+        not the sign. The gripper assembly hangs off the wrist axis,
+        so for the same target ``(location, direction)`` IK puts the
+        wrist on opposite sides of the grip center for the two
+        finger-side choices (separated by ``2·gripper_length``).
+      gripper_z_offset: vertical offset from the wrist plate to the
+        grip center in mm. Positive = grip center below the wrist plate.
+      gripper_finger_side: which finger is treated as the gripper's
+        "front". The world yaw reported by
+        :meth:`request_gripper_location` (and the yaw accepted by
+        :meth:`move_to_location`) points at this finger. Flipping
+        side is a 180° relabel of which finger is "front" — for the
+        same joints the grip center is unchanged and only the
+        reported yaw shifts by 180°.
+    """
     super().__init__()
     self.driver = driver
     # Tooling is user-supplied and known at construction; KX2Config (drive-
