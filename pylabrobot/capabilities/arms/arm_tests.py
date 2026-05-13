@@ -7,7 +7,6 @@ from pylabrobot.capabilities.arms.backend import (
   OrientableGripperArmBackend,
 )
 from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
-from pylabrobot.capabilities.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
 
@@ -138,21 +137,23 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_pick_up_front(self):
     await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_bottom=8, direction=GripDirection.FRONT
+      self.plate, pickup_distance_from_bottom=8, direction="front"
     )
     call = self.mock_backend.pick_up_at_location.call_args
     _assert_location(self, call, 165, 145, 58)
-    self.assertAlmostEqual(call.kwargs["direction"], 0.0)
-    # FRONT → X width = 120
+    # "front" = -Y in deck frame = 270° under the +X-is-zero convention.
+    self.assertAlmostEqual(call.kwargs["direction"], 270.0)
+    # "front" grips along the X axis → X width = 120
     self.assertAlmostEqual(call.kwargs["resource_width"], 120)
 
   async def test_pick_up_right(self):
     await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_bottom=8, direction=GripDirection.RIGHT
+      self.plate, pickup_distance_from_bottom=8, direction="right"
     )
     call = self.mock_backend.pick_up_at_location.call_args
-    self.assertAlmostEqual(call.kwargs["direction"], 90.0)
-    # RIGHT → Y width = 80
+    # "right" = +X = 0° under the +X-is-zero convention.
+    self.assertAlmostEqual(call.kwargs["direction"], 0.0)
+    # "right" grips along the Y axis → Y width = 80
     self.assertAlmostEqual(call.kwargs["resource_width"], 80)
 
   async def test_drop_at_location(self):
@@ -173,9 +174,9 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
   async def test_move_plate(self):
     """Pick from site_a, drop at site_b."""
     await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_bottom=8, direction=GripDirection.FRONT
+      self.plate, pickup_distance_from_bottom=8, direction="front"
     )
-    await self.arm.drop_resource(self.site_b, direction=GripDirection.FRONT)
+    await self.arm.drop_resource(self.site_b, direction="front")
     drop_call = self.mock_backend.drop_at_location.call_args
     _assert_location(self, drop_call, 160, 340, 58)
     self.assertEqual(self.plate.parent.name, "site_b")

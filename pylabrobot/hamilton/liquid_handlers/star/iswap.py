@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.standard import CartesianPose, GripDirection
+from pylabrobot.capabilities.arms.standard import CartesianPose, GripperDirection
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
   """Convert rotation angle in degrees to firmware grip_direction (1-4).
 
-  Firmware:  1 = negative Y (front), 2 = positive X (right),
-             3 = positive Y (back),  4 = negative X (left).
+  User-facing convention: ``rotation.z = 0 → +X (CCW about +Z)``.
+  Firmware:  1 = -Y (front), 2 = +X (right), 3 = +Y (back), 4 = -X (left).
   """
   normalized = round(degrees) % 360
-  mapping = {0: 1, 90: 2, 180: 3, 270: 4}
+  mapping = {0: 2, 90: 3, 180: 4, 270: 1}
   if normalized not in mapping:
     raise ValueError(f"grip direction must be a multiple of 90 degrees, got {degrees}")
   return mapping[normalized]
@@ -301,7 +301,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
   async def rotate(
     self,
     rotation_drive: "iSWAPBackend.RotationDriveOrientation",
-    grip_direction: GripDirection,
+    grip_direction: GripperDirection,
     gripper_velocity: int = 55_000,
     gripper_acceleration: int = 170,
     gripper_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
@@ -334,16 +334,16 @@ class iSWAPBackend(OrientableGripperArmBackend):
     else:
       raise ValueError(f"Invalid rotation drive orientation: {rotation_drive}")
 
-    if grip_direction.value == GripDirection.FRONT.value:
+    if grip_direction == "front":
       position += 1
-    elif grip_direction.value == GripDirection.RIGHT.value:
+    elif grip_direction == "right":
       position += 2
-    elif grip_direction.value == GripDirection.BACK.value:
+    elif grip_direction == "back":
       position += 3
-    elif grip_direction.value == GripDirection.LEFT.value:
+    elif grip_direction == "left":
       position += 4
     else:
-      raise ValueError("Invalid grip direction")
+      raise ValueError(f"Invalid grip direction: {grip_direction!r}")
 
     await self.driver.send_command(
       module="R0",

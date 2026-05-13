@@ -52,19 +52,29 @@ await lh.iswap.move_resource(
 
 ### OrientableArm: grip direction
 
-```python
-from pylabrobot.capabilities.arms.standard import GripDirection
+`direction` is the world yaw of the gripper's front finger, in degrees,
+**CCW about +Z with 0° = +X**. You can pass a float, or one of the
+cardinal-direction strings:
 
-await lh.iswap.pick_up_resource(plate, direction=GripDirection.LEFT)
-await lh.iswap.drop_resource(reader, direction=GripDirection.FRONT)
+```python
+await lh.iswap.pick_up_resource(plate, direction="left")     # = 180°
+await lh.iswap.drop_resource(reader, direction="front")      # = 270°
+await lh.iswap.move_to_location(coord, direction=45.0)       # 45° CCW from +X
 ```
+
+| String      | Degrees | World axis (deck frame) |
+|:------------|--------:|:------------------------|
+| `"right"`   |   `0°`  | `+X`                    |
+| `"back"`    |  `90°`  | `+Y`                    |
+| `"left"`    | `180°`  | `-X`                    |
+| `"front"`   | `270°`  | `-Y`                    |
 
 ## Tips and gotchas
 
 - **Coordinates are in the reference resource's frame** (typically the deck). The arm computes gripper target coordinates from the resource's position, dimensions, and the destination type.
 - **`pickup_distance_from_bottom`** controls how far up from the bottom of the resource the gripper grips. If `None`, the resource's `preferred_pickup_location` is used, or a default of 5 mm from the top (`size_z - 5`).
 - **Resource tree is updated automatically.** After a successful `drop_resource`, the resource is unassigned from its old parent and assigned to the destination.
-- **`GripOrientation`** is either a {class}`~pylabrobot.capabilities.arms.standard.GripDirection` enum (`FRONT`, `RIGHT`, `BACK`, `LEFT`) or a float in degrees.
+- **`GripperOrientation`** is either a {data}`~pylabrobot.capabilities.arms.standard.GripperDirection` string literal (`"front"`, `"right"`, `"back"`, `"left"`) or a float in degrees, measured CCW about world +Z with 0° = +X.
 - **`request_gripper_pose()`** queries the hardware for the current end effector position. `get_picked_up_resource()` returns the internally tracked state (no hardware call).
 
 ## Supported hardware
