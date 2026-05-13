@@ -10715,11 +10715,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
         wrist_position_increments
       )
+      min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        STARBackend.iswap_wrist_drive_min_increment
+      )
+      max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        STARBackend.iswap_wrist_drive_max_increment
+      )
       raise ValueError(
-        f"angle {angle} maps to {wrist_position_increments} incr "
-        f"({wrist_position_deg:.2f} deg), outside hardware range "
-        f"[{STARBackend.iswap_wrist_drive_min_increment}, "
-        f"{STARBackend.iswap_wrist_drive_max_increment}]"
+        f"angle {angle} ({wrist_position_deg:+.2f} deg) is outside the hardware "
+        f"range [{min_deg:+.2f}, {max_deg:+.2f}] deg"
       )
     rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
 
