@@ -186,14 +186,14 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.iswap_rotate
       ~STAR.iswap_rotation_drive_move_y
       ~STAR.iswap_rotation_drive_move_z
+      ~STAR.iswap_rotation_drive_request_angle
       ~STAR.iswap_rotation_drive_request_position
-      ~STAR.iswap_rotation_drive_request_predefined_positions
       ~STAR.iswap_rotation_drive_request_predefined_y_positions
       ~STAR.iswap_rotation_drive_request_predefined_z_positions
       ~STAR.iswap_rotation_drive_request_x
       ~STAR.iswap_rotation_drive_request_y
       ~STAR.iswap_rotation_drive_request_z
-      ~STAR.iswap_wrist_drive_request_predefined_positions
+      ~STAR.iswap_rotation_drive_rotate_to_angle
       ~STAR.iswap_y_drive_increment_to_mm
       ~STAR.iswap_y_drive_mm_to_increment
       ~STAR.iswap_z_drive_increment_to_mm
@@ -287,10 +287,8 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.request_iswap_initialization_status
       ~STAR.request_iswap_position
       ~STAR.request_iswap_rotation_drive_orientation
-      ~STAR.request_iswap_rotation_drive_position_increments
       ~STAR.request_iswap_version
       ~STAR.request_iswap_wrist_drive_orientation
-      ~STAR.request_iswap_wrist_drive_position_increments
       ~STAR.request_left_x_arm_last_collision_type
       ~STAR.request_left_x_arm_position
       ~STAR.request_machine_configuration

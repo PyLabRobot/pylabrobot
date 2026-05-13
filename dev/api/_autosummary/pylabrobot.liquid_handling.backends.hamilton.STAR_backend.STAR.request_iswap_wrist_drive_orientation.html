@@ -60,7 +60,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type.html" />
     <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_version" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_version.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -593,20 +593,20 @@
 <li><p>RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
 =&gt; wrist points to the left of the machine.</p></li>
 </ol>
-<p>Uses nearest-neighbour classification against firmware default <code class="code docutils literal notranslate"><span class="pre">pt</span></code>
-values. Each machine’s EEPROM stores its own <code class="code docutils literal notranslate"><span class="pre">pt</span></code> adjustment so the
-actual stop position can drift by up to a few hundred increments per
-machine; an earlier implementation used +/-50 windows and faulted on
-machines calibrated outside that band. We now pick whichever predefined
-stop is closest and only raise if the wrist is more than ~5 deg
-(~1000 incr) from any of them.</p>
-<dl class="simple">
-<dt>Defaults (T-drive resolution = 0.00508 deg/incr):</dt><dd><p>RIGHT     T1   -26577 incr  (~ -135 deg)
-STRAIGHT  T2    -8859 incr  (~  -45 deg)
-LEFT      T3    +8859 incr  (~  +45 deg)
-REVERSE   T4   +26577 incr  (~ +135 deg)</p>
-</dd>
-</dl>
+<p>Uses nearest-neighbour classification against the per-machine EEPROM <code class="code docutils literal notranslate"><span class="pre">pt</span></code>
+values populated at setup. An earlier implementation used +/-50 windows
+around the Hamilton factory defaults and faulted on machines calibrated
+outside that band; we now pick whichever predefined stop is closest and
+only raise if the wrist is more than 5 deg from any predefined stop.</p>
+<p>Hamilton factory-default values shown below for reference only; the
+per-machine EEPROM table is queried at setup and used at runtime in place
+of these (T-drive resolution = 0.00508 deg/incr):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">RIGHT</span>     <span class="n">T1</span>   <span class="o">-</span><span class="mi">26577</span> <span class="n">incr</span>  <span class="p">(</span><span class="o">-</span><span class="mi">135</span> <span class="n">deg</span><span class="p">)</span>
+<span class="n">STRAIGHT</span>  <span class="n">T2</span>    <span class="o">-</span><span class="mi">8859</span> <span class="n">incr</span>  <span class="p">(</span> <span class="o">-</span><span class="mi">45</span> <span class="n">deg</span><span class="p">)</span>
+<span class="n">LEFT</span>      <span class="n">T3</span>    <span class="o">+</span><span class="mi">8859</span> <span class="n">incr</span>  <span class="p">(</span> <span class="o">+</span><span class="mi">45</span> <span class="n">deg</span><span class="p">)</span>
+<span class="n">REVERSE</span>   <span class="n">T4</span>   <span class="o">+</span><span class="mi">26577</span> <span class="n">incr</span>  <span class="p">(</span><span class="o">+</span><span class="mi">135</span> <span class="n">deg</span><span class="p">)</span>
+</pre></div>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><p><em>WristDriveOrientation</em> –</p>
@@ -617,8 +617,11 @@ REVERSE   T4   +26577 incr  (~ +135 deg)</p>
 </p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if the measured position is more than 1000 incr (~5 deg)
-    from any predefined stop (drive is in transit or drifted).</p>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – if <code class="code docutils literal notranslate"><span class="pre">setup()</span></code> has not populated the predefined positions.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if the measured position is more than 5 deg from any
+    predefined stop (drive is in transit or drifted).</p></li>
+</ul>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>WristDriveOrientation</p>
@@ -648,11 +651,11 @@ REVERSE   T4   +26577 incr  (~ +135 deg)</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_iswap_wrist_drive_position_increments</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_left_x_arm_last_collision_type</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
