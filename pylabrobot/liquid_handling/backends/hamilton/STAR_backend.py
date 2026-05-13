@@ -10563,6 +10563,69 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_3": pt[8],
     }
 
+  @staticmethod
+  def _iswap_wrist_drive_increments_to_angle(
+    increments: int,
+    predefined_increments: Dict["STARBackend.WristDriveOrientation", int],
+  ) -> float:
+    """Piecewise-linear map encoder increments -> degrees, with STRAIGHT as 0 deg.
+
+    [RIGHT, STRAIGHT] -> [-90, 0], [STRAIGHT, LEFT] -> [0, +90], and
+    [LEFT, REVERSE] -> [+90, +180]. Increments outside [RIGHT, REVERSE]
+    extrapolate using the nearest segment's slope. Anchored on the calibrated
+    stops, so they report exactly -90 / 0 / +90 / +180.
+    """
+    WDO = STARBackend.WristDriveOrientation
+    straight = predefined_increments[WDO.STRAIGHT]
+    left = predefined_increments[WDO.LEFT]
+    if increments < straight:
+      right = predefined_increments[WDO.RIGHT]
+      return -90.0 * (straight - increments) / (straight - right)
+    if increments < left:
+      return 90.0 * (increments - straight) / (left - straight)
+    reverse = predefined_increments[WDO.REVERSE]
+    return 90.0 + 90.0 * (increments - left) / (reverse - left)
+
+  @staticmethod
+  def _iswap_wrist_drive_angle_to_increments(
+    angle: float,
+    predefined_increments: Dict["STARBackend.WristDriveOrientation", int],
+  ) -> int:
+    """Inverse of `_iswap_wrist_drive_increments_to_angle`; rounds to the nearest
+    integer increment. The named stop angles (-90 / 0 / +90 / +180) return
+    exactly the EEPROM stop increments (rounding is a no-op for the stop values
+    themselves)."""
+    WDO = STARBackend.WristDriveOrientation
+    straight = predefined_increments[WDO.STRAIGHT]
+    left = predefined_increments[WDO.LEFT]
+    if angle < 0:
+      right = predefined_increments[WDO.RIGHT]
+      return round(straight - (straight - right) * (-angle / 90.0))
+    if angle <= 90:
+      return round(straight + (left - straight) * (angle / 90.0))
+    reverse = predefined_increments[WDO.REVERSE]
+    return round(left + (reverse - left) * ((angle - 90.0) / 90.0))
+
+  async def iswap_wrist_drive_request_angle(self) -> float:
+    """Query the iSWAP wrist drive angle in degrees (signed, 0 deg = calibrated STRAIGHT).
+
+    See `_iswap_wrist_drive_increments_to_angle` for the conversion. The wrist
+    motor's raw zero sits between STRAIGHT and LEFT and has no physical meaning;
+    we anchor the user-facing 0 deg on the calibrated STRAIGHT stop instead.
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+    """
+    if self._iswap_wrist_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    increments = await self._request_iswap_wrist_drive_position_increments()
+    return STARBackend._iswap_wrist_drive_increments_to_angle(
+      increments, self._iswap_wrist_drive_predefined_increments
+    )
+
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Request the iSWAP wrist drive orientation (relative to the rotation drive).
 
@@ -10632,6 +10695,77 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       command="TP",
       auto_id=False,
       tp=orientation.value,
+    )
+
+  async def iswap_wrist_drive_rotate_to_angle(
+    self,
+    angle: Union[WristDriveOrientation, float],
+    speed: int = 20_000,
+    acceleration: int = 145,
+    current_limit: int = 5,
+  ) -> None:
+    """Rotate the iSWAP wrist drive (Joint 2) to an absolute angle or named stop.
+
+    Passing a `WristDriveOrientation` (RIGHT / STRAIGHT / LEFT / REVERSE) sends
+    the drive to the exact EEPROM-stored increment for that stop. Passing a
+    float interprets it as degrees signed from the calibrated STRAIGHT (0 deg),
+    using piecewise-linear interpolation between the four working stops (RIGHT
+    -> STRAIGHT for negative angles, STRAIGHT -> LEFT for [0, +90], LEFT ->
+    REVERSE for [+90, +180]); the named stop angles (-90 / 0 / +90 / +180)
+    round-trip exactly. Angles outside [-90, +180] extrapolate using each
+    boundary segment's slope. The rotation drive is held at its current
+    position.
+
+    Args:
+      angle: either a `WristDriveOrientation` member, or a float in degrees
+        signed from the calibrated STRAIGHT. Range is per-machine, depends on
+        the EEPROM-stored stops populated at setup.
+      speed: max velocity in increments/sec, range 20..65000.
+      acceleration: in 1000 increments/sec^2, range 5..200.
+      current_limit: motor current protection limiter, range 0..7.
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the resulting target increment is outside the hardware range.
+    """
+    if self._iswap_wrist_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_wrist_drive_predefined_increments
+    if isinstance(angle, STARBackend.WristDriveOrientation):
+      wrist_position_increments = predefined_increments[angle]
+    else:
+      wrist_position_increments = STARBackend._iswap_wrist_drive_angle_to_increments(
+        angle, predefined_increments
+      )
+    if not (
+      STARBackend.iswap_wrist_drive_min_increment
+      <= wrist_position_increments
+      <= STARBackend.iswap_wrist_drive_max_increment
+    ):
+      wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        wrist_position_increments, predefined_increments
+      )
+      raise ValueError(
+        f"angle {angle} maps to {wrist_position_increments} incr ({wrist_position_deg:.2f} deg) "
+        f"(stops RIGHT/STRAIGHT/LEFT/REVERSE="
+        f"{predefined_increments[STARBackend.WristDriveOrientation.RIGHT]}/"
+        f"{predefined_increments[STARBackend.WristDriveOrientation.STRAIGHT]}/"
+        f"{predefined_increments[STARBackend.WristDriveOrientation.LEFT]}/"
+        f"{predefined_increments[STARBackend.WristDriveOrientation.REVERSE]}), "
+        f"outside hardware range [{STARBackend.iswap_wrist_drive_min_increment}, "
+        f"{STARBackend.iswap_wrist_drive_max_increment}]"
+      )
+    rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
+
+    await self._iswap_rotate_increments(
+      rotation_position_increments=rotation_position_increments,
+      wrist_position_increments=wrist_position_increments,
+      wrist_speed=speed,
+      wrist_acceleration=acceleration,
+      wrist_current_limit=current_limit,
     )
 
   # -----------------------------------------------------------------------
