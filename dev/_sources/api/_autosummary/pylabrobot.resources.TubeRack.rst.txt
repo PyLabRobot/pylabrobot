@@ -39,6 +39,7 @@ pylabrobot.resources.TubeRack
       ~TubeRack.centers
       ~TubeRack.check_can_drop_resource_here
       ~TubeRack.column
+      ~TubeRack.column_containers
       ~TubeRack.copy
       ~TubeRack.deregister_did_assign_resource_callback
       ~TubeRack.deregister_did_unassign_resource_callback
@@ -46,27 +47,33 @@ pylabrobot.resources.TubeRack
       ~TubeRack.deregister_will_assign_resource_callback
       ~TubeRack.deregister_will_unassign_resource_callback
       ~TubeRack.deserialize
+      ~TubeRack.empty
       ~TubeRack.get_absolute_location
       ~TubeRack.get_absolute_rotation
       ~TubeRack.get_absolute_size_x
       ~TubeRack.get_absolute_size_y
       ~TubeRack.get_absolute_size_z
       ~TubeRack.get_all_children
+      ~TubeRack.get_all_containers
       ~TubeRack.get_all_items
       ~TubeRack.get_anchor
       ~TubeRack.get_child_column
       ~TubeRack.get_child_identifier
       ~TubeRack.get_child_row
+      ~TubeRack.get_container
+      ~TubeRack.get_containers
       ~TubeRack.get_highest_known_point
       ~TubeRack.get_item
       ~TubeRack.get_items
       ~TubeRack.get_location_wrt
+      ~TubeRack.get_occupied_containers
       ~TubeRack.get_resource
       ~TubeRack.get_root
       ~TubeRack.get_size_x
       ~TubeRack.get_size_y
       ~TubeRack.get_size_z
       ~TubeRack.get_tube
+      ~TubeRack.has_container
       ~TubeRack.index_of_item
       ~TubeRack.is_in_subtree_of
       ~TubeRack.load_all_state
@@ -82,6 +89,7 @@ pylabrobot.resources.TubeRack
       ~TubeRack.rotate
       ~TubeRack.rotated
       ~TubeRack.row
+      ~TubeRack.row_containers
       ~TubeRack.save
       ~TubeRack.save_state_to_file
       ~TubeRack.serialize

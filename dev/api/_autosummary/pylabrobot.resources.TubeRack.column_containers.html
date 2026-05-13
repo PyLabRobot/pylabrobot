@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.resources.TubeRack.copy &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.resources.TubeRack.column_containers &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.TubeRack.copy';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.TubeRack.column_containers';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=0d03ad13"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.TubeRack.copy.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.TubeRack.column_containers.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources.TubeRack.deregister_did_assign_resource_callback" href="pylabrobot.resources.TubeRack.deregister_did_assign_resource_callback.html" />
-    <link rel="prev" title="pylabrobot.resources.TubeRack.column_containers" href="pylabrobot.resources.TubeRack.column_containers.html" />
+    <link rel="next" title="pylabrobot.resources.TubeRack.copy" href="pylabrobot.resources.TubeRack.copy.html" />
+    <link rel="prev" title="pylabrobot.resources.TubeRack.column" href="pylabrobot.resources.TubeRack.column.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -558,7 +558,7 @@
     
     <li class="breadcrumb-item"><a href="pylabrobot.resources.TubeRack.html" class="nav-link">pylabrobot.resources.TubeRack</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.TubeRack.copy</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.TubeRack.column_containers</span></li>
   </ul>
 </nav>
 </div>
@@ -575,14 +575,18 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-resources-tuberack-copy">
-<h1>pylabrobot.resources.TubeRack.copy<a class="headerlink" href="#pylabrobot-resources-tuberack-copy" title="Link to this heading">#</a></h1>
+  <section id="pylabrobot-resources-tuberack-column-containers">
+<h1>pylabrobot.resources.TubeRack.column_containers<a class="headerlink" href="#pylabrobot-resources-tuberack-column-containers" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.resources.TubeRack.copy">
-<span class="sig-prename descclassname"><span class="pre">TubeRack.</span></span><span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.TubeRack.copy" title="Link to this definition">#</a></dt>
-<dd><dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><em>Self</em></a></p>
+<dt class="sig sig-object py" id="pylabrobot.resources.TubeRack.column_containers">
+<span class="sig-prename descclassname"><span class="pre">TubeRack.</span></span><span class="sig-name descname"><span class="pre">column_containers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.resources.TubeRack.column_containers" title="Link to this definition">#</a></dt>
+<dd><p>Get all containers in a column. Raises if any position in the column is empty.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>col</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a>[<em>T</em>]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -600,20 +604,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.resources.TubeRack.column_containers.html"
+       href="pylabrobot.resources.TubeRack.column.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.resources.TubeRack.column_containers</p>
+        <p class="prev-next-title">pylabrobot.resources.TubeRack.column</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.resources.TubeRack.deregister_did_assign_resource_callback.html"
+       href="pylabrobot.resources.TubeRack.copy.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.TubeRack.deregister_did_assign_resource_callback</p>
+        <p class="prev-next-title">pylabrobot.resources.TubeRack.copy</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -636,7 +640,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.TubeRack.copy"><code class="docutils literal notranslate"><span class="pre">TubeRack.copy()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.TubeRack.column_containers"><code class="docutils literal notranslate"><span class="pre">TubeRack.column_containers()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -644,7 +648,7 @@
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.TubeRack.copy.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.TubeRack.column_containers.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -659,7 +663,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.resources.TubeRack.copy.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.resources.TubeRack.column_containers.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
