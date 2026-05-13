@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.capabilities.arms.arm import GripperOrientation, _BaseArm, _PickedUpState
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
@@ -15,7 +15,7 @@ from pylabrobot.resources.rotation import Rotation
 # PLR deck frame (+X = right, +Y = back), this maps to: right=+X,
 # back=+Y, left=-X, front=-Y. ``front`` lives at 270° (rather than -90°)
 # so the table reads top-to-bottom in CCW order from +X.
-_GRIPPER_DIRECTION_TO_DEGREES: dict = {
+_GRIPPER_DIRECTION_TO_DEGREES: Dict[GripperDirection, float] = {
   "right": 0.0,
   "back":  90.0,
   "left":  180.0,
