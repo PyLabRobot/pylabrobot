@@ -83,7 +83,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         grip center in mm. Positive = grip center below the wrist plate.
       gripper_finger_side: which finger is treated as the gripper's
         "front". The world yaw reported by
-        :meth:`request_gripper_location` (and the yaw accepted by
+        :meth:`request_gripper_pose` (and the yaw accepted by
         :meth:`move_to_location`) points at this finger. Flipping
         side is a 180° relabel of which finger is "front" — for the
         same joints the grip center is unchanged and only the
@@ -787,7 +787,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
     async with self._motion_guard():
       await self.driver.motors_ensure_enabled([int(a) for a in MOTION_AXES])
-      current_yaw = (await self.request_gripper_location()).rotation.z
+      current_yaw = (await self.request_gripper_pose()).rotation.z
       start_pose = CartesianPose(location=start, rotation=Rotation(z=current_yaw))
       end_pose = CartesianPose(location=end, rotation=Rotation(z=current_yaw))
       # Pre-position to start (joint move — path doesn't matter, just get there).
@@ -800,7 +800,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         ),
       )
       if await self.read_proximity_sensor():
-        return (await self.request_gripper_location()).location
+        return (await self.request_gripper_pose()).location
 
       sweep_task = asyncio.create_task(
         self._run_linear_path(end_pose, move_params)
@@ -828,14 +828,14 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
         # `motor_check_if_move_done` doesn't raise on the stop-induced frame.
         self.driver.clear_emcy_state()
       if not tripped:
-        end_loc = (await self.request_gripper_location()).location
+        end_loc = (await self.request_gripper_pose()).location
         raise RuntimeError(
           f"proximity sensor never tripped on "
           f"({start.x:.1f},{start.y:.1f},{start.z:.1f}) → "
           f"({end.x:.1f},{end.y:.1f},{end.z:.1f}) "
           f"(stopped at ({end_loc.x:.1f},{end_loc.y:.1f},{end_loc.z:.1f}))"
         )
-      return (await self.request_gripper_location()).location
+      return (await self.request_gripper_pose()).location
 
   async def motors_move_joint(
     self,
@@ -1068,7 +1068,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       "site-specific safe configuration."
     )
 
-  async def request_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
   ) -> CartesianPose:
     joints = {Axis(k): v for k, v in (await self.request_joint_position()).items()}

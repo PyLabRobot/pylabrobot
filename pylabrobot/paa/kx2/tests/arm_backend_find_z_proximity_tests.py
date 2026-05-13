@@ -293,7 +293,7 @@ def _build_generic_harness(
 ) -> _FindGenericHarness:
   """Harness for ``find_with_proximity_sensor``. Fakes _run_linear_path
   (the IPM streaming runtime), _cart_to_joints (IK), and
-  request_gripper_location (FK) so the test exercises the polling-and-
+  request_gripper_pose (FK) so the test exercises the polling-and-
   cancel logic without spinning up a real driver."""
   from pylabrobot.capabilities.arms.standard import CartesianPose
   from pylabrobot.resources import Rotation
@@ -312,7 +312,7 @@ def _build_generic_harness(
     await asyncio.sleep(0)
     return prox[0] if len(prox) == 1 else prox.pop(0)
 
-  async def _request_gripper_location():
+  async def _request_gripper_pose():
     val = locs[0] if len(locs) == 1 else locs.pop(0)
     if isinstance(val, CartesianPose):
       return val
@@ -339,7 +339,7 @@ def _build_generic_harness(
       pass
 
   backend.read_proximity_sensor = _read_proximity  # type: ignore[assignment]
-  backend.request_gripper_location = _request_gripper_location  # type: ignore[assignment]
+  backend.request_gripper_pose = _request_gripper_pose  # type: ignore[assignment]
   backend._cart_to_joints = _cart_to_joints  # type: ignore[assignment]
   backend._motors_move_joint_locked = _fake_joint_move  # type: ignore[assignment]
   backend._run_linear_path = _fake_run_linear  # type: ignore[assignment]

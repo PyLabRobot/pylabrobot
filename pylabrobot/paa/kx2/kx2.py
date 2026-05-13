@@ -42,7 +42,7 @@ class KX2(Device):
         grip center in mm. Positive = grip center below the wrist plate.
       gripper_finger_side: which finger is treated as the gripper's
         "front". The world yaw returned by
-        :meth:`arm.request_gripper_location` (and the ``direction``
+        :meth:`arm.request_gripper_pose` (and the ``direction``
         argument to :meth:`arm.move_to_location`) points at this
         finger. Flipping side is a 180° relabel of which finger is
         "front" — for the same joints the grip center is unchanged

@@ -71,7 +71,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     finally:
       self.traversal_height = original
 
-  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
+  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
     """Request iSWAP grip center position (C0 QG).
 
     Returns:
@@ -224,17 +224,17 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   async def move_x(self, x: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""
-    loc = (await self.request_gripper_location()).location
+    loc = (await self.request_gripper_pose()).location
     await self.move_relative_x(step_size=x - loc.x, allow_splitting=True)
 
   async def move_y(self, y: float) -> None:
     """Move iSWAP Y to an absolute position [mm]."""
-    loc = (await self.request_gripper_location()).location
+    loc = (await self.request_gripper_pose()).location
     await self.move_relative_y(step_size=y - loc.y, allow_splitting=True)
 
   async def move_z(self, z: float) -> None:
     """Move iSWAP Z to an absolute position [mm]."""
-    loc = (await self.request_gripper_location()).location
+    loc = (await self.request_gripper_pose()).location
     await self.move_relative_z(step_size=z - loc.z, allow_splitting=True)
 
   # -- rotation / wrist drive ------------------------------------------------
