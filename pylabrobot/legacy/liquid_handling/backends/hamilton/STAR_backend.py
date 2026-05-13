@@ -7390,7 +7390,7 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_iswap_position(self) -> Coordinate:
     """Deprecated: use ``star.iswap.get_gripper_location()``."""
-    return (await self._iswap.request_gripper_location()).location
+    return (await self._iswap.request_gripper_pose()).location
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Deprecated: use ``star.iswap.rotation_drive_request_y()``."""

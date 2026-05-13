@@ -343,8 +343,8 @@ class _ArmAdapter(OrientableGripperArmBackend):
   async def park(self, backend_params=None):
     pass
 
-  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
-    raise NotImplementedError("request_gripper_location not available via legacy adapter")
+  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
+    raise NotImplementedError("request_gripper_pose not available via legacy adapter")
 
   async def open_gripper(self, gripper_width, backend_params=None):
     pass

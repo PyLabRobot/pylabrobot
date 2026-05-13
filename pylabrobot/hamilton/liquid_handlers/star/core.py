@@ -24,8 +24,8 @@ class CoreGripper(GripperArmBackend):
 
   # -- lifecycle --------------------------------------------------------------
 
-  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
-    raise NotImplementedError("CoreGripper does not support request_gripper_location")
+  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
+    raise NotImplementedError("CoreGripper does not support request_gripper_pose")
 
   # -- ArmBackend interface ---------------------------------------------------
 

@@ -166,7 +166,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
       num_retries=1,
     )
 
-  async def request_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
   ) -> CartesianPose:
     """Get the current gripper location and rotation."""

@@ -104,8 +104,8 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(set_pos_calls[0].kwargs["y"], 0)
     self.assertEqual(set_pos_calls[0].kwargs["z"], 300)
 
-  async def test_request_gripper_location(self):
-    location = await self.backend.request_gripper_location()
+  async def test_request_gripper_pose(self):
+    location = await self.backend.request_gripper_pose()
     self.assertEqual(location.location.x, 100)
     self.assertEqual(location.location.y, 200)
     self.assertEqual(location.location.z, 300)

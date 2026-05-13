@@ -10,7 +10,7 @@ from pylabrobot.resources.rotation import Rotation
 # - pick_up_at_location
 # - drop_at_location
 # - move_to_location
-# - request_gripper_location
+# - request_gripper_pose
 # - is_holding_resource
 
 # CanGrip
@@ -117,7 +117,7 @@ class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
     """Park the arm to its default position."""
 
   @abstractmethod
-  async def request_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
   ) -> CartesianPose:
     """Get the current location and rotation of the gripper."""
