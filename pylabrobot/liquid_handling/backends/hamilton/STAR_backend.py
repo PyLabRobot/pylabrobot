@@ -10911,8 +10911,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
-    plate_width: float = 0,
-    plate_width_tolerance: float = 0,
+    plate_width: float = 86.0,
+    plate_width_tolerance: float = 2.0,
   ):
     """Close gripper
 
@@ -10920,13 +10920,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
-      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0 and 9.9. Default 2.0.
+      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g ).
+        Default 86.0 (SBS short side, matching `iswap_get_plate`'s 860 in 0.1 mm units).
+      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0.5 and 9.9. Default 2.0.
     """
 
     assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
-    assert 0 <= plate_width <= 999.9, "plate_width must be between 0 and 999.9"
-    assert 0 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0 and 9.9"
+    assert 76.0 < plate_width <= 999.9, "plate_width must be between 76.0 and 999.9"
+    assert 0.5 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0.5 and 9.9"
 
     return await self.send_command(
       module="C0",
