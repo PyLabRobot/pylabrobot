@@ -572,7 +572,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
     return self._parse_angles_response(parts)
 
-  async def request_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
   ) -> PreciseFlexGripperLocation:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""

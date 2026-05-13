@@ -261,7 +261,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self._new_backend.request_joint_position()
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
-    result = await self._new_backend.request_gripper_location()
+    result = await self._new_backend.request_gripper_pose()
     return _from_new_coords(result)
 
   async def send_command(self, command: str) -> str:
