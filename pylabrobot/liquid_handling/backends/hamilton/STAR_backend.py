@@ -10356,7 +10356,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Hamilton factory-default values shown below for reference only; the
     per-machine EEPROM table is queried at setup and used at runtime in place
-    of these (W-drive resolution = 0.00310 deg/incr):
+    of these (W-drive resolution = 0.00310 deg/incr)::
+
       LEFT          W1      -29068 incr  (-90 deg)
       FRONT         W2          +0 incr  ( +0 deg)
       RIGHT         W3      +29068 incr  (+90 deg)
@@ -10584,7 +10585,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Hamilton factory-default values shown below for reference only; the
     per-machine EEPROM table is queried at setup and used at runtime in place
-    of these (T-drive resolution = 0.00508 deg/incr):
+    of these (T-drive resolution = 0.00508 deg/incr)::
+
       RIGHT     T1   -26577 incr  (-135 deg)
       STRAIGHT  T2    -8859 incr  ( -45 deg)
       LEFT      T3    +8859 incr  ( +45 deg)
