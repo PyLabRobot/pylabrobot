@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Cookbook &#8212; PyLabRobot dev documentation</title>
+    <title>Sending PyLabRobot notifications to Slack &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'cookbook/index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'cookbook/slack_notifications';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../_static/plr_cards.js?v=0d03ad13"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/cookbook/index.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/cookbook/slack_notifications.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Moving plate onto Alpaqua magnet using CORE grippers" href="star_movement_plate_to_alpaqua_core.html" />
-    <link rel="prev" title="Designs by David Nedrud" href="../resources/library/diy/davidnedrud.html" />
+    <link rel="next" title="Contributor guide" href="../contributor_guide/index.html" />
+    <link rel="prev" title="Moving plate onto Alpaqua magnet using CORE grippers" href="star_movement_plate_to_alpaqua_core.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -169,7 +169,7 @@
 
 
 <li class="nav-item current active">
-  <a class="nav-link nav-internal" href="#">
+  <a class="nav-link nav-internal" href="index.html">
      Cookbook
   </a>
 </li>
@@ -368,7 +368,7 @@
 
 
 <li class="nav-item current active">
-  <a class="nav-link nav-internal" href="#">
+  <a class="nav-link nav-internal" href="index.html">
      Cookbook
   </a>
 </li>
@@ -507,9 +507,9 @@
 <nav class="bd-docs-nav bd-links"
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
-  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="star_movement_plate_to_alpaqua_core.html">Moving plate onto Alpaqua magnet using CORE grippers</a></li>
-<li class="toctree-l1"><a class="reference internal" href="slack_notifications.html">Sending PyLabRobot notifications to Slack</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Sending PyLabRobot notifications to Slack</a></li>
 </ul>
 </div>
 </nav></div>
@@ -550,7 +550,10 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Cookbook</span></li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Cookbook</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Sending PyLabRobot notifications to Slack</span></li>
   </ul>
 </nav>
 </div>
@@ -567,83 +570,149 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="cookbook">
-<h1>Cookbook<a class="headerlink" href="#cookbook" title="Link to this heading">#</a></h1>
-<p>The PyLabRobot Cookbook is a curated collection of concise, modular code
-examples, called recipes, that demonstrate practical solutions to common lab
-automation challenges.
-Each recipe is short, focused, and reusable - designed to help
-you apply specific PyLabRobot features in real-world contexts.
-Rather than full experimental protocols, these recipes aim to inspire,
-teach, and accelerate your own automation workflows.</p>
-<hr class="docutils" />
-<div id="tutorial-cards-container">
-
-  <div class="row">
-
-<div class="plr-card-filter">
-  <div class="plr-tag-buttons plr-filter-menu">
-    <div class="plr-filter-btn active" data-tag="All">All</div>
-    <div class="plr-filter-btn" data-tag="ResourceMovement">Resource Movement</div>
-    <div class="plr-filter-btn" data-tag="PlateAdapter">PlateAdapter</div>
-    <div class="plr-filter-btn" data-tag="HamiltonSTAR">Hamilton STAR(let)</div>
-  </div>
+  <section class="tex2jax_ignore mathjax_ignore" id="sending-pylabrobot-notifications-to-slack">
+<h1>Sending PyLabRobot notifications to Slack<a class="headerlink" href="#sending-pylabrobot-notifications-to-slack" title="Link to this heading">#</a></h1>
+<p>A basic example of sending Slack messages from Python, wired into a PLR protocol. Nothing here is PLR-specific — for the full webhook API (formatting, attachments, threading, Block Kit), see <a class="reference external" href="https://api.slack.com/messaging/webhooks">Slack’s Incoming Webhooks docs</a>.</p>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>A Slack <a class="reference external" href="https://api.slack.com/messaging/webhooks">Incoming Webhook URL</a></p></li>
+</ul>
+</section>
+<section id="store-the-webhook-url">
+<h2>1. Store the webhook URL<a class="headerlink" href="#store-the-webhook-url" title="Link to this heading">#</a></h2>
+<p>Save the URL to <code class="docutils literal notranslate"><span class="pre">~/.plr_slack_webhook</span></code> — outside the repo, mode 600 so only your user can read it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">umask</span><span class="w"> </span><span class="m">077</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;https://hooks.slack.com/services/...&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>~/.plr_slack_webhook
+</pre></div>
 </div>
+<p>The helper below reads from this file. Pass <code class="docutils literal notranslate"><span class="pre">webhook_url=</span></code> to override (e.g. for testing).</p>
+</section>
+<section id="a-tiny-stdlib-notifier">
+<h2>2. A tiny stdlib notifier<a class="headerlink" href="#a-tiny-stdlib-notifier" title="Link to this heading">#</a></h2>
+<p>Slack’s incoming-webhook endpoint accepts a JSON POST. The standard library is enough — no <code class="docutils literal notranslate"><span class="pre">httpx</span></code>, <code class="docutils literal notranslate"><span class="pre">requests</span></code>, or <code class="docutils literal notranslate"><span class="pre">slack_sdk</span></code> needed.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.request</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.error</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<div class="plr-card-grid">
-  
-    <div class="plr-card"
-         data-tags="ResourceMovement PlateAdapter HamiltonSTAR"
-         data-title="move plate to alpaqua magnet using core grippers"
-         data-desc="">
-      <a href="star_movement_plate_to_alpaqua_core.html">
-        <div class="plr-card-content">
-          <div class="plr-card-text">
-            <h4>Move plate to Alpaqua magnet using CORE grippers</h4>
-            
-              <p><ul>
-<li>Resource movement using CORE grippers</li>
-<li>Resource position check using grippers</li>
-<li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li></ul></p>
-            
-          </div>
-          <div class="plr-card-image">
-            
-              
-                <video src="/cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4" muted loop preload="none"
-                       class="plr-hover-video"></video>
-                <img src="/cookbook/assets/star_movement_plate_to_alpaqua_core/preview.jpg" alt="Move plate to Alpaqua magnet using CORE grippers">
-              
-            
-          </div>
-        </div>
-      </a>
-    </div>
-  
-    <div class="plr-card"
-         data-tags="Notifications Slack Monitoring"
-         data-title="send pylabrobot notifications to slack"
-         data-desc="">
-      <a href="slack_notifications.html">
-        <div class="plr-card-content">
-          <div class="plr-card-text">
-            <h4>Send PyLabRobot notifications to Slack</h4>
-            
-              <p><ul>
-<li>Post run start/finish/failure messages to a Slack channel</li>
-<li>Uses only the Python standard library (no extra deps)</li>
-<li>Webhook URL stored in a local file outside the repo</li></ul></p>
-            
-          </div>
-          <div class="plr-card-image">
-            
-          </div>
-        </div>
-      </a>
-    </div>
-  
-</div><div class="toctree-wrapper compound">
+<span class="n">WEBHOOK_FILE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;~/.plr_slack_webhook&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_load_webhook</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="k">if</span> <span class="n">WEBHOOK_FILE</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">WEBHOOK_FILE</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">or</span> <span class="kc">None</span>
+  <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">slack_notify</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">webhook_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="n">url</span> <span class="o">=</span> <span class="n">webhook_url</span> <span class="ow">or</span> <span class="n">_load_webhook</span><span class="p">()</span>
+  <span class="k">if</span> <span class="ow">not</span> <span class="n">url</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_notify: no webhook configured at </span><span class="si">{</span><span class="n">WEBHOOK_FILE</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span>
+
+  <span class="n">req</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
+    <span class="n">url</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">text</span><span class="p">})</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;POST&quot;</span><span class="p">,</span>
+  <span class="p">)</span>
+  <span class="k">try</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span> <span class="k">as</span> <span class="n">resp</span><span class="p">:</span>
+      <span class="n">resp</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+  <span class="k">except</span> <span class="p">(</span><span class="n">urllib</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">URLError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_notify failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="n">slack_notify</span><span class="p">(</span><span class="s2">&quot;:wave: Hello from PyLabRobot&quot;</span><span class="p">)</span>
+</pre></div>
 </div>
+</div>
+</div>
+</section>
+<section id="wrap-a-plr-run">
+<h2>3. Wrap a PLR run<a class="headerlink" href="#wrap-a-plr-run" title="Link to this heading">#</a></h2>
+<p>Send a message at start, on success, and on failure. The <code class="docutils literal notranslate"><span class="pre">finally</span></code> block guarantees <code class="docutils literal notranslate"><span class="pre">lh.stop()</span></code> runs even if the protocol crashes.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiquidHandler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends.hamilton.STAR_chatterbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARChatterboxBackend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARLetDeck</span>
+
+<span class="c1"># Using the chatterbox backend so this notebook runs without hardware.</span>
+<span class="c1"># On a real machine, swap in `STARBackend()` (or whatever your machine uses).</span>
+<span class="n">lh</span> <span class="o">=</span> <span class="n">LiquidHandler</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">STARChatterboxBackend</span><span class="p">(),</span> <span class="n">deck</span><span class="o">=</span><span class="n">STARLetDeck</span><span class="p">())</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+  <span class="n">slack_notify</span><span class="p">(</span><span class="s2">&quot;:test_tube: Protocol started&quot;</span><span class="p">)</span>
+
+  <span class="c1"># ... your protocol goes here ...</span>
+  <span class="c1"># await lh.pick_up_tips(...)</span>
+  <span class="c1"># await lh.aspirate(...)</span>
+  <span class="c1"># await lh.dispense(...)</span>
+  <span class="c1"># await lh.drop_tips()</span>
+
+  <span class="n">slack_notify</span><span class="p">(</span><span class="s2">&quot;:white_check_mark: Protocol finished&quot;</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="n">slack_notify</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;:rotating_light: Protocol failed: `</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">`</span><span class="se">\n</span><span class="s2">```</span><span class="si">{</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">()</span><span class="si">}</span><span class="s2">```&quot;</span><span class="p">)</span>
+  <span class="k">raise</span>
+<span class="k">finally</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="richer-messages-with-block-kit">
+<h2>4. Richer messages with Block Kit<a class="headerlink" href="#richer-messages-with-block-kit" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">text</span></code> is just one of the payload fields. Slack also accepts <a class="reference external" href="https://api.slack.com/block-kit">Block Kit</a> for headers, sections, fields, and dividers:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">slack_post</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">webhook_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="n">url</span> <span class="o">=</span> <span class="n">webhook_url</span> <span class="ow">or</span> <span class="n">_load_webhook</span><span class="p">()</span>
+  <span class="k">if</span> <span class="ow">not</span> <span class="n">url</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_post: no webhook configured at </span><span class="si">{</span><span class="n">WEBHOOK_FILE</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">payload</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span>
+  <span class="n">req</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
+    <span class="n">url</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;POST&quot;</span><span class="p">,</span>
+  <span class="p">)</span>
+  <span class="k">try</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span> <span class="k">as</span> <span class="n">resp</span><span class="p">:</span>
+      <span class="n">resp</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+  <span class="k">except</span> <span class="p">(</span><span class="n">urllib</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">URLError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_post failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">payload</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="n">slack_post</span><span class="p">({</span>
+  <span class="s2">&quot;blocks&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;header&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;plain_text&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;Run complete&quot;</span><span class="p">}},</span>
+    <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;section&quot;</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;mrkdwn&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;*Plates:*</span><span class="se">\n</span><span class="s2">4&quot;</span><span class="p">},</span>
+      <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;mrkdwn&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;*Duration:*</span><span class="se">\n</span><span class="s2">00:42:13&quot;</span><span class="p">},</span>
+    <span class="p">]},</span>
+  <span class="p">]</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>The webhook URL lives in <code class="docutils literal notranslate"><span class="pre">~/.plr_slack_webhook</span></code>, outside the repo. Anyone with the URL can post to that channel, so keep it mode 600.</p></li>
+<li><p>The helper catches <code class="docutils literal notranslate"><span class="pre">URLError</span></code> and <code class="docutils literal notranslate"><span class="pre">TimeoutError</span></code> so a failed POST doesn’t abort the protocol.</p></li>
+<li><p>Incoming Webhooks rate-limit to ~1 msg/sec per channel.</p></li>
+<li><p>Webhooks are write-only. Slack → robot (e.g. a <code class="docutils literal notranslate"><span class="pre">/pause</span></code> command) needs the Events API.</p></li>
+</ul>
+</section>
 </section>
 
 
@@ -657,20 +726,20 @@ teach, and accelerate your own automation workflows.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../resources/library/diy/davidnedrud.html"
+       href="star_movement_plate_to_alpaqua_core.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Designs by David Nedrud</p>
+        <p class="prev-next-title">Moving plate onto Alpaqua magnet using CORE grippers</p>
       </div>
     </a>
     <a class="right-next"
-       href="star_movement_plate_to_alpaqua_core.html"
+       href="../contributor_guide/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Moving plate onto Alpaqua magnet using CORE grippers</p>
+        <p class="prev-next-title">Contributor guide</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -686,10 +755,27 @@ teach, and accelerate your own automation workflows.</p>
 
 
   <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#store-the-webhook-url">1. Store the webhook URL</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-tiny-stdlib-notifier">2. A tiny stdlib notifier</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wrap-a-plr-run">3. Wrap a PLR run</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#richer-messages-with-block-kit">4. Richer messages with Block Kit</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/cookbook/index.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/cookbook/slack_notifications.ipynb">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -704,7 +790,7 @@ teach, and accelerate your own automation workflows.</p>
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../_sources/cookbook/index.rst.txt">
+    <a href="../_sources/cookbook/slack_notifications.ipynb.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
