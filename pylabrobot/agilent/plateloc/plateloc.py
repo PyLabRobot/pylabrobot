@@ -203,11 +203,12 @@ class PlateLocDriver(Driver):
 
     response = await self.read_response(
       timeout=self.profile.response_timeout if expect_response else self.profile.ack_timeout,
-      required=expect_response,
+      required=True,
     )
+    assert response is not None
     self._last_command = command
     self._last_response = response
-    if response is not None and raise_on_nak:
+    if raise_on_nak:
       self._raise_for_error(command, response)
     return response
 
@@ -233,7 +234,7 @@ class PlateLocDriver(Driver):
   def _raise_for_error(self, command: str, response: str):
     match = _ACK_RE.match(response)
     if match is None:
-      return
+      raise PlateLocError(f"PlateLoc returned invalid response to {command!r}: {response!r}")
     code = match.group("code")
     expected_code = self.profile.commands.get(command)
     if expected_code is not None and code != expected_code:
@@ -302,7 +303,9 @@ class PlateLocDriver(Driver):
     )
     match = _ACK_RE.match(response or "")
     if match is None:
-      return False
+      raise PlateLocError(
+        f"PlateLoc returned invalid response to 'check_cycle_complete': {response!r}"
+      )
     expected_code = self.profile.commands.get("check_cycle_complete")
     if expected_code is not None and match.group("code") != expected_code:
       raise PlateLocError(

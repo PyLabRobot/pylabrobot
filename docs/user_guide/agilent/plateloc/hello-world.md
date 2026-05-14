@@ -31,7 +31,7 @@ await plateloc.sealer.close()
 `sealer.open()` and `sealer.close()` move the stage and wait for the default stage-settle delay.
 `sealer.seal()` starts a sealing cycle after writing the requested temperature and time.
 
-The PlateLoc-specific frontend also exposes independent setpoint and status helpers:
+The PlateLoc device class also exposes independent setpoint and status helpers:
 
 ```python
 await plateloc.set_sealing_temperature(160)
