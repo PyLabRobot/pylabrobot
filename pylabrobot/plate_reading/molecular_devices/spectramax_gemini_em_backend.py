@@ -147,7 +147,7 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
       return [(x, y) for y in (top, center_y, bottom) for x in (left, center_x, right)]
     raise ValueError(f"Unsupported wellscan pattern: {pattern}")
 
-  async def read_fluorescence_wellscan(
+  async def experimental_read_fluorescence_wellscan(
     self,
     plate: Plate,
     wells: Optional[List[Well]] = None,
@@ -339,7 +339,7 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
-  async def read_fluorescence_emission_spectrum(
+  async def experimental_read_fluorescence_emission_spectrum(
     self,
     plate: Plate,
     wells: Optional[List[Well]] = None,
@@ -406,7 +406,7 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
-  async def read_fluorescence_excitation_spectrum(
+  async def experimental_read_fluorescence_excitation_spectrum(
     self,
     plate: Plate,
     wells: Optional[List[Well]] = None,
@@ -556,7 +556,13 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
       "Fluorescence polarization reading is not supported by the SpectraMax Gemini EM."
     )
 
-  async def read_time_resolved_fluorescence(
+  async def read_time_resolved_fluorescence(self, *args, **kwargs) -> List[Dict]:  # type: ignore[override]
+    raise NotImplementedError(
+      "Use experimental_read_time_resolved_fluorescence on the Gemini EM backend; "
+      "the inherited MolecularDevicesBackend implementation has not been validated for this device."
+    )
+
+  async def experimental_read_time_resolved_fluorescence(
     self,
     plate: Plate,
     excitation_wavelengths: List[int],
