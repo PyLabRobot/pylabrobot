@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-pip install pylabrobot[serial]
+pip install "pylabrobot[serial]"
 ```
 
 In automated wet lab workflows, **microplate sealers** are essential for preserving sample integrity.

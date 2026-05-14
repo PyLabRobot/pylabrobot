@@ -68,7 +68,7 @@ class FakeSerial:
 
 
 class PlateLocTests(unittest.IsolatedAsyncioTestCase):
-  def make_driver(self, commands=None, ack_timeout=0, timeout=30):
+  def make_driver(self, commands=None, ack_timeout=0.01, timeout=30):
     profile = PlateLocSerialProfile(
       response_timeout=0.01,
       ack_timeout=ack_timeout,
@@ -98,6 +98,8 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
   async def test_temperature_and_time_writes_are_scaled_and_validated(self):
     driver = self.make_driver()
     await driver.setup()
+    driver.io.queue_response(b"STAK\r")
+    driver.io.queue_response(b"SSAK\r")
 
     await driver.set_sealing_temperature(30)
     await driver.set_sealing_time(0.5)
@@ -119,6 +121,25 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(driver.io.writes, [b"ST 0.030\r"])
 
+  async def test_missing_acknowledgement_raises_timeout(self):
+    driver = self.make_driver()
+    await driver.setup()
+
+    with self.assertRaisesRegex(TimeoutError, "Timeout"):
+      await driver.set_sealing_temperature(30)
+
+    self.assertEqual(driver.io.writes, [b"ST 0.030\r"])
+
+  async def test_malformed_acknowledgement_raises_protocol_error(self):
+    driver = self.make_driver()
+    await driver.setup()
+    driver.io.queue_response(b"unexpected\r")
+
+    with self.assertRaisesRegex(PlateLocError, "invalid response"):
+      await driver.set_sealing_temperature(30)
+
+    self.assertEqual(driver.io.writes, [b"ST 0.030\r"])
+
   async def test_required_response_reads_until_plate_loc_ack(self):
     driver = self.make_driver()
     await driver.setup()
@@ -135,9 +156,22 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(await driver.check_cycle_complete())
     self.assertEqual(driver.io.writes, [b"CC 00\r"])
 
+  async def test_invalid_cycle_complete_response_raises_protocol_error(self):
+    driver = self.make_driver()
+    await driver.setup()
+    driver.io.queue_response(b"unexpected\r")
+
+    with self.assertRaisesRegex(PlateLocError, "invalid response"):
+      await driver.check_cycle_complete()
+
+    self.assertEqual(driver.io.writes, [b"CC 00\r"])
+
   async def test_status_snapshot_tracks_setpoints_and_live_cycle_complete(self):
     driver = self.make_driver()
     await driver.setup()
+    driver.io.queue_response(b"STAK\r")
+    driver.io.queue_response(b"SSAK\r")
+    driver.io.queue_response(b"SOAK\r")
 
     await driver.set_sealing_temperature(30)
     await driver.set_sealing_time(0.5)
@@ -165,6 +199,8 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
       }
     )
     await driver.setup()
+    driver.io.queue_response(b"TPAK\r")
+    driver.io.queue_response(b"TMAK\r")
 
     await driver.set_sealing_temperature(120)
     await driver.set_sealing_time(1.25)
@@ -191,7 +227,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
   async def test_seal_waits_for_cycle_completion(self):
     profile = PlateLocSerialProfile(
       response_timeout=0.01,
-      ack_timeout=0,
+      ack_timeout=0.01,
       read_delay=0,
       stage_move_delay=0,
       cycle_poll_interval=0,
@@ -199,6 +235,9 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     device = PlateLoc(name="plateloc", port="COM6", profile=profile, timeout=1, serial_cls=FakeSerial)
 
     await device.setup()
+    device.driver.io.queue_response(b"STAK\r")
+    device.driver.io.queue_response(b"SSAK\r")
+    device.driver.io.queue_response(b"GOAK\r")
     device.driver.io.queue_response(b"CCNK\r")
     device.driver.io.queue_response(b"CCAK\r")
 
@@ -218,7 +257,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
   async def test_device_exposes_sealer_capability(self):
     profile = PlateLocSerialProfile(
       response_timeout=0.01,
-      ack_timeout=0,
+      ack_timeout=0.01,
       read_delay=0,
       stage_move_delay=0,
       cycle_poll_interval=0,
@@ -226,11 +265,18 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     device = PlateLoc(name="plateloc", port="COM6", profile=profile, serial_cls=FakeSerial)
 
     await device.setup()
+    device.driver.io.queue_response(b"STAK\r")
     await device.set_sealing_temperature(100)
+    device.driver.io.queue_response(b"SSAK\r")
     await device.set_sealing_time(0.5)
+    device.driver.io.queue_response(b"STAK\r")
+    device.driver.io.queue_response(b"SSAK\r")
+    device.driver.io.queue_response(b"GOAK\r")
     device.driver.io.queue_response(b"CCAK\r")
     await device.sealer.seal(120, 1.2)
+    device.driver.io.queue_response(b"SOAK\r")
     await device.sealer.open()
+    device.driver.io.queue_response(b"SIAK\r")
     await device.sealer.close()
     status = device.status_snapshot()
     await device.stop()
