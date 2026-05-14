@@ -30,6 +30,15 @@ teach, and accelerate your own automation workflows.
    :link: star_movement_plate_to_alpaqua_core.html
    :tags: ResourceMovement PlateAdapter HamiltonSTAR
 
+.. plrcard::
+   :header: Send PyLabRobot notifications to Slack
+   :card_description: <ul>
+      <li>Post run start/finish/failure messages to a Slack channel</li>
+      <li>Uses only the Python standard library (no extra deps)</li>
+      <li>Webhook URL stored in a local file outside the repo</li></ul>
+   :link: slack_notifications.html
+   :tags: Notifications Slack Monitoring
+
 .. plrcardgrid::
 
 .. End of tutorial card section
@@ -42,3 +51,4 @@ teach, and accelerate your own automation workflows.
    :hidden:
 
    star_movement_plate_to_alpaqua_core
+   slack_notifications
