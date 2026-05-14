@@ -544,7 +544,7 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
-  async def read_fluorescence_polarization(
+  async def read_fluorescence_polarization(  # type: ignore[override]
     self,
     plate: Plate,
     excitation_wavelengths: List[int],
