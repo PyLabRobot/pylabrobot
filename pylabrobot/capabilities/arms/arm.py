@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
 from pylabrobot.capabilities.arms.backend import GripperArmBackend, _BaseArmBackend
-from pylabrobot.capabilities.arms.standard import CartesianPose, GripDirection
+from pylabrobot.capabilities.arms.standard import CartesianPose, GripperDirection
 from pylabrobot.capabilities.capability import BackendParams, Capability
 from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
@@ -20,7 +20,7 @@ from pylabrobot.resources.rotation import Rotation
 
 logger = logging.getLogger(__name__)
 
-GripOrientation = Union[GripDirection, float]
+GripperOrientation = Union[GripperDirection, float]
 
 
 @dataclass

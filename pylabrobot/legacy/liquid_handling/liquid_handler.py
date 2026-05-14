@@ -22,7 +22,7 @@ from typing import (
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
 from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
-from pylabrobot.capabilities.arms.standard import GripDirection as _NewGripDirection
+from pylabrobot.capabilities.arms.standard import GripperDirection as _NewGripperDirection
 from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.head96_backend import (
@@ -305,7 +305,12 @@ class _Head96Adapter(_NewHead96Backend):
     await self._legacy.dispense96(dispense=legacy_disp, **kw)
 
 
-_LEGACY_TO_NEW_GRIP = {d: _NewGripDirection[d.name] for d in GripDirection}
+_LEGACY_TO_NEW_GRIP: Dict[GripDirection, _NewGripperDirection] = {
+  GripDirection.FRONT: "front",
+  GripDirection.BACK: "back",
+  GripDirection.LEFT: "left",
+  GripDirection.RIGHT: "right",
+}
 
 
 class _ArmAdapter(OrientableGripperArmBackend):

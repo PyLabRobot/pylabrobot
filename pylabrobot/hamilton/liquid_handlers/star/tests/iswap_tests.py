@@ -16,9 +16,10 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_pick_up_at_location(self):
     """C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"""
+    # direction=270° = -Y = "front" pickup; firmware gr=1 (front).
     await self.iswap.pick_up_at_location(
       location=Coordinate(347.9, 114.2, 187.4),
-      direction=0.0,
+      direction=270.0,
       resource_width=127.76,
     )
 
@@ -44,9 +45,10 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_pick_up_grip_direction_left(self):
     """C0PPid0003xs10427xd0yj3286yd0zj2063zd0gr4th2800te2800gw4go1308gb1245gt20ga0gc0"""
+    # direction=180° = -X = "left" pickup; firmware gr=4 (left).
     await self.iswap.pick_up_at_location(
       location=Coordinate(1042.7, 328.6, 206.3),
-      direction=270.0,
+      direction=180.0,
       resource_width=127.76,
     )
 
@@ -72,9 +74,10 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_drop_at_location(self):
     """C0PRid0002xs03479xd0yj3062yd0zj1874zd0th2800te2800gr1go1308ga0gc0"""
+    # direction=270° = -Y = "front" drop; firmware gr=1 (front).
     await self.iswap.drop_at_location(
       location=Coordinate(347.9, 306.2, 187.4),
-      direction=0.0,
+      direction=270.0,
       resource_width=127.76,
     )
 
@@ -97,9 +100,10 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_drop_grip_direction_left(self):
     """C0PRid0002xs10427xd0yj3286yd0zj2063zd0th2800te2800gr4go1308ga0gc0"""
+    # direction=180° = -X = "left" drop; firmware gr=4 (left).
     await self.iswap.drop_at_location(
       location=Coordinate(1042.7, 328.6, 206.3),
-      direction=270.0,
+      direction=180.0,
       resource_width=127.76,
     )
 

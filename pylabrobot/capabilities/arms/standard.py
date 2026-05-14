@@ -1,6 +1,5 @@
-import enum
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Literal, get_args
 
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -15,11 +14,13 @@ class CartesianPose:
   rotation: Rotation
 
 
-class GripDirection(enum.Enum):
-  FRONT = enum.auto()
-  BACK = enum.auto()
-  LEFT = enum.auto()
-  RIGHT = enum.auto()
+# Cardinal directions in the deck frame. String-literal alias for
+# ``OrientableArm`` ``direction`` arguments. Mapped to degrees by
+# :data:`pylabrobot.capabilities.arms.orientable_arm._GRIPPER_DIRECTION_TO_DEGREES`
+# under the standard ``rotation.z = 0 → +X (CCW about +Z)`` convention:
+# ``"right" = 0°``, ``"back" = 90°``, ``"left" = 180°``, ``"front" = 270°``.
+GripperDirection = Literal["front", "back", "left", "right"]
+_GRIPPER_DIRECTION_VALUES = frozenset(get_args(GripperDirection))
 
 
 @dataclass(frozen=True)

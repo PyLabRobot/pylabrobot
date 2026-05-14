@@ -39,4 +39,4 @@ Types
   :recursive:
 
     standard.CartesianPose
-    standard.GripDirection
+    standard.GripperDirection
