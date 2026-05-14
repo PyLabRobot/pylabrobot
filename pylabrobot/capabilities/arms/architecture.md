@@ -1,5 +1,31 @@
 # Arms architecture
 
+## Coordinate convention
+
+Backends share one rotation convention so swapping a Hamilton iSWAP for a
+PreciseFlex (or any future arm) doesn't change what `direction` means at
+the call site.
+
+`direction` (and `CartesianPose.rotation.z`) is the world yaw of the
+gripper's *front finger*, in degrees, measured **CCW about world +Z
+(right-hand rule, looking down)** with **0° = +X**:
+
+| `direction` | World axis | `GripperDirection` (deck frame) |
+|------------:|:----------:|:--------------------------------|
+|        `0°` |   `+X`     | `"right"`                       |
+|       `90°` |   `+Y`     | `"back"`                        |
+|      `180°` |   `-X`     | `"left"`                        |
+|      `270°` |   `-Y`     | `"front"`                       |
+
+`GripperDirection = Literal["front", "back", "left", "right"]` is a
+string-literal alias for these cardinal degrees, used wherever a deck-
+relative label reads better than a raw number.
+
+The frontends accept `direction: Union[GripperDirection, float]` and
+resolve the label to degrees before handing it to the backend, so
+backend implementations only ever see the float — but every backend
+must interpret that float under the convention above.
+
 ## Frontend hierarchy (capabilities)
 
 ```
