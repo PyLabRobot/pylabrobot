@@ -25,6 +25,7 @@ from .deck import Deck
 from .diy import *
 from .eppendorf import *
 from .errors import ResourceNotFoundError
+from .geometry import generate_geometry_catalog, save_geometry_catalog
 from .greiner import *
 from .hamilton import *
 from .itemized_resource import ItemizedResource
