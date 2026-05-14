@@ -833,6 +833,8 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         excitation_wavelength=485,
         emission_wavelength=525,
         pattern="cross",
+        center_x=14.380,
+        center_y=20.235,
       )
 
     commands = [c.args[0] for c in send_command_mock.call_args_list]
@@ -1168,7 +1170,6 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         wells=plate.get_all_items(),
         excitation_wavelength=485,
         emission_wavelength=520,
-        focal_height=0,
       )
 
     self.assertEqual(result, [{"data": []}])
@@ -1177,6 +1178,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertIn("!EMWAVELENGTH 520", commands)
     self.assertIn("!EMFILTER 7", commands)
     self.assertIn("!STRIP 1 12", commands)
+    self.assertIn("!WELLSCANMODE OFF", commands)
     read_now_mock.assert_awaited_once()
     wait_for_idle_mock.assert_awaited_once()
     transfer_data_mock.assert_awaited_once()
@@ -1194,7 +1196,6 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         wells=plate.get_all_items(),
         excitation_wavelength=485,
         emission_wavelength=520,
-        focal_height=0,
         cutoff_filters=[8],
       )
 
@@ -1237,7 +1238,6 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         wells=plate.get_items("B2:G7"),
         excitation_wavelength=485,
         emission_wavelength=520,
-        focal_height=0,
       )
 
     commands = [c.args[0] for c in send_command_mock.call_args_list]
@@ -1327,7 +1327,6 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         wells=[plate.get_item("A1")],
         excitation_wavelength=485,
         emission_wavelength=520,
-        focal_height=0,
       )
 
     commands = [c.args[0] for c in send_command_mock.call_args_list]
@@ -1342,7 +1341,6 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         plate=plate,
         wells=plate.get_all_items(),
         emission_wavelength=520,
-        focal_height=0,
       )
 
     with self.assertRaisesRegex(ValueError, "emission_wavelength is required"):
@@ -1350,6 +1348,16 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
         plate=plate,
         wells=plate.get_all_items(),
         excitation_wavelength=485,
+      )
+
+  async def test_fluorescence_rejects_focal_height(self):
+    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    with self.assertRaisesRegex(NotImplementedError, "focal_height"):
+      await self.backend.read_fluorescence(
+        plate=plate,
+        wells=plate.get_all_items(),
+        excitation_wavelength=485,
+        emission_wavelength=520,
         focal_height=0,
       )
 
@@ -1360,6 +1368,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
   async def test_unsupported_fluorescence_polarization(self):
     with self.assertRaisesRegex(NotImplementedError, "Fluorescence polarization reading"):
       await self.backend.read_fluorescence_polarization(MagicMock(), [485], [520], [515])
+
 
 class TestDataParsing(unittest.IsolatedAsyncioTestCase):
   send_command_mock: AsyncMock

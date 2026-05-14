@@ -27,7 +27,9 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     super().__init__(port)
 
   def _assert_full_plate(self, plate: Plate, wells: Optional[List[Well]]) -> None:
-    if wells is not None and wells != plate.get_all_items():
+    if wells is None:
+      return
+    if {id(well) for well in wells} != {id(well) for well in plate.get_all_items()}:
       raise NotImplementedError("Partial-plate reads are not supported by the Gemini EM backend.")
 
   def _get_well_region(
@@ -35,7 +37,9 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     plate: Plate,
     wells: Optional[List[Well]],
   ) -> Tuple[int, int, int, int]:
-    if wells is None or wells == plate.get_all_items():
+    if wells is None:
+      return (0, plate.num_items_y, 0, plate.num_items_x)
+    if {id(well) for well in wells} == {id(well) for well in plate.get_all_items()}:
       return (0, plate.num_items_y, 0, plate.num_items_x)
 
     indices = [plate.index_of_item(well) for well in wells]
@@ -46,11 +50,7 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     cols = sorted({index // plate.num_items_y for index in indices if index is not None})
     row_range = list(range(rows[0], rows[-1] + 1))
     col_range = list(range(cols[0], cols[-1] + 1))
-    expected = {
-      col * plate.num_items_y + row
-      for col in col_range
-      for row in row_range
-    }
+    expected = {col * plate.num_items_y + row for col in col_range for row in row_range}
     if set(indices) != expected:
       raise NotImplementedError("Only rectangular contiguous well regions are supported.")
 
@@ -136,14 +136,15 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     if pattern == "vertical":
       return [(center_x, top), (center_x, center_y), (center_x, bottom)]
     if pattern == "cross":
-      return [(center_x, top), (left, center_y), (center_x, center_y), (right, center_y),
-              (center_x, bottom)]
-    if pattern == "fill":
       return [
-        (x, y)
-        for y in (top, center_y, bottom)
-        for x in (left, center_x, right)
+        (center_x, top),
+        (left, center_y),
+        (center_x, center_y),
+        (right, center_y),
+        (center_x, bottom),
       ]
+    if pattern == "fill":
+      return [(x, y) for y in (top, center_y, bottom) for x in (left, center_x, right)]
     raise ValueError(f"Unsupported wellscan pattern: {pattern}")
 
   async def read_fluorescence_wellscan(
@@ -155,8 +156,8 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     focal_height: Optional[float] = None,
     cutoff_filters: Optional[List[int]] = None,
     pattern: Literal["horizontal", "vertical", "cross", "fill"] = "fill",
-    center_x: float = 14.380,
-    center_y: float = 20.235,
+    center_x: Optional[float] = None,
+    center_y: Optional[float] = None,
     x_spacing: float = 9,
     y_spacing: float = 9,
     columns: int = 12,
@@ -189,6 +190,16 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
 
     if cutoff_filters is None:
       cutoff_filters = [self._get_cutoff_filter_index_from_wavelength(emission_wavelength)]
+
+    if center_x is None or center_y is None:
+      top_left_well = plate.get_item(0)
+      if top_left_well.location is None:
+        raise ValueError("Top left well location is not set.")
+      top_left_well_center = top_left_well.location + top_left_well.get_anchor(x="c", y="c")
+      if center_x is None:
+        center_x = top_left_well_center.x
+      if center_y is None:
+        center_y = plate.get_size_y() - top_left_well_center.y
 
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -274,6 +285,8 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     settling_time: int = 0,
     timeout: int = 600,
   ) -> List[Dict]:
+    if focal_height is not None:
+      raise NotImplementedError("focal_height is not used by the Gemini EM fluorescence path.")
     if excitation_wavelength is None:
       raise ValueError("excitation_wavelength is required.")
     if emission_wavelength is None:
@@ -318,6 +331,7 @@ class MolecularDevicesSpectraMaxGeminiEMBackend(MolecularDevicesBackend):
     await self._set_mode(settings)
     await self._set_order(settings)
     await self._set_tag(settings)
+    await self._set_wellscan_mode(False)
     await self._set_nvram(settings)
     await self._set_readtype(settings)
 
