@@ -28,21 +28,9 @@ Add something like the following:
       <li>Resource position check using grippers</li>
       <li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li>
       </ul>
-   :image: cookbook/assets/star_movement_plate_to_alpaqua_core/preview.png
-   :image_hover: cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4
    :link: star_movement_plate_to_alpaqua_core.html
    :tags: ResourceMovement PlateAdapter HamiltonSTAR
 ```
-
-<details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
-   <summary style="font-weight: bold; cursor: pointer;"><code>plrcard</code> Legend </summary>
-   <hr>
-   <p> <code>:image:</code> is the static preview shown in the Cookbook grid.</p>
-   <p> <code>:image_hover:</code> is the dynamic image or video displayed when hovering over the card.</p>
-   <p>  Both paths are relative to the docs/ folder.</p>
-</details>
-
-<p></p>
 
 Then, further down in the same index.rst, add the TOC reference:
 
@@ -58,23 +46,6 @@ Then, further down in the same index.rst, add the TOC reference:
 ```
 
 Replace `star_movement_plate_to_alpaqua_core` with your recipe’s base name.
-
-### 2.1 Add Preview Images or Hover Videos
-
-Each recipe card displays a **static image** and an optional **hover image** (which may be an animated GIF or MP4 video).  
-These preview files live in: `pylabrobot/docs/cookbook/assets/`
-
-Follow these conventions:
-
-- Name the files like this:
-  - `preview.png`
-  - `animation.gif` or `animation.mp4`
-- Keep filenames lowercase and avoid spaces.
-- Use JPG for static images.
-- Use GIF (short animations) or MP4 (hover videos) for dynamic previews.
-- Keep files optimized: < 100 kb per static image, < 5 MB per hover file.
-
-When you commit, ensure both static and hover assets are included under `cookbook/assets/` in your PR.
 
 <hr>
 
@@ -102,7 +73,6 @@ This ensures your new tag appears as a filterable button on the Cookbook cards g
 
 - The new notebook is located in `docs/cookbook/recipes/`.  
 - You added a `plrcard` entry and a `toctree` reference to `index.rst`.  
-- All image assets (e.g. `_static/cookbook_img/...`) are included and referenced correctly.  
 - Any new tags are added to `plr_card_grid.html`. 
 
 - Documentation builds without errors (`make docs`).  
@@ -126,7 +96,6 @@ Example PR: [PR#726 Start PLR Cookbook](https://github.com/PyLabRobot/pylabrobot
 - Suppose you are adding the recipe file `star_movement_plate_to_alpaqua_core.ipynb`.
 - Your PR would contain:
    - the recipe notebook: `docs/cookbook/recipes/star_movement_plate_to_alpaqua_core.ipynb`
-   - image/video files such as `docs/_static/cookbook_img/recipe_01_core_move_static.png`, `recipe_01_core_move.mp4`.
    - Modifications to `docs/cookbook/index.rst` adding the card and TOC entry.
    - If relevant: Modification to `docs/_templates/plr_card_grid.html` to add new tag(s).
    - In the PR description mention something like: *“Add new Cookbook recipe: Move plate to Alpaqua magnet using CORE grippers (resources movement, gripper position check, placement correction).”*

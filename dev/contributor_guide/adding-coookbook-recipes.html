@@ -33,7 +33,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=bbd25712" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
@@ -55,7 +55,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <script src="../_static/plr_cards.js?v=0d03ad13"></script>
+    <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/contributor_guide/adding-coookbook-recipes.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -616,20 +616,10 @@ Add something like the following:</p>
       &lt;li&gt;Resource position check using grippers&lt;/li&gt;
       &lt;li&gt;PLR autocorrection of plate placement onto PlateAdapter/magnet&lt;/li&gt;
       &lt;/ul&gt;
-   <span class="nc">:image:</span> cookbook/assets/star_movement_plate_to_alpaqua_core/preview.png
-   <span class="nc">:image_hover:</span> cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4
    <span class="nc">:link:</span> star_movement_plate_to_alpaqua_core.html
    <span class="nc">:tags:</span> ResourceMovement PlateAdapter HamiltonSTAR
 </pre></div>
 </div>
-<details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
-   <summary style="font-weight: bold; cursor: pointer;"><code>plrcard</code> Legend </summary>
-   <hr>
-   <p> <code>:image:</code> is the static preview shown in the Cookbook grid.</p>
-   <p> <code>:image_hover:</code> is the dynamic image or video displayed when hovering over the card.</p>
-   <p>  Both paths are relative to the docs/ folder.</p>
-</details>
-<p></p>
 <p>Then, further down in the same index.rst, add the TOC reference:</p>
 <div class="highlight-rst notranslate"><div class="highlight"><pre><span></span><span class="c">.. -----------------------------------------</span>
 <span class="c">.. Page TOC</span>
@@ -642,26 +632,7 @@ Add something like the following:</p>
 </pre></div>
 </div>
 <p>Replace <code class="docutils literal notranslate"><span class="pre">star_movement_plate_to_alpaqua_core</span></code> with your recipe’s base name.</p>
-<section id="add-preview-images-or-hover-videos">
-<h3>2.1 Add Preview Images or Hover Videos<a class="headerlink" href="#add-preview-images-or-hover-videos" title="Link to this heading">#</a></h3>
-<p>Each recipe card displays a <strong>static image</strong> and an optional <strong>hover image</strong> (which may be an animated GIF or MP4 video).<br />
-These preview files live in: <code class="docutils literal notranslate"><span class="pre">pylabrobot/docs/cookbook/assets/</span></code></p>
-<p>Follow these conventions:</p>
-<ul class="simple">
-<li><p>Name the files like this:</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">preview.png</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">animation.gif</span></code> or <code class="docutils literal notranslate"><span class="pre">animation.mp4</span></code></p></li>
-</ul>
-</li>
-<li><p>Keep filenames lowercase and avoid spaces.</p></li>
-<li><p>Use JPG for static images.</p></li>
-<li><p>Use GIF (short animations) or MP4 (hover videos) for dynamic previews.</p></li>
-<li><p>Keep files optimized: &lt; 100 kb per static image, &lt; 5 MB per hover file.</p></li>
-</ul>
-<p>When you commit, ensure both static and hover assets are included under <code class="docutils literal notranslate"><span class="pre">cookbook/assets/</span></code> in your PR.</p>
 <hr>
-</section>
 </section>
 <section id="adding-new-tags-optional">
 <h2>3. Adding New Tags (Optional)<a class="headerlink" href="#adding-new-tags-optional" title="Link to this heading">#</a></h2>
@@ -689,7 +660,6 @@ They populate the filter buttons at the top of the Cookbook page, helping users 
 <ul class="simple">
 <li><p>The new notebook is located in <code class="docutils literal notranslate"><span class="pre">docs/cookbook/recipes/</span></code>.</p></li>
 <li><p>You added a <code class="docutils literal notranslate"><span class="pre">plrcard</span></code> entry and a <code class="docutils literal notranslate"><span class="pre">toctree</span></code> reference to <code class="docutils literal notranslate"><span class="pre">index.rst</span></code>.</p></li>
-<li><p>All image assets (e.g. <code class="docutils literal notranslate"><span class="pre">_static/cookbook_img/...</span></code>) are included and referenced correctly.</p></li>
 <li><p>Any new tags are added to <code class="docutils literal notranslate"><span class="pre">plr_card_grid.html</span></code>.</p></li>
 <li><p>Documentation builds without errors (<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">docs</span></code>).</p></li>
 <li><p>The notebook executes cleanly from start to finish.</p></li>
@@ -714,7 +684,6 @@ make<span class="w"> </span>typecheck
 <li><p>Your PR would contain:</p>
 <ul>
 <li><p>the recipe notebook: <code class="docutils literal notranslate"><span class="pre">docs/cookbook/recipes/star_movement_plate_to_alpaqua_core.ipynb</span></code></p></li>
-<li><p>image/video files such as <code class="docutils literal notranslate"><span class="pre">docs/_static/cookbook_img/recipe_01_core_move_static.png</span></code>, <code class="docutils literal notranslate"><span class="pre">recipe_01_core_move.mp4</span></code>.</p></li>
 <li><p>Modifications to <code class="docutils literal notranslate"><span class="pre">docs/cookbook/index.rst</span></code> adding the card and TOC entry.</p></li>
 <li><p>If relevant: Modification to <code class="docutils literal notranslate"><span class="pre">docs/_templates/plr_card_grid.html</span></code> to add new tag(s).</p></li>
 <li><p>In the PR description mention something like: <em>“Add new Cookbook recipe: Move plate to Alpaqua magnet using CORE grippers (resources movement, gripper position check, placement correction).”</em></p></li>
@@ -797,10 +766,7 @@ They illustrate how to write complete, reproducible automation protocols and for
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-add-the-recipe">1. Where to add the Recipe</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-recipe-card-to-the-cookbook-page">2. Adding a Recipe Card to the Cookbook Page</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#add-preview-images-or-hover-videos">2.1 Add Preview Images or Hover Videos</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-recipe-card-to-the-cookbook-page">2. Adding a Recipe Card to the Cookbook Page</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-new-tags-optional">3. Adding New Tags (Optional)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checklist-before-submitting-your-pull-request">4. Checklist Before Submitting Your Pull Request</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-pull-request">5. Example Pull Request</a></li>

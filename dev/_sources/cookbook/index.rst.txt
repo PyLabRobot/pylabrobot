@@ -25,8 +25,6 @@ teach, and accelerate your own automation workflows.
       <li>Resource movement using CORE grippers</li>
       <li>Resource position check using grippers</li>
       <li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li></ul>
-   :image: /cookbook/assets/star_movement_plate_to_alpaqua_core/preview.jpg
-   :image_hover: /cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4
    :link: star_movement_plate_to_alpaqua_core.html
    :tags: ResourceMovement PlateAdapter HamiltonSTAR
 
