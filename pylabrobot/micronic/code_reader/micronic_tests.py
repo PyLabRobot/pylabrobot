@@ -221,6 +221,15 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(MicronicError):
       await driver.scan_rack(_rack(num_items_x=6, num_items_y=4))
 
+  async def test_driver_rejects_concurrent_scan(self):
+    driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    await driver._scan_lock.acquire()
+    try:
+      with self.assertRaises(MicronicError):
+        await driver.scan_rack(_rack())
+    finally:
+      driver._scan_lock.release()
+
 
 class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
   def _backend_with_mocked_driver(self) -> tuple[MicronicRackReadingBackend, MagicMock]:
