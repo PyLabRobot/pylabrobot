@@ -5,18 +5,10 @@ from __future__ import annotations
 import asyncio
 import time
 
-from pylabrobot.capabilities.rack_reading import (
-  RackReaderBackend,
-  RackReaderError,
-  RackScanResult,
-)
+from pylabrobot.capabilities.rack_reading import RackReaderBackend, RackScanResult
 from pylabrobot.resources.tube_rack import TubeRack
 
-from .driver import MicronicDriver, MicronicError, MicronicRackReaderState
-
-
-class MicronicRackReaderError(MicronicError, RackReaderError):
-  """Raised when Micronic rack-reading operations fail."""
+from .driver import MicronicDriver, MicronicRackReaderState
 
 
 class MicronicRackReadingBackend(RackReaderBackend):
@@ -27,21 +19,15 @@ class MicronicRackReadingBackend(RackReaderBackend):
     self.driver = driver
 
   async def scan_rack(self, rack: TubeRack, timeout: float, poll_interval: float) -> RackScanResult:
-    try:
-      initial_state = await self.driver.get_rack_reader_state()
-      await self.driver.trigger_rack_scan(rack)
-      await self._wait_for_fresh_dataready(
-        initial_state=initial_state, timeout=timeout, poll_interval=poll_interval
-      )
-      return await self.driver.get_scan_result()
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
+    initial_state = await self.driver.get_rack_reader_state()
+    await self.driver.trigger_rack_scan(rack)
+    await self._wait_for_fresh_dataready(
+      initial_state=initial_state, timeout=timeout, poll_interval=poll_interval
+    )
+    return await self.driver.get_scan_result()
 
   async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
-    try:
-      return await self.driver.scan_rack_id(timeout=timeout, poll_interval=poll_interval)
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
+    return await self.driver.scan_rack_id(timeout=timeout, poll_interval=poll_interval)
 
   async def _wait_for_fresh_dataready(
     self,

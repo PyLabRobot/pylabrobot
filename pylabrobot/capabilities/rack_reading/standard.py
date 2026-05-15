@@ -4,10 +4,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-class RackReaderError(Exception):
-  """Base exception for rack reader operations."""
-
-
 @dataclass
 class RackScanEntry:
   """One decoded rack position."""

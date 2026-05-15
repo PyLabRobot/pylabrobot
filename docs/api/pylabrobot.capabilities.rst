@@ -220,7 +220,6 @@ Rack Reading
   :nosignatures:
   :recursive:
 
-    RackReaderError
     RackScanEntry
     RackScanResult
 
