@@ -77,6 +77,7 @@ class MicronicDriver(Driver):
     self.last_image_path: Optional[Path] = None
     self.last_scan_metadata: dict[str, object] = {}
     self.last_decode_metadata: dict[str, object] = {}
+    self._scan_lock = asyncio.Lock()
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     del backend_params
@@ -94,12 +95,6 @@ class MicronicDriver(Driver):
       "serial_timeout_ms": self.serial_timeout_ms,
       "keep_images": self.keep_images,
     }
-
-  async def scan_rack(self, rack: TubeRack) -> RackScanResult:
-    self._validate_rack(rack)
-    rack_id = await self.scan_rack_id()
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
 
   @staticmethod
   def _validate_rack(rack: TubeRack) -> None:
@@ -131,6 +126,15 @@ class MicronicDriver(Driver):
     text = b"".join(chunks).decode("utf-8", errors="ignore")
     match = re.search(r"\d{6,}", text)
     return match.group(0) if match else "NOREAD"
+
+  async def scan_rack(self, rack: TubeRack) -> RackScanResult:
+    self._validate_rack(rack)
+    if self._scan_lock.locked():
+      raise MicronicError("Micronic rack scan is already in progress.")
+    async with self._scan_lock:
+      rack_id = await self.scan_rack_id()
+      loop = asyncio.get_running_loop()
+      return await loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
 
   def _scan_rack_blocking(self, rack_id: str, expected_well_count: int) -> RackScanResult:
     self.image_dir.mkdir(parents=True, exist_ok=True)
