@@ -50,8 +50,8 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         keep_images=True,
       )
       decoded = {
-        "A01": DecodeResult(tube_id="1111111111", method="test"),
-        "A02": DecodeResult(tube_id="2222222222", method="test"),
+        "A1": DecodeResult(tube_id="1111111111", method="test"),
+        "A2": DecodeResult(tube_id="2222222222", method="test"),
       }
       with (
         patch(
@@ -74,7 +74,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(await driver.get_rack_reader_state(), MicronicRackReaderState.DATAREADY)
       self.assertEqual(result.rack_id, "9500017722")
-      self.assertEqual(result.entries[0].position, "A01")
+      self.assertEqual(result.entries[0].position, "A1")
       self.assertEqual(result.entries[0].tube_id, "1111111111")
       self.assertEqual(result.entries[1].tube_id, "2222222222")
       self.assertEqual(driver.last_scan_metadata, {"source": "test"})
@@ -91,7 +91,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
           keep_images=True,
         )
       )
-      decoded = {"A01": DecodeResult(tube_id="1111111111", method="test")}
+      decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
       with (
         patch(
           "pylabrobot.micronic.code_reader.driver.run_scan",
@@ -124,7 +124,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         image_dir=image_dir,
         keep_images=True,
       )
-      decoded = {"A01": DecodeResult(tube_id="1111111111", method="test")}
+      decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
 
       def slow_scan(*args, **kwargs):
         del args, kwargs
