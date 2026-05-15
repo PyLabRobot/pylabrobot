@@ -669,13 +669,13 @@ def fitted_axis(means: list[float], expected_count: int) -> list[float]:
 
 
 def rack_position(scan_row: int, scan_col: int) -> str:
-  return f"{ROWS[RACK_ROWS - 1 - scan_col]}{RACK_COLS - scan_row:02d}"
+  return f"{ROWS[RACK_ROWS - 1 - scan_col]}{RACK_COLS - scan_row}"
 
 
 def iter_positions() -> Iterable[str]:
   for row in ROWS:
     for column in range(1, COLS + 1):
-      yield f"{row}{column:02d}"
+      yield f"{row}{column}"
 
 
 def is_tube_id(value: object) -> bool:
