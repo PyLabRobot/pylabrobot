@@ -70,10 +70,19 @@ class MicronicDriver(Driver):
     self.image_dir = (
       Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "pylabrobot-micronic"
     )
-    self.serial_port = serial_port
     self.scanner_timeout_ms = scanner_timeout_ms
     self.serial_timeout_ms = serial_timeout_ms
     self.keep_images = keep_images
+    self.io = Serial(
+      human_readable_device_name="Micronic rack ID reader",
+      port=serial_port,
+      baudrate=9600,
+      bytesize=7,
+      parity="E",
+      stopbits=1,
+      timeout=0.1,
+      write_timeout=1.0,
+    )
     self._state = MicronicRackReaderState.IDLE
     self._expected_well_count = 0
     self._last_result: Optional[RackScanResult] = None
@@ -87,37 +96,40 @@ class MicronicDriver(Driver):
   async def setup(self, backend_params: Optional[BackendParams] = None):
     del backend_params
     self.image_dir.mkdir(parents=True, exist_ok=True)
+    await self.io.setup()
 
   async def stop(self):
-    scan_task = self._scan_task
-    if scan_task is None:
+    try:
+      scan_task = self._scan_task
+      if scan_task is None:
+        if self._scan_error is not None:
+          raise self._scan_error
+        return
+      if scan_task.done():
+        self._complete_scan_task(scan_task)
+      else:
+        try:
+          self._last_result = await scan_task
+        except asyncio.CancelledError:
+          self._scan_error = MicronicError("Micronic rack scan was cancelled.")
+          self._state = MicronicRackReaderState.IDLE
+        except Exception as exc:
+          self._scan_error = exc
+          self._state = MicronicRackReaderState.IDLE
+        else:
+          self._scan_error = None
+          self._state = MicronicRackReaderState.DATAREADY
+        finally:
+          self._scan_task = None
       if self._scan_error is not None:
         raise self._scan_error
-      return
-    if scan_task.done():
-      self._complete_scan_task(scan_task)
-    else:
-      try:
-        self._last_result = await scan_task
-      except asyncio.CancelledError:
-        self._scan_error = MicronicError("Micronic rack scan was cancelled.")
-        self._state = MicronicRackReaderState.IDLE
-      except Exception as exc:
-        self._scan_error = exc
-        self._state = MicronicRackReaderState.IDLE
-      else:
-        self._scan_error = None
-        self._state = MicronicRackReaderState.DATAREADY
-      finally:
-        self._scan_task = None
-    if self._scan_error is not None:
-      raise self._scan_error
+    finally:
+      await self.io.stop()
 
   def serialize(self) -> dict:
     return {
       **super().serialize(),
       "image_dir": str(self.image_dir),
-      "serial_port": self.serial_port,
       "scanner_timeout_ms": self.scanner_timeout_ms,
       "serial_timeout_ms": self.serial_timeout_ms,
       "keep_images": self.keep_images,
@@ -139,13 +151,14 @@ class MicronicDriver(Driver):
     self._complete_finished_scan_task()
     if self._scan_task is not None and not self._scan_task.done():
       raise MicronicError("Micronic rack scan is already in progress.")
+    rack_id = await self.scan_rack_id()
     self._last_result = None
     self._expected_well_count = rack.num_items
     self._state = MicronicRackReaderState.SCANNING
     self._scan_error = None
     self._reported_scanning_since_trigger = False
     loop = asyncio.get_running_loop()
-    self._scan_task = loop.run_in_executor(None, self._scan_rack_blocking)
+    self._scan_task = loop.run_in_executor(None, self._scan_rack_blocking, rack_id)
 
   @staticmethod
   def _validate_rack(rack: TubeRack) -> None:
@@ -155,12 +168,28 @@ class MicronicDriver(Driver):
         f"got {rack.num_items_y}x{rack.num_items_x}."
       )
 
-  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
+  async def scan_rack_id(self, timeout: float = 0, poll_interval: float = 0) -> str:
     del timeout, poll_interval
-    return await read_rack_id_plr_serial(
-      serial_port=self.serial_port,
-      timeout_ms=self.serial_timeout_ms,
-    )
+    deadline = time.monotonic() + self.serial_timeout_ms / 1000
+    chunks: list[bytes] = []
+    try:
+      await self.io.reset_input_buffer()
+      await self.io.write(b"<t>\r\n")
+      while time.monotonic() < deadline:
+        value = await self.io.read(1)
+        if value:
+          chunks.append(value)
+          if value in {b"\r", b"\n"}:
+            break
+    except Exception as exc:
+      raise MicronicError(
+        "Rack ID serial read failed. Install the PLR serial extra with "
+        "`pip install pylabrobot[serial]` and verify the serial port: "
+        f"{exc}"
+      ) from exc
+    text = b"".join(chunks).decode("utf-8", errors="ignore")
+    match = re.search(r"\d{6,}", text)
+    return match.group(0) if match else "NOREAD"
 
   async def get_scan_result(self) -> RackScanResult:
     self._complete_finished_scan_task()
@@ -193,7 +222,7 @@ class MicronicDriver(Driver):
       self._scan_error = None
       self._state = MicronicRackReaderState.DATAREADY
 
-  def _scan_rack_blocking(self) -> RackScanResult:
+  def _scan_rack_blocking(self, rack_id: str) -> RackScanResult:
     self.image_dir.mkdir(parents=True, exist_ok=True)
     image_path = (
       self.image_dir
@@ -203,10 +232,6 @@ class MicronicDriver(Driver):
     self.last_scan_metadata = self.scanner.acquire(image_path, self.scanner_timeout_ms)
     self.last_image_path = image_path
 
-    rack_id = read_rack_id(
-      serial_port=self.serial_port,
-      timeout_ms=self.serial_timeout_ms,
-    )
     decoded, self.last_decode_metadata = decode_image(image_path)
     if len(decoded) < self._expected_well_count:
       missing = ", ".join(position for position in iter_positions() if position not in decoded)
@@ -235,53 +260,6 @@ class MicronicDriver(Driver):
         pass
 
     return RackScanResult(rack_id=rack_id, entries=entries)
-
-
-def read_rack_id(
-  serial_port: str = "COM4",
-  timeout_ms: int = 2500,
-) -> str:
-  return asyncio.run(read_rack_id_plr_serial(serial_port=serial_port, timeout_ms=timeout_ms))
-
-
-async def read_rack_id_plr_serial(serial_port: str, timeout_ms: int) -> str:
-  deadline = time.monotonic() + timeout_ms / 1000
-  chunks: list[bytes] = []
-  io = Serial(
-    human_readable_device_name="Micronic rack ID reader",
-    port=serial_port,
-    baudrate=9600,
-    bytesize=7,
-    parity="E",
-    stopbits=1,
-    timeout=0.1,
-    write_timeout=1.0,
-  )
-  try:
-    await io.setup()
-    await io.reset_input_buffer()
-    await io.write(b"<t>\r\n")
-    while time.monotonic() < deadline:
-      value = await io.read(1)
-      if value:
-        chunks.append(value)
-        if value in {b"\r", b"\n"}:
-          break
-  except Exception as exc:
-    raise MicronicError(
-      "Rack ID serial read failed. Install the PLR serial extra with "
-      "`pip install pylabrobot[serial]` and verify the serial port: "
-      f"{exc}"
-    ) from exc
-  finally:
-    await io.stop()
-
-  return extract_rack_id(b"".join(chunks).decode("utf-8", errors="ignore"))
-
-
-def extract_rack_id(text: str) -> str:
-  match = re.search(r"\d{6,}", text)
-  return match.group(0) if match else "NOREAD"
 
 
 def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, object]]:
