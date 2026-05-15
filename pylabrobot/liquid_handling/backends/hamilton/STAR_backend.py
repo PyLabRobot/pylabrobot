@@ -10789,9 +10789,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     + yaw). No intermediate frames in the return; callers that need the wrist
     XY can recompute trivially from joints + L1.
 
-    Yaw convention: link-2 deck direction `alpha_2 = (W - 90) + (T - T_STRAIGHT)`,
-    CCW positive with 0 deg = +x deck-right. Z: rotation-drive-bottom Z minus
-    `iswap_rotation_drive_z_offset_above_finger_mm` (13 mm).
+    Sign convention follows right-hand rule about +Z (CCW positive looking
+    down). Yaw is the deck-frame direction of link 2:
+    `alpha_2 = (W - 90) + (T - T_STRAIGHT)`, with 0 deg = +x deck-right.
+    Z: rotation-drive-bottom Z minus `iswap_rotation_drive_z_offset_above_finger_mm`
+    (13 mm).
     """
     rotation_drive_angle = joints[STARBackend.iSWAPAxis.ROTATION]
     wrist_drive_angle = joints[STARBackend.iSWAPAxis.WRIST]
