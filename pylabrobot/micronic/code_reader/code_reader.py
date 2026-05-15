@@ -23,8 +23,7 @@ class MicronicCodeReader(Device):
     scanner: Scanner,
     serial_port: str,
     image_dir: Optional[str] = None,
-    timeout: float = 90.0,
-    poll_interval: float = 1.0,
+    scanner_timeout: float = 90.0,
     serial_timeout_ms: int = 2500,
     keep_images: bool = False,
   ):
@@ -32,20 +31,11 @@ class MicronicCodeReader(Device):
       scanner=scanner,
       serial_port=serial_port,
       image_dir=image_dir,
-      scanner_timeout_ms=int(timeout * 1000),
+      scanner_timeout_ms=int(scanner_timeout * 1000),
       serial_timeout_ms=serial_timeout_ms,
       keep_images=keep_images,
     )
     super().__init__(driver=driver)
     self.driver: MicronicDriver = driver
-    self.default_timeout = timeout
-    self.default_poll_interval = poll_interval
     self.rack_reading = RackReader(backend=MicronicRackReadingBackend(driver))
     self._capabilities = [self.rack_reading]
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "timeout": self.default_timeout,
-      "poll_interval": self.default_poll_interval,
-    }

@@ -288,8 +288,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     reader = MicronicCodeReader(
       scanner=_mock_scanner(),
       serial_port="/dev/ttyUSB0",
-      timeout=12.0,
-      poll_interval=0.25,
+      scanner_timeout=12.0,
     )
     with (
       patch.object(reader.driver.io, "setup", AsyncMock()),
@@ -306,8 +305,8 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
         ) as scan_rack:
           result = await reader.rack_reading.scan_rack(
             rack=_rack(),
-            timeout=reader.default_timeout,
-            poll_interval=reader.default_poll_interval,
+            timeout=12.0,
+            poll_interval=1.0,
           )
       finally:
         await reader.stop()
