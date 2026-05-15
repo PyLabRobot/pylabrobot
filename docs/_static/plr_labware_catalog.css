@@ -49,6 +49,16 @@
   margin: 1rem 0 2rem;
 }
 
+.plr-catalog-group + .plr-catalog-group {
+  margin-top: 1rem;
+}
+
+.plr-catalog-group__title {
+  margin: 0.5rem 0 0.25rem;
+  color: var(--pst-color-text-base);
+  font-size: 1.1rem;
+}
+
 .plr-catalog-loading,
 .plr-catalog-empty {
   padding: 1rem;

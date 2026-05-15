@@ -196,18 +196,37 @@
 
   function renderCatalog(root) {
     const items = (state.index.items || []).filter(itemMatchesFilters);
-    const grid = root.querySelector(".plr-catalog-grid");
+    const results = root.querySelector(".plr-catalog-results");
     const count = root.querySelector(".plr-catalog-count");
-    grid.innerHTML = "";
+    results.innerHTML = "";
     count.textContent = `${items.length} resources`;
 
     if (items.length === 0) {
-      grid.appendChild(element("div", "plr-catalog-empty", "No labware matches these filters."));
+      results.appendChild(element("div", "plr-catalog-empty", "No labware matches these filters."));
       return;
     }
 
+    if (state.section !== "All") {
+      const grid = element("div", "plr-catalog-grid");
+      items.forEach((item) => grid.appendChild(createCard(item)));
+      results.appendChild(grid);
+      return;
+    }
+
+    const groups = new Map();
     items.forEach((item) => {
-      grid.appendChild(createCard(item));
+      const key = item.section || "Other";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+
+    groups.forEach((groupItems, sectionName) => {
+      const group = element("section", "plr-catalog-group");
+      group.appendChild(element("h2", "plr-catalog-group__title", sectionName));
+      const grid = element("div", "plr-catalog-grid");
+      groupItems.forEach((item) => grid.appendChild(createCard(item)));
+      group.appendChild(grid);
+      results.appendChild(group);
     });
   }
 
@@ -228,7 +247,7 @@
         </div>
         <div class="plr-catalog-count"></div>
       </div>
-      <div class="plr-catalog-grid"></div>
+      <div class="plr-catalog-results"></div>
     `;
 
     const search = root.querySelector("#plr-catalog-search-input");
