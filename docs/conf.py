@@ -13,6 +13,7 @@
 import os
 import shutil
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(".."))
 # Allow importing local Sphinx extensions (e.g., pylabrobot_cards)
@@ -66,6 +67,8 @@ exclude_patterns = [
   "Thumbs.db",
   ".DS_Store",
   "jupyter_execute",
+  "resources/library/*.md",
+  "resources/library/**/*.md",
 ]
 
 autodoc_default_options = {
@@ -202,6 +205,32 @@ redirects = {
   "fans.html": "user_guide/fans.html",
   "resources/geometry-catalog.html": "resources/catalog.html",
 }
+
+
+def _catalog_redirect_target(source_html_path: str) -> str:
+  target = "resources/catalog.html"
+  source_dir = os.path.dirname(source_html_path)
+  if not source_dir:
+    return target
+  return os.path.relpath(target, start=source_dir).replace("\\", "/")
+
+
+def _library_doc_redirects() -> dict[str, str]:
+  redirects_map: dict[str, str] = {}
+  library_root = Path(__file__).parent / "resources" / "library"
+  for markdown_path in library_root.rglob("*.md"):
+    relative_markdown = markdown_path.relative_to(Path(__file__).parent)
+    source_html = relative_markdown.with_suffix(".html").as_posix()
+    redirects_map[source_html] = _catalog_redirect_target(source_html)
+
+    # Also redirect extension-less style links such as /resources/library/hamilton.
+    if markdown_path.stem != "index":
+      folder_style_source = (relative_markdown.with_suffix("") / "index.html").as_posix()
+      redirects_map[folder_style_source] = _catalog_redirect_target(folder_style_source)
+  return redirects_map
+
+
+redirects.update(_library_doc_redirects())
 
 html_sidebars = {
   "api/**": ["search-field"],

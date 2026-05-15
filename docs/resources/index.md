@@ -11,7 +11,7 @@ The PLR Resource Management System consists of two key components, each serving 
 
 1. **Resource Ontology System**
     - The ***'blueprint'*** of PLR's physical definition framework, responsible for defining physical resources, modeling their distinct behaviors, and dynamically managing their relationships (i.e. tracking their *state*).
-2. **Resource Library**
+2. **Resource Catalog**
     - The ***'catalog'*** of premade resource definitions.
     This provides reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
     This ensures smooth integration, scalability, and efficient resource utilization.
@@ -134,14 +134,14 @@ plate-adapter/plate-adapter
 resource-stack/resource-stack
 ```
 
-## Resource Library
+## Resource Catalog
 
-The PyLabRobot Resource Library (PLR-RL) is PyLabRobot's open-source, crowd-sourced collection of pre-made resource definitions.
+The PyLabRobot Resource Catalog is PyLabRobot's open-source, crowd-sourced collection of pre-made resource definitions.
 Laboratories across the world use an almost infinite number of different resources (e.g. plates, tubes, liquid handlers, microscopes, arms, ...).
 We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing definitions.
 If you cannot find something, please contribute what you are looking for!
 
-Open the {doc}`catalog page <catalog>` to search the library across manufacturers and inspect generated 3D previews for labware definitions.
+Open the {doc}`catalog page <catalog>` to search the catalog across manufacturers and inspect generated 3D previews for labware definitions.
 
 <hr>
 
@@ -167,36 +167,7 @@ Open the {doc}`catalog page <catalog>` to search the library across manufacturer
 
 
 ```{toctree}
-:caption: Resource Library
+:caption: Resource Catalog
 
 catalog
-```
-
-```{toctree}
-:hidden:
-
-library/agenbio
-library/agilent
-library/alpaqua
-library/azenta
-library/bioer
-library/biorad
-library/boekel
-library/celltreat
-library/cellvis
-library/corning
-library/eppendorf
-library/falcon
-library/greiner
-library/hamilton
-library/imcs
-library/nest
-library/opentrons
-library/perkin_elmer
-library/porvair
-library/revvity
-library/sergi
-library/thermo_fisher
-library/vwr
-library/diy/index
 ```

@@ -171,14 +171,11 @@
     description.innerHTML = item.description_html || "";
 
     const footer = element("div", "plr-library-card__footer");
-    const sourceLink = element("a", "plr-library-card__source", "Source page");
-    sourceLink.href = staticUrl(item.page);
     const modelButton = element("button", "plr-library-card__action", "View 3D");
     modelButton.type = "button";
     modelButton.disabled = !item.has_geometry;
     modelButton.addEventListener("click", () => openModel(item.definition));
 
-    footer.appendChild(sourceLink);
     footer.appendChild(modelButton);
     body.appendChild(vendor);
     body.appendChild(title);
