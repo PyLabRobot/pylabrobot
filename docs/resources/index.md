@@ -170,6 +170,11 @@ Open the {doc}`catalog page <catalog>` to search the library across manufacturer
 :caption: Resource Library
 
 catalog
+```
+
+```{toctree}
+:hidden:
+
 library/agenbio
 library/agilent
 library/alpaqua
