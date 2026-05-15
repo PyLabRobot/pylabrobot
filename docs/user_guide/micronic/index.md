@@ -14,11 +14,10 @@ PyLabRobot does not package any scanner helper executable.
 
 Rack reading (large scanner that decodes 96 tubes plus the side rack barcode):
 
-- `rack_reading.scan_rack()` to trigger image acquisition, decode all 96 tube
-  positions, read the side rack barcode, and return a `RackScanResult`
+- `rack_reading.scan_rack(rack)` to trigger image acquisition, decode all 96 tube
+  positions, read the side rack barcode, and return a `RackScanResult`. The driver
+  only supports 8x12 racks; passing a different shape raises `MicronicRackReaderError`.
 - `rack_reading.scan_rack_id()` for a rack-barcode-only read on the side reader
-- `rack_reading.get_layouts()`, `get_current_layout()`, and
-  `set_current_layout()` for the fixed 8x12 rack layout
 
 ## Hardware example
 
@@ -41,7 +40,9 @@ reader = MicronicCodeReader(
 await reader.setup()
 
 try:
-  rack_result = await reader.rack_reading.scan_rack(timeout=90.0, poll_interval=1.0)
+  rack_result = await reader.rack_reading.scan_rack(
+    rack=my_rack, timeout=90.0, poll_interval=1.0
+  )
   print(rack_result.rack_id)
   print(len([entry for entry in rack_result.entries if entry.tube_id]))
 

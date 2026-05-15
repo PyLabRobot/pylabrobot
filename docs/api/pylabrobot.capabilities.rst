@@ -220,12 +220,9 @@ Rack Reading
   :nosignatures:
   :recursive:
 
-    RackReaderState
     RackReaderError
-    RackReaderTimeoutError
     RackScanEntry
     RackScanResult
-    LayoutInfo
 
 
 Microscopy

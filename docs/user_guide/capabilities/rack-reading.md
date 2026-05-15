@@ -1,7 +1,7 @@
 # Rack Reading
 
-The `rack_reading` capability standardizes rack-scale code readers that trigger a rack scan,
-report normalized state while scanning, and return structured per-position scan results.
+The `rack_reading` capability standardizes rack-scale code readers that decode a tube rack and
+return structured per-position scan results.
 
 Unlike one-at-a-time code reads, rack reading is job-oriented and returns the full decoded rack map.
 
@@ -10,26 +10,13 @@ Unlike one-at-a-time code reads, rack reading is job-oriented and returns the fu
 ```python
 from pylabrobot.capabilities.rack_reading import RackReader
 
-result = await reader.scan_rack(timeout=60.0, poll_interval=1.0)
+result = await reader.rack_reading.scan_rack(rack, timeout=60.0, poll_interval=1.0)
 ```
 
-`scan_rack()` is the main public operation. It triggers the scan, waits internally until the
-reader reaches `dataready`, and then returns a `RackScanResult`.
-
-If the hardware supports reading just the rack barcode without decoding all tube positions,
-`scan_rack_id()` exposes that as a rack-reading operation and returns the rack identifier only.
-
-Lower-level methods are also available:
-
-- `get_state()`
-- `wait_for_data_ready()`
-- `trigger_rack_scan()`
-- `scan_rack_id()`
-- `get_scan_result()`
-- `get_rack_id()`
-- `get_layouts()`
-- `get_current_layout()`
-- `set_current_layout(layout)`
+- `scan_rack(rack, timeout, poll_interval)` — scan a `TubeRack` and return a `RackScanResult`. The
+  backend validates that the rack shape matches what the hardware supports.
+- `scan_rack_id(timeout, poll_interval)` — read just the rack barcode (no per-position decoding)
+  and return the rack identifier.
 
 ## Example With Micronic
 
@@ -44,7 +31,7 @@ reader = MicronicCodeReader(
 await reader.setup()
 
 try:
-  result = await reader.rack_reading.scan_rack(timeout=90.0, poll_interval=1.0)
+  result = await reader.rack_reading.scan_rack(rack=my_rack, timeout=90.0, poll_interval=1.0)
   print(result.rack_id)
   print(result.entries[0].position, result.entries[0].tube_id)
 

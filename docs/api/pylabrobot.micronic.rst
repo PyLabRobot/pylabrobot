@@ -30,6 +30,7 @@ Driver
 
     MicronicDriver
     MicronicError
+    MicronicRackReaderState
 
 
 Capabilities
