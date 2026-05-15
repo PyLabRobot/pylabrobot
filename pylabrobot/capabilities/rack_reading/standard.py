@@ -19,6 +19,4 @@ class RackScanResult:
   """A decoded rack scan."""
 
   rack_id: str
-  date: str
-  time: str
   entries: list[RackScanEntry]

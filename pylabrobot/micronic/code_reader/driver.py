@@ -282,9 +282,6 @@ class MicronicDriver(Driver):
         f"{self._expected_well_count}. Missing: {missing}"
       )
 
-    now = datetime.now()
-    date_text = now.strftime("%Y%m%d")
-    time_text = now.strftime("%H%M%S")
     entries = [
       RackScanEntry(
         position=position,
@@ -302,12 +299,7 @@ class MicronicDriver(Driver):
       except OSError:
         pass
 
-    return RackScanResult(
-      rack_id=rack_id,
-      date=date_text,
-      time=time_text,
-      entries=entries,
-    )
+    return RackScanResult(rack_id=rack_id, entries=entries)
 
 
 def run_scan(
