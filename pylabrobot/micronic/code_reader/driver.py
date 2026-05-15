@@ -64,7 +64,6 @@ class MicronicDriver(Driver):
     scanner_timeout_ms: int = 90000,
     serial_timeout_ms: int = 2500,
     keep_images: bool = False,
-    rack_id_override: Optional[str] = None,
   ):
     super().__init__()
     self.scanner = scanner
@@ -75,7 +74,6 @@ class MicronicDriver(Driver):
     self.scanner_timeout_ms = scanner_timeout_ms
     self.serial_timeout_ms = serial_timeout_ms
     self.keep_images = keep_images
-    self.rack_id_override = rack_id_override
     self._state = MicronicRackReaderState.IDLE
     self._expected_well_count = 0
     self._last_result: Optional[RackScanResult] = None
@@ -123,7 +121,6 @@ class MicronicDriver(Driver):
       "scanner_timeout_ms": self.scanner_timeout_ms,
       "serial_timeout_ms": self.serial_timeout_ms,
       "keep_images": self.keep_images,
-      "rack_id_override": self.rack_id_override,
     }
 
   async def get_rack_reader_state(self) -> MicronicRackReaderState:
@@ -160,8 +157,6 @@ class MicronicDriver(Driver):
 
   async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
     del timeout, poll_interval
-    if self.rack_id_override:
-      return self.rack_id_override
     return await read_rack_id_plr_serial(
       serial_port=self.serial_port,
       timeout_ms=self.serial_timeout_ms,
@@ -211,7 +206,6 @@ class MicronicDriver(Driver):
     rack_id = read_rack_id(
       serial_port=self.serial_port,
       timeout_ms=self.serial_timeout_ms,
-      rack_id_override=self.rack_id_override,
     )
     decoded, self.last_decode_metadata = decode_image(image_path)
     if len(decoded) < self._expected_well_count:
@@ -246,11 +240,7 @@ class MicronicDriver(Driver):
 def read_rack_id(
   serial_port: str = "COM4",
   timeout_ms: int = 2500,
-  rack_id_override: Optional[str] = None,
 ) -> str:
-  if rack_id_override:
-    return rack_id_override
-
   return asyncio.run(read_rack_id_plr_serial(serial_port=serial_port, timeout_ms=timeout_ms))
 
 

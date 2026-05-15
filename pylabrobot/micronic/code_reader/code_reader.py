@@ -27,7 +27,6 @@ class MicronicCodeReader(Device):
     poll_interval: float = 1.0,
     serial_timeout_ms: int = 2500,
     keep_images: bool = False,
-    rack_id_override: Optional[str] = None,
   ):
     driver = MicronicDriver(
       scanner=scanner,
@@ -36,7 +35,6 @@ class MicronicCodeReader(Device):
       scanner_timeout_ms=int(timeout * 1000),
       serial_timeout_ms=serial_timeout_ms,
       keep_images=keep_images,
-      rack_id_override=rack_id_override,
     )
     super().__init__(driver=driver)
     self.driver: MicronicDriver = driver
