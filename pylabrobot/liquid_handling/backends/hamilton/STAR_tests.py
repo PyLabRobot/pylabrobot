@@ -5,6 +5,7 @@ import unittest
 import unittest.mock
 from typing import Literal, cast
 
+from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
@@ -145,6 +146,91 @@ def _any_write_and_read_command_call(cmd):
     read_timeout=unittest.mock.ANY,
     wait=unittest.mock.ANY,
   )
+
+
+class TestiSWAPForwardKinematics(unittest.TestCase):
+  """Geometry of `STARBackend._iswap_fk` (pure FK, no I/O).
+
+  Verifies the canonical (W, T) configurations against the docstring examples
+  in `request_iswap_wrist_drive_orientation`:
+    - W=FRONT (0)  + T=STRAIGHT  -> arm extends in -y (front of deck)
+    - W=LEFT (-90) + T=STRAIGHT  -> arm extends in -x (left of deck)
+    - W=RIGHT(+90) + T=STRAIGHT  -> arm extends in +x (right of deck)
+    - W=FRONT (0)  + T=RIGHT     -> arm tip ends up to the left (-x) of rot. drive
+  Uses factory-default link lengths (138 mm each) and the factory-default
+  STRAIGHT angle (~-45 deg). Asserts only on the public pose contract
+  (`location` + `rotation.z`).
+  """
+
+  L1 = 138.0
+  L2 = 138.0
+  T_STRAIGHT = -45.0  # factory-default STRAIGHT calibration (EEPROM-dependent in practice)
+  Z_OFFSET = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+  BASE_X, BASE_Y, BASE_Z = 100.0, 500.0, 200.0
+  # Gripper jaw width: hardware range ~71-134 mm (drive min/max increments).
+  # FK doesn't read this axis, but the joint dict represents full state, so
+  # use a realistic mid-range plate-grip value.
+  GRIPPER_WIDTH = 90.0
+
+  def _fk(self, w: float, t: float) -> CartesianCoords:
+    joints = {
+      STARBackend.iSWAPAxis.X: self.BASE_X,
+      STARBackend.iSWAPAxis.Y: self.BASE_Y,
+      STARBackend.iSWAPAxis.Z: self.BASE_Z,
+      STARBackend.iSWAPAxis.ROTATION: w,
+      STARBackend.iSWAPAxis.WRIST: t,
+      STARBackend.iSWAPAxis.GRIPPER: self.GRIPPER_WIDTH,
+    }
+    return STARBackend._iswap_fk(
+      joints=joints,
+      link_1_length=self.L1,
+      link_2_length=self.L2,
+      wrist_straight_angle=self.T_STRAIGHT,
+    )
+
+  def test_returns_cartesian_coords(self):
+    pose = self._fk(w=0.0, t=self.T_STRAIGHT)
+    self.assertIsInstance(pose, CartesianCoords)
+    # Gripper plane stays parallel to deck — only `rotation.z` (yaw) is non-zero.
+    self.assertEqual(pose.rotation.x, 0.0)
+    self.assertEqual(pose.rotation.y, 0.0)
+
+  def test_front_straight_extends_in_minus_y(self):
+    pose = self._fk(w=0.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y - (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.z, self.BASE_Z - self.Z_OFFSET, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -90.0, places=6)
+
+  def test_left_straight_extends_in_minus_x(self):
+    pose = self._fk(w=-90.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X - (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -180.0, places=6)
+
+  def test_right_straight_extends_in_plus_x(self):
+    pose = self._fk(w=+90.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X + (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+    self.assertAlmostEqual(pose.rotation.z, 0.0, places=6)
+
+  def test_front_right_extends_in_minus_x(self):
+    """W=FRONT + T=RIGHT (-135 deg motor) -> gripper points to deck-left."""
+    pose = self._fk(w=0.0, t=-135.0)
+    # Link 1 points -y from base; link 2 is bent right (CW by 90 deg) -> points -x.
+    self.assertAlmostEqual(pose.location.x, self.BASE_X - self.L2, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y - self.L1, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -180.0, places=6)
+
+  def test_reverse_folds_arm_back_onto_base_xy(self):
+    """T=REVERSE (+135) folds link 2 back 180 deg from link 1 -> tip XY = base XY."""
+    pose = self._fk(w=0.0, t=+135.0)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+
+  def test_grip_z_is_thirteen_mm_below_base_z(self):
+    pose = self._fk(w=0.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(self.BASE_Z - pose.location.z, self.Z_OFFSET, places=6)
 
 
 class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
