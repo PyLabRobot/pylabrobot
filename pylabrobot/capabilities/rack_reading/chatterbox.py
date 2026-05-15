@@ -13,8 +13,6 @@ class RackReaderChatterboxBackend(RackReaderBackend):
     del rack, timeout, poll_interval
     return RackScanResult(
       rack_id="CHATTERBOX",
-      date="19700101",
-      time="000000",
       entries=[
         RackScanEntry(position="A01", tube_id="SIMULATED", status="Code OK"),
       ],

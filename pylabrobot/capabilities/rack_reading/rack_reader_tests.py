@@ -7,8 +7,6 @@ from pylabrobot.resources.tube_rack import TubeRack
 
 SCAN_RESULT = RackScanResult(
   rack_id="5500135415",
-  date="20260316",
-  time="160626",
   entries=[
     RackScanEntry(position="A01", tube_id="7518613629", status="Code OK"),
   ],
