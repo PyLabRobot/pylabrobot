@@ -1,6 +1,7 @@
 # mypy: disable-error-code="attr-defined,method-assign"
 
 import contextlib
+import copy
 import unittest
 import unittest.mock
 from typing import Literal, cast
@@ -39,11 +40,14 @@ from .STAR_backend import (
   STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
+  iSWAPInformation,
   parse_star_fw_string,
 )
 from .STAR_chatterbox import (
   _DEFAULT_EXTENDED_CONFIGURATION,
+  _DEFAULT_ISWAP_INFORMATION,
   _DEFAULT_MACHINE_CONFIGURATION,
+  STARChatterboxBackend,
 )
 
 
@@ -263,14 +267,7 @@ class TestiSWAPRequestPose(unittest.IsolatedAsyncioTestCase):
   def _make_backend(self) -> STARBackend:
     b = STARBackend()
     b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    b._iswap_link_1_length = 138.0
-    b._iswap_link_2_length = 138.0
-    b._iswap_wrist_drive_predefined_increments = {
-      STARBackend.WristDriveOrientation.RIGHT: -26577,
-      STARBackend.WristDriveOrientation.STRAIGHT: -8859,
-      STARBackend.WristDriveOrientation.LEFT: 8859,
-      STARBackend.WristDriveOrientation.REVERSE: 26577,
-    }
+    b._iswap_information = _DEFAULT_ISWAP_INFORMATION
     b.iswap_rotation_drive_request_x = unittest.mock.AsyncMock(return_value=100.0)
     b.iswap_rotation_drive_request_y = unittest.mock.AsyncMock(return_value=500.0)
     b.iswap_rotation_drive_request_z = unittest.mock.AsyncMock(return_value=200.0)
@@ -297,6 +294,74 @@ class TestiSWAPRequestPose(unittest.IsolatedAsyncioTestCase):
     # rotation.x / y are always 0 - the gripper plane stays parallel to the deck.
     self.assertEqual(pose.rotation.x, 0.0)
     self.assertEqual(pose.rotation.y, 0.0)
+
+
+class TestiSWAPInformationGuard(unittest.TestCase):
+  """The `iswap_information` property raises before setup populates it."""
+
+  def test_raises_before_setup(self):
+    b = STARBackend()
+    self.assertIsNone(b._iswap_information)
+    with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
+      _ = b.iswap_information
+
+  def test_returns_record_when_set(self):
+    b = STARBackend()
+    b._iswap_information = _DEFAULT_ISWAP_INFORMATION
+    self.assertIs(b.iswap_information, _DEFAULT_ISWAP_INFORMATION)
+
+
+class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
+  """`STARChatterboxBackend.setup()` populates `_iswap_information` from the
+  default record (or a constructor override) when the iSWAP is installed."""
+
+  @staticmethod
+  def _make_chatterbox(**kwargs) -> STARChatterboxBackend:
+    cb = STARChatterboxBackend(**kwargs)
+    cb.set_deck(STARLetDeck())
+    return cb
+
+  async def test_default_record_assigned_when_iswap_installed(self):
+    cb = self._make_chatterbox()
+    await cb.setup()
+    self.assertIs(cb.iswap_information, _DEFAULT_ISWAP_INFORMATION)
+
+  async def test_constructor_override_takes_precedence(self):
+    custom = iSWAPInformation(
+      fw_version="custom-test",
+      rotation_drive_x_offset=50.0,
+      rotation_drive_y_max=700.0,
+      link_1_length=140.0,
+      link_2_length=140.0,
+      rotation_drive_predefined_increments={
+        STARBackend.RotationDriveOrientation.LEFT: -29000,
+        STARBackend.RotationDriveOrientation.FRONT: 0,
+        STARBackend.RotationDriveOrientation.RIGHT: 29000,
+        STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
+      },
+      wrist_drive_predefined_increments={
+        STARBackend.WristDriveOrientation.RIGHT: -26000,
+        STARBackend.WristDriveOrientation.STRAIGHT: -8800,
+        STARBackend.WristDriveOrientation.LEFT: 8800,
+        STARBackend.WristDriveOrientation.REVERSE: 26000,
+      },
+    )
+    cb = self._make_chatterbox(iswap_information=custom)
+    await cb.setup()
+    self.assertIs(cb.iswap_information, custom)
+    self.assertEqual(cb.iswap_information.fw_version, "custom-test")
+    self.assertEqual(cb.iswap_information.link_1_length, 140.0)
+
+  async def test_skipped_when_iswap_not_installed(self):
+    # Build an extended_conf with iSWAP NOT installed.
+    no_iswap_conf = copy.deepcopy(_DEFAULT_EXTENDED_CONFIGURATION)
+    no_iswap_conf.left_x_drive = copy.deepcopy(no_iswap_conf.left_x_drive)
+    no_iswap_conf.left_x_drive.iswap_installed = False
+    cb = self._make_chatterbox(extended_configuration=no_iswap_conf)
+    await cb.setup()
+    self.assertIsNone(cb._iswap_information)
+    with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
+      _ = cb.iswap_information
 
 
 class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
