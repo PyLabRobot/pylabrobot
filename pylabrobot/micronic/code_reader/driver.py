@@ -71,7 +71,6 @@ class MicronicDriver(Driver):
     rack_id_command: Optional[Sequence[str]] = None,
     scanner_timeout_ms: int = 90000,
     serial_timeout_ms: int = 2500,
-    min_wells: int = 96,
     keep_images: bool = False,
     image_input: Optional[str] = None,
     rack_id_override: Optional[str] = None,
@@ -90,11 +89,11 @@ class MicronicDriver(Driver):
     self.rack_id_command = list(rack_id_command) if rack_id_command is not None else None
     self.scanner_timeout_ms = scanner_timeout_ms
     self.serial_timeout_ms = serial_timeout_ms
-    self.min_wells = min_wells
     self.keep_images = keep_images
     self.image_input = image_input
     self.rack_id_override = rack_id_override
     self._state = MicronicRackReaderState.IDLE
+    self._expected_well_count = 0
     self._last_result: Optional[RackScanResult] = None
     self._scan_task: Optional[asyncio.Future[RackScanResult]] = None
     self._scan_error: Optional[Exception] = None
@@ -146,7 +145,6 @@ class MicronicDriver(Driver):
       "rack_id_command": self.rack_id_command,
       "scanner_timeout_ms": self.scanner_timeout_ms,
       "serial_timeout_ms": self.serial_timeout_ms,
-      "min_wells": self.min_wells,
       "keep_images": self.keep_images,
       "image_input": self.image_input,
       "rack_id_override": self.rack_id_override,
@@ -169,6 +167,7 @@ class MicronicDriver(Driver):
     if self._scan_task is not None and not self._scan_task.done():
       raise MicronicError("Micronic rack scan is already in progress.")
     self._last_result = None
+    self._expected_well_count = rack.num_items
     self._state = MicronicRackReaderState.SCANNING
     self._scan_error = None
     self._reported_scanning_since_trigger = False
@@ -276,11 +275,11 @@ class MicronicDriver(Driver):
       rack_id_command=self.rack_id_command,
     )
     decoded, self.last_decode_metadata = decode_image(image_path)
-    if len(decoded) < self.min_wells:
+    if len(decoded) < self._expected_well_count:
       missing = ", ".join(position for position in iter_positions() if position not in decoded)
       raise MicronicError(
-        f"Micronic decode found {len(decoded)} wells; expected at least {self.min_wells}. "
-        f"Missing: {missing}"
+        f"Micronic decode found {len(decoded)} wells; expected at least "
+        f"{self._expected_well_count}. Missing: {missing}"
       )
 
     now = datetime.now()
