@@ -137,7 +137,11 @@
       return;
     }
 
-    modal.querySelector(".plr-library-modal__title").textContent = definitionName;
+    const modalTitle = modal.querySelector(".plr-library-modal__title");
+    modalTitle.textContent = "";
+    const modalCode = document.createElement("code");
+    modalCode.textContent = definitionName;
+    modalTitle.appendChild(modalCode);
     modal.removeAttribute("hidden");
     document.body.classList.add("plr-library-modal-open");
     state.viewer.setCatalog(catalog);
@@ -165,7 +169,10 @@
 
     const body = element("div", "plr-library-card__body");
     const vendor = element("div", "plr-library-card__vendor", item.vendor);
-    const title = element("h3", "plr-library-card__title", item.definition);
+    const title = element("h3", "plr-library-card__title");
+    const titleCode = document.createElement("code");
+    titleCode.textContent = item.definition;
+    title.appendChild(titleCode);
     const section = element("div", "plr-library-card__section", item.section || "Resource");
     const description = element("div", "plr-library-card__description");
     description.innerHTML = item.description_html || "";
@@ -229,21 +236,45 @@
     const section = root.querySelector("#plr-catalog-section");
     setSelectOptions(vendor, unique(state.index.items.map((item) => item.vendor)), state.vendor);
     setSelectOptions(section, unique(state.index.items.map((item) => item.section)), state.section);
+    search.value = state.query;
 
     search.addEventListener("input", () => {
       state.query = search.value;
+      writeUrlState();
       renderCatalog(root);
     });
     vendor.addEventListener("change", () => {
       state.vendor = vendor.value;
+      writeUrlState();
       renderCatalog(root);
     });
     section.addEventListener("change", () => {
       state.section = section.value;
+      writeUrlState();
       renderCatalog(root);
     });
 
     renderCatalog(root);
+  }
+
+  function readUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    state.query = params.get("q") || "";
+    state.vendor = params.get("vendor") || "All";
+    state.section = params.get("section") || "All";
+  }
+
+  function writeUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    if (state.query) params.set("q", state.query);
+    else params.delete("q");
+    if (state.vendor && state.vendor !== "All") params.set("vendor", state.vendor);
+    else params.delete("vendor");
+    if (state.section && state.section !== "All") params.set("section", state.section);
+    else params.delete("section");
+    const queryString = params.toString();
+    const newUrl = `${window.location.pathname}${queryString ? "?" + queryString : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", newUrl);
   }
 
   function initializeCatalogPage() {
@@ -252,6 +283,7 @@
       return;
     }
 
+    readUrlState();
     root.innerHTML = `<div class="plr-catalog-loading">Loading catalog...</div>`;
     fetch(catalogIndexUrl())
       .then((response) => {
