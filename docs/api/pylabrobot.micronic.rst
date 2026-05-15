@@ -29,8 +29,31 @@ Driver
   :recursive:
 
     MicronicDriver
-    MicronicError
     MicronicRackReaderState
+
+.. currentmodule:: pylabrobot.micronic.code_reader.errors
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    MicronicError
+
+
+Scanners
+--------
+
+.. currentmodule:: pylabrobot.micronic.code_reader.scanner
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    Scanner
+    TwainScanner
+    SaneScanner
 
 
 Capabilities
