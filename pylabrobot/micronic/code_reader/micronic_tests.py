@@ -309,7 +309,6 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       serial_port="/dev/ttyUSB0",
       timeout=12.0,
       poll_interval=0.25,
-      rack_id_override="9500017722",
     )
     await reader.setup()
     try:
@@ -335,7 +334,6 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     reader = MicronicCodeReader(
       scanner=_mock_scanner(),
       serial_port="/dev/ttyUSB0",
-      rack_id_override="9500017722",
     )
     self.assertIsInstance(reader.driver, MicronicDriver)
     self.assertFalse(hasattr(reader, "barcode_scanning"))
