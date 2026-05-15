@@ -3,8 +3,7 @@
 This driver does not call Micronic Code Reader or IO Monitor. It owns the local
 scanner path directly:
 
-- acquire a rack image through a user-supplied scan command, Windows TWAIN
-  helper, or SANE ``scanimage`` command,
+- acquire a rack image through a caller-supplied :class:`Scanner`,
 - read the rack ID through the side serial barcode reader,
 - decode tube DataMatrix codes locally, and
 - return the standard PLR rack-reading result.
@@ -15,10 +14,8 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-import os
 import re
-import shutil
-import subprocess  # nosec B404 - local scanner/rack-id helper execution is the interface.
+import subprocess  # nosec B404 - local rack-id helper execution is the interface.
 import tempfile
 import time
 from dataclasses import dataclass
@@ -32,16 +29,15 @@ from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.tube_rack import TubeRack
 
+from .errors import MicronicError
+from .scanner import Scanner
+
 logger = logging.getLogger(__name__)
 
 ROWS = "ABCDEFGH"
 COLS = 12
 RACK_ROWS = 8
 RACK_COLS = 12
-
-
-class MicronicError(Exception):
-  """Raised when Micronic driver operations fail."""
 
 
 class MicronicRackReaderState(enum.Enum):
@@ -63,28 +59,17 @@ class MicronicDriver(Driver):
 
   def __init__(
     self,
-    twain_scanner_path: Optional[str] = None,
-    twain_source: str = "AVA6PlusG",
-    sane_device: Optional[str] = None,
-    scanner_backend: str = "auto",
-    scan_command: Optional[Sequence[str]] = None,
-    image_extension: Optional[str] = None,
+    scanner: Scanner,
+    serial_port: str,
     image_dir: Optional[str] = None,
-    serial_port: str = "COM4",
     rack_id_command: Optional[Sequence[str]] = None,
     scanner_timeout_ms: int = 90000,
     serial_timeout_ms: int = 2500,
     keep_images: bool = False,
-    image_input: Optional[str] = None,
     rack_id_override: Optional[str] = None,
   ):
     super().__init__()
-    self.twain_scanner_path = twain_scanner_path
-    self.twain_source = twain_source
-    self.sane_device = sane_device
-    self.scanner_backend = scanner_backend
-    self.scan_command = list(scan_command) if scan_command is not None else None
-    self.image_extension = normalize_image_extension(image_extension) if image_extension else None
+    self.scanner = scanner
     self.image_dir = (
       Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "pylabrobot-micronic"
     )
@@ -93,7 +78,6 @@ class MicronicDriver(Driver):
     self.scanner_timeout_ms = scanner_timeout_ms
     self.serial_timeout_ms = serial_timeout_ms
     self.keep_images = keep_images
-    self.image_input = image_input
     self.rack_id_override = rack_id_override
     self._state = MicronicRackReaderState.IDLE
     self._expected_well_count = 0
@@ -137,19 +121,12 @@ class MicronicDriver(Driver):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "twain_scanner_path": self.twain_scanner_path,
-      "twain_source": self.twain_source,
-      "sane_device": self.sane_device,
-      "scanner_backend": self.scanner_backend,
-      "scan_command": self.scan_command,
-      "image_extension": self.image_extension,
       "image_dir": str(self.image_dir),
       "serial_port": self.serial_port,
       "rack_id_command": self.rack_id_command,
       "scanner_timeout_ms": self.scanner_timeout_ms,
       "serial_timeout_ms": self.serial_timeout_ms,
       "keep_images": self.keep_images,
-      "image_input": self.image_input,
       "rack_id_override": self.rack_id_override,
     }
 
@@ -192,7 +169,7 @@ class MicronicDriver(Driver):
     if self.rack_id_command is not None:
       return await asyncio.to_thread(
         read_rack_id_command,
-        format_command(
+        _format_command(
           self.rack_id_command,
           serial_port=self.serial_port,
           timeout_ms=self.serial_timeout_ms,
@@ -237,28 +214,12 @@ class MicronicDriver(Driver):
 
   def _scan_rack_blocking(self) -> RackScanResult:
     self.image_dir.mkdir(parents=True, exist_ok=True)
-    image_extension = choose_image_extension(
-      image_extension=self.image_extension,
-      image_input=self.image_input,
-      scanner_backend=self.scanner_backend,
-      scan_command=self.scan_command,
-      twain_scanner_path=self.twain_scanner_path,
-      sane_device=self.sane_device,
-    )
     image_path = (
-      self.image_dir / f"micronic_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.{image_extension}"
+      self.image_dir
+      / f"micronic_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.{self.scanner.image_extension}"
     )
 
-    self.last_scan_metadata = run_scan(
-      twain_scanner_path=self.twain_scanner_path,
-      twain_source=self.twain_source,
-      sane_device=self.sane_device,
-      scanner_backend=self.scanner_backend,
-      scan_command=self.scan_command,
-      output_path=image_path,
-      timeout_ms=self.scanner_timeout_ms,
-      image_input=self.image_input,
-    )
+    self.last_scan_metadata = self.scanner.acquire(image_path, self.scanner_timeout_ms)
     self.last_image_path = image_path
 
     rack_id = read_rack_id(
@@ -287,7 +248,7 @@ class MicronicDriver(Driver):
       for position in iter_positions()
     ]
 
-    if not self.keep_images and self.image_input is None:
+    if not self.keep_images:
       try:
         image_path.unlink()
         self.last_image_path = None
@@ -295,101 +256,6 @@ class MicronicDriver(Driver):
         pass
 
     return RackScanResult(rack_id=rack_id, entries=entries)
-
-
-def run_scan(
-  output_path: Path,
-  timeout_ms: int,
-  twain_scanner_path: Optional[str] = None,
-  twain_source: str = "AVA6PlusG",
-  sane_device: Optional[str] = None,
-  scanner_backend: str = "auto",
-  scan_command: Optional[Sequence[str]] = None,
-  image_input: Optional[str] = None,
-) -> dict[str, object]:
-  if image_input:
-    source_path = Path(image_input)
-    if not source_path.exists():
-      raise MicronicError(f"Image input does not exist: {source_path}")
-    output_path.write_bytes(source_path.read_bytes())
-    return {"stdout": "", "stderr": "", "source": str(source_path)}
-
-  if scan_command is not None:
-    command = format_command(
-      scan_command,
-      output_path=output_path,
-      timeout_ms=timeout_ms,
-      twain_source=twain_source,
-      sane_device=sane_device or "",
-    )
-    return run_scan_command(command, output_path, timeout_ms, source="command")
-
-  backend = normalize_scanner_backend(scanner_backend)
-  if backend == "command":
-    raise MicronicError("Command scan requested, but scan_command was not configured.")
-
-  if backend in {"auto", "twain"}:
-    resolved_twain_path = resolve_twain_scanner_path(twain_scanner_path)
-    if resolved_twain_path is not None:
-      return run_scan_command(
-        [resolved_twain_path, str(output_path), twain_source, str(timeout_ms)],
-        output_path,
-        timeout_ms,
-        source="twain",
-      )
-    if backend == "twain":
-      raise MicronicError(
-        "TWAIN scan requested, but no TWAIN helper was configured. Set "
-        "twain_scanner_path, MICRONIC_TWAIN_SCANNER_PATH, or put twain_scan on PATH."
-      )
-
-  if backend in {"auto", "sane"}:
-    scanimage_path = shutil.which("scanimage")
-    if scanimage_path is not None:
-      command = [scanimage_path]
-      if sane_device:
-        command.extend(["--device-name", sane_device])
-      command.extend(["--format=tiff", "--output-file", str(output_path)])
-      return run_scan_command(command, output_path, timeout_ms, source="sane")
-    if backend == "sane":
-      raise MicronicError("SANE scan requested, but scanimage was not found on PATH.")
-
-  raise MicronicError(
-    "No scan acquisition method is available. Configure scan_command, "
-    "twain_scanner_path/MICRONIC_TWAIN_SCANNER_PATH, or install SANE scanimage."
-  )
-
-
-def run_scan_command(
-  command: Sequence[str],
-  output_path: Path,
-  timeout_ms: int,
-  source: str,
-) -> dict[str, object]:
-  try:
-    completed = subprocess.run(  # nosec B603 - operator-configured command, shell=False.
-      list(command),
-      check=False,
-      capture_output=True,
-      text=True,
-      timeout=(timeout_ms / 1000) + 15,
-    )
-  except FileNotFoundError as exc:
-    raise MicronicError(f"Scan command was not found: {command[0]}") from exc
-
-  if completed.returncode != 0:
-    raise MicronicError(
-      "Scan command failed with exit code "
-      f"{completed.returncode}: {completed.stderr.strip() or completed.stdout.strip()}"
-    )
-  if not output_path.exists():
-    raise MicronicError(f"Scan command did not create image: {output_path}")
-  return {
-    "stdout": completed.stdout.strip(),
-    "stderr": completed.stderr.strip(),
-    "source": source,
-    "command": list(command),
-  }
 
 
 def read_rack_id(
@@ -402,7 +268,7 @@ def read_rack_id(
     return rack_id_override
 
   if rack_id_command is not None:
-    command = format_command(
+    command = _format_command(
       rack_id_command,
       serial_port=serial_port,
       timeout_ms=timeout_ms,
@@ -472,59 +338,7 @@ def extract_rack_id(text: str) -> str:
   return match.group(0) if match else "NOREAD"
 
 
-def normalize_scanner_backend(scanner_backend: str) -> str:
-  backend = scanner_backend.strip().lower()
-  if backend not in {"auto", "twain", "sane", "command"}:
-    raise MicronicError(
-      "Unsupported scanner backend "
-      f"{scanner_backend!r}; expected 'auto', 'twain', 'sane', or 'command'."
-    )
-  return backend
-
-
-def normalize_image_extension(image_extension: str) -> str:
-  normalized = image_extension.strip().lstrip(".")
-  if not normalized:
-    raise MicronicError("image_extension must not be empty.")
-  return normalized
-
-
-def choose_image_extension(
-  image_extension: Optional[str],
-  image_input: Optional[str],
-  scanner_backend: str,
-  scan_command: Optional[Sequence[str]],
-  twain_scanner_path: Optional[str],
-  sane_device: Optional[str],
-) -> str:
-  if image_extension:
-    return normalize_image_extension(image_extension)
-  if image_input and Path(image_input).suffix:
-    return normalize_image_extension(Path(image_input).suffix)
-
-  backend = normalize_scanner_backend(scanner_backend)
-  if backend == "sane" or (
-    backend == "auto"
-    and scan_command is None
-    and twain_scanner_path is None
-    and (sane_device is not None or os.name != "nt")
-  ):
-    return "tiff"
-  return "bmp"
-
-
-def resolve_twain_scanner_path(twain_scanner_path: Optional[str]) -> Optional[str]:
-  if twain_scanner_path:
-    return twain_scanner_path
-
-  env_path = os.environ.get("MICRONIC_TWAIN_SCANNER_PATH")
-  if env_path:
-    return env_path
-
-  return shutil.which("twain_scan.exe") or shutil.which("twain_scan")
-
-
-def format_command(command: Sequence[str], **values: object) -> list[str]:
+def _format_command(command: Sequence[str], **values: object) -> list[str]:
   return [part.format(**values) for part in command]
 
 

@@ -4,4 +4,7 @@ from pylabrobot.micronic.code_reader import (
   MicronicError,
   MicronicRackReaderState,
   MicronicRackReadingBackend,
+  SaneScanner,
+  Scanner,
+  TwainScanner,
 )
