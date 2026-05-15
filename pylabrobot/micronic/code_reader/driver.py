@@ -12,7 +12,6 @@ scanner path directly:
 from __future__ import annotations
 
 import asyncio
-import enum
 import logging
 import re
 import tempfile
@@ -37,14 +36,6 @@ ROWS = "ABCDEFGH"
 COLS = 12
 RACK_ROWS = 8
 RACK_COLS = 12
-
-
-class MicronicRackReaderState(enum.Enum):
-  """Micronic rack reader state machine."""
-
-  IDLE = "idle"
-  SCANNING = "scanning"
-  DATAREADY = "dataready"
 
 
 @dataclass(frozen=True)
@@ -83,12 +74,6 @@ class MicronicDriver(Driver):
       timeout=0.1,
       write_timeout=1.0,
     )
-    self._state = MicronicRackReaderState.IDLE
-    self._expected_well_count = 0
-    self._last_result: Optional[RackScanResult] = None
-    self._scan_task: Optional[asyncio.Future[RackScanResult]] = None
-    self._scan_error: Optional[Exception] = None
-    self._reported_scanning_since_trigger = False
     self.last_image_path: Optional[Path] = None
     self.last_scan_metadata: dict[str, object] = {}
     self.last_decode_metadata: dict[str, object] = {}
@@ -99,32 +84,7 @@ class MicronicDriver(Driver):
     await self.io.setup()
 
   async def stop(self):
-    try:
-      scan_task = self._scan_task
-      if scan_task is None:
-        if self._scan_error is not None:
-          raise self._scan_error
-        return
-      if scan_task.done():
-        self._complete_scan_task(scan_task)
-      else:
-        try:
-          self._last_result = await scan_task
-        except asyncio.CancelledError:
-          self._scan_error = MicronicError("Micronic rack scan was cancelled.")
-          self._state = MicronicRackReaderState.IDLE
-        except Exception as exc:
-          self._scan_error = exc
-          self._state = MicronicRackReaderState.IDLE
-        else:
-          self._scan_error = None
-          self._state = MicronicRackReaderState.DATAREADY
-        finally:
-          self._scan_task = None
-      if self._scan_error is not None:
-        raise self._scan_error
-    finally:
-      await self.io.stop()
+    await self.io.stop()
 
   def serialize(self) -> dict:
     return {
@@ -135,30 +95,11 @@ class MicronicDriver(Driver):
       "keep_images": self.keep_images,
     }
 
-  async def get_rack_reader_state(self) -> MicronicRackReaderState:
-    if (
-      self._state == MicronicRackReaderState.SCANNING and not self._reported_scanning_since_trigger
-    ):
-      self._reported_scanning_since_trigger = True
-      return self._state
-    self._complete_finished_scan_task()
-    if self._scan_error is not None:
-      raise self._scan_error
-    return self._state
-
-  async def trigger_rack_scan(self, rack: TubeRack) -> None:
+  async def scan_rack(self, rack: TubeRack) -> RackScanResult:
     self._validate_rack(rack)
-    self._complete_finished_scan_task()
-    if self._scan_task is not None and not self._scan_task.done():
-      raise MicronicError("Micronic rack scan is already in progress.")
     rack_id = await self.scan_rack_id()
-    self._last_result = None
-    self._expected_well_count = rack.num_items
-    self._state = MicronicRackReaderState.SCANNING
-    self._scan_error = None
-    self._reported_scanning_since_trigger = False
     loop = asyncio.get_running_loop()
-    self._scan_task = loop.run_in_executor(None, self._scan_rack_blocking, rack_id)
+    return await loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
 
   @staticmethod
   def _validate_rack(rack: TubeRack) -> None:
@@ -191,38 +132,7 @@ class MicronicDriver(Driver):
     match = re.search(r"\d{6,}", text)
     return match.group(0) if match else "NOREAD"
 
-  async def get_scan_result(self) -> RackScanResult:
-    self._complete_finished_scan_task()
-    if self._scan_error is not None:
-      raise self._scan_error
-    if self._state == MicronicRackReaderState.SCANNING:
-      raise MicronicError("Micronic rack scan is still in progress.")
-    if self._last_result is None:
-      raise MicronicError("No Micronic rack scan has completed yet.")
-    return self._last_result
-
-  def _complete_finished_scan_task(self) -> None:
-    if self._scan_task is not None and self._scan_task.done():
-      self._complete_scan_task(self._scan_task)
-
-  def _complete_scan_task(self, task: asyncio.Future[RackScanResult]) -> None:
-    if task is not self._scan_task:
-      return
-
-    self._scan_task = None
-    try:
-      self._last_result = task.result()
-    except asyncio.CancelledError:
-      self._scan_error = MicronicError("Micronic rack scan was cancelled.")
-      self._state = MicronicRackReaderState.IDLE
-    except Exception as exc:
-      self._scan_error = exc
-      self._state = MicronicRackReaderState.IDLE
-    else:
-      self._scan_error = None
-      self._state = MicronicRackReaderState.DATAREADY
-
-  def _scan_rack_blocking(self, rack_id: str) -> RackScanResult:
+  def _scan_rack_blocking(self, rack_id: str, expected_well_count: int) -> RackScanResult:
     self.image_dir.mkdir(parents=True, exist_ok=True)
     image_path = (
       self.image_dir
@@ -233,11 +143,11 @@ class MicronicDriver(Driver):
     self.last_image_path = image_path
 
     decoded, self.last_decode_metadata = decode_image(image_path)
-    if len(decoded) < self._expected_well_count:
+    if len(decoded) < expected_well_count:
       missing = ", ".join(position for position in iter_positions() if position not in decoded)
       raise MicronicError(
         f"Micronic decode found {len(decoded)} wells; expected at least "
-        f"{self._expected_well_count}. Missing: {missing}"
+        f"{expected_well_count}. Missing: {missing}"
       )
 
     for position, result in decoded.items():

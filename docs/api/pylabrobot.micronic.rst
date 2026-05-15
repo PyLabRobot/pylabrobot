@@ -29,7 +29,6 @@ Driver
   :recursive:
 
     MicronicDriver
-    MicronicRackReaderState
 
 .. currentmodule:: pylabrobot.micronic.code_reader.errors
 

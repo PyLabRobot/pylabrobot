@@ -1,4 +1,3 @@
-import asyncio
 import os
 import tempfile
 import unittest
@@ -11,7 +10,6 @@ from pylabrobot.micronic.code_reader.driver import (
   DecodeResult,
   MicronicDriver,
   MicronicError,
-  MicronicRackReaderState,
 )
 from pylabrobot.micronic.code_reader.rack_reading_backend import MicronicRackReadingBackend
 from pylabrobot.resources.tube_rack import TubeRack
@@ -30,14 +28,6 @@ def _mock_scanner(image_extension: str = "bmp") -> MagicMock:
   scanner.image_extension = image_extension
   scanner.acquire = MagicMock(return_value={"source": "test"})
   return scanner
-
-
-async def wait_for_dataready(driver: MicronicDriver) -> None:
-  for _ in range(100):
-    if await driver.get_rack_reader_state() == MicronicRackReaderState.DATAREADY:
-      return
-    await asyncio.sleep(0.01)
-  raise AssertionError("Micronic test scan did not reach dataready.")
 
 
 class TestScannerClasses(unittest.IsolatedAsyncioTestCase):
@@ -113,7 +103,7 @@ class TestScannerClasses(unittest.IsolatedAsyncioTestCase):
 
 
 class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
-  async def test_driver_scan_populates_standard_rack_result(self):
+  async def test_scan_rack_populates_standard_rack_result(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
       driver = MicronicDriver(
@@ -131,18 +121,15 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         patch.object(driver.io, "stop", AsyncMock()),
         patch.object(
           driver, "scan_rack_id", AsyncMock(return_value="9500017722")
-        ) as read_rack_id_mock,
+        ) as scan_rack_id_mock,
         patch(
           "pylabrobot.micronic.code_reader.driver.decode_image",
           return_value=(decoded, {"decodedWells": 2}),
         ) as decode_image_mock,
       ):
         await driver.setup()
-        await driver.trigger_rack_scan(_rack(num_items=2))
-        await wait_for_dataready(driver)
-        result = await driver.get_scan_result()
+        result = await driver.scan_rack(_rack(num_items=2))
 
-      self.assertEqual(await driver.get_rack_reader_state(), MicronicRackReaderState.DATAREADY)
       self.assertEqual(result.rack_id, "9500017722")
       self.assertEqual(result.entries[0].position, "A1")
       self.assertEqual(result.entries[0].tube_id, "1111111111")
@@ -150,10 +137,10 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(driver.last_scan_metadata, {"source": "test"})
       self.assertEqual(driver.last_decode_metadata, {"decodedWells": 2})
       scanner.acquire.assert_called_once()
-      read_rack_id_mock.assert_awaited_once()
+      scan_rack_id_mock.assert_awaited_once()
       decode_image_mock.assert_called_once()
 
-  async def test_reader_can_scan_twice_after_dataready(self):
+  async def test_reader_can_scan_twice(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
       reader = MicronicCodeReader(
@@ -174,17 +161,17 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
       ):
         await reader.setup()
         first = await reader.rack_reading.scan_rack(
-          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.01
+          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.0
         )
         second = await reader.rack_reading.scan_rack(
-          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.01
+          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.0
         )
 
       self.assertEqual(first.rack_id, "9500017722")
       self.assertEqual(second.rack_id, "9500017722")
       self.assertEqual(scanner.acquire.call_count, 2)
 
-  async def test_driver_read_rack_id_uses_plr_serial(self):
+  async def test_driver_scan_rack_id_uses_plr_serial(self):
     instances: list[object] = []
 
     class FakeSerial:
@@ -214,7 +201,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
       driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
       await driver.setup()
       try:
-        rack_id = await driver.scan_rack_id(timeout=0, poll_interval=0)
+        rack_id = await driver.scan_rack_id()
       finally:
         await driver.stop()
 
@@ -229,68 +216,48 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn("write:b'<t>\\r\\n'", fake_serial.calls)
     self.assertEqual(fake_serial.calls[-1], "stop")
 
-  async def test_driver_raises_when_scan_result_is_not_ready(self):
-    driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
-    with self.assertRaises(MicronicError):
-      await driver.get_scan_result()
-
   async def test_driver_rejects_mismatched_rack_shape(self):
     driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     with self.assertRaises(MicronicError):
-      await driver.trigger_rack_scan(_rack(num_items_x=6, num_items_y=4))
+      await driver.scan_rack(_rack(num_items_x=6, num_items_y=4))
 
 
 class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
   def _backend_with_mocked_driver(self) -> tuple[MicronicRackReadingBackend, MagicMock]:
     driver = MagicMock(spec=MicronicDriver)
-    driver.trigger_rack_scan = AsyncMock()
-    driver.get_rack_reader_state = AsyncMock()
-    driver.get_scan_result = AsyncMock()
+    driver.scan_rack = AsyncMock()
     driver.scan_rack_id = AsyncMock()
     return MicronicRackReadingBackend(driver=driver), driver
 
-  async def test_scan_rack_triggers_polls_and_returns_result(self):
+  async def test_scan_rack_delegates_to_driver(self):
     backend, driver = self._backend_with_mocked_driver()
-    driver.get_rack_reader_state.side_effect = [
-      MicronicRackReaderState.IDLE,
-      MicronicRackReaderState.DATAREADY,
-    ]
     expected = MagicMock()
-    driver.get_scan_result.return_value = expected
+    driver.scan_rack.return_value = expected
     rack = _rack()
 
     result = await backend.scan_rack(rack=rack, timeout=1.0, poll_interval=0.0)
 
     self.assertIs(result, expected)
-    driver.trigger_rack_scan.assert_awaited_once_with(rack)
-    self.assertEqual(driver.get_rack_reader_state.await_count, 2)
-    driver.get_scan_result.assert_awaited_once()
+    driver.scan_rack.assert_awaited_once_with(rack)
 
-  async def test_scan_rack_waits_for_fresh_dataready(self):
+  async def test_scan_rack_times_out(self):
     backend, driver = self._backend_with_mocked_driver()
-    driver.get_rack_reader_state.side_effect = [
-      MicronicRackReaderState.DATAREADY,
-      MicronicRackReaderState.SCANNING,
-      MicronicRackReaderState.DATAREADY,
-    ]
-    driver.get_scan_result.return_value = MagicMock()
 
-    await backend.scan_rack(rack=_rack(), timeout=1.0, poll_interval=0.0)
+    async def slow(rack):
+      del rack
+      import asyncio
 
-    self.assertEqual(driver.get_rack_reader_state.await_count, 3)
-    driver.get_scan_result.assert_awaited_once()
+      await asyncio.sleep(1)
+      return MagicMock()
 
-  async def test_scan_rack_times_out_with_standard_timeout_error(self):
-    backend, driver = self._backend_with_mocked_driver()
-    driver.get_rack_reader_state.return_value = MicronicRackReaderState.SCANNING
+    driver.scan_rack.side_effect = slow
 
     with self.assertRaises(TimeoutError):
       await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
 
   async def test_scan_rack_propagates_driver_micronic_error(self):
     backend, driver = self._backend_with_mocked_driver()
-    driver.get_rack_reader_state.return_value = MicronicRackReaderState.IDLE
-    driver.trigger_rack_scan.side_effect = MicronicError("rack shape mismatch")
+    driver.scan_rack.side_effect = MicronicError("rack shape mismatch")
 
     with self.assertRaises(MicronicError):
       await backend.scan_rack(
