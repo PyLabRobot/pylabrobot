@@ -118,60 +118,6 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(second.rack_id, "9500017722")
       self.assertEqual(run_scan_mock.call_count, 2)
 
-  async def test_driver_get_rack_id_does_not_return_stale_result_while_scanning(self):
-    with tempfile.TemporaryDirectory() as image_dir:
-      driver = MicronicDriver(
-        image_dir=image_dir,
-        keep_images=True,
-      )
-      decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
-
-      def slow_scan(*args, **kwargs):
-        del args, kwargs
-        import time
-
-        time.sleep(0.05)
-        return {"source": "test"}
-
-      with (
-        patch(
-          "pylabrobot.micronic.code_reader.driver.run_scan",
-          return_value={"source": "test"},
-        ),
-        patch(
-          "pylabrobot.micronic.code_reader.driver.read_rack_id",
-          return_value="9500017722",
-        ),
-        patch(
-          "pylabrobot.micronic.code_reader.driver.decode_image",
-          return_value=(decoded, {"decodedWells": 1}),
-        ),
-      ):
-        await driver.setup()
-        await driver.trigger_rack_scan(_rack(num_items=1))
-        await wait_for_dataready(driver)
-        self.assertEqual(await driver.get_rack_id(), "9500017722")
-
-      with (
-        patch(
-          "pylabrobot.micronic.code_reader.driver.run_scan",
-          side_effect=slow_scan,
-        ),
-        patch(
-          "pylabrobot.micronic.code_reader.driver.read_rack_id",
-          return_value="9500017723",
-        ),
-        patch(
-          "pylabrobot.micronic.code_reader.driver.decode_image",
-          return_value=(decoded, {"decodedWells": 1}),
-        ),
-      ):
-        await driver.trigger_rack_scan(_rack(num_items=1))
-        with self.assertRaises(MicronicError):
-          await driver.get_rack_id()
-        await wait_for_dataready(driver)
-        self.assertEqual(await driver.get_rack_id(), "9500017723")
-
   async def test_run_scan_uses_explicit_command(self):
     with tempfile.TemporaryDirectory() as image_dir:
       output_path = Path(image_dir) / "rack.bmp"

@@ -214,16 +214,6 @@ class MicronicDriver(Driver):
       raise MicronicError("No Micronic rack scan has completed yet.")
     return self._last_result
 
-  async def get_rack_id(self) -> str:
-    self._complete_finished_scan_task()
-    if self._scan_error is not None:
-      raise self._scan_error
-    if self._state == MicronicRackReaderState.SCANNING:
-      raise MicronicError("Micronic rack scan is still in progress.")
-    if self._last_result is not None:
-      return self._last_result.rack_id
-    return await self.scan_rack_id(timeout=0, poll_interval=0)
-
   def _complete_finished_scan_task(self) -> None:
     if self._scan_task is not None and self._scan_task.done():
       self._complete_scan_task(self._scan_task)
