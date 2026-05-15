@@ -16,7 +16,7 @@ Rack reading (large scanner that decodes 96 tubes plus the side rack barcode):
 
 - `rack_reading.scan_rack(rack)` to trigger image acquisition, decode all 96 tube
   positions, read the side rack barcode, and return a `RackScanResult`. The driver
-  only supports 8x12 racks; passing a different shape raises `MicronicRackReaderError`.
+  only supports 8x12 racks; passing a different shape raises `MicronicError`.
 - `rack_reading.scan_rack_id()` for a rack-barcode-only read on the side reader
 
 ## Hardware example

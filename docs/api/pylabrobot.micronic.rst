@@ -44,4 +44,3 @@ Capabilities
   :recursive:
 
     MicronicRackReadingBackend
-    MicronicRackReaderError

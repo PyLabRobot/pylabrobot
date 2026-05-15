@@ -17,10 +17,7 @@ from pylabrobot.micronic.code_reader.driver import (
   read_rack_id_plr_serial,
   run_scan,
 )
-from pylabrobot.micronic.code_reader.rack_reading_backend import (
-  MicronicRackReaderError,
-  MicronicRackReadingBackend,
-)
+from pylabrobot.micronic.code_reader.rack_reading_backend import MicronicRackReadingBackend
 from pylabrobot.resources.tube_rack import TubeRack
 
 
@@ -354,17 +351,15 @@ class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
     backend, driver = self._backend_with_mocked_driver()
     driver.get_rack_reader_state.return_value = MicronicRackReaderState.SCANNING
 
-    with self.assertRaises(TimeoutError) as ctx:
+    with self.assertRaises(TimeoutError):
       await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
 
-    self.assertNotIsInstance(ctx.exception, MicronicRackReaderError)
-
-  async def test_scan_rack_wraps_driver_micronic_error(self):
+  async def test_scan_rack_propagates_driver_micronic_error(self):
     backend, driver = self._backend_with_mocked_driver()
     driver.get_rack_reader_state.return_value = MicronicRackReaderState.IDLE
     driver.trigger_rack_scan.side_effect = MicronicError("rack shape mismatch")
 
-    with self.assertRaises(MicronicRackReaderError):
+    with self.assertRaises(MicronicError):
       await backend.scan_rack(
         rack=_rack(num_items_x=6, num_items_y=4), timeout=1.0, poll_interval=0.0
       )

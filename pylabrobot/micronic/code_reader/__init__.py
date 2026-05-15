@@ -4,7 +4,4 @@ from pylabrobot.micronic.code_reader.driver import (
   MicronicError,
   MicronicRackReaderState,
 )
-from pylabrobot.micronic.code_reader.rack_reading_backend import (
-  MicronicRackReaderError,
-  MicronicRackReadingBackend,
-)
+from pylabrobot.micronic.code_reader.rack_reading_backend import MicronicRackReadingBackend
