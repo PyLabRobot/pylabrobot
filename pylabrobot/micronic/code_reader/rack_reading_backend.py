@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Optional
+import asyncio
+import time
 
-from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading import (
-  LayoutInfo,
   RackReaderBackend,
   RackReaderError,
-  RackReaderState,
   RackScanResult,
 )
+from pylabrobot.resources.tube_rack import TubeRack
 
-from .driver import MicronicDriver, MicronicError
+from .driver import MicronicDriver, MicronicError, MicronicRackReaderState
 
 
 class MicronicRackReaderError(MicronicError, RackReaderError):
@@ -27,18 +26,14 @@ class MicronicRackReadingBackend(RackReaderBackend):
     super().__init__()
     self.driver = driver
 
-  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
-    await self.get_state()
-
-  async def get_state(self) -> RackReaderState:
+  async def scan_rack(self, rack: TubeRack, timeout: float, poll_interval: float) -> RackScanResult:
     try:
-      return await self.driver.get_rack_reader_state()
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
-
-  async def trigger_rack_scan(self) -> None:
-    try:
-      await self.driver.trigger_rack_scan()
+      initial_state = await self.driver.get_rack_reader_state()
+      await self.driver.trigger_rack_scan(rack)
+      await self._wait_for_fresh_dataready(
+        initial_state=initial_state, timeout=timeout, poll_interval=poll_interval
+      )
+      return await self.driver.get_scan_result()
     except MicronicError as exc:
       raise MicronicRackReaderError(str(exc)) from exc
 
@@ -48,32 +43,20 @@ class MicronicRackReadingBackend(RackReaderBackend):
     except MicronicError as exc:
       raise MicronicRackReaderError(str(exc)) from exc
 
-  async def get_scan_result(self) -> RackScanResult:
-    try:
-      return await self.driver.get_scan_result()
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
-
-  async def get_rack_id(self) -> str:
-    try:
-      return await self.driver.get_rack_id()
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
-
-  async def get_layouts(self) -> list[LayoutInfo]:
-    try:
-      return await self.driver.get_layouts()
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
-
-  async def get_current_layout(self) -> str:
-    try:
-      return await self.driver.get_current_layout()
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
-
-  async def set_current_layout(self, layout: str) -> None:
-    try:
-      await self.driver.set_current_layout(layout)
-    except MicronicError as exc:
-      raise MicronicRackReaderError(str(exc)) from exc
+  async def _wait_for_fresh_dataready(
+    self,
+    initial_state: MicronicRackReaderState,
+    timeout: float,
+    poll_interval: float,
+  ) -> None:
+    require_state_change = initial_state == MicronicRackReaderState.DATAREADY
+    deadline = time.monotonic() + timeout
+    while True:
+      state = await self.driver.get_rack_reader_state()
+      if state != MicronicRackReaderState.DATAREADY:
+        require_state_change = False
+      elif not require_state_change:
+        return
+      if time.monotonic() >= deadline:
+        raise TimeoutError("Timed out waiting for Micronic rack reader to reach dataready.")
+      await asyncio.sleep(poll_interval)

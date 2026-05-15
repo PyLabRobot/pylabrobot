@@ -1,27 +1,16 @@
 from __future__ import annotations
 
+from pylabrobot.resources.tube_rack import TubeRack
+
 from .backend import RackReaderBackend
-from .standard import LayoutInfo, RackReaderState, RackScanEntry, RackScanResult
+from .standard import RackScanEntry, RackScanResult
 
 
 class RackReaderChatterboxBackend(RackReaderBackend):
   """Device-free rack-reading backend for tests and examples."""
 
-  def __init__(self):
-    self._state = RackReaderState.IDLE
-    self._layout = "96"
-
-  async def get_state(self) -> RackReaderState:
-    return self._state
-
-  async def trigger_rack_scan(self) -> None:
-    self._state = RackReaderState.DATAREADY
-
-  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
-    self._state = RackReaderState.DATAREADY
-    return "CHATTERBOX"
-
-  async def get_scan_result(self) -> RackScanResult:
+  async def scan_rack(self, rack: TubeRack, timeout: float, poll_interval: float) -> RackScanResult:
+    del rack, timeout, poll_interval
     return RackScanResult(
       rack_id="CHATTERBOX",
       date="19700101",
@@ -31,14 +20,6 @@ class RackReaderChatterboxBackend(RackReaderBackend):
       ],
     )
 
-  async def get_rack_id(self) -> str:
+  async def scan_rack_id(self, timeout: float, poll_interval: float) -> str:
+    del timeout, poll_interval
     return "CHATTERBOX"
-
-  async def get_layouts(self) -> list[LayoutInfo]:
-    return [LayoutInfo(name="96"), LayoutInfo(name="48")]
-
-  async def get_current_layout(self) -> str:
-    return self._layout
-
-  async def set_current_layout(self, layout: str) -> None:
-    self._layout = layout
