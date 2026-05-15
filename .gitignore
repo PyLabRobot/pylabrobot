@@ -17,3 +17,4 @@ build/lib
 myenv
 env/*
 .venv
+.env

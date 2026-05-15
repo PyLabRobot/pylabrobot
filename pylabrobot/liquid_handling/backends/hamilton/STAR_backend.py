@@ -3,6 +3,7 @@ import datetime
 import enum
 import functools
 import logging
+import math
 import re
 import sys
 import warnings
@@ -38,9 +39,7 @@ from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
-from pylabrobot.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
 from pylabrobot.liquid_handling.channel_positioning import (
-  MIN_SPACING_EDGE,
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
@@ -48,6 +47,12 @@ from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
+)
+from pylabrobot.liquid_handling.pipette_batch_scheduling import (
+  ChannelBatch,
+  log_batches,
+  plan_batches,
+  validate_channel_selections,
 )
 from pylabrobot.liquid_handling.standard import (
   Drop,
@@ -1285,6 +1290,21 @@ class ExtendedConfiguration:
 
 
 @dataclass
+class PipChannelInformation:
+  """Installed hardware information for a single pipetting channel (VW command)."""
+
+  ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
+  HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
+  StopDiscType = Literal["core_i", "core_ii"]
+  PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
+
+  channel_type: ChannelType
+  head_type: HeadType
+  stop_disc_type: StopDiscType
+  pressure_adc: PressureADC
+
+
+@dataclass
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1347,21 +1367,34 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._extended_conf: Optional[ExtendedConfiguration] = None
     self._channel_traversal_height: float = 245.0
     self._iswap_traversal_height: float = 280.0
+    self._iswap_rotation_drive_x_offset_mm: Optional[float] = None
+    self._iswap_rotation_drive_y_max_mm: Optional[float] = None
+    self._iswap_rotation_drive_predefined_increments: Optional[
+      Dict[STARBackend.RotationDriveOrientation, int]
+    ] = None
+    self._iswap_wrist_drive_predefined_increments: Optional[
+      Dict[STARBackend.WristDriveOrientation, int]
+    ] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
     self._iswap_version: Optional[str] = None  # loaded lazily
+    self._pip_channel_information: Optional[List[PipChannelInformation]] = None
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
+    self._x_grouping_tolerance_mm: float = 0.1
 
     self._setup_done = False
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the firmware-safe minimum Y spacing between channels *i* and *j*.
 
-    Uses max() of both channels' spacings for firmware safety (conservative).
-    For adjacent channels, ceiling-rounded to 0.1mm.
-    For non-adjacent channels, the sum of all intermediate adjacent-pair spacings.
+    For each adjacent pair, takes max() of both channels' spacings and ceiling-rounds
+    to 0.1mm. For non-adjacent channels, sums these per-pair spacings.
+
+    TODO: migrate to radii model (spacing[i]/2 + spacing[j]/2) to match
+    compute_channel_offsets. Current max() model is conservative but inconsistent
+    with channel_positioning.py's diameter-based abstraction.
     """
     lo, hi = min(i, j), max(i, j)
     if hi - lo == 1:
@@ -1512,6 +1545,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return cast(
       str,
       (await self.send_command(STARBackend.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"],
+    )
+
+  async def _pip_channel_request_configuration(self, channel: int) -> PipChannelInformation:
+    """Request installed hardware for a pipetting channel using the VW command.
+
+    Args:
+      channel: 0-indexed channel number.
+    """
+    pip_fw = self._parse_firmware_version_datetime(await self.request_pip_channel_version(channel))
+    if pip_fw.year <= 2016:
+      raise RuntimeError(
+        f"VW (pip channel configuration) is not supported on firmware from 2016 or older "
+        f"(channel {channel} firmware date: {pip_fw.isoformat()})."
+      )
+    resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
+    hw_tokens = resp.split("vw")[-1].strip().split()
+    return PipChannelInformation(
+      channel_type="ML_STAR_RPC" if hw_tokens[0] == "1" else "ML_STAR",
+      head_type="ML_STAR_PLE"
+      if hw_tokens[1] == "1"
+      else "ML_STAR_RPC"
+      if hw_tokens[1] == "2"
+      else "ML_STAR",
+      stop_disc_type="core_i" if hw_tokens[2] == "0" else "core_ii",
+      pressure_adc="Analog_Devices_AD5263" if hw_tokens[3] == "1" else "Renesas_X9268",
     )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -1685,6 +1743,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
+      # VW is not supported on firmware from 2016 or older (see issue #1004). Skip the
+      # query there and leave the cache as None; otherwise populate it for every channel.
+      pip_fw = self._parse_firmware_version_datetime(await self.request_pip_channel_version(0))
+      if pip_fw.year <= 2016:
+        self._pip_channel_information = None
+      else:
+        self._pip_channel_information = [
+          await self._pip_channel_request_configuration(ch) for ch in range(self.num_channels)
+        ]
+
     async def set_up_autoload():
       if self.machine_conf.auto_load_installed and not skip_autoload:
         autoload_initialized = await self.request_autoload_initialization_status()
@@ -1702,6 +1770,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.park_iswap(
           minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
         )
+
+        self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+        self._iswap_rotation_drive_y_max_mm = await self._iswap_rotation_drive_request_y_max()
+
+        rot_predefined = await self._iswap_rotation_drive_request_predefined_increments()
+        self._iswap_rotation_drive_predefined_increments = {
+          STARBackend.RotationDriveOrientation.LEFT: rot_predefined["left"],
+          STARBackend.RotationDriveOrientation.FRONT: rot_predefined["front"],
+          STARBackend.RotationDriveOrientation.RIGHT: rot_predefined["right"],
+          STARBackend.RotationDriveOrientation.PARKED_RIGHT: rot_predefined["parking"],
+        }
+
+        wrist_predefined = await self._iswap_wrist_drive_request_predefined_increments()
+        self._iswap_wrist_drive_predefined_increments = {
+          STARBackend.WristDriveOrientation.RIGHT: wrist_predefined["right"],
+          STARBackend.WristDriveOrientation.STRAIGHT: wrist_predefined["straight"],
+          STARBackend.WristDriveOrientation.LEFT: wrist_predefined["left"],
+          STARBackend.WristDriveOrientation.REVERSE: wrist_predefined["reverse"],
+        }
 
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
@@ -1749,6 +1836,53 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # ============== LiquidHandlerBackend methods ==============
 
+  # -----------------------------------------------------------------------
+  # X-Arm
+  # -----------------------------------------------------------------------
+
+  async def x_arm_request_firmware_version(self) -> Tuple[str, datetime.date]:
+    """Request the X-arm firmware version and build date.
+
+    Returns:
+      A tuple of (version_string, build_date), e.g. ("1.0S", date(2009, 6, 24)).
+    """
+
+    resp = await self.send_command(module="X0", command="RF")
+    version = resp.split("rf")[-1].split(" ")[0]
+    build_date = self._parse_firmware_version_datetime(resp)
+    return version, build_date
+
+  async def experimental_x_arm_move(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the X-arm to an absolute X position with specified acceleration.
+
+    Args:
+      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+
+    if not (90.0 <= x <= 1350.0):
+      raise ValueError(f"x must be between 90.0 and 1350.0 mm, is {x}")
+    if not (1 <= acceleration_level <= 5):
+      raise ValueError(f"acceleration_level must be between 1 and 5, is {acceleration_level}")
+    if not (0 <= current_protection_limiter <= 7):
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, is {current_protection_limiter}"
+      )
+
+    return await self.send_command(
+      module="X0",
+      command="XP",
+      la=f"{round(x * 10):05}",
+      lr=str(acceleration_level),
+      lw=str(current_protection_limiter),
+    )
+
   # # # # Single-Channel Pipette Commands # # # #
 
   # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
@@ -1776,21 +1910,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return self.y_drive_increment_to_mm(resp["yc"][1])
 
   async def channels_request_y_minimum_spacing(self) -> List[float]:
-    """Query the minimum Y spacing for all channels in parallel.
-
-    Each channel is addressed on its own module (P1, P2, ...), so the queries
-    can run concurrently.
+    """Query all channels for their minimum Y spacing in parallel.
 
     Returns:
-      A list of exact (unrounded) minimum Y spacings in mm, one per channel,
-      indexed by channel number.
+      A list of minimum Y spacings in mm, one per channel.
     """
     return list(
       await asyncio.gather(
-        *(
-          self.channel_request_y_minimum_spacing(channel_idx=idx)
-          for idx in range(self.num_channels)
-        )
+        *(self.channel_request_y_minimum_spacing(i) for i in range(self.num_channels))
       )
     )
 
@@ -2056,240 +2183,209 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     LIQUID = 0
     FOAM = 1
 
-  async def _move_to_traverse_height(
-    self, channels: Optional[List[int]] = None, traverse_height: Optional[float] = None
-  ):
-    """Move channels to a specified traverse height, if given, otherwise move to full Z safety.
+  async def execute_batched(
+    self,
+    func: Callable[[ChannelBatch], Awaitable[T]],
+    batches: List[ChannelBatch],
+    min_traverse_height_during_command: Optional[float] = None,
+  ) -> List[T]:
+    """Execute a Z-axis callback across pre-planned batches with X/Y positioning.
+
+    Handles inter-batch safety: raises channels between batches, moves X when the
+    X group changes, and positions Y before calling *func*. On error or
+    KeyboardInterrupt, channels are moved to Z safety before re-raising.
 
     Args:
-      channels: Channels to move. If None, all channels are moved.
-      traverse_height: Absolute Z position in mm. If None, move to full Z safety.
-    """
-    if traverse_height is None:
-      await self.move_all_channels_in_z_safety()
-    else:
-      if channels is None:
-        channels = list(range(self.num_channels))
-      await self.position_channels_in_z_direction(
-        {channel: traverse_height for channel in channels}
-      )
+      func: Async callback that receives a ``ChannelBatch`` and performs Z-axis work
+        (e.g. liquid level detection, z-touch probing). Must not move X or Y.
+      batches: Pre-planned batches from ``plan_batches()``.
+      min_traverse_height_during_command: Absolute Z height (mm) for inter-batch
+        channel raises. ``None`` uses full Z safety.
 
-  async def _probe_liquid_heights_batch(
+    Returns:
+      List of results from each batch callback, in batch order.
+    """
+    log_batches(batches)
+    results: List[T] = []
+    try:
+      prev_batch: Optional[ChannelBatch] = None
+      for batch in batches:
+        if prev_batch is not None:
+          if min_traverse_height_during_command is None:
+            await self.move_all_channels_in_z_safety()
+          else:
+            await self.position_channels_in_z_direction(
+              {ch: min_traverse_height_during_command for ch in prev_batch.channels}
+            )
+
+        if prev_batch is None or not math.isclose(batch.x_position, prev_batch.x_position):
+          await self.move_channel_x(0, batch.x_position)
+
+        await self.position_channels_in_y_direction(batch.y_positions)
+        results.append(await func(batch))
+        prev_batch = batch
+
+    except Exception:  # firmware errors, RuntimeError, etc.
+      await self.move_all_channels_in_z_safety()
+      raise
+    except BaseException:  # KeyboardInterrupt, SystemExit — still must raise channels
+      await self.move_all_channels_in_z_safety()
+      raise
+
+    return results
+
+  async def _prepare_batched(
     self,
     containers: List[Container],
-    use_channels: List[int],
-    lld_mode: LLDMode = LLDMode.GAMMA,
-    search_speed: float = 10.0,
-    n_replicates: int = 1,
-  ) -> List[float]:
-    """Helper for probe_liquid_heights that performs a single batch of liquid level detection using a set of channels.
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    x_grouping_tolerance: Optional[float] = None,
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+  ) -> Tuple[List[int], List[float], List[ChannelBatch]]:
+    """Validate channels, verify tips, position Z, resolve targets, plan batches.
 
-    Assumes channels are moved to the appropriate traverse height before calling, and does not move channels after completion.
+    Shared setup for any batched channel operation (probing, aspirate,
+    dispense). Returns everything the caller needs to define its callback
+    and call ``execute_batched``.
+
+    Returns:
+      (use_channels, tip_lengths, batches).
     """
+    if x_grouping_tolerance is None:
+      x_grouping_tolerance = self._x_grouping_tolerance_mm
 
+    use_channels = validate_channel_selections(
+      containers=containers,
+      num_channels=self.num_channels,
+      use_channels=use_channels,
+    )
+
+    # Verify tips and query tip lengths
+    tip_presence = await self.request_tip_presence()
+    if not all(tip_presence[idx] for idx in use_channels):
+      raise RuntimeError("All specified channels must have tips attached.")
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    detect_func: Callable[..., Any]
-    if lld_mode == self.LLDMode.GAMMA:
-      detect_func = self._move_z_drive_to_liquid_surface_using_clld
+    # Z pre-positioning
+    idle_channels = sorted(set(range(self.num_channels)) - set(use_channels))
+    if min_traverse_height_at_beginning_of_command is not None:
+      await asyncio.gather(
+        *[
+          self.move_channel_stop_disk_z(channel_idx=ch_idx, z=self.MAXIMUM_CHANNEL_Z_POSITION)
+          for ch_idx in idle_channels
+        ]
+      )
+      await self.position_channels_in_z_direction(
+        {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
+      )
     else:
-      detect_func = self._search_for_surface_using_plld
+      await self.move_all_channels_in_z_safety()
 
-    # Compute Z search bounds for this batch
+    # Plan batches directly from containers (per-batch spread, no-go-zone aware).
+    batches = plan_batches(
+      use_channels=use_channels,
+      containers=containers,
+      channel_spacings=self._channels_minimum_y_spacing,
+      wrt_resource=self.deck,
+      x_tolerance=x_grouping_tolerance,
+      resource_offsets=resource_offsets,
+    )
+
+    return use_channels, tip_lengths, batches
+
+  async def _run_lld_on_channel_batch(
+    self,
+    batch: ChannelBatch,
+    containers: List[Container],
+    tip_lengths: List[float],
+    z_cavity_bottom: List[float],
+    z_top: List[float],
+    lld_mode: List[LLDMode],
+    search_speed: float,
+    n_replicates: int,
+  ) -> Dict[int, List[Optional[float]]]:
+    """Per-batch liquid level detection. Override to substitute simulated sensing.
+
+    *lld_mode* is indexed by original container position (``batch.indices[i]``),
+    so channels within a single batch may use different detection modes concurrently.
+
+    Returns absolute heights keyed by job index (``batch.indices[i]``), so duplicate
+    channels across batches don't collide. One list per job, with ``None`` entries for
+    replicates where no liquid was detected. The caller subtracts ``z_cavity_bottom``
+    to get heights relative to container bottom.
+    """
+
+    def _detect_func(mode: "STARBackend.LLDMode") -> Callable[..., Any]:
+      return (
+        self._move_z_drive_to_liquid_surface_using_clld
+        if mode == self.LLDMode.GAMMA
+        else self._search_for_surface_using_plld
+      )
+
     batch_lowest_immers = [
-      container.get_absolute_location("c", "c", "cavity_bottom").z
-      + tip_len
-      - self.DEFAULT_TIP_FITTING_DEPTH
-      for container, tip_len in zip(containers, tip_lengths)
+      z_cavity_bottom[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH for i in batch.indices
     ]
     batch_start_pos = [
-      container.get_absolute_location("c", "c", "t").z
-      + tip_len
-      - self.DEFAULT_TIP_FITTING_DEPTH
-      + 5
-      for container, tip_len in zip(containers, tip_lengths)
+      z_top[i] + tip_lengths[i] - self.DEFAULT_TIP_FITTING_DEPTH + self.SEARCH_START_CLEARANCE_MM
+      for i in batch.indices
     ]
 
-    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
-      idx: [] for idx in range(len(use_channels))
-    }
+    measurements: Dict[int, List[Optional[float]]] = {orig_idx: [] for orig_idx in batch.indices}
 
-    # Run n_replicates detection loop for this batch
     for _ in range(n_replicates):
-      errors = await asyncio.gather(
+      results = await asyncio.gather(
         *[
-          detect_func(
+          _detect_func(lld_mode[orig_idx])(
             channel_idx=channel,
             lowest_immers_pos=lip,
             start_pos_search=sps,
             channel_speed=search_speed,
           )
-          for channel, lip, sps in zip(use_channels, batch_lowest_immers, batch_start_pos)
+          for channel, lip, sps, orig_idx in zip(
+            batch.channels, batch_lowest_immers, batch_start_pos, batch.indices
+          )
         ],
         return_exceptions=True,
       )
 
-      # Get heights for ALL channels, handling failures for channels with no liquid
       current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-      for idx, (channel_idx, error) in enumerate(zip(use_channels, errors)):
-        if isinstance(error, STARFirmwareError):
-          error_msg = str(error).lower()
+      for local_idx, (ch_idx, result) in enumerate(zip(batch.channels, results)):
+        orig_idx = batch.indices[local_idx]
+        if isinstance(result, STARFirmwareError):
+          error_msg = str(result).lower()
           if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
             height = None
             msg = (
-              f"Operation {idx} (channel {channel_idx}): No liquid detected. Could be because there is "
-              f"no liquid in container {containers[idx].name} or liquid level "
+              f"Channel {ch_idx}: No liquid detected. Could be because there is "
+              f"no liquid in container {containers[orig_idx].name} or liquid level "
               f"is too low."
             )
-            if lld_mode == self.LLDMode.GAMMA:
+            if lld_mode[orig_idx] == self.LLDMode.GAMMA:
               msg += " Consider using pressure-based LLD if liquid is believed to exist."
             logger.warning(msg)
           else:
-            raise error
-        elif isinstance(error, Exception):
-          raise error
+            raise result
+        elif isinstance(result, Exception):
+          raise result
         else:
-          height = current_absolute_liquid_heights[channel_idx]
-        absolute_heights_measurements[idx].append(height)
+          height = current_absolute_liquid_heights[ch_idx]
+        measurements[orig_idx].append(height)
 
-    # Compute liquid heights relative to well bottom
-    relative_to_well: List[float] = []
-    inconsistent_ops: List[str] = []
-
-    for idx, container in enumerate(containers):
-      measurements = absolute_heights_measurements[idx]
-      valid = [m for m in measurements if m is not None]
-      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
-
-      if len(valid) == 0:
-        relative_to_well.append(0.0)
-      elif len(valid) == len(measurements):
-        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
-      else:
-        inconsistent_ops.append(
-          f"Operation {idx}: {len(valid)}/{len(measurements)} replicates detected liquid"
-        )
-
-    if inconsistent_ops:
-      raise RuntimeError(
-        "Inconsistent liquid detection across replicates. "
-        "This may indicate liquid levels near the detection limit:\n" + "\n".join(inconsistent_ops)
-      )
-
-    return relative_to_well
-
-  def _get_maximum_minimum_spacing_between_channels(self, use_channels: List[int]) -> float:
-    """Get the maximum of the set of minimum spacing requirements between the channels being used"""
-    sorted_channels = sorted(use_channels)
-    max_channel_spacing = max(
-      self._min_spacing_between(hi, lo) for hi, lo in zip(sorted_channels[1:], sorted_channels[:-1])
-    )
-    return max_channel_spacing
-
-  def _compute_channels_in_resource_locations(
-    self,
-    resources: Sequence[Resource],
-    use_channels: List[int],
-    offsets: Optional[List[Coordinate]],
-  ) -> List[Coordinate]:
-    """Compute absolute locations of resources with given offsets."""
-
-    # If no offset is provided but we can fit all channels inside a single resource,
-    # compute the offsets to make that happen using wide spacing.
-    if offsets is None:
-      if len(set(resources)) == 1 and len(use_channels) == len(set(use_channels)):
-        container_size_y = resources[0].get_absolute_size_y()
-        # For non-consecutive channels (e.g. [0,1,2,5,6,7]), we must account for
-        # phantom intermediate channels (3,4) that physically exist between them.
-        # Compute offsets for the full channel range (min to max), then pick only
-        # the offsets corresponding to the actual channels being used.
-        max_channel_spacing = self._get_maximum_minimum_spacing_between_channels(use_channels)
-        num_channels_in_span = max(use_channels) - min(use_channels) + 1
-        min_required = MIN_SPACING_EDGE * 2 + (num_channels_in_span - 1) * max_channel_spacing
-        if container_size_y >= min_required:
-          all_offsets = get_wide_single_resource_liquid_op_offsets(
-            resource=resources[0],
-            num_channels=num_channels_in_span,
-            min_spacing=max_channel_spacing,
-          )
-          min_ch = min(use_channels)
-          offsets = [all_offsets[ch - min_ch] for ch in use_channels]
-        # else: container too small to fit all channels — fall back to center offsets.
-        # Y sub-batching will serialize channels that can't coexist.
-
-    offsets = offsets or [Coordinate.zero()] * len(resources)
-
-    # Compute positions for all resources
-    resource_locations = [
-      resource.get_location_wrt(self.deck, x="c", y="c", z="b") + offset
-      for resource, offset in zip(resources, offsets)
-    ]
-
-    return resource_locations
-
-  async def execute_batched(  # TODO: any hamilton liquid handler
-    self,
-    func: Callable[[List[int]], Awaitable[None]],
-    resources: List[Container],
-    use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
-    min_traverse_height_during_command: Optional[float] = None,
-  ):
-    if use_channels is None:
-      use_channels = list(range(len(resources)))
-
-    # precompute locations and batches
-    locations = self._compute_channels_in_resource_locations(
-      resources, use_channels, resource_offsets
-    )
-    x_batches = group_by_x_batch_by_xy(
-      locations=locations,
-      use_channels=use_channels,
-      min_spacing_between_channels=self._min_spacing_between,
-    )
-
-    # loop over batches. keep track of channels used in previous batch to ensure they are raised to traverse height before next batch
-    prev_channels: Optional[List[int]] = None
-
-    try:
-      for x_value, x_batch in x_batches.items():
-        if prev_channels is not None:
-          await self._move_to_traverse_height(
-            channels=prev_channels, traverse_height=min_traverse_height_during_command
-          )
-        await self.move_channel_x(0, x_value)
-
-        for y_batch in x_batch:
-          if prev_channels is not None:
-            await self._move_to_traverse_height(
-              channels=prev_channels, traverse_height=min_traverse_height_during_command
-            )
-          await self.position_channels_in_y_direction(
-            {use_channels[idx]: locations[idx].y for idx in y_batch},
-          )
-
-          await func(y_batch)
-
-          prev_channels = [use_channels[idx] for idx in y_batch]
-    except Exception:
-      await self.move_all_channels_in_z_safety()
-      raise
-    except BaseException:
-      await self.move_all_channels_in_z_safety()
-      raise
+    return measurements
 
   async def probe_liquid_heights(
     self,
     containers: List[Container],
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
+    lld_mode: Union[LLDMode, List[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
     # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
     min_traverse_height_at_beginning_of_command: Optional[float] = None,
     min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
+    x_grouping_tolerance: Optional[float] = None,
     # Deprecated
     move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
@@ -2299,107 +2395,140 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     container positions and sensing the liquid surface. Heights are measured from the bottom
     of each container's cavity.
 
+    Uses ``plan_batches`` for X/Y partitioning with per-batch container spread
+    (respecting no-go zones), then ``execute_batched`` to iterate batches with
+    Z safety.
+
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use for probing (0-indexed).
-      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single
-        containers with odd channel counts to avoid center dividers. Defaults to container centers.
-      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.
-        Defaults to capacitive.
+      resource_offsets: Optional XYZ offsets from container centers. When not provided,
+        ``plan_batches`` auto-spreads channels targeting the same container.
+      lld_mode: Detection mode. Either a single ``LLDMode`` applied to all containers
+        (deprecated, removed in v1b1) or a list of ``LLDMode``s (one per container)
+        allowing mixed GAMMA/PRESSURE within one call. ``None`` (default) applies
+        GAMMA to all containers.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
       min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
-        channels to before the first batch. None (default) uses full Z safety.
+        channels to before the first batch. Must clear all deck obstacles since channels
+        travel laterally at this height. None (default) uses full Z safety.
       min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
-        between batches (X groups and Y sub-batches). None (default) uses full Z safety.
+        between batches. None (default) uses full Z safety.
       z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
         probing. None (default) uses full Z safety.
-
+      x_grouping_tolerance: Containers within this X distance (mm) are grouped and probed
+        together. Defaults to ``_x_grouping_tolerance_mm`` (0.1 mm).
+      move_to_z_safety_after: Deprecated. Use ``z_position_at_end_of_command`` instead.
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
 
     Raises:
-      RuntimeError: If channels lack tips.
-
-    Notes:
-      - All specified channels must have tips attached
-      - Containers at different X positions are probed in sequential groups (single X carriage)
-      - For single containers with no-go zones, Y-offsets are computed to avoid
-        obstructed regions (e.g. center dividers in troughs)
+      ValueError: If ``use_channels`` is empty, contains out-of-range indices,
+        or if input list lengths don't match.
+      RuntimeError: If any specified channel lacks a tip.
     """
 
     if move_to_z_safety_after is not None:
       warnings.warn(
-        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a future release. "
-        "Use 'z_position_at_end_of_command' with an appropriate Z height instead. If not set, "
-        "the default behavior will be to move to full Z safety after the command.",
+        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a "
+        "future release. Use 'z_position_at_end_of_command' with an appropriate Z height "
+        "instead. If not set, the default behavior will be to move to full Z safety after "
+        "the command.",
         DeprecationWarning,
+        stacklevel=2,
       )
 
-    # Validate parameters.
-    if use_channels is None:
-      use_channels = list(range(len(containers)))
-    if len(use_channels) == 0:
-      raise ValueError("use_channels must not be empty.")
-    if not all(0 <= ch < self.num_channels for ch in use_channels):
+    if n_replicates < 1:
+      raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
+
+    if lld_mode is None:
+      lld_mode = [self.LLDMode.GAMMA] * len(containers)
+    elif isinstance(lld_mode, self.LLDMode):
+      warnings.warn(
+        "Passing a single LLDMode to probe_liquid_heights is deprecated and will be "
+        "removed in v1b1. Pass a list of LLDModes (one per container) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      lld_mode = [lld_mode] * len(containers)
+    elif not isinstance(lld_mode, list):
+      raise TypeError(f"lld_mode must be List[LLDMode], got {type(lld_mode).__name__}")
+
+    if len(lld_mode) != len(containers):
       raise ValueError(
-        f"All use_channels must be integers in range [0, {self.num_channels - 1}], "
-        f"got {use_channels}."
+        f"lld_mode list length must match containers: got {len(lld_mode)} LLD modes "
+        f"for {len(containers)} containers."
       )
+    for m in lld_mode:
+      if m not in (self.LLDMode.GAMMA, self.LLDMode.PRESSURE):
+        raise ValueError(f"Unsupported lld_mode: {m!r}")
 
-    if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
-      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
+    z_cavity_bottom = [
+      r.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z for r in containers
+    ]
+    z_top = [r.get_location_wrt(self.deck, "c", "c", "t").z for r in containers]
 
-    if not len(containers) == len(use_channels):
-      raise ValueError(
-        "Length of containers and use_channels must match, "
-        f"got lengths {len(containers)}, {len(use_channels)}."
-      )
-
-    # Validate resource_offsets length (if provided) to avoid silent truncation in downstream zips.
-    if resource_offsets is not None and len(resource_offsets) != len(containers):
-      raise ValueError(
-        "Length of resource_offsets must match the length of containers and use_channels, "
-        f"got lengths {len(resource_offsets)} (resource_offsets) and "
-        f"{len(containers)} (containers/use_channels)."
-      )
-    # Make sure we have tips on all channels and know their lengths
-    tip_presence = await self.request_tip_presence()
-    if not all(tip_presence[idx] for idx in use_channels):
-      raise RuntimeError("All specified channels must have tips attached.")
-
-    # Move channels to traverse height
-    await self._move_to_traverse_height(
-      channels=use_channels, traverse_height=min_traverse_height_at_beginning_of_command
+    use_channels, tip_lengths, batches = await self._prepare_batched(
+      containers=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      x_grouping_tolerance=x_grouping_tolerance,
+      min_traverse_height_at_beginning_of_command=min_traverse_height_at_beginning_of_command,
     )
-
-    result_by_operation: Dict[int, float] = {}
-
-    async def func(batch: List[int]):
-      liquid_heights = await self._probe_liquid_heights_batch(
-        containers=[containers[idx] for idx in batch],
-        use_channels=[use_channels[idx] for idx in batch],
+    batch_results = await self.execute_batched(
+      func=lambda b: self._run_lld_on_channel_batch(
+        batch=b,
+        containers=containers,
+        tip_lengths=tip_lengths,
+        z_cavity_bottom=z_cavity_bottom,
+        z_top=z_top,
         lld_mode=lld_mode,
         search_speed=search_speed,
         n_replicates=n_replicates,
-      )
-      for idx, height in zip(batch, liquid_heights):
-        result_by_operation[idx] = height
-
-    await self.execute_batched(
-      func=func,
-      resources=containers,
-      use_channels=use_channels,
-      resource_offsets=resource_offsets,
+      ),
+      batches=batches,
       min_traverse_height_during_command=min_traverse_height_during_command,
     )
 
-    await self._move_to_traverse_height(
-      channels=use_channels,
-      traverse_height=z_position_at_end_of_command,
-    )
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {}
+    for batch_measurements in batch_results:
+      for orig_idx, heights in batch_measurements.items():
+        absolute_heights_measurements.setdefault(orig_idx, []).extend(heights)
 
-    return [result_by_operation[idx] for idx in range(len(containers))]
+    # Compute liquid heights relative to well bottom
+    relative_to_well: List[float] = []
+    inconsistent_channels: List[str] = []
+
+    for idx, (ch, container) in enumerate(zip(use_channels, containers)):
+      measurements = absolute_heights_measurements[idx]
+      valid = [m for m in measurements if m is not None]
+      cavity_bottom = z_cavity_bottom[idx]
+
+      if len(valid) == 0:
+        relative_to_well.append(0.0)
+      elif len(valid) == len(measurements):
+        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
+      else:
+        inconsistent_channels.append(
+          f"Channel {ch}: {len(valid)}/{len(measurements)} replicates detected liquid"
+        )
+
+    if inconsistent_channels:
+      raise RuntimeError(
+        "Inconsistent liquid detection across replicates. "
+        "This may indicate liquid levels near the detection limit:\n"
+        + "\n".join(inconsistent_channels)
+      )
+
+    if z_position_at_end_of_command is not None:
+      await self.position_channels_in_z_direction(
+        {ch: z_position_at_end_of_command for ch in use_channels}
+      )
+    else:
+      await self.move_all_channels_in_z_safety()
+
+    return relative_to_well
 
   async def probe_liquid_volumes(
     self,
@@ -2409,7 +2538,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 3,
-    move_to_z_safety_after: bool = True,
+    z_position_at_end_of_command: Optional[float] = None,
+    # Deprecated
+    move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
     """Probe liquid volumes in containers by measuring heights and converting to volumes.
 
@@ -2424,7 +2555,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.  Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 3.
-      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
+      z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
+        probing. None (default) uses full Z safety.
+      move_to_z_safety_after: Deprecated. Use ``z_position_at_end_of_command`` instead.
 
     Returns:
       Volumes in each container (uL).
@@ -2436,6 +2569,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
     - All containers must support height-volume functions. Volume calculation uses Container.compute_volume_from_height()
     """
+
+    if move_to_z_safety_after is not None:
+      warnings.warn(
+        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a "
+        "future release. Use 'z_position_at_end_of_command' with an appropriate Z height "
+        "instead. If not set, the default behavior will be to move to full Z safety after "
+        "the command.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     if any(not resource.supports_compute_height_volume_functions() for resource in containers):
       raise ValueError(
@@ -2449,7 +2592,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode=lld_mode,
       search_speed=search_speed,
       n_replicates=n_replicates,
-      move_to_z_safety_after=move_to_z_safety_after,
+      z_position_at_end_of_command=z_position_at_end_of_command,
     )
 
     return [
@@ -2888,7 +3031,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
-        move_to_z_safety_after=False,
+        z_position_at_end_of_command=100,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
@@ -3250,7 +3393,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
-        move_to_z_safety_after=False,
+        z_position_at_end_of_command=100,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
@@ -9670,7 +9813,1083 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       allow_splitting=True,
     )
 
+  # -----------------------------------------------------------------------
+  # iSWAP: SCARA Geometry
+  # -----------------------------------------------------------------------
+
+  async def iswap_request_link_1_length(self) -> float:
+    """Read iSWAP link 1 length (rotation joint -> wrist joint) in mm.
+
+    Default factory value 138.0 mm.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pw", fmt="pw##### (n)")
+    pw = cast(List[int], resp["pw"])
+    return round(pw[9] / 10, 1)
+
+  async def iswap_request_link_2_length(self) -> float:
+    """Read iSWAP link 2 length (wrist joint -> gripper finger center) in mm.
+
+    Default factory value 138.0 mm.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pt", fmt="pt##### (n)")
+    pt = cast(List[int], resp["pt"])
+    return round(pt[9] / 10, 1)
+
+  # -----------------------------------------------------------------------
+  # iSWAP: "Rotation Drive" (Joint 1)
+  # -----------------------------------------------------------------------
+
+  iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
+  iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
+  iswap_rotation_drive_deg_per_increment = 0.00309619077
+  iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
+  iswap_rotation_drive_diameter = 30.5
+  iswap_rotation_drive_safety_radius = 90.0
+
+  iswap_y_drive_mm_per_increment = 0.046302083
+  iswap_z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def iswap_y_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.iswap_y_drive_mm_per_increment)
+
+  @staticmethod
+  def iswap_y_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STARBackend.iswap_y_drive_mm_per_increment, 2)
+
+  @staticmethod
+  def iswap_z_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.iswap_z_drive_mm_per_increment)
+
+  @staticmethod
+  def iswap_z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STARBackend.iswap_z_drive_mm_per_increment, 2)
+
+  class RotationDriveOrientation(enum.Enum):
+    LEFT = 1
+    FRONT = 2
+    RIGHT = 3
+    PARKED_RIGHT = None
+
+  async def _iswap_rotation_drive_request_x_offset(self) -> float:
+    """Read the X-offset i.e. X-axis center <-> iSWAP rotation drive, in mm.
+
+    Stored in the master EEPROM as parameter `kg`.
+    Default: 34.0 mm, but typically tuned per machine during service calibration.
+    Required for deriving the iSWAP rotation drive's deck X coordinate from
+    the X-arm carriage center.
+    Cached on the backend as `_iswap_rotation_drive_x_offset_mm` during setup.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="C0", command="RA", ra="kg", fmt="kg###")
+    return cast(int, resp["kg"]) / 10.0
+
+  async def _iswap_rotation_drive_request_y_max(self) -> float:
+    """Read the iSWAP Y-axis upper bound (parking pose) from EEPROM, in mm.
+
+    Parking sits at the back of the usable Y travel; anything past it is in
+    the mechanical-stop region.
+    """
+    py = await self.iswap_rotation_drive_request_predefined_y_positions()
+    return py["parking"]
+
+  async def iswap_rotation_drive_request_x(self) -> float:
+    """Request iSWAP rotation drive X position (deck coordinates), in mm.
+
+    Computed as `request_left_x_arm_position() - kg` (cached at setup).
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    if self._iswap_rotation_drive_x_offset_mm is None:
+      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+    x_arm_center = await self.request_left_x_arm_position()
+    return x_arm_center - self._iswap_rotation_drive_x_offset_mm
+
+  async def iswap_rotation_drive_request_y(self) -> float:
+    """Request iSWAP rotation drive Y position (deck coordinates), in mm.
+
+    Reads the linear Y carriage that the rotation joint is mounted on. This is
+    NOT the gripper finger's Y - the finger position depends on the rotation
+    drive (W) and wrist (T) angles. Use `iswap_rotation_drive_request_position`
+    for the rotation drive's full XYZ.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
+    iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
+    return round(STARBackend.iswap_y_drive_increment_to_mm(iswap_y_pos), 1)
+
+  # Vertical offset between the rotation drive's bottom (its lowest physical
+  # point) and the gripper finger plane. R0 RZ is calibrated to the finger
+  # plane; the rotation drive's bottom sits 13 mm above it.
+  iswap_rotation_drive_z_offset_above_finger_mm = 13.0
+
+  # Z increment ranges below are in finger-plane coords (the R0 ZA reference).
+  # `iswap_rotation_drive_move_z` and `iswap_rotation_drive_request_z` apply
+  # the 13 mm offset internally to translate between deck and finger-plane Z.
+  iswap_rotation_drive_z_min_increment = -187
+  iswap_rotation_drive_z_max_increment = 26_661
+  iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
+  iswap_rotation_drive_z_acceleration_increment_range = (5, 999)
+
+  async def iswap_rotation_drive_request_z(self) -> float:
+    """Request iSWAP rotation-drive-bottom Z (deck coordinates), in mm.
+
+    Returns the Z of the rotation drive's lowest physical point, which sits
+    13 mm above the gripper finger plane that C0 QG reports.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    finger_plane_z = (await self.request_iswap_position()).z
+    return finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+
+  async def iswap_rotation_drive_request_position(self) -> Coordinate:
+    """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm."""
+    return Coordinate(
+      x=await self.iswap_rotation_drive_request_x(),
+      y=await self.iswap_rotation_drive_request_y(),
+      z=await self.iswap_rotation_drive_request_z(),
+    )
+
+  async def experimental_iswap_rotation_drive_move_x(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the iSWAP rotation drive to an absolute X position (deck coordinates).
+
+    Thin wrapper around `x_arm_move` that translates rotation-drive X into
+    X-arm carriage X using the cached `kg` offset.
+
+    Args:
+      x: Target rotation-drive X coordinate in mm.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+    # TODO: remove "experimental_" prefix once x_arm_move has been optimised
+
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    if self._iswap_rotation_drive_x_offset_mm is None:
+      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
+    kg = self._iswap_rotation_drive_x_offset_mm
+
+    x_min = 90.0 - kg
+    x_max = 1350.0 - kg
+    if not (x_min <= x <= x_max):
+      raise ValueError(f"x must be between {x_min} and {x_max} mm, is {x}")
+
+    return await self.experimental_x_arm_move(
+      x=x + kg,
+      acceleration_level=acceleration_level,
+      current_protection_limiter=current_protection_limiter,
+    )
+
+  async def iswap_rotation_drive_move_y(
+    self,
+    y: float,
+    speed: float = 220.0,
+    acceleration_level: int = 2,
+    current_protection_limiter: int = 7,
+    make_space: bool = False,
+  ):
+    """Move the iSWAP rotation drive to an absolute Y position.
+
+    To stay clear of channel 0 regardless of the current W-axis angle, the
+    iSWAP envelope is treated as a circle of radius
+    `iswap_rotation_drive_diameter / 2 + iswap_rotation_drive_safety_radius`.
+    The safety radius bounds the link-1 and protrusion sweep across all
+    rotation poses.
+
+    Args:
+      y: Target Y coordinate in mm.
+      speed: Max velocity in mm/sec. Default 220.0.
+      acceleration_level: Acceleration index, 1 or 2. Default 2.
+      current_protection_limiter: Motor current limit, 0-7. Default 7.
+      make_space: If True, reposition pipetting channels in a single
+        synchronous JY move when channel 0 is in the way and can be cleared.
+        If False, raise so the caller decides.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    iswap_radius = (
+      STARBackend.iswap_rotation_drive_diameter / 2 + STARBackend.iswap_rotation_drive_safety_radius
+    )
+    channel_0_radius = self._channels_minimum_y_spacing[0] / 2
+    channel_0_y = await self.request_y_pos_channel_n(0)
+
+    compressed_channel_0_y = self.extended_conf.left_arm_min_y_position + sum(
+      self._channels_minimum_y_spacing[1:]
+    )
+
+    if self._iswap_rotation_drive_y_max_mm is None:
+      self._iswap_rotation_drive_y_max_mm = await self._iswap_rotation_drive_request_y_max()
+    if self._iswap_rotation_drive_y_max_mm is None:
+      raise RuntimeError("iSWAP Y max not loaded; was setup() called with skip_iswap=False?")
+    max_y = self._iswap_rotation_drive_y_max_mm
+    absolute_min_y = self.extended_conf.left_arm_min_y_position
+    if not (absolute_min_y <= y <= max_y):
+      raise ValueError(f"y must be between {absolute_min_y} and {max_y} mm, is {y}")
+
+    target_channel_0_y = y - channel_0_radius - iswap_radius
+    if channel_0_y > target_channel_0_y:
+      if target_channel_0_y < compressed_channel_0_y:
+        raise ValueError(
+          f"y={y} mm is unreachable: would require channel 0 at "
+          f"{target_channel_0_y} mm, below the compressed floor "
+          f"{compressed_channel_0_y} mm"
+        )
+      if not make_space:
+        raise ValueError(
+          f"y={y} mm requires channel 0 at <= {target_channel_0_y} mm "
+          f"(currently {channel_0_y} mm); pass make_space=True to "
+          f"reposition channels"
+        )
+      await self.move_all_channels_in_z_safety()
+      await self.position_channels_in_y_direction({0: target_channel_0_y}, make_space=True)
+
+    speed_increments = STARBackend.iswap_y_drive_mm_to_increment(speed)
+    speed_min, speed_max = STARBackend.iswap_rotation_drive_y_speed_increment_range
+    if not (speed_min <= speed_increments <= speed_max):
+      raise ValueError(
+        f"speed must be between "
+        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_min)} and "
+        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"got {speed} mm/sec"
+      )
+
+    if not (1 <= acceleration_level <= 2):
+      raise ValueError(f"acceleration_level must be between 1 and 2, got {acceleration_level}")
+
+    if not (0 <= current_protection_limiter <= 7):
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, got {current_protection_limiter}"
+      )
+
+    await self.send_command(
+      module="R0",
+      command="YA",
+      ya=f"{round(STARBackend.iswap_y_drive_mm_to_increment(y)):05}",
+      yv=f"{round(speed_increments):04}",
+      yr=f"{int(acceleration_level)}",
+      yw=f"{int(current_protection_limiter)}",
+    )
+
+  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, float]:
+    """Read iSWAP rotation-drive Y predefined-position table from EEPROM, in mm.
+
+    Sends R0 RA ra=py. Firmware returns 10 signed-integer slots; all 10 are
+    positions (no length slot, unlike pw/pt). Slots beyond the documented
+    semantic roles are extra slots addressable via R0 YP yp5..yp9.
+
+    Keys (mm):
+      "home"         py[0]  - home position
+      "lower_limit"  py[1]  - lower travel limit
+      "upper_limit"  py[2]  - upper travel limit
+      "parking"      py[3]  - parking pose (back of travel)
+      "pre_parking"  py[4]  - pre-parking pose (firmware requires py[4] < py[3] - 430)
+      "extra_1"      py[5]  - extra slot, address via R0 YP yp5
+      "extra_2"      py[6]  - extra slot, address via R0 YP yp6
+      "extra_3"      py[7]  - extra slot, address via R0 YP yp7
+      "extra_4"      py[8]  - extra slot, address via R0 YP yp8
+      "extra_5"      py[9]  - extra slot, address via R0 YP yp9
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="py", fmt="py##### (n)")
+    py = cast(List[int], resp["py"])
+    keys = (
+      "home",
+      "lower_limit",
+      "upper_limit",
+      "parking",
+      "pre_parking",
+      "extra_1",
+      "extra_2",
+      "extra_3",
+      "extra_4",
+      "extra_5",
+    )
+    return {k: STARBackend.iswap_y_drive_increment_to_mm(py[i]) for i, k in enumerate(keys)}
+
+  async def iswap_rotation_drive_move_z(
+    self,
+    z: float,
+    speed: float = 118.0,
+    acceleration: float = 643.66,
+    current_protection_limiter: int = 6,
+  ):
+    """Move the iSWAP rotation-drive bottom to an absolute Z (deck coordinates).
+
+    `z` is the rotation-drive bottom Z (lowest physical point of the drive),
+    matching what `iswap_rotation_drive_request_z` returns. The 13 mm offset
+    to the finger plane (R0 ZA reference) is applied internally.
+
+    Args:
+      z: Target rotation-drive-bottom Z coordinate in mm.
+      speed: Max velocity in mm/sec. Default 118.0 (firmware default).
+      acceleration: Acceleration in mm/sec^2. Default 643.66
+        (firmware default 60 in 1000 incr/sec^2 units).
+      current_protection_limiter: Motor current limit, 0-7. Default 6
+        (firmware default).
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    z_min_incr = STARBackend.iswap_rotation_drive_z_min_increment
+    z_max_incr = STARBackend.iswap_rotation_drive_z_max_increment
+    absolute_min_z = (
+      STARBackend.iswap_z_drive_increment_to_mm(z_min_incr)
+      + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    )
+    absolute_max_z = (
+      STARBackend.iswap_z_drive_increment_to_mm(z_max_incr)
+      + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    )
+    if not (absolute_min_z <= z <= absolute_max_z):
+      raise ValueError(f"z must be between {absolute_min_z} and {absolute_max_z} mm, is {z}")
+
+    finger_plane_z = z - STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    z_increments = STARBackend.iswap_z_drive_mm_to_increment(finger_plane_z)
+
+    speed_increments = STARBackend.iswap_z_drive_mm_to_increment(speed)
+    speed_min, speed_max = STARBackend.iswap_rotation_drive_z_speed_increment_range
+    if not (speed_min <= speed_increments <= speed_max):
+      raise ValueError(
+        f"speed must be between "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_min)} and "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"is {speed}"
+      )
+
+    acceleration_increments = STARBackend.iswap_z_drive_mm_to_increment(acceleration / 1000)
+    accel_min, accel_max = STARBackend.iswap_rotation_drive_z_acceleration_increment_range
+    if not (accel_min <= acceleration_increments <= accel_max):
+      raise ValueError(
+        f"acceleration must be between "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_min * 1000)} and "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_max * 1000)} mm/sec^2, "
+        f"is {acceleration}"
+      )
+
+    if not (0 <= current_protection_limiter <= 7):
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, is {current_protection_limiter}"
+      )
+
+    await self.send_command(
+      module="R0",
+      command="ZA",
+      za=f"{round(z_increments):+06}",
+      zv=f"{round(speed_increments):05}",
+      zr=f"{round(acceleration_increments):03}",
+      zw=f"{int(current_protection_limiter)}",
+    )
+
+  async def iswap_rotation_drive_request_predefined_z_positions(self) -> Dict[str, float]:
+    """Read iSWAP rotation-drive Z predefined-position table from EEPROM, in mm.
+
+    Sends R0 RA ra=pz. Firmware returns 10 signed-integer slots; all 10 are
+    positions (no length slot, unlike pw/pt). Slots beyond home/parking are
+    extra slots addressable via R0 ZP zp2..zp9.
+
+    Returns rotation-drive-bottom Z (matching `iswap_rotation_drive_request_z`
+    and `iswap_rotation_drive_move_z`): each EEPROM finger-plane increment is
+    converted via `iswap_z_drive_increment_to_mm` then offset by
+    `iswap_rotation_drive_z_offset_above_finger_mm`.
+
+    Keys (mm):
+      "home"     pz[0]  - home position
+      "parking"  pz[1]  - parking pose
+      "extra_1"  pz[2]  - extra slot, address via R0 ZP zp2
+      "extra_2"  pz[3]  - extra slot, address via R0 ZP zp3
+      "extra_3"  pz[4]  - extra slot, address via R0 ZP zp4
+      "extra_4"  pz[5]  - extra slot, address via R0 ZP zp5
+      "extra_5"  pz[6]  - extra slot, address via R0 ZP zp6
+      "extra_6"  pz[7]  - extra slot, address via R0 ZP zp7
+      "extra_7"  pz[8]  - extra slot, address via R0 ZP zp8
+      "extra_8"  pz[9]  - extra slot, address via R0 ZP zp9
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pz", fmt="pz##### (n)")
+    pz = cast(List[int], resp["pz"])
+    offset = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    keys = (
+      "home",
+      "parking",
+      "extra_1",
+      "extra_2",
+      "extra_3",
+      "extra_4",
+      "extra_5",
+      "extra_6",
+      "extra_7",
+      "extra_8",
+    )
+    return {
+      k: STARBackend.iswap_z_drive_increment_to_mm(pz[i]) + offset for i, k in enumerate(keys)
+    }
+
+  async def _iswap_rotation_drive_request_predefined_increments(self) -> Dict[str, int]:
+    """Read the iSWAP rotation drive (W) predefined-position table from EEPROM.
+
+    Sends R0 RA ra=pw. Firmware returns 10 signed-integer slots; the 9 position
+    slots are returned here. Slot pw[9] (arm length) is exposed separately via
+    `iswap_request_link_1_length`. Undocumented slots are returned as
+    "extra_1".."extra_4" and addressable via R0 WP wp5..wp8.
+
+    Keys (motor increments; W-drive resolution 0.00310 deg/incr):
+      "home"     pw[0]  - home position
+      "left"     pw[1]  - LEFT deck position  (~ -90 deg)
+      "front"    pw[2]  - FRONT deck position (~   0 deg)
+      "right"    pw[3]  - RIGHT deck position (~ +90 deg)
+      "parking"  pw[4]  - past-W3 parking pose (firmware requires > iw + 50)
+      "extra_1"  pw[5]  - extra slot, address via R0 WP wp5
+      "extra_2"  pw[6]  - extra slot, address via R0 WP wp6
+      "extra_3"  pw[7]  - extra slot, address via R0 WP wp7
+      "extra_4"  pw[8]  - extra slot, address via R0 WP wp8
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pw", fmt="pw##### (n)")
+    pw = cast(List[int], resp["pw"])
+    return {
+      "home": pw[0],
+      "left": pw[1],
+      "front": pw[2],
+      "right": pw[3],
+      "parking": pw[4],
+      "extra_1": pw[5],
+      "extra_2": pw[6],
+      "extra_3": pw[7],
+      "extra_4": pw[8],
+    }
+
+  async def _request_iswap_rotation_drive_position_increments(self) -> int:
+    """Query the iSWAP rotation drive position (units: increments) from the firmware."""
+    response = await self.send_command(module="R0", command="RW", fmt="rw######")
+    return cast(int, response["rw"])
+
+  @staticmethod
+  def _iswap_rotation_drive_increments_to_angle(
+    increments: int,
+    predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+  ) -> float:
+    """Piecewise-linear map encoder increments -> degrees.
+
+    [LEFT, FRONT] -> [-90, 0] and [FRONT, RIGHT] -> [0, +90]. Increments outside
+    [LEFT, RIGHT] extrapolate using each segment's slope (e.g. PARKED_RIGHT ~+91
+    deg). Anchored on the calibrated stops, so they report exactly -90/0/+90.
+    """
+    front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
+    if increments < front:
+      left = predefined_increments[STARBackend.RotationDriveOrientation.LEFT]
+      return -90.0 * (front - increments) / (front - left)
+    else:
+      right = predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]
+      return 90.0 * (increments - front) / (right - front)
+
+  @staticmethod
+  def _iswap_rotation_drive_angle_to_increments(
+    angle: float,
+    predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+  ) -> int:
+    """Inverse of `_iswap_rotation_drive_increments_to_angle`; rounds to the nearest
+    integer increment. The named stop angles (-90 / 0 / +90) return exactly the
+    EEPROM stop increments (rounding is a no-op for the stop values themselves)."""
+    front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
+    if angle < 0:
+      left = predefined_increments[STARBackend.RotationDriveOrientation.LEFT]
+      return round(front - (front - left) * (-angle / 90.0))
+    else:
+      right = predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]
+      return round(front + (right - front) * (angle / 90.0))
+
+  async def iswap_rotation_drive_request_angle(self) -> float:
+    """Query the iSWAP rotation drive angle in degrees (signed, 0 deg = calibrated FRONT).
+
+    See `_iswap_rotation_drive_increments_to_angle` for the conversion. On a
+    calibrated STAR the FRONT stop can sit ~+/-300 incr (~1 deg) off the
+    Hamilton-default zero.
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+    """
+    if self._iswap_rotation_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    increments = await self._request_iswap_rotation_drive_position_increments()
+    return STARBackend._iswap_rotation_drive_increments_to_angle(
+      increments, self._iswap_rotation_drive_predefined_increments
+    )
+
+  async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
+    """Request the iSWAP rotation drive orientation.
+
+    Uses nearest-neighbour classification against the per-machine EEPROM `pw`
+    values populated at setup. An earlier implementation used +/-50 windows
+    around the Hamilton factory defaults and faulted on machines calibrated
+    outside that band; we now pick whichever predefined stop is closest and
+    only raise if the drive is more than 5 deg from any predefined stop.
+
+    Hamilton factory-default values shown below for reference only; the
+    per-machine EEPROM table is queried at setup and used at runtime in place
+    of these (W-drive resolution = 0.00310 deg/incr)::
+
+      LEFT          W1      -29068 incr  (-90 deg)
+      FRONT         W2          +0 incr  ( +0 deg)
+      RIGHT         W3      +29068 incr  (+90 deg)
+      PARKED_RIGHT  park    +29500 incr  (+91 deg, beyond W3 at the stop)
+
+    Returns:
+      RotationDriveOrientation: The interpreted rotation orientation
+        (LEFT, FRONT, RIGHT, or PARKED_RIGHT).
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the measured position is more than 5 deg from any
+        predefined stop (drive is in transit or drifted).
+    """
+    # PARKED_RIGHT is kept as a distinct neighbour so we can report "parked"
+    # explicitly when the drive sits at the parking stop rather than the W3
+    # work stop.
+    # TODO: add PARKED_LEFT reference for STAR(let)s that park on the left.
+    if self._iswap_rotation_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_rotation_drive_predefined_increments
+    front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
+    # Compute the per-machine increment delta for 5 deg via the same piecewise mapping the
+    # angle methods use, so the tolerance reflects the calibrated FRONT->RIGHT slope.
+    tolerance_incr = (
+      STARBackend._iswap_rotation_drive_angle_to_increments(5.0, predefined_increments) - front
+    )
+
+    motor_position_increments = await self._request_iswap_rotation_drive_position_increments()
+
+    orientation, offset = min(
+      ((o, abs(p - motor_position_increments)) for o, p in predefined_increments.items()),
+      key=lambda pair: pair[1],
+    )
+    if offset > tolerance_incr:
+      raise ValueError(
+        f"Unknown rotation orientation: {motor_position_increments} incr is "
+        f"{offset} incr (~{offset * STARBackend.iswap_rotation_drive_deg_per_increment:.2f} deg) "
+        f"from the nearest predefined "
+        f"stop ({orientation.name} at {predefined_increments[orientation]}). "
+        "Is the rotation drive in transit or mis-calibrated?"
+      )
+    return orientation
+
+  async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
+    """Rotate the iSWAP rotation drive to a predefined working stop (R0 WP).
+
+    Args:
+      orientation: must be LEFT, FRONT, or RIGHT. PARKED_RIGHT is not
+        accepted; use `park_iswap()` for parking.
+
+    Raises:
+      ValueError: if orientation is not LEFT, FRONT, or RIGHT.
+    """
+    if orientation in {
+      STARBackend.RotationDriveOrientation.RIGHT,
+      STARBackend.RotationDriveOrientation.FRONT,
+      STARBackend.RotationDriveOrientation.LEFT,
+    }:
+      return await self.send_command(
+        module="R0",
+        command="WP",
+        auto_id=False,
+        wp=orientation.value,
+      )
+    else:
+      raise ValueError(f"Invalid rotation drive orientation: {orientation}")
+
+  async def iswap_rotation_drive_rotate_to_angle(
+    self,
+    angle: Union[RotationDriveOrientation, float],
+    speed: int = 25_000,
+    acceleration: int = 170,
+    current_limit: int = 5,
+  ) -> None:
+    """Rotate the iSWAP rotation drive (Joint 1) to an absolute angle or named stop.
+
+    Passing a `RotationDriveOrientation` (LEFT / FRONT / RIGHT / PARKED_RIGHT)
+    sends the drive to the exact EEPROM-stored increment for that stop. Passing
+    a float interprets it as degrees signed from the calibrated FRONT (0 deg),
+    using piecewise-linear interpolation between the three working stops (LEFT
+    -> FRONT for negative angles, FRONT -> RIGHT for non-negative); the named
+    stop angles (-90 / 0 / +90) thus round-trip exactly. Angles beyond +/-90
+    extrapolate using each segment's slope. The wrist drive is held at its
+    current position.
+
+    Note on PARKED_RIGHT: this method moves only the rotation drive joint to
+    the parking increment via an absolute-position command - it does NOT invoke
+    the full gripper-park procedure provided by `park_iswap()` (which also
+    closes the gripper, applies a traverse-height constraint, and sets the
+    internal `_iswap_parked` state). Use `rotate_to_angle(PARKED_RIGHT)` when
+    you want only the joint motion; use `park_iswap()` when you want the full
+    safe-park.
+
+    Args:
+      angle: either a `RotationDriveOrientation` member, or a float in degrees
+        signed from the calibrated FRONT (~+/-93 deg achievable window;
+        per-machine, depends on the EEPROM-stored stops populated at setup).
+      speed: max velocity in increments/sec, range 20..75000.
+      acceleration: in 1000 increments/sec^2, range 5..200.
+      current_limit: motor current protection limiter, range 0..7.
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the resulting target increment is outside the hardware range.
+    """
+    if self._iswap_rotation_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_rotation_drive_predefined_increments
+    if isinstance(angle, STARBackend.RotationDriveOrientation):
+      rotation_position_increments = predefined_increments[angle]
+    else:
+      rotation_position_increments = STARBackend._iswap_rotation_drive_angle_to_increments(
+        angle, predefined_increments
+      )
+    if not (
+      STARBackend.iswap_rotation_drive_min_increment
+      <= rotation_position_increments
+      <= STARBackend.iswap_rotation_drive_max_increment
+    ):
+      rotation_position_deg = STARBackend._iswap_rotation_drive_increments_to_angle(
+        rotation_position_increments, predefined_increments
+      )
+      raise ValueError(
+        f"angle {angle} maps to {rotation_position_increments} incr ({rotation_position_deg:.2f} deg) "
+        f"(stops LEFT/FRONT/RIGHT="
+        f"{predefined_increments[STARBackend.RotationDriveOrientation.LEFT]}/"
+        f"{predefined_increments[STARBackend.RotationDriveOrientation.FRONT]}/"
+        f"{predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]}), "
+        f"outside hardware range [{STARBackend.iswap_rotation_drive_min_increment}, "
+        f"{STARBackend.iswap_rotation_drive_max_increment}]"
+      )
+    wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
+
+    await self._iswap_rotate_increments(
+      rotation_position_increments=rotation_position_increments,
+      wrist_position_increments=wrist_position_increments,
+      rotation_speed=speed,
+      rotation_acceleration=acceleration,
+      rotation_current_limit=current_limit,
+    )
+
+  # -----------------------------------------------------------------------
+  # iSWAP: "Wrist Drive" (Joint 2)
+  # -----------------------------------------------------------------------
+
+  iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
+  iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
+  iswap_wrist_drive_deg_per_increment = 0.00507968798
+
+  class WristDriveOrientation(enum.Enum):
+    RIGHT = 1
+    STRAIGHT = 2
+    LEFT = 3
+    REVERSE = 4
+
+  async def _request_iswap_wrist_drive_position_increments(self) -> int:
+    """Query the iSWAP wrist drive position (units: increments) from the firmware."""
+    response = await self.send_command(module="R0", command="RT", fmt="rt######")
+    return cast(int, response["rt"])
+
+  async def _iswap_wrist_drive_request_predefined_increments(self) -> Dict[str, int]:
+    """Read the iSWAP wrist twist drive (T) predefined-position table from EEPROM.
+
+    Sends R0 RA ra=pt. Firmware returns 10 signed-integer slots; the 9 position
+    slots are returned here. Slot pt[9] (arm length) is exposed separately via
+    `iswap_request_link_2_length`. Undocumented slots are returned as
+    "extra_1".."extra_3" and addressable via R0 TP tp6..tp8.
+
+    Keys (motor increments; T-drive resolution 0.00508 deg/incr):
+      "home"     pt[0]  - home position
+      "right"    pt[1]  - wrist twisted right relative to arm (~ -135 deg)
+      "straight" pt[2]  - wrist aligned with arm (~ -45 deg)
+      "left"     pt[3]  - wrist twisted left relative to arm (~ +45 deg)
+      "reverse"  pt[4]  - wrist twisted 180 deg from straight (~ +135 deg)
+      "parking"  pt[5]  - free pip channel + parking pose (firmware requires < it - 50)
+      "extra_1"  pt[6]  - extra slot, address via R0 TP tp6
+      "extra_2"  pt[7]  - extra slot, address via R0 TP tp7
+      "extra_3"  pt[8]  - extra slot, address via R0 TP tp8
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pt", fmt="pt##### (n)")
+    pt = cast(List[int], resp["pt"])
+    return {
+      "home": pt[0],
+      "right": pt[1],
+      "straight": pt[2],
+      "left": pt[3],
+      "reverse": pt[4],
+      "parking": pt[5],
+      "extra_1": pt[6],
+      "extra_2": pt[7],
+      "extra_3": pt[8],
+    }
+
+  @staticmethod
+  def _iswap_wrist_drive_increments_to_angle(increments: int) -> float:
+    """Linear map encoder increments -> degrees, anchored on motor zero (0 incr = 0 deg).
+
+    Symmetric around the motor's raw zero, so the achievable range is
+    ~+/-152 deg (the +/-30000 incr hardware limits). Named EEPROM stops
+    report approximately:
+
+      RIGHT     ~ -135 deg
+      STRAIGHT  ~  -45 deg
+      LEFT      ~  +45 deg
+      REVERSE   ~ +135 deg
+
+    with small per-machine drift from the factory defaults. Callers that
+    need an exact named-stop landing should pass the `WristDriveOrientation`
+    member to `iswap_wrist_drive_rotate_to_angle` rather than a float -- the
+    enum path uses the calibrated EEPROM increment directly.
+    """
+    return increments * STARBackend.iswap_wrist_drive_deg_per_increment
+
+  @staticmethod
+  def _iswap_wrist_drive_angle_to_increments(angle: float) -> int:
+    """Inverse of `_iswap_wrist_drive_increments_to_angle`; rounds to nearest int."""
+    return round(angle / STARBackend.iswap_wrist_drive_deg_per_increment)
+
+  async def iswap_wrist_drive_request_angle(self) -> float:
+    """Query the iSWAP wrist drive angle in degrees (signed, 0 deg = motor zero).
+
+    See `_iswap_wrist_drive_increments_to_angle` for the conversion. The
+    motor's raw zero sits between STRAIGHT and LEFT; this convention keeps
+    the achievable range symmetric (~+/-152 deg).
+    """
+    increments = await self._request_iswap_wrist_drive_position_increments()
+    return STARBackend._iswap_wrist_drive_increments_to_angle(increments)
+
+  async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
+    """Request the iSWAP wrist drive orientation (relative to the rotation drive).
+
+    e.g.:
+
+    1) RotationDriveOrientation.FRONT + WristDriveOrientation.STRAIGHT
+       => wrist also points to the front of the machine.
+
+    2) RotationDriveOrientation.LEFT + WristDriveOrientation.STRAIGHT
+       => wrist also points to the left of the machine.
+
+    3) RotationDriveOrientation.FRONT + WristDriveOrientation.RIGHT
+       => wrist points to the left of the machine.
+
+    Uses nearest-neighbour classification against the per-machine EEPROM `pt`
+    values populated at setup. An earlier implementation used +/-50 windows
+    around the Hamilton factory defaults and faulted on machines calibrated
+    outside that band; we now pick whichever predefined stop is closest and
+    only raise if the wrist is more than 5 deg from any predefined stop.
+
+    Hamilton factory-default values shown below for reference only; the
+    per-machine EEPROM table is queried at setup and used at runtime in place
+    of these (T-drive resolution = 0.00508 deg/incr)::
+
+      RIGHT     T1   -26577 incr  (-135 deg)
+      STRAIGHT  T2    -8859 incr  ( -45 deg)
+      LEFT      T3    +8859 incr  ( +45 deg)
+      REVERSE   T4   +26577 incr  (+135 deg)
+
+    Returns:
+      WristDriveOrientation: The interpreted wrist orientation
+        (RIGHT, STRAIGHT, LEFT, or REVERSE).
+
+    Raises:
+      RuntimeError: if `setup()` has not populated the predefined positions.
+      ValueError: if the measured position is more than 5 deg from any
+        predefined stop (drive is in transit or drifted).
+    """
+    if self._iswap_wrist_drive_predefined_increments is None:
+      raise RuntimeError(
+        "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
+        "is installed and `setup()` has run."
+      )
+    predefined_increments = self._iswap_wrist_drive_predefined_increments
+    tolerance_incr = round(5.0 / STARBackend.iswap_wrist_drive_deg_per_increment)  # ~1000
+
+    motor_position_increments = await self._request_iswap_wrist_drive_position_increments()
+
+    orientation, offset = min(
+      ((o, abs(p - motor_position_increments)) for o, p in predefined_increments.items()),
+      key=lambda pair: pair[1],
+    )
+    if offset > tolerance_incr:
+      raise ValueError(
+        f"Unknown wrist orientation: {motor_position_increments} incr is "
+        f"{offset} incr (~{offset * STARBackend.iswap_wrist_drive_deg_per_increment:.2f} deg) "
+        f"from the nearest predefined "
+        f"stop ({orientation.name} at {predefined_increments[orientation]}). "
+        "Is the wrist drive in transit or mis-calibrated?"
+      )
+    return orientation
+
+  async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
+    """Rotate the iSWAP wrist drive to a predefined orientation."""
+    return await self.send_command(
+      module="R0",
+      command="TP",
+      auto_id=False,
+      tp=orientation.value,
+    )
+
+  async def iswap_wrist_drive_rotate_to_angle(
+    self,
+    angle: Union[WristDriveOrientation, float],
+    speed: int = 20_000,
+    acceleration: int = 145,
+    current_limit: int = 5,
+  ) -> None:
+    """Rotate the iSWAP wrist drive (Joint 2) to an absolute angle or named stop.
+
+    Passing a `WristDriveOrientation` (RIGHT / STRAIGHT / LEFT / REVERSE) sends
+    the drive to the exact EEPROM-stored increment for that stop -- use this
+    when you need a calibrated landing. Passing a float interprets it as
+    degrees signed from motor zero (0 deg = 0 incr), via the linear
+    `deg_per_increment` conversion. Achievable range is ~+/-152 deg (the
+    +/-30000 incr hardware limits). The rotation drive is held at its
+    current position.
+
+    Args:
+      angle: either a `WristDriveOrientation` member (uses EEPROM stop), or
+        a float in degrees signed from motor zero.
+      speed: max velocity in increments/sec, range 20..65000.
+      acceleration: in 1000 increments/sec^2, range 5..200.
+      current_limit: motor current protection limiter, range 0..7.
+
+    Raises:
+      RuntimeError: when an orientation is passed and `setup()` has not
+        populated the predefined positions yet.
+      ValueError: if the resulting target increment is outside the hardware range.
+    """
+    if isinstance(angle, STARBackend.WristDriveOrientation):
+      if self._iswap_wrist_drive_predefined_increments is None:
+        raise RuntimeError(
+          "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
+          "is installed and `setup()` has run."
+        )
+      wrist_position_increments = self._iswap_wrist_drive_predefined_increments[angle]
+    else:
+      wrist_position_increments = STARBackend._iswap_wrist_drive_angle_to_increments(angle)
+    if not (
+      STARBackend.iswap_wrist_drive_min_increment
+      <= wrist_position_increments
+      <= STARBackend.iswap_wrist_drive_max_increment
+    ):
+      wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        wrist_position_increments
+      )
+      min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        STARBackend.iswap_wrist_drive_min_increment
+      )
+      max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
+        STARBackend.iswap_wrist_drive_max_increment
+      )
+      raise ValueError(
+        f"angle {angle} ({wrist_position_deg:+.2f} deg) is outside the hardware "
+        f"range [{min_deg:+.2f}, {max_deg:+.2f}] deg"
+      )
+    rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
+
+    await self._iswap_rotate_increments(
+      rotation_position_increments=rotation_position_increments,
+      wrist_position_increments=wrist_position_increments,
+      wrist_speed=speed,
+      wrist_acceleration=acceleration,
+      wrist_current_limit=current_limit,
+    )
+
+  # -----------------------------------------------------------------------
+  # iSWAP: Combined Rotation-Wrist Moves
+  # -----------------------------------------------------------------------
+
+  async def _iswap_rotate_increments(
+    self,
+    rotation_position_increments: int,  # units: increments
+    wrist_position_increments: int,  # units: increments
+    rotation_speed: int = 25_000,  # units: increments/sec
+    wrist_speed: int = 20_000,  # units: increments/sec
+    rotation_acceleration: int = 170,  # units: 1000 increments/sec^2
+    wrist_acceleration: int = 145,  # units: 1000 increments/sec^2
+    rotation_current_limit: int = 5,
+    wrist_current_limit: int = 5,
+  ) -> None:
+    """Absolute parallel move of rotation (Joint 1) + wrist (Joint 2) drives.
+
+    Args:
+      rotation_position_increments: signed destination, range -30032..+30032.
+      wrist_position_increments: signed destination, range -30000..+30000.
+      rotation_speed [increments/sec]: max velocity, range 20..75000.
+      wrist_speed [increments/sec]: max velocity, range 20..65000.
+      rotation_acceleration [1000 increments/sec^2]: range 5..200.
+      wrist_acceleration [1000 increments/sec^2]: range 5..200.
+      rotation_current_limit: current protection limiter, range 0..7.
+      wrist_current_limit: current protection limiter, range 0..7.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    if abs(rotation_position_increments) > STARBackend.iswap_rotation_drive_max_increment:
+      raise ValueError(
+        f"rotation_position_increments must be between "
+        f"{-STARBackend.iswap_rotation_drive_max_increment} and "
+        f"{STARBackend.iswap_rotation_drive_max_increment}; got {rotation_position_increments}"
+      )
+    if abs(wrist_position_increments) > STARBackend.iswap_wrist_drive_max_increment:
+      raise ValueError(
+        f"wrist_position_increments must be between "
+        f"{-STARBackend.iswap_wrist_drive_max_increment} and "
+        f"{STARBackend.iswap_wrist_drive_max_increment}; got {wrist_position_increments}"
+      )
+
+    if not 20 <= rotation_speed <= 75000:
+      raise ValueError(f"rotation_speed must be between 20 and 75000; got {rotation_speed}")
+    if not 20 <= wrist_speed <= 65000:
+      raise ValueError(f"wrist_speed must be between 20 and 65000; got {wrist_speed}")
+    if not 5 <= rotation_acceleration <= 200:
+      raise ValueError(
+        f"rotation_acceleration must be between 5 and 200; got {rotation_acceleration}"
+      )
+    if not 5 <= wrist_acceleration <= 200:
+      raise ValueError(f"wrist_acceleration must be between 5 and 200; got {wrist_acceleration}")
+    if not 0 <= rotation_current_limit <= 7:
+      raise ValueError(
+        f"rotation_current_limit must be between 0 and 7; got {rotation_current_limit}"
+      )
+    if not 0 <= wrist_current_limit <= 7:
+      raise ValueError(f"wrist_current_limit must be between 0 and 7; got {wrist_current_limit}")
+
+    await self.send_command(
+      module="R0",
+      command="PA",
+      wa=f"{rotation_position_increments:+06}",
+      wv=f"{rotation_speed:05}",
+      wr=f"{rotation_acceleration:03}",
+      ww=f"{rotation_current_limit}",
+      ta=f"{wrist_position_increments:+06}",
+      tv=f"{wrist_speed:05}",
+      tr=f"{wrist_acceleration:03}",
+      tw=f"{wrist_current_limit}",
+    )
+
+  # -----------------------------------------------------------------------
+  # iSWAP: Gripper
+  # -----------------------------------------------------------------------
+
+  iswap_gripper_drive_min_increment = 12780  # ~ 71 mm
+  iswap_gripper_drive_max_increment = 24120  # ~ 134 mm
+
+  iswap_gripper_drive_mm_per_increment = 0.00554337
+
+  @staticmethod
+  def iswap_gripper_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STARBackend.iswap_gripper_drive_mm_per_increment, 1)
+
+  @staticmethod
+  def iswap_gripper_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.iswap_gripper_drive_mm_per_increment)
+
+  async def iswap_gripper_request_width(self) -> float:
+    """Request the current iSWAP gripper jaw opening width, in mm.
+
+    RG is always available and reads the raw drive encoder.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    resp = await self.send_command(module="R0", command="RG", fmt="rg##### (n)")
+    actual_increments = resp["rg"][1]  # rg returns [target, actual]; we want actual
+
+    return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
+
+  async def iswap_gripper_request_predefined_positions(self) -> Dict[str, int]:
+    """Read the iSWAP gripper drive (G) predefined-position table.
+
+    Keys (motor increments; G-drive resolution 0.00554 mm/incr):
+      "home"          pg[0]  - home & parking
+      "fully_open"    pg[1]  - default 24120 = max jaw width
+      "closed"        pg[2]  - gripper closed
+      "plate_type_1"  pg[3]  - grip plate type 1
+      "plate_type_2"  pg[4]  - grip plate type 2
+      "plate_type_3"  pg[5]  - grip plate type 3
+      "plate_type_4"  pg[6]  - grip plate type 4
+      "plate_type_5"  pg[7]  - grip plate type 5
+      "plate_type_6"  pg[8]  - grip plate type 6
+      "plate_type_7"  pg[9]  - grip plate type 7
+
+    Raises:
+      RuntimeError: if the iSWAP module is not installed.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RA", ra="pg", fmt="pg##### (n)")
+    pg = cast(List[int], resp["pg"])
+    return {
+      "home": pg[0],
+      "fully_open": pg[1],
+      "closed": pg[2],
+      "plate_type_1": pg[3],
+      "plate_type_2": pg[4],
+      "plate_type_3": pg[5],
+      "plate_type_4": pg[6],
+      "plate_type_5": pg[7],
+      "plate_type_6": pg[8],
+      "plate_type_7": pg[9],
+    }
+
+  async def request_plate_in_iswap(self) -> bool:
+    """Request plate in iSWAP
+
+    Returns:
+      True if holding a plate, False otherwise.
+    """
+
+    resp = await self.send_command(module="C0", command="QP", fmt="ph#")
+    return resp is not None and resp["ph"] == 1
+
   async def open_not_initialized_gripper(self):
+    """Initialize the iSWAP gripper drive (C0 GI).
+
+    Required if the gripper drive hasn't been initialized yet. After init,
+    the drive sits in a known position from which subsequent open/close
+    commands can operate.
+    """
     return await self.send_command(module="C0", command="GI")
 
   async def iswap_open_gripper(self, open_position: Optional[float] = None):
@@ -9692,8 +10911,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
-    plate_width: float = 0,
-    plate_width_tolerance: float = 0,
+    plate_width: float = 86.0,
+    plate_width_tolerance: float = 2.0,
   ):
     """Close gripper
 
@@ -9701,13 +10920,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
-      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0 and 9.9. Default 2.0.
+      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g ).
+        Default 86.0 (SBS short side, matching `iswap_get_plate`'s 860 in 0.1 mm units).
+      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0.5 and 9.9. Default 2.0.
     """
 
     assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
-    assert 0 <= plate_width <= 999.9, "plate_width must be between 0 and 999.9"
-    assert 0 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0 and 9.9"
+    assert 76.0 < plate_width <= 999.9, "plate_width must be between 76.0 and 999.9"
+    assert 0.5 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0.5 and 9.9"
 
     return await self.send_command(
       module="C0",
@@ -9929,86 +11149,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Once the command has completed successfully, set _iswap_parked to false
     self._iswap_parked = False
     return command_output
-
-  async def request_iswap_rotation_drive_position_increments(self) -> int:
-    """Query the iSWAP rotation drive position (units: increments) from the firmware."""
-    response = await self.send_command(module="R0", command="RW", fmt="rw######")
-    return cast(int, response["rw"])
-
-  async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
-    """
-    Request the iSWAP rotation drive orientation.
-    This is the orientation of the iSWAP rotation drive (relative to the machine).
-
-    Uses empirically determined increment values:
-      FRONT: -25 ± 50
-      RIGHT: +29068 ± 50
-      LEFT:  -29116 ± 50
-
-    Returns:
-      RotationDriveOrientation: The interpreted rotation orientation (LEFT, FRONT, RIGHT).
-    """
-    # Map motor increments to rotation orientations (constant lookup table).
-    rotation_orientation_to_motor_increment_dict = {
-      STARBackend.RotationDriveOrientation.FRONT: range(-75, 26),
-      STARBackend.RotationDriveOrientation.RIGHT: range(29018, 29119),
-      STARBackend.RotationDriveOrientation.LEFT: range(-29166, -29065),
-      STARBackend.RotationDriveOrientation.PARKED_RIGHT: range(29450, 29550),
-      # TODO: add range for STAR(let)s with "PARKED_LEFT" setting
-    }
-
-    motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
-
-    for orientation, increment_range in rotation_orientation_to_motor_increment_dict.items():
-      if motor_position_increments in increment_range:
-        return orientation
-
-    raise ValueError(
-      f"Unknown rotation orientation: {motor_position_increments}. "
-      f"Expected one of {list(rotation_orientation_to_motor_increment_dict.values())}."
-    )
-
-  async def request_iswap_wrist_drive_position_increments(self) -> int:
-    """Query the iSWAP wrist drive position (units: increments) from the firmware."""
-    response = await self.send_command(module="R0", command="RT", fmt="rt######")
-    return cast(int, response["rt"])
-
-  async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
-    """
-    Request the iSWAP wrist drive orientation.
-    This is the orientation of the iSWAP wrist drive (always in relation to the iSWAP arm/rotation drive).
-
-    e.g.:
-    1) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) + iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
-
-    2) iSWAP RotationDriveOrientation.LEFT (i.e. pointing to the left of the machine) + iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
-
-    3) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) + iSWAP WristDriveOrientation.RIGHT (i.e. wrist is pointing to the left !)
-
-    The relative wrist orientation is reported as a motor position increment by the STAR firmware. This value is mapped to a `WristDriveOrientation` enum member.
-
-    Returns:
-      WristDriveOrientation: The interpreted wrist orientation (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
-    """
-
-    # Map motor increments to wrist orientations (constant lookup table).
-    wrist_orientation_to_motor_increment_dict = {
-      STARBackend.WristDriveOrientation.RIGHT: range(-26_627, -26_527),
-      STARBackend.WristDriveOrientation.STRAIGHT: range(-8_804, -8_704),
-      STARBackend.WristDriveOrientation.LEFT: range(9_051, 9_151),
-      STARBackend.WristDriveOrientation.REVERSE: range(26_802, 26_902),
-    }
-
-    motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
-
-    for orientation, increment_range in wrist_orientation_to_motor_increment_dict.items():
-      if motor_position_increments in increment_range:
-        return orientation
-
-    raise ValueError(
-      f"Unknown wrist orientation: {motor_position_increments}. "
-      f"Expected one of {list(wrist_orientation_to_motor_increment_dict)}."
-    )
 
   async def iswap_rotate(
     self,
@@ -10320,25 +11460,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="RG", fmt="rg#")
 
-  async def request_plate_in_iswap(self) -> bool:
-    """Request plate in iSWAP
-
-    Returns:
-      True if holding a plate, False otherwise.
-    """
-
-    resp = await self.send_command(module="C0", command="QP", fmt="ph#")
-    return resp is not None and resp["ph"] == 1
-
   async def request_iswap_position(self) -> Coordinate:
-    """Request iSWAP position ( grip center )
+    """Request iSWAP gripper finger center position.
 
     Returns:
-      xs: Hotel center in X direction [1mm]
+      xs: Gripper finger center in X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yj: Gripper center in Y direction [1mm]
+      yj: Gripper finger center in Y direction [1mm]
       yd: Y direction 0 = positive 1 = negative
-      zj: Gripper Z height (gripping height) [1mm]
+      zj: Gripper finger center Z height [1mm]
       zd: Z direction 0 = positive 1 = negative
     """
 
@@ -10348,14 +11478,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y=(resp["yj"] / 10) * (1 if resp["yd"] == 0 else -1),
       z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
     )
-
-  async def iswap_rotation_drive_request_y(self) -> float:
-    """Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module."""
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
-    iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
@@ -10370,6 +11492,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def request_iswap_version(self) -> str:
     """Firmware command for getting iswap version"""
     return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
+
+  async def measure_iswap_gripper_force(self) -> float:
+    """Measure the force currently exerted by the iSWAP gripper, in Newtons.
+
+    Sends R0 RH (request gripper current and force sensor). The firmware
+    returns 5 fields; the last is the calibrated force in mN, which this
+    method converts to N. Useful for closed-loop grip verification,
+    grip-slip detection, and adaptive grip-strength tuning.
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RH")
+    # Response: rh#### #### #### #### #####
+    # Fields: max drive current, max force during movement, idle offset,
+    # last measured (all AD values), and force in mN (firmware-calibrated).
+    match = re.search(r"rh\s*-?\d+\s+-?\d+\s+-?\d+\s+-?\d+\s+(-?\d+)", resp or "")
+    if match is None:
+      raise RuntimeError(f"unexpected RH response: {resp!r}")
+    return round(int(match.group(1)) / 1000.0, 3)
 
   # -------------- 3.18 Cover and port control --------------
 
@@ -10424,7 +11565,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
-  y_drive_mm_per_increment = 0.046302082
+  y_drive_mm_per_increment = 0.046302083
   z_drive_mm_per_increment = 0.01072765
 
   dispensing_drive_vol_per_increment = 0.046876  # uL / increment
@@ -10703,8 +11844,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Machine-compatibility check of calculated parameters
     assert 0 <= max_y_search_pos_increments <= 13_714, (
-      "Maximum y search position must be between \n0 and"
-      + f"{STARBackend.y_drive_increment_to_mm(13_714) + 9} mm, is {max_y_search_pos_increments} mm"
+      "Maximum y search position must be between 0 and "
+      + f"{STARBackend.y_drive_increment_to_mm(13_714):.1f} mm, "
+      + f"is {max_y_search_pos:.1f} mm"
     )
     assert 20 <= channel_speed_increments <= 8_000, (
       f"LLD search speed must be between \n{STARBackend.y_drive_increment_to_mm(20)}"
@@ -11436,6 +12578,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)
   DEFAULT_TIP_FITTING_DEPTH = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
+  SEARCH_START_CLEARANCE_MM = 5  # mm above container top for LLD search start position
 
   async def ztouch_probe_z_height_using_channel(
     self,
@@ -11576,41 +12719,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return float(result_in_mm)
 
-  class RotationDriveOrientation(enum.Enum):
-    LEFT = 1
-    FRONT = 2
-    RIGHT = 3
-    PARKED_RIGHT = None
-
-  async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
-    if orientation in {
-      STARBackend.RotationDriveOrientation.RIGHT,
-      STARBackend.RotationDriveOrientation.FRONT,
-      STARBackend.RotationDriveOrientation.LEFT,
-    }:
-      return await self.send_command(
-        module="R0",
-        command="WP",
-        auto_id=False,
-        wp=orientation.value,
-      )
-    else:
-      raise ValueError(f"Invalid rotation drive orientation: {orientation}")
-
-  class WristDriveOrientation(enum.Enum):
-    RIGHT = 1
-    STRAIGHT = 2
-    LEFT = 3
-    REVERSE = 4
-
-  async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
-    return await self.send_command(
-      module="R0",
-      command="TP",
-      auto_id=False,
-      tp=orientation.value,
-    )
-
   @staticmethod
   def channel_id(channel_idx: int) -> str:
     """channel_idx: plr style, 0-indexed from the back"""
@@ -11627,10 +12735,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     y_positions = [round(y / 10, 2) for y in resp["ry"]]
 
     # sometimes there is (likely) a floating point error and channels are reported to be
-    # less than their minimum spacing apart (typically 9 mm). (When you set channels using
-    # position_channels_in_y_direction, it will raise an error.) The minimum y is 6mm,
-    # so we fix that first (in case that value is misreported). Then, we traverse the
-    # list in reverse and enforce pairwise minimum spacing.
+    # closer together than the minimum required spacing. (When you set channels using
+    # position_channels_in_y_direction, it will raise an error.) We first ensure the last
+    # channel is not reported in front of the known minimum Y position, then traverse the
+    # list in reverse and enforce the per-channel minimum spacing.
     min_y = self.extended_conf.left_arm_min_y_position
     if y_positions[-1] < min_y - 0.2:
       raise RuntimeError(
@@ -11643,9 +12751,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y_positions[-1] = min_y
 
     for i in range(len(y_positions) - 2, -1, -1):
-      spacing = self._min_spacing_between(i, i + 1)
-      if y_positions[i] - y_positions[i + 1] < spacing:
-        y_positions[i] = y_positions[i + 1] + spacing
+      min_diff = self._min_spacing_between(i, i + 1)
+      if y_positions[i] - y_positions[i + 1] < min_diff:
+        y_positions[i] = y_positions[i + 1] + min_diff
 
     return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
 
@@ -11671,37 +12779,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_locations[channel_idx] = y
 
     if make_space:
+      # For the channels to the back of `back_channel`, make sure the space between them
+      # meets the per-pair minimum. We start with the channel closest to `back_channel`, and
+      # make sure the channel behind it is spaced correctly, updating if needed.
       use_channels = list(ys.keys())
       back_channel = min(use_channels)
-      front_channel = max(use_channels)
+      for channel_idx in range(back_channel, 0, -1):
+        pair_spacing = self._min_spacing_between(channel_idx - 1, channel_idx)
+        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < pair_spacing:
+          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + pair_spacing
 
-      # Position channels in between used channels
+      # Position intermediate channels between back_channel and front_channel.
+      front_channel = max(use_channels)
       for intermediate_ch in range(back_channel + 1, front_channel):
         if intermediate_ch not in ys:
-          channel_locations[intermediate_ch] = channel_locations[
-            intermediate_ch - 1
-          ] - self._min_spacing_between(intermediate_ch - 1, intermediate_ch)
-
-      # For the channels to the back of `back_channel`, make sure the space between them is
-      # >=9mm. We start with the channel closest to `back_channel`, and make sure the
-      # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
-      # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
-      # This order matters because the channel in front of any channel may have been moved in the
-      # previous iteration.
-      # Note that if a channel is already spaced at >=9mm, it is not moved.
-      for channel_idx in range(back_channel, 0, -1):
-        spacing = self._min_spacing_between(channel_idx - 1, channel_idx)
-        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < spacing:
-          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + spacing
+          pair_spacing = self._min_spacing_between(intermediate_ch - 1, intermediate_ch)
+          channel_locations[intermediate_ch] = channel_locations[intermediate_ch - 1] - pair_spacing
 
       # Similarly for the channels to the front of `front_channel`, make sure they are all
-      # spaced >= channel_minimum_y_spacing (usually 9mm) apart. This time, we iterate from
-      # back (closest to `front_channel`) to the front (lh.backend.num_channels - 1), and
-      # put each channel >= channel_minimum_y_spacing before the one behind it.
+      # spaced by the per-pair minimum. This time, we iterate from back (closest to
+      # `front_channel`) to the front (lh.backend.num_channels - 1).
       for channel_idx in range(front_channel, self.num_channels - 1):
-        spacing = self._min_spacing_between(channel_idx, channel_idx + 1)
-        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < spacing:
-          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - spacing
+        pair_spacing = self._min_spacing_between(channel_idx, channel_idx + 1)
+        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < pair_spacing:
+          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - pair_spacing
 
     # Quick checks before movement.
     if channel_locations[0] > 650:
@@ -11787,7 +12888,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         offsets = get_wide_single_resource_liquid_op_offsets(
           resource=well,
           num_channels=len(piercing_channels),
-          min_spacing=self._get_maximum_minimum_spacing_between_channels(piercing_channels),
+          min_spacing=max(
+            self._min_spacing_between(lo, hi)
+            for lo, hi in zip(sorted(piercing_channels)[:-1], sorted(piercing_channels)[1:])
+          ),
         )
       else:
         offsets = get_tight_single_resource_liquid_op_offsets(

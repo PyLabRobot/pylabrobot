@@ -109,3 +109,11 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     # assert await self.thermocycler_backend.get_total_cycle_count() == 10
     assert await self.thermocycler_backend.get_current_step_index() == 0  # 1 - 1 = 0 (zero-based)
     assert await self.thermocycler_backend.get_total_step_count() == 3
+
+  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
+  async def test_get_hold_time_raises_if_not_running(self, mock_list_connected_modules):
+    mock_list_connected_modules.return_value = [{"id": "test_id", "data": {}}]
+
+    with self.assertRaises(RuntimeError) as e:
+      await self.thermocycler_backend.get_hold_time()
+    self.assertEqual(str(e.exception), "Hold time is not available. Is a profile running?")

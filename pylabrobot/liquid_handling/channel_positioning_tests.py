@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock, patch
 
 from pylabrobot.liquid_handling.channel_positioning import (
   _centers_to_offsets,
@@ -9,6 +10,7 @@ from pylabrobot.liquid_handling.channel_positioning import (
   _resolve_channel_spacings,
   _space_needed,
   compute_channel_offsets,
+  compute_nonconsecutive_channel_offsets,
   required_spacing_between,
 )
 from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
@@ -400,6 +402,69 @@ class TestComputeChannelOffsets(unittest.TestCase):
     wide_gap = abs(wide[0].y - wide[-1].y)
     tight_gap = abs(tight[0].y - tight[-1].y)
     self.assertGreaterEqual(wide_gap, tight_gap - 0.01)
+
+
+class TestComputeSingleContainerOffsets(unittest.TestCase):
+  S = [9.0] * 8
+
+  def _mock_container(self, size_y: float):
+    c = MagicMock(spec=["get_absolute_size_y"])
+    c.get_absolute_size_y.return_value = size_y
+    return c
+
+  @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
+  def test_even_span_no_center_offset(self, mock_offsets):
+    mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
+    result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 1], self.S)
+    assert result is not None
+    self.assertAlmostEqual(result[0].y, 4.5)
+    self.assertAlmostEqual(result[1].y, -4.5)
+
+  @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
+  def test_odd_span_passes_through_offsets(self, mock_offsets):
+    mock_offsets.return_value = [
+      Coordinate(0, 9.0, 0),
+      Coordinate(0, 0.0, 0),
+      Coordinate(0, -9.0, 0),
+    ]
+    # No additional shift; compute_channel_offsets handles no-go zones directly
+    result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 1, 2], self.S)
+    assert result is not None
+    self.assertAlmostEqual(result[0].y, 9.0)
+
+  def test_container_too_small_returns_none(self):
+    self.assertIsNone(
+      compute_nonconsecutive_channel_offsets(self._mock_container(10.0), [0, 1], self.S)
+    )
+
+  @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
+  def test_non_consecutive_uses_full_physical_span(self, mock_offsets):
+    mock_offsets.return_value = [
+      Coordinate(0, 10.0, 0),
+      Coordinate(0, 0.0, 0),
+      Coordinate(0, -10.0, 0),
+    ]
+    result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 2], self.S)
+    assert result is not None
+    self.assertEqual(len(result), 2)
+    mock_offsets.assert_called_once_with(
+      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[9.0] * 3
+    )
+
+  @patch("pylabrobot.liquid_handling.channel_positioning.compute_channel_offsets")
+  def test_mixed_spacing_uses_effective(self, mock_offsets):
+    mock_offsets.return_value = [
+      Coordinate(0, 18.0, 0),
+      Coordinate(0, 0.0, 0),
+      Coordinate(0, -18.0, 0),
+    ]
+    result = compute_nonconsecutive_channel_offsets(
+      self._mock_container(100.0), [0, 2], [9.0, 9.0, 18.0]
+    )
+    self.assertIsNotNone(result)
+    mock_offsets.assert_called_once_with(
+      resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[18.0] * 3
+    )
 
 
 if __name__ == "__main__":

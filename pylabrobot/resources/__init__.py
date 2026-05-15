@@ -5,6 +5,7 @@ from .alpaqua import *
 from .azenta import *
 from .biorad import *
 from .boekel import *
+from .btx import *
 from .carrier import (
   Carrier,
   MFXCarrier,
@@ -17,6 +18,7 @@ from .carrier import (
 from .celltreat import *
 from .cellvis import *
 from .container import Container
+from .container_rack import ContainerRack
 from .coordinate import Coordinate
 from .corning import *
 from .deck import Deck

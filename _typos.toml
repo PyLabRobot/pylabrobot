@@ -37,6 +37,7 @@ AZMA = "AZMA"
 MCH = "MCH"
 AAS = "AAS"
 AER = "AER"
+scap = "scap"
 
 [files]
 extend-exclude = [

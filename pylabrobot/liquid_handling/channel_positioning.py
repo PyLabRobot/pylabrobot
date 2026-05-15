@@ -1,7 +1,7 @@
 import logging
 import math
 import warnings
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.resources.container import Container
@@ -298,10 +298,11 @@ def compute_channel_offsets(
   spread: str = "wide",
   channel_spacings: Optional[List[float]] = None,
 ) -> List[Coordinate]:
-  """Compute Y offsets for positioning pipette channels in a resource.
+  """Compute Y offsets for positioning consecutive channels (0..num_channels-1) in a resource.
 
-  Single entry point for all channel positioning logic. Handles containers with no-go zones
-  (distributing channels across compartments) and plain resources (wide/tight spread).
+  Handles container geometry: compartments with no-go zones, wide/tight spread.
+  Assumes channels are consecutively indexed — for non-consecutive channel selections
+  (e.g. [0, 2, 5]), use ``compute_nonconsecutive_channel_offsets`` instead.
 
   Args:
     resource: The target resource (Container, Trough, Well, etc.).
@@ -446,6 +447,96 @@ def compute_channel_offsets(
   else:
     centers = _position_channels_tight(resource_size, spacings_front_to_back)
   return _centers_to_offsets(centers, resource)
+
+
+# ---------------------------------------------------------------------------
+# Non-consecutive channel offsets
+# ---------------------------------------------------------------------------
+
+
+def compute_nonconsecutive_channel_offsets(
+  container: Container,
+  use_channels: List[int],
+  channel_spacings: List[float],
+) -> Optional[List[Coordinate]]:
+  """Compute Y offsets for non-consecutive channel selections targeting one container.
+
+  Wraps ``compute_channel_offsets``: fills in phantom channels for gaps in the
+  channel sequence (e.g. [0, 2, 5] → physical span 0..5), attempts to fit the
+  full span, and falls back to splitting into consecutive sub-groups when it
+  doesn't fit.
+
+  Args:
+    container: The target container.
+    use_channels: Channel indices being used (e.g. [0, 2, 5]). Need not be
+      consecutive — gaps are filled with phantom channels.
+    channel_spacings: Per-channel occupancy diameters in mm. Must have at least
+      ``max(use_channels) + 1`` entries.
+
+  Returns:
+    List of Y offsets (one per entry in *use_channels*), or None if even a
+    single pair of adjacent channels can't fit in the container.
+  """
+
+  if len(use_channels) == 0:
+    return []
+
+  ch_hi = max(use_channels)
+  if len(channel_spacings) < ch_hi + 1:
+    raise ValueError(
+      f"channel_spacings list must have at least {ch_hi + 1} entries "
+      f"(max channel index is {ch_hi}), got {len(channel_spacings)}."
+    )
+
+  def _try_group(channels: List[int]) -> Optional[List[Coordinate]]:
+    """Try to fit channels into the container, returning None if too narrow."""
+    g_lo, g_hi = min(channels), max(channels)
+    spacing = max(channel_spacings[g_lo : g_hi + 1])
+    num_physical = g_hi - g_lo + 1
+    min_required = MIN_SPACING_EDGE * 2 + (num_physical - 1) * spacing
+    if container.get_absolute_size_y() < min_required:
+      return None
+    try:
+      all_offsets = compute_channel_offsets(
+        resource=container,
+        num_channels=num_physical,
+        spread="wide",
+        channel_spacings=[spacing] * num_physical,
+      )
+    except (ChannelsDoNotFitError, ValueError):
+      return None
+    return [all_offsets[ch - g_lo] for ch in channels]
+
+  # Try the full span first (all channels including phantoms fit)
+  full = _try_group(use_channels)
+  if full is not None:
+    return full
+
+  # Full span doesn't fit. Split at gaps in the sorted channel sequence
+  # into consecutive sub-groups and compute offsets for each independently.
+  sorted_chs = sorted(use_channels)
+  groups: List[List[int]] = [[sorted_chs[0]]]
+  for i in range(1, len(sorted_chs)):
+    if sorted_chs[i] == sorted_chs[i - 1] + 1:
+      groups[-1].append(sorted_chs[i])
+    else:
+      groups.append([sorted_chs[i]])
+
+  # If there's only one consecutive group and it didn't fit above, container is too small
+  if len(groups) == 1:
+    return None
+
+  # Compute offsets per sub-group
+  ch_to_offset: Dict[int, Coordinate] = {}
+  for group in groups:
+    group_offsets = _try_group(group)
+    if group_offsets is None:
+      return None  # even a sub-group doesn't fit
+    for ch, offset in zip(group, group_offsets):
+      ch_to_offset[ch] = offset
+
+  # Return in the original use_channels order
+  return [ch_to_offset[ch] for ch in use_channels]
 
 
 # ---------------------------------------------------------------------------
