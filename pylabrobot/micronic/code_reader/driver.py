@@ -15,13 +15,12 @@ import asyncio
 import enum
 import logging
 import re
-import subprocess  # nosec B404 - local rack-id helper execution is the interface.
 import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading import RackScanEntry, RackScanResult
@@ -62,7 +61,6 @@ class MicronicDriver(Driver):
     scanner: Scanner,
     serial_port: str,
     image_dir: Optional[str] = None,
-    rack_id_command: Optional[Sequence[str]] = None,
     scanner_timeout_ms: int = 90000,
     serial_timeout_ms: int = 2500,
     keep_images: bool = False,
@@ -74,7 +72,6 @@ class MicronicDriver(Driver):
       Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "pylabrobot-micronic"
     )
     self.serial_port = serial_port
-    self.rack_id_command = list(rack_id_command) if rack_id_command is not None else None
     self.scanner_timeout_ms = scanner_timeout_ms
     self.serial_timeout_ms = serial_timeout_ms
     self.keep_images = keep_images
@@ -123,7 +120,6 @@ class MicronicDriver(Driver):
       **super().serialize(),
       "image_dir": str(self.image_dir),
       "serial_port": self.serial_port,
-      "rack_id_command": self.rack_id_command,
       "scanner_timeout_ms": self.scanner_timeout_ms,
       "serial_timeout_ms": self.serial_timeout_ms,
       "keep_images": self.keep_images,
@@ -166,16 +162,6 @@ class MicronicDriver(Driver):
     del timeout, poll_interval
     if self.rack_id_override:
       return self.rack_id_override
-    if self.rack_id_command is not None:
-      return await asyncio.to_thread(
-        read_rack_id_command,
-        _format_command(
-          self.rack_id_command,
-          serial_port=self.serial_port,
-          timeout_ms=self.serial_timeout_ms,
-        ),
-        self.serial_timeout_ms,
-      )
     return await read_rack_id_plr_serial(
       serial_port=self.serial_port,
       timeout_ms=self.serial_timeout_ms,
@@ -226,7 +212,6 @@ class MicronicDriver(Driver):
       serial_port=self.serial_port,
       timeout_ms=self.serial_timeout_ms,
       rack_id_override=self.rack_id_override,
-      rack_id_command=self.rack_id_command,
     )
     decoded, self.last_decode_metadata = decode_image(image_path)
     if len(decoded) < self._expected_well_count:
@@ -262,18 +247,9 @@ def read_rack_id(
   serial_port: str = "COM4",
   timeout_ms: int = 2500,
   rack_id_override: Optional[str] = None,
-  rack_id_command: Optional[Sequence[str]] = None,
 ) -> str:
   if rack_id_override:
     return rack_id_override
-
-  if rack_id_command is not None:
-    command = _format_command(
-      rack_id_command,
-      serial_port=serial_port,
-      timeout_ms=timeout_ms,
-    )
-    return read_rack_id_command(command, timeout_ms)
 
   return asyncio.run(read_rack_id_plr_serial(serial_port=serial_port, timeout_ms=timeout_ms))
 
@@ -313,33 +289,9 @@ async def read_rack_id_plr_serial(serial_port: str, timeout_ms: int) -> str:
   return extract_rack_id(b"".join(chunks).decode("utf-8", errors="ignore"))
 
 
-def read_rack_id_command(command: Sequence[str], timeout_ms: int) -> str:
-  try:
-    completed = subprocess.run(  # nosec B603 - operator-configured command, shell=False.
-      list(command),
-      check=False,
-      capture_output=True,
-      text=True,
-      timeout=(timeout_ms / 1000) + 5,
-    )
-  except FileNotFoundError as exc:
-    raise MicronicError(f"Rack ID command was not found: {command[0]}") from exc
-
-  if completed.returncode != 0:
-    raise MicronicError(
-      "Rack ID command failed with exit code "
-      f"{completed.returncode}: {completed.stderr.strip() or completed.stdout.strip()}"
-    )
-  return extract_rack_id(completed.stdout)
-
-
 def extract_rack_id(text: str) -> str:
   match = re.search(r"\d{6,}", text)
   return match.group(0) if match else "NOREAD"
-
-
-def _format_command(command: Sequence[str], **values: object) -> list[str]:
-  return [part.format(**values) for part in command]
 
 
 def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, object]]:

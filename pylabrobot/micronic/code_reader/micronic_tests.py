@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +12,6 @@ from pylabrobot.micronic.code_reader.driver import (
   MicronicDriver,
   MicronicError,
   MicronicRackReaderState,
-  read_rack_id,
   read_rack_id_plr_serial,
 )
 from pylabrobot.micronic.code_reader.rack_reading_backend import MicronicRackReadingBackend
@@ -187,13 +185,6 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(second.rack_id, "9500017722")
       self.assertEqual(scanner.acquire.call_count, 2)
 
-  async def test_read_rack_id_uses_configured_command(self):
-    rack_id = read_rack_id(
-      timeout_ms=1000,
-      rack_id_command=[sys.executable, "-c", "print('rack 9500017722')"],
-    )
-    self.assertEqual(rack_id, "9500017722")
-
   async def test_read_rack_id_uses_plr_serial(self):
     instances: list[object] = []
 
@@ -232,14 +223,6 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn("reset_input_buffer", fake_serial.calls)
     self.assertIn("write:b'<t>\\r\\n'", fake_serial.calls)
     self.assertEqual(fake_serial.calls[-1], "stop")
-
-  async def test_driver_scan_rack_id_uses_configured_command(self):
-    driver = MicronicDriver(
-      scanner=_mock_scanner(),
-      serial_port="/dev/ttyUSB0",
-      rack_id_command=[sys.executable, "-c", "print('rack 9500017722')"],
-    )
-    self.assertEqual(await driver.scan_rack_id(timeout=1.0, poll_interval=0.1), "9500017722")
 
   async def test_driver_raises_when_scan_result_is_not_ready(self):
     driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
