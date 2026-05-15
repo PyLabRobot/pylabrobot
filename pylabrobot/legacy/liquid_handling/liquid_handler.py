@@ -74,8 +74,6 @@ from pylabrobot.legacy.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
 )
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
-from pylabrobot.legacy.plate_reading import PlateReader
-from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -83,7 +81,6 @@ from pylabrobot.resources import (
   Lid,
   Plate,
   PlateAdapter,
-  PlateHolder,
   Resource,
   ResourceHolder,
   ResourceStack,
@@ -317,16 +314,12 @@ class _ArmAdapter(OrientableGripperArmBackend):
   def __init__(self, legacy: LiquidHandlerBackend):
     self._legacy = legacy
 
-  async def pick_up_at_location(
-    self, location, direction, resource_width, backend_params=None
-  ):
+  async def pick_up_at_location(self, location, direction, resource_width, backend_params=None):
     kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
     pickup = kw.pop("_pickup")
     await self._legacy.pick_up_resource(pickup=pickup, **kw)
 
-  async def drop_at_location(
-    self, location, direction, resource_width, backend_params=None
-  ):
+  async def drop_at_location(self, location, direction, resource_width, backend_params=None):
     kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
     drop = kw.pop("_drop")
     await self._legacy.drop_resource(drop=drop, **kw)
@@ -453,9 +446,7 @@ class LiquidHandler(Resource, Machine):
 
     # Create arm capability with adapter backend
     if self.backend.num_arms > 0:
-      self._arm_cap = OrientableArm(
-        backend=_ArmAdapter(self.backend), reference_resource=self.deck
-      )
+      self._arm_cap = OrientableArm(backend=_ArmAdapter(self.backend), reference_resource=self.deck)
       await self._arm_cap._on_setup()
 
   def serialize_state(self) -> Dict[str, Any]:
