@@ -38,6 +38,7 @@ extensions = [
   "sphinx.ext.napoleon",
   "sphinx.ext.autodoc",
   "pylabrobot_cards",  # NEW: PLR cards (plrcard/plrcardgrid + compat)
+  "pylabrobot_labware_catalog",
   "sphinx.ext.autosummary",
   "sphinx.ext.autosectionlabel",
   "sphinx.ext.intersphinx",
@@ -98,10 +99,16 @@ html_extra_path = ["resources/library/img"]
 html_css_files = list(globals().get("html_css_files", []))
 if "plr_cards.css" not in html_css_files:
   html_css_files.append("plr_cards.css")  # served from _static/plr_cards.css
+if "plr_labware_catalog.css" not in html_css_files:
+  html_css_files.append("plr_labware_catalog.css")
 
 html_js_files = list(globals().get("html_js_files", []))
 if "plr_cards.js" not in html_js_files:
   html_js_files.append("plr_cards.js")    # served from _static/plr_cards.js
+if "plr_geometry_viewer.js" not in html_js_files:
+  html_js_files.append("plr_geometry_viewer.js")
+if "plr_labware_catalog.js" not in html_js_files:
+  html_js_files.append("plr_labware_catalog.js")
 
 # NOTE: templates_path already includes "_templates", which is where
 #       plr_card_grid.html should live.
@@ -193,6 +200,7 @@ redirects = {
   "tilting.html": "user_guide/tilting.html",
   "heating-shaking.html": "user_guide/heating_shaking.html",
   "fans.html": "user_guide/fans.html",
+  "resources/geometry-catalog.html": "resources/catalog.html",
 }
 
 html_sidebars = {

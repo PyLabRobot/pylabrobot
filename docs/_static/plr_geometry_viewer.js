@@ -1,0 +1,677 @@
+(function () {
+  "use strict";
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function colorForPrototype(prototype) {
+    const geometry = prototype.geometry || {};
+    const type = prototype.type || "";
+    const category = prototype.category || "";
+
+    if (geometry.shape === "deck") return "#dbe7f1";
+    if (type.includes("Carrier")) return "#9eb3c4";
+    if (type.includes("Plate")) return "#4a5f73";
+    if (type.includes("TipRack")) return "#8f6e34";
+    if (type.includes("TubeRack")) return "#5f7c55";
+    if (type.includes("Well")) return "#66b8c4";
+    if (type.includes("TipSpot")) return "#d8c48a";
+    if (category === "trash") return "#9f7c7c";
+    return "#8ea3b6";
+  }
+
+  function hexToRgb(hex) {
+    const normalized = hex.replace("#", "");
+    const value = parseInt(normalized, 16);
+    return {
+      r: (value >> 16) & 255,
+      g: (value >> 8) & 255,
+      b: value & 255,
+    };
+  }
+
+  function shadeColor(hex, factor) {
+    const rgb = hexToRgb(hex);
+    const scale = clamp(factor, 0.45, 1.2);
+    return `rgb(${Math.round(rgb.r * scale)}, ${Math.round(rgb.g * scale)}, ${Math.round(rgb.b * scale)})`;
+  }
+
+  function multiplyMatrix(a, b) {
+    return [
+      [
+        a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0],
+        a[0][0] * b[0][1] + a[0][1] * b[1][1] + a[0][2] * b[2][1],
+        a[0][0] * b[0][2] + a[0][1] * b[1][2] + a[0][2] * b[2][2],
+      ],
+      [
+        a[1][0] * b[0][0] + a[1][1] * b[1][0] + a[1][2] * b[2][0],
+        a[1][0] * b[0][1] + a[1][1] * b[1][1] + a[1][2] * b[2][1],
+        a[1][0] * b[0][2] + a[1][1] * b[1][2] + a[1][2] * b[2][2],
+      ],
+      [
+        a[2][0] * b[0][0] + a[2][1] * b[1][0] + a[2][2] * b[2][0],
+        a[2][0] * b[0][1] + a[2][1] * b[1][1] + a[2][2] * b[2][1],
+        a[2][0] * b[0][2] + a[2][1] * b[1][2] + a[2][2] * b[2][2],
+      ],
+    ];
+  }
+
+  function rotationMatrix(rotation) {
+    const [rx, ry, rz] = (rotation || [0, 0, 0]).map((degrees) => (degrees * Math.PI) / 180);
+
+    const cx = Math.cos(rx);
+    const sx = Math.sin(rx);
+    const cy = Math.cos(ry);
+    const sy = Math.sin(ry);
+    const cz = Math.cos(rz);
+    const sz = Math.sin(rz);
+
+    const mx = [
+      [1, 0, 0],
+      [0, cx, -sx],
+      [0, sx, cx],
+    ];
+    const my = [
+      [cy, 0, sy],
+      [0, 1, 0],
+      [-sy, 0, cy],
+    ];
+    const mz = [
+      [cz, -sz, 0],
+      [sz, cz, 0],
+      [0, 0, 1],
+    ];
+
+    return multiplyMatrix(mz, multiplyMatrix(my, mx));
+  }
+
+  function applyMatrix(point, matrix) {
+    return {
+      x: point.x * matrix[0][0] + point.y * matrix[0][1] + point.z * matrix[0][2],
+      y: point.x * matrix[1][0] + point.y * matrix[1][1] + point.z * matrix[1][2],
+      z: point.x * matrix[2][0] + point.y * matrix[2][1] + point.z * matrix[2][2],
+    };
+  }
+
+  function translatePoint(point, offset) {
+    return {
+      x: point.x + offset[0],
+      y: point.y + offset[1],
+      z: point.z + offset[2],
+    };
+  }
+
+  function createBoxGeometry(size) {
+    const sx = size[0];
+    const sy = size[1];
+    const sz = size[2];
+
+    const vertices = [
+      { x: 0, y: 0, z: 0 },
+      { x: sx, y: 0, z: 0 },
+      { x: sx, y: sy, z: 0 },
+      { x: 0, y: sy, z: 0 },
+      { x: 0, y: 0, z: sz },
+      { x: sx, y: 0, z: sz },
+      { x: sx, y: sy, z: sz },
+      { x: 0, y: sy, z: sz },
+    ];
+
+    const faces = [
+      [0, 1, 2, 3],
+      [4, 5, 6, 7],
+      [0, 1, 5, 4],
+      [1, 2, 6, 5],
+      [2, 3, 7, 6],
+      [3, 0, 4, 7],
+    ];
+
+    return { vertices, faces };
+  }
+
+  function createOffsetBoxGeometry(box) {
+    const geometry = createBoxGeometry([box.sx, box.sy, box.sz]);
+    geometry.vertices = geometry.vertices.map((vertex) => ({
+      x: vertex.x + box.x,
+      y: vertex.y + box.y,
+      z: vertex.z + box.z,
+    }));
+    return geometry;
+  }
+
+  function mergeGeometries(geometries) {
+    const merged = { vertices: [], faces: [] };
+    geometries.forEach((geometry) => {
+      const offset = merged.vertices.length;
+      geometry.vertices.forEach((vertex) => merged.vertices.push(vertex));
+      geometry.faces.forEach((face) => {
+        merged.faces.push(face.map((index) => index + offset));
+      });
+    });
+    return merged;
+  }
+
+  function createTrayGeometry(size) {
+    const sx = size[0];
+    const sy = size[1];
+    const sz = size[2];
+    const wallThickness = clamp(Math.min(sx, sy) * 0.055, 2.2, 6.5);
+    const baseThickness = clamp(sz * 0.18, 1.8, Math.max(2.2, sz * 0.28));
+
+    return mergeGeometries([
+      createOffsetBoxGeometry({ x: 0, y: 0, z: 0, sx, sy, sz: baseThickness }),
+      createOffsetBoxGeometry({ x: 0, y: 0, z: baseThickness, sx, sy: wallThickness, sz: sz - baseThickness }),
+      createOffsetBoxGeometry({
+        x: 0,
+        y: sy - wallThickness,
+        z: baseThickness,
+        sx,
+        sy: wallThickness,
+        sz: sz - baseThickness,
+      }),
+      createOffsetBoxGeometry({
+        x: 0,
+        y: wallThickness,
+        z: baseThickness,
+        sx: wallThickness,
+        sy: sy - wallThickness * 2,
+        sz: sz - baseThickness,
+      }),
+      createOffsetBoxGeometry({
+        x: sx - wallThickness,
+        y: wallThickness,
+        z: baseThickness,
+        sx: wallThickness,
+        sy: sy - wallThickness * 2,
+        sz: sz - baseThickness,
+      }),
+    ]);
+  }
+
+  function createCylinderGeometry(size, segments) {
+    const sx = size[0];
+    const sy = size[1];
+    const sz = size[2];
+    const radiusX = sx / 2;
+    const radiusY = sy / 2;
+    const centerX = sx / 2;
+    const centerY = sy / 2;
+    const vertices = [];
+    const top = [];
+    const bottom = [];
+    const faces = [];
+
+    for (let index = 0; index < segments; index += 1) {
+      const theta = (Math.PI * 2 * index) / segments;
+      const x = centerX + Math.cos(theta) * radiusX;
+      const y = centerY + Math.sin(theta) * radiusY;
+      bottom.push(vertices.length);
+      vertices.push({ x, y, z: 0 });
+      top.push(vertices.length);
+      vertices.push({ x, y, z: sz });
+    }
+
+    faces.push(bottom.slice().reverse());
+    faces.push(top.slice());
+    for (let index = 0; index < segments; index += 1) {
+      const next = (index + 1) % segments;
+      faces.push([
+        bottom[index],
+        bottom[next],
+        top[next],
+        top[index],
+      ]);
+    }
+
+    return { vertices, faces };
+  }
+
+  function createShapeGeometry(prototype) {
+    const geometry = prototype.geometry || {};
+    const size = displaySizeForPrototype(prototype);
+    const type = prototype.type || "";
+
+    if (geometry.shape === "well" && geometry.cross_section === "circle") {
+      return createCylinderGeometry(size, 18);
+    }
+
+    if (geometry.shape === "tip_spot") {
+      return createCylinderGeometry(size, 12);
+    }
+
+    if (
+      type.includes("Plate") ||
+      type.includes("TipRack") ||
+      type.includes("TubeRack")
+    ) {
+      return createTrayGeometry(size);
+    }
+
+    return createBoxGeometry(size);
+  }
+
+  function displaySizeForPrototype(prototype) {
+    const size = (prototype.size || [10, 10, 10]).slice();
+    if (size[2] > 0) {
+      return size;
+    }
+
+    const type = prototype.type || "";
+    const minPlanar = Math.max(1, Math.min(size[0], size[1]));
+    let fallbackHeight = Math.max(2, minPlanar * 0.1);
+
+    if (type.includes("TipSpot")) {
+      fallbackHeight = Math.max(2, minPlanar * 0.3);
+    } else if (type.includes("Well")) {
+      fallbackHeight = Math.max(2, minPlanar * 0.35);
+    } else if (type.includes("Holder")) {
+      fallbackHeight = Math.max(3, minPlanar * 0.18);
+    }
+
+    size[2] = fallbackHeight;
+    return size;
+  }
+
+  function normalizeCatalog(catalog) {
+    if (!catalog || !catalog.prototypes || !catalog.instances) {
+      return [];
+    }
+
+    const drawables = [];
+    Object.entries(catalog.instances).forEach(([name, instance]) => {
+      const prototype = catalog.prototypes[instance.prototype];
+      if (!prototype || !instance.pose) {
+        return;
+      }
+
+      const baseGeometry = createShapeGeometry(prototype);
+      const matrix = rotationMatrix(instance.rotation || [0, 0, 0]);
+      const translatedVertices = baseGeometry.vertices.map((vertex) =>
+        translatePoint(applyMatrix(vertex, matrix), instance.pose),
+      );
+      const outline = createOutlinePoints(prototype, matrix, instance.pose);
+
+      drawables.push({
+        name,
+        prototype,
+        color: colorForPrototype(prototype),
+        layer: drawableLayer(prototype),
+        alpha: drawableAlpha(prototype),
+        vertices: translatedVertices,
+        faces: baseGeometry.faces,
+        outline,
+      });
+    });
+
+    return drawables;
+  }
+
+  function createOutlinePoints(prototype, matrix, pose) {
+    const type = prototype.type || "";
+    if (
+      !type.includes("Plate") &&
+      !type.includes("TipRack") &&
+      !type.includes("TubeRack")
+    ) {
+      return null;
+    }
+
+    const size = displaySizeForPrototype(prototype);
+    const z = size[2];
+    const top = [
+      { x: 0, y: 0, z },
+      { x: size[0], y: 0, z },
+      { x: size[0], y: size[1], z },
+      { x: 0, y: size[1], z },
+    ].map((corner) => translatePoint(applyMatrix(corner, matrix), pose));
+    const bottom = [
+      { x: 0, y: 0, z: 0 },
+      { x: size[0], y: 0, z: 0 },
+      { x: size[0], y: size[1], z: 0 },
+      { x: 0, y: size[1], z: 0 },
+    ].map((corner) => translatePoint(applyMatrix(corner, matrix), pose));
+
+    return {
+      top,
+      bottom,
+      verticals: [
+        [bottom[0], top[0]],
+        [bottom[1], top[1]],
+        [bottom[2], top[2]],
+        [bottom[3], top[3]],
+      ],
+    };
+  }
+
+  function drawableLayer(prototype) {
+    const geometry = prototype.geometry || {};
+    const type = prototype.type || "";
+
+    if (geometry.shape === "deck") return 0;
+    if (type.includes("Carrier") || type.includes("Holder")) return 1;
+    if (type.includes("Plate") || type.includes("TipRack") || type.includes("TubeRack")) return 2;
+    if (type.includes("Well") || type.includes("TipSpot")) return 4;
+    return 3;
+  }
+
+  function drawableAlpha(prototype) {
+    const type = prototype.type || "";
+    const geometry = prototype.geometry || {};
+
+    if (geometry.shape === "deck") return 0.38;
+    if (type.includes("Plate") || type.includes("TipRack") || type.includes("TubeRack")) return 0.84;
+    if (type.includes("Well") || type.includes("TipSpot")) return 0.68;
+    return 0.78;
+  }
+
+  function computeBounds(drawables) {
+    const points = [];
+    drawables.forEach((drawable) => {
+      drawable.vertices.forEach((vertex) => points.push(vertex));
+    });
+
+    if (points.length === 0) {
+      return {
+        min: { x: 0, y: 0, z: 0 },
+        max: { x: 1, y: 1, z: 1 },
+        center: { x: 0.5, y: 0.5, z: 0.5 },
+        span: 1,
+      };
+    }
+
+    const min = { x: Infinity, y: Infinity, z: Infinity };
+    const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+    points.forEach((point) => {
+      min.x = Math.min(min.x, point.x);
+      min.y = Math.min(min.y, point.y);
+      min.z = Math.min(min.z, point.z);
+      max.x = Math.max(max.x, point.x);
+      max.y = Math.max(max.y, point.y);
+      max.z = Math.max(max.z, point.z);
+    });
+
+    const center = {
+      x: (min.x + max.x) / 2,
+      y: (min.y + max.y) / 2,
+      z: (min.z + max.z) / 2,
+    };
+
+    const span = Math.max(max.x - min.x, max.y - min.y, max.z - min.z, 1);
+    return { min, max, center, span };
+  }
+
+  class CanvasCatalogViewer {
+    constructor(root) {
+      this.root = root;
+      this.canvas = document.createElement("canvas");
+      this.canvas.className = "plr-geometry-canvas";
+      this.root.innerHTML = "";
+      this.root.appendChild(this.canvas);
+      this.context = this.canvas.getContext("2d");
+      this.drawables = [];
+      this.bounds = computeBounds([]);
+      this.rotation = { yaw: -0.75, pitch: 0.55 };
+      this.zoom = 1;
+      this.isDragging = false;
+      this.lastPointer = { x: 0, y: 0 };
+
+      this.handlePointerDown = this.handlePointerDown.bind(this);
+      this.handlePointerMove = this.handlePointerMove.bind(this);
+      this.handlePointerUp = this.handlePointerUp.bind(this);
+      this.handleWheel = this.handleWheel.bind(this);
+      this.handleResize = this.handleResize.bind(this);
+      this.resize = this.resize.bind(this);
+
+      this.canvas.addEventListener("pointerdown", this.handlePointerDown);
+      window.addEventListener("pointermove", this.handlePointerMove);
+      window.addEventListener("pointerup", this.handlePointerUp);
+      this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
+      window.addEventListener("resize", this.handleResize);
+      if (typeof ResizeObserver !== "undefined") {
+        this.resizeObserver = new ResizeObserver(this.handleResize);
+        this.resizeObserver.observe(this.root);
+      }
+
+      this.handleResize();
+    }
+
+    destroy() {
+      this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+      window.removeEventListener("pointermove", this.handlePointerMove);
+      window.removeEventListener("pointerup", this.handlePointerUp);
+      this.canvas.removeEventListener("wheel", this.handleWheel);
+      window.removeEventListener("resize", this.handleResize);
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+      }
+    }
+
+    setCatalog(catalog) {
+      this.drawables = normalizeCatalog(catalog);
+      this.bounds = computeBounds(this.drawables);
+      this.zoom = 1;
+      this.render();
+    }
+
+    handlePointerDown(event) {
+      this.isDragging = true;
+      this.lastPointer = { x: event.clientX, y: event.clientY };
+      this.canvas.setPointerCapture(event.pointerId);
+    }
+
+    handlePointerMove(event) {
+      if (!this.isDragging) {
+        return;
+      }
+
+      const deltaX = event.clientX - this.lastPointer.x;
+      const deltaY = event.clientY - this.lastPointer.y;
+      this.lastPointer = { x: event.clientX, y: event.clientY };
+      this.rotation.yaw += deltaX * 0.01;
+      this.rotation.pitch = clamp(this.rotation.pitch + deltaY * 0.01, -1.4, 1.4);
+      this.render();
+    }
+
+    handlePointerUp(event) {
+      this.isDragging = false;
+      if (event.pointerId != null && this.canvas.hasPointerCapture(event.pointerId)) {
+        this.canvas.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    handleWheel(event) {
+      event.preventDefault();
+      const zoomDelta = event.deltaY > 0 ? 0.92 : 1.08;
+      this.zoom = clamp(this.zoom * zoomDelta, 0.25, 6);
+      this.render();
+    }
+
+    handleResize() {
+      const width = Math.max(this.root.clientWidth, 200);
+      const height = Math.max(this.root.clientHeight, 200);
+      this.canvas.width = Math.floor(width * Math.min(window.devicePixelRatio || 1, 2));
+      this.canvas.height = Math.floor(height * Math.min(window.devicePixelRatio || 1, 2));
+      this.canvas.style.width = `${width}px`;
+      this.canvas.style.height = `${height}px`;
+      this.render();
+    }
+
+    resize() {
+      this.handleResize();
+    }
+
+    project(point) {
+      const centered = {
+        x: point.x - this.bounds.center.x,
+        y: point.y - this.bounds.center.y,
+        z: point.z - this.bounds.center.z,
+      };
+
+      const cosYaw = Math.cos(this.rotation.yaw);
+      const sinYaw = Math.sin(this.rotation.yaw);
+      const cosPitch = Math.cos(this.rotation.pitch);
+      const sinPitch = Math.sin(this.rotation.pitch);
+
+      const yawed = {
+        x: centered.x * cosYaw - centered.y * sinYaw,
+        y: centered.x * sinYaw + centered.y * cosYaw,
+        z: centered.z,
+      };
+
+      const pitched = {
+        x: yawed.x,
+        y: yawed.y * cosPitch - yawed.z * sinPitch,
+        z: yawed.y * sinPitch + yawed.z * cosPitch,
+      };
+
+      const scaleBase = Math.min(this.canvas.width, this.canvas.height) / (this.bounds.span * 1.8);
+      const scale = scaleBase * this.zoom;
+      return {
+        x: this.canvas.width / 2 + pitched.x * scale,
+        y: this.canvas.height / 2 - pitched.y * scale,
+        depth: pitched.z,
+      };
+    }
+
+    drawBackground() {
+      const ctx = this.context;
+      const gradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+      gradient.addColorStop(0, "#f5f8fb");
+      gradient.addColorStop(1, "#e6edf3");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    drawGround() {
+      const ctx = this.context;
+      const span = this.bounds.span * 0.8;
+      const groundZ = this.bounds.min.z;
+      const gridSize = Math.max(4, Math.min(12, Math.round(this.bounds.span / 20)));
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(126, 152, 176, 0.22)";
+
+      for (let index = -gridSize; index <= gridSize; index += 1) {
+        const ratio = index / gridSize;
+        const x = this.bounds.center.x + ratio * span;
+        const y = this.bounds.center.y + ratio * span;
+
+        const xLineStart = this.project({ x, y: this.bounds.center.y - span, z: groundZ });
+        const xLineEnd = this.project({ x, y: this.bounds.center.y + span, z: groundZ });
+        ctx.beginPath();
+        ctx.moveTo(xLineStart.x, xLineStart.y);
+        ctx.lineTo(xLineEnd.x, xLineEnd.y);
+        ctx.stroke();
+
+        const yLineStart = this.project({ x: this.bounds.center.x - span, y, z: groundZ });
+        const yLineEnd = this.project({ x: this.bounds.center.x + span, y, z: groundZ });
+        ctx.beginPath();
+        ctx.moveTo(yLineStart.x, yLineStart.y);
+        ctx.lineTo(yLineEnd.x, yLineEnd.y);
+        ctx.stroke();
+      }
+    }
+
+    drawDrawables() {
+      const faces = [];
+      const outlines = [];
+
+      this.drawables.forEach((drawable) => {
+        drawable.faces.forEach((face) => {
+          const projected = face.map((vertexIndex) => this.project(drawable.vertices[vertexIndex]));
+          const depth =
+            projected.reduce((sum, point) => sum + point.depth, 0) / Math.max(projected.length, 1);
+          faces.push({
+            points: projected,
+            depth,
+            color: drawable.color,
+            layer: drawable.layer,
+            alpha: drawable.alpha,
+          });
+        });
+
+        if (drawable.outline) {
+          outlines.push({
+            top: drawable.outline.top.map((point) => this.project(point)),
+            bottom: drawable.outline.bottom.map((point) => this.project(point)),
+            verticals: drawable.outline.verticals.map((pair) => pair.map((point) => this.project(point))),
+            color: shadeColor(drawable.color, 0.42),
+          });
+        }
+      });
+
+      faces.sort((left, right) => {
+        if (left.layer !== right.layer) {
+          return left.layer - right.layer;
+        }
+        return left.depth - right.depth;
+      });
+
+      const ctx = this.context;
+      faces.forEach((face) => {
+        const shade =
+          face.points.length >= 4
+            ? shadeColor(face.color, 0.9 + (face.depth / (this.bounds.span || 1)) * 0.15)
+            : face.color;
+
+        ctx.beginPath();
+        ctx.moveTo(face.points[0].x, face.points[0].y);
+        for (let index = 1; index < face.points.length; index += 1) {
+          ctx.lineTo(face.points[index].x, face.points[index].y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = shade;
+        ctx.globalAlpha = face.alpha;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "rgba(30, 53, 77, 0.28)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      outlines.forEach((outline) => {
+        ctx.strokeStyle = outline.color;
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.moveTo(outline.top[0].x, outline.top[0].y);
+        for (let index = 1; index < outline.top.length; index += 1) {
+          ctx.lineTo(outline.top[index].x, outline.top[index].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(outline.bottom[0].x, outline.bottom[0].y);
+        for (let index = 1; index < outline.bottom.length; index += 1) {
+          ctx.lineTo(outline.bottom[index].x, outline.bottom[index].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        outline.verticals.forEach((pair) => {
+          ctx.beginPath();
+          ctx.moveTo(pair[0].x, pair[0].y);
+          ctx.lineTo(pair[1].x, pair[1].y);
+          ctx.stroke();
+        });
+      });
+    }
+
+    render() {
+      if (!this.context) {
+        return;
+      }
+
+      this.drawBackground();
+      this.drawGround();
+      this.drawDrawables();
+    }
+  }
+
+  window.PLRGeometryViewer = {
+    CanvasCatalogViewer,
+  };
+})();

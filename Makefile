@@ -5,25 +5,28 @@ endif
 
 .PHONY: docs docs-fast docs-check docs-linkcheck clean-docs lint test
 
+DOCS_GENERATED_DIRS = docs/_autosummary docs/api/_autosummary docs/jupyter_execute docs/user_guide/jupyter_execute
+
 docs:
+	rm -rf $(DOCS_GENERATED_DIRS)
 	sphinx-build -b html docs docs/build/ -j 16 -W
 
 docs-fast:
 	echo "building docs without api for speed"
+	rm -rf $(DOCS_GENERATED_DIRS)
 	sphinx-build -t no-api -b html docs docs/build/ -j 16 -W
 
 docs-check:
+	rm -rf $(DOCS_GENERATED_DIRS)
 	sphinx-build -b dummy docs docs/build/ -j 16 -W
 
 docs-linkcheck:
+	rm -rf $(DOCS_GENERATED_DIRS)
 	sphinx-build -b linkcheck docs docs/build/linkcheck -j 16 -W
 
 clean-docs:
 	rm -rf docs/build
-	rm -rf docs/_autosummary
-	rm -rf docs/api/_autosummary
-	rm -rf docs/jupyter_execute
-	rm -rf docs/user_guide/jupyter_execute
+	rm -rf $(DOCS_GENERATED_DIRS)
 
 TRACKED_PY = $(shell git ls-files 'pylabrobot/*.py' 'pylabrobot/*.ipynb')
 

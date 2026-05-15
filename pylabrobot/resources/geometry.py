@@ -32,7 +32,7 @@ def generate_geometry_catalog(root: Resource) -> Dict[str, Any]:
     instance: Dict[str, Any] = {
       "prototype": prototype_id,
       "parent": resource.parent.name if resource.parent is not None else None,
-      "pose": _coordinate_or_none(resource, x="l", y="f", z="b"),
+      "pose": _resource_pose(resource),
       "rotation": _rotation_values(resource.get_absolute_rotation()),
     }
     if len(resource.children) > 0:
@@ -120,6 +120,13 @@ def _coordinate_or_none(resource: Resource, x: str, y: str, z: str) -> Optional[
     return _coordinate_values(resource.get_absolute_location(x=x, y=y, z=z))
   except Exception:
     return None
+
+
+def _resource_pose(resource: Resource) -> Optional[List[float]]:
+  pose = _coordinate_or_none(resource, x="l", y="f", z="b")
+  if pose is None and resource.parent is None:
+    return [0, 0, 0]
+  return pose
 
 
 def _coordinate_values(coordinate: Coordinate) -> List[float]:

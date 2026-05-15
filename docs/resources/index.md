@@ -141,6 +141,8 @@ Laboratories across the world use an almost infinite number of different resourc
 We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing definitions.
 If you cannot find something, please contribute what you are looking for!
 
+Open the {doc}`catalog page <catalog>` to search the library across manufacturers and inspect generated 3D previews for labware definitions.
+
 <hr>
 
 <details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
@@ -167,6 +169,7 @@ If you cannot find something, please contribute what you are looking for!
 ```{toctree}
 :caption: Resource Library
 
+catalog
 library/agenbio
 library/agilent
 library/alpaqua

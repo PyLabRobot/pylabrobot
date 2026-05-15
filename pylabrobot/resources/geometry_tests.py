@@ -32,9 +32,11 @@ class GeometryCatalogTests(unittest.TestCase):
     self.assertEqual(len(well_instance["pose"]), 3)
 
   def test_generate_geometry_catalog_for_single_labware(self):
-    catalog = generate_geometry_catalog(self.plate)
+    plate = Cor_96_wellplate_360ul_Fb(name="standalone_plate")
+    catalog = generate_geometry_catalog(plate)
 
-    self.assertEqual(catalog["root"], "plate")
-    self.assertIn("plate", catalog["instances"])
-    self.assertIn("plate_well_A1", catalog["instances"])
+    self.assertEqual(catalog["root"], "standalone_plate")
+    self.assertIn("standalone_plate", catalog["instances"])
+    self.assertIn("standalone_plate_well_A1", catalog["instances"])
+    self.assertEqual(catalog["instances"]["standalone_plate"]["pose"], [0, 0, 0])
     self.assertLess(len(catalog["prototypes"]), len(catalog["instances"]))
