@@ -14,7 +14,7 @@ class RackReaderChatterboxBackend(RackReaderBackend):
     return RackScanResult(
       rack_id="CHATTERBOX",
       entries=[
-        RackScanEntry(position="A01", tube_id="SIMULATED", status="Code OK"),
+        RackScanEntry(position="A01", tube_id="SIMULATED", status="OK"),
       ],
     )
 

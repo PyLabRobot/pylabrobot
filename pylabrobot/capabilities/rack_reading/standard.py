@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 
 @dataclass
@@ -10,7 +10,7 @@ class RackScanEntry:
 
   position: str
   tube_id: Optional[str]
-  status: str
+  status: Literal["OK", "NOREAD"]
   free_text: str = ""
 
 
