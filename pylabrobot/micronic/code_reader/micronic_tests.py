@@ -24,10 +24,11 @@ from pylabrobot.micronic.code_reader.rack_reading_backend import (
 from pylabrobot.resources.tube_rack import TubeRack
 
 
-def _rack(num_items_x: int = 12, num_items_y: int = 8) -> TubeRack:
+def _rack(num_items_x: int = 12, num_items_y: int = 8, num_items: int = 96) -> TubeRack:
   rack = MagicMock(spec=TubeRack)
   rack.num_items_x = num_items_x
   rack.num_items_y = num_items_y
+  rack.num_items = num_items
   return rack
 
 
@@ -49,7 +50,6 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
     with tempfile.TemporaryDirectory() as image_dir:
       driver = MicronicDriver(
         image_dir=image_dir,
-        min_wells=2,
         keep_images=True,
       )
       decoded = {
@@ -71,7 +71,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         ) as decode_image_mock,
       ):
         await driver.setup()
-        await driver.trigger_rack_scan(_rack())
+        await driver.trigger_rack_scan(_rack(num_items=2))
         await wait_for_dataready(driver)
         result = await driver.get_scan_result()
 
@@ -91,7 +91,6 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
       reader = MicronicCodeReader(
         driver=MicronicDriver(
           image_dir=image_dir,
-          min_wells=1,
           keep_images=True,
         )
       )
@@ -111,8 +110,12 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         ),
       ):
         await reader.setup()
-        first = await reader.rack_reading.scan_rack(rack=_rack(), timeout=1.0, poll_interval=0.01)
-        second = await reader.rack_reading.scan_rack(rack=_rack(), timeout=1.0, poll_interval=0.01)
+        first = await reader.rack_reading.scan_rack(
+          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.01
+        )
+        second = await reader.rack_reading.scan_rack(
+          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.01
+        )
 
       self.assertEqual(first.rack_id, "9500017722")
       self.assertEqual(second.rack_id, "9500017722")
@@ -122,7 +125,6 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
     with tempfile.TemporaryDirectory() as image_dir:
       driver = MicronicDriver(
         image_dir=image_dir,
-        min_wells=1,
         keep_images=True,
       )
       decoded = {"A01": DecodeResult(tube_id="1111111111", method="test")}
@@ -149,7 +151,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         ),
       ):
         await driver.setup()
-        await driver.trigger_rack_scan(_rack())
+        await driver.trigger_rack_scan(_rack(num_items=1))
         await wait_for_dataready(driver)
         self.assertEqual(await driver.get_rack_id(), "9500017722")
 
@@ -167,7 +169,7 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
           return_value=(decoded, {"decodedWells": 1}),
         ),
       ):
-        await driver.trigger_rack_scan(_rack())
+        await driver.trigger_rack_scan(_rack(num_items=1))
         with self.assertRaises(MicronicError):
           await driver.get_rack_id()
         await wait_for_dataready(driver)
