@@ -37,6 +37,15 @@
     return `rgb(${Math.round(rgb.r * scale)}, ${Math.round(rgb.g * scale)}, ${Math.round(rgb.b * scale)})`;
   }
 
+  function readThemeColors(root) {
+    const probe = root || document.documentElement;
+    const style = getComputedStyle(probe);
+    const bg = style.getPropertyValue("--pst-color-background").trim() || "#f7fafc";
+    const surface = style.getPropertyValue("--pst-color-surface").trim() || bg;
+    const text = style.getPropertyValue("--pst-color-text-base").trim() || "#17334a";
+    return { bg, surface, text };
+  }
+
   function multiplyMatrix(a, b) {
     return [
       [
@@ -536,9 +545,10 @@
 
     drawBackground() {
       const ctx = this.context;
+      const theme = readThemeColors(this.root);
       const gradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-      gradient.addColorStop(0, "#f5f8fb");
-      gradient.addColorStop(1, "#e6edf3");
+      gradient.addColorStop(0, theme.bg);
+      gradient.addColorStop(1, theme.surface);
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
@@ -550,7 +560,9 @@
       const gridSize = Math.max(4, Math.min(12, Math.round(this.bounds.span / 20)));
 
       ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(126, 152, 176, 0.22)";
+      ctx.save();
+      ctx.strokeStyle = readThemeColors(this.root).text;
+      ctx.globalAlpha = 0.22;
 
       for (let index = -gridSize; index <= gridSize; index += 1) {
         const ratio = index / gridSize;
@@ -571,6 +583,7 @@
         ctx.lineTo(yLineEnd.x, yLineEnd.y);
         ctx.stroke();
       }
+      ctx.restore();
     }
 
     drawDrawables() {
@@ -609,6 +622,7 @@
       });
 
       const ctx = this.context;
+      const edgeColor = readThemeColors(this.root).text;
       faces.forEach((face) => {
         const shade =
           face.points.length >= 4
@@ -624,10 +638,11 @@
         ctx.fillStyle = shade;
         ctx.globalAlpha = face.alpha;
         ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = "rgba(30, 53, 77, 0.28)";
+        ctx.globalAlpha = 0.28;
+        ctx.strokeStyle = edgeColor;
         ctx.lineWidth = 1;
         ctx.stroke();
+        ctx.globalAlpha = 1;
       });
 
       outlines.forEach((outline) => {
