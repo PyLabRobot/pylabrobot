@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import logging
 import os
 import re
 import shutil
@@ -30,6 +31,8 @@ from pylabrobot.capabilities.rack_reading import RackScanEntry, RackScanResult
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.tube_rack import TubeRack
+
+logger = logging.getLogger(__name__)
 
 ROWS = "ABCDEFGH"
 COLS = 12
@@ -282,12 +285,14 @@ class MicronicDriver(Driver):
         f"{self._expected_well_count}. Missing: {missing}"
       )
 
+    for position, result in decoded.items():
+      logger.debug("Micronic decoded %s via %s", position, result.method)
+
     entries = [
       RackScanEntry(
         position=position,
         tube_id=decoded[position].tube_id if position in decoded else None,
         status="OK" if position in decoded else "NOREAD",
-        free_text=decoded[position].method if position in decoded else "",
       )
       for position in iter_positions()
     ]

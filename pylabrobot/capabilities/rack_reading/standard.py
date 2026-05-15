@@ -11,7 +11,6 @@ class RackScanEntry:
   position: str
   tube_id: Optional[str]
   status: Literal["OK", "NOREAD"]
-  free_text: str = ""
 
 
 @dataclass
