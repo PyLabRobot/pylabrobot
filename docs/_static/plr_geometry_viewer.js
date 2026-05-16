@@ -441,6 +441,16 @@
       this.root.innerHTML = "";
       this.root.appendChild(this.canvas);
       this.context = this.canvas.getContext("2d");
+
+      this.homeButton = document.createElement("button");
+      this.homeButton.type = "button";
+      this.homeButton.className = "plr-geometry-home";
+      this.homeButton.title = "Reset view";
+      this.homeButton.setAttribute("aria-label", "Reset view");
+      this.homeButton.innerHTML =
+        '<svg width="28" height="28" viewBox="0 0 20 20" aria-hidden="true">' +
+        '<path d="M10 1L1 9h3v8h5v-5h2v5h5V9h3L10 1z" fill="currentColor"/></svg>';
+      this.root.appendChild(this.homeButton);
       this.drawables = [];
       this.bounds = computeBounds([]);
       this.defaultRotation = { yaw: -0.95 + Math.PI / 2, pitch: -0.9 };
@@ -457,6 +467,7 @@
       this.handlePointerUp = this.handlePointerUp.bind(this);
       this.handleWheel = this.handleWheel.bind(this);
       this.handleDoubleClick = this.handleDoubleClick.bind(this);
+      this.handleHomeClick = this.handleHomeClick.bind(this);
       this.handleResize = this.handleResize.bind(this);
       this.resize = this.resize.bind(this);
 
@@ -465,6 +476,7 @@
       window.addEventListener("pointerup", this.handlePointerUp);
       this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
       this.canvas.addEventListener("dblclick", this.handleDoubleClick);
+      this.homeButton.addEventListener("click", this.handleHomeClick);
       window.addEventListener("resize", this.handleResize);
       if (typeof ResizeObserver !== "undefined") {
         this.resizeObserver = new ResizeObserver(this.handleResize);
@@ -480,6 +492,7 @@
       window.removeEventListener("pointerup", this.handlePointerUp);
       this.canvas.removeEventListener("wheel", this.handleWheel);
       this.canvas.removeEventListener("dblclick", this.handleDoubleClick);
+      this.homeButton.removeEventListener("click", this.handleHomeClick);
       window.removeEventListener("resize", this.handleResize);
       if (this.resizeObserver) {
         this.resizeObserver.disconnect();
@@ -496,6 +509,14 @@
     handleDoubleClick(event) {
       event.preventDefault();
       this.resetView();
+    }
+
+    handleHomeClick() {
+      this.resetView();
+      this.homeButton.classList.add("plr-geometry-home--active");
+      window.setTimeout(() => {
+        this.homeButton.classList.remove("plr-geometry-home--active");
+      }, 220);
     }
 
     setCatalog(catalog) {
@@ -592,7 +613,7 @@
         z: yawed.y * sinPitch + yawed.z * cosPitch,
       };
 
-      const scaleBase = Math.min(this.canvas.width, this.canvas.height) / (this.bounds.span * 1.8);
+      const scaleBase = Math.min(this.canvas.width, this.canvas.height) / (this.bounds.span * 1.4);
       const scale = scaleBase * this.zoom;
       return {
         x: this.canvas.width / 2 + pitched.x * scale + this.pan.x,
@@ -666,6 +687,28 @@
       ctx.moveTo(xAxisStart.x, xAxisStart.y);
       ctx.lineTo(yAxisEnd.x, yAxisEnd.y);
       ctx.stroke();
+
+      // Tick marks: short stubs pointing outward toward each axis's labels.
+      ctx.lineWidth = 2;
+      const tickLen = step * 0.12;
+      ctx.strokeStyle = AXIS_COLORS.x;
+      for (let x = x0; x <= x1 + epsilon; x += step) {
+        const tickStart = this.project({ x, y: y0, z: groundZ });
+        const tickEnd = this.project({ x, y: y0 - tickLen, z: groundZ });
+        ctx.beginPath();
+        ctx.moveTo(tickStart.x, tickStart.y);
+        ctx.lineTo(tickEnd.x, tickEnd.y);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = AXIS_COLORS.y;
+      for (let y = y0; y <= y1 + epsilon; y += step) {
+        const tickStart = this.project({ x: x0, y, z: groundZ });
+        const tickEnd = this.project({ x: x0 - tickLen, y, z: groundZ });
+        ctx.beginPath();
+        ctx.moveTo(tickStart.x, tickStart.y);
+        ctx.lineTo(tickEnd.x, tickEnd.y);
+        ctx.stroke();
+      }
 
       // Tick labels in mm (matched to axis colors).
       ctx.globalAlpha = 0.9;
@@ -902,7 +945,7 @@
         return;
       }
 
-      const fmt = (value) => (Math.round(value * 10) / 10).toFixed(1);
+      const fmt = (value) => (Math.round(value * 100) / 100).toFixed(2);
       const lines = [`${fmt(sizeX)} × ${fmt(sizeY)} × ${fmt(sizeZ)} mm`];
 
       const wells = this.drawables.filter(
