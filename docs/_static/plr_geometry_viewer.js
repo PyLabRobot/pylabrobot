@@ -836,15 +836,19 @@
     }
 
     drawDrawables() {
-      const faces = [];
-      const outlines = [];
+      const items = [];
+      // Outline segments share this layer so they depth-interleave with the
+      // wells/tip-spots (Well/TipSpot get layer 4 in drawableLayer()) instead
+      // of being painted on top as a flat overlay.
+      const outlineLayer = 4;
 
       this.drawables.forEach((drawable) => {
         drawable.faces.forEach((face) => {
           const projected = face.map((vertexIndex) => this.project(drawable.vertices[vertexIndex]));
           const depth =
             projected.reduce((sum, point) => sum + point.depth, 0) / Math.max(projected.length, 1);
-          faces.push({
+          items.push({
+            kind: "poly",
             points: projected,
             depth,
             color: drawable.color,
@@ -854,16 +858,45 @@
         });
 
         if (drawable.outline) {
-          outlines.push({
-            top: drawable.outline.top.map((point) => this.project(point)),
-            bottom: drawable.outline.bottom.map((point) => this.project(point)),
-            verticals: drawable.outline.verticals.map((pair) => pair.map((point) => this.project(point))),
-            color: shadeColor(drawable.color, 0.42),
-          });
+          const color = shadeColor(drawable.color, 0.42);
+          // Subdivide each edge so it depth-sorts against the well field in
+          // many short pieces (one average depth per whole edge can't be
+          // partly-behind / partly-in-front of 96 wells). Still an
+          // approximation -- exact occlusion would need a depth buffer.
+          const SUBDIV = 18;
+          const addSegment = (a, b, width) => {
+            let prev = this.project(a);
+            for (let k = 1; k <= SUBDIV; k += 1) {
+              const t = k / SUBDIV;
+              const next = this.project({
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t,
+                z: a.z + (b.z - a.z) * t,
+              });
+              items.push({
+                kind: "stroke",
+                a: prev,
+                b: next,
+                depth: (prev.depth + next.depth) / 2,
+                color,
+                width,
+                layer: outlineLayer,
+              });
+              prev = next;
+            }
+          };
+          const ring = (pts, width) => {
+            for (let i = 0; i < pts.length; i += 1) {
+              addSegment(pts[i], pts[(i + 1) % pts.length], width);
+            }
+          };
+          ring(drawable.outline.top, 3);
+          ring(drawable.outline.bottom, 1.5);
+          drawable.outline.verticals.forEach((pair) => addSegment(pair[0], pair[1], 1.5));
         }
       });
 
-      faces.sort((left, right) => {
+      items.sort((left, right) => {
         if (left.layer !== right.layer) {
           return left.layer - right.layer;
         }
@@ -872,55 +905,37 @@
 
       const ctx = this.context;
       const edgeColor = readThemeColors(this.root).text;
-      faces.forEach((face) => {
+      items.forEach((item) => {
+        if (item.kind === "stroke") {
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = item.width;
+          ctx.beginPath();
+          ctx.moveTo(item.a.x, item.a.y);
+          ctx.lineTo(item.b.x, item.b.y);
+          ctx.stroke();
+          return;
+        }
+
         const shade =
-          face.points.length >= 4
-            ? shadeColor(face.color, 0.9 + (face.depth / (this.bounds.span || 1)) * 0.15)
-            : face.color;
+          item.points.length >= 4
+            ? shadeColor(item.color, 0.9 + (item.depth / (this.bounds.span || 1)) * 0.15)
+            : item.color;
 
         ctx.beginPath();
-        ctx.moveTo(face.points[0].x, face.points[0].y);
-        for (let index = 1; index < face.points.length; index += 1) {
-          ctx.lineTo(face.points[index].x, face.points[index].y);
+        ctx.moveTo(item.points[0].x, item.points[0].y);
+        for (let index = 1; index < item.points.length; index += 1) {
+          ctx.lineTo(item.points[index].x, item.points[index].y);
         }
         ctx.closePath();
         ctx.fillStyle = shade;
-        ctx.globalAlpha = face.alpha;
+        ctx.globalAlpha = item.alpha;
         ctx.fill();
         ctx.globalAlpha = 0.28;
         ctx.strokeStyle = edgeColor;
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.globalAlpha = 1;
-      });
-
-      outlines.forEach((outline) => {
-        ctx.strokeStyle = outline.color;
-        ctx.lineWidth = 3;
-
-        ctx.beginPath();
-        ctx.moveTo(outline.top[0].x, outline.top[0].y);
-        for (let index = 1; index < outline.top.length; index += 1) {
-          ctx.lineTo(outline.top[index].x, outline.top[index].y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(outline.bottom[0].x, outline.bottom[0].y);
-        for (let index = 1; index < outline.bottom.length; index += 1) {
-          ctx.lineTo(outline.bottom[index].x, outline.bottom[index].y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-
-        outline.verticals.forEach((pair) => {
-          ctx.beginPath();
-          ctx.moveTo(pair[0].x, pair[0].y);
-          ctx.lineTo(pair[1].x, pair[1].y);
-          ctx.stroke();
-        });
       });
     }
 
@@ -980,7 +995,7 @@
     drawOrientationCube() {
       const ctx = this.context;
       const dpr = this.pixelRatio;
-      const halfCss = 30; // half widget size in CSS px
+      const halfCss = 31.5; // half widget size in CSS px
       const marginCss = 16;
       const topCss = 14; // top-right corner, right of the home button
       const cx = this.canvas.width - (marginCss + halfCss) * dpr;
