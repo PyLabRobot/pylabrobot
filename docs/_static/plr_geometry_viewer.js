@@ -934,6 +934,7 @@
       this.drawDrawables();
       this.drawZAxis();
       this.drawSizeReadout();
+      this.drawOrientationCube();
     }
 
     drawSizeReadout() {
@@ -957,7 +958,7 @@
       if (wells > 0) {
         lines.push(`${wells} well${wells === 1 ? "" : "s"}`);
       } else if (tips > 0) {
-        lines.push(`${tips} tip${tips === 1 ? "" : "s"} spot${tips === 1 ? "" : "s"}`);
+        lines.push(`${tips} Tip Spot${tips === 1 ? "" : "s"}`);
       }
 
       ctx.save();
@@ -972,6 +973,185 @@
         ctx.globalAlpha = index === 0 ? 0.95 : 0.7;
         ctx.fillText(line, 14, y);
         y += index === 0 ? 19 : 16;
+      });
+      ctx.restore();
+    }
+
+    drawOrientationCube() {
+      const ctx = this.context;
+      const dpr = this.pixelRatio;
+      const halfCss = 30; // half widget size in CSS px
+      const marginCss = 16;
+      const topCss = 14; // top-right corner, right of the home button
+      const cx = this.canvas.width - (marginCss + halfCss) * dpr;
+      const cy = (topCss + halfCss) * dpr;
+      const s = halfCss * dpr * 0.6; // projected half-extent of the cube
+
+      const cosYaw = Math.cos(this.rotation.yaw);
+      const sinYaw = Math.sin(this.rotation.yaw);
+      const cosPitch = Math.cos(this.rotation.pitch);
+      const sinPitch = Math.sin(this.rotation.pitch);
+
+      const projectCubePoint = (p) => {
+        const yx = p.x * cosYaw - p.y * sinYaw;
+        const yy = p.x * sinYaw + p.y * cosYaw;
+        const py = yy * cosPitch - p.z * sinPitch;
+        const pz = yy * sinPitch + p.z * cosPitch;
+        return { x: cx + yx * s, y: cy - py * s, depth: pz };
+      };
+
+      const add = (a, b, t) => ({
+        x: a.x + b.x * t,
+        y: a.y + b.y * t,
+        z: a.z + b.z * t,
+      });
+      const depthAt = (p) => projectCubePoint(p).depth;
+
+      // Chamfered cube: each corner cut by a plane -> 6 octagon faces + 8
+      // corner triangles. `chamfer` is the fraction of each edge removed.
+      const chamfer = 0.504;
+      const k = 1 - chamfer;
+      const ring = [
+        [1, k], [k, 1], [-k, 1], [-1, k],
+        [-1, -k], [-k, -1], [k, -1], [1, -k],
+      ];
+      // (b, d) in-plane coords -> 3D, per axis (0=x,1=y,2=z), at axis=sg.
+      const place = {
+        0: (sg, b, d) => ({ x: sg, y: b, z: d }),
+        1: (sg, b, d) => ({ x: d, y: sg, z: b }),
+        2: (sg, b, d) => ({ x: b, y: d, z: sg }),
+      };
+      const inPlaneU = { 0: { x: 0, y: 1, z: 0 }, 1: { x: 1, y: 0, z: 0 }, 2: { x: 1, y: 0, z: 0 } };
+      const inPlaneW = { 0: { x: 0, y: 0, z: 1 }, 1: { x: 0, y: 0, z: 1 }, 2: { x: 0, y: 1, z: 0 } };
+      const axisNormal = (axis, sg) => ({
+        x: axis === 0 ? sg : 0,
+        y: axis === 1 ? sg : 0,
+        z: axis === 2 ? sg : 0,
+      });
+
+      const faces = [];
+
+      [
+        { axis: 2, sg: 1, label: "TOP", color: AXIS_COLORS.z },
+        { axis: 2, sg: -1, label: "BOTTOM", color: AXIS_COLORS.z },
+        { axis: 0, sg: 1, label: "RIGHT", color: AXIS_COLORS.x },
+        { axis: 0, sg: -1, label: "LEFT", color: AXIS_COLORS.x },
+        { axis: 1, sg: 1, label: "BACK", color: AXIS_COLORS.y },
+        { axis: 1, sg: -1, label: "FRONT", color: AXIS_COLORS.y },
+      ].forEach((f) => {
+        const pts3 = ring.map(([b, d]) => place[f.axis](f.sg, b, d));
+        const center3 = axisNormal(f.axis, f.sg);
+        const normal = center3;
+        const visible = depthAt(add(center3, normal, 0.02)) > depthAt(center3);
+        const pts = pts3.map(projectCubePoint);
+        const depth = pts.reduce((sum, p) => sum + p.depth, 0) / pts.length;
+        faces.push({
+          kind: "oct",
+          label: f.label,
+          color: f.color,
+          pts,
+          depth,
+          visible,
+          center3,
+          uW: inPlaneU[f.axis],
+          wW: inPlaneW[f.axis],
+        });
+      });
+
+      [-1, 1].forEach((sx) => {
+        [-1, 1].forEach((sy) => {
+          [-1, 1].forEach((sz) => {
+            const pts3 = [
+              { x: sx * k, y: sy, z: sz },
+              { x: sx, y: sy * k, z: sz },
+              { x: sx, y: sy, z: sz * k },
+            ];
+            const centroid = {
+              x: (pts3[0].x + pts3[1].x + pts3[2].x) / 3,
+              y: (pts3[0].y + pts3[1].y + pts3[2].y) / 3,
+              z: (pts3[0].z + pts3[1].z + pts3[2].z) / 3,
+            };
+            const inv = 1 / Math.sqrt(3);
+            const normal = { x: sx * inv, y: sy * inv, z: sz * inv };
+            const visible = depthAt(add(centroid, normal, 0.02)) > depthAt(centroid);
+            const pts = pts3.map(projectCubePoint);
+            const depth = pts.reduce((sum, p) => sum + p.depth, 0) / 3;
+            faces.push({ kind: "chamfer", pts, depth, visible });
+          });
+        });
+      });
+
+      faces.sort((a, b) => a.depth - b.depth);
+
+      const theme = readThemeColors(this.root);
+      ctx.save();
+      ctx.lineJoin = "round";
+      faces.forEach((f) => {
+        ctx.beginPath();
+        ctx.moveTo(f.pts[0].x, f.pts[0].y);
+        for (let i = 1; i < f.pts.length; i += 1) {
+          ctx.lineTo(f.pts[i].x, f.pts[i].y);
+        }
+        ctx.closePath();
+
+        if (f.kind === "chamfer") {
+          ctx.globalAlpha = f.visible ? 0.5 : 0.12;
+          ctx.fillStyle = "rgba(150, 165, 180, 0.9)";
+          ctx.fill();
+          ctx.globalAlpha = f.visible ? 0.45 : 0.12;
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = "rgba(120, 135, 150, 0.9)";
+          ctx.stroke();
+          return;
+        }
+
+        ctx.globalAlpha = f.visible ? 0.82 : 0.18;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.fill();
+        ctx.globalAlpha = f.visible ? 0.9 : 0.25;
+        ctx.lineWidth = Math.max(1, dpr);
+        ctx.strokeStyle = f.color;
+        ctx.stroke();
+
+        if (!f.visible) {
+          return;
+        }
+        const fc = projectCubePoint(f.center3);
+        const pU = projectCubePoint(add(f.center3, f.uW, 1));
+        const pW = projectCubePoint(add(f.center3, f.wW, 1));
+        let ux = pU.x - fc.x;
+        let uy = pU.y - fc.y;
+        let vx = pW.x - fc.x;
+        let vy = pW.y - fc.y;
+        const exLen = Math.hypot(ux, uy);
+        const eyLen = Math.hypot(vx, vy);
+        if (exLen > 4 && eyLen > 4) {
+          // Unit in-plane basis keeps the face's shear/foreshorten so the
+          // label reads as painted on the surface; sign-normalize so it
+          // stays roughly upright rather than mirrored/upside-down.
+          ux /= exLen;
+          uy /= exLen;
+          vx /= eyLen;
+          vy /= eyLen;
+          if (ux < 0) {
+            ux = -ux;
+            uy = -uy;
+          }
+          if (vy < 0) {
+            vx = -vx;
+            vy = -vy;
+          }
+          const fontPx = Math.min(exLen, eyLen) * 0.486;
+          ctx.save();
+          ctx.setTransform(ux, uy, vx, vy, fc.x, fc.y);
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = theme.text;
+          ctx.font = `bold ${fontPx}px system-ui, -apple-system, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(f.label, 0, 0);
+          ctx.restore();
+        }
       });
       ctx.restore();
     }
