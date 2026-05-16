@@ -458,6 +458,8 @@
       this.zoom = 1;
       this.pan = { x: 0, y: 0 };
       this.pixelRatio = 1;
+      this._proj = null; // per-frame projection cache (see _updateProjection)
+      this._rafId = null; // pending requestAnimationFrame, for render coalescing
       this.isDragging = false;
       this.dragMode = "orbit";
       this.lastPointer = { x: 0, y: 0 };
@@ -496,6 +498,10 @@
       window.removeEventListener("resize", this.handleResize);
       if (this.resizeObserver) {
         this.resizeObserver.disconnect();
+      }
+      if (this._rafId !== null) {
+        window.cancelAnimationFrame(this._rafId);
+        this._rafId = null;
       }
     }
 
@@ -557,7 +563,7 @@
           Math.PI / 2,
         );
       }
-      this.render();
+      this.requestRender();
     }
 
     handlePointerUp(event) {
@@ -571,7 +577,7 @@
       event.preventDefault();
       const zoomDelta = event.deltaY > 0 ? 0.92 : 1.08;
       this.zoom = clamp(this.zoom * zoomDelta, 0.25, 6);
-      this.render();
+      this.requestRender();
     }
 
     handleResize() {
@@ -582,43 +588,47 @@
       this.canvas.height = Math.floor(height * this.pixelRatio);
       this.canvas.style.width = `${width}px`;
       this.canvas.style.height = `${height}px`;
-      this.render();
+      this.requestRender();
     }
 
     resize() {
       this.handleResize();
     }
 
+    // Per-frame transform constants. The camera is fixed for a whole render,
+    // so the trig/scale are computed once here instead of per projected vertex.
+    _updateProjection() {
+      const c = this.bounds.center;
+      this._proj = {
+        cx: c.x,
+        cy: c.y,
+        cz: c.z,
+        cosYaw: Math.cos(this.rotation.yaw),
+        sinYaw: Math.sin(this.rotation.yaw),
+        cosPitch: Math.cos(this.rotation.pitch),
+        sinPitch: Math.sin(this.rotation.pitch),
+        scale:
+          (Math.min(this.canvas.width, this.canvas.height) / (this.bounds.span * 1.4)) * this.zoom,
+        halfW: this.canvas.width / 2,
+        halfH: this.canvas.height / 2,
+        panX: this.pan.x,
+        panY: this.pan.y,
+      };
+    }
+
     project(point) {
-      const centered = {
-        x: point.x - this.bounds.center.x,
-        y: point.y - this.bounds.center.y,
-        z: point.z - this.bounds.center.z,
-      };
-
-      const cosYaw = Math.cos(this.rotation.yaw);
-      const sinYaw = Math.sin(this.rotation.yaw);
-      const cosPitch = Math.cos(this.rotation.pitch);
-      const sinPitch = Math.sin(this.rotation.pitch);
-
-      const yawed = {
-        x: centered.x * cosYaw - centered.y * sinYaw,
-        y: centered.x * sinYaw + centered.y * cosYaw,
-        z: centered.z,
-      };
-
-      const pitched = {
-        x: yawed.x,
-        y: yawed.y * cosPitch - yawed.z * sinPitch,
-        z: yawed.y * sinPitch + yawed.z * cosPitch,
-      };
-
-      const scaleBase = Math.min(this.canvas.width, this.canvas.height) / (this.bounds.span * 1.4);
-      const scale = scaleBase * this.zoom;
+      const p = this._proj || (this._updateProjection(), this._proj);
+      const cx = point.x - p.cx;
+      const cy = point.y - p.cy;
+      const cz = point.z - p.cz;
+      const yawedX = cx * p.cosYaw - cy * p.sinYaw;
+      const yawedY = cx * p.sinYaw + cy * p.cosYaw;
+      const pitchedY = yawedY * p.cosPitch - cz * p.sinPitch;
+      const pitchedZ = yawedY * p.sinPitch + cz * p.cosPitch;
       return {
-        x: this.canvas.width / 2 + pitched.x * scale + this.pan.x,
-        y: this.canvas.height / 2 - pitched.y * scale + this.pan.y,
-        depth: pitched.z,
+        x: p.halfW + yawedX * p.scale + p.panX,
+        y: p.halfH - pitchedY * p.scale + p.panY,
+        depth: pitchedZ,
       };
     }
 
@@ -939,11 +949,22 @@
       });
     }
 
+    requestRender() {
+      if (this._rafId !== null) {
+        return;
+      }
+      this._rafId = window.requestAnimationFrame(() => {
+        this._rafId = null;
+        this.render();
+      });
+    }
+
     render() {
       if (!this.context) {
         return;
       }
 
+      this._updateProjection();
       this.drawBackground();
       this.drawRuler();
       this.drawDrawables();
