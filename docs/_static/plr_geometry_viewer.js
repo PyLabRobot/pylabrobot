@@ -259,12 +259,117 @@
     return { vertices, faces };
   }
 
+  // V-bottom: straight upper cylinder + cone tapering to a centre apex.
+  function createVBottomGeometry(size, segments) {
+    const sx = size[0];
+    const sy = size[1];
+    const sz = size[2];
+    const radiusX = sx / 2;
+    const radiusY = sy / 2;
+    const centerX = sx / 2;
+    const centerY = sy / 2;
+    const coneTopZ = sz * 0.2; // lower 20% of the depth is the V taper
+    const vertices = [];
+    const shoulder = [];
+    const top = [];
+
+    for (let index = 0; index < segments; index += 1) {
+      const theta = (Math.PI * 2 * index) / segments;
+      const x = centerX + Math.cos(theta) * radiusX;
+      const y = centerY + Math.sin(theta) * radiusY;
+      shoulder.push(vertices.length);
+      vertices.push({ x, y, z: coneTopZ });
+      top.push(vertices.length);
+      vertices.push({ x, y, z: sz });
+    }
+    const apex = vertices.length;
+    vertices.push({ x: centerX, y: centerY, z: 0 });
+
+    const faces = [top.slice()];
+    for (let index = 0; index < segments; index += 1) {
+      const next = (index + 1) % segments;
+      faces.push([shoulder[index], shoulder[next], top[next], top[index]]);
+      faces.push([apex, shoulder[next], shoulder[index]]);
+    }
+    return { vertices, faces };
+  }
+
+  // U-bottom: straight upper cylinder + a rounded (quarter-ellipse) cap.
+  function createUBottomGeometry(size, segments, lat) {
+    const sx = size[0];
+    const sy = size[1];
+    const sz = size[2];
+    const radiusX = sx / 2;
+    const radiusY = sy / 2;
+    const centerX = sx / 2;
+    const centerY = sy / 2;
+    const capH = Math.min((radiusX + radiusY) / 2, sz * 0.6);
+    const vertices = [];
+    const rings = [];
+
+    for (let r = 1; r <= lat; r += 1) {
+      const tt = r / lat; // fraction up the cap, 1 == equator
+      const z = capH * tt;
+      const factor = Math.sin((tt * Math.PI) / 2); // 0 -> full radius
+      const ring = [];
+      for (let index = 0; index < segments; index += 1) {
+        const theta = (Math.PI * 2 * index) / segments;
+        ring.push(vertices.length);
+        vertices.push({
+          x: centerX + Math.cos(theta) * radiusX * factor,
+          y: centerY + Math.sin(theta) * radiusY * factor,
+          z,
+        });
+      }
+      rings.push(ring);
+    }
+    const top = [];
+    for (let index = 0; index < segments; index += 1) {
+      const theta = (Math.PI * 2 * index) / segments;
+      top.push(vertices.length);
+      vertices.push({
+        x: centerX + Math.cos(theta) * radiusX,
+        y: centerY + Math.sin(theta) * radiusY,
+        z: sz,
+      });
+    }
+    const apex = vertices.length;
+    vertices.push({ x: centerX, y: centerY, z: 0 });
+
+    const faces = [top.slice()];
+    const first = rings[0];
+    for (let index = 0; index < segments; index += 1) {
+      const next = (index + 1) % segments;
+      faces.push([apex, first[next], first[index]]);
+    }
+    for (let r = 0; r < lat - 1; r += 1) {
+      const a = rings[r];
+      const b = rings[r + 1];
+      for (let index = 0; index < segments; index += 1) {
+        const next = (index + 1) % segments;
+        faces.push([a[index], a[next], b[next], b[index]]);
+      }
+    }
+    const equator = rings[lat - 1];
+    for (let index = 0; index < segments; index += 1) {
+      const next = (index + 1) % segments;
+      faces.push([equator[index], equator[next], top[next], top[index]]);
+    }
+    return { vertices, faces };
+  }
+
   function createShapeGeometry(prototype) {
     const geometry = prototype.geometry || {};
     const size = displaySizeForPrototype(prototype);
     const type = prototype.type || "";
 
     if (geometry.shape === "well" && geometry.cross_section === "circle") {
+      if (geometry.bottom === "V") {
+        return createVBottomGeometry(size, 18);
+      }
+      if (geometry.bottom === "U") {
+        return createUBottomGeometry(size, 18, 3);
+      }
       return createCylinderGeometry(size, 18);
     }
 
@@ -1068,12 +1173,14 @@
       const faces = [];
 
       [
+        // Faces colored by the axis their long edge spans: FRONT/BACK run
+        // along X (red), LEFT/RIGHT along Y (green), TOP/BOTTOM up Z (blue).
         { axis: 2, sg: 1, label: "TOP", color: AXIS_COLORS.z },
         { axis: 2, sg: -1, label: "BOTTOM", color: AXIS_COLORS.z },
-        { axis: 0, sg: 1, label: "RIGHT", color: AXIS_COLORS.x },
-        { axis: 0, sg: -1, label: "LEFT", color: AXIS_COLORS.x },
-        { axis: 1, sg: 1, label: "BACK", color: AXIS_COLORS.y },
-        { axis: 1, sg: -1, label: "FRONT", color: AXIS_COLORS.y },
+        { axis: 0, sg: 1, label: "RIGHT", color: AXIS_COLORS.y },
+        { axis: 0, sg: -1, label: "LEFT", color: AXIS_COLORS.y },
+        { axis: 1, sg: 1, label: "BACK", color: AXIS_COLORS.x },
+        { axis: 1, sg: -1, label: "FRONT", color: AXIS_COLORS.x },
       ].forEach((f) => {
         const pts3 = ring.map(([b, d]) => place[f.axis](f.sg, b, d));
         const center3 = axisNormal(f.axis, f.sg);
