@@ -56,6 +56,37 @@ def _page_title(markdown: str, fallback: str) -> str:
   return fallback
 
 
+def _company_url(markdown: str) -> Optional[str]:
+  # Manufacturer pages lead with a reference link whose label varies
+  # ("Company Page", "Company page:", "Wikipedia page:", ...), so take the
+  # first markdown link in the preamble (before the first ## heading).
+  preamble = re.split(r"^#{2,4}\s", markdown, maxsplit=1, flags=re.MULTILINE)[0]
+  match = re.search(r"\[[^\]]+\]\((https?://[^)]+)\)", preamble)
+  return match.group(1).strip() if match else None
+
+
+def _blurb(markdown: str) -> Optional[str]:
+  # The "about" text is the first blockquote in the preamble.
+  preamble = re.split(r"^#{2,4}\s", markdown, maxsplit=1, flags=re.MULTILINE)[0]
+  lines: List[str] = []
+  for line in preamble.splitlines():
+    quoted = re.match(r"^>\s?(.*)$", line)
+    if quoted is not None:
+      lines.append(quoted.group(1).strip())
+    elif lines:
+      break
+  text = " ".join(part for part in lines if part).strip()
+  return text or None
+
+
+def _brand_tree(markdown: str) -> Optional[str]:
+  # Some manufacturer pages (e.g. Thermo Fisher) hand-curate the brand
+  # hierarchy as an ASCII tree in a fenced code block in the preamble.
+  preamble = re.split(r"^#{2,4}\s", markdown, maxsplit=1, flags=re.MULTILINE)[0]
+  match = re.search(r"```[^\n]*\n(.*?)\n```", preamble, flags=re.DOTALL)
+  return match.group(1).rstrip("\n") if match else None
+
+
 def _image_path_from_cell(cell: str, doc_relative_path: Path) -> Optional[str]:
   match = re.search(r"!\[[^\]]*]\(([^)]+)\)", cell)
   if match is None:
@@ -76,13 +107,16 @@ def _extract_labware_entries_from_markdown(
 ) -> List[Dict[str, Any]]:
   entries: List[Dict[str, Any]] = []
   manufacturer = _page_title(markdown, doc_relative_path.stem.replace("_", " ").title())
-  current_section = ""
+  heading_stack: List[Any] = []  # of (level, title), level in 2..4
 
   for line in markdown.splitlines():
     stripped = line.strip()
     heading_match = re.match(r"^(#{2,4})\s+(.+?)\s*$", stripped)
     if heading_match:
-      current_section = heading_match.group(2)
+      level = len(heading_match.group(1))
+      while heading_stack and heading_stack[-1][0] >= level:
+        heading_stack.pop()
+      heading_stack.append((level, heading_match.group(2)))
       continue
 
     if not stripped.startswith("|"):
@@ -96,12 +130,15 @@ def _extract_labware_entries_from_markdown(
     if len(matches) == 0:
       continue
 
+    section_path = [title for _level, title in heading_stack]
+    current_section = section_path[-1] if section_path else ""
     image_path = _image_path_from_cell(cells[1], doc_relative_path)
     for definition_name in matches:
       entries.append({
         "definition": definition_name,
         "manufacturer": manufacturer,
         "section": current_section,
+        "section_path": section_path,
         "description_html": _description_to_html(cells[0], definition_name),
         "image": image_path,
         "page": doc_relative_path.with_suffix(".html").as_posix(),
@@ -143,6 +180,23 @@ def _catalog_entries(srcdir: str) -> List[Dict[str, Any]]:
       entries.append(entry)
 
   return entries
+
+
+def _manufacturers_index(srcdir: str) -> Dict[str, Dict[str, Any]]:
+  manufacturers: Dict[str, Dict[str, Any]] = {}
+  for doc_path in _library_doc_paths(srcdir):
+    markdown = doc_path.read_text(encoding="utf-8")
+    fallback = doc_path.relative_to(srcdir).stem.replace("_", " ").title()
+    name = _page_title(markdown, fallback)
+    manufacturers.setdefault(
+      name,
+      {
+        "company_url": _company_url(markdown),
+        "blurb": _blurb(markdown),
+        "brand_tree": _brand_tree(markdown),
+      },
+    )
+  return manufacturers
 
 
 def _resource_factory_registry() -> Dict[str, Callable[..., Any]]:
@@ -245,6 +299,7 @@ def build_labware_geometry_index(srcdir: str) -> Dict[str, Any]:
   return {
     "items": entries,
     "resources": resources,
+    "manufacturers": _manufacturers_index(srcdir),
   }
 
 

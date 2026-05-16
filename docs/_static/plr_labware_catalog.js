@@ -194,6 +194,71 @@
     return card;
   }
 
+  function buildSectionTree(items) {
+    const tree = { children: new Map(), count: 0 };
+    items.forEach((item) => {
+      const path =
+        Array.isArray(item.section_path) && item.section_path.length
+          ? item.section_path
+          : [item.section || "Other"];
+      let node = tree;
+      tree.count += 1;
+      path.forEach((seg) => {
+        if (!node.children.has(seg)) {
+          node.children.set(seg, { children: new Map(), count: 0 });
+        }
+        node = node.children.get(seg);
+        node.count += 1;
+      });
+    });
+    return tree;
+  }
+
+  function createManufacturerPanel(name, items) {
+    const meta = (state.index.manufacturers || {})[name] || {};
+    const details = document.createElement("details");
+    details.className = "plr-catalog-manufacturer";
+    details.open = false;
+
+    const breakdown = Array.from(buildSectionTree(items).children.entries())
+      .map(([title, node]) => `${title} (${node.count})`)
+      .join(" · ");
+    const summary = document.createElement("summary");
+    summary.appendChild(element("span", "plr-catalog-manufacturer__name", name));
+    summary.appendChild(
+      element("span", "plr-catalog-manufacturer__meta", breakdown),
+    );
+    details.appendChild(summary);
+
+    if (meta.company_url) {
+      const link = document.createElement("a");
+      link.className = "plr-catalog-manufacturer__company";
+      link.href = meta.company_url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = /wikipedia\.org/i.test(meta.company_url)
+        ? "Wikipedia ↗"
+        : "Website ↗";
+      details.appendChild(link);
+    }
+
+    if (meta.blurb) {
+      details.appendChild(
+        element("p", "plr-catalog-manufacturer__blurb", meta.blurb),
+      );
+    }
+
+    if (meta.brand_tree) {
+      details.appendChild(
+        element("div", "plr-catalog-manufacturer__subhead", "Brand structure"),
+      );
+      const pre = element("pre", "plr-catalog-manufacturer__tree", meta.brand_tree);
+      details.appendChild(pre);
+    }
+
+    return details;
+  }
+
   function renderCatalog(root) {
     const items = (state.index.items || []).filter(itemMatchesFilters);
     const results = root.querySelector(".plr-catalog-results");
@@ -204,6 +269,10 @@
     if (items.length === 0) {
       results.appendChild(element("div", "plr-catalog-empty", "No labware matches these filters."));
       return;
+    }
+
+    if (state.manufacturer !== "All") {
+      results.appendChild(createManufacturerPanel(state.manufacturer, items));
     }
 
     if (state.section !== "All") {

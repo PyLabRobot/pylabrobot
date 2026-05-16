@@ -163,7 +163,8 @@
 .plr-library-card__action {
   border: 0;
   border-radius: 6px;
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.675rem;
+  font-size: 0.9em;
   background: var(--pst-color-primary);
   color: var(--pst-color-background);
   font-weight: 600;
@@ -312,3 +313,86 @@
     grid-template-rows: 145px 1fr;
   }
 }
+
+.plr-catalog-manufacturer {
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--pst-color-border, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+  background: var(--pst-color-surface, rgba(128, 128, 128, 0.05));
+}
+
+.plr-catalog-manufacturer > summary {
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  list-style: none;
+  user-select: none;
+}
+
+.plr-catalog-manufacturer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.plr-catalog-manufacturer > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.1rem;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+
+.plr-catalog-manufacturer[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.plr-catalog-manufacturer > summary:hover {
+  color: var(--pst-color-primary, inherit);
+}
+
+.plr-catalog-manufacturer__name {
+  font-size: 1.05rem;
+}
+
+.plr-catalog-manufacturer__meta {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.plr-catalog-manufacturer__company {
+  display: inline-block;
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.plr-catalog-manufacturer__subhead {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.plr-catalog-manufacturer__blurb {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  opacity: 0.85;
+}
+
+.plr-catalog-manufacturer__tree {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  border: 1px solid var(--pst-color-border, rgba(128, 128, 128, 0.3));
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.12);
+  color: var(--pst-color-text-base, currentColor);
+  white-space: pre;
+}
+
