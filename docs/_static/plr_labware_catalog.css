@@ -113,7 +113,7 @@
   padding: 0.95rem;
 }
 
-.plr-library-card__vendor {
+.plr-library-card__manufacturer {
   color: var(--pst-color-text-muted);
   font-size: 0.76rem;
   font-weight: 700;
@@ -252,7 +252,7 @@
 .plr-geometry-home {
   position: absolute;
   top: 14px;
-  right: 14px;
+  right: 90px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

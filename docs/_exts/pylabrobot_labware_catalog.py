@@ -75,7 +75,7 @@ def _extract_labware_entries_from_markdown(
   doc_relative_path: Path,
 ) -> List[Dict[str, Any]]:
   entries: List[Dict[str, Any]] = []
-  vendor = _page_title(markdown, doc_relative_path.stem.replace("_", " ").title())
+  manufacturer = _page_title(markdown, doc_relative_path.stem.replace("_", " ").title())
   current_section = ""
 
   for line in markdown.splitlines():
@@ -100,7 +100,7 @@ def _extract_labware_entries_from_markdown(
     for definition_name in matches:
       entries.append({
         "definition": definition_name,
-        "vendor": vendor,
+        "manufacturer": manufacturer,
         "section": current_section,
         "description_html": _description_to_html(cells[0], definition_name),
         "image": image_path,

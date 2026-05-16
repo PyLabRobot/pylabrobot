@@ -4,7 +4,7 @@
   const state = {
     index: null,
     query: "",
-    vendor: "All",
+    manufacturer: "All",
     section: "All",
     selectedDefinition: null,
     viewer: null,
@@ -50,7 +50,7 @@
   function itemMatchesFilters(item) {
     const haystack = [
       item.definition,
-      item.vendor,
+      item.manufacturer,
       item.section,
       item.description_html,
     ]
@@ -60,7 +60,7 @@
     if (state.query && haystack.indexOf(state.query.toLowerCase()) === -1) {
       return false;
     }
-    if (state.vendor !== "All" && item.vendor !== state.vendor) {
+    if (state.manufacturer !== "All" && item.manufacturer !== state.manufacturer) {
       return false;
     }
     if (state.section !== "All" && item.section !== state.section) {
@@ -168,7 +168,7 @@
     media.addEventListener("click", () => openModel(item.definition));
 
     const body = element("div", "plr-library-card__body");
-    const vendor = element("div", "plr-library-card__vendor", item.vendor);
+    const manufacturer = element("div", "plr-library-card__manufacturer", item.manufacturer);
     const title = element("h3", "plr-library-card__title");
     const titleCode = document.createElement("code");
     titleCode.textContent = item.definition;
@@ -184,7 +184,7 @@
     modelButton.addEventListener("click", () => openModel(item.definition));
 
     footer.appendChild(modelButton);
-    body.appendChild(vendor);
+    body.appendChild(manufacturer);
     body.appendChild(title);
     body.appendChild(section);
     if (item.description_html) body.appendChild(description);
@@ -238,8 +238,8 @@
           <input id="plr-catalog-search-input" type="search" placeholder="Plate, tiprack, Hamilton, 96..." />
         </div>
         <div class="plr-catalog-filter">
-          <label for="plr-catalog-vendor">Vendor</label>
-          <select id="plr-catalog-vendor"></select>
+          <label for="plr-catalog-manufacturer">Manufacturer</label>
+          <select id="plr-catalog-manufacturer"></select>
         </div>
         <div class="plr-catalog-filter">
           <label for="plr-catalog-section">Type</label>
@@ -251,9 +251,9 @@
     `;
 
     const search = root.querySelector("#plr-catalog-search-input");
-    const vendor = root.querySelector("#plr-catalog-vendor");
+    const manufacturer = root.querySelector("#plr-catalog-manufacturer");
     const section = root.querySelector("#plr-catalog-section");
-    setSelectOptions(vendor, unique(state.index.items.map((item) => item.vendor)), state.vendor);
+    setSelectOptions(manufacturer, unique(state.index.items.map((item) => item.manufacturer)), state.manufacturer);
     setSelectOptions(section, unique(state.index.items.map((item) => item.section)), state.section);
     search.value = state.query;
 
@@ -262,8 +262,8 @@
       writeUrlState();
       renderCatalog(root);
     });
-    vendor.addEventListener("change", () => {
-      state.vendor = vendor.value;
+    manufacturer.addEventListener("change", () => {
+      state.manufacturer = manufacturer.value;
       writeUrlState();
       renderCatalog(root);
     });
@@ -279,7 +279,7 @@
   function readUrlState() {
     const params = new URLSearchParams(window.location.search);
     state.query = params.get("q") || "";
-    state.vendor = params.get("vendor") || "All";
+    state.manufacturer = params.get("manufacturer") || "All";
     state.section = params.get("section") || "All";
   }
 
@@ -287,8 +287,8 @@
     const params = new URLSearchParams(window.location.search);
     if (state.query) params.set("q", state.query);
     else params.delete("q");
-    if (state.vendor && state.vendor !== "All") params.set("vendor", state.vendor);
-    else params.delete("vendor");
+    if (state.manufacturer && state.manufacturer !== "All") params.set("manufacturer", state.manufacturer);
+    else params.delete("manufacturer");
     if (state.section && state.section !== "All") params.set("section", state.section);
     else params.delete("section");
     const queryString = params.toString();
