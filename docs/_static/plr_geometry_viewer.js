@@ -5,6 +5,25 @@
     return Math.min(Math.max(value, min), max);
   }
 
+  function niceStep(span, targetCount) {
+    const raw = Math.max(span, 1) / Math.max(targetCount, 1);
+    const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+    const normalized = raw / magnitude;
+    let factor;
+    if (normalized <= 1) {
+      factor = 1;
+    } else if (normalized <= 2) {
+      factor = 2;
+    } else if (normalized <= 5) {
+      factor = 5;
+    } else {
+      factor = 10;
+    }
+    return factor * magnitude;
+  }
+
+  const AXIS_COLORS = { x: "#e84a4a", y: "#4caf3e", z: "#3b7dd8" };
+
   function colorForPrototype(prototype) {
     const geometry = prototype.geometry || {};
     const type = prototype.type || "";
@@ -420,7 +439,7 @@
       this.context = this.canvas.getContext("2d");
       this.drawables = [];
       this.bounds = computeBounds([]);
-      this.rotation = { yaw: -0.75, pitch: 0.55 };
+      this.rotation = { yaw: -0.95 + Math.PI / 2, pitch: -0.9 };
       this.zoom = 1;
       this.isDragging = false;
       this.lastPointer = { x: 0, y: 0 };
@@ -553,36 +572,160 @@
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
-    drawGround() {
+    drawRuler() {
       const ctx = this.context;
-      const span = this.bounds.span * 0.8;
+      const theme = readThemeColors(this.root);
       const groundZ = this.bounds.min.z;
-      const gridSize = Math.max(4, Math.min(12, Math.round(this.bounds.span / 20)));
 
-      ctx.lineWidth = 1;
+      const spanX = this.bounds.max.x - this.bounds.min.x;
+      const spanY = this.bounds.max.y - this.bounds.min.y;
+      const step = Math.max(niceStep(spanX, 8), niceStep(spanY, 8));
+
+      const x0 = Math.floor(this.bounds.min.x / step) * step;
+      const x1 = Math.ceil(this.bounds.max.x / step) * step;
+      const y0 = Math.floor(this.bounds.min.y / step) * step;
+      const y1 = Math.ceil(this.bounds.max.y / step) * step;
+      const epsilon = step * 1e-6;
+      const labelGap = step * 0.2;
+
       ctx.save();
-      ctx.strokeStyle = readThemeColors(this.root).text;
-      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = theme.text;
 
-      for (let index = -gridSize; index <= gridSize; index += 1) {
-        const ratio = index / gridSize;
-        const x = this.bounds.center.x + ratio * span;
-        const y = this.bounds.center.y + ratio * span;
-
-        const xLineStart = this.project({ x, y: this.bounds.center.y - span, z: groundZ });
-        const xLineEnd = this.project({ x, y: this.bounds.center.y + span, z: groundZ });
+      // Minor mm grid.
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.18;
+      for (let x = x0; x <= x1 + epsilon; x += step) {
+        const start = this.project({ x, y: y0, z: groundZ });
+        const end = this.project({ x, y: y1, z: groundZ });
         ctx.beginPath();
-        ctx.moveTo(xLineStart.x, xLineStart.y);
-        ctx.lineTo(xLineEnd.x, xLineEnd.y);
-        ctx.stroke();
-
-        const yLineStart = this.project({ x: this.bounds.center.x - span, y, z: groundZ });
-        const yLineEnd = this.project({ x: this.bounds.center.x + span, y, z: groundZ });
-        ctx.beginPath();
-        ctx.moveTo(yLineStart.x, yLineStart.y);
-        ctx.lineTo(yLineEnd.x, yLineEnd.y);
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
         ctx.stroke();
       }
+      for (let y = y0; y <= y1 + epsilon; y += step) {
+        const start = this.project({ x: x0, y, z: groundZ });
+        const end = this.project({ x: x1, y, z: groundZ });
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      }
+
+      // Origin axes (Blender-style colors: X red, Y green).
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 3;
+      const xAxisStart = this.project({ x: x0, y: y0, z: groundZ });
+      const xAxisEnd = this.project({ x: x1, y: y0, z: groundZ });
+      ctx.strokeStyle = AXIS_COLORS.x;
+      ctx.beginPath();
+      ctx.moveTo(xAxisStart.x, xAxisStart.y);
+      ctx.lineTo(xAxisEnd.x, xAxisEnd.y);
+      ctx.stroke();
+      const yAxisEnd = this.project({ x: x0, y: y1, z: groundZ });
+      ctx.strokeStyle = AXIS_COLORS.y;
+      ctx.beginPath();
+      ctx.moveTo(xAxisStart.x, xAxisStart.y);
+      ctx.lineTo(yAxisEnd.x, yAxisEnd.y);
+      ctx.stroke();
+
+      // Tick labels in mm (matched to axis colors).
+      ctx.globalAlpha = 0.9;
+      ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+      ctx.fillStyle = AXIS_COLORS.x;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let x = x0; x <= x1 + epsilon; x += step) {
+        const point = this.project({ x, y: y0 - labelGap, z: groundZ });
+        ctx.fillText(String(Math.round(x)), point.x, point.y + 5);
+      }
+      ctx.fillStyle = AXIS_COLORS.y;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let y = y0; y <= y1 + epsilon; y += step) {
+        const point = this.project({ x: x0 - labelGap, y, z: groundZ - step * 0.2 });
+        ctx.fillText(String(Math.round(y)), point.x - 7, point.y);
+      }
+
+      // Axis unit captions.
+      ctx.globalAlpha = 1;
+      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
+      const xCaption = this.project({ x: x1, y: y0, z: groundZ });
+      ctx.fillStyle = AXIS_COLORS.x;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("X (mm)", xCaption.x + 25, xCaption.y);
+      const yCaption = this.project({ x: x0, y: y1, z: groundZ });
+      ctx.fillStyle = AXIS_COLORS.y;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Y (mm)", yCaption.x - 7, yCaption.y - 22);
+
+      ctx.restore();
+    }
+
+    drawZAxis() {
+      const z0 = this.bounds.min.z;
+      const z1 = this.bounds.max.z;
+      if (z1 - z0 < 1e-6) {
+        return;
+      }
+
+      const step = niceStep(z1 - z0, 4);
+      const zStart = Math.floor(z0 / step) * step;
+      const zEnd = Math.ceil(z1 / step) * step;
+      const epsilon = step * 1e-6;
+
+      // Share the origin corner with the X/Y axes (matplotlib/Blender convention)
+      // so all three meet at one point and Z rides the front silhouette edge
+      // rather than piercing the translucent body.
+      const gridStep = Math.max(
+        niceStep(this.bounds.max.x - this.bounds.min.x, 8),
+        niceStep(this.bounds.max.y - this.bounds.min.y, 8),
+      );
+      const corner = {
+        x: Math.floor(this.bounds.min.x / gridStep) * gridStep,
+        y: Math.floor(this.bounds.min.y / gridStep) * gridStep,
+      };
+
+      const centerScreen = this.project({
+        x: this.bounds.center.x,
+        y: this.bounds.center.y,
+        z: z0,
+      });
+      const baseScreen = this.project({ x: corner.x, y: corner.y, z: z0 });
+      const outwardSign = baseScreen.x >= centerScreen.x ? 1 : -1;
+
+      const ctx = this.context;
+      ctx.save();
+      ctx.strokeStyle = AXIS_COLORS.z;
+      ctx.fillStyle = AXIS_COLORS.z;
+
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 3;
+      const axisBottom = this.project({ x: corner.x, y: corner.y, z: zStart });
+      const axisTop = this.project({ x: corner.x, y: corner.y, z: zEnd });
+      ctx.beginPath();
+      ctx.moveTo(axisBottom.x, axisBottom.y);
+      ctx.lineTo(axisTop.x, axisTop.y);
+      ctx.stroke();
+
+      ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+      ctx.textAlign = outwardSign > 0 ? "left" : "right";
+      ctx.textBaseline = "middle";
+      for (let z = zStart; z <= zEnd + epsilon; z += step) {
+        const point = this.project({ x: corner.x, y: corner.y, z });
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
+        ctx.lineTo(point.x + outwardSign * 6, point.y);
+        ctx.stroke();
+        ctx.fillText(String(Math.round(z)), point.x + outwardSign * 10, point.y);
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Z (mm)", axisTop.x + outwardSign * 10, axisTop.y - 8);
+
       ctx.restore();
     }
 
@@ -681,8 +824,9 @@
       }
 
       this.drawBackground();
-      this.drawGround();
+      this.drawRuler();
       this.drawDrawables();
+      this.drawZAxis();
     }
   }
 
