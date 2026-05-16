@@ -24,6 +24,10 @@
 
   const AXIS_COLORS = { x: "#e84a4a", y: "#4caf3e", z: "#3b7dd8" };
 
+  // Minimum on-screen spacing (canvas px) between drawn tick labels; closer
+  // ones are skipped so they don't pile up when an axis goes near edge-on.
+  const TICK_MIN_GAP = 30;
+
   function colorForPrototype(prototype) {
     const geometry = prototype.geometry || {};
     const type = prototype.type || "";
@@ -439,15 +443,20 @@
       this.context = this.canvas.getContext("2d");
       this.drawables = [];
       this.bounds = computeBounds([]);
-      this.rotation = { yaw: -0.95 + Math.PI / 2, pitch: -0.9 };
+      this.defaultRotation = { yaw: -0.95 + Math.PI / 2, pitch: -0.9 };
+      this.rotation = { ...this.defaultRotation };
       this.zoom = 1;
+      this.pan = { x: 0, y: 0 };
+      this.pixelRatio = 1;
       this.isDragging = false;
+      this.dragMode = "orbit";
       this.lastPointer = { x: 0, y: 0 };
 
       this.handlePointerDown = this.handlePointerDown.bind(this);
       this.handlePointerMove = this.handlePointerMove.bind(this);
       this.handlePointerUp = this.handlePointerUp.bind(this);
       this.handleWheel = this.handleWheel.bind(this);
+      this.handleDoubleClick = this.handleDoubleClick.bind(this);
       this.handleResize = this.handleResize.bind(this);
       this.resize = this.resize.bind(this);
 
@@ -455,6 +464,7 @@
       window.addEventListener("pointermove", this.handlePointerMove);
       window.addEventListener("pointerup", this.handlePointerUp);
       this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
+      this.canvas.addEventListener("dblclick", this.handleDoubleClick);
       window.addEventListener("resize", this.handleResize);
       if (typeof ResizeObserver !== "undefined") {
         this.resizeObserver = new ResizeObserver(this.handleResize);
@@ -469,20 +479,38 @@
       window.removeEventListener("pointermove", this.handlePointerMove);
       window.removeEventListener("pointerup", this.handlePointerUp);
       this.canvas.removeEventListener("wheel", this.handleWheel);
+      this.canvas.removeEventListener("dblclick", this.handleDoubleClick);
       window.removeEventListener("resize", this.handleResize);
       if (this.resizeObserver) {
         this.resizeObserver.disconnect();
       }
     }
 
+    resetView() {
+      this.rotation = { ...this.defaultRotation };
+      this.zoom = 1;
+      this.pan = { x: 0, y: 0 };
+      this.render();
+    }
+
+    handleDoubleClick(event) {
+      event.preventDefault();
+      this.resetView();
+    }
+
     setCatalog(catalog) {
       this.drawables = normalizeCatalog(catalog);
       this.bounds = computeBounds(this.drawables);
       this.zoom = 1;
+      this.pan = { x: 0, y: 0 };
       this.render();
     }
 
     handlePointerDown(event) {
+      if (event.button === 1) {
+        event.preventDefault(); // suppress middle-click autoscroll
+      }
+      this.dragMode = event.button === 1 || event.shiftKey ? "pan" : "orbit";
       this.isDragging = true;
       this.lastPointer = { x: event.clientX, y: event.clientY };
       this.canvas.setPointerCapture(event.pointerId);
@@ -496,8 +524,18 @@
       const deltaX = event.clientX - this.lastPointer.x;
       const deltaY = event.clientY - this.lastPointer.y;
       this.lastPointer = { x: event.clientX, y: event.clientY };
-      this.rotation.yaw += deltaX * 0.01;
-      this.rotation.pitch = clamp(this.rotation.pitch + deltaY * 0.01, -1.4, 1.4);
+      if (this.dragMode === "pan") {
+        // pointer deltas are CSS px; project() outputs device px.
+        this.pan.x += deltaX * this.pixelRatio;
+        this.pan.y += deltaY * this.pixelRatio;
+      } else {
+        this.rotation.yaw += deltaX * 0.01;
+        this.rotation.pitch = clamp(
+          this.rotation.pitch + deltaY * 0.01,
+          -Math.PI / 2,
+          Math.PI / 2,
+        );
+      }
       this.render();
     }
 
@@ -518,8 +556,9 @@
     handleResize() {
       const width = Math.max(this.root.clientWidth, 200);
       const height = Math.max(this.root.clientHeight, 200);
-      this.canvas.width = Math.floor(width * Math.min(window.devicePixelRatio || 1, 2));
-      this.canvas.height = Math.floor(height * Math.min(window.devicePixelRatio || 1, 2));
+      this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      this.canvas.width = Math.floor(width * this.pixelRatio);
+      this.canvas.height = Math.floor(height * this.pixelRatio);
       this.canvas.style.width = `${width}px`;
       this.canvas.style.height = `${height}px`;
       this.render();
@@ -556,8 +595,8 @@
       const scaleBase = Math.min(this.canvas.width, this.canvas.height) / (this.bounds.span * 1.8);
       const scale = scaleBase * this.zoom;
       return {
-        x: this.canvas.width / 2 + pitched.x * scale,
-        y: this.canvas.height / 2 - pitched.y * scale,
+        x: this.canvas.width / 2 + pitched.x * scale + this.pan.x,
+        y: this.canvas.height / 2 - pitched.y * scale + this.pan.y,
         depth: pitched.z,
       };
     }
@@ -634,15 +673,31 @@
       ctx.fillStyle = AXIS_COLORS.x;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
+      let lastXLabel = null;
       for (let x = x0; x <= x1 + epsilon; x += step) {
         const point = this.project({ x, y: y0 - labelGap, z: groundZ });
+        if (
+          lastXLabel !== null &&
+          Math.hypot(point.x - lastXLabel.x, point.y - lastXLabel.y) < TICK_MIN_GAP
+        ) {
+          continue;
+        }
+        lastXLabel = point;
         ctx.fillText(String(Math.round(x)), point.x, point.y + 5);
       }
       ctx.fillStyle = AXIS_COLORS.y;
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
+      let lastYLabel = null;
       for (let y = y0; y <= y1 + epsilon; y += step) {
         const point = this.project({ x: x0 - labelGap, y, z: groundZ - step * 0.2 });
+        if (
+          lastYLabel !== null &&
+          Math.hypot(point.x - lastYLabel.x, point.y - lastYLabel.y) < TICK_MIN_GAP
+        ) {
+          continue;
+        }
+        lastYLabel = point;
         ctx.fillText(String(Math.round(y)), point.x - 7, point.y);
       }
 
@@ -712,8 +767,16 @@
       ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
       ctx.textAlign = outwardSign > 0 ? "left" : "right";
       ctx.textBaseline = "middle";
+      let lastZLabel = null;
       for (let z = zStart; z <= zEnd + epsilon; z += step) {
         const point = this.project({ x: corner.x, y: corner.y, z });
+        if (
+          lastZLabel !== null &&
+          Math.hypot(point.x - lastZLabel.x, point.y - lastZLabel.y) < TICK_MIN_GAP
+        ) {
+          continue;
+        }
+        lastZLabel = point;
         ctx.beginPath();
         ctx.moveTo(point.x, point.y);
         ctx.lineTo(point.x + outwardSign * 6, point.y);
@@ -827,6 +890,47 @@
       this.drawRuler();
       this.drawDrawables();
       this.drawZAxis();
+      this.drawSizeReadout();
+    }
+
+    drawSizeReadout() {
+      const ctx = this.context;
+      const sizeX = this.bounds.max.x - this.bounds.min.x;
+      const sizeY = this.bounds.max.y - this.bounds.min.y;
+      const sizeZ = this.bounds.max.z - this.bounds.min.z;
+      if (sizeX <= 0 && sizeY <= 0 && sizeZ <= 0) {
+        return;
+      }
+
+      const fmt = (value) => (Math.round(value * 10) / 10).toFixed(1);
+      const lines = [`${fmt(sizeX)} × ${fmt(sizeY)} × ${fmt(sizeZ)} mm`];
+
+      const wells = this.drawables.filter(
+        (d) => d.prototype.geometry && d.prototype.geometry.shape === "well",
+      ).length;
+      const tips = this.drawables.filter(
+        (d) => d.prototype.geometry && d.prototype.geometry.shape === "tip_spot",
+      ).length;
+      if (wells > 0) {
+        lines.push(`${wells} well${wells === 1 ? "" : "s"}`);
+      } else if (tips > 0) {
+        lines.push(`${tips} tip${tips === 1 ? "" : "s"} spot${tips === 1 ? "" : "s"}`);
+      }
+
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      let y = 12;
+      lines.forEach((line, index) => {
+        ctx.font = index === 0
+          ? "bold 13px system-ui, -apple-system, sans-serif"
+          : "12px system-ui, -apple-system, sans-serif";
+        ctx.fillStyle = readThemeColors(this.root).text;
+        ctx.globalAlpha = index === 0 ? 0.95 : 0.7;
+        ctx.fillText(line, 14, y);
+        y += index === 0 ? 19 : 16;
+      });
+      ctx.restore();
     }
   }
 
