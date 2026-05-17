@@ -33,6 +33,3 @@ from .luminescence_96 import (
   byonoy_l96a_base_unit,
   byonoy_l96a_reader_unit,
 )
-
-# Convenience alias so users don't reach into the nested class.
-LuminescenceParams = ByonoyLuminescence96Backend.LuminescenceParams
