@@ -132,8 +132,11 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
       )
 
       t0 = time.time()
-      all_rows: List[Optional[float]] = []
-      chunk_flags: List[int] = []  # vendor bit definitions unpublished; surface non-zero
+      # Index by seq so an out-of-order or dropped chunk surfaces as a None
+      # slot instead of silently shifting subsequent rows into the wrong wells.
+      rows_by_seq: List[Optional[List[float]]] = []
+      flags_by_seq: List[Optional[int]] = []
+      expected_chunks: Optional[int] = None
 
       while True:
         if self._abort_requested:
@@ -159,11 +162,28 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
           flags = reader.u8()
           _ = reader.u8()  # progress (0..100 running %); not surfaced
 
-          all_rows.extend(row)
-          chunk_flags.append(flags)
+          if seq_len == 0:
+            raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
+          if expected_chunks is None:
+            expected_chunks = seq_len
+            rows_by_seq = [None] * seq_len
+            flags_by_seq = [None] * seq_len
+          elif seq_len != expected_chunks:
+            raise RuntimeError(
+              f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
+            )
+          if not 0 <= seq < seq_len:
+            raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
+          rows_by_seq[seq] = row
+          flags_by_seq[seq] = flags
 
-          if seq == seq_len - 1:
+          if all(r is not None for r in rows_by_seq):
             break
+
+    if expected_chunks is None:
+      raise RuntimeError(f"{self.name} luminescence read produced no chunks")
+    chunk_flags: List[int] = [f for f in flags_by_seq if f is not None]
+    all_rows: List[float] = [v for row in rows_by_seq if row is not None for v in row]
 
     # Check firmware health before trusting the data. error_code is the
     # authoritative post-measurement status byte; per-chunk flags are
@@ -175,14 +195,11 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
         f"{self.describe_error_code(status.error_code)} "
         f"(chunk flags: {[f'0x{f:02x}' for f in chunk_flags]})"
       )
-    if any(f != 0 for f in chunk_flags):
-      logger.warning(
-        "[%s] non-zero chunk flags during read: %s "
-        "(vendor bit definitions not published; data may be unreliable)",
-        self.name,
-        [f"0x{f:02x}" for f in chunk_flags],
+    self._warn_chunk_flags(chunk_flags)
+    if len(all_rows) != 96:
+      raise RuntimeError(
+        f"{self.name} luminescence read produced {len(all_rows)} values (expected 96)"
       )
-    assert len(all_rows) == 96, f"expected 96 luminescence values, got {len(all_rows)}"
 
     # Firmware zero-fills wells outside the mask. Convert those to None per
     # the LuminescenceResult contract ("None for unmeasured wells") — 0.0 is

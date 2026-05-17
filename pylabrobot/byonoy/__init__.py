@@ -9,14 +9,18 @@ from .absorbance_96 import (
   byonoy_sbs_adapter,
 )
 from .backend import (
+  LUM96_PRESET_S,
   Abs1StatusError,
   Abs96StatusError,
+  ByonoyDevice,
   ByonoyDeviceInfo,
   ByonoyEnvironment,
+  ByonoySlotState,
   ByonoyStatus,
   ByonoyVersions,
   LedEffect,
   Lum96IntegrationMode,
+  encode_well_bitmask,
 )
 from .luminescence_96 import (
   ByonoyLuminescence96,
@@ -29,3 +33,6 @@ from .luminescence_96 import (
   byonoy_l96a_base_unit,
   byonoy_l96a_reader_unit,
 )
+
+# Convenience alias so users don't reach into the nested class.
+LuminescenceParams = ByonoyLuminescence96Backend.LuminescenceParams

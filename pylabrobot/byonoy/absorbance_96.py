@@ -81,8 +81,11 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
         routing_info=b"\x00\x40",
       )
 
-      rows: List[float] = []
-      chunk_flags: List[int] = []  # vendor bit definitions unpublished; surface non-zero
+      # Index by seq so out-of-order/dropped chunks surface as None slots
+      # rather than silently shifting subsequent rows into the wrong wells.
+      rows_by_seq: List[Optional[List[float]]] = []
+      flags_by_seq: List[Optional[int]] = []
+      expected_chunks: Optional[int] = None
       t0 = time.time()
 
       while True:
@@ -115,11 +118,28 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
           flags = reader.u8()
           _ = reader.u8()  # progress (0..100 running %); not surfaced
 
-          rows.extend(row)
-          chunk_flags.append(flags)
+          if seq_len == 0:
+            raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
+          if expected_chunks is None:
+            expected_chunks = seq_len
+            rows_by_seq = [None] * seq_len
+            flags_by_seq = [None] * seq_len
+          elif seq_len != expected_chunks:
+            raise RuntimeError(
+              f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
+            )
+          if not 0 <= seq < seq_len:
+            raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
+          rows_by_seq[seq] = row
+          flags_by_seq[seq] = flags
 
-          if seq == seq_len - 1:
+          if all(r is not None for r in rows_by_seq):
             break
+
+    if expected_chunks is None:
+      raise RuntimeError(f"{self.name} absorbance read produced no chunks")
+    chunk_flags: List[int] = [f for f in flags_by_seq if f is not None]
+    rows: List[float] = [v for r in rows_by_seq if r is not None for v in r]
 
     status = await self.request_status()
     if status.error_code != 0:
@@ -128,13 +148,7 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
         f"ref={reference_wl} nm): {self.describe_error_code(status.error_code)} "
         f"(chunk flags: {[f'0x{f:02x}' for f in chunk_flags]})"
       )
-    if any(f != 0 for f in chunk_flags):
-      logger.warning(
-        "[%s] non-zero chunk flags during measurement: %s "
-        "(vendor bit definitions not published; data may be unreliable)",
-        self.name,
-        [f"0x{f:02x}" for f in chunk_flags],
-      )
+    self._warn_chunk_flags(chunk_flags)
 
     return rows
 
@@ -154,9 +168,10 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
     wavelength: int,
     backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
-    assert wavelength in self.available_wavelengths, (
-      f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
-    )
+    if wavelength not in self.available_wavelengths:
+      raise ValueError(
+        f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
+      )
 
     logger.info(
       "[%s] reading absorbance: plate='%s', wavelength=%d nm, wells=%d/%d",

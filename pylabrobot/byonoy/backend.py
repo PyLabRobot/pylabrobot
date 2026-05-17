@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import enum
 import logging
@@ -82,11 +83,6 @@ class ByonoyVersions:
   @property
   def is_production(self) -> bool:
     return self.stm_dev_version == 0 and self.esp_dev_version == 0
-
-
-@dataclass
-class ByonoyApiVersion:
-  version_no: int
 
 
 @dataclass
@@ -188,16 +184,22 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     self._device_type = device_type
     self._abort_requested = False
     self._in_flight_trigger: Optional[int] = None
+    # Serializes write+response-sniff in send_command. Does NOT cover the
+    # measurement read loops in subclasses (which poll io.read directly so
+    # cancel() can still send the abort while they run).
+    self._io_lock = asyncio.Lock()
 
   @property
   def name(self) -> str:
-    return self.io._human_readable_device_name
+    return self.io.human_readable_device_name
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     logger.info("[%s] connected", self.name)
 
   async def stop(self) -> None:
+    if self._in_flight_trigger is not None:
+      await self.cancel()
     await self.io.stop()
     logger.info("[%s] disconnected", self.name)
 
@@ -214,26 +216,27 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     routing_info: bytes = b"\x00\x00",
   ) -> Optional[bytes]:
     command = self._assemble_command(report_id, payload=payload, routing_info=routing_info)
-    await self.io.write(command)
-    if not wait_for_response:
-      return None
+    async with self._io_lock:
+      await self.io.write(command)
+      if not wait_for_response:
+        return None
 
-    t0 = time.time()
-    while True:
-      if time.time() - t0 > 120:
-        logger.error(
-          "[%s] timeout waiting for response to command 0x%04X after 120s",
-          self.name,
-          report_id,
-        )
-        raise TimeoutError("Reading data timed out after 2 minutes.")
-      response = await self.io.read(64, timeout=30)
-      if len(response) == 0:
-        continue
-      response_report_id = Reader(response).u16()
-      if report_id == response_report_id:
-        break
-    return response
+      t0 = time.time()
+      while True:
+        if time.time() - t0 > 120:
+          logger.error(
+            "[%s] timeout waiting for response to command 0x%04X after 120s",
+            self.name,
+            report_id,
+          )
+          raise TimeoutError("Reading data timed out after 2 minutes.")
+        response = await self.io.read(64, timeout=30)
+        if len(response) == 0:
+          continue
+        response_report_id = Reader(response).u16()
+        if report_id == response_report_id:
+          break
+      return response
 
   async def request_status(self) -> ByonoyStatus:
     """Read REP_STATUS_IN (0x0300): init/slot/error/uptime/measuring/boot."""
@@ -250,6 +253,22 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       is_measuring=r.u8() != 0,
       boot_completed=r.u8() != 0,
     )
+
+  def _warn_chunk_flags(self, chunk_flags: List[int]) -> None:
+    """Log non-zero per-chunk flag bytes from a measurement read loop.
+
+    Vendor bit definitions for the measurement-result `flags` byte aren't
+    published, so we can't decode them — only surface that *something* was
+    flagged. Subclasses' read loops call this after the loop completes
+    (after error_code has been checked and didn't raise).
+    """
+    if any(f != 0 for f in chunk_flags):
+      logger.warning(
+        "[%s] non-zero chunk flags during read: %s "
+        "(vendor bit definitions not published; data may be unreliable)",
+        self.name,
+        [f"0x{f:02x}" for f in chunk_flags],
+      )
 
   def describe_error_code(self, code: int) -> str:
     """Return a human-readable name for a firmware error_code byte.
@@ -281,14 +300,13 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       acceleration_g=(ax / _ACCEL_LSB_PER_G, ay / _ACCEL_LSB_PER_G, az / _ACCEL_LSB_PER_G),
     )
 
-  async def request_api_version(self) -> ByonoyApiVersion:
+  async def request_api_version(self) -> int:
     """Read REP_API_VERSION_IN (0x0050): a single u32."""
     response = await self.send_command(
       report_id=0x0050, payload=b"\x00" * 60, routing_info=b"\x80\x40"
     )
     assert response is not None
-    r = Reader(response[2:])
-    return ByonoyApiVersion(version_no=r.u32())
+    return Reader(response[2:]).u32()
 
   async def request_supported_reports(self) -> List[int]:
     """Read REP_SUPPORTED_REPORTS_IN (0x0010): list of report IDs the device supports.
@@ -323,12 +341,16 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
         out.append(i)
     return out
 
-  async def read_data_field(self, field_index: int) -> object:
+  async def _read_data_field(self, field_index: int) -> object:
     """Read a named device-data field via REP_DEVICE_DATA_READ_IN (0x0200).
 
     Returns the field's value typed per the response flags
     (str / int / float / bool / bytes). Truncates if HAS_MORE_DATA is set
     (shouldn't happen for the short identity strings; log if it does).
+
+    Private — the only documented caller is `request_device_info`, which knows
+    the field types ahead of time. Promote to public if you find a use case
+    that needs the polymorphic-by-flag-byte shape.
     """
     payload = Writer().u16(field_index).u8(0).raw_bytes(b"\x00" * 57).finish()
     response = await self.send_command(report_id=0x0200, payload=payload, routing_info=b"\x80\x40")
@@ -358,7 +380,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     """Read identity strings (matches C lib's byonoy_get_device_information)."""
 
     async def s(idx: int) -> str:
-      v = await self.read_data_field(idx)
+      v = await self._read_data_field(idx)
       return v if isinstance(v, str) else str(v)
 
     return ByonoyDeviceInfo(
