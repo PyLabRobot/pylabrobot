@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import (
   LUM96_PRESET_S,
-  ByonoyBase,
+  ByonoyDriver,
   ByonoyDevice,
   Lum96IntegrationMode,
   encode_well_bitmask,
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class ByonoyLuminescence96Backend(ByonoyBase, LuminescenceBackend):
+class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
   """Backend for the Byonoy Luminescence 96 Automate plate reader."""
 
   def __init__(self) -> None:
@@ -272,13 +272,13 @@ class ByonoyLuminescenceBaseUnit(Resource):
   ) -> None:
     if isinstance(resource, _ByonoyLuminescenceReaderPlateHolder):
       if self.plate_holder._byonoy_base is not None:
-        raise ValueError("ByonoyBase can only have one plate holder assigned.")
+        raise ValueError("ByonoyDriver can only have one plate holder assigned.")
       self.plate_holder._byonoy_base = self
     super().assign_child_resource(resource, location, reassign)
 
   def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     raise RuntimeError(
-      "ByonoyBase does not support assigning child resources directly. "
+      "ByonoyDriver does not support assigning child resources directly. "
       "Use the plate_holder or reader_unit_holder to assign plates and the reader unit, "
       "respectively."
     )

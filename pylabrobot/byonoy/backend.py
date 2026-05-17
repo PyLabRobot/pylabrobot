@@ -174,7 +174,7 @@ ABS1_ERROR_NAMES: Dict[int, str] = {e.value: e.name for e in Abs1StatusError}
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
 
 
-class ByonoyBase(Driver, metaclass=ABCMeta):
+class ByonoyDriver(Driver, metaclass=ABCMeta):
   """Shared HID communication logic for Byonoy plate readers."""
 
   # Firmware error-code → name mapping. Default mirrors Byonoy's generic

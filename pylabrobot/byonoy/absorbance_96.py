@@ -2,7 +2,7 @@ import logging
 import time
 from typing import List, Optional, Tuple
 
-from pylabrobot.byonoy.backend import ABS96_ERROR_NAMES, ByonoyBase, ByonoyDevice
+from pylabrobot.byonoy.backend import ABS96_ERROR_NAMES, ByonoyDriver, ByonoyDevice
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import (
   Absorbance,
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
+class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
   """Backend for the Byonoy Absorbance 96 Automate plate reader."""
 
   _ERROR_NAMES = ABS96_ERROR_NAMES
@@ -255,13 +255,13 @@ class ByonoyAbsorbanceBaseUnit(Resource):
   ) -> None:
     if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
       if self.plate_holder._byonoy_base is not None:
-        raise ValueError("ByonoyBase can only have one plate holder assigned.")
+        raise ValueError("ByonoyDriver can only have one plate holder assigned.")
       self.plate_holder._byonoy_base = self
     super().assign_child_resource(resource, location, reassign)
 
   def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     raise RuntimeError(
-      "ByonoyBase does not support assigning child resources directly. "
+      "ByonoyDriver does not support assigning child resources directly. "
       "Use the plate_holder or illumination_unit_holder to assign plates and the "
       "illumination unit, respectively."
     )
