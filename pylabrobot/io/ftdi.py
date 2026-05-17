@@ -74,7 +74,7 @@ class FTDI(IOBase):
         f"Import error: {_PYUSB_ERROR}"
       )
 
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self._device_id = device_id
     self._vid = vid
     self._pid = pid
@@ -86,7 +86,7 @@ class FTDI(IOBase):
 
     if get_capture_or_validation_active():
       raise RuntimeError(
-        f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active"
+        f"Cannot create a new FTDI object for '{self.human_readable_device_name}' while capture or validation is active"
       )
 
   @property
@@ -198,7 +198,7 @@ class FTDI(IOBase):
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
       raise RuntimeError(
-        f"Failed to open FTDI device for '{self._human_readable_device_name}': {e}. "
+        f"Failed to open FTDI device for '{self.human_readable_device_name}': {e}. "
         "Is the device connected? Is it in use by another process? "
         "Try restarting the kernel."
       ) from e
@@ -329,7 +329,7 @@ class FTDI(IOBase):
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "device_id": self._device_id,
       "vid": self._vid,
       "pid": self._pid,
