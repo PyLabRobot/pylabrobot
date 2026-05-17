@@ -1,8 +1,6 @@
-import asyncio
 import contextlib
 import enum
 import logging
-import threading
 import time
 from abc import ABCMeta
 from dataclasses import dataclass
@@ -183,30 +181,24 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
   # documented tables. Lum96 has no documented table; inherits the default.
   _ERROR_NAMES: Dict[int, str] = _GENERIC_ERROR_NAMES
 
-  def __init__(self, pid: int, device_type: ByonoyDevice) -> None:
+  def __init__(self, pid: int, device_type: ByonoyDevice, name: str) -> None:
     super().__init__()
-    self.io = HID(human_readable_device_name="Byonoy Plate Reader", vid=0x16D0, pid=pid)
-    self._background_thread: Optional[threading.Thread] = None
-    self._stop_background = threading.Event()
-    self._ping_interval = 1.0
-    self._sending_pings = False
+    self.io = HID(human_readable_device_name=name, vid=0x16D0, pid=pid)
     self._device_type = device_type
     self._abort_requested = False
     self._in_flight_trigger: Optional[int] = None
 
+  @property
+  def name(self) -> str:
+    return self.io._human_readable_device_name
+
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
-    logger.info("[Byonoy %s pid=0x%04X] connected", self._device_type.name, self.io.pid)
-    self._stop_background.clear()
-    self._background_thread = threading.Thread(target=self._background_ping_worker, daemon=True)
-    self._background_thread.start()
+    logger.info("[%s] connected", self.name)
 
   async def stop(self) -> None:
-    self._stop_background.set()
-    if self._background_thread and self._background_thread.is_alive():
-      self._background_thread.join(timeout=2.0)
     await self.io.stop()
-    logger.info("[Byonoy %s pid=0x%04X] disconnected", self._device_type.name, self.io.pid)
+    logger.info("[%s] disconnected", self.name)
 
   def _assemble_command(self, report_id: int, payload: bytes, routing_info: bytes) -> bytes:
     packet = Writer().u16(report_id).raw_bytes(payload).finish()
@@ -229,9 +221,8 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     while True:
       if time.time() - t0 > 120:
         logger.error(
-          "[Byonoy %s pid=0x%04X] timeout waiting for response to command 0x%04X after 120s",
-          self._device_type.name,
-          self.io.pid,
+          "[%s] timeout waiting for response to command 0x%04X after 120s",
+          self.name,
           report_id,
         )
         raise TimeoutError("Reading data timed out after 2 minutes.")
@@ -243,35 +234,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
         break
     return response
 
-  def _background_ping_worker(self) -> None:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-      loop.run_until_complete(self._ping_loop())
-    except Exception:
-      logger.error("Background ping worker crashed", exc_info=True)
-    finally:
-      loop.close()
-
-  async def _ping_loop(self) -> None:
-    while not self._stop_background.is_set():
-      if self._sending_pings:
-        payload = Writer().u8(1).finish()
-        cmd = self._assemble_command(
-          report_id=0x0040,
-          payload=payload,
-          routing_info=b"\x00\x00",
-        )
-        await self.io.write(cmd)
-      self._stop_background.wait(self._ping_interval)
-
-  def _start_background_pings(self) -> None:
-    self._sending_pings = True
-
-  def _stop_background_pings(self) -> None:
-    self._sending_pings = False
-
-  async def get_status(self) -> ByonoyStatus:
+  async def request_status(self) -> ByonoyStatus:
     """Read REP_STATUS_IN (0x0300): init/slot/error/uptime/measuring/boot."""
     response = await self.send_command(
       report_id=0x0300, payload=b"\x00" * 60, routing_info=b"\x80\x40"
@@ -301,7 +264,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       return self._ERROR_NAMES[code]
     return f"errorCode=0x{code:02x}"
 
-  async def get_environment(self) -> ByonoyEnvironment:
+  async def request_environment(self) -> ByonoyEnvironment:
     """Read REP_ENVIRONMENT_IN (0x0310): temperature, humidity, acceleration."""
     response = await self.send_command(
       report_id=0x0310, payload=b"\x00" * 60, routing_info=b"\x80\x40"
@@ -317,7 +280,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       acceleration_g=(ax / _ACCEL_LSB_PER_G, ay / _ACCEL_LSB_PER_G, az / _ACCEL_LSB_PER_G),
     )
 
-  async def get_api_version(self) -> ByonoyApiVersion:
+  async def request_api_version(self) -> ByonoyApiVersion:
     """Read REP_API_VERSION_IN (0x0050): a single u32."""
     response = await self.send_command(
       report_id=0x0050, payload=b"\x00" * 60, routing_info=b"\x80\x40"
@@ -326,7 +289,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     r = Reader(response[2:])
     return ByonoyApiVersion(version_no=r.u32())
 
-  async def get_supported_reports(self) -> List[int]:
+  async def request_supported_reports(self) -> List[int]:
     """Read REP_SUPPORTED_REPORTS_IN (0x0010): list of report IDs the device supports.
 
     Reply is delivered in seq/seq_len chunks of up to 29 u16 ids; zero-valued
@@ -377,7 +340,8 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     data_type = flags & _FLAG_TYPE_MASK
     if flags & _FLAG_HAS_MORE_DATA:
       logger.warning(
-        "[Byonoy] field 0x%04X has more data than fits in one report; truncating",
+        "[%s] field 0x%04X has more data than fits in one report; truncating",
+        self.name,
         field_index,
       )
     raw = r.raw_bytes(52)
@@ -391,7 +355,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       return raw[0] != 0
     return raw  # TypeBytes
 
-  async def get_device_info(self) -> ByonoyDeviceInfo:
+  async def request_device_info(self) -> ByonoyDeviceInfo:
     """Read identity strings (matches C lib's byonoy_get_device_information)."""
 
     async def s(idx: int) -> str:
@@ -419,12 +383,15 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
         f"Byonoy device busy: report 0x{self._in_flight_trigger:04X} already in "
         f"flight; call cancel() before starting 0x{report_id:04X}."
       )
+    # Entry-side reset is load-bearing for correctness; exit-side is hygiene
+    # so a between-reads inspection doesn't see stale True from a prior cancel.
     self._in_flight_trigger = report_id
     self._abort_requested = False
     try:
       yield
     finally:
       self._in_flight_trigger = None
+      self._abort_requested = False
 
   async def cancel(self) -> None:
     """Abort the in-flight measurement via REP_ABORT_REPORT_OUT (0x0060).
@@ -438,12 +405,12 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     """
     report_id = self._in_flight_trigger
     if report_id is None:
-      logger.info("[Byonoy] cancel(): no measurement in flight; no-op")
+      logger.info("[%s] cancel(): no measurement in flight; no-op", self.name)
       return
     self._abort_requested = True
     payload = Writer().u16(report_id).raw_bytes(b"\x00" * 58).finish()
     await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
-    logger.info("[Byonoy] sent abort for in-flight report 0x%04X", report_id)
+    logger.info("[%s] sent abort for in-flight report 0x%04X", self.name, report_id)
 
   async def set_led_color(
     self,
@@ -467,6 +434,11 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
 
     `force` (FLAG_LED_FORCE=0x10) overrides an unexpired previous
     `duration_ms`. `low_power` (FLAG_LED_LOWPOWER=0x01) reduces brightness.
+
+    `effect_state` is a 0..255 parameter used only by the "progress" effect
+    to indicate fill level (0 = empty bar, 255 = full bar). It is ignored
+    by every other effect ("solid", "breathing", "blinking", "cylon",
+    "rainbow"); leave it at 0 unless you're driving progress.
 
     The PC routing tag (request_info=0x4000) is required — the firmware
     silently drops LED writes that arrive with the default LEGACY tag.
@@ -504,7 +476,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       routing_info=b"\x00\x40",
     )
 
-  async def get_versions(self) -> ByonoyVersions:
+  async def request_versions(self) -> ByonoyVersions:
     """Read REP_VERSIONS_IN (0x0080): system / STM / ESP / bootloader versions."""
     response = await self.send_command(
       report_id=0x0080, payload=b"\x00" * 60, routing_info=b"\x80\x40"

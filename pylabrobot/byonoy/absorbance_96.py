@@ -33,7 +33,7 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
   _ERROR_NAMES = ABS96_ERROR_NAMES
 
   def __init__(self) -> None:
-    super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96)
+    super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96")
     self.available_wavelengths: List[float] = []
 
   async def setup(self, backend_params: Optional["BackendParams"] = None) -> None:
@@ -41,8 +41,8 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
     await self.initialize_measurements()
     self.available_wavelengths = await self.request_available_absorbance_wavelengths()
     logger.info(
-      "[Byonoy A96 pid=0x%04X] ready, available wavelengths: %s nm",
-      self.io.pid,
+      "[%s] ready, available wavelengths: %s nm",
+      self.name,
       self.available_wavelengths,
     )
 
@@ -82,16 +82,17 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
       )
 
       rows: List[float] = []
+      chunk_flags: List[int] = []  # vendor bit definitions unpublished; surface non-zero
       t0 = time.time()
 
       while True:
         if self._abort_requested:
-          logger.info("[Byonoy A96 pid=0x%04X] measurement aborted by cancel()", self.io.pid)
+          logger.info("[%s] measurement aborted by cancel()", self.name)
           raise asyncio.CancelledError("Absorbance measurement aborted via cancel().")
         if time.time() - t0 > 120:
           logger.error(
-            "[Byonoy A96 pid=0x%04X] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
-            self.io.pid,
+            "[%s] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
+            self.name,
             signal_wl,
             reference_wl,
           )
@@ -111,13 +112,29 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
           _ = reader.i16()  # reference_wl_nm
           _ = reader.u32()  # duration_ms
           row = [reader.f32() for _ in range(12)]
-          _ = reader.u8()  # flags
-          _ = reader.u8()  # progress
+          flags = reader.u8()
+          _ = reader.u8()  # progress (0..100 running %); not surfaced
 
           rows.extend(row)
+          chunk_flags.append(flags)
 
           if seq == seq_len - 1:
             break
+
+    status = await self.request_status()
+    if status.error_code != 0:
+      raise RuntimeError(
+        f"{self.name} firmware error after measurement (signal={signal_wl} nm, "
+        f"ref={reference_wl} nm): {self.describe_error_code(status.error_code)} "
+        f"(chunk flags: {[f'0x{f:02x}' for f in chunk_flags]})"
+      )
+    if any(f != 0 for f in chunk_flags):
+      logger.warning(
+        "[%s] non-zero chunk flags during measurement: %s "
+        "(vendor bit definitions not published; data may be unreliable)",
+        self.name,
+        [f"0x{f:02x}" for f in chunk_flags],
+      )
 
     return rows
 
@@ -142,8 +159,8 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
     )
 
     logger.info(
-      "[Byonoy A96 pid=0x%04X] reading absorbance: plate='%s', wavelength=%d nm, wells=%d/%d",
-      self.io.pid,
+      "[%s] reading absorbance: plate='%s', wavelength=%d nm, wells=%d/%d",
+      self.name,
       plate.name,
       wavelength,
       len(wells),

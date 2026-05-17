@@ -38,7 +38,7 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
   """Backend for the Byonoy Luminescence 96 Automate plate reader."""
 
   def __init__(self) -> None:
-    super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96)
+    super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96, name="Byonoy L96")
 
   @dataclass
   class LuminescenceParams(BackendParams):
@@ -50,17 +50,10 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
         byonoy_device_library mapping.
       integration_time: Integration time in seconds. If set, forces "custom"
         mode regardless of `mode`. Required when `mode == "custom"`.
-      selected_wells: Optional 96-bool mask in plate row-major order (A1..H12).
-        If None, the wells passed to `read_luminescence` decide which wells
-        are reported (defaulting to all 96). Note: this is an output filter,
-        not a measurement optimisation — the firmware scans all 96 wells in
-        every read and zero-fills the unselected ones in the result. Useful
-        for cleaner downstream processing; does not reduce read time.
     """
 
     mode: Lum96IntegrationMode = "sensitive"
     integration_time: Optional[float] = None
-    selected_wells: Optional[List[bool]] = None
 
   async def read_luminescence(
     self,
@@ -95,19 +88,16 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
       mode = backend_params.mode
       integration_time = LUM96_PRESET_S[mode]
 
-    # Resolve well mask
-    if backend_params.selected_wells is not None:
-      mask_bools = backend_params.selected_wells
-    else:
-      all_items = plate.get_all_items()
-      well_set = set(id(w) for w in wells)
-      mask_bools = [id(w) in well_set for w in all_items]
+    # Firmware always scans all 96 wells; this mask only filters which are
+    # reported (others come back as 0.0). Single source of truth: the wells arg.
+    well_set = set(id(w) for w in wells)
+    mask_bools = [id(w) in well_set for w in plate.get_all_items()]
 
     well_mask = encode_well_bitmask(mask_bools, n=96)
     logger.info(
-      "[Byonoy L96 pid=0x%04X] reading luminescence: plate='%s', mode=%s, "
+      "[%s] reading luminescence: plate='%s', mode=%s, "
       "integration_time=%.3fs, wells=%d/96",
-      self.io.pid,
+      self.name,
       plate.name,
       mode,
       integration_time,
@@ -144,13 +134,14 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
 
       t0 = time.time()
       all_rows: List[Optional[float]] = []
+      chunk_flags: List[int] = []  # vendor bit definitions unpublished; surface non-zero
 
       while True:
         if self._abort_requested:
-          logger.info("[Byonoy L96 pid=0x%04X] read aborted by cancel()", self.io.pid)
+          logger.info("[%s] read aborted by cancel()", self.name)
           raise asyncio.CancelledError("Luminescence read aborted via cancel().")
         if time.time() - t0 > 120:
-          logger.error("[Byonoy L96 pid=0x%04X] luminescence read timed out after 120s", self.io.pid)
+          logger.error("[%s] luminescence read timed out after 120s", self.name)
           raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
 
         chunk = await self.io.read(64, timeout=2)
@@ -166,19 +157,42 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
           _ = reader.u32()  # integration_time_us
           _ = reader.u32()  # duration_ms
           row = [reader.f32() for _ in range(12)]
-          _ = reader.u8()  # flags
-          _ = reader.u8()  # progress
+          flags = reader.u8()
+          _ = reader.u8()  # progress (0..100 running %); not surfaced
 
           all_rows.extend(row)
+          chunk_flags.append(flags)
 
           if seq == seq_len - 1:
             break
 
-    hybrid_result: List[Optional[float]] = all_rows[96 * 0 : 96 * 1]
+    # Check firmware health before trusting the data. error_code is the
+    # authoritative post-measurement status byte; per-chunk flags are
+    # undocumented but a non-zero value means the firmware flagged the chunk.
+    status = await self.request_status()
+    if status.error_code != 0:
+      raise RuntimeError(
+        f"{self.name} firmware error after read: "
+        f"{self.describe_error_code(status.error_code)} "
+        f"(chunk flags: {[f'0x{f:02x}' for f in chunk_flags]})"
+      )
+    if any(f != 0 for f in chunk_flags):
+      logger.warning(
+        "[%s] non-zero chunk flags during read: %s "
+        "(vendor bit definitions not published; data may be unreliable)",
+        self.name,
+        [f"0x{f:02x}" for f in chunk_flags],
+      )
+    assert len(all_rows) == 96, f"expected 96 luminescence values, got {len(all_rows)}"
+
+    # Firmware zero-fills wells outside the mask. Convert those to None per
+    # the LuminescenceResult contract ("None for unmeasured wells") — 0.0 is
+    # a legitimate measurement (baseline subtraction can yield ~0 or negative).
+    masked: List[Optional[float]] = [v if m else None for v, m in zip(all_rows, mask_bools)]
 
     return [
       LuminescenceResult(
-        data=reshape_2d(hybrid_result, (8, 12)),
+        data=reshape_2d(masked, (8, 12)),
         temperature=None,
         timestamp=time.time(),
       )
