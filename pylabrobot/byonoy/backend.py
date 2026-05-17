@@ -153,6 +153,7 @@ class Abs96StatusError(enum.IntEnum):
 
 class Abs1StatusError(enum.IntFlag):
   """AbsOne errors are a bit-flag set — multiple can be raised at once."""
+
   NO_ERROR = 0
   AMBIENT_LIGHT = 1
   MIN_LIGHT = 2
@@ -330,9 +331,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     (shouldn't happen for the short identity strings; log if it does).
     """
     payload = Writer().u16(field_index).u8(0).raw_bytes(b"\x00" * 57).finish()
-    response = await self.send_command(
-      report_id=0x0200, payload=payload, routing_info=b"\x80\x40"
-    )
+    response = await self.send_command(report_id=0x0200, payload=payload, routing_info=b"\x80\x40")
     assert response is not None
     r = Reader(response[2:])
     _ = r.u16()  # echoed field_index
@@ -448,14 +447,18 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     payload = (
       Writer()
       .u8(_LED_EFFECT_CODES[effect])
-      .u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
+      .u8(r_ & 0xFF)
+      .u8(g & 0xFF)
+      .u8(b & 0xFF)
       .u8(effect_state & 0xFF)
       .u8(flags)
       .u32(int(duration_ms))
       .finish()
     )
     await self.send_command(
-      report_id=0x0351, payload=payload, wait_for_response=False,
+      report_id=0x0351,
+      payload=payload,
+      wait_for_response=False,
       routing_info=b"\x00\x40",
     )
 
@@ -472,7 +475,9 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     for r_, g, b in pixels:
       w.u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
     await self.send_command(
-      report_id=0x0350, payload=w.finish(), wait_for_response=False,
+      report_id=0x0350,
+      payload=w.finish(),
+      wait_for_response=False,
       routing_info=b"\x00\x40",
     )
 

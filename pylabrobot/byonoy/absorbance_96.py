@@ -3,7 +3,7 @@ import logging
 import time
 from typing import List, Optional, Tuple
 
-from pylabrobot.byonoy.backend import ABS96_ERROR_NAMES, ByonoyDriver, ByonoyDevice
+from pylabrobot.byonoy.backend import ABS96_ERROR_NAMES, ByonoyDevice, ByonoyDriver
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import (
   Absorbance,

@@ -6,8 +6,8 @@ from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.backend import (
   LUM96_PRESET_S,
-  ByonoyDriver,
   ByonoyDevice,
+  ByonoyDriver,
   Lum96IntegrationMode,
   encode_well_bitmask,
 )
@@ -95,8 +95,7 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
 
     well_mask = encode_well_bitmask(mask_bools, n=96)
     logger.info(
-      "[%s] reading luminescence: plate='%s', mode=%s, "
-      "integration_time=%.3fs, wells=%d/96",
+      "[%s] reading luminescence: plate='%s', mode=%s, integration_time=%.3fs, wells=%d/96",
       self.name,
       plate.name,
       mode,
