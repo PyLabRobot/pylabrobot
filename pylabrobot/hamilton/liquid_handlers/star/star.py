@@ -4,8 +4,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from pylabrobot.capabilities.arms.arm import GripperArm
-from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.arm import FixedAxisGripperArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.pip import PIP
@@ -33,7 +33,7 @@ class _HamiltonSTAR(Device):
     self.deck = deck
     self.pip: PIP  # set in setup()
     self.head96: Optional[Head96] = None  # set in setup() if installed
-    self.iswap: Optional[OrientableArm] = None  # set in setup() if installed
+    self.iswap: Optional[OrientableGripperArm] = None  # set in setup() if installed
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.driver.setup(backend_params=backend_params)
@@ -49,7 +49,7 @@ class _HamiltonSTAR(Device):
 
     # iSWAP only if installed.
     if self.driver.iswap is not None:
-      self.iswap = OrientableArm(backend=self.driver.iswap, reference_resource=self.deck)
+      self.iswap = OrientableGripperArm(backend=self.driver.iswap, reference_resource=self.deck)
       self._capabilities.append(self.iswap)
 
     # Matches legacy: autoload runs in parallel with arm modules.
@@ -85,7 +85,7 @@ class _HamiltonSTAR(Device):
     front_offset: Coordinate = Coordinate.zero(),
     back_offset: Coordinate = Coordinate.zero(),
     traversal_height: float = 280.0,
-  ) -> AsyncIterator[GripperArm]:
+  ) -> AsyncIterator[FixedAxisGripperArm]:
     """Context manager that picks up CoRe gripper tools on enter and returns them on exit.
 
     Usage::
@@ -121,7 +121,7 @@ class _HamiltonSTAR(Device):
     )
 
     backend = CoreGripper(driver=self.driver)
-    arm = GripperArm(backend=backend, reference_resource=self.deck, grip_axis="y")
+    arm = FixedAxisGripperArm(backend=backend, reference_resource=self.deck, grip_axis="y")
 
     try:
       yield arm

@@ -588,23 +588,14 @@ class iSWAPBackend(OrientableGripperArmBackend):
     )
     self._parked = True
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Open the iSWAP gripper.
-
-    Args:
-      gripper_width: Open position [mm].
-      backend_params: Unused, reserved for future use.
-    """
-    if not 0 <= gripper_width <= 999.9:
-      raise ValueError("gripper_width must be between 0 and 999.9")
-
-    await self.driver.send_command(module="C0", command="GF", go=f"{round(gripper_width * 10):04}")
+  # Physical jaw range for the iSWAP gripper. The firmware accepts up to 999.9 mm,
+  # but the mechanism cannot actually reach those extremes.
+  min_gripper_width: float = 50.0
+  max_gripper_width: float = 145.0
 
   @dataclass
-  class CloseGripperParams(BackendParams):
-    """Parameters for closing the iSWAP gripper.
+  class GripParams(BackendParams):
+    """Parameters for a force-sensing close on the iSWAP gripper.
 
     The gripper should be at position plate_width + plate_width_tolerance + 2.0 mm
     before sending this command.
@@ -619,22 +610,37 @@ class iSWAPBackend(OrientableGripperArmBackend):
     grip_strength: int = 5
     plate_width_tolerance: float = 2.0
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
-    """Close the iSWAP gripper.
+    """Move the iSWAP gripper jaws.
 
     Args:
-      gripper_width: Plate width [mm].
-      backend_params: iSWAP.CloseGripperParams with grip_strength and plate_width_tolerance.
+      width: Target jaw width [mm]. Must be between 0 and 999.9.
+      force_sensing: If True, close with force feedback (C0 GC) and stop on
+        contact. If False, drive the jaws to ``width`` without sensing (C0 GF).
+      backend_params: iSWAP.GripParams. Only valid when ``force_sensing=True``;
+        passing it with ``force_sensing=False`` raises ``ValueError``.
     """
-    if not isinstance(backend_params, iSWAPBackend.CloseGripperParams):
-      backend_params = iSWAPBackend.CloseGripperParams()
+    if not 0 <= width <= 999.9:
+      raise ValueError("width must be between 0 and 999.9")
 
+    if not force_sensing:
+      if backend_params is not None:
+        raise ValueError(
+          "GripParams is only valid with force_sensing=True. "
+          "Drop backend_params or set force_sensing=True."
+        )
+      await self.driver.send_command(module="C0", command="GF", go=f"{round(width * 10):04}")
+      return
+
+    if not isinstance(backend_params, iSWAPBackend.GripParams):
+      backend_params = iSWAPBackend.GripParams()
     if not 0 <= backend_params.grip_strength <= 9:
       raise ValueError("grip_strength must be between 0 and 9")
-    if not 0 <= gripper_width <= 999.9:
-      raise ValueError("gripper_width must be between 0 and 999.9")
     if not 0.5 <= backend_params.plate_width_tolerance <= 9.9:
       raise ValueError("plate_width_tolerance must be between 0.5 and 9.9")
 
@@ -642,7 +648,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       module="C0",
       command="GC",
       gw=backend_params.grip_strength,
-      gb=f"{round(gripper_width * 10):04}",
+      gb=f"{round(width * 10):04}",
       gt=f"{round(backend_params.plate_width_tolerance * 10):02}",
     )
 

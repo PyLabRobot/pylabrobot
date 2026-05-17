@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Union
 
-from pylabrobot.capabilities.arms.arm import GripperOrientation, _BaseArm, _PickedUpState
+from pylabrobot.capabilities.arms.arm import GripperArm, GripperOrientation, _PickedUpState
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
 from pylabrobot.capabilities.arms.standard import (
   _GRIPPER_DIRECTION_VALUES,
@@ -34,25 +34,12 @@ def _resolve_direction(direction: GripperOrientation) -> float:
   return direction
 
 
-class OrientableArm(_BaseArm):
-  """An arm with rotation capability. E.g. Hamilton iSWAP."""
+class OrientableGripperArm(GripperArm):
+  """A gripper arm with rotation capability. E.g. Hamilton iSWAP."""
 
   def __init__(self, backend: OrientableGripperArmBackend, reference_resource: Resource):
-    super().__init__(backend=backend, reference_resource=reference_resource)
+    super().__init__(backend=backend, reference_resource=reference_resource)  # type: ignore[arg-type]
     self.backend: OrientableGripperArmBackend = backend  # type: ignore[assignment]
-
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    await self.backend.open_gripper(gripper_width=gripper_width, backend_params=backend_params)
-
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    await self.backend.close_gripper(gripper_width=gripper_width, backend_params=backend_params)
-
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   @staticmethod
   def _resource_width_for_direction(resource: Resource, direction: float) -> float:
@@ -98,10 +85,7 @@ class OrientableArm(_BaseArm):
     )
     dir_degrees = _resolve_direction(direction)
     resource_width = self._resource_width_for_direction(resource, dir_degrees)
-    # if gripper:
     await self.pick_up_at_location(location, resource_width, dir_degrees, backend_params)
-    # if suction:
-    # TODO:
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,

@@ -1,31 +1,18 @@
 from typing import List, Optional, Union
 
-from pylabrobot.capabilities.arms.arm import _BaseArm, _PickedUpState
+from pylabrobot.capabilities.arms.arm import GripperArm, _PickedUpState
 from pylabrobot.capabilities.arms.backend import ArticulatedGripperArmBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder, ResourceStack
 from pylabrobot.resources.rotation import Rotation
 
 
-class ArticulatedArm(_BaseArm):
-  """An arm with full 3D rotation capability. E.g. a 6-axis robot arm."""
+class ArticulatedGripperArm(GripperArm):
+  """A gripper arm with full 3D rotation capability. E.g. a 6-axis robot arm."""
 
   def __init__(self, backend: ArticulatedGripperArmBackend, reference_resource: Resource):
-    super().__init__(backend=backend, reference_resource=reference_resource)
+    super().__init__(backend=backend, reference_resource=reference_resource)  # type: ignore[arg-type]
     self.backend: ArticulatedGripperArmBackend = backend  # type: ignore[assignment]
-
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    await self.backend.open_gripper(gripper_width=gripper_width, backend_params=backend_params)
-
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    await self.backend.close_gripper(gripper_width=gripper_width, backend_params=backend_params)
-
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   @staticmethod
   def _resource_width_for_rotation(resource: Resource, rotation: Rotation) -> float:
