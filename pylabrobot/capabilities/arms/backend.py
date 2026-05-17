@@ -37,12 +37,18 @@ class CanFreedrive(metaclass=ABCMeta):
 
   @abstractmethod
   async def start_freedrive_mode(
-    self, free_axes: List[int], backend_params: Optional[BackendParams] = None
+    self,
+    free_axes: Optional[List[int]] = None,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
     Args:
-      free_axes: List of joint indices to free. Use [0] for all axes.
+      free_axes: List of joint indices to free. ``None`` or ``[0]`` mean
+        the backend's default ("all freeable axes" — typically all motion
+        axes, excluding load-bearing axes like a gripper that's holding a
+        plate). Backends may reject per-axis selection if they only
+        support all-or-nothing freedrive.
     """
 
   @abstractmethod
