@@ -13,18 +13,6 @@ from pylabrobot.resources import generate_geometry_catalog
 
 LIBRARY_RELATIVE_ROOT = Path("resources") / "library"
 GEOMETRY_INDEX_FILENAME = "labware_geometry_index.json"
-RESOURCE_ALIASES = {
-  "Azenta4titudeFrameStar_96_wellplate_skirted": "Azenta4titudeFrameStar_96_wellplate_200ul_Vb",
-  "BioRad_384_DWP_50uL_Vb": "BioRad_384_wellplate_50uL_Vb",
-  "CellTreat_6_DWP_16300ul_Fb": "CellTreat_6_wellplate_16300ul_Fb",
-  "Cor_12_wellplate_6900ul_Fb": "Cor_Cos_12_wellplate_6900ul_Fb",
-  "Cor_24_wellplate_3470ul_Fb": "Cor_Cos_24_wellplate_3470ul_Fb",
-  "Cor_48_wellplate_1620ul_Fb": "Cor_Cos_48_wellplate_1620ul_Fb",
-  "Cos_96_wellplate_2mL_Vb": "Cor_96_wellplate_2mL_Vb",
-  "Cos_6_wellplate_16800ul_Fb": "Cor_Cos_6_wellplate_16800ul_Fb",
-  "Hamilton_mfx_plateholder_DWP_metal_tapped": "hamilton_mfx_plateholder_DWP_metal_tapped",
-  "PLT_CAR_P3AC": "PLT_CAR_P3AC_A00",
-}
 
 
 def _library_doc_paths(srcdir: str) -> List[Path]:
@@ -180,11 +168,10 @@ def _resolve_definition_callable(
   definition_name: str,
   registry: Dict[str, Callable[..., Any]],
 ) -> tuple[Optional[str], Optional[Callable[..., Any]]]:
-  candidate_name = RESOURCE_ALIASES.get(definition_name, definition_name)
-  if candidate_name in registry:
-    return candidate_name, registry[candidate_name]
+  if definition_name in registry:
+    return definition_name, registry[definition_name]
 
-  lowered = candidate_name.lower()
+  lowered = definition_name.lower()
   matches = [name for name in registry if name.lower() == lowered]
   if len(matches) == 1:
     match = matches[0]

@@ -19,7 +19,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | - | - | - |
 | 'PLT_CAR_L5AC_A00'<br>Part no.: 182090<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182090) <br>Carrier for 5x 96 Deep Well Plates or for 5x 384 tip racks (e.g.384HEAD_384TIPS_50μl) (6T) | ![](img/hamilton/PLT_CAR_L5AC_A00_182090.jpg) | `PLT_CAR_L5AC_A00` |
 | 'PLT_CAR_L5MD_A00'<br>Part no.: 182365/02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Carries five ANSI/SLAS footprint MTPs in landscape orientation. Occupies six tracks.| ![](img/hamilton/182365-Plate-Carrier.webp) | `PLT_CAR_L5MD_A00` |
-| 'PLT_CAR_P3AC'<br>Part no.: 182365/03<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Hamilton Deepwell Plate Carrier for 3 Plates (Portrait, 6 tracks wide)| ![](img/hamilton/PLT_CAR_P3AC.jpg) | `PLT_CAR_P3AC` |
+| 'PLT_CAR_P3AC_A00'<br>Part no.: 182365/03<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Hamilton Deepwell Plate Carrier for 3 Plates (Portrait, 6 tracks wide)| ![](img/hamilton/PLT_CAR_P3AC_A00.jpg) | `PLT_CAR_P3AC_A00` |
 | 'PLT_CAR_L5_DWP'<br>Part no.:  93522-01/03<br>manufacturer website? <br>Hamilton Plate Carrier for 5 Plates (Landscape, 6 tracks wide). Plastic tabs. | ![](img/hamilton/PLT_CAR_L5_DWP.jpg) | `PLT_CAR_L5_DWP` |
 
 ### MFX carriers
@@ -41,7 +41,7 @@ See [MFX Carrier documentation](/resources/carrier/mfx-carrier/mfx_carrier).
 | 'MFX_TIP_module'<br>Part no.: 188160 or 188040<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188040) <br>Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack) | ![](img/hamilton/MFX_TIP_module_188040.jpg) | `MFX_TIP_module` |
 | 'hamilton_mfx_plateholder_DWP_flat'<br>Part no.: 188229<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188229) (<-non-functional link?) <br>MFX DWP module rack-based | ![](img/hamilton/MFX_DWP_RB_module_188229_.jpg) | `hamilton_mfx_plateholder_DWP_flat` |
 | 'MFX_DWP_module_flat'<br>Part no.: 6601988-01<br>manufacturer website unknown | ![](img/hamilton/MFX_DWP_module_flat.jpg) | `MFX_DWP_module_flat` |
-| 'Hamilton_mfx_plateholder_DWP_metal_tapped'<br>Part no.: 188042 <br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/188042)<br>Carries a single ANSI/SLAS footprint DWP, a Matrix or Micronics tube rack, or a Nunc reagent reservoir. Occupies one MFX site.| ![](img/hamilton/hamilton_MFX_plateholder_DWP_metal_tapped.png) | `Hamilton_mfx_plateholder_DWP_metal_tapped` |
+| 'hamilton_mfx_plateholder_DWP_metal_tapped'<br>Part no.: 188042 <br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/188042)<br>Carries a single ANSI/SLAS footprint DWP, a Matrix or Micronics tube rack, or a Nunc reagent reservoir. Occupies one MFX site.| ![](img/hamilton/hamilton_mfx_plateholder_DWP_metal_tapped.png) | `hamilton_mfx_plateholder_DWP_metal_tapped` |
 
 ### Tube carriers
 
