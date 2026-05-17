@@ -192,7 +192,6 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     self._sending_pings = False
     self._device_type = device_type
     self._abort_requested = False
-    self._led_bar_warning_issued = False
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
@@ -423,82 +422,33 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
     logger.info("[Byonoy] sent abort for report 0x%04X", report_id)
 
-  async def _warn_if_likely_no_led_bar(self) -> None:
-    """Log a one-time warning if this device is likely a non-Automate SKU
-    without a physical RGB bar. Heuristic: serial number prefix.
-
-    Both the standalone L96 ("BYOMML*") and the Automate L96A ("BYOMAL*")
-    share the same USB PID, firmware build, and HID protocol — the reports
-    are accepted on both, but the standalone hardware appears to lack the
-    20-pixel RGB bar, so the writes have no visible effect. Tested only on
-    the Automate (PR #1027 was validated on serial BYOMAL00029).
-    """
-    if self._led_bar_warning_issued:
-      return
-    self._led_bar_warning_issued = True
-    try:
-      info = await self.get_device_info()
-    except Exception:
-      return
-    if not info.serial_no.startswith("BYOMAL"):
-      logger.warning(
-        "[Byonoy] LED bar writes may have no visible effect on this device "
-        "(serial=%s). The 20-pixel RGB bar has only been validated on the "
-        "Automate variant (serial prefix 'BYOMAL'). Standalone L96 ('BYOMML') "
-        "hardware appears not to have the bar; firmware accepts the report "
-        "either way.",
-        info.serial_no,
-      )
-
-  async def set_led(
+  async def set_led_color(
     self,
-    colors: List[Tuple[int, int, int]],
+    color: Tuple[int, int, int],
     effect: LedEffect = LedEffect.SOLID,
     *,
+    low_power: bool = False,
+    force: bool = False,
     effect_state: int = 0,
     duration_ms: int = 0,
   ) -> None:
-    """Set the 20-LED bar via REP_LED_BAR_COLOURS_OUT (0x0350).
+    """Set the LED bar to a single color via REP_LED_BAR_EFFECTS_OUT (0x0351).
 
-    First switches the bar into manual mode (FLAG_LED_MANUAL | FLAG_LED_FORCE)
-    under the requested `effect` so the firmware doesn't overwrite the colors
-    with its own animation, then sends the 20-pixel buffer. Pads with black if
-    fewer than 20 are given.
-
-    Visible only on Automate-variant hardware (serial prefix "BYOMAL"); the
-    standalone L96 ("BYOMML") accepts the reports but appears to lack the
-    physical RGB bar. A one-time warning is logged on non-Automate devices.
-    """
-    await self._warn_if_likely_no_led_bar()
-    base = colors[0] if colors else (0, 0, 0)
-    await self._set_led_effect(effect, color=base, manual=True,
-                               effect_state=effect_state, duration_ms=duration_ms)
-    pixels = list(colors[:20]) + [(0, 0, 0)] * max(0, 20 - len(colors))
-    w = Writer()
-    for r_, g, b in pixels:
-      w.u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
-    await self.send_command(
-      report_id=0x0350, payload=w.finish(), wait_for_response=False
-    )
-
-  async def _set_led_effect(
-    self,
-    effect: LedEffect,
-    color: Tuple[int, int, int] = (0, 0, 0),
-    effect_state: int = 0,
-    manual: bool = False,
-    duration_ms: int = 0,
-  ) -> None:
-    """Set the LED bar effect via REP_LED_BAR_EFFECTS_OUT (0x0351).
+    Mirrors the vendor's user-facing `set_led_effect(effect, color, modes, ...)`
+    in byonoy_device_library. The firmware renders `effect` over `color`:
+    SOLID just shows the color; BREATHING/CYLON/BLINKING/RAINBOW/PROGRESS
+    animate it.
 
     Packed layout (vendor byonoyusbhid.h led_bar_effects_out_t):
       effect:u8  color:(r,g,b u8)  effect_state:u8  flags:u8  duration_ms:u32
 
-    See `set_led` for the SKU caveat — visible only on Automate hardware.
+    `force` (FLAG_LED_FORCE=0x10) overrides an unexpired previous
+    `duration_ms`. `low_power` (FLAG_LED_LOWPOWER=0x01) reduces brightness.
+
+    The PC routing tag (request_info=0x4000) is required — the firmware
+    silently drops LED writes that arrive with the default LEGACY tag.
     """
-    await self._warn_if_likely_no_led_bar()
-    # FLAG_LED_MANUAL=0x02, FLAG_LED_FORCE=0x10 — force overrides idle state.
-    flags = (0x02 | 0x10) if manual else 0
+    flags = (0x01 if low_power else 0) | (0x10 if force else 0)
     r_, g, b = color
     payload = (
       Writer()
@@ -510,7 +460,25 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
       .finish()
     )
     await self.send_command(
-      report_id=0x0351, payload=payload, wait_for_response=False
+      report_id=0x0351, payload=payload, wait_for_response=False,
+      routing_info=b"\x00\x40",
+    )
+
+  async def set_led_colors(self, colors: List[Tuple[int, int, int]]) -> None:
+    """Set each of the 20 LED bar pixels individually via
+    REP_LED_BAR_COLOURS_OUT (0x0350). Pads with black if fewer than 20 are
+    given; truncates if more. Fast enough for real-time animation (~30+ fps).
+
+    Like `set_led_color`, requires the PC routing tag (request_info=0x4000);
+    the firmware silently drops writes with the default LEGACY tag.
+    """
+    pixels = list(colors[:20]) + [(0, 0, 0)] * max(0, 20 - len(colors))
+    w = Writer()
+    for r_, g, b in pixels:
+      w.u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
+    await self.send_command(
+      report_id=0x0350, payload=w.finish(), wait_for_response=False,
+      routing_info=b"\x00\x40",
     )
 
   async def get_versions(self) -> ByonoyVersions:

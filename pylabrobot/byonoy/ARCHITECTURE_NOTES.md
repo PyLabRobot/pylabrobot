@@ -54,10 +54,9 @@ When a future PR refactors:
 
 ### F1 — LED control could be a P-16 helper subsystem (soft)
 
-`set_led` (public) and `_set_led_effect` (private helper) live as flat
-methods on the `Driver`. They form a coherent subsystem (touch reports
-0x0350 / 0x0351, share manual-mode coordination — `set_led` already
-chains an effect-set + color-write). v1b1 precedent: `STARCover`,
+`set_led` lives as a flat method on the `Driver`. It mirrors the vendor
+`set_led_effect(effect, color, modes, ...)` API one-for-one (single
+REP_LED_BAR_EFFECTS_OUT report). v1b1 precedent: `STARCover`,
 `STARWashStation`, `NimbusDoor` group related operations into a plain
 helper class attached as a Driver attribute, with `_on_setup` /
 `_on_stop` hooks.
@@ -67,12 +66,12 @@ Suggested shape:
 ```python
 class ByonoyLEDBar:
   """Plain helper class (not a CapabilityBackend), following the
-  STARCover pattern. Drives the 20-pixel front bar."""
+  STARCover pattern."""
   def __init__(self, driver: ByonoyDriver) -> None:
     self._driver = driver
   async def _on_setup(self) -> None: pass
   async def _on_stop(self) -> None: pass
-  async def set(self, colors: List[Tuple[int, int, int]],
+  async def set(self, color: Tuple[int, int, int],
                 effect: LedEffect = LedEffect.SOLID, ...) -> None: ...
 ```
 
