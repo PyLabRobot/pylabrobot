@@ -8,7 +8,7 @@ Status: **proposal, not yet enforced or wired.** This describes the target
 structure for `docs/resources/library/<vendor>.md` so that (a) the full
 manufacturer / OEM information is captured deterministically and (b) the
 resources are organised into a consistent, machine-readable hierarchy that the
-Resource Catalog can render and CI can validate.
+Resource Library can render and CI can validate.
 
 It deliberately replaces heuristics in today's catalog extension ("first link
 in the preamble", "first blockquote", "first fenced code block") with explicit,
