@@ -143,8 +143,8 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       th=2000,
     )
 
-  async def test_open_gripper(self):
-    await self.iswap.open_gripper(gripper_width=130.8)
+  async def test_move_gripper_position(self):
+    await self.iswap.move_gripper(width=130.8, force_sensing=False)
 
     self.mock_driver.send_command.assert_called_once_with(
       module="C0",
@@ -152,10 +152,11 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       go="1308",
     )
 
-  async def test_close_gripper(self):
-    await self.iswap.close_gripper(
-      gripper_width=86.0,
-      backend_params=iSWAPBackend.CloseGripperParams(grip_strength=5, plate_width_tolerance=2.0),
+  async def test_move_gripper_grip(self):
+    await self.iswap.move_gripper(
+      width=86.0,
+      force_sensing=True,
+      backend_params=iSWAPBackend.GripParams(grip_strength=5, plate_width_tolerance=2.0),
     )
 
     self.mock_driver.send_command.assert_called_once_with(
@@ -165,6 +166,15 @@ class TestiSWAPCommands(unittest.IsolatedAsyncioTestCase):
       gb="0860",
       gt="20",
     )
+
+  async def test_move_gripper_rejects_params_without_force_sensing(self):
+    with self.assertRaises(ValueError):
+      await self.iswap.move_gripper(
+        width=130.0,
+        force_sensing=False,
+        backend_params=iSWAPBackend.GripParams(grip_strength=5),
+      )
+    self.mock_driver.send_command.assert_not_called()
 
   async def test_is_gripper_closed(self):
     self.mock_driver.send_command.return_value = {"ph": 1}
