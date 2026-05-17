@@ -39,7 +39,7 @@ finger forward.
 
 from dataclasses import dataclass, field
 from math import asin, atan2, ceil, cos, degrees, hypot, pi, radians, sin, sqrt, trunc
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from pylabrobot.capabilities.arms import kinematics as arm_kinematics
 from pylabrobot.capabilities.arms.standard import CartesianPose
@@ -160,7 +160,39 @@ def ik(pose: CartesianPose, c: KX2Config, t: GripperParams) -> Dict[Axis, float]
   # wrist_joint = ext_world - shoulder.
   wrist = ext_deg - shoulder
 
-  return {Axis.SHOULDER: shoulder, Axis.Z: wrist_z, Axis.ELBOW: elbow, Axis.WRIST: wrist}
+  joints = {Axis.SHOULDER: shoulder, Axis.Z: wrist_z, Axis.ELBOW: elbow, Axis.WRIST: wrist}
+
+  # Enforce per-axis joint travel limits. Rotary axes (shoulder, wrist) are
+  # 360°-periodic and a downstream `snap_to_current` may wrap them — check
+  # only the *non-wrappable* representative (the canonical solution in this
+  # call). Linear axes (Z, elbow) get a strict check. Raising here aborts
+  # the caller before any motion command leaves the host.
+  for ax in (Axis.Z, Axis.ELBOW):
+    cfg_ax = c.axes[ax]
+    val = joints[ax]
+    if val < cfg_ax.min_travel or val > cfg_ax.max_travel:
+      raise IKError(
+        f"{ax.name} out of range: {val:.3f} not in "
+        f"[{cfg_ax.min_travel:.3f}, {cfg_ax.max_travel:.3f}] "
+        f"for pose location={pose.location}, yaw={pose.rotation.z}"
+      )
+  for ax in (Axis.SHOULDER, Axis.WRIST):
+    cfg_ax = c.axes[ax]
+    if cfg_ax.unlimited_travel:
+      continue
+    # Pull the canonical solution into the range straddling the limits before
+    # checking, so a -180° solution against a [-90, 270] axis doesn't false-fail.
+    val = joints[ax]
+    mid = 0.5 * (cfg_ax.min_travel + cfg_ax.max_travel)
+    val += 360.0 * round((mid - val) / 360.0)
+    if val < cfg_ax.min_travel or val > cfg_ax.max_travel:
+      raise IKError(
+        f"{ax.name} out of range: {val:.3f}° not in "
+        f"[{cfg_ax.min_travel:.3f}, {cfg_ax.max_travel:.3f}]° "
+        f"for pose location={pose.location}, yaw={pose.rotation.z}"
+      )
+
+  return joints
 
 
 def snap_to_current(
@@ -651,11 +683,12 @@ def sample_linear_path(
   # to force it. Forcing zero against a non-trivial v[n-2] would create
   # the cubic-Hermite overshoot the trailing hold is meant to avoid.
   n = len(poses)
+  # V[0] forced to 0 (matches C# MotorsMovePath line 4242). Some drives reject
+  # the first preload frame if it has non-zero velocity.
   enc_vel: Dict[Axis, List[int]] = {ax: [0] * n for ax in _LINEAR_PATH_AXES}
   for ax in _LINEAR_PATH_AXES:
     seq = enc_pos[ax]
     if n >= 2:
-      enc_vel[ax][0] = int(round((seq[1] - seq[0]) / dt_s))
       for i in range(1, n - 1):
         enc_vel[ax][i] = int(round((seq[i + 1] - seq[i - 1]) / (2.0 * dt_s)))
       enc_vel[ax][n - 1] = int(round((seq[n - 1] - seq[n - 2]) / dt_s))
@@ -669,3 +702,215 @@ def sample_linear_path(
       encoder_velocity={ax: enc_vel[ax][i] for ax in _LINEAR_PATH_AXES},
     ))
   return out
+
+
+def _build_samples_from_joints(
+  joints_seq: List[Dict[Axis, float]],
+  cfg: KX2Config,
+  dt_s: float,
+) -> List[LinearPathSample]:
+  """Convert a joint-space sequence into encoder-domain PVT samples.
+
+  Mirrors the encoder + central-diff velocity block of ``sample_linear_path``.
+  Shared by every sampler so they all produce identically-formed samples.
+  """
+  n = len(joints_seq)
+  enc_pos: Dict[Axis, List[int]] = {ax: [] for ax in _LINEAR_PATH_AXES}
+  for joints in joints_seq:
+    for ax in _LINEAR_PATH_AXES:
+      conv = cfg.axes[ax].motor_conversion_factor
+      val = joints[ax]
+      if ax is Axis.ELBOW:
+        val = convert_elbow_position_to_angle(cfg, val)
+      enc_pos[ax].append(int(round(val * conv)))
+  # V[0]=0 (matches sample_linear_path and C# MotorsMovePath line 4242).
+  # Forward-diff initial velocity makes drives reject the first preload frame
+  # in some configurations (queue_full on first write).
+  enc_vel: Dict[Axis, List[int]] = {ax: [0] * n for ax in _LINEAR_PATH_AXES}
+  for ax in _LINEAR_PATH_AXES:
+    seq = enc_pos[ax]
+    if n >= 2:
+      for i in range(1, n - 1):
+        enc_vel[ax][i] = int(round((seq[i + 1] - seq[i - 1]) / (2.0 * dt_s)))
+      enc_vel[ax][n - 1] = int(round((seq[n - 1] - seq[n - 2]) / dt_s))
+  return [
+    LinearPathSample(
+      time_s=i * dt_s,
+      joints=joints_seq[i],
+      encoder_position={ax: enc_pos[ax][i] for ax in _LINEAR_PATH_AXES},
+      encoder_velocity={ax: enc_vel[ax][i] for ax in _LINEAR_PATH_AXES},
+    ) for i in range(n)
+  ]
+
+
+def _ik_pose_sequence(
+  poses: List[CartesianPose],
+  cfg: KX2Config,
+  gripper_params: GripperParams,
+  current_joints: Optional[Dict[Axis, float]],
+) -> List[Dict[Axis, float]]:
+  """IK every pose, snap rotary axes to the previous solution (avoiding 360°
+  unwinds across the trajectory). Raises IKError on the first out-of-range
+  pose with the trajectory-relative index in the message."""
+  prev: Optional[Dict[Axis, float]] = (
+    dict(current_joints) if current_joints is not None else None
+  )
+  out: List[Dict[Axis, float]] = []
+  for i, p in enumerate(poses):
+    try:
+      joints = ik(p, cfg, gripper_params)
+    except IKError as e:
+      raise IKError(f"sample {i}/{len(poses)}: {e}") from e
+    if prev is not None:
+      joints = snap_to_current(joints, prev)
+    out.append(joints)
+    prev = joints
+  return out
+
+
+def sample_parametric_path(
+  cfg: KX2Config,
+  gripper_params: GripperParams,
+  path_fn: "Callable[[float], CartesianPose]",
+  duration_s: float,
+  dt_s: float,
+  current_joints: Optional[Dict[Axis, float]] = None,
+) -> List[LinearPathSample]:
+  """Evaluate ``path_fn`` at every ``i * dt_s`` for ``i = 0..N`` (N chosen so
+  the last sample lands at or just past ``duration_s``), IK each pose, and
+  return encoder-domain samples ready for streaming.
+
+  Caller owns the velocity profile — ``path_fn`` defines both shape and pacing.
+  IK enforces joint limits; any out-of-range pose raises IKError with the
+  sample index.
+  """
+  if duration_s <= 0 or dt_s <= 0:
+    raise ValueError(f"duration_s and dt_s must be > 0 (got {duration_s}, {dt_s})")
+  n = max(2, int(duration_s / dt_s) + 1)
+  poses = [path_fn(min(i * dt_s, duration_s)) for i in range(n)]
+  joints_seq = _ik_pose_sequence(poses, cfg, gripper_params, current_joints)
+  return _build_samples_from_joints(joints_seq, cfg, dt_s)
+
+
+def sample_waypoint_path(
+  cfg: KX2Config,
+  gripper_params: GripperParams,
+  waypoints: List[CartesianPose],
+  speed_mm_per_s: float,
+  accel_mm_per_s2: float,
+  dt_s: float,
+  current_joints: Optional[Dict[Axis, float]] = None,
+) -> List[LinearPathSample]:
+  """Sample a Catmull-Rom spline through ``waypoints`` at the IPM cadence.
+
+  Curve geometry: centripetal Catmull-Rom through the location component of
+  every waypoint, with C¹ continuity at interior knots. Yaw is interpolated
+  linearly between knot rotations (short-way around the circle). Endpoint
+  tangents are extrapolated from the first/last segment.
+
+  Time parametrization: trapezoidal velocity profile over the spline's total
+  arc length, with peak speed ``speed_mm_per_s`` and peak acceleration
+  ``accel_mm_per_s2``. Returns to a triangular profile when the spline is too
+  short to reach peak speed.
+
+  The spline is dense-sampled internally (50 sub-steps per segment) to build
+  an arc-length lookup table; the trajectory is then sampled by stepping
+  through that table at dt-spaced arc-length increments.
+  """
+  if len(waypoints) < 2:
+    raise ValueError(f"need >= 2 waypoints, got {len(waypoints)}")
+  if speed_mm_per_s <= 0 or accel_mm_per_s2 <= 0 or dt_s <= 0:
+    raise ValueError(
+      f"speed, accel, dt_s must be > 0 (got {speed_mm_per_s}, "
+      f"{accel_mm_per_s2}, {dt_s})"
+    )
+
+  # Build extended control point list with mirrored endpoint tangents so the
+  # Catmull-Rom evaluator can use four consecutive points at every segment.
+  pts = [(w.location.x, w.location.y, w.location.z) for w in waypoints]
+  yaws = [w.rotation.z for w in waypoints]
+  ext = [tuple(2 * a - b for a, b in zip(pts[0], pts[1]))]
+  ext.extend(pts)
+  ext.append(tuple(2 * a - b for a, b in zip(pts[-1], pts[-2])))
+
+  def cr_eval(seg_idx: int, t: float) -> "Tuple[float, float, float]":
+    # Centripetal Catmull-Rom at local parameter t in [0, 1] within segment
+    # seg_idx (which goes between waypoints[seg_idx] and waypoints[seg_idx+1]).
+    p0, p1, p2, p3 = ext[seg_idx], ext[seg_idx + 1], ext[seg_idx + 2], ext[seg_idx + 3]
+    t2 = t * t
+    t3 = t2 * t
+    return tuple(
+      0.5 * (
+        (2 * p1[k])
+        + (-p0[k] + p2[k]) * t
+        + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2
+        + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3
+      ) for k in range(3)
+    )
+
+  # Build (cumulative arc length → (segment, local t)) table by densely
+  # sampling the spline.
+  SUBSTEPS = 50
+  arc_table: List[Tuple[float, int, float]] = []  # (s, seg, local_t)
+  total_len = 0.0
+  prev_pt = pts[0]
+  arc_table.append((0.0, 0, 0.0))
+  for seg in range(len(pts) - 1):
+    for k in range(1, SUBSTEPS + 1):
+      t_local = k / SUBSTEPS
+      p = cr_eval(seg, t_local)
+      total_len += sqrt(sum((p[i] - prev_pt[i]) ** 2 for i in range(3)))
+      arc_table.append((total_len, seg, t_local))
+      prev_pt = p
+
+  if total_len <= _EPS:
+    # All waypoints colinear at one point — bail out with a hold-in-place
+    # 2-sample trajectory so the streamer no-ops cleanly.
+    one_pose = waypoints[0]
+    return sample_parametric_path(
+      cfg=cfg, gripper_params=gripper_params,
+      path_fn=lambda _t: one_pose, duration_s=dt_s, dt_s=dt_s,
+      current_joints=current_joints,
+    )
+
+  # Trapezoidal time → arc-length profile.
+  s_seq = _arc_length_trapezoid_times(total_len, speed_mm_per_s, accel_mm_per_s2, dt_s)
+  n = len(s_seq)
+
+  # Resolve each arc-length s into (seg, local_t) via binary search in the table.
+  poses: List[CartesianPose] = []
+  for s in s_seq:
+    s_clamped = min(max(s, 0.0), total_len)
+    lo, hi = 0, len(arc_table) - 1
+    while hi - lo > 1:
+      mid = (lo + hi) // 2
+      if arc_table[mid][0] <= s_clamped:
+        lo = mid
+      else:
+        hi = mid
+    s0, seg0, t0 = arc_table[lo]
+    s1, seg1, t1 = arc_table[hi]
+    span = s1 - s0
+    alpha = 0.0 if span <= _EPS else (s_clamped - s0) / span
+    # Linear interpolation in local-t space within the same segment; if the
+    # table spans a segment boundary, evaluate using the higher one.
+    if seg0 == seg1:
+      seg = seg0
+      tl = t0 + alpha * (t1 - t0)
+    else:
+      seg = seg1
+      tl = t1 * alpha
+    x, y, z = cr_eval(seg, tl)
+    # Yaw interpolation: chord-length parameter along the full polyline so
+    # yaw lerps across segment boundaries naturally.
+    yaw_alpha = s_clamped / total_len
+    # Map yaw_alpha (0..1 over whole polyline) onto waypoint indices linearly.
+    yaw_pos = yaw_alpha * (len(yaws) - 1)
+    yi = min(int(yaw_pos), len(yaws) - 2)
+    yf = yaw_pos - yi
+    yaw = _yaw_lerp(yaws[yi], yaws[yi + 1], yf)
+    poses.append(CartesianPose(location=Coordinate(x=x, y=y, z=z),
+                               rotation=Rotation(z=yaw)))
+
+  joints_seq = _ik_pose_sequence(poses, cfg, gripper_params, current_joints)
+  return _build_samples_from_joints(joints_seq, cfg, dt_s)

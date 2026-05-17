@@ -9,12 +9,14 @@ from pylabrobot.paa.kx2.kinematics import IKError
 from pylabrobot.resources import Coordinate, Rotation
 
 
-def _axis() -> AxisConfig:
+def _axis(
+  *, max_travel: float = 1e6, min_travel: float = -1e6, unlimited: bool = False,
+) -> AxisConfig:
   return AxisConfig(
     motor_conversion_factor=1.0,
-    max_travel=180.0,
-    min_travel=-180.0,
-    unlimited_travel=False,
+    max_travel=max_travel,
+    min_travel=min_travel,
+    unlimited_travel=unlimited,
     absolute_encoder=True,
     max_vel=100.0,
     max_accel=100.0,
@@ -34,7 +36,12 @@ def _config(
     wrist_offset=wrist_offset,
     elbow_offset=elbow_offset,
     elbow_zero_offset=elbow_zero_offset,
-    axes={a: _axis() for a in (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)},
+    axes={
+      Axis.SHOULDER: _axis(unlimited=True),
+      Axis.Z: _axis(min_travel=0.0, max_travel=10000.0),
+      Axis.ELBOW: _axis(min_travel=-10000.0, max_travel=10000.0),
+      Axis.WRIST: _axis(unlimited=True),
+    },
     base_to_gripper_clearance_z=0.0,
     base_to_gripper_clearance_arm=0.0,
     robot_on_rail=False,

@@ -110,6 +110,17 @@ class _FakeDriver:
       "ipm_wait_motion_complete", (tuple(int(n) for n in node_ids), timeout_s),
     ))
 
+  async def motors_ensure_enabled(
+    self, node_ids: List[int], *, use_ds402: bool = True,
+  ) -> None:
+    self.calls.append(("motors_ensure_enabled", (tuple(int(n) for n in node_ids),)))
+
+  def clear_emcy_state(self, node_id=None):
+    self.calls.append(("clear_emcy_state", (node_id,)))
+
+  async def motor_get_current_position(self, node_id, pu=False):
+    return 0
+
 
 def _build_backend(
   fake_driver: _FakeDriver,
@@ -167,7 +178,7 @@ class LinearPathHappyPath(unittest.TestCase):
     pre = fake.calls[:begin_idx]
     pre_sends = [c for c in pre if c[0] == "ipm_send_pvt_point"]
     # 4 axes * 8 preload frames = 32 sends before begin_motion
-    self.assertEqual(len(pre_sends), 4 * backend._LINEAR_PATH_PRELOAD)
+    self.assertEqual(len(pre_sends), 4 * backend._PVT_PRELOAD)
 
     # begin_motion received the four arm axes
     _, (axes,) = fake.calls[begin_idx]
@@ -184,7 +195,7 @@ class LinearPathHappyPath(unittest.TestCase):
     asyncio.run(backend._run_linear_path(_target_pose(), params))
     dt_calls = [c for c in fake.calls if c[0] == "ipm_set_time_interval"]
     self.assertEqual(len(dt_calls), 1)
-    self.assertEqual(dt_calls[0][1], (backend._LINEAR_PATH_DT_MS,))
+    self.assertEqual(dt_calls[0][1], (backend._PVT_DT_MS,))
 
   def test_select_mode_true_then_false(self):
     """Mode is flipped on at start, off in cleanup. The drive must end in
@@ -199,21 +210,24 @@ class LinearPathHappyPath(unittest.TestCase):
     self.assertEqual(selects[0], (True,))
     self.assertEqual(selects[-1], (False,))
 
-  def test_wait_uses_ipm_specific_motion_complete(self):
-    """End-of-motion wait must poll SW bit-10 (target reached), not MS.
-    MS goes to 0 transiently between buffered points; bit-10 is the
-    authoritative IPM-done signal."""
+  def test_stream_end_drops_ip_enable_no_blocking_wait(self):
+    """After the last frame, the runtime must drop ip-enable (ipm_stop) and
+    NOT poll for any wait condition. The Elmo drive doesn't latch SW bit-10
+    until ip-enable goes low — polling it inside IP mode hangs forever — and
+    leaving ip-enable asserted past the buffer drain raises EMCY 0x8A
+    (underflow). Mirrors C# MotorsMovePathExecute which proceeds straight to
+    PVTBeginMotion(false) once streaming completes."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
     params = KX2ArmBackend.CartesianMoveParams(
       max_gripper_speed=20.0, max_gripper_acceleration=200.0, path="linear",
     )
     asyncio.run(backend._run_linear_path(_target_pose(), params))
-    # Must NOT use the MS-based generic waiter.
     self.assertFalse([c for c in fake.calls if c[0] == "wait_for_moves_done"])
-    waits = [c for c in fake.calls if c[0] == "ipm_wait_motion_complete"]
-    self.assertEqual(len(waits), 1)
-    (axes, _) = waits[0][1]
+    self.assertFalse([c for c in fake.calls if c[0] == "ipm_wait_motion_complete"])
+    stops = [c for c in fake.calls if c[0] == "ipm_stop"]
+    self.assertGreaterEqual(len(stops), 1)
+    (axes,) = stops[0][1]
     self.assertEqual(set(axes), {
       int(Axis.SHOULDER), int(Axis.Z), int(Axis.ELBOW), int(Axis.WRIST),
     })

@@ -5,7 +5,7 @@ import time
 import warnings
 from contextlib import asynccontextmanager
 from enum import IntEnum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Callable, Dict, List, Literal, Optional, Union
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -919,65 +919,66 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
     ik_joints = kinematics.ik(pose, self._cfg, self._gripper_params)
     return kinematics.snap_to_current(ik_joints, current)
 
-  async def _run_linear_path(
-    self,
-    target_pose: CartesianPose,
-    params: "KX2ArmBackend.CartesianMoveParams",
+  async def _stream_samples(
+    self, samples: "List[kinematics.LinearPathSample]"
   ) -> None:
-    """Stream a Cartesian-linear trajectory through the drive's IPM buffer.
-
-    Caller MUST hold ``_motion_guard``. Picks up the current pose from the
-    drives, samples a straight-line tool-tip path to ``target_pose`` at the
-    fixed IPM cadence (``_LINEAR_PATH_DT_MS``), and feeds (P, V) points to
-    each axis 8 frames ahead of the drive's read pointer.
+    """Stream a pre-built list of LinearPathSamples through the drive's IPM
+    buffer. Caller MUST hold ``_motion_guard``. The samples' encoder positions
+    and velocities are fed to each axis 8 frames ahead of the drive's read
+    pointer at the fixed IPM cadence (``_PVT_DT_MS``).
 
     On cancel/exception the drive is brought back to PPM through a
-    ``finally`` block (``ipm_stop`` then ``ipm_select_mode(False)``), so a
-    halt mid-stream leaves the arm in a state that a subsequent joint move
-    can resume from.
-
-    NOTE: cancel/halt drops ip-enable and lets the drive consume already-
-    buffered points before stopping. Coast can run up to
-    ``_LINEAR_PATH_PRELOAD * dt_ms`` (~64 ms at 8 ms / 8 frames) past the
-    cancel. If true zero-coast halt is needed, fall through to the
-    existing ``halt()`` (MO=0 across all motion axes), which is independent
-    of the linear path.
+    ``finally`` block. Coast on a cancel can run up to ``_PVT_PRELOAD
+    * dt_ms`` (~64 ms) past the cancel — see ``halt()`` for zero-coast stop.
     """
-    if params.max_gripper_speed is None or params.max_gripper_acceleration is None:
-      raise ValueError(
-        "CartesianMoveParams(path='linear') requires max_gripper_speed and "
-        "max_gripper_acceleration: the Cartesian profile is built from them "
-        "directly (no firmware fallback for streamed motion)."
-      )
-
-    current_joints = {
-      Axis(k): v for k, v in (await self.request_joint_position()).items()
-    }
-    start_pose = kinematics.fk(current_joints, self._cfg, self._gripper_params)
-    samples = kinematics.sample_linear_path(
-      cfg=self._cfg,
-      gripper_params=self._gripper_params,
-      start_pose=start_pose,
-      end_pose=target_pose,
-      vel_mm_per_s=params.max_gripper_speed,
-      accel_mm_per_s2=params.max_gripper_acceleration,
-      dt_s=self._LINEAR_PATH_DT_MS / 1000.0,
-      current_joints=current_joints,
-    )
     if len(samples) < 2:
-      # Zero-length path: same pose. Defensively flip mode back to PPM in
-      # case a prior linear move's cleanup failed and left _ipm_mode=True.
       await self.driver.ipm_select_mode(False)
       return
 
-    active_axes = [int(ax) for ax in (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)]
-    dt_s = self._LINEAR_PATH_DT_MS / 1000.0
-    preload = min(self._LINEAR_PATH_PRELOAD, len(samples))
+    # Skip axes with small total motion (Δ ≤ _SKIP_AXIS_COUNTS). Two reasons:
+    # (1) the drive idles on sub-threshold motion and leaves frames stuck in
+    # the IP buffer; (2) rotary axes (shoulder, wrist) wrap — IK gives
+    # angles in (-180, 180] but the drive's encoder counts up across
+    # revolutions, so streaming raw IK values for a rotary axis that's
+    # currently many revolutions in causes the drive to interpret each
+    # command as a huge multi-rotation move and tracking-error fault.
+    all_axes = [int(ax) for ax in (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)]
+    active_axes: List[int] = []
+    for nid in all_axes:
+      seq = [s.encoder_position[Axis(nid)] for s in samples]
+      if max(seq) - min(seq) > self._SKIP_AXIS_COUNTS:
+        active_axes.append(nid)
+    if not active_axes:
+      return
+
+    # Clear any sticky fault on the involved drives before streaming.
+    await self.driver.motors_ensure_enabled(active_axes)
+
+    # Align the sample sequence to the drive's actual encoder positions.
+    # Rotary axes (shoulder, wrist) wrap — the drive's encoder counts up
+    # forever across full rotations, but IK gives joint angles in (-180,
+    # 180]; sample[0] therefore lands many revolutions away from the drive's
+    # actual position. Sending those raw triggers an immediate position-
+    # tracking fault (drive rejects RPDO3, looks like queue_full to us).
+    # Shift every sample's encoder_position by (actual_now - sample[0]) so
+    # the trajectory rides on top of the drive's current encoder, preserving
+    # all relative motion.
+    enc_now = {}
+    for nid in active_axes:
+      enc_now[nid] = await self.driver.motor_get_current_position(nid)
+    for nid in active_axes:
+      offset = enc_now[nid] - samples[0].encoder_position[Axis(nid)]
+      if offset == 0:
+        continue
+      for s in samples:
+        s.encoder_position[Axis(nid)] += offset
+
+    dt_s = self._PVT_DT_MS / 1000.0
+    preload = min(self._PVT_PRELOAD, len(samples))
 
     await self.driver.ipm_select_mode(True)
     try:
-      await self.driver.ipm_set_time_interval(self._LINEAR_PATH_DT_MS)
-
+      await self.driver.ipm_set_time_interval(self._PVT_DT_MS)
       # Preload PRELOAD frames per axis. The drive starts consuming as soon
       # as begin_motion fires; preload lets the producer fall behind by up
       # to (PRELOAD-1) * dt without underflowing the queue.
@@ -989,21 +990,14 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
             samples[i].encoder_position[ax],
             samples[i].encoder_velocity[ax],
           )
-      # Surface any preload-induced fault (queue_full from a malformed
-      # first point) before we kick off motion.
       self.driver.ipm_check_queue_fault(active_axes)
 
-      # Capture the pacing reference *before* begin_motion. The drive starts
-      # consuming the moment SYNC arrives inside begin_motion; capturing
-      # after means we underestimate elapsed drive-time and pace too late,
-      # eating into the underflow margin. Capturing before is conservative
-      # (we send slightly early), wasting a few buffer slots — strictly
-      # safer.
+      # Capture pacing reference *before* begin_motion (drive starts consuming
+      # on SYNC; capturing after underestimates elapsed drive-time and pace
+      # too late, eating into the underflow margin).
       start = time.monotonic()
       await self.driver.ipm_begin_motion(active_axes)
 
-      # Pace the rest: send sample i so it lands at t = (i - (PRELOAD-1)) * dt
-      # after the captured start.
       for i in range(preload, len(samples)):
         target_t = (i - (preload - 1)) * dt_s
         while time.monotonic() - start < target_t:
@@ -1017,23 +1011,17 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           )
         self.driver.ipm_check_queue_fault(active_axes)
 
-      # Wait for SW bit-10 (target reached) on every axis. Bit-10 goes high
-      # once the IP buffer drains and the trajectory generator settles on
-      # the last commanded position. MS-based polling (`wait_for_moves_done`)
-      # would race the buffer drain — bit-10 is the authoritative IPM
-      # done-signal.
-      total_t = (len(samples) - 1) * dt_s
-      timeout = total_t + 2.0
-      await self.driver.ipm_wait_motion_complete(active_axes, timeout_s=timeout)
-      # One more fault check after drain — covers an underflow in the very
-      # last frames that bit-10 wouldn't reflect.
-      self.driver.ipm_check_queue_fault(active_axes)
+      # Drop ip-enable immediately after the last frame. Elmo drives don't
+      # latch SW bit-10 (target_reached) while ip-enable is high — polling
+      # for it inside IP mode hangs forever — and leaving ip-enable asserted
+      # past the buffer drain raises EMCY 0x8A on the next tick. Mirrors C#
+      # MotorsMovePathExecute. Trade-off: drive halts ~0.3 mm short of the
+      # trajectory end at typical speeds (matches the vendor behaviour).
+      await self.driver.ipm_stop(active_axes)
     finally:
       try:
         await self.driver.ipm_stop(active_axes)
       except Exception:
-        # Log with EMCY state for post-mortem: if the drive was already
-        # mid-fault when we tried to stop, the EMCY counters tell us why.
         emcy_snap = {
           ax: vars(self.driver._emcy[ax]) for ax in active_axes
           if ax in self.driver._emcy
@@ -1050,6 +1038,127 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
           "fresh-arm IPM via the re-arm path"
         )
 
+  async def _run_linear_path(
+    self,
+    target_pose: CartesianPose,
+    params: "KX2ArmBackend.CartesianMoveParams",
+  ) -> None:
+    """Sample a straight tool-tip path to ``target_pose`` and stream it.
+    Caller MUST hold ``_motion_guard``."""
+    if params.max_gripper_speed is None or params.max_gripper_acceleration is None:
+      raise ValueError(
+        "CartesianMoveParams(path='linear') requires max_gripper_speed and "
+        "max_gripper_acceleration: the Cartesian profile is built from them "
+        "directly (no firmware fallback for streamed motion)."
+      )
+    current_joints = {
+      Axis(k): v for k, v in (await self.request_joint_position()).items()
+    }
+    start_pose = kinematics.fk(current_joints, self._cfg, self._gripper_params)
+    samples = kinematics.sample_linear_path(
+      cfg=self._cfg,
+      gripper_params=self._gripper_params,
+      start_pose=start_pose,
+      end_pose=target_pose,
+      vel_mm_per_s=params.max_gripper_speed,
+      accel_mm_per_s2=params.max_gripper_acceleration,
+      dt_s=self._PVT_DT_MS / 1000.0,
+      current_joints=current_joints,
+    )
+    await self._stream_samples(samples)
+
+  async def move_parametric(
+    self,
+    path_fn: "Callable[[float], CartesianPose]",
+    duration_s: float,
+  ) -> None:
+    """Stream a parametric Cartesian trajectory through IPM.
+
+    ``path_fn(t)`` is called at every IPM sample time ``t ∈ [0, duration_s]``
+    (seconds, evaluated at the drive's interpolation cadence, currently
+    8 ms) and must return the absolute :class:`CartesianPose` the gripper
+    should occupy at that instant. Use the start pose if you need offsets:
+
+      start = await arm.request_gripper_pose()
+      def fig8(t):
+        s = t / duration_s
+        theta = 2 * math.pi * s
+        return CartesianPose(
+          location=Coordinate(start.location.x + 50 * math.sin(theta),
+                              start.location.y + 12.5 * math.sin(2*theta),
+                              start.location.z + 30 * math.sin(math.pi * s)),
+          rotation=start.rotation,
+        )
+      await arm.move_parametric(fig8, duration_s=8.0)
+
+    No speed/accel cap — the parametrization sets the velocity profile;
+    callers are responsible for keeping derivatives within drive limits.
+    Joint travel limits are enforced via IK; out-of-range raises IKError
+    before any motion. Path continuity is the caller's responsibility —
+    discontinuities surface as drive faults.
+    """
+    if duration_s <= 0:
+      raise ValueError(f"duration_s must be > 0, got {duration_s}")
+    async with self._motion_guard():
+      current_joints = {
+        Axis(k): v for k, v in (await self.request_joint_position()).items()
+      }
+      samples = kinematics.sample_parametric_path(
+        cfg=self._cfg,
+        gripper_params=self._gripper_params,
+        path_fn=path_fn,
+        duration_s=duration_s,
+        dt_s=self._PVT_DT_MS / 1000.0,
+        current_joints=current_joints,
+      )
+      await self._stream_samples(samples)
+
+  async def move_through_waypoints(
+    self,
+    waypoints: "List[CartesianPose]",
+    *,
+    speed: float,
+    accel: float,
+  ) -> None:
+    """Stream a smooth Catmull-Rom spline through ``waypoints``.
+
+    The curve passes through every waypoint with C¹ continuity (no stop at
+    intermediate waypoints). Tangents at each interior waypoint are derived
+    from neighbours; endpoint tangents are extrapolated from the first/last
+    segment. The whole spline is time-reparametrized into a trapezoidal
+    arc-length profile with peak Cartesian speed ``speed`` (mm/s) and peak
+    acceleration ``accel`` (mm/s²), then sampled at the IPM cadence.
+
+    Args:
+      waypoints: at least 2 absolute Cartesian poses. The first should
+        match the current pose closely (or the path will start with a
+        Cartesian-linear segment to get there).
+      speed: peak Cartesian speed along the spline, mm/s.
+      accel: peak Cartesian acceleration, mm/s².
+
+    Raises:
+      ValueError if waypoints < 2 or speed/accel <= 0.
+      IKError if any sample's joints are out of range.
+    """
+    if len(waypoints) < 2:
+      raise ValueError(f"need at least 2 waypoints, got {len(waypoints)}")
+    if speed <= 0 or accel <= 0:
+      raise ValueError(f"speed and accel must be > 0, got {speed}, {accel}")
+    async with self._motion_guard():
+      current_joints = {
+        Axis(k): v for k, v in (await self.request_joint_position()).items()
+      }
+      samples = kinematics.sample_waypoint_path(
+        cfg=self._cfg,
+        gripper_params=self._gripper_params,
+        waypoints=waypoints,
+        speed_mm_per_s=speed,
+        accel_mm_per_s2=accel,
+        dt_s=self._PVT_DT_MS / 1000.0,
+        current_joints=current_joints,
+      )
+      await self._stream_samples(samples)
+
   # -- capability interface (OrientableGripperArmBackend + HasJoints + CanFreedrive) --
 
   async def halt(self, backend_params: Optional[BackendParams] = None) -> None:
@@ -1062,10 +1171,31 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
       *(self.driver.motor_emergency_stop(node_id=axis) for axis in MOTION_AXES)
     )
 
+  # Park pose (centered, well inside workspace) and motion caps.
+  _PARK_JOINTS: Dict[Axis, float] = {
+    Axis.SHOULDER: 0.0, Axis.Z: 300.0, Axis.ELBOW: 250.0, Axis.WRIST: 0.0,
+  }
+  _PARK_SPEED: float = 80.0
+  _PARK_ACCEL: float = 400.0
+
   async def park(self, backend_params: Optional[BackendParams] = None) -> None:
-    raise NotImplementedError(
-      "KX2 does not define a default park pose. Use move_to_joint_position with a "
-      "site-specific safe configuration."
+    """Move the arm to a centered safe pose via a Cartesian-linear (IPM) move.
+
+    Uses IPM (`path='linear'`) rather than PPM (move_to_joint_position) so the
+    drives stay in mode 7 — back-to-back PPM → IPM transitions leave one or
+    more drives' IP buffers in a state where the next preload write hits
+    EMCY 0x34/0xBA (queue_full on first write). Sticking to IPM throughout
+    sidesteps that.
+    """
+    park_pose = kinematics.fk(self._PARK_JOINTS, self._cfg, self._gripper_params)
+    await self.move_to_location(
+      location=park_pose.location,
+      direction=park_pose.rotation.z,
+      backend_params=KX2ArmBackend.CartesianMoveParams(
+        max_gripper_speed=self._PARK_SPEED,
+        max_gripper_acceleration=self._PARK_ACCEL,
+        path="linear",
+      ),
     )
 
   async def request_gripper_pose(
@@ -1135,8 +1265,12 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   # `ipm_set_time_interval` validates this at the wire level. (b) PRELOAD <
   # drive IP buffer depth (16, set by the 24772:2=16 write at setup) —
   # otherwise the (PRELOAD+1)th frame queue_fulls immediately.
-  _LINEAR_PATH_DT_MS: int = 8
-  _LINEAR_PATH_PRELOAD: int = 8
+  _PVT_DT_MS: int = 8
+  _PVT_PRELOAD: int = 8
+  # Below this trajectory delta (in encoder counts) an axis is considered
+  # "not moving" and skipped from IPM streaming — the drive idles on
+  # sub-threshold motion and leaves frames stuck in its IP buffer otherwise.
+  _SKIP_AXIS_COUNTS: int = 500
 
   async def move_to_location(
     self,

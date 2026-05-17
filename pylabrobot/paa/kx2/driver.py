@@ -1313,22 +1313,26 @@ class KX2Driver(Driver):
     we cleanly stayed in PPM.
     """
     if enable:
-      # Set the flag first so a partial failure (some axes flipped to mode 7,
-      # others not) leaves bookkeeping consistent with "drive may be in IPM".
-      already_armed = self._ipm_mode
       self._ipm_mode = True
-      if not already_armed:
-        for nid in self.motion_node_ids:
-          await self.ipm_clear_queue(nid)
-          await self._set_op_mode(nid, 7)  # interpolated position mode
-      else:
-        # Re-arm: drop to PPM, reset the interpolation-buffer pointer, climb
-        # back into IPM. Skipping any of the three steps leaves the drive in
-        # the wrong mode or with a stale IP buffer.
-        for nid in self.motion_node_ids:
-          await self._set_op_mode(nid, 1)
-          await self.ipm_clear_queue(nid)
-          await self._set_op_mode(nid, 7)
+      # First, latch CW=0x0F on every axis (op-enabled, NO ip-enable/new-
+      # setpoint trigger). PPM leaves CW bit 4 high; in mode 7 bit 4 means
+      # "interpolation enabled" so an unreset CW makes the drive try to
+      # interpolate an empty buffer the moment we flip to mode 7, and the next
+      # RPDO3 preload hits EMCY 0x34 / 0xBA (queue_full on first write).
+      # RPDO1 is SynchronousCyclic so the writes need a SYNC to take effect.
+      for nid in self.motion_node_ids:
+        await self._control_word_set(nid, 0x0F, sync=False)
+      await self._can_sync()
+      # Now do the mode-bounce + buffer clear per axis.
+      for nid in self.motion_node_ids:
+        await self._set_op_mode(nid, 1)
+        await self.ipm_clear_queue(nid)
+        await self._set_op_mode(nid, 7)
+      # Let drives finish ingesting mode 7 + buffer reset before any RPDO3
+      # write — without this, back-to-back IPM moves intermittently see the
+      # first preload write hit EMCY 0x34 / 0xBA (queue_full) against a
+      # buffer the drive still treats as "previous state".
+      await asyncio.sleep(0.05)
     else:
       # Always attempt to revert — the cheap mode-display poll inside
       # _set_op_mode is the authoritative confirmation. Skip the writes only
