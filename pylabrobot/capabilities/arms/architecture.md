@@ -33,14 +33,20 @@ _BaseArm(Capability)
   │  halt(), park(), get_gripper_location()
   │  resource tracking (pick_up/drop state)
   │
-  └── GripperArm
-        │  open/close_gripper, is_gripper_closed
-        │  pick_up/drop/move at location
-        │  pick_up_resource(), drop_resource(), move_resource() (convenience)
+  └── GripperArm (abstract base for any arm with a gripper)
+        │  move_gripper, open/close_gripper, is_gripper_closed
         │
-        └── OrientableArm
-              Arm with rotation. E.g. Hamilton iSWAP, PreciseFlex.
-              pick_up/drop/move with direction parameter
+        ├── FixedAxisGripperArm
+        │     Fixed grip axis (x or y). E.g. Hamilton core grippers.
+        │     pick_up/drop/move at location
+        │
+        ├── OrientableGripperArm
+        │     Arm with rotation. E.g. Hamilton iSWAP, PreciseFlex.
+        │     pick_up/drop/move with direction parameter
+        │
+        └── ArticulatedGripperArm
+              Arm with full 3D rotation. E.g. UFACTORY xArm 6.
+              pick_up/drop/move with Rotation parameter
 ```
 
 Frontend mirrors backend hierarchy exactly.
@@ -72,9 +78,9 @@ _BaseArmBackend(CapabilityBackend)
 
 | Device | Driver | Arm Backend | Frontend |
 |--------|--------|-------------|----------|
-| Hamilton STAR (iSWAP) | STARDriver (shared) | `iSWAP(OrientableGripperArmBackend)` | `OrientableArm` |
-| Hamilton STAR (core) | STARDriver (shared) | `CoreGripper(GripperArmBackend)` | `Arm` |
-| PreciseFlex 400 | `PreciseFlexDriver` | `PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive)` | `OrientableArm` |
+| Hamilton STAR (iSWAP) | STARDriver (shared) | `iSWAP(OrientableGripperArmBackend)` | `OrientableGripperArm` |
+| Hamilton STAR (core) | STARDriver (shared) | `CoreGripper(GripperArmBackend)` | `FixedAxisGripperArm` |
+| PreciseFlex 400 | `PreciseFlexDriver` | `PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive)` | `OrientableGripperArm` |
 
 ## Usage
 
@@ -85,8 +91,8 @@ class STAR(Device):
   def __init__(self, ...):
     driver = STARDriver(...)
     super().__init__(driver=driver)
-    self.iswap = OrientableArm(backend=iSWAP(driver), reference_resource=deck)
-    self.core_gripper = GripperArm(backend=CoreGripper(driver), reference_resource=deck)
+    self.iswap = OrientableGripperArm(backend=iSWAP(driver), reference_resource=deck)
+    self.core_gripper = FixedAxisGripperArm(backend=CoreGripper(driver), reference_resource=deck)
     self._capabilities = [self.iswap, self.core_gripper]
 ```
 
@@ -105,7 +111,7 @@ class PreciseFlex400(Device):
       gripper_length=gripper_length,
       gripper_z_offset=gripper_z_offset,
     )
-    self.arm = OrientableArm(backend=backend, reference_resource=self.reference)
+    self.arm = OrientableGripperArm(backend=backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
 
 # Joint methods accessed via backend (robot-specific):

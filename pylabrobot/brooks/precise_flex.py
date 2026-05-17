@@ -14,7 +14,7 @@ from pylabrobot.capabilities.arms.backend import (
   HasJoints,
   OrientableGripperArmBackend,
 )
-from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
 from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Device, Driver
@@ -411,21 +411,34 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Get the current speed percentage of the arm's movement."""
     return await self.request_profile_speed(self.profile_index)
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ):
-    """Open the gripper to the specified width."""
-    logger.info("[PreciseFlex %s] open_gripper: width_mm=%s", self.driver.io._host, gripper_width)
-    await self._set_grip_open_pos(gripper_width)
-    await self.driver.send_command("gripper 1")
+  # Physical jaw range for the PF400 servoed gripper.
+  min_gripper_width: float = 60.0
+  max_gripper_width: float = 145.0
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ):
-    """Close the gripper to the specified width."""
-    logger.info("[PreciseFlex %s] close_gripper: width_mm=%s", self.driver.io._host, gripper_width)
-    await self._set_grip_close_pos(gripper_width)
-    await self.driver.send_command("gripper 2")
+    """Move the PreciseFlex gripper jaws.
+
+    ``force_sensing=False`` drives to the open position (``gripper 1``);
+    ``force_sensing=True`` drives to the close position with force feedback
+    (``gripper 2``), which may stop short of ``width`` on contact.
+    """
+    logger.info(
+      "[PreciseFlex %s] move_gripper: width_mm=%s force_sensing=%s",
+      self.driver.io._host,
+      width,
+      force_sensing,
+    )
+    if force_sensing:
+      await self._set_grip_close_pos(width)
+      await self.driver.send_command("gripper 2")
+    else:
+      await self._set_grip_open_pos(width)
+      await self.driver.send_command("gripper 1")
 
   async def halt(self, backend_params: Optional[BackendParams] = None):
     """Stops the current robot immediately but leaves power on."""
@@ -1736,7 +1749,7 @@ class PreciseFlex400(Device):
       gripper_z_offset=gripper_z_offset,
     )
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
-    self.arm = OrientableArm(backend=backend, reference_resource=self.reference)
+    self.arm = OrientableGripperArm(backend=backend, reference_resource=self.reference)
     self._capabilities = [self.arm]
 
 

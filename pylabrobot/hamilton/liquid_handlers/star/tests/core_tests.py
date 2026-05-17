@@ -156,11 +156,15 @@ class TestCoreGripperCommands(unittest.IsolatedAsyncioTestCase):
       th="3500",
     )
 
-  async def test_open_gripper(self):
-    """ZO command."""
-    await self.core.open_gripper(gripper_width=0)
+  async def test_move_gripper_position(self):
+    """ZO command. CoreGripper ignores ``width`` and just opens fully."""
+    await self.core.move_gripper(width=0, force_sensing=False)
 
     self.mock_driver.send_command.assert_called_once_with(
       module="C0",
       command="ZO",
     )
+
+  async def test_move_gripper_force_sensing_not_supported(self):
+    with self.assertRaises(NotImplementedError):
+      await self.core.move_gripper(width=80, force_sensing=True)

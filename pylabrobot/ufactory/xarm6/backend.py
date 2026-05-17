@@ -123,17 +123,26 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   # -- CanGrip ---------------------------------------------------------------
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Open the bio-gripper to the specified width (mm)."""
-    await self._set_gripper_units(self._mm_to_gripper_units(gripper_width))
+  @property
+  def min_gripper_width(self) -> float:
+    return self.gripper_min_mm
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  @property
+  def max_gripper_width(self) -> float:
+    return self.gripper_max_mm
+
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
-    """Close the bio-gripper to the specified width (mm)."""
-    await self._set_gripper_units(self._mm_to_gripper_units(gripper_width))
+    """Move the bio-gripper jaws to ``width`` mm.
+
+    The xArm bio-gripper is position-controlled; ``force_sensing`` is accepted
+    for interface compatibility but the SDK call is the same in both modes.
+    """
+    await self._set_gripper_units(self._mm_to_gripper_units(width))
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Return True if the gripper width is at or below ``closed_threshold_mm``."""
@@ -209,7 +218,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Move to ``location`` and close the gripper to ``resource_width``."""
     await self.move_to_location(location, rotation, backend_params=backend_params)
-    await self.close_gripper(resource_width)
+    await self.move_gripper(width=resource_width, force_sensing=True)
 
   async def drop_at_location(
     self,

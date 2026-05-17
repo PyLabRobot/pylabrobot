@@ -1,4 +1,5 @@
 import logging
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
@@ -297,7 +298,69 @@ class _BaseArm(Capability):
 
 
 class GripperArm(_BaseArm):
-  """A gripper arm without rotation capability. E.g. Hamilton core grippers."""
+  """Base class for arms with a gripper.
+
+  Owns the gripper-width controls (:meth:`move_gripper`, :meth:`open_gripper`,
+  :meth:`close_gripper`, :meth:`is_gripper_closed`) shared by all gripper
+  arms. Concrete pick/drop/move signatures differ between fixed-axis,
+  orientable, and articulated arms and live on the respective subclasses:
+  :class:`FixedAxisGripperArm`, :class:`OrientableGripperArm`,
+  :class:`ArticulatedGripperArm`.
+  """
+
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    return await self.backend.move_gripper(
+      width=width, force_sensing=force_sensing, backend_params=backend_params
+    )
+
+  async def open_gripper(self, backend_params: Optional[BackendParams] = None) -> None:
+    width = self.backend.max_gripper_width
+    if width is None:
+      raise NotImplementedError(
+        f"{type(self.backend).__name__} does not support open_gripper "
+        "(max_gripper_width is None)."
+      )
+    return await self.backend.move_gripper(
+      width=width, force_sensing=False, backend_params=backend_params
+    )
+
+  async def close_gripper(self, backend_params: Optional[BackendParams] = None) -> None:
+    width = self.backend.min_gripper_width
+    if width is None:
+      raise NotImplementedError(
+        f"{type(self.backend).__name__} does not support close_gripper "
+        "(min_gripper_width is None)."
+      )
+    return await self.backend.move_gripper(
+      width=width, force_sensing=True, backend_params=backend_params
+    )
+
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    return await self.backend.is_gripper_closed(backend_params=backend_params)
+
+  @abstractmethod
+  async def pick_up_resource(self, resource: Resource, *args, **kwargs) -> None:
+    """Pick up a resource. Concrete subclasses define the full signature."""
+
+  @abstractmethod
+  async def drop_resource(self, destination, *args, **kwargs) -> None:
+    """Drop the held resource at a destination. Subclasses define the signature."""
+
+  @abstractmethod
+  async def move_resource(self, resource: Resource, to, *args, **kwargs) -> None:
+    """Pick up, optionally pass through waypoints, and drop. Subclass-defined signature."""
+
+
+class FixedAxisGripperArm(GripperArm):
+  """A gripper arm without rotation capability. E.g. Hamilton core grippers.
+
+  Grips along a single deck-fixed axis chosen at construction time.
+  """
 
   def __init__(
     self,
@@ -308,23 +371,6 @@ class GripperArm(_BaseArm):
     super().__init__(backend=backend, reference_resource=reference_resource)
     self.backend: GripperArmBackend = backend
     self._grip_axis = grip_axis
-
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    return await self.backend.open_gripper(
-      gripper_width=gripper_width, backend_params=backend_params
-    )
-
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    return await self.backend.close_gripper(
-      gripper_width=gripper_width, backend_params=backend_params
-    )
-
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   def _resource_width(self, resource: Resource) -> float:
     if self._grip_axis == "y":

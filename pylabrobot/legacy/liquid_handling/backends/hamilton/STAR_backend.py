@@ -6956,9 +6956,10 @@ class STARBackend(HamiltonLiquidHandler):
 
     from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
 
-    return await self._iswap.close_gripper(
-      gripper_width=plate_width,
-      backend_params=iSWAPBackend.CloseGripperParams(
+    return await self._iswap.move_gripper(
+      width=plate_width,
+      force_sensing=True,
+      backend_params=iSWAPBackend.GripParams(
         grip_strength=grip_strength,
         plate_width_tolerance=plate_width_tolerance,
       ),

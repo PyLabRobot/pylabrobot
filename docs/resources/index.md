@@ -55,7 +55,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td><a href="introduction.html">Resource</a></td></tr>
   <!-- Arm subtree -->
   <tr><td>├── <a href="deck/deck.html">Arm</a></td></tr>
-  <tr><td>│   ├── ArticulatedArm</td></tr>
+  <tr><td>│   ├── ArticulatedGripperArm</td></tr>
   <tr><td>│   ├── CartesianArm</td></tr>
   <tr><td>│   └── SCARA</td></tr>
 

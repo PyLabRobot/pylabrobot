@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.capabilities.arms.arm import GripperArm
+from pylabrobot.capabilities.arms.arm import FixedAxisGripperArm
 from pylabrobot.capabilities.arms.backend import (
   GripperArmBackend,
   OrientableGripperArmBackend,
 )
-from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
 
@@ -48,16 +48,17 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
       "pick_up_at_location",
       "drop_at_location",
       "move_to_location",
-      "open_gripper",
-      "close_gripper",
+      "move_gripper",
       "is_gripper_closed",
       "halt",
       "park",
     ]:
       setattr(self.mock_backend, method_name, AsyncMock())
+    self.mock_backend.min_gripper_width = 50.0
+    self.mock_backend.max_gripper_width = 145.0
 
     self.deck, self.site_a, self.site_b, self.plate = _make_deck_with_sites()
-    self.arm = GripperArm(backend=self.mock_backend, reference_resource=self.deck)
+    self.arm = FixedAxisGripperArm(backend=self.mock_backend, reference_resource=self.deck)
 
   async def test_pick_up_resource(self):
     # plate at site_a(100,100,50) + child_loc(5,5,0), center_xy=(60,40), size_z=10
@@ -99,9 +100,33 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
       location=location, backend_params=None
     )
 
+  async def test_move_gripper(self):
+    await self.arm.move_gripper(width=80.0, force_sensing=True)
+    self.mock_backend.move_gripper.assert_called_once_with(
+      width=80.0, force_sensing=True, backend_params=None
+    )
+
   async def test_open_gripper(self):
-    await self.arm.open_gripper(gripper_width=50.0)
-    self.mock_backend.open_gripper.assert_called_once_with(gripper_width=50.0, backend_params=None)
+    await self.arm.open_gripper()
+    self.mock_backend.move_gripper.assert_called_once_with(
+      width=145.0, force_sensing=False, backend_params=None
+    )
+
+  async def test_close_gripper(self):
+    await self.arm.close_gripper()
+    self.mock_backend.move_gripper.assert_called_once_with(
+      width=50.0, force_sensing=True, backend_params=None
+    )
+
+  async def test_open_gripper_unsupported(self):
+    self.mock_backend.max_gripper_width = None
+    with self.assertRaises(NotImplementedError):
+      await self.arm.open_gripper()
+
+  async def test_close_gripper_unsupported(self):
+    self.mock_backend.min_gripper_width = None
+    with self.assertRaises(NotImplementedError):
+      await self.arm.close_gripper()
 
   async def test_halt(self):
     await self.arm.halt()
@@ -113,7 +138,9 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_grip_axis_y(self):
     """With grip_axis='y', resource_width should be the Y size."""
-    arm_y = GripperArm(backend=self.mock_backend, reference_resource=self.deck, grip_axis="y")
+    arm_y = FixedAxisGripperArm(
+      backend=self.mock_backend, reference_resource=self.deck, grip_axis="y"
+    )
     await arm_y.pick_up_resource(self.plate, pickup_distance_from_bottom=8)
     call = self.mock_backend.pick_up_at_location.call_args
     # plate size_y=80
@@ -121,7 +148,7 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
 
 
 class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
-  """Test OrientableArm coordinate computation with fictional resources."""
+  """Test OrientableGripperArm coordinate computation with fictional resources."""
 
   async def asyncSetUp(self):
     self.mock_backend = MagicMock(spec=OrientableGripperArmBackend)
@@ -133,7 +160,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
       setattr(self.mock_backend, method_name, AsyncMock())
 
     self.deck, self.site_a, self.site_b, self.plate = _make_deck_with_sites()
-    self.arm = OrientableArm(backend=self.mock_backend, reference_resource=self.deck)
+    self.arm = OrientableGripperArm(backend=self.mock_backend, reference_resource=self.deck)
 
   async def test_pick_up_front(self):
     await self.arm.pick_up_resource(

@@ -211,18 +211,31 @@ class CoreGripper(GripperArmBackend):
       th=f"{round(backend_params.minimum_traverse_height * 10):04}",
     )
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Open the CoRe gripper."""
-    await self.driver.send_command(module="C0", command="ZO")
+  # ``min`` is the fully-closed jaw width. ``max`` is None because the CoRe
+  # gripper has no commandable "open" width: the firmware ZO command opens the
+  # jaws fully and ``width`` is therefore ignored.
+  min_gripper_width: float = 9.0
+  max_gripper_width: Optional[float] = None
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
-    raise NotImplementedError(
-      "CoreGripper does not support close_gripper directly. Use pick_up_at_location instead."
-    )
+    """Open the CoRe gripper.
+
+    The CoRe gripper has no commandable jaw width: only the firmware ZO command
+    is supported, which opens the jaws fully. ``width`` is accepted for
+    interface compatibility but ignored. Force-sensing closes are not exposed
+    here; they happen as part of :meth:`pick_up_at_location`.
+    """
+    if force_sensing:
+      raise NotImplementedError(
+        "CoreGripper does not support force-sensing closes directly. "
+        "Use pick_up_at_location instead."
+      )
+    await self.driver.send_command(module="C0", command="ZO")
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     raise NotImplementedError("CoreGripper does not support is_gripper_closed")
