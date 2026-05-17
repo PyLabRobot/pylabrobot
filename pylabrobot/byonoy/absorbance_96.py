@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from typing import List, Optional, Tuple
@@ -58,61 +59,65 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
     return [w for w in available_wavelengths if w != 0]
 
   async def _run_abs_measurement(self, signal_wl: int, reference_wl: int, is_reference: bool):
-    await self.send_command(
-      report_id=0x0010,
-      payload=b"\x00" * 60,
-      wait_for_response=False,
-    )
+    with self._measurement_in_flight(0x0320):
+      await self.send_command(
+        report_id=0x0010,
+        payload=b"\x00" * 60,
+        wait_for_response=False,
+      )
 
-    payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
-    await self.send_command(
-      report_id=0x0200,
-      payload=payload2,
-      wait_for_response=False,
-    )
+      payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
+      await self.send_command(
+        report_id=0x0200,
+        payload=payload2,
+        wait_for_response=False,
+      )
 
-    payload3 = Writer().i16(signal_wl).i16(reference_wl).u8(int(is_reference)).u8(0).finish()
-    await self.send_command(
-      report_id=0x0320,
-      payload=payload3,
-      wait_for_response=False,
-      routing_info=b"\x00\x40",
-    )
+      payload3 = Writer().i16(signal_wl).i16(reference_wl).u8(int(is_reference)).u8(0).finish()
+      await self.send_command(
+        report_id=0x0320,
+        payload=payload3,
+        wait_for_response=False,
+        routing_info=b"\x00\x40",
+      )
 
-    rows: List[float] = []
-    t0 = time.time()
+      rows: List[float] = []
+      t0 = time.time()
 
-    while True:
-      if time.time() - t0 > 120:
-        logger.error(
-          "[Byonoy A96 pid=0x%04X] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
-          self.io.pid,
-          signal_wl,
-          reference_wl,
-        )
-        raise TimeoutError("Measurement timeout.")
+      while True:
+        if self._abort_requested:
+          logger.info("[Byonoy A96 pid=0x%04X] measurement aborted by cancel()", self.io.pid)
+          raise asyncio.CancelledError("Absorbance measurement aborted via cancel().")
+        if time.time() - t0 > 120:
+          logger.error(
+            "[Byonoy A96 pid=0x%04X] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
+            self.io.pid,
+            signal_wl,
+            reference_wl,
+          )
+          raise TimeoutError("Measurement timeout.")
 
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
+        chunk = await self.io.read(64, timeout=30)
+        if len(chunk) == 0:
+          continue
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+        reader = Reader(chunk)
+        report_id = reader.u16()
 
-      if report_id == 0x0500:
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.i16()  # signal_wl_nm
-        _ = reader.i16()  # reference_wl_nm
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
+        if report_id == 0x0500:
+          seq = reader.u8()
+          seq_len = reader.u8()
+          _ = reader.i16()  # signal_wl_nm
+          _ = reader.i16()  # reference_wl_nm
+          _ = reader.u32()  # duration_ms
+          row = [reader.f32() for _ in range(12)]
+          _ = reader.u8()  # flags
+          _ = reader.u8()  # progress
 
-        rows.extend(row)
+          rows.extend(row)
 
-        if seq == seq_len - 1:
-          break
+          if seq == seq_len - 1:
+            break
 
     return rows
 

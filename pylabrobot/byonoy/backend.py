@@ -1,11 +1,12 @@
 import asyncio
+import contextlib
 import enum
 import logging
 import threading
 import time
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, Iterator, List, Literal, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
@@ -191,6 +192,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     self._sending_pings = False
     self._device_type = device_type
     self._abort_requested = False
+    self._in_flight_trigger: Optional[int] = None
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
@@ -405,21 +407,43 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
       ref_number=await s(_DD_REF_NUMBER),
     )
 
-  async def cancel(self, report_id: int = 0x0340) -> None:
-    """Abort an in-progress measurement via REP_ABORT_REPORT_OUT (0x0060).
-
-    Empirically the firmware stops emitting result chunks but does not send
-    any closing notification, so we also raise an `_abort_requested` flag
-    that subclasses' read loops poll to bail out instead of waiting 120 s
-    for the hard timeout.
-
-    `report_id` is the trigger report whose execution should be aborted.
-    Defaults to the lum96 trigger (0x0340).
+  @contextlib.contextmanager
+  def _measurement_in_flight(self, report_id: int) -> Iterator[None]:
+    """Mark `report_id` as the in-flight measurement trigger for the duration
+    of the `with` block. Subclasses' read methods wrap their trigger + result
+    loop in this so `cancel()` can find the right report to abort and so a
+    concurrent second read raises instead of corrupting the read buffer.
     """
+    if self._in_flight_trigger is not None:
+      raise RuntimeError(
+        f"Byonoy device busy: report 0x{self._in_flight_trigger:04X} already in "
+        f"flight; call cancel() before starting 0x{report_id:04X}."
+      )
+    self._in_flight_trigger = report_id
+    self._abort_requested = False
+    try:
+      yield
+    finally:
+      self._in_flight_trigger = None
+
+  async def cancel(self) -> None:
+    """Abort the in-flight measurement via REP_ABORT_REPORT_OUT (0x0060).
+
+    Uses the report id tracked by the read method's `_measurement_in_flight`
+    context. If no measurement is in flight, this is a no-op.
+
+    Empirically the firmware stops emitting result chunks but sends no closing
+    notification, so we also raise `_abort_requested`; subclasses' read loops
+    poll the flag and bail out instead of waiting 120 s for the hard timeout.
+    """
+    report_id = self._in_flight_trigger
+    if report_id is None:
+      logger.info("[Byonoy] cancel(): no measurement in flight; no-op")
+      return
     self._abort_requested = True
     payload = Writer().u16(report_id).raw_bytes(b"\x00" * 58).finish()
     await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
-    logger.info("[Byonoy] sent abort for report 0x%04X", report_id)
+    logger.info("[Byonoy] sent abort for in-flight report 0x%04X", report_id)
 
   async def set_led_color(
     self,

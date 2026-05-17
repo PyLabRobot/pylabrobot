@@ -114,66 +114,65 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
       sum(mask_bools),
     )
 
-    await self.send_command(
-      report_id=0x0010,
-      payload=b"\x00" * 60,
-      wait_for_response=False,
-    )
+    with self._measurement_in_flight(0x0340):
+      await self.send_command(
+        report_id=0x0010,
+        payload=b"\x00" * 60,
+        wait_for_response=False,
+      )
 
-    payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
-    await self.send_command(
-      report_id=0x0200,
-      payload=payload2,
-      wait_for_response=False,
-    )
+      payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
+      await self.send_command(
+        report_id=0x0200,
+        payload=payload2,
+        wait_for_response=False,
+      )
 
-    payload3 = (
-      Writer()
-      .i32(int(integration_time * 1_000_000))
-      .raw_bytes(well_mask)
-      .u8(0)  # is_reference_measurement
-      .u8(0)  # flags
-      .finish()
-    )
-    self._abort_requested = False
-    await self.send_command(
-      report_id=0x0340,
-      payload=payload3,
-      wait_for_response=False,
-    )
+      payload3 = (
+        Writer()
+        .i32(int(integration_time * 1_000_000))
+        .raw_bytes(well_mask)
+        .u8(0)  # is_reference_measurement
+        .u8(0)  # flags
+        .finish()
+      )
+      await self.send_command(
+        report_id=0x0340,
+        payload=payload3,
+        wait_for_response=False,
+      )
 
-    t0 = time.time()
-    all_rows: List[Optional[float]] = []
+      t0 = time.time()
+      all_rows: List[Optional[float]] = []
 
-    while True:
-      if self._abort_requested:
-        self._abort_requested = False
-        logger.info("[Byonoy L96 pid=0x%04X] read aborted by cancel()", self.io.pid)
-        raise asyncio.CancelledError("Luminescence read aborted via cancel().")
-      if time.time() - t0 > 120:
-        logger.error("[Byonoy L96 pid=0x%04X] luminescence read timed out after 120s", self.io.pid)
-        raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+      while True:
+        if self._abort_requested:
+          logger.info("[Byonoy L96 pid=0x%04X] read aborted by cancel()", self.io.pid)
+          raise asyncio.CancelledError("Luminescence read aborted via cancel().")
+        if time.time() - t0 > 120:
+          logger.error("[Byonoy L96 pid=0x%04X] luminescence read timed out after 120s", self.io.pid)
+          raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
 
-      chunk = await self.io.read(64, timeout=2)
-      if len(chunk) == 0:
-        continue
+        chunk = await self.io.read(64, timeout=2)
+        if len(chunk) == 0:
+          continue
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+        reader = Reader(chunk)
+        report_id = reader.u16()
 
-      if report_id == 0x0600:
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.u32()  # integration_time_us
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
+        if report_id == 0x0600:
+          seq = reader.u8()
+          seq_len = reader.u8()
+          _ = reader.u32()  # integration_time_us
+          _ = reader.u32()  # duration_ms
+          row = [reader.f32() for _ in range(12)]
+          _ = reader.u8()  # flags
+          _ = reader.u8()  # progress
 
-        all_rows.extend(row)
+          all_rows.extend(row)
 
-        if seq == seq_len - 1:
-          break
+          if seq == seq_len - 1:
+            break
 
     hybrid_result: List[Optional[float]] = all_rows[96 * 0 : 96 * 1]
 
