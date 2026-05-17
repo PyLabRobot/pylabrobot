@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 pytest.importorskip("ot_api")
 from pylabrobot.resources.itemized_resource import ItemizedResource
