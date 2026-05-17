@@ -1,12 +1,16 @@
+---
+orphan: true
+---
+
 # Example vendor file (reference for library_convention.md)
 
 This is a complete, conformant reference for the proposed
 `docs/resources/library/<vendor>.md` convention. It is **not** a real vendor
-page and is intentionally placed outside `resources/library/` so the catalog
-extension does not scrape it. Copy this skeleton when adding a manufacturer.
+page; it is shown below as a literal code block so it is not built as a page
+and its placeholder images are not resolved. Copy this skeleton when adding a
+manufacturer.
 
----
-
+````markdown
 # Acme Labware Inc.
 
 - **Website:** https://www.acme-labware.example
@@ -50,18 +54,17 @@ Acme Labware Inc.
 | Description | Image | PLR definition |
 |-|-|-|
 | 96 tips, 1000 uL, filtered<br>Part no.: AT-1000F<br>[manufacturer website](https://www.acme-labware.example/p/AT-1000F) | ![](img/acme/Acme_96_tiprack_1000uL_filtered.jpg) | `Acme_96_tiprack_1000uL_filtered` |
-
----
+````
 
 ## Why this is conformant
 
 - **One H1** (`# Acme Labware Inc.`) — the canonical name + dedup key.
-- **OEM metadata** as a labelled list (`Website:`, `Wikipedia:`) — both
-  captured unambiguously, no "first link" guessing.
-- **`## About`** reserved section holds the description (not a scraped
-  blockquote heuristic).
-- **`## Brand structure`** reserved section holds the human-curated overview;
-  it is *not* used to build the catalog tree.
+- **OEM metadata** as a labelled list (`Website:`, optional `Wikipedia:`) —
+  captured unambiguously, no "first link" guessing; all keys optional.
+- **`## About`** (optional) reserved section holds the description (not a
+  scraped blockquote heuristic).
+- **`## Brand structure`** (optional) reserved section holds the human-curated
+  overview; it is *not* used to build the catalog tree.
 - **Organisation = heading nesting**: brand-first here
   (`## AcmePure` → `### Plates`/`### Reservoirs`, `## AcmeTips` →
   `### Tip Racks`), one consistent axis, reserved sections excluded.

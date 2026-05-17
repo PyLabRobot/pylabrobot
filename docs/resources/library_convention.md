@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # Resource Library file convention (PROPOSAL — for review)
 
 Status: **proposal, not yet enforced or wired.** This describes the target
@@ -21,28 +25,50 @@ reserved structure.
 
 ## 2. OEM metadata (explicit, labelled — never inferred)
 
-Immediately after the H1, a bullet list of labelled links. Keys are fixed and
-case-insensitive; each value is a single absolute URL. All keys are optional
-but recognised keys must use exactly these labels:
+Immediately after the H1, an **optional** bullet list of labelled links. The
+list, any individual key, and the whole block are all optional — many
+manufacturers (smaller OEMs, regional suppliers, the DIY entries) have no
+external page at all, and that is normal, not a violation.
+
+Recognised keys (case-insensitive, value = one absolute URL):
+
+- **`Website:`** — the manufacturer's own page. This is the only key worth
+  treating as the "primary" reference when present.
+- Any number of *additional, optional* labelled links, e.g.
+  **`Wikipedia:`**, **`Catalog:`**, **`Datasheet:`**. **None of these is
+  expected** — `Wikipedia:` in particular must not be assumed, since most
+  manufacturers have no Wikipedia page.
 
 ```markdown
 - **Website:** https://www.corning.com
-- **Wikipedia:** https://en.wikipedia.org/wiki/Corning_Inc.
+- **Wikipedia:** https://en.wikipedia.org/wiki/Corning_Inc.   (optional extra)
 ```
 
-Rationale: today the catalog grabs "whichever link appears first", which is why
-some manufacturers surface a Wikipedia link and others a homepage. With labelled
-keys both can be captured and shown distinctly, with no ambiguity.
+A file with no links is fully conformant. **Fallback:** no metadata → no
+reference link in the panel; only `Website:` → a "Website ↗" link; a
+`Wikipedia:` present → an additional "Wikipedia ↗" link. The panel never
+implies a missing key should exist.
 
-## 3. Reserved info sections
+Rationale: today the catalog grabs "whichever link appears first", so some
+manufacturers surface a Wikipedia link and others a homepage purely by
+ordering accident. Explicit, optional labels remove the ambiguity without
+making any particular source mandatory.
 
-These headings are **reserved**: they hold manufacturer information and are
-**excluded from the resource organisation tree**. Names are exact.
+## 3. Reserved info sections (all optional)
 
-### `## About`
+These headings are **reserved** and **optional**. When present they hold
+manufacturer information and are **excluded from the resource organisation
+tree**; when absent the panel simply omits that part — never an error. The
+names, *if used*, must be spelled exactly, but **no file is required to have
+them**. The only mandatory content is §1 (one H1) and §5 (at least one
+resource table whose definitions resolve); everything in this section is
+optional enrichment.
+
+### `## About` (optional)
 
 A single descriptive paragraph (plain prose or one blockquote). Replaces the
 "first blockquote in the preamble" heuristic.
+**Fallback:** if absent, no description paragraph is shown — not an error.
 
 ```markdown
 ## About
@@ -56,6 +82,8 @@ specialises in specialty glass, ceramics, and related materials.
 A human-curated overview of the manufacturer's brand hierarchy, as a fenced
 code block (ASCII tree) and/or prose. This is narrative context for humans; it
 is **not** the source of truth for how resources are organised (see §4).
+**Fallback:** if absent, the panel shows only the heading-derived breakdown
+from §4 (which every file has) — not an error.
 
 ```markdown
 ## Brand structure
@@ -137,19 +165,30 @@ Rules per row:
 
 ## What CI would enforce (objective)
 
-These are mechanically checkable and proposed to **fail** CI on violation:
+Mechanically checkable, proposed to **fail** CI on violation. Split into the
+mandatory core and conditional checks that only apply to *optional* content
+when it is present.
+
+**Required (mandatory core — every file):**
 
 1. Exactly one H1.
-2. OEM metadata list, if present, uses only recognised labels with valid
+2. At least one resource table, and every PLR definition in it is a single
+   regex-valid identifier that resolves to a real `pylabrobot.resources`
+   factory.
+3. Every definition table matches the fixed header.
+4. Every image path resolves to an existing file.
+5. No duplicate PLR definition names across the whole library.
+
+**Conditional (optional content — checked only if present):**
+
+6. OEM metadata list, *if present*, uses only recognised labels with valid
    absolute URLs.
-3. Reserved section names spelled exactly (`About`, `Brand structure`).
-4. No prose/tables placed where the parser expects structure (e.g. a resource
-   table outside any non-reserved section).
-5. Every definition table matches the fixed header.
-6. Each PLR definition: single identifier, regex-valid, resolves to a real
-   `pylabrobot.resources` factory.
-7. Every image path resolves to an existing file.
-8. No duplicate PLR definition names across the whole library.
+7. Reserved sections are **not required**. A section titled exactly
+   `## About` or `## Brand structure` is treated as reserved (excluded from
+   the resource tree); near-miss spellings are flagged so they are not
+   silently parsed as resource categories.
+8. No resource table placed where the parser expects an info section, or
+   vice-versa.
 
 ## What is NOT in scope for CI (author / project decision)
 
