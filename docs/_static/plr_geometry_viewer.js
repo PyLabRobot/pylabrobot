@@ -737,6 +737,12 @@
       };
     }
 
+    rulerUiScale() {
+      // Keep rulers a bit larger at baseline and grow with zoom so labels and
+      // axis strokes stay legible while inspecting details.
+      return clamp(1.1 + (this.zoom - 1) * 0.28, 1.0, 2.0);
+    }
+
     drawBackground() {
       const ctx = this.context;
       const theme = readThemeColors(this.root);
@@ -762,12 +768,14 @@
       const y1 = Math.ceil(this.bounds.max.y / step) * step;
       const epsilon = step * 1e-6;
       const labelGap = step * 0.2;
+      const uiScale = this.rulerUiScale();
+      const tickMinGap = TICK_MIN_GAP * uiScale;
 
       ctx.save();
       ctx.strokeStyle = theme.text;
 
       // Minor mm grid.
-      ctx.lineWidth = 1;
+      ctx.lineWidth = Math.max(1, 0.9 * uiScale);
       ctx.globalAlpha = 0.18;
       for (let x = x0; x <= x1 + epsilon; x += step) {
         const start = this.project({ x, y: y0, z: groundZ });
@@ -788,7 +796,7 @@
 
       // Origin axes (Blender-style colors: X red, Y green).
       ctx.globalAlpha = 0.9;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * uiScale;
       const xAxisStart = this.project({ x: x0, y: y0, z: groundZ });
       const xAxisEnd = this.project({ x: x1, y: y0, z: groundZ });
       ctx.strokeStyle = AXIS_COLORS.x;
@@ -804,7 +812,7 @@
       ctx.stroke();
 
       // Tick marks: short stubs pointing outward toward each axis's labels.
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 * uiScale;
       const tickLen = step * 0.12;
       ctx.strokeStyle = AXIS_COLORS.x;
       for (let x = x0; x <= x1 + epsilon; x += step) {
@@ -827,7 +835,7 @@
 
       // Tick labels in mm (matched to axis colors).
       ctx.globalAlpha = 0.9;
-      ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+      ctx.font = `bold ${Math.round(12 * uiScale)}px system-ui, -apple-system, sans-serif`;
       ctx.fillStyle = AXIS_COLORS.x;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -836,12 +844,12 @@
         const point = this.project({ x, y: y0 - labelGap, z: groundZ });
         if (
           lastXLabel !== null &&
-          Math.hypot(point.x - lastXLabel.x, point.y - lastXLabel.y) < TICK_MIN_GAP
+          Math.hypot(point.x - lastXLabel.x, point.y - lastXLabel.y) < tickMinGap
         ) {
           continue;
         }
         lastXLabel = point;
-        ctx.fillText(String(Math.round(x)), point.x, point.y + 5);
+        ctx.fillText(String(Math.round(x)), point.x, point.y + 5 * uiScale);
       }
       ctx.fillStyle = AXIS_COLORS.y;
       ctx.textAlign = "right";
@@ -851,27 +859,27 @@
         const point = this.project({ x: x0 - labelGap, y, z: groundZ - step * 0.2 });
         if (
           lastYLabel !== null &&
-          Math.hypot(point.x - lastYLabel.x, point.y - lastYLabel.y) < TICK_MIN_GAP
+          Math.hypot(point.x - lastYLabel.x, point.y - lastYLabel.y) < tickMinGap
         ) {
           continue;
         }
         lastYLabel = point;
-        ctx.fillText(String(Math.round(y)), point.x - 7, point.y);
+        ctx.fillText(String(Math.round(y)), point.x - 7 * uiScale, point.y);
       }
 
       // Axis unit captions.
       ctx.globalAlpha = 1;
-      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
+      ctx.font = `bold ${Math.round(11 * uiScale)}px system-ui, -apple-system, sans-serif`;
       const xCaption = this.project({ x: x1, y: y0, z: groundZ });
       ctx.fillStyle = AXIS_COLORS.x;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText("X (mm)", xCaption.x + 25, xCaption.y);
+      ctx.fillText("X (mm)", xCaption.x + 25 * uiScale, xCaption.y);
       const yCaption = this.project({ x: x0, y: y1, z: groundZ });
       ctx.fillStyle = AXIS_COLORS.y;
       ctx.textAlign = "right";
       ctx.textBaseline = "bottom";
-      ctx.fillText("Y (mm)", yCaption.x - 7, yCaption.y - 22);
+      ctx.fillText("Y (mm)", yCaption.x - 7 * uiScale, yCaption.y - 22 * uiScale);
 
       ctx.restore();
     }
@@ -907,6 +915,8 @@
       });
       const baseScreen = this.project({ x: corner.x, y: corner.y, z: z0 });
       const outwardSign = baseScreen.x >= centerScreen.x ? 1 : -1;
+      const uiScale = this.rulerUiScale();
+      const tickMinGap = TICK_MIN_GAP * uiScale;
 
       const ctx = this.context;
       ctx.save();
@@ -914,7 +924,7 @@
       ctx.fillStyle = AXIS_COLORS.z;
 
       ctx.globalAlpha = 0.9;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * uiScale;
       const axisBottom = this.project({ x: corner.x, y: corner.y, z: zStart });
       const axisTop = this.project({ x: corner.x, y: corner.y, z: zEnd });
       ctx.beginPath();
@@ -922,7 +932,7 @@
       ctx.lineTo(axisTop.x, axisTop.y);
       ctx.stroke();
 
-      ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+      ctx.font = `bold ${Math.round(12 * uiScale)}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = outwardSign > 0 ? "left" : "right";
       ctx.textBaseline = "middle";
       let lastZLabel = null;
@@ -930,22 +940,22 @@
         const point = this.project({ x: corner.x, y: corner.y, z });
         if (
           lastZLabel !== null &&
-          Math.hypot(point.x - lastZLabel.x, point.y - lastZLabel.y) < TICK_MIN_GAP
+          Math.hypot(point.x - lastZLabel.x, point.y - lastZLabel.y) < tickMinGap
         ) {
           continue;
         }
         lastZLabel = point;
         ctx.beginPath();
         ctx.moveTo(point.x, point.y);
-        ctx.lineTo(point.x + outwardSign * 6, point.y);
+        ctx.lineTo(point.x + outwardSign * 6 * uiScale, point.y);
         ctx.stroke();
-        ctx.fillText(String(Math.round(z)), point.x + outwardSign * 10, point.y);
+        ctx.fillText(String(Math.round(z)), point.x + outwardSign * 10 * uiScale, point.y);
       }
 
       ctx.globalAlpha = 1;
-      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
+      ctx.font = `bold ${Math.round(11 * uiScale)}px system-ui, -apple-system, sans-serif`;
       ctx.textBaseline = "bottom";
-      ctx.fillText("Z (mm)", axisTop.x + outwardSign * 10, axisTop.y - 8);
+      ctx.fillText("Z (mm)", axisTop.x + outwardSign * 10 * uiScale, axisTop.y - 8 * uiScale);
 
       ctx.restore();
     }
