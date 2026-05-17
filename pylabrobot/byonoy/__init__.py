@@ -8,7 +8,7 @@ from .absorbance_96 import (
   byonoy_a96a_parking_unit,
   byonoy_sbs_adapter,
 )
-from .backend import (
+from .driver import (
   LUM96_PRESET_S,
   Abs1StatusError,
   Abs96StatusError,

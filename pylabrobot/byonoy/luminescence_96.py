@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from pylabrobot.byonoy.backend import (
+from pylabrobot.byonoy.driver import (
   LUM96_PRESET_S,
   ByonoyDevice,
   ByonoyDriver,

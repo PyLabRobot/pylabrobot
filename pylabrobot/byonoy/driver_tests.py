@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.byonoy.backend import (
+from pylabrobot.byonoy.driver import (
   _GENERIC_ERROR_NAMES,
   _LED_EFFECT_CODES,
   ABS1_ERROR_NAMES,
