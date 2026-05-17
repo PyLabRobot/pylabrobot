@@ -192,6 +192,7 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     self._sending_pings = False
     self._device_type = device_type
     self._abort_requested = False
+    self._led_bar_warning_issued = False
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
@@ -422,6 +423,33 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
     logger.info("[Byonoy] sent abort for report 0x%04X", report_id)
 
+  async def _warn_if_likely_no_led_bar(self) -> None:
+    """Log a one-time warning if this device is likely a non-Automate SKU
+    without a physical RGB bar. Heuristic: serial number prefix.
+
+    Both the standalone L96 ("BYOMML*") and the Automate L96A ("BYOMAL*")
+    share the same USB PID, firmware build, and HID protocol — the reports
+    are accepted on both, but the standalone hardware appears to lack the
+    20-pixel RGB bar, so the writes have no visible effect. Tested only on
+    the Automate (PR #1027 was validated on serial BYOMAL00029).
+    """
+    if self._led_bar_warning_issued:
+      return
+    self._led_bar_warning_issued = True
+    try:
+      info = await self.get_device_info()
+    except Exception:
+      return
+    if not info.serial_no.startswith("BYOMAL"):
+      logger.warning(
+        "[Byonoy] LED bar writes may have no visible effect on this device "
+        "(serial=%s). The 20-pixel RGB bar has only been validated on the "
+        "Automate variant (serial prefix 'BYOMAL'). Standalone L96 ('BYOMML') "
+        "hardware appears not to have the bar; firmware accepts the report "
+        "either way.",
+        info.serial_no,
+      )
+
   async def set_led(
     self,
     colors: List[Tuple[int, int, int]],
@@ -436,7 +464,12 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     under the requested `effect` so the firmware doesn't overwrite the colors
     with its own animation, then sends the 20-pixel buffer. Pads with black if
     fewer than 20 are given.
+
+    Visible only on Automate-variant hardware (serial prefix "BYOMAL"); the
+    standalone L96 ("BYOMML") accepts the reports but appears to lack the
+    physical RGB bar. A one-time warning is logged on non-Automate devices.
     """
+    await self._warn_if_likely_no_led_bar()
     base = colors[0] if colors else (0, 0, 0)
     await self._set_led_effect(effect, color=base, manual=True,
                                effect_state=effect_state, duration_ms=duration_ms)
@@ -460,7 +493,10 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
 
     Packed layout (vendor byonoyusbhid.h led_bar_effects_out_t):
       effect:u8  color:(r,g,b u8)  effect_state:u8  flags:u8  duration_ms:u32
+
+    See `set_led` for the SKU caveat — visible only on Automate hardware.
     """
+    await self._warn_if_likely_no_led_bar()
     # FLAG_LED_MANUAL=0x02, FLAG_LED_FORCE=0x10 — force overrides idle state.
     flags = (0x02 | 0x10) if manual else 0
     r_, g, b = color
