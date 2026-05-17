@@ -54,10 +54,10 @@ When a future PR refactors:
 
 ### F1 — LED control could be a P-16 helper subsystem (soft)
 
-`set_led_colours` and `set_led_effect` live as flat methods on the
-`Driver`. They form a coherent subsystem (touch reports 0x0350 / 0x0351,
-share manual-mode coordination — `set_led_colours` already chains an
-effect-set + colour-write). v1b1 precedent: `STARCover`,
+`set_led` (public) and `_set_led_effect` (private helper) live as flat
+methods on the `Driver`. They form a coherent subsystem (touch reports
+0x0350 / 0x0351, share manual-mode coordination — `set_led` already
+chains an effect-set + color-write). v1b1 precedent: `STARCover`,
 `STARWashStation`, `NimbusDoor` group related operations into a plain
 helper class attached as a Driver attribute, with `_on_setup` /
 `_on_stop` hooks.
@@ -72,12 +72,12 @@ class ByonoyLEDBar:
     self._driver = driver
   async def _on_setup(self) -> None: pass
   async def _on_stop(self) -> None: pass
-  async def set_colours(self, colours: List[Tuple[int, int, int]]) -> None: ...
-  async def set_effect(self, effect: LedEffect, ...) -> None: ...
+  async def set(self, colors: List[Tuple[int, int, int]],
+                effect: LedEffect = LedEffect.SOLID, ...) -> None: ...
 ```
 
-User call site changes from `reader.driver.set_led_colours(...)` to
-`reader.driver.led_bar.set_colours(...)`.
+User call site changes from `reader.driver.set_led(...)` to
+`reader.driver.led_bar.set(...)`.
 
 ### F2 — Device-info queries could be a P-16 helper subsystem (soft)
 
@@ -147,7 +147,7 @@ rename to `ByonoyDriver`. The per-device pid is already passed via
   `reader.driver.get_status()`) doesn't depend on the internal
   layering and would survive a refactor unchanged for callers.
 - Helper-subsystem grouping (F1, F2) changes call sites
-  (`driver.led_bar.set_colours` vs `driver.set_led_colours`); worth
+  (`driver.led_bar.set` vs `driver.set_led`); worth
   doing in a single coordinated PR rather than piecemeal.
 
 ## Reference
