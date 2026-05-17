@@ -1,0 +1,55 @@
+﻿:orphan:
+
+pylabrobot.plate\_reading.molecular\_devices.spectramax\_gemini\_em\_backend.MolecularDevicesSpectraMaxGeminiEMBackend
+======================================================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.molecular_devices.spectramax_gemini_em_backend
+
+.. autoclass:: MolecularDevicesSpectraMaxGeminiEMBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.WELLSCAN_OFFSET_MM
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.__init__
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.clear_error_log
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.close
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.deserialize
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.experimental_read_fluorescence_emission_spectrum
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.experimental_read_fluorescence_excitation_spectrum
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.experimental_read_fluorescence_wellscan
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.experimental_read_time_resolved_fluorescence
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.get_all_instances
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.get_firmware_version
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.get_status
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.get_temperature
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.open
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.read_absorbance
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.read_error_log
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.read_fluorescence
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.read_fluorescence_polarization
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.read_luminescence
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.read_time_resolved_fluorescence
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.send_command
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.serialize
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.set_temperature
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.setup
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.start_shake
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.stop
+      ~MolecularDevicesSpectraMaxGeminiEMBackend.stop_shake
+   
+   

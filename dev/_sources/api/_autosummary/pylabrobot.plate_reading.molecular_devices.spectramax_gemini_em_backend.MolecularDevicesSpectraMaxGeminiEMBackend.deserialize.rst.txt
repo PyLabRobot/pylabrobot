@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.molecular\_devices.spectramax\_gemini\_em\_backend.MolecularDevicesSpectraMaxGeminiEMBackend.deserialize
+==================================================================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.molecular_devices.spectramax_gemini_em_backend
+
+.. automethod:: MolecularDevicesSpectraMaxGeminiEMBackend.deserialize

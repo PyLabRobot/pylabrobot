@@ -1,0 +1,1522 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>SpectraMax Gemini EM &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
+
+    <script src="../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/02_analytical/plate-reading/spectramax-gemini-em';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.17.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/spectramax-gemini-em.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Synergy H1" href="synergyh1.html" />
+    <link rel="prev" title="ImageXpress Pico" href="pico.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.1" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar"><svg class="pst-icon svg-inline--fa" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../_getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../_getting-started/units.html">Default Units</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/_hamilton-star.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/96head.html">Using the 96 head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader.html">Using the autoload &amp; 1D barcode reader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/y-probing.html">Y-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hamilton-liquid-classes.html">Using “Hamilton Liquid Classes” with Pylabrobot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/core-grippers.html">Co-Re Grippers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/surface-following.html">Surface following</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../00_liquid-handling/opentrons/ot2/ot2.html">Opentrons OT-2</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/opentrons/ot2/hello-world.html">OT-2 Hello World</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/opentrons/ot2/ot2-simulator.html">OT-2 Simulator with Visualizer</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../00_liquid-handling/plate-washing/plate-washing.html">Plate Washing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/plate-washing/biotek-el406.html">BioTek EL406</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../00_liquid-handling/pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/mixing.html">Mixing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/container_no_go_zones.html">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../01_material-handling/_material-handling.html">Material Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../01_material-handling/arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html">PreciseFlex PF400 and PF3400 robots</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/centrifuge/_centrifuge.html">Centrifuges</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/heating_shaking/qinstruments.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/fans/fans.html">Fans (Air Filtration Systems)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/fans/hamilton_hepa_scap.html">Hamilton HEPA Fan</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/sealers/a4s.html">Azenta a4S</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/temperature-controllers/temperature-controllers.html">Temperature Controllers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/temperature-controllers/ot-temperature-controller.html">Opentrons Temperature Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/temperature-controllers/hamilton-heater-cooler.html">Hamilton Heater Cooler (HHC)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/temperature-controllers/inheco.html">Hello World, Inheco CPAC!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/storage/storage.html">Storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/cytomat.html">TFS Cytomat Series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/inheco/incubator_shaker.html">Inheco Incubator (Shaker)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/inheco/scila.html">Inheco SCILA</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/liconic.html">Liconic STX Series</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../01_material-handling/tilting.html">Tilting</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/thermocycling/thermocycling.html">Thermocycling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/thermocycling/inheco-odtc.html">Inheco ODTC</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../_analytical.html">Analytical</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="plate-reading.html">Plate reading</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="byonoy.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cytation.html">Cytation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pico.html">ImageXpress Pico</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">SpectraMax Gemini EM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="synergyh1.html">Synergy H1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="tecan-spark.html">Tecan Spark 20M</a></li>
+<li class="toctree-l3"><a class="reference internal" href="tecan-infinite.html">Tecan Infinite 200 PRO</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../scales/mettler-toledo-WXS205SDU.html">Mettler Toledo Precision Scales</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../_analytical.html" class="nav-link">Analytical</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="plate-reading.html" class="nav-link">Plate reading</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">SpectraMax Gemini EM</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="spectramax-gemini-em">
+<h1>SpectraMax Gemini EM<a class="headerlink" href="#spectramax-gemini-em" title="Link to this heading">#</a></h1>
+<p>The Molecular Devices SpectraMax Gemini EM is a fluorescence plate reader controlled over a
+serial RS-232 interface. PyLabRobot supports this reader with the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MolecularDevicesSpectraMaxGeminiEMBackend</span></code>.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pylabrobot<span class="o">[</span>serial<span class="o">]</span>
+</pre></div>
+</div>
+<p>On Linux, the USB-to-RS-232 adapter will typically appear as <code class="docutils literal notranslate"><span class="pre">/dev/ttyUSB0</span></code> or <code class="docutils literal notranslate"><span class="pre">/dev/ttyUSB1</span></code>.
+On Windows, it appears as a <code class="docutils literal notranslate"><span class="pre">COM</span></code> port.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlateReader</span><span class="p">,</span> <span class="n">MolecularDevicesSpectraMaxGeminiEMBackend</span>
+
+<span class="n">backend</span> <span class="o">=</span> <span class="n">MolecularDevicesSpectraMaxGeminiEMBackend</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>
+<span class="n">pr</span> <span class="o">=</span> <span class="n">PlateReader</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>2026-05-17 13:10:52,216 - pylabrobot.io.serial - INFO - Using explicitly provided port: /dev/ttyUSB0 (for VID=None, PID=None)
+</pre></div>
+</div>
+</div>
+</div>
+<section id="open-tray">
+<h3>Open Tray<a class="headerlink" href="#open-tray" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="close-tray">
+<h3>Close Tray<a class="headerlink" href="#close-tray" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="validated-behavior">
+<h2>Validated behavior<a class="headerlink" href="#validated-behavior" title="Link to this heading">#</a></h2>
+<p>The Gemini EM backend was validated against a Molecular Devices SpectraMax Gemini EM using
+a USB-to-RS-232 adapter. The instrument identified itself as:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>GEMINI EM
+2.00b78 01Mar04
+</pre></div>
+</div>
+<p>The following operations were validated:</p>
+<ul class="simple">
+<li><p>opening and closing the drawer</p></li>
+<li><p>querying reader status</p></li>
+<li><p>querying and setting temperature</p></li>
+<li><p>endpoint fluorescence reads on a 96-well plate</p></li>
+<li><p>endpoint fluorescence reads on a 384-well plate</p></li>
+<li><p>endpoint luminescence reads on a 96-well plate</p></li>
+<li><p>endpoint time-resolved fluorescence reads on a 96-well plate</p></li>
+<li><p>kinetic time-resolved fluorescence reads on a 96-well plate</p></li>
+<li><p>emission and excitation fluorescence spectrum reads on a 96-well plate</p></li>
+<li><p>fluorescence fill wellscan reads on a 96-well plate</p></li>
+<li><p>top and bottom fluorescence read-stage selection</p></li>
+<li><p>configurable excitation and emission wavelengths</p></li>
+</ul>
+<p>The Windows/SoftMax Pro setup used during development was for protocol discovery only. The intended
+deployment path is direct serial control from Linux using the USB-to-RS-232 adapter, typically as
+<code class="docutils literal notranslate"><span class="pre">/dev/ttyUSB0</span></code> or <code class="docutils literal notranslate"><span class="pre">/dev/ttyUSB1</span></code>.</p>
+<p>Absorbance and fluorescence polarization are not implemented for this backend.</p>
+</section>
+<section id="support-status">
+<h2>Support status<a class="headerlink" href="#support-status" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Backend status</p></th>
+<th class="head"><p>Hardware status</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Drawer open/close</p></td>
+<td><p>implemented</p></td>
+<td><p>validated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Status and temperature query</p></td>
+<td><p>implemented</p></td>
+<td><p>validated</p></td>
+</tr>
+<tr class="row-even"><td><p>Temperature setpoint</p></td>
+<td><p>implemented</p></td>
+<td><p>validated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Fluorescence endpoint</p></td>
+<td><p>implemented</p></td>
+<td><p>validated, 96-well and 384-well</p></td>
+</tr>
+<tr class="row-even"><td><p>Fluorescence top/bottom read</p></td>
+<td><p>implemented</p></td>
+<td><p>validated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Luminescence endpoint</p></td>
+<td><p>implemented</p></td>
+<td><p>validated, top read</p></td>
+</tr>
+<tr class="row-even"><td><p>Time-resolved fluorescence endpoint</p></td>
+<td><p>implemented</p></td>
+<td><p>validated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Time-resolved fluorescence kinetic</p></td>
+<td><p>implemented</p></td>
+<td><p>validated with a short run</p></td>
+</tr>
+<tr class="row-even"><td><p>Fluorescence emission spectrum</p></td>
+<td><p>implemented</p></td>
+<td><p>validated with a short sweep</p></td>
+</tr>
+<tr class="row-odd"><td><p>Fluorescence excitation spectrum</p></td>
+<td><p>implemented</p></td>
+<td><p>validated with a short sweep</p></td>
+</tr>
+<tr class="row-even"><td><p>Fluorescence wellscan</p></td>
+<td><p>implemented</p></td>
+<td><p>validated with fill pattern</p></td>
+</tr>
+<tr class="row-odd"><td><p>Rectangular partial-region reads</p></td>
+<td><p>implemented</p></td>
+<td><p>unit tested</p></td>
+</tr>
+<tr class="row-even"><td><p>Arbitrary non-rectangular partial reads</p></td>
+<td><p>not implemented</p></td>
+<td><p>not validated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Absorbance</p></td>
+<td><p>not supported by Gemini EM</p></td>
+<td><p>not applicable</p></td>
+</tr>
+<tr class="row-even"><td><p>Fluorescence polarization</p></td>
+<td><p>not implemented</p></td>
+<td><p>not validated</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="fluorescence-reads">
+<h2>Fluorescence reads<a class="headerlink" href="#fluorescence-reads" title="Link to this heading">#</a></h2>
+<p>Assign a plate to the reader before reading. The backend uses the plate resource geometry to
+configure the reader’s plate position.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
+
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<span class="n">pr</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">read_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">485</span><span class="p">,</span>
+  <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">520</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>For a TRITC-like fluorescence read:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">read_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">557</span><span class="p">,</span>
+  <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">576</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>For a bottom read, pass <code class="docutils literal notranslate"><span class="pre">read_from_bottom=True</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">read_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">485</span><span class="p">,</span>
+  <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">520</span><span class="p">,</span>
+  <span class="n">read_from_bottom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Full-plate reads and rectangular contiguous well regions are supported. Arbitrary non-rectangular
+well selections raise <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>.</p>
+</section>
+<section id="luminescence-reads">
+<h2>Luminescence reads<a class="headerlink" href="#luminescence-reads" title="Link to this heading">#</a></h2>
+<p>Endpoint luminescence is available through the Gemini EM backend. The implementation follows the
+SoftMax Pro command sequence captured during development, including <code class="docutils literal notranslate"><span class="pre">!READTYPE</span> <span class="pre">LUM</span></code>,
+<code class="docutils literal notranslate"><span class="pre">!EMWAVELENGTH</span> <span class="pre">0</span></code>, <code class="docutils literal notranslate"><span class="pre">!TOPREADCLEAR</span> <span class="pre">OFF</span></code>, and <code class="docutils literal notranslate"><span class="pre">!READSTAGE</span> <span class="pre">TOP</span></code>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">read_luminescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Optional pre-read shaking is supported:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading.molecular_devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShakeSettings</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">read_luminescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">shake_settings</span><span class="o">=</span><span class="n">ShakeSettings</span><span class="p">(</span><span class="n">before_read</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">before_read_duration</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Only endpoint, top-read luminescence is currently implemented.</p>
+</section>
+<section id="time-resolved-fluorescence">
+<h2>Time-Resolved Fluorescence<a class="headerlink" href="#time-resolved-fluorescence" title="Link to this heading">#</a></h2>
+<p>Endpoint time-resolved fluorescence is available through the Gemini EM backend. The implementation
+uses the Gemini EM command form observed from SoftMax Pro:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!READTYPE TIME &lt;delay_time&gt; &lt;integration_time&gt;
+</pre></div>
+</div>
+<p>For example:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_time_resolved_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">excitation_wavelengths</span><span class="o">=</span><span class="p">[</span><span class="mi">485</span><span class="p">],</span>
+  <span class="n">emission_wavelengths</span><span class="o">=</span><span class="p">[</span><span class="mi">525</span><span class="p">],</span>
+  <span class="n">cutoff_filters</span><span class="o">=</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span>
+  <span class="n">delay_time</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+  <span class="n">integration_time</span><span class="o">=</span><span class="mi">850</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>For a bottom TRF read:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_time_resolved_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">excitation_wavelengths</span><span class="o">=</span><span class="p">[</span><span class="mi">485</span><span class="p">],</span>
+  <span class="n">emission_wavelengths</span><span class="o">=</span><span class="p">[</span><span class="mi">525</span><span class="p">],</span>
+  <span class="n">cutoff_filters</span><span class="o">=</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span>
+  <span class="n">delay_time</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+  <span class="n">integration_time</span><span class="o">=</span><span class="mi">850</span><span class="p">,</span>
+  <span class="n">read_from_bottom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Kinetic TRF is also supported with <code class="docutils literal notranslate"><span class="pre">ReadType.KINETIC</span></code> and <code class="docutils literal notranslate"><span class="pre">KineticSettings</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.plate_reading.molecular_devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">KineticSettings</span><span class="p">,</span> <span class="n">ReadType</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_time_resolved_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">excitation_wavelengths</span><span class="o">=</span><span class="p">[</span><span class="mi">485</span><span class="p">],</span>
+  <span class="n">emission_wavelengths</span><span class="o">=</span><span class="p">[</span><span class="mi">525</span><span class="p">],</span>
+  <span class="n">cutoff_filters</span><span class="o">=</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span>
+  <span class="n">delay_time</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+  <span class="n">integration_time</span><span class="o">=</span><span class="mi">850</span><span class="p">,</span>
+  <span class="n">read_type</span><span class="o">=</span><span class="n">ReadType</span><span class="o">.</span><span class="n">KINETIC</span><span class="p">,</span>
+  <span class="n">kinetic_settings</span><span class="o">=</span><span class="n">KineticSettings</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">num_readings</span><span class="o">=</span><span class="mi">21</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Endpoint and kinetic TRF are currently implemented for full plates and rectangular contiguous well
+regions. Arbitrary non-rectangular well selections are not supported.</p>
+</section>
+<section id="fluorescence-spectra">
+<h2>Fluorescence Spectra<a class="headerlink" href="#fluorescence-spectra" title="Link to this heading">#</a></h2>
+<p>Gemini-specific helpers are available for fluorescence spectra. They use <code class="docutils literal notranslate"><span class="pre">SpectrumSettings</span></code>
+internally but expose fixed-excitation and fixed-emission sweeps directly.</p>
+<p>For an emission spectrum with fixed excitation:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_fluorescence_emission_spectrum</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">350</span><span class="p">,</span>
+  <span class="n">start_emission_wavelength</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+  <span class="n">step</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+  <span class="n">num_steps</span><span class="o">=</span><span class="mi">36</span><span class="p">,</span>
+  <span class="n">read_from_bottom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
+<span class="ne">CancelledError</span><span class="g g-Whitespace">                            </span>Traceback (most recent call last)
+<span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">10</span><span class="p">],</span> <span class="n">line</span> <span class="mi">1</span>
+<span class="ne">----&gt; </span><span class="mi">1</span> <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_fluorescence_emission_spectrum</span><span class="p">(</span>
+<span class="g g-Whitespace">      </span><span class="mi">2</span>   <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+<span class="g g-Whitespace">      </span><span class="mi">3</span>   <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+<span class="g g-Whitespace">      </span><span class="mi">4</span>   <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">350</span><span class="p">,</span>
+
+<span class="nn">File ~/git/pylabrobot/pylabrobot/plate_reading/molecular_devices/spectramax_gemini_em_backend.py:406,</span> in <span class="ni">MolecularDevicesSpectraMaxGeminiEMBackend.experimental_read_fluorescence_emission_spectrum</span><span class="nt">(self, plate, wells, excitation_wavelength, start_emission_wavelength, step, num_steps, cutoff_filters, read_order, calibrate, shake_settings, carriage_speed, read_from_bottom, pmt_gain, flashes_per_well, timeout)</span>
+<span class="g g-Whitespace">    </span><span class="mi">403</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_order</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">405</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_now</span><span class="p">()</span>
+<span class="ne">--&gt; </span><span class="mi">406</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_idle</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">407</span> <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfer_data</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+
+<span class="nn">File ~/git/pylabrobot/pylabrobot/plate_reading/molecular_devices/backend.py:689,</span> in <span class="ni">MolecularDevicesBackend._wait_for_idle</span><span class="nt">(self, timeout)</span>
+<span class="g g-Whitespace">    </span><span class="mi">687</span> <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">688</span>   <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;Timeout waiting for plate reader to become idle.&quot;</span><span class="p">)</span>
+<span class="ne">--&gt; </span><span class="mi">689</span> <span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">()</span>
+<span class="g g-Whitespace">    </span><span class="mi">690</span> <span class="k">if</span> <span class="n">status</span> <span class="ow">and</span> <span class="n">status</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;IDLE&quot;</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">691</span>   <span class="k">break</span>
+
+<span class="nn">File ~/git/pylabrobot/pylabrobot/plate_reading/molecular_devices/backend.py:333,</span> in <span class="ni">MolecularDevicesBackend.get_status</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">    </span><span class="mi">332</span> <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_status</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="ne">--&gt; </span><span class="mi">333</span>   <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_command</span><span class="p">(</span><span class="s2">&quot;!STATUS&quot;</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">334</span>   <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">res</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">335</span>     <span class="k">return</span> <span class="n">res</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+<span class="nn">File ~/git/pylabrobot/pylabrobot/plate_reading/molecular_devices/backend.py:287,</span> in <span class="ni">MolecularDevicesBackend.send_command</span><span class="nt">(self, command, timeout, num_res_fields)</span>
+<span class="g g-Whitespace">    </span><span class="mi">285</span> <span class="n">timeout_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">timeout</span>
+<span class="g g-Whitespace">    </span><span class="mi">286</span> <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+<span class="ne">--&gt; </span><span class="mi">287</span>   <span class="n">raw_response</span> <span class="o">+=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+<span class="g g-Whitespace">    </span><span class="mi">288</span>   <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.001</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">289</span>   <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">timeout_time</span><span class="p">:</span>
+
+<span class="nn">File ~/git/pylabrobot/pylabrobot/io/serial.py:244,</span> in <span class="ni">Serial.readline</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">    </span><span class="mi">241</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_executor</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ser</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">242</span>   <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Call setup() first for device &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_human_readable_device_name</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+<span class="ne">--&gt; </span><span class="mi">244</span> <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_executor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ser</span><span class="o">.</span><span class="n">readline</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">246</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">247</span>   <span class="n">logger</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">LOG_LEVEL_IO</span><span class="p">,</span> <span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] readline </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_port</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+<span class="ne">CancelledError</span>: 
+</pre></div>
+</div>
+</div>
+</div>
+<p>This sends the Gemini EM spectrum mode:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!EXWAVELENGTH 350
+!MODE EMSPECTRUM 400 10 36
+!ORDER WAVELENGTH
+</pre></div>
+</div>
+<p>For an excitation spectrum with fixed emission:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_fluorescence_excitation_spectrum</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+  <span class="n">start_excitation_wavelength</span><span class="o">=</span><span class="mi">350</span><span class="p">,</span>
+  <span class="n">step</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+  <span class="n">num_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+  <span class="n">read_from_bottom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>This sends:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!EMWAVELENGTH 600
+!AUTOFILTER EX OFF
+!MODE EXSPECTRUM 350 20 4
+!ORDER WAVELENGTH
+</pre></div>
+</div>
+<p>The spectrum helpers default to cutoff filter <code class="docutils literal notranslate"><span class="pre">1</span></code>, matching the captured SoftMax Pro spectrum
+protocols. Pass <code class="docutils literal notranslate"><span class="pre">cutoff_filters=[...]</span></code> to override this.</p>
+</section>
+<section id="wellscan-fluorescence">
+<h2>Wellscan fluorescence<a class="headerlink" href="#wellscan-fluorescence" title="Link to this heading">#</a></h2>
+<p>The Gemini EM backend includes a Gemini-specific <code class="docutils literal notranslate"><span class="pre">experimental_read_fluorescence_wellscan</span></code> method. SoftMax
+Pro implements wellscan by enabling wellscan mode and performing separate reads at shifted plate
+origins. The backend mirrors that behavior instead of averaging scan points silently.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">experimental_read_fluorescence_wellscan</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">485</span><span class="p">,</span>
+  <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">525</span><span class="p">,</span>
+  <span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;fill&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Supported patterns are:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>horizontal
+vertical
+cross
+fill
+</pre></div>
+</div>
+<p>Each returned read includes <code class="docutils literal notranslate"><span class="pre">wellscan_point</span></code>, <code class="docutils literal notranslate"><span class="pre">wellscan_x</span></code>, and <code class="docutils literal notranslate"><span class="pre">wellscan_y</span></code> fields.</p>
+</section>
+<section id="well-plates">
+<h2>384-well plates<a class="headerlink" href="#well-plates" title="Link to this heading">#</a></h2>
+<p>384-well fluorescence reads were validated with <code class="docutils literal notranslate"><span class="pre">Greiner_384_wellplate_28ul_Fb</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Greiner_384_wellplate_28ul_Fb</span>
+
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Greiner_384_wellplate_28ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<span class="n">pr</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">read_fluorescence</span><span class="p">(</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+  <span class="n">wells</span><span class="o">=</span><span class="n">plate</span><span class="o">.</span><span class="n">get_all_items</span><span class="p">(),</span>
+  <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">557</span><span class="p">,</span>
+  <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">576</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="oem-command-observations">
+<h2>OEM command observations<a class="headerlink" href="#oem-command-observations" title="Link to this heading">#</a></h2>
+<p>SoftMax Pro was used during development to observe the OEM serial behavior. The observed
+bottom-read setup sequence was:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!OPTION
+!TEMP
+!CLEAR DATA
+!TAG OFF
+!WELLSCANMODE
+!XPOS 14.380 9 12
+!YPOS 11.235 9 8
+!SHAKE OFF
+!SHAKE 0 0 0 0 0
+!STRIP 1 12
+!READTYPE FLU
+!EMWAVELENGTH 525
+!AUTOFILTER OFF
+!EMFILTER 7
+!EXWAVELENGTH 490
+!FPW 6
+!TOPREADCLEAR ON
+!AUTOPMT ON
+!CSPEED 8
+!PMTCAL ON
+!MODE ENDPOINT
+!ORDER COLUMN
+!READSTAGE BOT
+!READ
+</pre></div>
+</div>
+<p>The Gemini EM responds to <code class="docutils literal notranslate"><span class="pre">!READSTAGE</span> <span class="pre">BOT</span></code> and <code class="docutils literal notranslate"><span class="pre">!READSTAGE</span> <span class="pre">TOP</span></code> with a single <code class="docutils literal notranslate"><span class="pre">OK</span></code> response
+field. This differs from some other Molecular Devices readers and is handled by the Gemini EM
+backend.</p>
+<p>SoftMax Pro sent <code class="docutils literal notranslate"><span class="pre">!TOPREADCLEAR</span> <span class="pre">ON</span></code> before selecting either read stage. The Gemini EM backend
+does the same before sending <code class="docutils literal notranslate"><span class="pre">!READSTAGE</span> <span class="pre">TOP</span></code> or <code class="docutils literal notranslate"><span class="pre">!READSTAGE</span> <span class="pre">BOT</span></code>.</p>
+<section id="luminescence">
+<h3>Luminescence<a class="headerlink" href="#luminescence" title="Link to this heading">#</a></h3>
+<p>SoftMax Pro used this sequence for a luminescence endpoint read with a 10 second pre-read shake:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!CLEAR DATA
+!TAG OFF
+!WELLSCANMODE
+!XPOS 14.380 9 12
+!YPOS 11.235 9 8
+!SHAKE ON
+!SHAKE 10 0 0 0 0
+!STRIP 1 12
+!READTYPE LUM
+!EMWAVELENGTH 0
+!FPW 6
+!TOPREADCLEAR OFF
+!AUTOPMT ON
+!CSPEED 8
+!PMTCAL ON
+!MODE ENDPOINT
+!ORDER COLUMN
+!READSTAGE TOP
+!READ
+</pre></div>
+</div>
+</section>
+<section id="id1">
+<h3>Time-resolved fluorescence<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<p>SoftMax Pro used this sequence for a TRF endpoint read:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!TAG OFF
+!WELLSCANMODE
+!XPOS 14.380 9 12
+!YPOS 11.235 9 8
+!SHAKE ON
+!SHAKE 10 0 0 0 0
+!STRIP 1 12
+!READTYPE TIME 50 850
+!EMWAVELENGTH 525
+!AUTOFILTER OFF
+!EMFILTER 7
+!EXWAVELENGTH 485
+!FPW 6
+!TOPREADCLEAR ON
+!AUTOPMT ON
+!CSPEED 8
+!PMTCAL ON
+!MODE ENDPOINT
+!ORDER COLUMN
+!READSTAGE BOT
+!READ
+</pre></div>
+</div>
+<p>For a TRF kinetic assay, SoftMax Pro used:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!SHAKE ON
+!SHAKE 5 30 27 3 0
+!READTYPE TIME 50 850
+!AUTOPMT OFF
+!PMT MED
+!MODE KINETIC 30 21
+!READSTAGE TOP
+!READ
+</pre></div>
+</div>
+<p>During the kinetic run, SoftMax Pro repeatedly polled <code class="docutils literal notranslate"><span class="pre">!QUEUE</span></code> and called <code class="docutils literal notranslate"><span class="pre">!TRANSFER</span></code>.</p>
+</section>
+<section id="id2">
+<h3>Fluorescence spectra<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
+<p>For an emission spectrum with fixed excitation, SoftMax Pro sent:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!EXWAVELENGTH 350
+!AUTOFILTER OFF
+!EMFILTER 1
+!MODE EMSPECTRUM 400 10 36
+!ORDER WAVELENGTH
+!READSTAGE BOT
+!READ
+</pre></div>
+</div>
+<p>For an excitation spectrum with fixed emission, SoftMax Pro sent:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!EMWAVELENGTH 600
+!AUTOFILTER OFF
+!EMFILTER 1
+!AUTOFILTER EX OFF
+!MODE EXSPECTRUM 350 20 4
+!ORDER WAVELENGTH
+!READSTAGE BOT
+!READ
+</pre></div>
+</div>
+</section>
+<section id="partial-region-selection">
+<h3>Partial-region selection<a class="headerlink" href="#partial-region-selection" title="Link to this heading">#</a></h3>
+<p>SoftMax Pro changed the selected wells by changing plate geometry and strip selection. One
+captured partial-region read used:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!XPOS 14.380 9 12
+!YPOS 20.235 9 6
+!STRIP 2 6
+</pre></div>
+</div>
+<p>The Gemini EM backend maps rectangular contiguous well subsets to this command model. The selected
+rows change the <code class="docutils literal notranslate"><span class="pre">!YPOS</span></code> origin and row count, while the selected columns change <code class="docutils literal notranslate"><span class="pre">!STRIP</span></code>. For
+example, wells <code class="docutils literal notranslate"><span class="pre">B2:G7</span></code> on a 96-well plate map to row offset 1, six rows, strip 2, and six columns.</p>
+<p>Arbitrary non-rectangular well selections are not supported. Wellscan uses explicit scan geometry
+and does not yet infer scan geometry from <code class="docutils literal notranslate"><span class="pre">wells</span></code>.</p>
+</section>
+<section id="wellscan-patterns">
+<h3>Wellscan patterns<a class="headerlink" href="#wellscan-patterns" title="Link to this heading">#</a></h3>
+<p>SoftMax Pro enabled wellscan with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>!WELLSCANMODE
+!WELLSCANMODE ON
+</pre></div>
+</div>
+<p>It then performed one read per scan point, changing <code class="docutils literal notranslate"><span class="pre">!XPOS</span></code> and <code class="docutils literal notranslate"><span class="pre">!YPOS</span></code> between reads. The
+captured 3-point and 9-point scans used this coordinate model:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>center X = 14.380
+center Y = 20.235
+offset   = 1.133 mm
+
+X positions = 13.247, 14.380, 15.513
+Y positions = 19.102, 20.235, 21.368
+</pre></div>
+</div>
+<p>The horizontal pattern order was:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>13.247, 20.235
+14.380, 20.235
+15.513, 20.235
+</pre></div>
+</div>
+<p>The vertical pattern order was:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>14.380, 19.102
+14.380, 20.235
+14.380, 21.368
+</pre></div>
+</div>
+<p>The cross pattern order was:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>14.380, 19.102
+13.247, 20.235
+14.380, 20.235
+15.513, 20.235
+14.380, 21.368
+</pre></div>
+</div>
+<p>The fill pattern was a 3 by 3 row-major raster:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>13.247, 19.102
+14.380, 19.102
+15.513, 19.102
+13.247, 20.235
+14.380, 20.235
+15.513, 20.235
+13.247, 21.368
+14.380, 21.368
+15.513, 21.368
+</pre></div>
+</div>
+<p>After the first scan point, SoftMax Pro did not resend the full optical setup. It resent position,
+shake state, <code class="docutils literal notranslate"><span class="pre">!PMTCAL</span> <span class="pre">OFF</span></code>, <code class="docutils literal notranslate"><span class="pre">!STRIP</span></code>, and then <code class="docutils literal notranslate"><span class="pre">!READ</span></code>.</p>
+</section>
+</section>
+<section id="development-notes">
+<h2>Development notes<a class="headerlink" href="#development-notes" title="Link to this heading">#</a></h2>
+<p>The backend intentionally lives in its own module,
+<code class="docutils literal notranslate"><span class="pre">pylabrobot/plate_reading/molecular_devices/spectramax_gemini_em_backend.py</span></code>. It uses the shared
+Molecular Devices serial protocol implementation where possible, while keeping Gemini-specific
+behavior isolated from the SpectraMax M5 and SpectraMax 384 Plus backends.</p>
+<p>During protocol discovery, a serial bridge/logger can be placed between SoftMax Pro and the
+reader:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SoftMax Pro -&gt; virtual COM port -&gt; Python bridge/logger -&gt; physical serial port -&gt; Gemini EM
+</pre></div>
+</div>
+<p>This allows OEM traffic to be captured without changing the production backend.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="pico.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">ImageXpress Pico</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="synergyh1.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Synergy H1</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#open-tray">Open Tray</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#close-tray">Close Tray</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validated-behavior">Validated behavior</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#support-status">Support status</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fluorescence-reads">Fluorescence reads</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#luminescence-reads">Luminescence reads</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-resolved-fluorescence">Time-Resolved Fluorescence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fluorescence-spectra">Fluorescence Spectra</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wellscan-fluorescence">Wellscan fluorescence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#well-plates">384-well plates</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#oem-command-observations">OEM command observations</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#luminescence">Luminescence</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Time-resolved fluorescence</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">Fluorescence spectra</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#partial-region-selection">Partial-region selection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wellscan-patterns">Wellscan patterns</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#development-notes">Development notes</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/02_analytical/plate-reading/spectramax-gemini-em.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../_sources/user_guide/02_analytical/plate-reading/spectramax-gemini-em.ipynb.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.17.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
