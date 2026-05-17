@@ -422,15 +422,25 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
     await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
     logger.info("[Byonoy] sent abort for report 0x%04X", report_id)
 
-  async def set_led_colours(self, colours: List[Tuple[int, int, int]]) -> None:
-    """Set the 20-LED bar colours via REP_LED_BAR_COLOURS_OUT (0x0350).
+  async def set_led(
+    self,
+    colors: List[Tuple[int, int, int]],
+    effect: LedEffect = LedEffect.SOLID,
+    *,
+    effect_state: int = 0,
+    duration_ms: int = 0,
+  ) -> None:
+    """Set the 20-LED bar via REP_LED_BAR_COLOURS_OUT (0x0350).
 
-    First switches the bar into manual SOLID mode (FLAG_LED_MANUAL) so the
-    firmware doesn't overwrite the colours with its own animation, then
-    sends the 20-pixel buffer. Pads with black if fewer than 20 are given.
+    First switches the bar into manual mode (FLAG_LED_MANUAL | FLAG_LED_FORCE)
+    under the requested `effect` so the firmware doesn't overwrite the colors
+    with its own animation, then sends the 20-pixel buffer. Pads with black if
+    fewer than 20 are given.
     """
-    await self.set_led_effect(LedEffect.SOLID, manual=True)
-    pixels = list(colours[:20]) + [(0, 0, 0)] * max(0, 20 - len(colours))
+    base = colors[0] if colors else (0, 0, 0)
+    await self._set_led_effect(effect, color=base, manual=True,
+                               effect_state=effect_state, duration_ms=duration_ms)
+    pixels = list(colors[:20]) + [(0, 0, 0)] * max(0, 20 - len(colors))
     w = Writer()
     for r_, g, b in pixels:
       w.u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
@@ -438,22 +448,26 @@ class ByonoyBase(Driver, metaclass=ABCMeta):
       report_id=0x0350, payload=w.finish(), wait_for_response=False
     )
 
-  async def set_led_effect(
+  async def _set_led_effect(
     self,
     effect: LedEffect,
+    color: Tuple[int, int, int] = (0, 0, 0),
     effect_state: int = 0,
     manual: bool = False,
     duration_ms: int = 0,
   ) -> None:
     """Set the LED bar effect via REP_LED_BAR_EFFECTS_OUT (0x0351).
 
-    Set `manual=True` when driving dynamic effects (PROGRESS, CYLON, ...)
-    where you want to advance frames yourself via `effect_state`.
+    Packed layout (vendor byonoyusbhid.h led_bar_effects_out_t):
+      effect:u8  color:(r,g,b u8)  effect_state:u8  flags:u8  duration_ms:u32
     """
-    flags = 0x02 if manual else 0  # FLAG_LED_MANUAL
+    # FLAG_LED_MANUAL=0x02, FLAG_LED_FORCE=0x10 — force overrides idle state.
+    flags = (0x02 | 0x10) if manual else 0
+    r_, g, b = color
     payload = (
       Writer()
       .u8(int(effect))
+      .u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
       .u8(effect_state & 0xFF)
       .u8(flags)
       .u32(int(duration_ms))
