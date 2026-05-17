@@ -144,6 +144,18 @@
   color: var(--pst-color-text-base);
   font-size: 0.86rem;
   line-height: 1.45;
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+.plr-library-card__description ul,
+.plr-library-card__description ol {
+  margin: 0.25rem 0;
+  padding-left: 1.1rem;
+}
+
+.plr-library-card__description li {
+  margin: 0.05rem 0;
 }
 
 .plr-library-card__footer {

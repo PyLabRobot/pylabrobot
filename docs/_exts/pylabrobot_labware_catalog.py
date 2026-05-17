@@ -32,20 +32,54 @@ def _library_doc_paths(srcdir: str) -> List[Path]:
   return sorted(path for path in library_root.rglob("*.md") if path.is_file())
 
 
-def _markdown_links_to_html(text: str) -> str:
-  escaped = escape(text, quote=False)
-  return re.sub(
-    r"\[([^\]]+)\]\(([^)]+)\)",
-    lambda match: f'<a href="{escape(match.group(2), quote=True)}">{match.group(1)}</a>',
-    escaped,
+# Structural inline tags that pre-PR Sphinx/MyST rendered from these cells.
+# Re-enabled here so the catalog doesn't regress files that used inline HTML.
+_ALLOWED_TAGS = ("br", "p", "ul", "ol", "li", "b", "strong", "i", "em", "sub", "sup")
+_SAFE_HREF = re.compile(r"(?i)^(https?:|mailto:)")
+
+
+def _render_cell_html(text: str) -> str:
+  """Safe-by-construction: escape everything, then re-enable only a fixed
+  allowlist of attribute-less structural tags plus sanitised <a href>. Anything
+  else (scripts, on* handlers, unsafe schemes) stays escaped as inert text."""
+  out = escape(text, quote=True)
+
+  def _md_link(match: "re.Match") -> str:
+    label, href = match.group(1), match.group(2)
+    if not re.match(r"(?i)^(https?:|mailto:|/|#)", href):
+      return label
+    return f'<a href="{href}" target="_blank" rel="noopener noreferrer">{label}</a>'
+
+  out = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _md_link, out)
+
+  tags = "|".join(_ALLOWED_TAGS)
+  out = re.sub(
+    rf"&lt;(/?)({tags})\s*/?&gt;",
+    lambda m: f"<{m.group(1)}{m.group(2).lower()}>",
+    out,
+    flags=re.IGNORECASE,
   )
+
+  def _anchor(match: "re.Match") -> str:
+    href = match.group(1)
+    if _SAFE_HREF.match(href):
+      return f'<a href="{href}" target="_blank" rel="noopener noreferrer">'
+    return ""
+
+  out = re.sub(r"&lt;a\s+href=&quot;(.*?)&quot;\s*&gt;", _anchor, out, flags=re.IGNORECASE)
+  out = re.sub(r"&lt;/a&gt;", "</a>", out, flags=re.IGNORECASE)
+  return out
 
 
 def _description_to_html(description: str, definition_name: str) -> str:
-  parts = [part.strip() for part in re.split(r"<br\s*/?>", description) if part.strip()]
+  parts = [
+    part.strip()
+    for part in re.split(r"<br\s*/?>", description, flags=re.IGNORECASE)
+    if part.strip()
+  ]
   if parts and parts[0].strip("'` ") == definition_name:
     parts = parts[1:]
-  return "<br>".join(_markdown_links_to_html(part) for part in parts)
+  return "<br>".join(_render_cell_html(part) for part in parts)
 
 
 def _page_title(markdown: str, fallback: str) -> str:
