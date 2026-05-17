@@ -5,7 +5,7 @@ import threading
 import time
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
@@ -27,18 +27,14 @@ class ByonoySlotState(enum.IntEnum):
   UNDETERMINED = 3
 
 
-class Lum96IntegrationMode(enum.Enum):
-  RAPID = "rapid"
-  SENSITIVE = "sensitive"
-  ULTRA_SENSITIVE = "ultra_sensitive"
-  CUSTOM = "custom"
+Lum96IntegrationMode = Literal["rapid", "sensitive", "ultra_sensitive", "custom"]
 
 
 # Preset integration times (matches byonoy_device_library: hidmeasurements.cpp)
-LUM96_PRESET_S = {
-  Lum96IntegrationMode.RAPID: 0.1,
-  Lum96IntegrationMode.SENSITIVE: 2.0,
-  Lum96IntegrationMode.ULTRA_SENSITIVE: 20.0,
+LUM96_PRESET_S: Dict[Lum96IntegrationMode, float] = {
+  "rapid": 0.1,
+  "sensitive": 2.0,
+  "ultra_sensitive": 20.0,
 }
 
 
@@ -121,13 +117,16 @@ _FLAG_TYPE_BOOLEAN = 0x03
 _FLAG_HAS_MORE_DATA = 0x10
 
 
-class LedEffect(enum.IntEnum):
-  SOLID = 0x00
-  PROGRESS = 0x01
-  CYLON = 0x02
-  RAINBOW = 0x03
-  BLINKING = 0x04
-  BREATHING = 0x05
+LedEffect = Literal["solid", "progress", "cylon", "rainbow", "blinking", "breathing"]
+
+_LED_EFFECT_CODES: Dict[LedEffect, int] = {
+  "solid": 0x00,
+  "progress": 0x01,
+  "cylon": 0x02,
+  "rainbow": 0x03,
+  "blinking": 0x04,
+  "breathing": 0x05,
+}
 
 
 # --- Firmware error codes (per Byonoy hid-reports source) -------------------
@@ -425,7 +424,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
   async def set_led_color(
     self,
     color: Tuple[int, int, int],
-    effect: LedEffect = LedEffect.SOLID,
+    effect: LedEffect = "solid",
     *,
     low_power: bool = False,
     force: bool = False,
@@ -436,8 +435,8 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
 
     Mirrors the vendor's user-facing `set_led_effect(effect, color, modes, ...)`
     in byonoy_device_library. The firmware renders `effect` over `color`:
-    SOLID just shows the color; BREATHING/CYLON/BLINKING/RAINBOW/PROGRESS
-    animate it.
+    "solid" just shows the color; "breathing"/"cylon"/"blinking"/"rainbow"/
+    "progress" animate it.
 
     Packed layout (vendor byonoyusbhid.h led_bar_effects_out_t):
       effect:u8  color:(r,g,b u8)  effect_state:u8  flags:u8  duration_ms:u32
@@ -452,7 +451,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
     r_, g, b = color
     payload = (
       Writer()
-      .u8(int(effect))
+      .u8(_LED_EFFECT_CODES[effect])
       .u8(r_ & 0xFF).u8(g & 0xFF).u8(b & 0xFF)
       .u8(effect_state & 0xFF)
       .u8(flags)

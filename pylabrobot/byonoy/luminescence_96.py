@@ -45,10 +45,11 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
     """Byonoy Luminescence 96 parameters for luminescence reads.
 
     Args:
-      mode: One of RAPID (100 ms), SENSITIVE (2 s, default), ULTRA_SENSITIVE
-        (20 s), or CUSTOM. Presets match the byonoy_device_library mapping.
-      integration_time: Integration time in seconds. If set, forces CUSTOM
-        mode regardless of `mode`. Required when `mode == CUSTOM`.
+      mode: One of "rapid" (100 ms), "sensitive" (2 s, default),
+        "ultra_sensitive" (20 s), or "custom". Presets match the
+        byonoy_device_library mapping.
+      integration_time: Integration time in seconds. If set, forces "custom"
+        mode regardless of `mode`. Required when `mode == "custom"`.
       selected_wells: Optional 96-bool mask in plate row-major order (A1..H12).
         If None, the wells passed to `read_luminescence` decide which wells
         are reported (defaulting to all 96). Note: this is an output filter,
@@ -57,7 +58,7 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
         for cleaner downstream processing; does not reduce read time.
     """
 
-    mode: Lum96IntegrationMode = Lum96IntegrationMode.SENSITIVE
+    mode: Lum96IntegrationMode = "sensitive"
     integration_time: Optional[float] = None
     selected_wells: Optional[List[bool]] = None
 
@@ -86,10 +87,10 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
 
     # Resolve mode + integration time
     if backend_params.integration_time is not None:
-      mode = Lum96IntegrationMode.CUSTOM
+      mode = "custom"
       integration_time = backend_params.integration_time
-    elif backend_params.mode == Lum96IntegrationMode.CUSTOM:
-      raise ValueError("CUSTOM mode requires integration_time to be set.")
+    elif backend_params.mode == "custom":
+      raise ValueError("'custom' mode requires integration_time to be set.")
     else:
       mode = backend_params.mode
       integration_time = LUM96_PRESET_S[mode]
@@ -108,7 +109,7 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
       "integration_time=%.3fs, wells=%d/96",
       self.io.pid,
       plate.name,
-      mode.name,
+      mode,
       integration_time,
       sum(mask_bools),
     )
