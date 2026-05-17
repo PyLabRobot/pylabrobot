@@ -9,4 +9,4 @@ Our products include a line of innovative, high performance magnet plates built 
 
 | Description                                                                                                         | Image                                      | PLR definition          |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ----------------------- |
-| 'Alpaqua_96_magnum_flx'<br>Part no.: A000400<br>[manufacturer website](https://www.alpaqua.com/product/magnum-flx/) | ![](img/alpaqua/Alpaqua_96_magnum_flx.jpg) | `Alpaqua_96_magnum_flx` |
+| 'alpaqua_96_plateadapter_magnum_flx'<br>Part no.: A000400<br>[manufacturer website](https://www.alpaqua.com/product/magnum-flx/) | ![](img/alpaqua/Alpaqua_96_magnum_flx.jpg) | `alpaqua_96_plateadapter_magnum_flx` |

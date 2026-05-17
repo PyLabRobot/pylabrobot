@@ -1,4 +1,4 @@
-# Hamilton STAR "ML_STAR"
+# Hamilton
 
 Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/history)
 

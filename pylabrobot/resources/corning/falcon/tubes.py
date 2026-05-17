@@ -84,7 +84,7 @@ def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:
 
 def falcon_tube_50mL(name: str) -> Tube:
   raise NotImplementedError(
-    "falcon_tube_50mL definition is deprecated. Use Cor_Falcon_tube_50mL instead."
+    "falcon_tube_50mL definition is deprecated. Use Cor_Falcon_tube_50mL_Vb instead."
   )
 
 
