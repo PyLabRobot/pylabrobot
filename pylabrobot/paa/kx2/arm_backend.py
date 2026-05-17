@@ -1173,7 +1173,7 @@ class KX2ArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
 
   # Park pose (centered, well inside workspace) and motion caps.
   _PARK_JOINTS: Dict[Axis, float] = {
-    Axis.SHOULDER: 0.0, Axis.Z: 300.0, Axis.ELBOW: 250.0, Axis.WRIST: 0.0,
+    Axis.SHOULDER: 2.0, Axis.Z: 750.0, Axis.ELBOW: 1.0, Axis.WRIST: 356.0,
   }
   _PARK_SPEED: float = 80.0
   _PARK_ACCEL: float = 400.0
