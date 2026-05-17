@@ -18,6 +18,7 @@ from .backend import (
   SpectrumSettings,
 )
 from .spectramax_384_plus_backend import MolecularDevicesSpectraMax384PlusBackend
+from .spectramax_gemini_em_backend import MolecularDevicesSpectraMaxGeminiEMBackend
 from .spectramax_m5_backend import MolecularDevicesSpectraMaxM5Backend
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
   "SpectrumSettings",
   "MolecularDevicesSpectraMaxM5Backend",
   "MolecularDevicesSpectraMax384PlusBackend",
+  "MolecularDevicesSpectraMaxGeminiEMBackend",
 ]
