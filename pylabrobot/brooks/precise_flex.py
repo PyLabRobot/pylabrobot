@@ -335,6 +335,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     driver: PreciseFlexDriver,
     gripper_length: float,
     gripper_z_offset: float,
+    closed_gripper_position: float,
     is_dual_gripper: bool = False,
     has_rail: bool = False,
   ) -> None:
@@ -346,6 +347,11 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
         Depends on the mounted gripper; the concrete Device wrapper supplies a
         model-appropriate default.
+      closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
+        ``GripOpenPos``) at which the jaws are at :attr:`min_gripper_width`.
+        Depends on the mounted gripper. The conversion mm → firmware units is
+        linear with slope 1: ``units = closed_gripper_position + (width_mm -
+        min_gripper_width)``.
     """
     super().__init__()
     self.driver = driver
@@ -356,6 +362,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self.horizontal_compliance_torque: int = 0
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
+    self.closed_gripper_position = closed_gripper_position
     self._kinematics_params = kinematics.PF400Params(
       gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
     )
@@ -415,6 +422,14 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   min_gripper_width: float = 60.0
   max_gripper_width: float = 145.0
 
+  def _mm_to_firmware_units(self, width_mm: float) -> float:
+    """Convert a jaw width (mm) to the firmware's native position unit.
+
+    Anchored at :attr:`closed_gripper_position`, which is the firmware value
+    when the jaws are at :attr:`min_gripper_width`. Slope is 1 (1 mm = 1 unit).
+    """
+    return self.closed_gripper_position + (width_mm - self.min_gripper_width)
+
   async def move_gripper(
     self,
     width: float,
@@ -433,11 +448,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       width,
       force_sensing,
     )
+    units = self._mm_to_firmware_units(width)
     if force_sensing:
-      await self._set_grip_close_pos(width)
+      await self._set_grip_close_pos(units)
       await self.driver.send_command("gripper 2")
     else:
-      await self._set_grip_open_pos(width)
+      await self._set_grip_open_pos(units)
       await self.driver.send_command("gripper 1")
 
   async def halt(self, backend_params: Optional[BackendParams] = None):
@@ -1726,6 +1742,7 @@ class PreciseFlex400(Device):
   def __init__(
     self,
     host: str,
+    closed_gripper_position: float,
     port: int = 10100,
     has_rail: bool = False,
     timeout: int = 20,
@@ -1734,6 +1751,9 @@ class PreciseFlex400(Device):
   ) -> None:
     """
     Args:
+      closed_gripper_position: firmware-unit value at which the jaws are at the
+        backend's :attr:`~PreciseFlexArmBackend.min_gripper_width`. Depends on
+        the specific gripper mounted; calibrate before first use.
       gripper_length: wrist-axis → TCP distance in mm. Defaults to 162 mm, which
         matches the stock single gripper on the PF400.
       gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
@@ -1747,6 +1767,7 @@ class PreciseFlex400(Device):
       has_rail=has_rail,
       gripper_length=gripper_length,
       gripper_z_offset=gripper_z_offset,
+      closed_gripper_position=closed_gripper_position,
     )
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
     self.arm = OrientableGripperArm(backend=backend, reference_resource=self.reference)
@@ -1761,6 +1782,7 @@ class PreciseFlex3400Backend(PreciseFlexArmBackend):
     driver: PreciseFlexDriver,
     gripper_length: float,
     gripper_z_offset: float,
+    closed_gripper_position: float,
     has_rail: bool = False,
   ) -> None:
     super().__init__(
@@ -1768,4 +1790,5 @@ class PreciseFlex3400Backend(PreciseFlexArmBackend):
       has_rail=has_rail,
       gripper_length=gripper_length,
       gripper_z_offset=gripper_z_offset,
+      closed_gripper_position=closed_gripper_position,
     )

@@ -225,10 +225,9 @@ class CoreGripper(GripperArmBackend):
   ) -> None:
     """Open the CoRe gripper.
 
-    The CoRe gripper has no commandable jaw width: only the firmware ZO command
-    is supported, which opens the jaws fully. ``width`` is accepted for
-    interface compatibility but ignored. Force-sensing closes are not exposed
-    here; they happen as part of :meth:`pick_up_at_location`.
+    Sends the firmware ZO command, which opens the jaws fully; ``width`` has
+    no effect. Force-sensing closes happen as part of :meth:`pick_up_at_location`
+    and are not exposed here.
     """
     if force_sensing:
       raise NotImplementedError(

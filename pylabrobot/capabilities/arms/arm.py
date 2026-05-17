@@ -1,9 +1,9 @@
 import logging
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union, cast
 
-from pylabrobot.capabilities.arms.backend import GripperArmBackend, _BaseArmBackend
+from pylabrobot.capabilities.arms.backend import CanGrip, GripperArmBackend, _BaseArmBackend
 from pylabrobot.capabilities.arms.standard import CartesianPose, GripperDirection
 from pylabrobot.capabilities.capability import BackendParams, Capability
 from pylabrobot.legacy.tilting.tilter import Tilter
@@ -298,14 +298,21 @@ class _BaseArm(Capability):
 
 
 class GripperArm(_BaseArm):
-  """Base class for arms with a gripper.
+  """Abstract base for arms with a gripper.
 
   Owns the gripper-width controls (:meth:`move_gripper`, :meth:`open_gripper`,
   :meth:`close_gripper`, :meth:`is_gripper_closed`) shared by all gripper
-  arms. Concrete pick/drop/move signatures differ between fixed-axis,
-  orientable, and articulated arms and live on the respective subclasses:
-  :class:`FixedAxisGripperArm`, :class:`OrientableGripperArm`,
-  :class:`ArticulatedGripperArm`.
+  arms.
+
+  Do not instantiate this class directly. Pick/drop/move signatures differ
+  between fixed-axis, orientable, and articulated arms, so subclass one of:
+
+  - :class:`FixedAxisGripperArm` — grips along a single deck-fixed axis
+    (e.g. Hamilton core grippers).
+  - :class:`OrientableGripperArm` — grip direction is a yaw angle
+    (e.g. Hamilton iSWAP, PreciseFlex).
+  - :class:`ArticulatedGripperArm` — full 3D rotation
+    (e.g. UFACTORY xArm 6).
   """
 
   async def move_gripper(
@@ -314,33 +321,69 @@ class GripperArm(_BaseArm):
     force_sensing: bool = False,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    return await self.backend.move_gripper(
+    """Move the gripper jaws.
+
+    Args:
+      width: Target jaw width in mm. Must lie within the backend's advertised
+        ``[min_gripper_width, max_gripper_width]`` range; either bound declared
+        as ``None`` is treated as unbounded on that side.
+      force_sensing: If ``True``, close toward ``width`` with force feedback and
+        stop on contact (final width may be larger than ``width``). If
+        ``False``, drive to exactly ``width`` without feedback.
+      backend_params: Optional backend-specific parameters.
+
+    Raises:
+      ValueError: If ``width`` falls outside the advertised range.
+    """
+    backend = cast(CanGrip, self.backend)
+    min_w = backend.min_gripper_width
+    max_w = backend.max_gripper_width
+    if min_w is not None and width < min_w:
+      raise ValueError(
+        f"width {width} mm is below {type(self.backend).__name__}.min_gripper_width ({min_w} mm)."
+      )
+    if max_w is not None and width > max_w:
+      raise ValueError(
+        f"width {width} mm is above {type(self.backend).__name__}.max_gripper_width ({max_w} mm)."
+      )
+    return await backend.move_gripper(
       width=width, force_sensing=force_sensing, backend_params=backend_params
     )
 
   async def open_gripper(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Drive the gripper to its full open width.
+
+    Calls :meth:`move_gripper` with ``width=max_gripper_width`` and
+    ``force_sensing=False``. Raises :class:`NotImplementedError` if the backend
+    does not declare ``max_gripper_width``.
+    """
     width = self.backend.max_gripper_width
     if width is None:
       raise NotImplementedError(
-        f"{type(self.backend).__name__} does not support open_gripper "
-        "(max_gripper_width is None)."
+        f"{type(self.backend).__name__} does not support open_gripper (max_gripper_width is None)."
       )
     return await self.backend.move_gripper(
       width=width, force_sensing=False, backend_params=backend_params
     )
 
   async def close_gripper(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Drive the gripper closed with force feedback.
+
+    Calls :meth:`move_gripper` with ``width=min_gripper_width`` and
+    ``force_sensing=True``. Raises :class:`NotImplementedError` if the backend
+    does not declare ``min_gripper_width``.
+    """
     width = self.backend.min_gripper_width
     if width is None:
       raise NotImplementedError(
-        f"{type(self.backend).__name__} does not support close_gripper "
-        "(min_gripper_width is None)."
+        f"{type(self.backend).__name__} does not support close_gripper (min_gripper_width is None)."
       )
     return await self.backend.move_gripper(
       width=width, force_sensing=True, backend_params=backend_params
     )
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    """Return whether the gripper is currently in the closed state."""
     return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   @abstractmethod

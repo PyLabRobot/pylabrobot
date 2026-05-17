@@ -92,10 +92,7 @@ class CanGrip(metaclass=ABCMeta):
 
   All widths in this interface are in **millimeters**. Backends that drive
   their hardware in other units (encoder counts, SDK steps, etc.) must convert
-  from mm internally. For grippers with a linear-but-offset response (e.g.
-  Brooks PF400, Hudson KX2) the typical pattern is to take a
-  ``closed_gripper_position`` (or equivalent reference) at construction time
-  and linearly interpolate to/from mm.
+  from mm internally.
 
   Gripper actuation has two fundamental modes, exposed through a single
   :meth:`move_gripper` call:
@@ -135,6 +132,10 @@ class CanGrip(metaclass=ABCMeta):
       width: Target jaw width in mm.
       force_sensing: If ``True``, close with force feedback and stop on contact.
         If ``False``, drive the jaws to ``width`` without sensing.
+
+    Backends that do not implement force feedback should either raise
+    :class:`NotImplementedError` when ``force_sensing=True`` is requested or
+    document that the flag has no effect on their hardware.
     """
 
   @abstractmethod

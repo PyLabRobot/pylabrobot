@@ -21,7 +21,7 @@ from typing import (
 )
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
 from pylabrobot.capabilities.arms.standard import GripperDirection as _NewGripperDirection
 from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
@@ -397,7 +397,7 @@ class LiquidHandler(Resource, Machine):
     # New capability instances — created during setup()
     self._lh_cap: Optional[PIP] = None
     self._head96_cap: Optional[Head96] = None
-    self._arm_cap: Optional[OrientableArm] = None
+    self._arm_cap: Optional[OrientableGripperArm] = None
 
     # Default offset applied to all 96-head operations. Any offset passed to a 96-head method is
     # added to this value.
@@ -451,7 +451,9 @@ class LiquidHandler(Resource, Machine):
 
     # Create arm capability with adapter backend
     if self.backend.num_arms > 0:
-      self._arm_cap = OrientableArm(backend=_ArmAdapter(self.backend), reference_resource=self.deck)
+      self._arm_cap = OrientableGripperArm(
+        backend=_ArmAdapter(self.backend), reference_resource=self.deck
+      )
       await self._arm_cap._on_setup()
 
   def serialize_state(self) -> Dict[str, Any]:

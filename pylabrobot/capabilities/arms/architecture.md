@@ -30,7 +30,7 @@ must interpret that float under the convention above.
 
 ```
 _BaseArm(Capability)
-  │  halt(), park(), get_gripper_location()
+  │  halt(), park(), request_gripper_pose()
   │  resource tracking (pick_up/drop state)
   │
   └── GripperArm (abstract base for any arm with a gripper)
@@ -56,10 +56,10 @@ Joint-space methods are backend-only (robot-specific), accessed via `arm.backend
 
 ```
 _BaseArmBackend(CapabilityBackend)
-  │  halt(), park(), get_gripper_location()
+  │  halt(), park(), request_gripper_pose()
   │
   ├── GripperArmBackend
-  │     open/close_gripper, is_gripper_closed
+  │     move_gripper, is_gripper_closed, min/max_gripper_width
   │     pick_up/drop/move at location (no rotation)
   │
   ├── OrientableGripperArmBackend

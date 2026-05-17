@@ -139,8 +139,8 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Move the bio-gripper jaws to ``width`` mm.
 
-    The xArm bio-gripper is position-controlled; ``force_sensing`` is accepted
-    for interface compatibility but the SDK call is the same in both modes.
+    The xArm bio-gripper is position-controlled; ``force_sensing`` has no
+    effect on the SDK call.
     """
     await self._set_gripper_units(self._mm_to_gripper_units(width))
 
@@ -271,7 +271,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Move to the joint target and close the gripper to ``resource_width``."""
     await self.move_to_joint_position(position, backend_params=backend_params)
-    await self.close_gripper(resource_width)
+    await self.move_gripper(width=resource_width, force_sensing=True)
 
   async def drop_at_joint_position(
     self,
@@ -290,8 +290,8 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Enter freedrive (manual teaching) mode.
 
-    The xArm SDK only supports freeing all axes at once, so ``free_axes`` is
-    accepted for interface compatibility but ignored.
+    The xArm SDK only supports freeing all axes at once, so ``free_axes`` has
+    no effect.
     """
     await self._driver._call_sdk(self._driver._arm.set_mode, 2, op="set_mode")
     await self._driver._call_sdk(self._driver._arm.set_state, 0, op="set_state")

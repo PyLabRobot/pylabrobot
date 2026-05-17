@@ -1,6 +1,6 @@
 # Arms
 
-Arms are capabilities for picking up, moving, and placing labware (plates, lids, etc.) on the deck. PLR provides two arm types:
+Arms are capabilities for picking up, moving, and placing labware (plates, lids, etc.) on the deck. PLR provides three arm types:
 
 - {class}`~pylabrobot.capabilities.arms.arm.FixedAxisGripperArm`: a fixed-axis gripper arm (e.g. Hamilton core grippers). Grips along a single deck-fixed axis.
 - {class}`~pylabrobot.capabilities.arms.orientable_arm.OrientableGripperArm`: a rotatable gripper arm (e.g. Hamilton iSWAP). Can grip from any direction.
@@ -88,6 +88,24 @@ Gripper actuation goes through a single fundamental call, `move_gripper(width, f
 Widths are always in mm. Each backend declares its hardware limits via `min_gripper_width` and `max_gripper_width` (either may be `None` if the gripper has no commandable open/close at that end).
 
 `open_gripper()` and `close_gripper()` are convenience wrappers built on top: `open_gripper()` calls `move_gripper(max_gripper_width, force_sensing=False)` and `close_gripper()` calls `move_gripper(min_gripper_width, force_sensing=True)`. They take no width but still forward `backend_params` so backend-specific options (e.g. `iSWAPBackend.GripParams`) work the same as with `move_gripper`. They raise `NotImplementedError` if the corresponding limit is `None`.
+
+## Migration
+
+The arm capability was reshaped in the v1b1 release. The old
+`pylabrobot.arms` shim package has been removed; import from
+`pylabrobot.capabilities.arms.*` instead.
+
+| Old | New |
+|:----|:----|
+| `pylabrobot.arms.GripperArm` (concrete) | {class}`~pylabrobot.capabilities.arms.arm.FixedAxisGripperArm` |
+| `pylabrobot.arms.OrientableArm` | {class}`~pylabrobot.capabilities.arms.orientable_arm.OrientableGripperArm` |
+| `pylabrobot.arms.ArticulatedArm` | {class}`~pylabrobot.capabilities.arms.articulated_arm.ArticulatedGripperArm` |
+| `iSWAPBackend.CloseGripperParams` | {class}`~pylabrobot.hamilton.liquid_handlers.star.iswap.iSWAPBackend.GripParams` |
+| `open_gripper(width=...)` / `close_gripper(width=...)` | `move_gripper(width=..., force_sensing=...)` |
+
+The name `GripperArm` still exists in `pylabrobot.capabilities.arms.arm` but
+now refers to the abstract base. Code that did `class MyArm(GripperArm)` over
+the old concrete class should subclass `FixedAxisGripperArm` instead.
 
 ## Supported hardware
 

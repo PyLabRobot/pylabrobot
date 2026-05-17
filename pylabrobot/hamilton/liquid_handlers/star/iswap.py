@@ -622,12 +622,18 @@ class iSWAPBackend(OrientableGripperArmBackend):
       width: Target jaw width [mm]. Must be between 0 and 999.9.
       force_sensing: If True, close with force feedback (C0 GC) and stop on
         contact. If False, drive the jaws to ``width`` without sensing (C0 GF).
-      backend_params: iSWAP.GripParams (only used when ``force_sensing=True``).
+      backend_params: iSWAP.GripParams. Only valid when ``force_sensing=True``;
+        passing it with ``force_sensing=False`` raises ``ValueError``.
     """
     if not 0 <= width <= 999.9:
       raise ValueError("width must be between 0 and 999.9")
 
     if not force_sensing:
+      if backend_params is not None:
+        raise ValueError(
+          "GripParams is only valid with force_sensing=True. "
+          "Drop backend_params or set force_sensing=True."
+        )
       await self.driver.send_command(module="C0", command="GF", go=f"{round(width * 10):04}")
       return
 

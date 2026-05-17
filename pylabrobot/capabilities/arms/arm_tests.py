@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.capabilities.arms.arm import FixedAxisGripperArm
+from pylabrobot.capabilities.arms.arm import FixedAxisGripperArm, GripperArm
 from pylabrobot.capabilities.arms.backend import (
   GripperArmBackend,
   OrientableGripperArmBackend,
@@ -106,6 +106,27 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
       width=80.0, force_sensing=True, backend_params=None
     )
 
+  async def test_move_gripper_below_min_raises(self):
+    with self.assertRaises(ValueError):
+      await self.arm.move_gripper(width=10.0)
+    self.mock_backend.move_gripper.assert_not_called()
+
+  async def test_move_gripper_above_max_raises(self):
+    with self.assertRaises(ValueError):
+      await self.arm.move_gripper(width=200.0)
+    self.mock_backend.move_gripper.assert_not_called()
+
+  async def test_move_gripper_at_min_and_max_allowed(self):
+    await self.arm.move_gripper(width=50.0)
+    await self.arm.move_gripper(width=145.0)
+    self.assertEqual(self.mock_backend.move_gripper.call_count, 2)
+
+  async def test_move_gripper_skips_check_when_bound_is_none(self):
+    self.mock_backend.max_gripper_width = None
+    # No upper bound declared → 999 mm passes through.
+    await self.arm.move_gripper(width=999.0)
+    self.mock_backend.move_gripper.assert_called_once()
+
   async def test_open_gripper(self):
     await self.arm.open_gripper()
     self.mock_backend.move_gripper.assert_called_once_with(
@@ -163,9 +184,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
     self.arm = OrientableGripperArm(backend=self.mock_backend, reference_resource=self.deck)
 
   async def test_pick_up_front(self):
-    await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_bottom=8, direction="front"
-    )
+    await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8, direction="front")
     call = self.mock_backend.pick_up_at_location.call_args
     _assert_location(self, call, 165, 145, 58)
     # "front" = -Y in deck frame = 270° under the +X-is-zero convention.
@@ -174,9 +193,7 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(call.kwargs["resource_width"], 120)
 
   async def test_pick_up_right(self):
-    await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_bottom=8, direction="right"
-    )
+    await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8, direction="right")
     call = self.mock_backend.pick_up_at_location.call_args
     # "right" = +X = 0° under the +X-is-zero convention.
     self.assertAlmostEqual(call.kwargs["direction"], 0.0)
@@ -200,10 +217,16 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_plate(self):
     """Pick from site_a, drop at site_b."""
-    await self.arm.pick_up_resource(
-      self.plate, pickup_distance_from_bottom=8, direction="front"
-    )
+    await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8, direction="front")
     await self.arm.drop_resource(self.site_b, direction="front")
     drop_call = self.mock_backend.drop_at_location.call_args
     _assert_location(self, drop_call, 160, 340, 58)
     self.assertEqual(self.plate.parent.name, "site_b")
+
+
+class TestGripperArmAbstract(unittest.TestCase):
+  def test_cannot_instantiate_abstract_base(self):
+    with self.assertRaises(TypeError):
+      GripperArm(
+        backend=MagicMock(spec=GripperArmBackend), reference_resource=Resource("x", 1, 1, 1)
+      )  # type: ignore[abstract]

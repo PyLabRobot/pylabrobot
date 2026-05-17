@@ -6929,7 +6929,7 @@ class STARBackend(HamiltonLiquidHandler):
 
     assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self._iswap.open_gripper(gripper_width=open_position)
+    return await self._iswap.move_gripper(width=open_position, force_sensing=False)
 
   async def iswap_close_gripper(
     self,
