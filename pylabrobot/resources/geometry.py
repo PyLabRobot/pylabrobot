@@ -13,10 +13,10 @@ from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.well import Well
 
 
-def generate_geometry_catalog(root: Resource) -> Dict[str, Any]:
-  """Generate a renderer-oriented geometry catalog for a resource tree.
+def generate_geometry_library(root: Resource) -> Dict[str, Any]:
+  """Generate a renderer-oriented geometry library entry for a resource tree.
 
-  The catalog is intentionally separate from the package data: call this on a deck
+  The library entry is intentionally separate from the package data: call this on a deck
   or labware resource after building a layout, then write the returned dict to JSON
   if a simulator needs it.
   """
@@ -46,16 +46,32 @@ def generate_geometry_catalog(root: Resource) -> Dict[str, Any]:
   }
 
 
+def save_geometry_library(
+  root: Resource,
+  path: Union[str, Path],
+  indent: Optional[int] = 2,
+) -> None:
+  """Generate a geometry library entry and write it to a JSON file."""
+
+  path = Path(path)
+  path.parent.mkdir(parents=True, exist_ok=True)
+  path.write_text(json.dumps(generate_geometry_library(root), indent=indent), encoding="utf-8")
+
+
+def generate_geometry_catalog(root: Resource) -> Dict[str, Any]:
+  """Deprecated alias for :func:`generate_geometry_library`."""
+
+  return generate_geometry_library(root)
+
+
 def save_geometry_catalog(
   root: Resource,
   path: Union[str, Path],
   indent: Optional[int] = 2,
 ) -> None:
-  """Generate a geometry catalog and write it to a JSON file."""
+  """Deprecated alias for :func:`save_geometry_library`."""
 
-  path = Path(path)
-  path.parent.mkdir(parents=True, exist_ok=True)
-  path.write_text(json.dumps(generate_geometry_catalog(root), indent=indent), encoding="utf-8")
+  save_geometry_library(root, path, indent=indent)
 
 
 def _walk_resources(root: Resource) -> List[Resource]:

@@ -64,7 +64,7 @@ Acme Labware Inc.
 - **`## About`** (optional) reserved section holds the description (not a
   scraped blockquote heuristic).
 - **`## Brand structure`** (optional) reserved section holds the human-curated
-  overview; it is *not* used to build the catalog tree.
+  overview; it is *not* used to build the library tree.
 - **Organisation = heading nesting**: brand-first here
   (`## AcmePure` → `### Plates`/`### Reservoirs`, `## AcmeTips` →
   `### Tip Racks`), one consistent axis, reserved sections excluded.

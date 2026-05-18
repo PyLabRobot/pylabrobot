@@ -141,7 +141,7 @@ Laboratories across the world use an almost infinite number of different resourc
 We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing definitions.
 If you cannot find something, please contribute what you are looking for!
 
-Open the {doc}`library page <catalog>` to search the resource library across manufacturers and inspect generated 3D previews for labware definitions.
+Open the {doc}`library page <library>` to search the resource library across manufacturers and inspect generated 3D previews for labware definitions.
 
 <hr>
 
@@ -169,5 +169,5 @@ Open the {doc}`library page <catalog>` to search the resource library across man
 ```{toctree}
 :caption: Resource Library
 
-catalog
+library
 ```

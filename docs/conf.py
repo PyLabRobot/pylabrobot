@@ -39,7 +39,7 @@ extensions = [
   "sphinx.ext.napoleon",
   "sphinx.ext.autodoc",
   "pylabrobot_cards",  # NEW: PLR cards (plrcard/plrcardgrid + compat)
-  "pylabrobot_labware_catalog",
+  "pylabrobot_labware_library",
   "sphinx.ext.autosummary",
   "sphinx.ext.autosectionlabel",
   "sphinx.ext.intersphinx",
@@ -102,16 +102,16 @@ html_extra_path = ["resources/library/img"]
 html_css_files = list(globals().get("html_css_files", []))
 if "plr_cards.css" not in html_css_files:
   html_css_files.append("plr_cards.css")  # served from _static/plr_cards.css
-if "plr_labware_catalog.css" not in html_css_files:
-  html_css_files.append("plr_labware_catalog.css")
+if "plr_labware_library.css" not in html_css_files:
+  html_css_files.append("plr_labware_library.css")
 
 html_js_files = list(globals().get("html_js_files", []))
 if "plr_cards.js" not in html_js_files:
   html_js_files.append("plr_cards.js")    # served from _static/plr_cards.js
 if "plr_geometry_viewer.js" not in html_js_files:
   html_js_files.append("plr_geometry_viewer.js")
-if "plr_labware_catalog.js" not in html_js_files:
-  html_js_files.append("plr_labware_catalog.js")
+if "plr_labware_library.js" not in html_js_files:
+  html_js_files.append("plr_labware_library.js")
 
 # NOTE: templates_path already includes "_templates", which is where
 #       plr_card_grid.html should live.
@@ -203,12 +203,13 @@ redirects = {
   "tilting.html": "user_guide/tilting.html",
   "heating-shaking.html": "user_guide/heating_shaking.html",
   "fans.html": "user_guide/fans.html",
-  "resources/geometry-catalog.html": "resources/catalog.html",
+  "resources/catalog.html": "resources/library.html",
+  "resources/geometry-catalog.html": "resources/library.html",
 }
 
 
-def _catalog_redirect_target(source_html_path: str) -> str:
-  target = "resources/catalog.html"
+def _library_redirect_target(source_html_path: str) -> str:
+  target = "resources/library.html"
   source_dir = os.path.dirname(source_html_path)
   if not source_dir:
     return target
@@ -221,12 +222,12 @@ def _library_doc_redirects() -> dict[str, str]:
   for markdown_path in library_root.rglob("*.md"):
     relative_markdown = markdown_path.relative_to(Path(__file__).parent)
     source_html = relative_markdown.with_suffix(".html").as_posix()
-    redirects_map[source_html] = _catalog_redirect_target(source_html)
+    redirects_map[source_html] = _library_redirect_target(source_html)
 
     # Also redirect extension-less style links such as /resources/library/hamilton.
     if markdown_path.stem != "index":
       folder_style_source = (relative_markdown.with_suffix("") / "index.html").as_posix()
-      redirects_map[folder_style_source] = _catalog_redirect_target(folder_style_source)
+      redirects_map[folder_style_source] = _library_redirect_target(folder_style_source)
   return redirects_map
 
 

@@ -10,7 +10,7 @@ manufacturer / OEM information is captured deterministically and (b) the
 resources are organised into a consistent, machine-readable hierarchy that the
 Resource Library can render and CI can validate.
 
-It deliberately replaces heuristics in today's catalog extension ("first link
+It deliberately replaces heuristics in today's library extension ("first link
 in the preamble", "first blockquote", "first fenced code block") with explicit,
 reserved structure.
 
@@ -49,7 +49,7 @@ reference link in the panel; only `Website:` → a "Website ↗" link; a
 `Wikipedia:` present → an additional "Wikipedia ↗" link. The panel never
 implies a missing key should exist.
 
-Rationale: today the catalog grabs "whichever link appears first", so some
+Rationale: today the library grabs "whichever link appears first", so some
 manufacturers surface a Wikipedia link and others a homepage purely by
 ordering accident. Explicit, optional labels remove the ambiguity without
 making any particular source mandatory.
@@ -100,7 +100,7 @@ Thermo Fisher Scientific Inc.
 
 ## 4. Resource organisation = heading nesting
 
-The organisational tree the catalog renders is derived **only** from the
+The organisational tree the library renders is derived **only** from the
 `##` / `###` / `####` heading nesting of the non-reserved sections — not from
 the `## Brand structure` art (which only a few files have today).
 
@@ -193,7 +193,7 @@ when it is present.
 ## What is NOT in scope for CI (author / project decision)
 
 These are real consistency issues but are **naming/structure policy**, not
-mechanics, and tie into the open "Resource Library vs Catalog" /
+mechanics, and tie into the open resource library /
 plural-vs-singular discussion. The spec *recommends* a rule but the project
 owner decides; CI should not impose it:
 
@@ -204,7 +204,7 @@ owner decides; CI should not impose it:
 
 ## Migration note
 
-Adopting this fully requires: updating the catalog extension to parse the
+Adopting this fully requires: updating the library extension to parse the
 explicit metadata + reserved sections + heading-derived tree, migrating the
 ~23 existing vendor files, then enabling the CI. That is a separate,
 author-coordinated effort; this document is the spec to agree on first.

@@ -24,14 +24,14 @@
     return `${getUrlRoot()}${path}`;
   }
 
-  function catalogIndexUrl() {
+  function libraryIndexUrl() {
     const currentScript =
       document.currentScript ||
-      document.querySelector('script[src*="plr_labware_catalog.js"]');
+      document.querySelector('script[src*="plr_labware_library.js"]');
     if (currentScript && currentScript.src) {
-      return new URL("labware_geometry_index.json", currentScript.src).toString();
+      return new URL("labware_library_index.json", currentScript.src).toString();
     }
-    return staticUrl("_static/labware_geometry_index.json");
+    return staticUrl("_static/labware_library_index.json");
   }
 
   function element(tagName, className, text) {
@@ -132,8 +132,8 @@
 
   function openModel(definitionName) {
     const modal = ensureModal();
-    const catalog = state.index.resources[definitionName];
-    if (!modal || !catalog || !state.viewer) {
+    const library = state.index.resources[definitionName];
+    if (!modal || !library || !state.viewer) {
       return;
     }
 
@@ -144,7 +144,7 @@
     modalTitle.appendChild(modalCode);
     modal.removeAttribute("hidden");
     document.body.classList.add("plr-library-modal-open");
-    state.viewer.setCatalog(catalog);
+    state.viewer.setCatalog(library);
     window.requestAnimationFrame(() => state.viewer.resize());
   }
 
@@ -217,22 +217,22 @@
   function createManufacturerPanel(name, items) {
     const meta = (state.index.manufacturers || {})[name] || {};
     const details = document.createElement("details");
-    details.className = "plr-catalog-manufacturer";
+    details.className = "plr-library-manufacturer";
     details.open = false;
 
     const breakdown = Array.from(buildSectionTree(items).children.entries())
       .map(([title, node]) => `${title} (${node.count})`)
       .join(" · ");
     const summary = document.createElement("summary");
-    summary.appendChild(element("span", "plr-catalog-manufacturer__name", name));
+    summary.appendChild(element("span", "plr-library-manufacturer__name", name));
     summary.appendChild(
-      element("span", "plr-catalog-manufacturer__meta", breakdown),
+      element("span", "plr-library-manufacturer__meta", breakdown),
     );
     details.appendChild(summary);
 
     if (meta.company_url) {
       const link = document.createElement("a");
-      link.className = "plr-catalog-manufacturer__company";
+      link.className = "plr-library-manufacturer__company";
       link.href = meta.company_url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
@@ -244,30 +244,30 @@
 
     if (meta.blurb) {
       details.appendChild(
-        element("p", "plr-catalog-manufacturer__blurb", meta.blurb),
+        element("p", "plr-library-manufacturer__blurb", meta.blurb),
       );
     }
 
     if (meta.brand_tree) {
       details.appendChild(
-        element("div", "plr-catalog-manufacturer__subhead", "Brand structure"),
+        element("div", "plr-library-manufacturer__subhead", "Brand structure"),
       );
-      const pre = element("pre", "plr-catalog-manufacturer__tree", meta.brand_tree);
+      const pre = element("pre", "plr-library-manufacturer__tree", meta.brand_tree);
       details.appendChild(pre);
     }
 
     return details;
   }
 
-  function renderCatalog(root) {
+  function renderLibrary(root) {
     const items = (state.index.items || []).filter(itemMatchesFilters);
-    const results = root.querySelector(".plr-catalog-results");
-    const count = root.querySelector(".plr-catalog-count");
+    const results = root.querySelector(".plr-library-results");
+    const count = root.querySelector(".plr-library-count");
     results.innerHTML = "";
     count.textContent = `${items.length} resources`;
 
     if (items.length === 0) {
-      results.appendChild(element("div", "plr-catalog-empty", "No labware matches these filters."));
+      results.appendChild(element("div", "plr-library-empty", "No labware matches these filters."));
       return;
     }
 
@@ -276,7 +276,7 @@
     }
 
     if (state.section !== "All") {
-      const grid = element("div", "plr-catalog-grid");
+      const grid = element("div", "plr-library-grid");
       items.forEach((item) => grid.appendChild(createCard(item)));
       results.appendChild(grid);
       return;
@@ -290,38 +290,38 @@
     });
 
     groups.forEach((groupItems, sectionName) => {
-      const group = element("section", "plr-catalog-group");
-      group.appendChild(element("h2", "plr-catalog-group__title", sectionName));
-      const grid = element("div", "plr-catalog-grid");
+      const group = element("section", "plr-library-group");
+      group.appendChild(element("h2", "plr-library-group__title", sectionName));
+      const grid = element("div", "plr-library-grid");
       groupItems.forEach((item) => grid.appendChild(createCard(item)));
       group.appendChild(grid);
       results.appendChild(group);
     });
   }
 
-  function renderCatalogShell(root) {
+  function renderLibraryShell(root) {
     root.innerHTML = `
-      <div class="plr-catalog-toolbar">
-        <div class="plr-catalog-search">
-          <label for="plr-catalog-search-input">Search</label>
-          <input id="plr-catalog-search-input" type="search" placeholder="Plate, tiprack, Hamilton, 96..." />
+      <div class="plr-library-toolbar">
+        <div class="plr-library-search">
+          <label for="plr-library-search-input">Search</label>
+          <input id="plr-library-search-input" type="search" placeholder="Plate, tiprack, Hamilton, 96..." />
         </div>
-        <div class="plr-catalog-filter">
-          <label for="plr-catalog-manufacturer">Manufacturer</label>
-          <select id="plr-catalog-manufacturer"></select>
+        <div class="plr-library-filter">
+          <label for="plr-library-manufacturer">Manufacturer</label>
+          <select id="plr-library-manufacturer"></select>
         </div>
-        <div class="plr-catalog-filter">
-          <label for="plr-catalog-section">Type</label>
-          <select id="plr-catalog-section"></select>
+        <div class="plr-library-filter">
+          <label for="plr-library-section">Type</label>
+          <select id="plr-library-section"></select>
         </div>
-        <div class="plr-catalog-count"></div>
+        <div class="plr-library-count"></div>
       </div>
-      <div class="plr-catalog-results"></div>
+      <div class="plr-library-results"></div>
     `;
 
-    const search = root.querySelector("#plr-catalog-search-input");
-    const manufacturer = root.querySelector("#plr-catalog-manufacturer");
-    const section = root.querySelector("#plr-catalog-section");
+    const search = root.querySelector("#plr-library-search-input");
+    const manufacturer = root.querySelector("#plr-library-manufacturer");
+    const section = root.querySelector("#plr-library-section");
     setSelectOptions(manufacturer, unique(state.index.items.map((item) => item.manufacturer)), state.manufacturer);
     setSelectOptions(section, unique(state.index.items.map((item) => item.section)), state.section);
     search.value = state.query;
@@ -329,20 +329,20 @@
     search.addEventListener("input", () => {
       state.query = search.value;
       writeUrlState();
-      renderCatalog(root);
+      renderLibrary(root);
     });
     manufacturer.addEventListener("change", () => {
       state.manufacturer = manufacturer.value;
       writeUrlState();
-      renderCatalog(root);
+      renderLibrary(root);
     });
     section.addEventListener("change", () => {
       state.section = section.value;
       writeUrlState();
-      renderCatalog(root);
+      renderLibrary(root);
     });
 
-    renderCatalog(root);
+    renderLibrary(root);
   }
 
   function readUrlState() {
@@ -365,27 +365,27 @@
     window.history.replaceState(null, "", newUrl);
   }
 
-  function initializeCatalogPage() {
-    const root = document.getElementById("plr-labware-catalog");
+  function initializeLibraryPage() {
+    const root = document.getElementById("plr-labware-library");
     if (!root) {
       return;
     }
 
     readUrlState();
-    root.innerHTML = `<div class="plr-catalog-loading">Loading catalog...</div>`;
-    fetch(catalogIndexUrl())
+    root.innerHTML = `<div class="plr-library-loading">Loading library...</div>`;
+    fetch(libraryIndexUrl())
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
       .then((index) => {
         state.index = index;
-        renderCatalogShell(root);
+        renderLibraryShell(root);
       })
       .catch((error) => {
-        root.innerHTML = `<div class="plr-catalog-empty">Could not load the generated catalog index: ${error.message}</div>`;
+        root.innerHTML = `<div class="plr-library-empty">Could not load the generated library index: ${error.message}</div>`;
       });
   }
 
-  document.addEventListener("DOMContentLoaded", initializeCatalogPage);
+  document.addEventListener("DOMContentLoaded", initializeLibraryPage);
 })();

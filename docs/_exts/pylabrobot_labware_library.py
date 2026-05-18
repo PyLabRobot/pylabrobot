@@ -6,13 +6,14 @@ import json
 import re
 from html import escape
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, get_type_hints
 
-from pylabrobot.resources import generate_geometry_catalog
+from pylabrobot.resources import generate_geometry_library
+from pylabrobot.resources.resource import Resource
 
 
 LIBRARY_RELATIVE_ROOT = Path("resources") / "library"
-GEOMETRY_INDEX_FILENAME = "labware_geometry_index.json"
+GEOMETRY_INDEX_FILENAME = "labware_library_index.json"
 RESOURCE_ALIASES = {
   "Azenta4titudeFrameStar_96_wellplate_skirted": "Azenta4titudeFrameStar_96_wellplate_200ul_Vb",
   "BioRad_384_DWP_50uL_Vb": "BioRad_384_wellplate_50uL_Vb",
@@ -26,6 +27,56 @@ RESOURCE_ALIASES = {
   "PLT_CAR_P3AC": "PLT_CAR_P3AC_A00",
 }
 
+MANUFACTURER_NAMES = {
+  "agenbio": "AgenBio",
+  "agilent": "Agilent",
+  "alpaqua": "Alpaqua",
+  "azenta": "Azenta",
+  "bioer": "Bioer",
+  "biorad": "Bio-Rad",
+  "boekel": "Boekel",
+  "btx": "BTX",
+  "celltreat": "CellTreat",
+  "cellvis": "CellVis",
+  "corning": "Corning Inc.",
+  "diy": "DIY",
+  "eppendorf": "Eppendorf",
+  "greiner": "Greiner Bio-One",
+  "hamilton": "Hamilton",
+  "imcs": "IMCS",
+  "nest": "NEST",
+  "opentrons": "Opentrons",
+  "perkin_elmer": "Perkin Elmer",
+  "porvair": "Porvair",
+  "revvity": "Revvity",
+  "sergi": "Sergi",
+  "tecan": "Tecan",
+  "thermo_fisher": "Thermo Fisher Scientific",
+  "vwr": "VWR",
+}
+
+SECTION_NAMES = {
+  "adapters": "Adapters",
+  "carrier": "Carriers",
+  "deck": "Decks",
+  "hamilton_decks": "Decks",
+  "mfx_carriers": "MFX Carriers",
+  "mfx_modules": "MFX Modules",
+  "nimbus_decks": "Decks",
+  "plate_adapters": "Plate Adapters",
+  "plate_carriers": "Plate Carriers",
+  "plates": "Plates",
+  "tip_carriers": "Tip Carriers",
+  "tip_racks": "Tip Racks",
+  "trash": "Trash",
+  "trough_carriers": "Trough Carriers",
+  "troughs": "Troughs",
+  "tube_carriers": "Tube Carriers",
+  "tube_racks": "Tube Racks",
+  "vantage_decks": "Decks",
+  "wash": "Wash Stations",
+}
+
 
 def _library_doc_paths(srcdir: str) -> List[Path]:
   library_root = Path(srcdir) / LIBRARY_RELATIVE_ROOT
@@ -33,7 +84,7 @@ def _library_doc_paths(srcdir: str) -> List[Path]:
 
 
 # Structural inline tags that pre-PR Sphinx/MyST rendered from these cells.
-# Re-enabled here so the catalog doesn't regress files that used inline HTML.
+# Re-enabled here so the library doesn't regress files that used inline HTML.
 _ALLOWED_TAGS = ("br", "p", "ul", "ol", "li", "b", "strong", "i", "em", "sub", "sup")
 _SAFE_HREF = re.compile(r"(?i)^(https?:|mailto:)")
 
@@ -181,37 +232,15 @@ def _extract_labware_entries_from_markdown(
   return entries
 
 
-def _iter_unique_resource_names(srcdir: str) -> Iterable[str]:
-  seen: Set[str] = set()
-
-  for doc_path in _library_doc_paths(srcdir):
-    doc_relative_path = doc_path.relative_to(srcdir)
-    entries = _extract_labware_entries_from_markdown(
-      doc_path.read_text(encoding="utf-8"),
-      doc_relative_path,
-    )
-    for entry in entries:
-      name = entry["definition"]
-      if name not in seen:
-        seen.add(name)
-        yield name
-
-
-def _catalog_entries(srcdir: str) -> List[Dict[str, Any]]:
-  entries: List[Dict[str, Any]] = []
-  seen: Set[str] = set()
-
+def _markdown_library_entries(srcdir: str) -> Dict[str, Dict[str, Any]]:
+  entries: Dict[str, Dict[str, Any]] = {}
   for doc_path in _library_doc_paths(srcdir):
     doc_relative_path = doc_path.relative_to(srcdir)
     for entry in _extract_labware_entries_from_markdown(
       doc_path.read_text(encoding="utf-8"),
       doc_relative_path,
     ):
-      definition_name = entry["definition"]
-      if definition_name in seen:
-        continue
-      seen.add(definition_name)
-      entries.append(entry)
+      entries.setdefault(entry["definition"], entry)
 
   return entries
 
@@ -241,7 +270,7 @@ def _resource_factory_registry() -> Dict[str, Callable[..., Any]]:
     if name.startswith("_"):
       continue
     value = getattr(resources_module, name)
-    if callable(value):
+    if inspect.isfunction(value):
       registry[name] = value
 
   resources_root = Path(resources_module.__file__).resolve().parent
@@ -249,15 +278,13 @@ def _resource_factory_registry() -> Dict[str, Callable[..., Any]]:
     if module_path.name == "__init__.py" or module_path.name.endswith("_tests.py"):
       continue
     relative_path = module_path.relative_to(resources_root).with_suffix("")
-    if "falcon" in relative_path.parts:
-      continue
     module_name = "pylabrobot.resources." + ".".join(relative_path.parts)
     try:
       module = importlib.import_module(module_name)
     except Exception:
       continue
     for name, value in vars(module).items():
-      if name.startswith("_") or not callable(value):
+      if name.startswith("_") or not inspect.isfunction(value):
         continue
       registry.setdefault(name, value)
 
@@ -303,7 +330,7 @@ def _build_resource_definition(
     if first.kind in (
       inspect.Parameter.POSITIONAL_ONLY,
       inspect.Parameter.POSITIONAL_OR_KEYWORD,
-    ):
+    ) and first.default is inspect.Parameter.empty:
       args.append(definition_name)
 
   try:
@@ -312,23 +339,194 @@ def _build_resource_definition(
     return None
 
 
-def build_labware_geometry_index(srcdir: str) -> Dict[str, Any]:
+def _title_from_slug(slug: str) -> str:
+  return slug.replace("_", " ").replace("-", " ").title()
+
+
+def _manufacturer_from_definition(definition: Callable[..., Any]) -> str:
+  parts = definition.__module__.split(".")
+  try:
+    resources_index = parts.index("resources")
+  except ValueError:
+    return "Other"
+
+  if len(parts) <= resources_index + 1:
+    return "Other"
+
+  slug = parts[resources_index + 1]
+  return MANUFACTURER_NAMES.get(slug, _title_from_slug(slug))
+
+
+def _section_from_definition(
+  definition: Callable[..., Any],
+  resource: Optional[Resource] = None,
+) -> str:
+  module_slug = definition.__module__.split(".")[-1]
+  if module_slug in SECTION_NAMES:
+    return SECTION_NAMES[module_slug]
+
+  if resource is not None:
+    category = getattr(resource, "category", None)
+    if isinstance(category, str) and category:
+      return _title_from_slug(category)
+
+    return resource.__class__.__name__
+
+  return _title_from_slug(module_slug)
+
+
+def _fallback_description_html(
+  definition: Callable[..., Any],
+  resource: Optional[Resource] = None,
+) -> str:
+  if resource is None:
+    docstring = inspect.getdoc(definition)
+    if docstring:
+      first_paragraph = docstring.split("\n\n", maxsplit=1)[0].strip()
+      if first_paragraph:
+        return _render_cell_html(first_paragraph)
+    return ""
+
+  details = [
+    f"Type: {escape(resource.__class__.__name__)}",
+    (
+      "Size: "
+      f"{resource.get_size_x():g} x {resource.get_size_y():g} x {resource.get_size_z():g} mm"
+    ),
+  ]
+  if resource.model is not None:
+    details.append(f"Model: {escape(resource.model)}")
+  return "<br>".join(details)
+
+
+def _enrichment_for_definition(
+  definition_name: str,
+  markdown_entries: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+  if definition_name in markdown_entries:
+    return markdown_entries[definition_name]
+
+  aliases = [
+    alias
+    for alias, target in RESOURCE_ALIASES.items()
+    if target == definition_name and alias in markdown_entries
+  ]
+  if len(aliases) > 0:
+    return markdown_entries[aliases[0]]
+
+  return None
+
+
+def _library_entry_from_resource(
+  definition_name: str,
+  definition: Callable[..., Any],
+  resource: Optional[Resource],
+  markdown_entries: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+  enrichment = _enrichment_for_definition(definition_name, markdown_entries)
+  if enrichment is not None:
+    entry = dict(enrichment)
+    entry["definition"] = definition_name
+    entry["section"] = entry.get("section") or _section_from_definition(definition, resource)
+    entry["section_path"] = entry.get("section_path") or [entry["section"]]
+    if not entry.get("description_html"):
+      entry["description_html"] = _fallback_description_html(definition, resource)
+    return entry
+
+  section = _section_from_definition(definition, resource)
+  return {
+    "definition": definition_name,
+    "manufacturer": _manufacturer_from_definition(definition),
+    "section": section,
+    "section_path": [section],
+    "description_html": _fallback_description_html(definition, resource),
+    "image": None,
+    "page": "resources/library.html",
+  }
+
+
+def _is_resource_factory(definition: Callable[..., Any]) -> bool:
+  try:
+    hints = get_type_hints(definition)
+  except Exception:
+    hints = {}
+
+  return_type = hints.get("return", inspect.signature(definition).return_annotation)
+  if return_type is inspect.Signature.empty:
+    return False
+
+  if inspect.isclass(return_type):
+    try:
+      return issubclass(return_type, Resource)
+    except TypeError:
+      return False
+
+  return_annotation = str(return_type)
+  return any(
+    resource_type in return_annotation
+    for resource_type in (
+      "Resource",
+      "Plate",
+      "Lid",
+      "TipRack",
+      "TubeRack",
+      "Carrier",
+      "Trough",
+      "Trash",
+      "Deck",
+      "PlateAdapter",
+      "ResourceHolder",
+      "PetriDish",
+      "Tecan",
+    )
+  )
+
+
+def _should_instantiate_factory(definition: Callable[..., Any]) -> bool:
+  # These Opentrons factories download JSON labware definitions as part of
+  # construction. Discovery should remain deterministic and offline-friendly.
+  return definition.__module__ not in {
+    "pylabrobot.resources.opentrons.adapters",
+    "pylabrobot.resources.opentrons.tip_racks",
+    "pylabrobot.resources.opentrons.tube_racks",
+  }
+
+
+def build_labware_library_index(srcdir: str) -> Dict[str, Any]:
   resources: Dict[str, Any] = {}
-  entries = _catalog_entries(srcdir)
+  entries: List[Dict[str, Any]] = []
+  markdown_entries = _markdown_library_entries(srcdir)
   registry = _resource_factory_registry()
 
-  for definition_name in [entry["definition"] for entry in entries]:
-    resource = _build_resource_definition(definition_name, registry)
-    if resource is None:
+  for definition_name in sorted(registry):
+    definition = registry[definition_name]
+    resource = (
+      _build_resource_definition(definition_name, registry)
+      if _should_instantiate_factory(definition)
+      else None
+    )
+    if not isinstance(resource, Resource) and not _is_resource_factory(definition):
       continue
 
-    try:
-      resources[definition_name] = generate_geometry_catalog(resource)
-    except Exception:
-      continue
+    entry = _library_entry_from_resource(
+      definition_name,
+      definition,
+      resource if isinstance(resource, Resource) else None,
+      markdown_entries,
+    )
+    if isinstance(resource, Resource):
+      try:
+        resources[definition_name] = generate_geometry_library(resource)
+      except Exception:
+        pass
+    entry["has_geometry"] = definition_name in resources
+    entries.append(entry)
 
-  for entry in entries:
-    entry["has_geometry"] = entry["definition"] in resources
+  entries.sort(key=lambda entry: (
+    entry["manufacturer"].lower(),
+    entry["section"].lower(),
+    entry["definition"].lower(),
+  ))
 
   return {
     "items": entries,
@@ -341,7 +539,7 @@ def _write_geometry_index(app) -> None:
   if app.builder.format != "html":
     return
 
-  geometry_index = build_labware_geometry_index(app.srcdir)
+  geometry_index = build_labware_library_index(app.srcdir)
   target_dir = Path(app.outdir) / "_static"
   target_dir.mkdir(parents=True, exist_ok=True)
   target_path = target_dir / GEOMETRY_INDEX_FILENAME
