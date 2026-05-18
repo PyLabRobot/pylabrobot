@@ -264,7 +264,7 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       }
     ]
 
-  async def read_absorbance_spectrum(
+  async def experimental_read_absorbance_spectrum(
     self,
     plate: Plate,
     wells: Optional[List[Well]],
@@ -324,7 +324,7 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       for wl, data_matrix in sorted(spectrum_data.items())
     ]
 
-  async def read_fluorescence_spectrum(
+  async def experimental_read_fluorescence_spectrum(
     self,
     plate: Plate,
     wells: List[Well],

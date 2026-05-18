@@ -142,7 +142,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
     temp = await self.backend.get_average_temperature()
     self.assertIsNone(temp)
 
-  async def test_read_absorbance_spectrum(self) -> None:
+  async def test_experimental_read_absorbance_spectrum(self) -> None:
     # Mock background read
     stop_event = MagicMock()
     bg_task: "asyncio.Future[None]" = asyncio.Future()
@@ -172,7 +172,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
 
       plate.get_item.return_value = well
 
-      results = await self.backend.read_absorbance_spectrum(
+      results = await self.backend.experimental_read_absorbance_spectrum(
         plate, None, wavelength_start=500, wavelength_end=550, wavelength_step=10
       )
 
@@ -182,20 +182,20 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[1]["wavelength"], 510.0)
     self.assertEqual(results[1]["data"], [[0.7, 0.8]])
 
-  async def test_read_absorbance_spectrum_validation(self) -> None:
+  async def test_experimental_read_absorbance_spectrum_validation(self) -> None:
     plate = MagicMock(spec=Plate)
 
     with self.assertRaises(ValueError):
-      await self.backend.read_absorbance_spectrum(
+      await self.backend.experimental_read_absorbance_spectrum(
         plate, None, wavelength_start=550, wavelength_end=500
       )
 
     with self.assertRaises(ValueError):
-      await self.backend.read_absorbance_spectrum(
+      await self.backend.experimental_read_absorbance_spectrum(
         plate, None, wavelength_start=500, wavelength_end=550, wavelength_step=0
       )
 
-  async def test_read_fluorescence_spectrum(self) -> None:
+  async def test_experimental_read_fluorescence_spectrum(self) -> None:
     # Mock background read
     stop_event = MagicMock()
     bg_task: "asyncio.Future[None]" = asyncio.Future()
@@ -225,7 +225,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
 
       plate.get_item.return_value = well
 
-      results = await self.backend.read_fluorescence_spectrum(
+      results = await self.backend.experimental_read_fluorescence_spectrum(
         plate,
         [well],
         excitation_wavelength_start=440,
@@ -241,12 +241,12 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[1]["ex_wavelength"], 450.0)
     self.assertEqual(results[1]["data"], [[200.0]])
 
-  async def test_read_fluorescence_spectrum_validation(self) -> None:
+  async def test_experimental_read_fluorescence_spectrum_validation(self) -> None:
     plate = MagicMock(spec=Plate)
     well = MagicMock(spec=Well)
 
     with self.assertRaises(ValueError):
-      await self.backend.read_fluorescence_spectrum(
+      await self.backend.experimental_read_fluorescence_spectrum(
         plate,
         [well],
         excitation_wavelength_start=480,
@@ -255,7 +255,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
       )
 
     with self.assertRaises(ValueError):
-      await self.backend.read_fluorescence_spectrum(
+      await self.backend.experimental_read_fluorescence_spectrum(
         plate,
         [well],
         excitation_wavelength_start=440,
