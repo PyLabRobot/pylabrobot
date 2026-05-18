@@ -6,8 +6,6 @@ sys.path.append(str(Path(__file__).resolve().parent))
 
 from pylabrobot_labware_library import (
   _markdown_library_entries,
-  _resource_factory_registry,
-  _should_instantiate_factory,
   build_labware_library_index,
 )
 
@@ -36,13 +34,14 @@ class LabwareLibraryTests(unittest.TestCase):
     self.assertIsNotNone(item["image"])
     self.assertTrue(item["has_geometry"])
 
-  def test_offline_opentrons_factories_are_listed_without_instantiation(self):
-    registry = _resource_factory_registry()
-    definition = registry["opentrons_96_tiprack_300ul"]
-
-    self.assertFalse(_should_instantiate_factory(definition))
+  def test_opentrons_factories_are_listed_when_download_fails(self):
     self.assertIn("opentrons_96_tiprack_300ul", self.items_by_definition)
-    self.assertFalse(self.items_by_definition["opentrons_96_tiprack_300ul"]["has_geometry"])
+
+    if not self.items_by_definition["opentrons_96_tiprack_300ul"]["has_geometry"]:
+      self.assertIn(
+        "opentrons_96_tiprack_300ul",
+        self.index["diagnostics"]["failures"],
+      )
 
 
 if __name__ == "__main__":

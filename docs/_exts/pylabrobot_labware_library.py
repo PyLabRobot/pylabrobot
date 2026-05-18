@@ -311,10 +311,10 @@ def _resolve_definition_callable(
 def _build_resource_definition(
   definition_name: str,
   registry: Dict[str, Callable[..., Any]],
-):
+) -> tuple[Optional[Resource], Optional[str]]:
   resolved_name, definition = _resolve_definition_callable(definition_name, registry)
   if definition is None or resolved_name is None:
-    return None
+    return None, "definition callable could not be resolved"
 
   signature = inspect.signature(definition)
   kwargs: Dict[str, Any] = {}
@@ -334,9 +334,14 @@ def _build_resource_definition(
       args.append(definition_name)
 
   try:
-    return definition(*args, **kwargs)
-  except Exception:
-    return None
+    resource = definition(*args, **kwargs)
+  except Exception as error:
+    return None, f"{error.__class__.__name__}: {error}"
+
+  if not isinstance(resource, Resource):
+    return None, f"factory returned {resource.__class__.__name__}, not Resource"
+
+  return resource, None
 
 
 def _title_from_slug(slug: str) -> str:
@@ -446,6 +451,9 @@ def _library_entry_from_resource(
 
 
 def _is_resource_factory(definition: Callable[..., Any]) -> bool:
+  if not _has_library_factory_signature(definition):
+    return False
+
   try:
     hints = get_type_hints(definition)
   except Exception:
@@ -482,29 +490,37 @@ def _is_resource_factory(definition: Callable[..., Any]) -> bool:
   )
 
 
-def _should_instantiate_factory(definition: Callable[..., Any]) -> bool:
-  # These Opentrons factories download JSON labware definitions as part of
-  # construction. Discovery should remain deterministic and offline-friendly.
-  return definition.__module__ not in {
-    "pylabrobot.resources.opentrons.adapters",
-    "pylabrobot.resources.opentrons.tip_racks",
-    "pylabrobot.resources.opentrons.tube_racks",
-  }
+def _has_library_factory_signature(definition: Callable[..., Any]) -> bool:
+  try:
+    parameters = inspect.signature(definition).parameters.values()
+  except (TypeError, ValueError):
+    return False
+
+  for parameter in parameters:
+    if parameter.kind in (
+      inspect.Parameter.VAR_POSITIONAL,
+      inspect.Parameter.VAR_KEYWORD,
+    ):
+      continue
+    if parameter.default is not inspect.Parameter.empty:
+      continue
+    if parameter.name in {"name", "modules"}:
+      continue
+    return False
+
+  return True
 
 
 def build_labware_library_index(srcdir: str) -> Dict[str, Any]:
   resources: Dict[str, Any] = {}
   entries: List[Dict[str, Any]] = []
+  failures: Dict[str, Dict[str, str]] = {}
   markdown_entries = _markdown_library_entries(srcdir)
   registry = _resource_factory_registry()
 
   for definition_name in sorted(registry):
     definition = registry[definition_name]
-    resource = (
-      _build_resource_definition(definition_name, registry)
-      if _should_instantiate_factory(definition)
-      else None
-    )
+    resource, instantiation_error = _build_resource_definition(definition_name, registry)
     if not isinstance(resource, Resource) and not _is_resource_factory(definition):
       continue
 
@@ -517,8 +533,16 @@ def build_labware_library_index(srcdir: str) -> Dict[str, Any]:
     if isinstance(resource, Resource):
       try:
         resources[definition_name] = generate_geometry_library(resource)
-      except Exception:
-        pass
+      except Exception as error:
+        failures[definition_name] = {
+          "stage": "geometry",
+          "reason": f"{error.__class__.__name__}: {error}",
+        }
+    elif instantiation_error is not None:
+      failures[definition_name] = {
+        "stage": "instantiation",
+        "reason": instantiation_error,
+      }
     entry["has_geometry"] = definition_name in resources
     entries.append(entry)
 
@@ -532,6 +556,15 @@ def build_labware_library_index(srcdir: str) -> Dict[str, Any]:
     "items": entries,
     "resources": resources,
     "manufacturers": _manufacturers_index(srcdir),
+    "diagnostics": {
+      "markdown_enriched_items": sum(
+        1
+        for entry in entries
+        if _enrichment_for_definition(entry["definition"], markdown_entries) is not None
+      ),
+      "items_without_geometry": len(entries) - len(resources),
+      "failures": failures,
+    },
   }
 
 
