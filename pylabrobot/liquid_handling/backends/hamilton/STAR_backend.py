@@ -34,6 +34,7 @@ else:
   from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
+from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -1322,6 +1323,36 @@ class Head96Information:
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STARBackend."""
 
+  class iSWAPAxis(enum.IntEnum):
+    """Axis index for `iswap_request_joint_state` dicts.
+
+    Units are axis-implicit (matches PF400's `Dict[int, float]` keyed by `PFAxis`):
+    prismatic axes (X/Y/Z, GRIPPER) are in mm; revolute axes (ROTATION, WRIST)
+    are in degrees. Z is the rotation-drive-bottom Z (sits 13 mm above the
+    gripper finger plane).
+    """
+
+    X = 1  # X-arm carriage (rotation-drive X in deck coords)
+    Y = 2  # Y carriage at rotation drive
+    Z = 3  # Z carriage at rotation drive (rotation-drive-bottom Z, deck coords).
+    # NOT the grip-center Z - that sits ~13 mm below this plane and only
+    # appears in iswap_request_pose().location.z.
+    ROTATION = 4  # W joint 1, signed from calibrated FRONT (deg)
+    WRIST = 5  # T joint 2, signed from motor zero (deg)
+    GRIPPER = 6  # gripper jaw opening width
+
+    @property
+    def is_in_kinematic_chain(self) -> bool:
+      """Whether this axis enters forward kinematics. The gripper is an
+      addressable actuator but not a chain member - it changes what is held,
+      not where the gripper frame is."""
+      return self is not STARBackend.iSWAPAxis.GRIPPER
+
+    @property
+    def is_revolute(self) -> bool:
+      """True for revolute (rotary, deg) axes; False for prismatic (linear, mm)."""
+      return self in (STARBackend.iSWAPAxis.ROTATION, STARBackend.iSWAPAxis.WRIST)
+
   PIP_X_MIN_WITH_LEFT_SIDE_PANEL: float = 320.0
   HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL: float = 0.0
 
@@ -1375,6 +1406,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._iswap_wrist_drive_predefined_increments: Optional[
       Dict[STARBackend.WristDriveOrientation, int]
     ] = None
+    self._iswap_link_1_length: Optional[float] = None
+    self._iswap_link_2_length: Optional[float] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1789,6 +1822,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           STARBackend.WristDriveOrientation.LEFT: wrist_predefined["left"],
           STARBackend.WristDriveOrientation.REVERSE: wrist_predefined["reverse"],
         }
+
+        self._iswap_link_1_length = await self.iswap_request_link_1_length()
+        self._iswap_link_2_length = await self.iswap_request_link_2_length()
 
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
@@ -10733,6 +10769,120 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       wrist_speed=speed,
       wrist_acceleration=acceleration,
       wrist_current_limit=current_limit,
+    )
+
+  # -----------------------------------------------------------------------
+  # iSWAP: Forward Kinematics
+  # -----------------------------------------------------------------------
+
+  @staticmethod
+  def _iswap_fk(
+    joints: Dict["STARBackend.iSWAPAxis", float],
+    link_1_length: float,
+    link_2_length: float,
+    wrist_straight_angle: float,
+  ) -> CartesianCoords:
+    """Pure forward-kinematics map: joint state -> gripper pose (no I/O).
+
+    Takes an `iSWAPAxis`-keyed joint dict and the calibrated link lengths /
+    STRAIGHT angle, returns just the gripper-frame pose (grip-center location
+    + yaw). No intermediate frames in the return; callers that need the wrist
+    XY can recompute trivially from joints + L1.
+
+    Sign convention follows right-hand rule about +Z (CCW positive looking
+    down). Yaw is the deck-frame direction of link 2:
+    `alpha_2 = (W - 90) + (T - T_STRAIGHT)`, with 0 deg = +x deck-right.
+    Z: rotation-drive-bottom Z minus `iswap_rotation_drive_z_offset_above_finger_mm`
+    (13 mm).
+    """
+    rotation_drive_angle = joints[STARBackend.iSWAPAxis.ROTATION]
+    wrist_drive_angle = joints[STARBackend.iSWAPAxis.WRIST]
+    base_x = joints[STARBackend.iSWAPAxis.X]
+    base_y = joints[STARBackend.iSWAPAxis.Y]
+    base_z = joints[STARBackend.iSWAPAxis.Z]
+
+    link_1_deck_angle = rotation_drive_angle - 90.0
+    link_2_deck_angle = link_1_deck_angle + (wrist_drive_angle - wrist_straight_angle)
+
+    alpha_1_rad = math.radians(link_1_deck_angle)
+    alpha_2_rad = math.radians(link_2_deck_angle)
+
+    grip_x = base_x + link_1_length * math.cos(alpha_1_rad) + link_2_length * math.cos(alpha_2_rad)
+    grip_y = base_y + link_1_length * math.sin(alpha_1_rad) + link_2_length * math.sin(alpha_2_rad)
+    grip_z = base_z - STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+
+    return CartesianCoords(
+      location=Coordinate(x=grip_x, y=grip_y, z=grip_z),
+      rotation=Rotation(z=link_2_deck_angle),
+    )
+
+  async def iswap_request_joint_state(self) -> Dict[int, float]:
+    """Snapshot of the iSWAP's current joint state, keyed by `iSWAPAxis`.
+
+    Composes the per-axis request methods into a single read-through dict.
+    Units are axis-implicit (see `iSWAPAxis`): X/Y/Z/GRIPPER in mm, ROTATION
+    and WRIST in degrees.
+
+    Raises:
+      RuntimeError: if iSWAP is not installed or if `setup()` has not run
+        (the rotation-drive angle reader needs the predefined-stop table).
+    """
+    if not self.extended_conf.left_x_drive.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+
+    return {
+      STARBackend.iSWAPAxis.X: await self.iswap_rotation_drive_request_x(),
+      STARBackend.iSWAPAxis.Y: await self.iswap_rotation_drive_request_y(),
+      STARBackend.iSWAPAxis.Z: await self.iswap_rotation_drive_request_z(),
+      STARBackend.iSWAPAxis.ROTATION: await self.iswap_rotation_drive_request_angle(),
+      STARBackend.iSWAPAxis.WRIST: await self.iswap_wrist_drive_request_angle(),
+      STARBackend.iSWAPAxis.GRIPPER: await self.iswap_gripper_request_width(),
+    }
+
+  async def iswap_request_pose(self) -> CartesianCoords:
+    """Compute the iSWAP gripper pose via forward kinematics.
+
+    FK-based alternative to `request_iswap_position` (C0 QG), which is
+    firmware-state-dependent and only returns correct values after certain
+    preceding commands. Reads the joint state directly via
+    `iswap_request_joint_state` and runs `_iswap_fk` against the link lengths
+    cached during `setup()`.
+
+    Returns:
+      `CartesianCoords` with `location` = grip-center deck coordinates (mm) and
+      `rotation.z` = gripper yaw (deg, deck-frame, 0 = +x; `rotation.x`/`.y` = 0
+      since the gripper plane stays parallel to the deck).
+
+    Raises:
+      RuntimeError: if iSWAP is not installed or if `setup()` has not populated
+        the wrist STRAIGHT calibration / cached link lengths.
+    """
+    if (
+      self._iswap_wrist_drive_predefined_increments is None
+      or self._iswap_link_1_length is None
+      or self._iswap_link_2_length is None
+    ):
+      raise RuntimeError(
+        "iSWAP setup state not loaded (wrist predefined positions / link lengths); "
+        "ensure the iSWAP is installed and `setup()` has run."
+      )
+
+    wrist_straight_increments = self._iswap_wrist_drive_predefined_increments[
+      STARBackend.WristDriveOrientation.STRAIGHT
+    ]
+    wrist_straight_angle = STARBackend._iswap_wrist_drive_increments_to_angle(
+      wrist_straight_increments
+    )
+
+    joints = {
+      STARBackend.iSWAPAxis(k): v for k, v in (await self.iswap_request_joint_state()).items()
+    }
+
+    return STARBackend._iswap_fk(
+      joints=joints,
+      link_1_length=self._iswap_link_1_length,
+      link_2_length=self._iswap_link_2_length,
+      wrist_straight_angle=wrist_straight_angle,
     )
 
   # -----------------------------------------------------------------------

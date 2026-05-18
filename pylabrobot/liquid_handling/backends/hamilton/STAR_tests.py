@@ -5,6 +5,7 @@ import unittest
 import unittest.mock
 from typing import Literal, cast
 
+from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
@@ -145,6 +146,157 @@ def _any_write_and_read_command_call(cmd):
     read_timeout=unittest.mock.ANY,
     wait=unittest.mock.ANY,
   )
+
+
+class TestiSWAPForwardKinematics(unittest.TestCase):
+  """Geometry of `STARBackend._iswap_fk` (pure FK, no I/O).
+
+  Verifies the canonical (W, T) configurations against the docstring examples
+  in `request_iswap_wrist_drive_orientation`:
+    - W=FRONT (0)  + T=STRAIGHT  -> arm extends in -y (front of deck)
+    - W=LEFT (-90) + T=STRAIGHT  -> arm extends in -x (left of deck)
+    - W=RIGHT(+90) + T=STRAIGHT  -> arm extends in +x (right of deck)
+    - W=FRONT (0)  + T=RIGHT     -> arm tip ends up to the left (-x) of rot. drive
+  Uses factory-default link lengths (138 mm each) and the factory-default
+  STRAIGHT angle (~-45 deg). Asserts only on the public pose contract
+  (`location` + `rotation.z`).
+  """
+
+  L1 = 138.0
+  L2 = 138.0
+  T_STRAIGHT = -45.0  # factory-default STRAIGHT calibration (EEPROM-dependent in practice)
+  Z_OFFSET = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+  BASE_X, BASE_Y, BASE_Z = 100.0, 500.0, 200.0
+  # Gripper jaw width: hardware range ~71-134 mm (drive min/max increments).
+  # FK doesn't read this axis, but the joint dict represents full state, so
+  # use a realistic mid-range plate-grip value.
+  GRIPPER_WIDTH = 90.0
+
+  def _fk(self, w: float, t: float) -> CartesianCoords:
+    joints = {
+      STARBackend.iSWAPAxis.X: self.BASE_X,
+      STARBackend.iSWAPAxis.Y: self.BASE_Y,
+      STARBackend.iSWAPAxis.Z: self.BASE_Z,
+      STARBackend.iSWAPAxis.ROTATION: w,
+      STARBackend.iSWAPAxis.WRIST: t,
+      STARBackend.iSWAPAxis.GRIPPER: self.GRIPPER_WIDTH,
+    }
+    return STARBackend._iswap_fk(
+      joints=joints,
+      link_1_length=self.L1,
+      link_2_length=self.L2,
+      wrist_straight_angle=self.T_STRAIGHT,
+    )
+
+  def test_front_straight_extends_in_minus_y(self):
+    pose = self._fk(w=0.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y - (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.z, self.BASE_Z - self.Z_OFFSET, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -90.0, places=6)
+
+  def test_left_straight_extends_in_minus_x(self):
+    pose = self._fk(w=-90.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X - (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -180.0, places=6)
+
+  def test_front_right_extends_in_minus_x(self):
+    """W=FRONT + T=RIGHT (-135 deg motor) -> gripper points to deck-left."""
+    pose = self._fk(w=0.0, t=-135.0)
+    # Link 1 points -y from base; link 2 is bent right (CW by 90 deg) -> points -x.
+    self.assertAlmostEqual(pose.location.x, self.BASE_X - self.L2, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y - self.L1, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -180.0, places=6)
+
+  def test_reverse_folds_arm_back_onto_base_xy(self):
+    """T=REVERSE (+135) folds link 2 back 180 deg from link 1 -> tip XY = base XY."""
+    pose = self._fk(w=0.0, t=+135.0)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+
+
+class TestiSWAPAxisPredicates(unittest.TestCase):
+  """Predicates on `STARBackend.iSWAPAxis` classify axes by kinematic role / unit."""
+
+  def test_is_in_kinematic_chain(self):
+    Axis = STARBackend.iSWAPAxis
+    for a in (Axis.X, Axis.Y, Axis.Z, Axis.ROTATION, Axis.WRIST):
+      self.assertTrue(a.is_in_kinematic_chain, f"{a.name} should be in the chain")
+    self.assertFalse(Axis.GRIPPER.is_in_kinematic_chain, "GRIPPER should NOT be in the chain")
+
+
+class TestiSWAPRequestJointState(unittest.IsolatedAsyncioTestCase):
+  """`iswap_request_joint_state` composes the per-axis request methods into one dict."""
+
+  def _make_backend(self) -> STARBackend:
+    b = STARBackend()
+    b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    b.iswap_rotation_drive_request_x = unittest.mock.AsyncMock(return_value=100.0)
+    b.iswap_rotation_drive_request_y = unittest.mock.AsyncMock(return_value=500.0)
+    b.iswap_rotation_drive_request_z = unittest.mock.AsyncMock(return_value=200.0)
+    b.iswap_rotation_drive_request_angle = unittest.mock.AsyncMock(return_value=0.0)
+    b.iswap_wrist_drive_request_angle = unittest.mock.AsyncMock(return_value=-45.0)
+    b.iswap_gripper_request_width = unittest.mock.AsyncMock(return_value=90.0)
+    return b
+
+  async def test_returns_full_axis_dict(self):
+    b = self._make_backend()
+    joints = await b.iswap_request_joint_state()
+    Axis = STARBackend.iSWAPAxis
+    self.assertEqual(
+      joints,
+      {
+        Axis.X: 100.0,
+        Axis.Y: 500.0,
+        Axis.Z: 200.0,
+        Axis.ROTATION: 0.0,
+        Axis.WRIST: -45.0,
+        Axis.GRIPPER: 90.0,
+      },
+    )
+
+
+class TestiSWAPRequestPose(unittest.IsolatedAsyncioTestCase):
+  """`iswap_request_pose` reads joints + runs FK against the cached link lengths."""
+
+  def _make_backend(self) -> STARBackend:
+    b = STARBackend()
+    b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    b._iswap_link_1_length = 138.0
+    b._iswap_link_2_length = 138.0
+    b._iswap_wrist_drive_predefined_increments = {
+      STARBackend.WristDriveOrientation.RIGHT: -26577,
+      STARBackend.WristDriveOrientation.STRAIGHT: -8859,
+      STARBackend.WristDriveOrientation.LEFT: 8859,
+      STARBackend.WristDriveOrientation.REVERSE: 26577,
+    }
+    b.iswap_rotation_drive_request_x = unittest.mock.AsyncMock(return_value=100.0)
+    b.iswap_rotation_drive_request_y = unittest.mock.AsyncMock(return_value=500.0)
+    b.iswap_rotation_drive_request_z = unittest.mock.AsyncMock(return_value=200.0)
+    b.iswap_rotation_drive_request_angle = unittest.mock.AsyncMock(return_value=0.0)
+    b.iswap_wrist_drive_request_angle = unittest.mock.AsyncMock(return_value=-45.0)
+    b.iswap_gripper_request_width = unittest.mock.AsyncMock(return_value=90.0)
+    return b
+
+  async def test_front_straight_pose(self):
+    """Canonical W=0 / T=-45 / base=(100, 500, 200) -> grip ~ (100, 224, 187), yaw ~ -90°.
+
+    Verifies the full I/O path (per-axis reads -> joint state -> FK -> pose). EEPROM
+    STRAIGHT (-8859 incr) maps to ~-45.0007 deg, so the canonical -90° yaw lands at
+    -89.999° and grip x picks up a ~0.002 mm offset - this is intentional per-machine
+    calibration drift, not an FK bug.
+    """
+    b = self._make_backend()
+    pose = await b.iswap_request_pose()
+    self.assertIsInstance(pose, CartesianCoords)
+    self.assertAlmostEqual(pose.location.x, 100.0, places=2)
+    self.assertAlmostEqual(pose.location.y, 224.0, places=3)
+    self.assertAlmostEqual(pose.location.z, 187.0, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -90.0, places=2)
+    # rotation.x / y are always 0 - the gripper plane stays parallel to the deck.
+    self.assertEqual(pose.rotation.x, 0.0)
+    self.assertEqual(pose.rotation.y, 0.0)
 
 
 class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
