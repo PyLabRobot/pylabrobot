@@ -181,8 +181,10 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.iswap_open_gripper
       ~STAR.iswap_put_plate
       ~STAR.iswap_reengage_break
+      ~STAR.iswap_request_joint_state
       ~STAR.iswap_request_link_1_length
       ~STAR.iswap_request_link_2_length
+      ~STAR.iswap_request_pose
       ~STAR.iswap_rotate
       ~STAR.iswap_rotation_drive_move_y
       ~STAR.iswap_rotation_drive_move_z

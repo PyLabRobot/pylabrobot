@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y.html" />
-    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_pose" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_pose.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_link_1_length" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_link_1_length.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -561,7 +561,7 @@
     
     <li class="breadcrumb-item"><a href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.html" class="nav-link">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state</span></li>
   </ul>
 </nav>
 </div>
@@ -578,27 +578,22 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-rotate">
-<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-rotate" title="Link to this heading">#</a></h1>
+  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-request-joint-state">
+<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-request-joint-state" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">iswap_rotate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rotation_drive</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">RotationDriveOrientation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grip_direction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.liquid_handling.standard.GripDirection.html#pylabrobot.liquid_handling.standard.GripDirection" title="pylabrobot.liquid_handling.standard.GripDirection"><span class="pre">GripDirection</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">gripper_velocity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">55000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gripper_acceleration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">170</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gripper_protection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">2</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">3</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">4</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">5</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">6</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">7</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_velocity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">48000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_acceleration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">145</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_protection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">2</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">3</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">4</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">5</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">6</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">7</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate" title="Link to this definition">#</a></dt>
-<dd><p>Rotate the iswap to a predefined position.
-Velocity units are “incr/sec”
-Acceleration units are “1_000 incr/sec**2”
-For a list of the possible positions see the pylabrobot documentation on the R0 module.</p>
+<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">iswap_request_joint_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state" title="Link to this definition">#</a></dt>
+<dd><p>Snapshot of the iSWAP’s current joint state, keyed by <code class="code docutils literal notranslate"><span class="pre">iSWAPAxis</span></code>.</p>
+<p>Composes the per-axis request methods into a single read-through dict.
+Units are axis-implicit (see <code class="code docutils literal notranslate"><span class="pre">iSWAPAxis</span></code>): X/Y/Z/GRIPPER in mm, ROTATION
+and WRIST in degrees.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>rotation_drive</strong> (<em>RotationDriveOrientation</em>)</p></li>
-<li><p><strong>grip_direction</strong> (<a class="reference internal" href="pylabrobot.liquid_handling.standard.GripDirection.html#pylabrobot.liquid_handling.standard.GripDirection" title="pylabrobot.liquid_handling.standard.GripDirection"><em>GripDirection</em></a>)</p></li>
-<li><p><strong>gripper_velocity</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
-<li><p><strong>gripper_acceleration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
-<li><p><strong>gripper_protection</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>0</em><em>, </em><em>1</em><em>, </em><em>2</em><em>, </em><em>3</em><em>, </em><em>4</em><em>, </em><em>5</em><em>, </em><em>6</em><em>, </em><em>7</em><em>]</em>)</p></li>
-<li><p><strong>wrist_velocity</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
-<li><p><strong>wrist_acceleration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
-<li><p><strong>wrist_protection</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>0</em><em>, </em><em>1</em><em>, </em><em>2</em><em>, </em><em>3</em><em>, </em><em>4</em><em>, </em><em>5</em><em>, </em><em>6</em><em>, </em><em>7</em><em>]</em>)</p></li>
-</ul>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – if iSWAP is not installed or if <code class="code docutils literal notranslate"><span class="pre">setup()</span></code> has not run
+    (the rotation-drive angle reader needs the predefined-stop table).</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><em>Dict</em></a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a>]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -616,20 +611,20 @@ For a list of the possible positions see the pylabrobot documentation on the R0 
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_pose.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_pose</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_reengage_break</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_link_1_length.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_link_1_length</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -652,7 +647,7 @@ For a list of the possible positions see the pylabrobot documentation on the R0 
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate"><code class="docutils literal notranslate"><span class="pre">STAR.iswap_rotate()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state"><code class="docutils literal notranslate"><span class="pre">STAR.iswap_request_joint_state()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -660,7 +655,7 @@ For a list of the possible positions see the pylabrobot documentation on the R0 
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -675,7 +670,7 @@ For a list of the possible positions see the pylabrobot documentation on the R0 
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_request_joint_state.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
