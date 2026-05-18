@@ -10872,8 +10872,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       RuntimeError: if iSWAP is not installed or if `setup()` has not populated
         the wrist STRAIGHT calibration / cached link lengths.
     """
-    info = self.iswap_information  # raises if iSWAP setup hasn't run
-    wrist_straight_increments = info.wrist_drive_predefined_increments[
+    wrist_straight_increments = self.iswap_information.wrist_drive_predefined_increments[
       STARBackend.WristDriveOrientation.STRAIGHT
     ]
     wrist_straight_angle = STARBackend._iswap_wrist_drive_increments_to_angle(
@@ -10886,8 +10885,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return STARBackend._iswap_fk(
       joints=joints,
-      link_1_length=info.link_1_length,
-      link_2_length=info.link_2_length,
+      link_1_length=self.iswap_information.link_1_length,
+      link_2_length=self.iswap_information.link_2_length,
       wrist_straight_angle=wrist_straight_angle,
     )
 
