@@ -520,9 +520,10 @@ def build_labware_library_index(srcdir: str) -> Dict[str, Any]:
 
   for definition_name in sorted(registry):
     definition = registry[definition_name]
-    resource, instantiation_error = _build_resource_definition(definition_name, registry)
-    if not isinstance(resource, Resource) and not _is_resource_factory(definition):
+    if not _is_resource_factory(definition):
       continue
+
+    resource, instantiation_error = _build_resource_definition(definition_name, registry)
 
     entry = _library_entry_from_resource(
       definition_name,
