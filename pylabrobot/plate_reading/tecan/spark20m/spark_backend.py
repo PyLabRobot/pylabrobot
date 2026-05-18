@@ -1,7 +1,7 @@
 import logging
 import statistics
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
@@ -26,7 +26,12 @@ from .controls.spark_enums import (
 )
 from .controls.system_control import SystemControl
 from .enums import SparkDevice
-from .spark_processor import process_absorbance, process_fluorescence
+from .spark_processor import (
+  process_absorbance,
+  process_absorbance_spectrum,
+  process_fluorescence,
+  process_fluorescence_spectrum,
+)
 from .spark_reader_async import SparkReaderAsync
 
 logger = logging.getLogger(__name__)
@@ -114,6 +119,83 @@ class ExperimentalSparkBackend(PlateReaderBackend):
           start_x, end_x, y_pos, z, num_points_x
         )
 
+  async def _run_measurement(
+    self, device: SparkDevice, plate: Plate, wells: Optional[List[Well]], z: float = 9150
+  ) -> List[bytes]:
+    """Execute a measurement: start background read, scan plate, collect results.
+
+    This is the shared orchestration for all measurement types.
+    """
+    bg_task, stop_event, results = await self.reader.start_background_read(device)
+
+    if bg_task is None or stop_event is None or results is None:
+      raise RuntimeError(f"Failed to start background read for {device.name}")
+
+    try:
+      await self.measurement_control.prepare_instrument(measure_reference=True)
+      await self.scan_plate_range(plate, wells, z)
+    finally:
+      stop_event.set()
+      await bg_task
+      await self.data_control.turn_all_interval_messages_off()
+      await self.measurement_control.end_measurement()
+
+    return results
+
+  async def _setup_absorbance(
+    self, wavelength: Union[int, str], bandwidth: int, num_reads: int
+  ) -> None:
+    """Configure the instrument for an absorbance measurement."""
+    self.reader.clear_messages()
+    await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
+    await self.measurement_control.set_measurement_mode(MeasurementMode.ABSORBANCE)
+    await self.measurement_control.start_measurement()
+    await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
+    await self.measurement_control.set_scan_direction(ScanDirection.UP)
+    await self.system_control.set_settle_time(50000)
+    await self.measurement_control.set_number_of_reads(num_reads, label=1)
+    await self.optics_control.set_excitation_filter(
+      FilterType.BANDPASS, wavelength=wavelength, bandwidth=bandwidth, label=1
+    )
+
+  async def _setup_fluorescence(
+    self,
+    ex_wavelength: Union[int, str],
+    em_wavelength: int,
+    bandwidth: int,
+    num_reads: int,
+    gain: int,
+  ) -> None:
+    """Configure the instrument for a fluorescence measurement."""
+    self.reader.clear_messages()
+    await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
+    await self.measurement_control.set_measurement_mode(MeasurementMode.FLUORESCENCE_TOP)
+    await self.measurement_control.start_measurement()
+    await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
+
+    await self.system_control.set_integration_time(40)
+    await self.system_control.set_lag_time(0)
+    await self.system_control.set_settle_time(0)
+
+    await self.optics_control.set_beam_diameter(5400)
+    await self.optics_control.set_emission_filter(
+      FilterType.BANDPASS,
+      wavelength=em_wavelength,
+      bandwidth=bandwidth,
+      carrier=FluorescenceCarrier.MONOCHROMATOR,
+    )
+    await self.optics_control.set_excitation_filter(
+      FilterType.BANDPASS,
+      wavelength=ex_wavelength,
+      bandwidth=bandwidth,
+      carrier=FluorescenceCarrier.MONOCHROMATOR,
+    )
+
+    await self.measurement_control.set_scan_direction(ScanDirection.ALTERNATE_UP)
+    await self.optics_control.set_mirror(mirror_type=MirrorType.AUTOMATIC)
+    await self.optics_control.set_signal_gain(gain)
+    await self.measurement_control.set_number_of_reads(num_reads)
+
   async def read_absorbance(
     self,
     plate: Plate,
@@ -129,45 +211,13 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         "ABSORPTION device is not connected. Cannot perform absorbance measurement."
       )
 
-    # Initialize
-    self.reader.clear_messages()
-    await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
-    # Setup Measurement
-    await self.measurement_control.set_measurement_mode(MeasurementMode.ABSORBANCE)
-    await self.measurement_control.start_measurement()
-    await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
-    await self.measurement_control.set_scan_direction(ScanDirection.UP)
-    await self.system_control.set_settle_time(50000)
-    await self.measurement_control.set_number_of_reads(num_reads, label=1)
-    await self.optics_control.set_excitation_filter(
-      FilterType.BANDPASS, wavelength=wavelength * 10, bandwidth=bandwidth, label=1
-    )
+    await self._setup_absorbance(wavelength * 10, bandwidth, num_reads)
+    results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells)
+    measurement_time = time.time()
 
-    # Start Background Read
-    bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.ABSORPTION)
-
-    if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(f"Failed to start background read for {SparkDevice.ABSORPTION.name}")
-
-    try:
-      # Execute Measurement Sequence
-      await self.measurement_control.prepare_instrument(measure_reference=True)
-
-      await self.scan_plate_range(plate, wells)
-      measurement_time = time.time()
-
-    finally:
-      stop_event.set()
-      await bg_task
-
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
-
-    # Process results
     data_matrix = process_absorbance(results)
     avg_temp = await self.get_average_temperature()
 
-    # Construct the response
     return [
       {
         "wavelength": wavelength,
@@ -195,63 +245,12 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         "FLUORESCENCE device is not connected. Cannot perform fluorescence measurement."
       )
 
-    ex_wavelength = excitation_wavelength * 10
-    em_wavelength = emission_wavelength * 10
-
-    # Initialize
-    self.reader.clear_messages()
-    await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
-
-    # Setup Measurement
-    await self.measurement_control.set_measurement_mode(MeasurementMode.FLUORESCENCE_TOP)
-    await self.measurement_control.start_measurement()
-    await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
-
-    # System Settings
-    await self.system_control.set_integration_time(40)
-    await self.system_control.set_lag_time(0)
-    await self.system_control.set_settle_time(0)
-
-    # Optics Settings
-    await self.optics_control.set_beam_diameter(5400)
-    await self.optics_control.set_emission_filter(
-      FilterType.BANDPASS,
-      wavelength=em_wavelength,
-      bandwidth=bandwidth,
-      carrier=FluorescenceCarrier.MONOCHROMATOR,
+    await self._setup_fluorescence(
+      excitation_wavelength * 10, emission_wavelength * 10, bandwidth, num_reads, gain
     )
-    await self.optics_control.set_excitation_filter(
-      FilterType.BANDPASS,
-      wavelength=ex_wavelength,
-      bandwidth=bandwidth,
-      carrier=FluorescenceCarrier.MONOCHROMATOR,
-    )
+    results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
+    measurement_time = time.time()
 
-    await self.measurement_control.set_scan_direction(ScanDirection.ALTERNATE_UP)
-    await self.optics_control.set_mirror(mirror_type=MirrorType.AUTOMATIC)
-    await self.optics_control.set_signal_gain(gain)
-    await self.measurement_control.set_number_of_reads(num_reads)
-
-    # Start Background Read
-    bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.FLUORESCENCE)
-
-    if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(f"Failed to start background read for {SparkDevice.FLUORESCENCE.name} ")
-
-    try:
-      # Execute Measurement Sequence
-      await self.measurement_control.prepare_instrument(measure_reference=True)
-      await self.scan_plate_range(plate, wells, focal_height)
-      measurement_time = time.time()
-
-    finally:
-      stop_event.set()
-      await bg_task
-
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
-
-    # Process results
     data_matrix = process_fluorescence(results)
     avg_temp = await self.get_average_temperature()
 
@@ -263,6 +262,136 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         "temperature": avg_temp if avg_temp is not None else 0.0,
         "data": data_matrix,
       }
+    ]
+
+  async def experimental_read_absorbance_spectrum(
+    self,
+    plate: Plate,
+    wells: Optional[List[Well]],
+    wavelength_start: int,
+    wavelength_end: int,
+    wavelength_step: int = 10,
+    bandwidth: int = 200,
+    num_reads: int = 1,
+  ) -> List[Dict[str, object]]:
+    """Read absorbance across a range of wavelengths (spectrum scan).
+
+    The Spark firmware handles the wavelength sweep natively via a range syntax.
+    A single SCAN command per well position sweeps through all wavelengths.
+
+    Args:
+      plate: The plate resource.
+      wells: Wells to scan. None = all wells.
+      wavelength_start: Start wavelength in nm.
+      wavelength_end: End wavelength in nm.
+      wavelength_step: Step size in nm (default 10).
+      bandwidth: Monochromator bandwidth in deci-tenths of nm (default 200 = 20nm).
+      num_reads: Number of flashes per wavelength step (default 1).
+
+    Returns:
+      A list of dicts, one per wavelength step. Each contains:
+        ``wavelength`` (int), ``time`` (float), ``temperature`` (float),
+        ``data`` (List[List[float]]).
+    """
+
+    if SparkDevice.ABSORPTION not in self.reader.devices:
+      raise RuntimeError(
+        "ABSORPTION device is not connected. Cannot perform absorbance spectrum scan."
+      )
+
+    if wavelength_start >= wavelength_end:
+      raise ValueError("wavelength_start must be less than wavelength_end")
+    if wavelength_step <= 0:
+      raise ValueError("wavelength_step must be positive")
+
+    # Firmware range syntax: FROM~TO:STEP in deci-tenths of nm
+    wavelength_range = f"{wavelength_start * 10}~{wavelength_end * 10}:{wavelength_step * 10}"
+
+    await self._setup_absorbance(wavelength_range, bandwidth, num_reads)
+    results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells)
+    measurement_time = time.time()
+
+    spectrum_data = process_absorbance_spectrum(results)
+    avg_temp = await self.get_average_temperature()
+
+    return [
+      {
+        "wavelength": wl,
+        "time": measurement_time,
+        "temperature": avg_temp if avg_temp is not None else 0.0,
+        "data": data_matrix,
+      }
+      for wl, data_matrix in sorted(spectrum_data.items())
+    ]
+
+  async def experimental_read_fluorescence_spectrum(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    excitation_wavelength_start: int,
+    excitation_wavelength_end: int,
+    emission_wavelength: int,
+    excitation_wavelength_step: int = 10,
+    focal_height: float = 20000,
+    bandwidth: int = 200,
+    num_reads: int = 30,
+    gain: int = 100,
+  ) -> List[Dict[str, object]]:
+    """Read fluorescence across a range of excitation wavelengths (spectrum scan).
+
+    The Spark firmware handles the wavelength sweep natively. The emission
+    wavelength is fixed, and the excitation wavelength sweeps across the range.
+
+    Args:
+      plate: The plate resource.
+      wells: Wells to scan.
+      excitation_wavelength_start: Start excitation wavelength in nm.
+      excitation_wavelength_end: End excitation wavelength in nm.
+      emission_wavelength: Fixed emission wavelength in nm.
+      excitation_wavelength_step: Step size in nm (default 10).
+      focal_height: Z focal height in device units (default 20000).
+      bandwidth: Monochromator bandwidth in deci-tenths of nm (default 200 = 20nm).
+      num_reads: Number of reads per wavelength step (default 30).
+      gain: Signal gain (default 100).
+
+    Returns:
+      A list of dicts, one per excitation wavelength step. Each contains:
+        ``ex_wavelength`` (float), ``em_wavelength`` (int), ``time`` (float),
+        ``temperature`` (float), ``data`` (List[List[float]]).
+    """
+
+    if SparkDevice.FLUORESCENCE not in self.reader.devices:
+      raise RuntimeError(
+        "FLUORESCENCE device is not connected. Cannot perform fluorescence spectrum scan."
+      )
+
+    if excitation_wavelength_start >= excitation_wavelength_end:
+      raise ValueError("excitation_wavelength_start must be less than excitation_wavelength_end")
+    if excitation_wavelength_step <= 0:
+      raise ValueError("excitation_wavelength_step must be positive")
+
+    # Firmware range syntax for excitation sweep
+    ex_range = (
+      f"{excitation_wavelength_start * 10}~"
+      f"{excitation_wavelength_end * 10}:{excitation_wavelength_step * 10}"
+    )
+
+    await self._setup_fluorescence(ex_range, emission_wavelength * 10, bandwidth, num_reads, gain)
+    results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
+    measurement_time = time.time()
+
+    spectrum_data = process_fluorescence_spectrum(results)
+    avg_temp = await self.get_average_temperature()
+
+    return [
+      {
+        "ex_wavelength": ex_wl,
+        "em_wavelength": emission_wavelength,
+        "time": measurement_time,
+        "temperature": avg_temp if avg_temp is not None else 0.0,
+        "data": data_matrix,
+      }
+      for ex_wl, data_matrix in sorted(spectrum_data.items())
     ]
 
   async def read_luminescence(

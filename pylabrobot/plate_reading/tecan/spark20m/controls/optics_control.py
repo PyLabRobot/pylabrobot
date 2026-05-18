@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 from .base_control import BaseControl
 from .spark_enums import (
@@ -111,13 +111,18 @@ class OpticsControl(BaseControl):
   async def set_emission_filter(
     self,
     filter_type: FilterType,
-    wavelength: Optional[int] = None,
+    wavelength: Optional[Union[int, str]] = None,
     bandwidth: Optional[int] = None,
     attenuation: Optional[int] = None,
     label: Optional[int] = None,
     carrier: Optional[FluorescenceCarrier] = None,
   ) -> Optional[str]:
-    """Sets the emission filter."""
+    """Sets the emission filter.
+
+    Args:
+      wavelength: Wavelength in deci-tenths of nm. Can be an int for a single wavelength,
+        or a string range like ``'5000~5500:100'`` (from~to:step) for spectrum scans.
+    """
     command = "EMISSION"
     if carrier:
       command += f" CARRIER={carrier.value}"
@@ -260,13 +265,18 @@ class OpticsControl(BaseControl):
   async def set_excitation_filter(
     self,
     filter_type: FilterType,
-    wavelength: Optional[int] = None,
+    wavelength: Optional[Union[int, str]] = None,
     bandwidth: Optional[int] = None,
     attenuation: Optional[int] = None,
     label: Optional[int] = None,
     carrier: Optional[FluorescenceCarrier] = None,
   ) -> Optional[str]:
-    """Sets the excitation filter."""
+    """Sets the excitation filter.
+
+    Args:
+      wavelength: Wavelength in deci-tenths of nm. Can be an int for a single wavelength,
+        or a string range like ``'5000~5500:100'`` (from~to:step) for spectrum scans.
+    """
     command = "EXCITATION"
     if carrier:
       command += f" CARRIER={carrier.value}"
