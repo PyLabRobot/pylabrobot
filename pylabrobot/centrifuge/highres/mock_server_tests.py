@@ -14,6 +14,7 @@ import asyncio
 import unittest
 
 from pylabrobot.centrifuge.highres.microspin_backend import (
+  MicroSpinAbortedError,
   MicroSpinBackend,
   MicroSpinError,
 )
@@ -251,6 +252,175 @@ class MockServerLowGHangTests(unittest.IsolatedAsyncioTestCase):
     # status would normally answer immediately; in low-G-hang mode it sits.
     with self.assertRaises(asyncio.TimeoutError):
       await self.backend.get_status()
+
+
+class MockServerCommandSurfaceTests(_MockServerTestBase):
+  """The mock must implement exactly the public command set the real device
+  exposes via ``list`` (manual §6.7's public tier) -- no maintenance
+  commands, no invented helpers, and with response text that matches the
+  device verbatim.
+  """
+
+  #: Commands the real device's ``list`` enumerates (in display order).
+  EXPECTED_COMMANDS = (
+    "clearbuttonabort, cba",
+    "commandstat, cstat",
+    "disconnect, d",
+    "errors, e",
+    "help",
+    "info, ??",
+    "list, ?",
+    "logcommands",
+    "version, v",
+    "whoami",
+    "abort, a",
+    "home",
+    "homedstatus, hss",
+    "open",
+    "spin, sp",
+    "status, s",
+  )
+
+  async def test_list_enumerates_exactly_the_public_commands(self):
+    lines = await self.backend.send_command("list")
+    # Each line starts with the display name padded to 32 chars then ``- desc``.
+    head_names = [line.split("- ", 1)[0].rstrip() for line in lines]
+    self.assertEqual(tuple(head_names), self.EXPECTED_COMMANDS)
+
+  async def test_info_includes_parameter_signatures(self):
+    lines = await self.backend.send_command("info")
+    text = "\n".join(lines)
+    # Spot-check a representative slice -- the exact wording the device prints.
+    self.assertIn(
+      "open                            - Open the door and present the specified bucket.",
+      text,
+    )
+    self.assertIn("     Parameters(1): <bucket>", text)
+    self.assertIn("     <bucket> the bucket number to present", text)
+    self.assertIn("spin, sp                        - Spin the centrifuge.", text)
+    self.assertIn(
+      "     Parameters(4): <G-force> <acceleration> <deceleration> <time>",
+      text,
+    )
+
+  async def test_help_for_known_command_returns_signature(self):
+    lines = await self.backend.send_command("help spin")
+    text = "\n".join(lines)
+    self.assertIn("spin, sp - Spin the centrifuge.", text)
+    self.assertIn(
+      "     Parameters(4): <G-force> <acceleration> <deceleration> <time>",
+      text,
+    )
+
+  async def test_help_for_alias_works(self):
+    # `help hss` should resolve via the alias to `homedstatus`'s entry.
+    lines = await self.backend.send_command("help hss")
+    text = "\n".join(lines)
+    self.assertIn("homedstatus, hss", text)
+
+  async def test_help_rejects_unknown_command(self):
+    with self.assertRaises(MicroSpinError):
+      await self.backend.send_command("help bogus")
+
+  async def test_aliases_resolve_to_canonical_handlers(self):
+    # `s` -> `status`, `v` -> `version`, `hss` -> `homedstatus`, `?` -> `list`,
+    # `cba` -> `clearbuttonabort`. Just spot-check that they don't error.
+    await self.backend.send_command("s")
+    info = await self.backend.send_command("v")
+    self.assertTrue(any("Version:" in line for line in info))
+    await self.backend.send_command("hss")
+    listing = await self.backend.send_command("?")
+    self.assertGreaterEqual(len(listing), len(self.EXPECTED_COMMANDS))
+    await self.backend.send_command("cba")
+
+  async def test_maintenance_commands_are_not_recognised(self):
+    # `od`, `cd`, `lockdoor`, `unlockdoor`, `locknest`, `unlocknest` are
+    # maintenance-only on the real device and not in `list`; the mock must
+    # treat them like any unknown command.
+    for cmd in ("od", "cd", "lockdoor", "unlockdoor", "locknest", "unlocknest"):
+      with self.assertRaises(MicroSpinError):
+        await self.backend.send_command(cmd)
+
+  async def test_logcommands_accepts_yes_or_no(self):
+    await self.backend.send_command("logcommands yes")
+    await self.backend.send_command("logcommands no")
+    with self.assertRaises(MicroSpinError):
+      await self.backend.send_command("logcommands maybe")
+    with self.assertRaises(MicroSpinError):
+      await self.backend.send_command("logcommands")
+
+  async def test_commandstat_reports_no_history(self):
+    # We don't track history in the mock, so cstat for any id misses.
+    with self.assertRaises(MicroSpinError) as cm:
+      await self.backend.send_command("cstat 5")
+    self.assertTrue(any("not in recorded history" in line for line in cm.exception.error_lines))
+
+  async def test_whoami_returns_a_number(self):
+    out = await self.backend.send_command("whoami")
+    self.assertEqual(len(out), 1)
+    int(out[0])  # must parse as an integer
+
+  async def test_abort_emits_cba_instruction_data_line(self):
+    # The real device returns this data line before its OK terminator.
+    data = await self.backend.send_command("abort")
+    self.assertEqual(
+      data,
+      ['Issue the "clearbuttonabort" (cba) command to re-enable the machine'],
+    )
+
+
+class MockServerAbortedTerminatorTests(_MockServerTestBase):
+  """`ABORTED!` is a real third terminator emitted by the device for
+  commands cancelled by an abort, and for motion commands issued while the
+  abort latch is set. The backend must raise :class:`MicroSpinAbortedError`
+  for these so callers can distinguish abort-cascade from real errors.
+  """
+
+  async def test_motion_after_abort_latch_returns_aborted(self):
+    await self.backend.home()
+    await self.backend.abort()  # sets the latch
+    # Now any motion command is immediately aborted.
+    with self.assertRaises(MicroSpinAbortedError):
+      await self.backend.spin(g=500, duration=1)
+    with self.assertRaises(MicroSpinAbortedError):
+      await self.backend.go_to_bucket1()
+    with self.assertRaises(MicroSpinAbortedError):
+      await self.backend.home()
+
+  async def test_cba_clears_latch_and_motion_works_again(self):
+    await self.backend.home()
+    await self.backend.abort()
+    with self.assertRaises(MicroSpinAbortedError):
+      await self.backend.spin(g=100, duration=1)
+    await self.backend.clear_button_abort()
+    # No longer aborted -> spin works.
+    await self.backend.spin(g=100, duration=1)
+
+  async def test_in_flight_motion_cancelled_by_abort_returns_aborted(self):
+    """A motion command running in parallel must terminate with ABORTED!
+    (not ERROR!) when an abort is issued from another connection."""
+    await self.backend.home()
+    # Make the next motion long so we can race against it.
+    self.server.motion_dwell["open"] = 0.5
+    open_task = asyncio.create_task(self.backend.go_to_bucket1())
+    await asyncio.sleep(0.05)
+
+    # Issue abort from a second connection.
+    side = MicroSpinBackend(host=self.server.host, port=self.server.port, timeout=5.0)
+    await side.setup()
+    try:
+      await side.abort()
+      with self.assertRaises(MicroSpinAbortedError):
+        await open_task
+    finally:
+      await side.stop()
+
+  async def test_aborted_error_is_a_microspin_error_subclass(self):
+    """Callers that just want ``except MicroSpinError`` still catch aborts."""
+    await self.backend.home()
+    await self.backend.abort()
+    with self.assertRaises(MicroSpinError):
+      await self.backend.spin(g=100, duration=1)
 
 
 class MockServerCliSmokeTest(unittest.IsolatedAsyncioTestCase):

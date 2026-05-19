@@ -45,11 +45,15 @@ logger = logging.getLogger(__name__)
 
 
 _ACK_RE = re.compile(r"^ACK!\s+(?P<echo>.*?)\s+(?P<id>\d+)\s*$")
-#: Matches any ``OK!``/``ERROR!`` terminator line, regardless of command id.
+#: The three terminator statuses the device can send. ``ABORTED!`` is
+#: emitted for commands cancelled by an ``abort`` and for motion commands
+#: issued while the abort latch is set.
+_END_STATUSES = "OK!|ERROR!|ABORTED!"
+#: Matches any terminator line, regardless of command id.
 #: Used by :meth:`MicroSpinBackend._drain_stale_responses` to identify
 #: terminators from previously-cancelled commands without needing to know
 #: their cmd-ids.
-_ANY_TERMINATOR_RE = re.compile(r"^(?:OK!|ERROR!)\s+.*\s+\d+\s*$")
+_ANY_TERMINATOR_RE = re.compile(rf"^(?:{_END_STATUSES})\s+.*\s+\d+\s*$")
 
 
 class MicroSpinError(RuntimeError):
@@ -60,17 +64,41 @@ class MicroSpinError(RuntimeError):
     command_id: The numeric command id assigned by the device, or -1 if the
       ACK could not be parsed.
     error_lines: The diagnostic lines (``Error <n>: ...``) the device emitted
-      before the ``ERROR!`` terminator.
+      before the ``ERROR!`` (or ``ABORTED!``) terminator.
   """
+
+  #: The terminator keyword that triggered this exception. Overridden in
+  #: subclasses (e.g. :class:`MicroSpinAbortedError`).
+  TERMINATOR: str = "ERROR!"
 
   def __init__(self, command: str, command_id: int, error_lines: List[str]):
     self.command = command
     self.command_id = command_id
     self.error_lines = list(error_lines)
     super().__init__(
-      f"MicroSpin returned ERROR! for {command!r} (id={command_id}):\n  "
+      f"MicroSpin returned {self.TERMINATOR} for {command!r} (id={command_id}):\n  "
       + ("\n  ".join(error_lines) if error_lines else "(no error detail)")
     )
+
+
+class MicroSpinAbortedError(MicroSpinError):
+  """Raised when the MicroSpin terminates a command with ``ABORTED!``.
+
+  The firmware emits ``ABORTED!`` (rather than ``ERROR!``) when:
+
+  * a motion command (``home``, ``open``, ``spin``) was cancelled mid-flight
+    by an :meth:`MicroSpinBackend.abort`, or
+  * a motion command was issued while the device's abort latch was set
+    (i.e. before :meth:`MicroSpinBackend.clear_button_abort` had been
+    called). In this case the firmware sends ``ACK!`` followed immediately
+    by ``ABORTED!`` with no diagnostic data lines.
+
+  Recovery is the same as for an :meth:`abort` event: call
+  :meth:`MicroSpinBackend.reset` to clear the latch and confirm the rotor
+  has stopped.
+  """
+
+  TERMINATOR = "ABORTED!"
 
 
 class MicroSpinProtocolError(RuntimeError):
@@ -96,6 +124,16 @@ class MicroSpinBackend(CentrifugeBackend):
   #: detect spin-down. Spinning below this triggers a :class:`UserWarning`;
   #: see :meth:`spin` for the failure mode.
   LOW_G_WARNING_THRESHOLD = 30
+  #: Deceleration fraction (0-1) below which spin-down is *slow but
+  #: legitimate*: a tested ``spin 1000 100 20 10`` (decel = 0.20) took ~7
+  #: minutes to fully stop. Spinning below this threshold triggers a
+  #: :class:`UserWarning` so callers can plan their timeouts accordingly.
+  SLOW_DECEL_WARNING_THRESHOLD = 0.40
+  #: Deceleration fraction (0-1) below which the firmware appears to *hang*
+  #: rather than just be slow: a tested ``spin 1000 100 10 10`` (decel =
+  #: 0.10) ran for >30 minutes without ever reporting spin-down. Spinning
+  #: below this threshold triggers a stronger :class:`UserWarning`.
+  STUCK_DECEL_WARNING_THRESHOLD = 0.20
 
   def __init__(
     self,
@@ -235,17 +273,20 @@ class MicroSpinBackend(CentrifugeBackend):
     command_id = int(m.group("id"))
     logger.debug("[microspin] <<< ACK id=%d", command_id)
 
-    # Stages 3+4: data lines until OK!/ERROR! <cmd> <id>
-    end_re = re.compile(rf"^(?P<status>OK!|ERROR!)\s+.*\s+{command_id}\s*$")
+    # Stages 3+4: data lines until OK!/ERROR!/ABORTED! <cmd> <id>
+    end_re = re.compile(rf"^(?P<status>{_END_STATUSES})\s+.*\s+{command_id}\s*$")
     data: List[str] = []
     while True:
       line = await self._readline()
       end = end_re.match(line)
       if end:
         self._pending_terminator_count -= 1
-        if end.group("status") == "OK!":
+        status = end.group("status")
+        if status == "OK!":
           logger.debug("[microspin] <<< OK (%d data lines)", len(data))
           return data
+        if status == "ABORTED!":
+          raise MicroSpinAbortedError(command, command_id, data)
         raise MicroSpinError(command, command_id, data)
       data.append(line)
 
@@ -413,6 +454,20 @@ class MicroSpinBackend(CentrifugeBackend):
         because the firmware still considers a spin in progress. If you
         hit this, the recovery path is :meth:`abort` followed by
         :meth:`clear_button_abort` (and possibly a power-cycle).
+      UserWarning: If ``deceleration`` is below
+        :attr:`STUCK_DECEL_WARNING_THRESHOLD` (0.20 = 20 % of max). Very
+        low decel rates have empirically failed to ever report spin-down
+        in real-world testing (``spin 1000 100 10 10`` ran for >30 min
+        with no completion). The recovery path is the same as for the
+        low-G hang above.
+      UserWarning: If ``deceleration`` is below
+        :attr:`SLOW_DECEL_WARNING_THRESHOLD` (0.40 = 40 % of max) but at
+        or above the stuck threshold. Spin-down completes correctly here
+        but is slow: tested ``spin 1000 100 20 10`` (decel = 0.20) took
+        ~7 minutes. Make sure your :meth:`wait_for_spindle_stopped`
+        budget (default 30 min) and any application-level timeouts allow
+        for this. Only one decel warning is emitted per call; if both
+        thresholds are crossed, the stuck-decel warning takes precedence.
 
     Safety:
       See the module-level docstring for the pre-spin checklist. This method
@@ -434,6 +489,29 @@ class MicroSpinBackend(CentrifugeBackend):
         "sensor may fail to latch, so no `OK!` is emitted and subsequent "
         "commands will time out. If this happens, call `abort()` followed "
         "by `clear_button_abort()`, and power-cycle if the device stays stuck.",
+        UserWarning,
+        stacklevel=2,
+      )
+
+    if deceleration < self.STUCK_DECEL_WARNING_THRESHOLD:
+      warnings.warn(
+        f"Spinning the MicroSpin with deceleration={deceleration} "
+        f"(<{self.STUCK_DECEL_WARNING_THRESHOLD}, i.e. <{int(self.STUCK_DECEL_WARNING_THRESHOLD * 100)} %) "
+        "may trigger a firmware bug where the rotor never reports having "
+        "spun down: a tested `spin 1000 100 10 10` ran for >30 minutes "
+        "without ever completing. If this happens, call `abort()` followed "
+        "by `clear_button_abort()`, and power-cycle if the device stays stuck.",
+        UserWarning,
+        stacklevel=2,
+      )
+    elif deceleration < self.SLOW_DECEL_WARNING_THRESHOLD:
+      warnings.warn(
+        f"Spinning the MicroSpin with deceleration={deceleration} "
+        f"(<{self.SLOW_DECEL_WARNING_THRESHOLD}, i.e. <{int(self.SLOW_DECEL_WARNING_THRESHOLD * 100)} %) "
+        "results in a long spin-down: a tested `spin 1000 100 20 10` "
+        "took ~7 minutes from full speed to stopped. Make sure your "
+        "`wait_for_spindle_stopped` budget and any application-level "
+        "timeouts allow for this.",
         UserWarning,
         stacklevel=2,
       )

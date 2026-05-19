@@ -24,6 +24,7 @@ import warnings
 from typing import List, Tuple
 
 from pylabrobot.centrifuge.highres.microspin_backend import (
+  MicroSpinAbortedError,
   MicroSpinBackend,
   MicroSpinError,
   MicroSpinProtocolError,
@@ -116,6 +117,27 @@ class MicroSpinProtocolEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(cm.exception.command_id, 19)
     self.assertEqual(cm.exception.command, "spin 0 0 0 1")
     self.assertEqual(cm.exception.error_lines, ["Error 1: (00:00:01) -12: bad params"])
+
+  async def test_aborted_terminator_raises_aborted_error(self):
+    """The device emits ``ABORTED!`` (a third terminator) for commands
+    cancelled by an abort or issued while the abort latch is set; the
+    parser must distinguish these from regular ``ERROR!`` responses.
+    """
+    backend, _ = _make_backend(
+      [
+        "ACK! spin 500 100 100 5 21\r\n",
+        "ABORTED! spin 500 100 100 5 21\r\n",
+      ]
+    )
+    with self.assertRaises(MicroSpinAbortedError) as cm:
+      await backend.send_command("spin 500 100 100 5")
+    self.assertEqual(cm.exception.command_id, 21)
+    self.assertEqual(cm.exception.command, "spin 500 100 100 5")
+    # ABORTED! typically arrives with no preceding diagnostic data lines.
+    self.assertEqual(cm.exception.error_lines, [])
+    # And it's a MicroSpinError subclass so plain `except MicroSpinError`
+    # in caller code still catches aborts.
+    self.assertIsInstance(cm.exception, MicroSpinError)
 
 
 class MicroSpinStreamResyncTests(unittest.IsolatedAsyncioTestCase):
@@ -275,6 +297,59 @@ class MicroSpinValidationTests(unittest.IsolatedAsyncioTestCase):
       w for w in caught if issubclass(w.category, UserWarning) and "×g" in str(w.message)
     ]
     self.assertEqual(low_g_warnings, [])
+
+  async def test_spin_warns_at_slow_decel(self):
+    """decel in [0.20, 0.40) -> 'long spin-down' warning, command still runs."""
+    backend, writer = _make_backend(
+      [
+        "ACK! spin 1000 100 30 10 1\r\n",
+        "OK! spin 1000 100 30 10 1\r\n",
+      ]
+    )
+    with warnings.catch_warnings(record=True) as caught:
+      warnings.simplefilter("always")
+      await backend.spin(g=1000, duration=10, acceleration=1.0, deceleration=0.30)
+    decel_warnings = [
+      w for w in caught if issubclass(w.category, UserWarning) and "deceleration" in str(w.message)
+    ]
+    self.assertEqual(len(decel_warnings), 1, [str(w.message) for w in caught])
+    self.assertIn("long spin-down", str(decel_warnings[0].message))
+    self.assertEqual(_sent_commands(writer), ["spin 1000 100 30 10"])
+
+  async def test_spin_warns_at_stuck_decel_threshold(self):
+    """decel < 0.20 -> 'firmware hang' warning takes precedence."""
+    backend, writer = _make_backend(
+      [
+        "ACK! spin 1000 100 10 10 1\r\n",
+        "OK! spin 1000 100 10 10 1\r\n",
+      ]
+    )
+    with warnings.catch_warnings(record=True) as caught:
+      warnings.simplefilter("always")
+      await backend.spin(g=1000, duration=10, acceleration=1.0, deceleration=0.10)
+    decel_warnings = [
+      w for w in caught if issubclass(w.category, UserWarning) and "deceleration" in str(w.message)
+    ]
+    # Exactly one decel warning: the more severe (stuck) one wins.
+    self.assertEqual(len(decel_warnings), 1, [str(w.message) for w in caught])
+    self.assertIn("firmware bug", str(decel_warnings[0].message))
+    self.assertEqual(_sent_commands(writer), ["spin 1000 100 10 10"])
+
+  async def test_spin_does_not_warn_at_safe_decel(self):
+    """decel >= 0.40 is fully safe and emits no decel warning."""
+    backend, _ = _make_backend(
+      [
+        "ACK! spin 1000 100 40 10 1\r\n",
+        "OK! spin 1000 100 40 10 1\r\n",
+      ]
+    )
+    with warnings.catch_warnings(record=True) as caught:
+      warnings.simplefilter("always")
+      await backend.spin(g=1000, duration=10, acceleration=1.0, deceleration=0.40)
+    decel_warnings = [
+      w for w in caught if issubclass(w.category, UserWarning) and "deceleration" in str(w.message)
+    ]
+    self.assertEqual(decel_warnings, [])
 
   async def test_maintenance_door_and_lock_methods_raise_not_implemented(self):
     """open_door / close_door / the four lock primitives are maintenance-only

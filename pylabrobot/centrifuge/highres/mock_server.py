@@ -8,29 +8,40 @@ a real device. It is intended for:
   path of the backend (not just stubs that replay canned bytes).
 * Hand-driving via ``nc`` / ``telnet`` while developing or debugging.
 * Reproducing tricky firmware behaviours -- e.g. the "``status`` blocks until
-  the spindle has truly stopped" gate that :meth:`MicroSpinBackend.reset`
-  relies on, or the low-G hang we warn about in :meth:`MicroSpinBackend.spin`.
+  the spindle has truly stopped" gate, the ``ABORTED!`` terminator the
+  device emits for commands cancelled by an ``abort``, and the low-G
+  spin-down-detection hang.
 
-The server is small and *not* a perfect emulator -- it implements only the
-commands pylabrobot uses, plus a few handy ones for diagnostics (``status``,
-``hss``, ``errors``, ``version``, ``list``).
+The mock implements **only** the commands the real device's ``list``
+enumerates (manual \u00a76.7's public set):
 
-Usage from Python::
-
-    async with MicroSpinMockServer() as srv:
-        print(f"listening on {srv.host}:{srv.port}")
-        backend = MicroSpinBackend(host=srv.host, port=srv.port)
-        await backend.setup()
-        ...
-
-Or as a script::
-
-    $ python -m pylabrobot.centrifuge.highres.mock_server --port 1000
-    # in another shell:
-    $ nc 127.0.0.1 1000
+    clearbuttonabort, cba
+    commandstat,      cstat
+    disconnect,       d
+    errors,           e
+    help
+    info,             ??
+    list,             ?
+    logcommands
+    version,          v
+    whoami
+    abort,            a
     home
-    ACK! home 1
-    OK! home 1
+    homedstatus,      hss
+    open
+    spin,             sp
+    status,           s
+
+Maintenance commands (``od``, ``cd``, ``lockdoor``, ``unlockdoor``,
+``locknest``, ``unlocknest``, ``r``, ``copleyget``, ``copleyset``, ``ddio``,
+etc.) are deliberately not modelled. Sending one to the mock will produce
+the same ``Command "<name>" not recognized!`` response the real device gives
+to unknown commands.
+
+Response text -- including the layout of ``list``/``info``/``help``, the
+"Issue the 'clearbuttonabort' (cba) command to re-enable the machine" line
+emitted by ``abort``, and the use of the ``ABORTED!`` terminator -- was
+captured verbatim from real-device netcat sessions.
 """
 
 from __future__ import annotations
@@ -45,11 +56,34 @@ from typing import Awaitable, Callable, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# Internal handler-control exceptions
+# ============================================================================
+
+
 class _MockError(Exception):
-  """Raised inside a command handler to produce an ``ERROR!`` terminator."""
+  """Raised inside a command handler to produce an ``ERROR!`` terminator.
+
+  ``error_lines`` are written as data lines before the terminator, just
+  like the firmware emits ``Error N: ...`` entries before ``ERROR!``.
+  """
 
   def __init__(self, error_lines: List[str]):
     self.error_lines = list(error_lines)
+
+
+class _MockAborted(Exception):
+  """Raised inside a command handler to produce an ``ABORTED!`` terminator.
+
+  The real device emits ``ABORTED!`` (not ``ERROR!``) when a motion command
+  is cancelled by an ``abort``, or when a motion command is issued while the
+  abort latch is set (i.e. before ``clearbuttonabort``).
+  """
+
+
+# ============================================================================
+# Mutable mock device state
+# ============================================================================
 
 
 @dataclass
@@ -71,7 +105,7 @@ class MockState:
   # False and any subsequent `status` waits forever, reproducing the
   # firmware bug we warn about in :meth:`MicroSpinBackend.spin`.
   spindle_settled: asyncio.Event = field(default_factory=asyncio.Event)
-  # When True, motion handlers refuse to mark the spindle as settled.
+  #: When True, motion handlers refuse to mark the spindle as settled.
   simulate_low_g_hang: bool = False
 
   def __post_init__(self):
@@ -83,13 +117,207 @@ class MockState:
     self.errors.append(f"Error {len(self.errors) + 1}: ({ts}) {code}: {message}")
 
 
-class MicroSpinMockServer:
-  """A localhost TCP server that speaks the MicroSpin remote-control protocol.
+# ============================================================================
+# Command specification table -- single source of truth for list/info/help
+# ============================================================================
 
-  Multiple clients can connect concurrently (the real firmware allows up to
-  10); each gets its own command-id counter is *not* shared across clients,
-  which matches the real device's behaviour.
+
+@dataclass(frozen=True)
+class _CommandSpec:
+  """Static metadata about one wire command.
+
+  ``description`` is the single-line summary shown by ``list``.
+  ``params_signature`` is the parameter-line ``info``/``help`` print
+  immediately under the description (e.g. ``"(No parameters)"`` or
+  ``"Parameters(1): <bucket>"``).
+  ``params_description`` are additional indented lines printed under the
+  signature in ``info``/``help`` (often a description of each parameter).
   """
+
+  name: str
+  aliases: tuple  # tuple of alias strings (may be empty)
+  description: str
+  params_signature: str
+  params_description: tuple  # tuple of extra info lines
+
+  @property
+  def display_name(self) -> str:
+    """e.g. ``"homedstatus, hss"`` or ``"home"`` (used by list/info)."""
+    if not self.aliases:
+      return self.name
+    return f"{self.name}, {', '.join(self.aliases)}"
+
+
+# Width of the name+alias column in `list`/`info` output (real device uses 32).
+_NAME_COLUMN_WIDTH = 32
+
+
+# This table drives the responses to `list`, `info`, and `help <cmd>`. The
+# command order matches the real device's output: client/server-side commands
+# first, then machine-side commands.
+#
+# IMPORTANT: any change here is visible on the wire and affects every test
+# that scrapes list/info output.
+_COMMAND_TABLE: List[_CommandSpec] = [
+  _CommandSpec(
+    name="clearbuttonabort",
+    aliases=("cba",),
+    description="Clear abort state.",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="commandstat",
+    aliases=("cstat",),
+    description="Gets status of a command.",
+    params_signature="Parameters(1): <command id>",
+    params_description=("",),  # real device emits a trailing blank info line
+  ),
+  _CommandSpec(
+    name="disconnect",
+    aliases=("d",),
+    description="Close the current client's connection.",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="errors",
+    aliases=("e",),
+    description="Display the top 10 errors on the error stack.",
+    params_signature="Parameters(0 - 1): [<n>]",
+    params_description=("Optional parameter <n> specifies the max number of errors to display.",),
+  ),
+  _CommandSpec(
+    name="help",
+    aliases=(),
+    description="Displays the parameter information for a specific command.",
+    params_signature="Parameters(1): <command>",
+    params_description=("Where <command> is the name of the command to view information about.",),
+  ),
+  _CommandSpec(
+    name="info",
+    aliases=("??",),
+    description="Displays the list of user commands with parameter information.",
+    params_signature="Parameters(0 - 1): [all]",
+    params_description=("If 'all' is specified, maintenance commands will be included.",),
+  ),
+  _CommandSpec(
+    name="list",
+    aliases=("?",),
+    description="Displays the list of user commands that the server recognizes.",
+    params_signature="Parameters(0 - 1): [all]",
+    params_description=("If 'all' is specified, maintenance commands will be included.",),
+  ),
+  _CommandSpec(
+    name="logcommands",
+    aliases=(),
+    description="Log all received commands to a file.",
+    params_signature="Parameters(1): yes|no",
+    params_description=("Yes will enable logging.  No will disable logging.",),
+  ),
+  _CommandSpec(
+    name="version",
+    aliases=("v",),
+    description="Return the software version report.",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="whoami",
+    aliases=(),
+    description="Get the current client's client number.",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="abort",
+    aliases=("a",),
+    description="Stop current machine operation.",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="home",
+    aliases=(),
+    description="Homes the system",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="homedstatus",
+    aliases=("hss",),
+    description="returns whether the device is in a homed state",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+  _CommandSpec(
+    name="open",
+    aliases=(),
+    description="Open the door and present the specified bucket.",
+    params_signature="Parameters(1): <bucket>",
+    params_description=("<bucket> the bucket number to present",),
+  ),
+  _CommandSpec(
+    name="spin",
+    aliases=("sp",),
+    description="Spin the centrifuge.",
+    params_signature="Parameters(4): <G-force> <acceleration> <deceleration> <time>",
+    params_description=(
+      "<G-force> is the force to spin at.",
+      "<acceleration> rate of acceleration 0-100%",
+      "<deceleration> rate of deceleration 0-100%",
+    ),
+  ),
+  _CommandSpec(
+    name="status",
+    aliases=("s",),
+    description="Returns the device status report.",
+    params_signature="(No parameters)",
+    params_description=(),
+  ),
+]
+
+
+def _list_lines() -> List[str]:
+  """The data lines emitted by ``list`` (one per command, no info)."""
+  return [
+    f"{spec.display_name:<{_NAME_COLUMN_WIDTH}}- {spec.description}" for spec in _COMMAND_TABLE
+  ]
+
+
+def _info_lines() -> List[str]:
+  """The data lines emitted by ``info`` (one block per command)."""
+  out: List[str] = []
+  for spec in _COMMAND_TABLE:
+    out.append(f"{spec.display_name:<{_NAME_COLUMN_WIDTH}}- {spec.description}")
+    out.append(f"     {spec.params_signature}")
+    for extra in spec.params_description:
+      out.append(f"     {extra}")
+    out.append("")  # blank line between command blocks
+  return out
+
+
+def _help_lines(spec: _CommandSpec) -> List[str]:
+  """The data lines emitted by ``help <cmd>`` for one specific command."""
+  out = [f"{spec.display_name} - {spec.description}"]
+  out.append(f"     {spec.params_signature}")
+  for extra in spec.params_description:
+    out.append(f"     {extra}")
+  out.append("")  # trailing blank line, matching real device
+  return out
+
+
+# Quick lookup: alias -> canonical command name. Built once from the table.
+_ALIAS_MAP: Dict[str, str] = {alias: spec.name for spec in _COMMAND_TABLE for alias in spec.aliases}
+
+
+# ============================================================================
+# The mock server itself
+# ============================================================================
+
+
+class MicroSpinMockServer:
+  """A localhost TCP server that speaks the MicroSpin remote-control protocol."""
 
   def __init__(
     self,
@@ -107,9 +335,8 @@ class MicroSpinMockServer:
     self.motion_dwell: Dict[str, float] = {
       "home": 0.05,
       "open": 0.05,
-      "od": 0.02,
-      "cd": 0.02,
-      # `spin` computes its own dwell from parameters.
+      "close_door_during_spin": 0.02,
+      # `spin` computes its own dwell from parameters; see _h_spin.
     }
 
   # ---- lifecycle --------------------------------------------------------
@@ -127,26 +354,14 @@ class MicroSpinMockServer:
     return self
 
   async def stop(self) -> None:
-    """Shut down the server, cancelling any in-flight client handlers.
-
-    Cancelling per-client tasks is necessary because a handler that is
-    waiting on :attr:`MockState.spindle_settled` would otherwise block
-    :meth:`asyncio.Server.wait_closed` forever -- this matters in
-    particular for the low-G hang simulation.
-    """
-    # Cancel any in-progress motion task.
+    """Shut down the server, cancelling any in-flight client handlers."""
     if self.state.current_motion is not None and not self.state.current_motion.done():
       self.state.current_motion.cancel()
-    # Cancel all in-flight per-client handler tasks, so handlers that are
-    # blocked waiting on `spindle_settled` (or anything else) can exit and
-    # let `wait_closed()` complete. Without this, an aborted-but-not-yet-
-    # settled handler would deadlock `stop()`.
     for task in list(self._client_tasks):
       if not task.done():
         task.cancel()
     if self._server is not None:
       self._server.close()
-      # Give cancelled handlers a chance to exit cleanly.
       if self._client_tasks:
         await asyncio.gather(*self._client_tasks, return_exceptions=True)
       await self._server.wait_closed()
@@ -196,23 +411,27 @@ class MicroSpinMockServer:
     cmd_id = self.state.next_command_id
     self.state.next_command_id += 1
 
-    # Stage 2: ACK
+    # Stage 2: ACK -- the echo is exactly the bytes the client sent (the
+    # real device does the same; it doesn't normalise aliases here).
     writer.write(f"ACK! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     await writer.drain()
 
     parts = cmd_line.split()
     head = parts[0] if parts else ""
     args = parts[1:]
+    # Resolve aliases to the canonical command name for dispatch.
+    canonical = _ALIAS_MAP.get(head, head)
 
     try:
-      data_lines = await self._dispatch(head, args, cmd_id)
+      data_lines = await self._dispatch(canonical, args, cmd_id)
       for line in data_lines:
         writer.write((line + "\r\n").encode("ascii"))
       writer.write(f"OK! {cmd_line} {cmd_id}\r\n".encode("ascii"))
+    except _MockAborted:
+      writer.write(f"ABORTED! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except _MockError as exc:
       for err in exc.error_lines:
         writer.write((err + "\r\n").encode("ascii"))
-        # mirror real device: errors also go on the persistent stack
         self.state.errors.append(err)
       writer.write(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except asyncio.CancelledError:
@@ -227,50 +446,19 @@ class MicroSpinMockServer:
 
   async def _dispatch(
     self,
-    head: str,
+    canonical: str,
     args: List[str],
     cmd_id: int,
   ) -> List[str]:
-    aliases = {
-      "a": "abort",
-      "cba": "clearbuttonabort",
-      "d": "disconnect",
-      "e": "errors",
-      "hi": "history",
-      "hss": "homedstatus",
-      "s": "status",
-      "sp": "spin",
-      "v": "version",
-      "?": "list",
-      "??": "info",
-    }
-    head_canon = aliases.get(head, head)
-
-    handler = self._handlers.get(head_canon)
+    handler = self._handlers.get(canonical)
     if handler is None:
-      raise _MockError([f"Error: Command {head!r} not recognized!"])
+      raise _MockError([f'Error: Command "{canonical}" not recognized!'])
     return await handler(self, args, cmd_id)
 
   # ---------- helpers shared by handlers --------------------------------
 
-  async def _wait_for_spindle_stopped(self) -> None:
-    """Block until the spindle-stopped sensor reports settled.
-
-    Reproduces the firmware behaviour where ``status`` (and a handful of
-    other commands) queue behind active motion. While
-    :attr:`MockState.simulate_low_g_hang` is True, the settle event is
-    never set after motion, so this method hangs indefinitely -- the
-    real-world failure mode we warn about in
-    :meth:`MicroSpinBackend.spin`.
-    """
-    await self.state.spindle_settled.wait()
-
   def _begin_motion(self, coro_factory):
-    """Start a motion coroutine, clearing/setting the spindle-settled flag.
-
-    `coro_factory` is a no-arg callable returning the awaitable that does
-    the actual simulated motion (sleep + state mutations).
-    """
+    """Start a motion coroutine, clearing/setting the spindle-settled flag."""
     self.state.spindle_settled.clear()
 
     async def runner():
@@ -289,7 +477,9 @@ class MicroSpinMockServer:
 
   def _require_not_aborted(self) -> None:
     if self.state.abort_latched:
-      raise _MockError(["Error: aborted state latched; call clearbuttonabort"])
+      # Real-device behaviour: motion commands issued while the abort latch
+      # is set return ACK! -> ABORTED!, with no Error data lines.
+      raise _MockAborted()
 
   # ---------- individual command handlers -------------------------------
 
@@ -307,54 +497,47 @@ class MicroSpinMockServer:
     ]
 
   async def _h_list(self, args, cmd_id):
-    return [
-      "clearbuttonabort, cba           - Clear abort state.",
-      "disconnect, d                   - Close the current client's connection.",
-      "errors, e                       - Display the error stack.",
-      "help                            - Show parameter info for a command.",
-      "info, ??                        - List commands with parameter info.",
-      "list, ?                         - List available commands.",
-      "version, v                      - Software version report.",
-      "whoami                          - Return client number.",
-      "abort, a                        - Stop current operation.",
-      "home                            - Home the system.",
-      "homedstatus, hss                - Whether the device is homed.",
-      "open                            - Open the door and present a bucket.",
-      "spin, sp                        - Spin the centrifuge.",
-      "status, s                       - Return the device status report.",
-    ]
+    return _list_lines()
 
   async def _h_info(self, args, cmd_id):
-    return await self._h_list(args, cmd_id)  # same surface in the mock
+    return _info_lines()
 
   async def _h_whoami(self, args, cmd_id):
     return [str(cmd_id)]
 
   async def _h_disconnect(self, args, cmd_id):
-    # The real device closes the connection after ACK; we leave that to the
-    # caller's stream handling. Just return no data.
+    # The real device closes the connection after the ACK/OK. We leave the
+    # actual close to the per-client read loop (it sees EOF on the next
+    # readline if the client disconnects); here we just emit no data.
     return []
 
   async def _h_help(self, args, cmd_id):
-    if not args:
+    if len(args) != 1:
       raise _MockError(
-        ['Error: Abnormal number of parameters (0) for command "help".  Min: 1, Max: 1']
+        [f'Error: Abnormal number of parameters ({len(args)}) for command "help".  Min: 1, Max: 1']
       )
-    return [f"{args[0]} -- (mock) no detailed help available"]
+    target = args[0]
+    canonical = _ALIAS_MAP.get(target, target)
+    for spec in _COMMAND_TABLE:
+      if spec.name == canonical:
+        return _help_lines(spec)
+    raise _MockError([f"Error: Can't provide information on unrecognized command '{target}'"])
 
   async def _h_errors(self, args, cmd_id):
     n = int(args[0]) if args else 10
     return list(self.state.errors[-n:])
 
   async def _h_homedstatus(self, args, cmd_id):
-    # `hss` does NOT wait for motion to finish in the real device, so we
-    # don't either.
+    # `hss` does NOT wait for motion to finish on the real device.
     return ["homed" if self.state.homed else "not homed"]
 
   async def _h_status(self, args, cmd_id):
-    # Crucial: status blocks behind active motion. This is the gate that
-    # MicroSpinBackend.reset() / wait_for_spindle_stopped() depend on.
-    await self._wait_for_spindle_stopped()
+    # Crucial firmware behaviour: `status` blocks behind active motion --
+    # the device only answers once the spindle-stopped sensor latches.
+    # While `state.simulate_low_g_hang` is True, the settle event is never
+    # set after motion, so this `wait()` hangs forever -- reproducing the
+    # real-world firmware quirk we warn about in `MicroSpinBackend.spin`.
+    await self.state.spindle_settled.wait()
     return [
       f"Spindle Position: {self.state.spindle_position}",
       f"Door Position: {self.state.door_position}",
@@ -364,20 +547,56 @@ class MicroSpinMockServer:
     motion = self.state.current_motion
     if motion is not None and not motion.done():
       motion.cancel()
+      # Wait for the cancelled motion handler to finish writing its
+      # ABORTED! terminator before we send our own OK! and the
+      # "Issue the cba ..." data line.
+      try:
+        await motion
+      except (asyncio.CancelledError, _MockAborted, _MockError):
+        pass
     self.state.abort_latched = True
     self.state.spinning = False
-    return []
+    # The real device prints this between abort's ACK and OK as a data line.
+    return ['Issue the "clearbuttonabort" (cba) command to re-enable the machine']
 
   async def _h_clearbuttonabort(self, args, cmd_id):
     self.state.abort_latched = False
     return []
+
+  async def _h_logcommands(self, args, cmd_id):
+    if len(args) != 1 or args[0].lower() not in ("yes", "no"):
+      raise _MockError(
+        [
+          f"Error: Abnormal number of parameters ({len(args)}) for command "
+          f'"logcommands".  Min: 1, Max: 1'
+        ]
+      )
+    # The mock doesn't actually log; just accept the toggle.
+    return []
+
+  async def _h_commandstat(self, args, cmd_id):
+    if len(args) != 1:
+      raise _MockError(
+        [f'Error: Abnormal number of parameters ({len(args)}) for command "cstat".  Min: 1, Max: 1']
+      )
+    try:
+      target_id = int(args[0])
+    except ValueError:
+      target_id = 0
+    # The mock doesn't track command history, so every lookup misses.
+    raise _MockError(
+      [
+        f"Error {len(self.state.errors) + 1}: ({time.strftime('%H:%M:%S', time.gmtime())}) "
+        f"{cmd_id}: Command id {target_id} not in recorded history."
+      ]
+    )
 
   async def _h_home(self, args, cmd_id):
     self._require_not_aborted()
 
     async def do_home():
       await asyncio.sleep(self.motion_dwell["home"])
-      self.state.spindle_position = 1958  # arbitrary "homed" rest position
+      self.state.spindle_position = 1958
       self.state.door_position = -258
       self.state.homed = True
       self.state.at_bucket = None
@@ -386,7 +605,8 @@ class MicroSpinMockServer:
     try:
       await task
     except asyncio.CancelledError:
-      raise _MockError(["Error: home cancelled by abort"])
+      # Cancelled by abort -> ABORTED! terminator
+      raise _MockAborted()
     return []
 
   async def _h_open(self, args, cmd_id):
@@ -412,36 +632,7 @@ class MicroSpinMockServer:
     try:
       await task
     except asyncio.CancelledError:
-      raise _MockError(["Error: open cancelled by abort"])
-    return []
-
-  async def _h_od(self, args, cmd_id):
-    self._require_not_aborted()
-
-    async def do_od():
-      await asyncio.sleep(self.motion_dwell["od"])
-      self.state.door_position = 19242
-
-    task = self._begin_motion(do_od)
-    try:
-      await task
-    except asyncio.CancelledError:
-      raise _MockError(["Error: od cancelled by abort"])
-    return []
-
-  async def _h_cd(self, args, cmd_id):
-    self._require_not_aborted()
-
-    async def do_cd():
-      await asyncio.sleep(self.motion_dwell["cd"])
-      self.state.door_position = -258
-      self.state.at_bucket = None
-
-    task = self._begin_motion(do_cd)
-    try:
-      await task
-    except asyncio.CancelledError:
-      raise _MockError(["Error: cd cancelled by abort"])
+      raise _MockAborted()
     return []
 
   async def _h_spin(self, args, cmd_id):
@@ -460,21 +651,14 @@ class MicroSpinMockServer:
     self._require_homed()
     self._require_not_aborted()
 
-    # Real-device behaviour: `spin` (and `home`) close the door automatically
-    # before doing anything else. We mirror that here -- if the door is open
-    # when spin is issued, we close it as the first step of the spin motion
-    # rather than rejecting the command.
     door_was_open = self.state.door_position > 0
-
-    # Compute a simulated dwell that scales with duration but is short by
-    # default so tests don't sleep for a minute. Tests can override.
     dwell = self.motion_dwell.get("spin_seconds_per_real_second", 0.005) * duration
 
     async def do_spin():
       self.state.spinning = True
       try:
         if door_was_open:
-          await asyncio.sleep(self.motion_dwell["cd"])
+          await asyncio.sleep(self.motion_dwell["close_door_during_spin"])
           self.state.door_position = -258
           self.state.at_bucket = None
         await asyncio.sleep(dwell)
@@ -486,30 +670,35 @@ class MicroSpinMockServer:
     try:
       await task
     except asyncio.CancelledError:
-      raise _MockError(["Error: spin cancelled by abort"])
+      raise _MockAborted()
     return []
 
   _handlers: Dict[str, Callable[["MicroSpinMockServer", List[str], int], Awaitable[List[str]]]]
 
 
-# Wire up the handler table (after class body so methods are bound names).
+# Wire up the handler table from the command-spec table. We intentionally
+# include EXACTLY the commands `_COMMAND_TABLE` lists -- no more, no less --
+# so that the mock's command surface matches what the real device's `list`
+# enumerates. Maintenance commands (od/cd/lockdoor/locknest/etc.) are not
+# modelled and will produce the same "command not recognized" error the
+# real device gives for unknown commands.
 MicroSpinMockServer._handlers = {
-  "abort": MicroSpinMockServer._h_abort,
-  "cd": MicroSpinMockServer._h_cd,
   "clearbuttonabort": MicroSpinMockServer._h_clearbuttonabort,
+  "commandstat": MicroSpinMockServer._h_commandstat,
   "disconnect": MicroSpinMockServer._h_disconnect,
   "errors": MicroSpinMockServer._h_errors,
   "help": MicroSpinMockServer._h_help,
-  "home": MicroSpinMockServer._h_home,
-  "homedstatus": MicroSpinMockServer._h_homedstatus,
   "info": MicroSpinMockServer._h_info,
   "list": MicroSpinMockServer._h_list,
-  "od": MicroSpinMockServer._h_od,
+  "logcommands": MicroSpinMockServer._h_logcommands,
+  "version": MicroSpinMockServer._h_version,
+  "whoami": MicroSpinMockServer._h_whoami,
+  "abort": MicroSpinMockServer._h_abort,
+  "home": MicroSpinMockServer._h_home,
+  "homedstatus": MicroSpinMockServer._h_homedstatus,
   "open": MicroSpinMockServer._h_open,
   "spin": MicroSpinMockServer._h_spin,
   "status": MicroSpinMockServer._h_status,
-  "version": MicroSpinMockServer._h_version,
-  "whoami": MicroSpinMockServer._h_whoami,
 }
 
 
