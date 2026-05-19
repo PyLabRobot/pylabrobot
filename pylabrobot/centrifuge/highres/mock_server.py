@@ -61,15 +61,32 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
+#: Maximum number of error-stack entries the device dumps as data lines
+#: before an ``ERROR!`` terminator. The real firmware caps this at 10 (per
+#: the manual's "top 10 errors" wording in the ``errors`` command help).
+_ERROR_DUMP_LIMIT = 10
+
+#: Standard error code the firmware emits for argument/parsing problems
+#: like unknown commands and parameter-count mismatches.
+_ERROR_CODE_PARAM = -12
+
+
 class _MockError(Exception):
   """Raised inside a command handler to produce an ``ERROR!`` terminator.
 
-  ``error_lines`` are written as data lines before the terminator, just
-  like the firmware emits ``Error N: ...`` entries before ``ERROR!``.
+  Each instance carries a ``(message, code)`` pair. The handler dispatcher
+  formats the message into the real-device wire format
+  (``Error N: (HH:MM:SS) <code>: <message>``), pushes it onto the
+  persistent error stack, and then dumps the last
+  :data:`_ERROR_DUMP_LIMIT` entries of the stack as data lines before
+  writing the ``ERROR!`` terminator -- mirroring how the real firmware
+  responds to any failing command.
   """
 
-  def __init__(self, error_lines: List[str]):
-    self.error_lines = list(error_lines)
+  def __init__(self, message: str, code: int = _ERROR_CODE_PARAM):
+    self.message = message
+    self.code = code
+    super().__init__(message)
 
 
 class _MockAborted(Exception):
@@ -430,9 +447,12 @@ class MicroSpinMockServer:
     except _MockAborted:
       writer.write(f"ABORTED! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except _MockError as exc:
-      for err in exc.error_lines:
+      # Push the new error onto the persistent stack in the firmware's
+      # `Error N: (HH:MM:SS) <code>: <message>` format, then dump the last
+      # N entries from the stack as data lines (real device emits up to 10).
+      self.state.push_error(exc.code, exc.message)
+      for err in self.state.errors[-_ERROR_DUMP_LIMIT:]:
         writer.write((err + "\r\n").encode("ascii"))
-        self.state.errors.append(err)
       writer.write(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except asyncio.CancelledError:
       raise
@@ -452,7 +472,7 @@ class MicroSpinMockServer:
   ) -> List[str]:
     handler = self._handlers.get(canonical)
     if handler is None:
-      raise _MockError([f'Error: Command "{canonical}" not recognized!'])
+      raise _MockError(f'Command "{canonical}" not recognized!')
     return await handler(self, args, cmd_id)
 
   # ---------- helpers shared by handlers --------------------------------
@@ -473,7 +493,7 @@ class MicroSpinMockServer:
 
   def _require_homed(self) -> None:
     if not self.state.homed:
-      raise _MockError(["Error: device is not homed"])
+      raise _MockError("device is not homed")
 
   def _require_not_aborted(self) -> None:
     if self.state.abort_latched:
@@ -514,14 +534,14 @@ class MicroSpinMockServer:
   async def _h_help(self, args, cmd_id):
     if len(args) != 1:
       raise _MockError(
-        [f'Error: Abnormal number of parameters ({len(args)}) for command "help".  Min: 1, Max: 1']
+        f'Abnormal number of parameters ({len(args)}) for command "help".  Min: 1, Max: 1'
       )
     target = args[0]
     canonical = _ALIAS_MAP.get(target, target)
     for spec in _COMMAND_TABLE:
       if spec.name == canonical:
         return _help_lines(spec)
-    raise _MockError([f"Error: Can't provide information on unrecognized command '{target}'"])
+    raise _MockError(f"Can't provide information on unrecognized command '{target}'")
 
   async def _h_errors(self, args, cmd_id):
     n = int(args[0]) if args else 10
@@ -566,10 +586,7 @@ class MicroSpinMockServer:
   async def _h_logcommands(self, args, cmd_id):
     if len(args) != 1 or args[0].lower() not in ("yes", "no"):
       raise _MockError(
-        [
-          f"Error: Abnormal number of parameters ({len(args)}) for command "
-          f'"logcommands".  Min: 1, Max: 1'
-        ]
+        f'Abnormal number of parameters ({len(args)}) for command "logcommands".  Min: 1, Max: 1'
       )
     # The mock doesn't actually log; just accept the toggle.
     return []
@@ -577,18 +594,17 @@ class MicroSpinMockServer:
   async def _h_commandstat(self, args, cmd_id):
     if len(args) != 1:
       raise _MockError(
-        [f'Error: Abnormal number of parameters ({len(args)}) for command "cstat".  Min: 1, Max: 1']
+        f'Abnormal number of parameters ({len(args)}) for command "cstat".  Min: 1, Max: 1'
       )
     try:
       target_id = int(args[0])
     except ValueError:
       target_id = 0
     # The mock doesn't track command history, so every lookup misses.
+    # The real device uses the cmd_id of the cstat call itself as the code.
     raise _MockError(
-      [
-        f"Error {len(self.state.errors) + 1}: ({time.strftime('%H:%M:%S', time.gmtime())}) "
-        f"{cmd_id}: Command id {target_id} not in recorded history."
-      ]
+      f"Command id {target_id} not in recorded history.",
+      code=cmd_id,
     )
 
   async def _h_home(self, args, cmd_id):
@@ -612,15 +628,13 @@ class MicroSpinMockServer:
   async def _h_open(self, args, cmd_id):
     self._require_not_aborted()
     if not args:
-      raise _MockError(
-        ['Error: Abnormal number of parameters (0) for command "open".  Min: 1, Max: 1']
-      )
+      raise _MockError('Abnormal number of parameters (0) for command "open".  Min: 1, Max: 1')
     try:
       bucket = int(args[0])
     except ValueError:
-      raise _MockError([f"Error: bad bucket: {args[0]!r}"])
+      raise _MockError(f"bad bucket: {args[0]!r}")
     if bucket not in (1, 2):
-      raise _MockError([f"Error: bucket must be 1 or 2, got {bucket}"])
+      raise _MockError(f"bucket must be 1 or 2, got {bucket}")
     self._require_homed()
 
     async def do_open():
@@ -638,16 +652,16 @@ class MicroSpinMockServer:
   async def _h_spin(self, args, cmd_id):
     if len(args) != 4:
       raise _MockError(
-        [f'Error: Abnormal number of parameters ({len(args)}) for command "spin".  Min: 4, Max: 4']
+        f'Abnormal number of parameters ({len(args)}) for command "spin".  Min: 4, Max: 4'
       )
     try:
       g, accel, decel, duration = (int(x) for x in args)
     except ValueError:
-      raise _MockError([f"Error: spin params must be integers, got {args}"])
+      raise _MockError(f"spin params must be integers, got {args}")
     if not (1 <= g <= 3000):
-      raise _MockError([f"Error: g out of range: {g}"])
+      raise _MockError(f"g out of range: {g}")
     if duration < 1:
-      raise _MockError([f"Error: duration too short: {duration}"])
+      raise _MockError(f"duration too short: {duration}")
     self._require_homed()
     self._require_not_aborted()
 
