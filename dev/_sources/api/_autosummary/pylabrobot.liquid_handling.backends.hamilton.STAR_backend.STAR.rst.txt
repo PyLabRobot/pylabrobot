@@ -187,7 +187,6 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.iswap_request_link_2_length
       ~STAR.iswap_request_pose
       ~STAR.iswap_rotate
-      ~STAR.iswap_rotate_to_angles
       ~STAR.iswap_rotation_drive_move_y
       ~STAR.iswap_rotation_drive_move_z
       ~STAR.iswap_rotation_drive_request_angle
@@ -197,7 +196,9 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.iswap_rotation_drive_request_x
       ~STAR.iswap_rotation_drive_request_y
       ~STAR.iswap_rotation_drive_request_z
+      ~STAR.iswap_rotation_drive_rotate_to_angle
       ~STAR.iswap_wrist_drive_request_angle
+      ~STAR.iswap_wrist_drive_rotate_to_angle
       ~STAR.iswap_y_drive_increment_to_mm
       ~STAR.iswap_y_drive_mm_to_increment
       ~STAR.iswap_z_drive_increment_to_mm
