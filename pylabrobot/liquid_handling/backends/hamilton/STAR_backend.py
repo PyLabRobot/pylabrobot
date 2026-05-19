@@ -1320,6 +1320,51 @@ class Head96Information:
   head_type: HeadType
 
 
+@dataclass
+class iSWAPInformation:
+  """Information about the installed iSWAP, loaded from firmware/EEPROM at setup.
+
+  Populated once by `STARBackend._set_up_iswap` when the iSWAP is installed
+  (`extended_conf.left_x_drive.iswap_installed`). All fields are calibrated,
+  per-machine values from EEPROM - they do not change at runtime, so the
+  record is treated as immutable post-setup.
+  """
+
+  fw_version: str
+  """iSWAP firmware version string (R0 RF response)."""
+
+  rotation_drive_x_offset: float
+  """Deck X distance from the X-arm carriage center to the rotation drive
+  (mm). Stored in master EEPROM as parameter `kg`. Hamilton factory default
+  is 34.0 mm."""
+
+  rotation_drive_y_max: float
+  """Upper Y-axis bound of the iSWAP carriage (mm). Parking sits at this Y;
+  anything past it is in the mechanical-stop region."""
+
+  link_1_length: float
+  """Distance from the rotation joint (joint 1) to the wrist joint (joint 2),
+  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
+  `iswap_request_link_1_length` (R0 RA ra=pw, slot 9)."""
+
+  link_2_length: float
+  """Distance from the wrist joint (joint 2) to the gripper finger center,
+  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
+  `iswap_request_link_2_length` (R0 RA ra=pt, slot 9)."""
+
+  rotation_drive_predefined_increments: Dict["STARBackend.RotationDriveOrientation", int]
+  """Calibrated motor-increment positions for the rotation drive's named
+  stops (LEFT / FRONT / RIGHT / PARKED_RIGHT), read from EEPROM `pw[0..4]`.
+  Used as anchor points for angle <-> increment conversion in
+  `_iswap_rotation_drive_increments_to_angle`."""
+
+  wrist_drive_predefined_increments: Dict["STARBackend.WristDriveOrientation", int]
+  """Calibrated motor-increment positions for the wrist drive's named stops
+  (RIGHT / STRAIGHT / LEFT / REVERSE), read from EEPROM `pt[1..4]`. Used to
+  determine the per-machine STRAIGHT angle, which anchors forward kinematics
+  (link-2 angle is measured relative to STRAIGHT)."""
+
+
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STARBackend."""
 
@@ -1398,20 +1443,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._extended_conf: Optional[ExtendedConfiguration] = None
     self._channel_traversal_height: float = 245.0
     self._iswap_traversal_height: float = 280.0
-    self._iswap_rotation_drive_x_offset_mm: Optional[float] = None
-    self._iswap_rotation_drive_y_max_mm: Optional[float] = None
-    self._iswap_rotation_drive_predefined_increments: Optional[
-      Dict[STARBackend.RotationDriveOrientation, int]
-    ] = None
-    self._iswap_wrist_drive_predefined_increments: Optional[
-      Dict[STARBackend.WristDriveOrientation, int]
-    ] = None
-    self._iswap_link_1_length: Optional[float] = None
-    self._iswap_link_2_length: Optional[float] = None
+    # All iSWAP setup state lives in a single dataclass populated by
+    # `set_up_iswap` from firmware/EEPROM. See `iswap_information` property
+    # for guarded access. None pre-setup; immutable post-setup.
+    self._iswap_information: Optional[iSWAPInformation] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
-    self._iswap_version: Optional[str] = None  # loaded lazily
     self._pip_channel_information: Optional[List[PipChannelInformation]] = None
 
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
@@ -1568,11 +1606,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def core_parked(self) -> bool:
     return self._core_parked is True
 
+  @property
+  def iswap_information(self) -> iSWAPInformation:
+    """Cached iSWAP setup state (link lengths, EEPROM-calibrated stops, fw version).
+
+    Populated by `setup()` when the iSWAP is installed. Raises if `setup()`
+    has not run with the iSWAP active.
+    """
+    if self._iswap_information is None:
+      raise RuntimeError(
+        "iSWAP information not loaded; ensure the iSWAP is installed and `setup()` has run."
+      )
+    return self._iswap_information
+
   async def get_iswap_version(self) -> str:
-    """Lazily load the iSWAP version. Use cached value if available."""
-    if self._iswap_version is None:
-      self._iswap_version = await self.request_iswap_version()
-    return self._iswap_version
+    """The iSWAP firmware version, loaded into `iswap_information` during setup."""
+    return self.iswap_information.fw_version
 
   async def request_pip_channel_version(self, channel: int) -> str:
     return cast(
@@ -1804,27 +1853,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
         )
 
-        self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
-        self._iswap_rotation_drive_y_max_mm = await self._iswap_rotation_drive_request_y_max()
-
         rot_predefined = await self._iswap_rotation_drive_request_predefined_increments()
-        self._iswap_rotation_drive_predefined_increments = {
-          STARBackend.RotationDriveOrientation.LEFT: rot_predefined["left"],
-          STARBackend.RotationDriveOrientation.FRONT: rot_predefined["front"],
-          STARBackend.RotationDriveOrientation.RIGHT: rot_predefined["right"],
-          STARBackend.RotationDriveOrientation.PARKED_RIGHT: rot_predefined["parking"],
-        }
-
         wrist_predefined = await self._iswap_wrist_drive_request_predefined_increments()
-        self._iswap_wrist_drive_predefined_increments = {
-          STARBackend.WristDriveOrientation.RIGHT: wrist_predefined["right"],
-          STARBackend.WristDriveOrientation.STRAIGHT: wrist_predefined["straight"],
-          STARBackend.WristDriveOrientation.LEFT: wrist_predefined["left"],
-          STARBackend.WristDriveOrientation.REVERSE: wrist_predefined["reverse"],
-        }
 
-        self._iswap_link_1_length = await self.iswap_request_link_1_length()
-        self._iswap_link_2_length = await self.iswap_request_link_2_length()
+        self._iswap_information = iSWAPInformation(
+          fw_version=await self.request_iswap_version(),
+          rotation_drive_x_offset=await self._iswap_rotation_drive_request_x_offset(),
+          rotation_drive_y_max=await self._iswap_rotation_drive_request_y_max(),
+          link_1_length=await self.iswap_request_link_1_length(),
+          link_2_length=await self.iswap_request_link_2_length(),
+          rotation_drive_predefined_increments={
+            STARBackend.RotationDriveOrientation.LEFT: rot_predefined["left"],
+            STARBackend.RotationDriveOrientation.FRONT: rot_predefined["front"],
+            STARBackend.RotationDriveOrientation.RIGHT: rot_predefined["right"],
+            STARBackend.RotationDriveOrientation.PARKED_RIGHT: rot_predefined["parking"],
+          },
+          wrist_drive_predefined_increments={
+            STARBackend.WristDriveOrientation.RIGHT: wrist_predefined["right"],
+            STARBackend.WristDriveOrientation.STRAIGHT: wrist_predefined["straight"],
+            STARBackend.WristDriveOrientation.LEFT: wrist_predefined["left"],
+            STARBackend.WristDriveOrientation.REVERSE: wrist_predefined["reverse"],
+          },
+        )
 
     async def set_up_core96_head():
       if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
@@ -9918,7 +9968,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Default: 34.0 mm, but typically tuned per machine during service calibration.
     Required for deriving the iSWAP rotation drive's deck X coordinate from
     the X-arm carriage center.
-    Cached on the backend as `_iswap_rotation_drive_x_offset_mm` during setup.
+    Cached on the backend as `iswap_information.rotation_drive_x_offset` during setup.
     """
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
@@ -9939,12 +9989,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Computed as `request_left_x_arm_position() - kg` (cached at setup).
     """
-    if not self.extended_conf.left_x_drive.iswap_installed:
-      raise RuntimeError("iSWAP is not installed")
-    if self._iswap_rotation_drive_x_offset_mm is None:
-      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
     x_arm_center = await self.request_left_x_arm_position()
-    return x_arm_center - self._iswap_rotation_drive_x_offset_mm
+    return x_arm_center - self.iswap_information.rotation_drive_x_offset
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Request iSWAP rotation drive Y position (deck coordinates), in mm.
@@ -10012,9 +10058,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
-    if self._iswap_rotation_drive_x_offset_mm is None:
-      self._iswap_rotation_drive_x_offset_mm = await self._iswap_rotation_drive_request_x_offset()
-    kg = self._iswap_rotation_drive_x_offset_mm
+    kg = self.iswap_information.rotation_drive_x_offset
 
     x_min = 90.0 - kg
     x_max = 1350.0 - kg
@@ -10065,11 +10109,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._channels_minimum_y_spacing[1:]
     )
 
-    if self._iswap_rotation_drive_y_max_mm is None:
-      self._iswap_rotation_drive_y_max_mm = await self._iswap_rotation_drive_request_y_max()
-    if self._iswap_rotation_drive_y_max_mm is None:
-      raise RuntimeError("iSWAP Y max not loaded; was setup() called with skip_iswap=False?")
-    max_y = self._iswap_rotation_drive_y_max_mm
+    max_y = self.iswap_information.rotation_drive_y_max
     absolute_min_y = self.extended_conf.left_arm_min_y_position
     if not (absolute_min_y <= y <= max_y):
       raise ValueError(f"y must be between {absolute_min_y} and {max_y} mm, is {y}")
@@ -10371,14 +10411,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Raises:
       RuntimeError: if `setup()` has not populated the predefined positions.
     """
-    if self._iswap_rotation_drive_predefined_increments is None:
-      raise RuntimeError(
-        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
-        "is installed and `setup()` has run."
-      )
     increments = await self._request_iswap_rotation_drive_position_increments()
     return STARBackend._iswap_rotation_drive_increments_to_angle(
-      increments, self._iswap_rotation_drive_predefined_increments
+      increments, self.iswap_information.rotation_drive_predefined_increments
     )
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
@@ -10412,12 +10447,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # explicitly when the drive sits at the parking stop rather than the W3
     # work stop.
     # TODO: add PARKED_LEFT reference for STAR(let)s that park on the left.
-    if self._iswap_rotation_drive_predefined_increments is None:
-      raise RuntimeError(
-        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
-        "is installed and `setup()` has run."
-      )
-    predefined_increments = self._iswap_rotation_drive_predefined_increments
+    predefined_increments = self.iswap_information.rotation_drive_predefined_increments
     front = predefined_increments[STARBackend.RotationDriveOrientation.FRONT]
     # Compute the per-machine increment delta for 5 deg via the same piecewise mapping the
     # angle methods use, so the tolerance reflects the calibrated FRONT->RIGHT slope.
@@ -10503,12 +10533,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       RuntimeError: if `setup()` has not populated the predefined positions.
       ValueError: if the resulting target increment is outside the hardware range.
     """
-    if self._iswap_rotation_drive_predefined_increments is None:
-      raise RuntimeError(
-        "iSWAP rotation drive predefined positions not loaded; ensure the iSWAP "
-        "is installed and `setup()` has run."
-      )
-    predefined_increments = self._iswap_rotation_drive_predefined_increments
+    predefined_increments = self.iswap_information.rotation_drive_predefined_increments
     if isinstance(angle, STARBackend.RotationDriveOrientation):
       rotation_position_increments = predefined_increments[angle]
     else:
@@ -10672,12 +10697,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the measured position is more than 5 deg from any
         predefined stop (drive is in transit or drifted).
     """
-    if self._iswap_wrist_drive_predefined_increments is None:
-      raise RuntimeError(
-        "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
-        "is installed and `setup()` has run."
-      )
-    predefined_increments = self._iswap_wrist_drive_predefined_increments
+    predefined_increments = self.iswap_information.wrist_drive_predefined_increments
     tolerance_incr = round(5.0 / STARBackend.iswap_wrist_drive_deg_per_increment)  # ~1000
 
     motor_position_increments = await self._request_iswap_wrist_drive_position_increments()
@@ -10735,12 +10755,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the resulting target increment is outside the hardware range.
     """
     if isinstance(angle, STARBackend.WristDriveOrientation):
-      if self._iswap_wrist_drive_predefined_increments is None:
-        raise RuntimeError(
-          "iSWAP wrist drive predefined positions not loaded; ensure the iSWAP "
-          "is installed and `setup()` has run."
-        )
-      wrist_position_increments = self._iswap_wrist_drive_predefined_increments[angle]
+      wrist_position_increments = self.iswap_information.wrist_drive_predefined_increments[angle]
     else:
       wrist_position_increments = STARBackend._iswap_wrist_drive_angle_to_increments(angle)
     if not (
@@ -10857,17 +10872,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       RuntimeError: if iSWAP is not installed or if `setup()` has not populated
         the wrist STRAIGHT calibration / cached link lengths.
     """
-    if (
-      self._iswap_wrist_drive_predefined_increments is None
-      or self._iswap_link_1_length is None
-      or self._iswap_link_2_length is None
-    ):
-      raise RuntimeError(
-        "iSWAP setup state not loaded (wrist predefined positions / link lengths); "
-        "ensure the iSWAP is installed and `setup()` has run."
-      )
-
-    wrist_straight_increments = self._iswap_wrist_drive_predefined_increments[
+    wrist_straight_increments = self.iswap_information.wrist_drive_predefined_increments[
       STARBackend.WristDriveOrientation.STRAIGHT
     ]
     wrist_straight_angle = STARBackend._iswap_wrist_drive_increments_to_angle(
@@ -10880,8 +10885,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return STARBackend._iswap_fk(
       joints=joints,
-      link_1_length=self._iswap_link_1_length,
-      link_2_length=self._iswap_link_2_length,
+      link_1_length=self.iswap_information.link_1_length,
+      link_2_length=self.iswap_information.link_2_length,
       wrist_straight_angle=wrist_straight_angle,
     )
 
