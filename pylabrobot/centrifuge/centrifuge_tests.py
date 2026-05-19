@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 
 from pylabrobot.centrifuge import (
   BucketHasPlateError,

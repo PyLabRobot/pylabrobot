@@ -11,6 +11,7 @@ This package contains APIs for working with centrifuges.
   :recursive:
 
     centrifuge.Centrifuge
+    centrifuge.Loader
 
 
 Backends
@@ -21,4 +22,25 @@ Backends
   :nosignatures:
   :recursive:
 
-    vspin_backend.VSpinBackend
+    chatterbox.CentrifugeChatterboxBackend
+    chatterbox.LoaderChatterboxBackend
+    agilent.vspin_backend.VSpinBackend
+    agilent.vspin_backend.Access2Backend
+    highres.microspin_backend.MicroSpinBackend
+
+
+Errors
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    standard.BucketHasPlateError
+    standard.BucketNoPlateError
+    standard.CentrifugeDoorError
+    standard.LoaderNoPlateError
+    standard.NotAtBucketError
+    highres.microspin_backend.MicroSpinError
+    highres.microspin_backend.MicroSpinProtocolError
