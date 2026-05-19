@@ -10401,6 +10401,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       right = predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]
       return round(front + (right - front) * (angle / 90.0))
 
+  @staticmethod
+  def _iswap_rotation_drive_resolve_to_increments(
+    angle: Union["STARBackend.RotationDriveOrientation", float],
+    predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+  ) -> int:
+    """Resolve a rotation-drive target (enum or float deg) to motor increments.
+
+    Enum stops return the EEPROM increment directly. Floats use the calibrated
+    piecewise-linear conversion, but snap to a stop's exact stored increment
+    when the float matches that stop's reported deg-form within one increment
+    of precision - so a value read via `iswap_rotation_drive_request_angle`
+    round-trips back to the same motor increment, including for PARKED_RIGHT
+    where the extrapolated formula is FP-vulnerable.
+    """
+    if isinstance(angle, STARBackend.RotationDriveOrientation):
+      return predefined_increments[angle]
+    for stop_incr in predefined_increments.values():
+      stop_angle = STARBackend._iswap_rotation_drive_increments_to_angle(
+        stop_incr, predefined_increments
+      )
+      if abs(angle - stop_angle) <= STARBackend.iswap_rotation_drive_deg_per_increment:
+        return stop_incr
+    return STARBackend._iswap_rotation_drive_angle_to_increments(angle, predefined_increments)
+
   async def iswap_rotation_drive_request_angle(self) -> float:
     """Query the iSWAP rotation drive angle in degrees (signed, 0 deg = calibrated FRONT).
 
@@ -10534,12 +10558,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the resulting target increment is outside the hardware range.
     """
     predefined_increments = self.iswap_information.rotation_drive_predefined_increments
-    if isinstance(angle, STARBackend.RotationDriveOrientation):
-      rotation_position_increments = predefined_increments[angle]
-    else:
-      rotation_position_increments = STARBackend._iswap_rotation_drive_angle_to_increments(
-        angle, predefined_increments
-      )
+    rotation_position_increments = STARBackend._iswap_rotation_drive_resolve_to_increments(
+      angle, predefined_increments
+    )
     if not (
       STARBackend.iswap_rotation_drive_min_increment
       <= rotation_position_increments
@@ -10649,6 +10670,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Inverse of `_iswap_wrist_drive_increments_to_angle`; rounds to nearest int."""
     return round(angle / STARBackend.iswap_wrist_drive_deg_per_increment)
 
+  @staticmethod
+  def _iswap_wrist_drive_resolve_to_increments(
+    angle: Union["STARBackend.WristDriveOrientation", float],
+    predefined_increments: Dict["STARBackend.WristDriveOrientation", int],
+  ) -> int:
+    """Resolve a wrist-drive target (enum or float deg) to motor increments.
+
+    Snap-to-stop rule mirrors `_iswap_rotation_drive_resolve_to_increments`;
+    here the snap is the only mechanism that lands the per-machine stops
+    bit-exact, since the standard linear conversion is anchored on motor zero
+    rather than the calibrated stops.
+    """
+    if isinstance(angle, STARBackend.WristDriveOrientation):
+      return predefined_increments[angle]
+    for stop_incr in predefined_increments.values():
+      stop_angle = STARBackend._iswap_wrist_drive_increments_to_angle(stop_incr)
+      if abs(angle - stop_angle) <= STARBackend.iswap_wrist_drive_deg_per_increment:
+        return stop_incr
+    return STARBackend._iswap_wrist_drive_angle_to_increments(angle)
+
   async def iswap_wrist_drive_request_angle(self) -> float:
     """Query the iSWAP wrist drive angle in degrees (signed, 0 deg = motor zero).
 
@@ -10754,10 +10795,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         populated the predefined positions yet.
       ValueError: if the resulting target increment is outside the hardware range.
     """
-    if isinstance(angle, STARBackend.WristDriveOrientation):
-      wrist_position_increments = self.iswap_information.wrist_drive_predefined_increments[angle]
-    else:
-      wrist_position_increments = STARBackend._iswap_wrist_drive_angle_to_increments(angle)
+    predefined_increments = self.iswap_information.wrist_drive_predefined_increments
+    wrist_position_increments = STARBackend._iswap_wrist_drive_resolve_to_increments(
+      angle, predefined_increments
+    )
     if not (
       STARBackend.iswap_wrist_drive_min_increment
       <= wrist_position_increments
@@ -11034,26 +11075,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
     else:
       rot_predefined = self.iswap_information.rotation_drive_predefined_increments
-      if isinstance(rotation_angle, STARBackend.RotationDriveOrientation):
-        rotation_position_increments = rot_predefined[rotation_angle]
-      else:
-        # Default to the piecewise-linear conversion; if the float matches a
-        # calibrated stop's deg-form to within one increment of precision,
-        # override with that stop's exact stored increment so callers who pass
-        # a stop's reported angle always land on the stop bit-exact.
-        rotation_position_increments = STARBackend._iswap_rotation_drive_angle_to_increments(
-          rotation_angle, rot_predefined
-        )
-        for stop_incr in rot_predefined.values():
-          stop_angle = STARBackend._iswap_rotation_drive_increments_to_angle(
-            stop_incr, rot_predefined
-          )
-          if (
-            abs(rotation_angle - stop_angle)
-            <= STARBackend.iswap_rotation_drive_deg_per_increment
-          ):
-            rotation_position_increments = stop_incr
-            break
+      rotation_position_increments = STARBackend._iswap_rotation_drive_resolve_to_increments(
+        rotation_angle, rot_predefined
+      )
       if not (
         STARBackend.iswap_rotation_drive_min_increment
         <= rotation_position_increments
@@ -11063,6 +11087,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           rotation_position_increments, rot_predefined
         )
         raise ValueError(
+          f"rotation_angle {rotation_angle} maps to {rotation_position_increments} incr "
           f"({rotation_position_deg:.2f} deg) (stops LEFT/FRONT/RIGHT="
           f"{rot_predefined[STARBackend.RotationDriveOrientation.LEFT]}/"
           f"{rot_predefined[STARBackend.RotationDriveOrientation.FRONT]}/"
@@ -11075,16 +11100,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
     else:
       wrist_predefined = self.iswap_information.wrist_drive_predefined_increments
-      if isinstance(wrist_angle, STARBackend.WristDriveOrientation):
-        wrist_position_increments = wrist_predefined[wrist_angle]
-      else:
-        # Same snap-to-stop rule as the rotation branch.
-        wrist_position_increments = STARBackend._iswap_wrist_drive_angle_to_increments(wrist_angle)
-        for stop_incr in wrist_predefined.values():
-          stop_angle = STARBackend._iswap_wrist_drive_increments_to_angle(stop_incr)
-          if abs(wrist_angle - stop_angle) <= STARBackend.iswap_wrist_drive_deg_per_increment:
-            wrist_position_increments = stop_incr
-            break
+      wrist_position_increments = STARBackend._iswap_wrist_drive_resolve_to_increments(
+        wrist_angle, wrist_predefined
+      )
       if not (
         STARBackend.iswap_wrist_drive_min_increment
         <= wrist_position_increments
