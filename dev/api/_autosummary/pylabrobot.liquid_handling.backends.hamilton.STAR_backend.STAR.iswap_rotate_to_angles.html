@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data.html" />
-    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -561,7 +561,7 @@
     
     <li class="breadcrumb-item"><a href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.html" class="nav-link">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles</span></li>
   </ul>
 </nav>
 </div>
@@ -578,18 +578,63 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-store-installation-data">
-<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-store-installation-data" title="Link to this heading">#</a></h1>
+  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-rotate-to-angles">
+<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-iswap-rotate-to-angles" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">store_installation_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">date</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/datetime.html#datetime.datetime" title="(in Python v3.14)"><span class="pre">datetime</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">datetime.datetime(2026,</span> <span class="pre">5,</span> <span class="pre">19,</span> <span class="pre">22,</span> <span class="pre">17,</span> <span class="pre">46,</span> <span class="pre">102506)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">serial_number</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'0000'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data" title="Link to this definition">#</a></dt>
-<dd><p>Store installation data</p>
+<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">iswap_rotate_to_angles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rotation_angle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">RotationDriveOrientation</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_angle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">WristDriveOrientation</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rotation_speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">77.4048</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rotation_acceleration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">526.3524</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rotation_current_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">101.5938</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_acceleration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">736.5548</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrist_current_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles" title="Link to this definition">#</a></dt>
+<dd><p>Rotate one or both iSWAP joints to absolute angles in a single motion.</p>
+<p>Public deg-based wrapper around <code class="code docutils literal notranslate"><span class="pre">_iswap_rotate_increments</span></code>. When both
+angles are supplied, both joints arrive together under a single motion
+plan so the gripper sweeps a straight joint-space path; calling the move
+twice (rotation then wrist) instead would pass through an intermediate
+(W_target, T_now) pose, which is not what an IK-driven trajectory wants.</p>
+<p>When only one angle is supplied, the other drive is read from firmware
+and pinned to its current position - so this method also covers the
+single-axis rotation case. At least one of <code class="code docutils literal notranslate"><span class="pre">rotation_angle</span></code> /
+<code class="code docutils literal notranslate"><span class="pre">wrist_angle</span></code> must be provided.</p>
+<p>Each angle accepts either the enum stop (calibrated EEPROM increment) or
+a float (degrees). Position conversions go through the calibrated path:
+rotation floats use piecewise-linear interpolation between the LEFT /
+FRONT / RIGHT EEPROM stops via <code class="code docutils literal notranslate"><span class="pre">_iswap_rotation_drive_angle_to_increments</span></code>;
+wrist floats use the linear <code class="code docutils literal notranslate"><span class="pre">iswap_wrist_drive_deg_per_increment</span></code> factor
+anchored on motor zero. Speed / acceleration are rate conversions and use
+the linear <code class="code docutils literal notranslate"><span class="pre">deg_per_increment</span></code> factor for both drives.</p>
+<p>Snap-to-stop guarantee for float inputs: if the float angle matches any
+calibrated stop’s reported deg-form to within one increment of precision,
+the call lands on that stop’s exact stored increment instead of the
+rounded conversion result. This means a value read via
+<code class="code docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_angle</span></code> or
+<code class="code docutils literal notranslate"><span class="pre">iswap_wrist_drive_request_angle</span></code> always round-trips back to the same
+motor increment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>date</strong> (<a class="reference external" href="https://docs.python.org/3/library/datetime.html#datetime.datetime" title="(in Python v3.14)"><em>datetime</em></a>) – installation date.</p></li>
-<li><p><strong>serial_number</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>rotation_angle</strong> (<em>RotationDriveOrientation</em><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – <code class="code docutils literal notranslate"><span class="pre">RotationDriveOrientation</span></code> member, degrees signed from
+the calibrated FRONT stop, or None to hold the rotation drive at its
+current position.</p></li>
+<li><p><strong>wrist_angle</strong> (<em>WristDriveOrientation</em><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – <code class="code docutils literal notranslate"><span class="pre">WristDriveOrientation</span></code> member, degrees signed from motor
+zero, or None to hold the wrist drive at its current position.</p></li>
+<li><p><strong>rotation_speed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – rotation drive max angular velocity in deg/sec.</p></li>
+<li><p><strong>rotation_acceleration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – rotation drive max angular acceleration in deg/sec^2.</p></li>
+<li><p><strong>rotation_current_limit</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – rotation drive motor current protection limiter,
+range 0..7.</p></li>
+<li><p><strong>wrist_speed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – wrist drive max angular velocity in deg/sec.</p></li>
+<li><p><strong>wrist_acceleration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – wrist drive max angular acceleration in deg/sec^2.</p></li>
+<li><p><strong>wrist_current_limit</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – wrist drive motor current protection limiter,
+range 0..7.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – if iSWAP is not installed or if <code class="code docutils literal notranslate"><span class="pre">setup()</span></code> has not populated
+    the predefined-stop tables.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if neither angle is provided, or if either resolved target
+    increment is outside the hardware range.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
 </dd>
 </dl>
 </dd></dl>
@@ -607,20 +652,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.stop_temperature_control_at_hhc</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_verification_data</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotation_drive_move_y</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -643,7 +688,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data"><code class="docutils literal notranslate"><span class="pre">STAR.store_installation_data()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles"><code class="docutils literal notranslate"><span class="pre">STAR.iswap_rotate_to_angles()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -651,7 +696,7 @@
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -666,7 +711,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.store_installation_data.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_rotate_to_angles.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
