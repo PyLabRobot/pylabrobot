@@ -38,6 +38,7 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.iswap_gripper_drive_max_increment
       ~STAR.iswap_gripper_drive_min_increment
       ~STAR.iswap_gripper_drive_mm_per_increment
+      ~STAR.iswap_information
       ~STAR.iswap_installed
       ~STAR.iswap_parked
       ~STAR.iswap_rotation_drive_deg_per_increment
