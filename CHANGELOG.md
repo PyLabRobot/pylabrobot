@@ -13,10 +13,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `MicroSpinBackend.reset()` recovery helper that issues `abort` -> `clearbuttonabort` -> `status`, using the last as the gate that genuinely confirms the rotor has stopped.
 - User guide notebook for the MicroSpin (`docs/user_guide/01_material-handling/centrifuge/highres_microspin.ipynb`).
 
-### Changed
-
-- Refactored `pylabrobot.centrifuge` to a per-vendor folder layout (`agilent/`, `highres/`) mirroring `pylabrobot.plate_reading`. Existing imports from `pylabrobot.centrifuge.vspin_backend` and `pylabrobot.centrifuge.access2` continue to work via deprecation shims.
-
 ### Fixed
 
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).

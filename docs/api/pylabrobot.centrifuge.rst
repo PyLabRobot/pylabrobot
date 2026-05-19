@@ -22,10 +22,7 @@ Backends
   :nosignatures:
   :recursive:
 
-    chatterbox.CentrifugeChatterboxBackend
-    chatterbox.LoaderChatterboxBackend
-    agilent.vspin_backend.VSpinBackend
-    agilent.vspin_backend.Access2Backend
+    vspin_backend.VSpinBackend
     highres.microspin_backend.MicroSpinBackend
 
 
