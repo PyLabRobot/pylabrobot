@@ -45,6 +45,11 @@ logger = logging.getLogger(__name__)
 
 
 _ACK_RE = re.compile(r"^ACK!\s+(?P<echo>.*?)\s+(?P<id>\d+)\s*$")
+#: Matches any ``OK!``/``ERROR!`` terminator line, regardless of command id.
+#: Used by :meth:`MicroSpinBackend._drain_stale_responses` to identify
+#: terminators from previously-cancelled commands without needing to know
+#: their cmd-ids.
+_ANY_TERMINATOR_RE = re.compile(r"^(?:OK!|ERROR!)\s+.*\s+\d+\s*$")
 
 
 class MicroSpinError(RuntimeError):
@@ -115,6 +120,12 @@ class MicroSpinBackend(CentrifugeBackend):
     self._reader: Optional[asyncio.StreamReader] = None
     self._writer: Optional[asyncio.StreamWriter] = None
     self._lock = asyncio.Lock()
+    # Number of terminator lines we still need to drain from the socket
+    # because previously-issued commands were cancelled (e.g. by
+    # `asyncio.wait_for`) before their response fully arrived. Each new
+    # `send_command` first drains this many terminators before reading its
+    # own response, preventing protocol desync after timeouts.
+    self._pending_terminator_count: int = 0
 
   # ------------------------------------------------------------------ lifecycle
 
@@ -184,11 +195,37 @@ class MicroSpinBackend(CentrifugeBackend):
         timeout=effective_timeout,
       )
 
+  async def _drain_stale_responses(self) -> None:
+    """Consume any leftover lines from previously-cancelled commands.
+
+    We track the number of terminators we still owe in
+    ``self._pending_terminator_count``. Each cancelled in-flight command
+    leaves at most one full response (``ACK!`` -> data -> ``OK!``/``ERROR!``)
+    in the socket buffer; reading lines until we have seen that many
+    terminators is sufficient to resynchronise the stream.
+    """
+    while self._pending_terminator_count > 0:
+      line = await self._readline()
+      if _ANY_TERMINATOR_RE.match(line):
+        self._pending_terminator_count -= 1
+        logger.debug(
+          "[microspin] drained stale terminator (%d still pending)",
+          self._pending_terminator_count,
+        )
+
   async def _send_command_no_lock(self, command: str) -> List[str]:
     assert self._writer is not None
+    # Resynchronise the stream before writing anything new.
+    await self._drain_stale_responses()
+
     logger.debug("[microspin] >>> %s", command)
     self._writer.write((command + "\r\n").encode("ascii"))
     await self._writer.drain()
+
+    # Speculatively assume our response will become orphaned if we are
+    # cancelled mid-read; the count is decremented again iff we successfully
+    # consume our own terminator.
+    self._pending_terminator_count += 1
 
     # Stage 2: ACK! <echo> <id>
     ack = await self._readline()
@@ -205,6 +242,7 @@ class MicroSpinBackend(CentrifugeBackend):
       line = await self._readline()
       end = end_re.match(line)
       if end:
+        self._pending_terminator_count -= 1
         if end.group("status") == "OK!":
           logger.debug("[microspin] <<< OK (%d data lines)", len(data))
           return data
@@ -379,8 +417,14 @@ class MicroSpinBackend(CentrifugeBackend):
   async def home(self) -> None:
     """Home both axes (door and spindle).
 
-    The MicroSpin needs to be homed once after every power-cycle before any
-    spin or bucket-positioning command is accepted.
+    The MicroSpin User Manual (HighRes doc 1058675 Rev C) does not
+    explicitly require homing after every power-cycle, but observably the
+    firmware reports ``hss -> not homed`` after a power-cycle, and
+    subsequent motion commands (``open <bucket>``, ``spin``) fail with
+    "not homed" errors until ``home`` is issued. The manual's recommended
+    unpacking procedure (§5.3) also opens with ``home``, and §7.2 requires
+    a re-home after an imbalance abort. In practice, treat ``home`` as the
+    first motion command of every power-on session.
     """
     await self.send_command("home", timeout=max(self.timeout, 120.0))
 
@@ -506,29 +550,83 @@ class MicroSpinBackend(CentrifugeBackend):
     data = await self.send_command("status", timeout=timeout)
     return _parse_kv_lines(data)
 
+  #: Default *overall* budget for :meth:`wait_for_spindle_stopped` -- 30 min,
+  #: chosen to comfortably cover the worst-case observed decel (~17 min for a
+  #: high-G spin on the slow-decel curve, e.g. ``spin 1000 100 10 5``).
+  DEFAULT_SPINDLE_STOP_TIMEOUT: Optional[float] = 1800.0
+  #: Default *per-poll* timeout for :meth:`wait_for_spindle_stopped`. The
+  #: method issues a fresh ``status`` every ``poll_interval`` seconds until
+  #: one succeeds (i.e. the spindle reports stopped) or until the overall
+  #: ``timeout`` budget expires.
+  DEFAULT_SPINDLE_POLL_INTERVAL: float = 60.0
+
   async def wait_for_spindle_stopped(
     self,
     *,
-    timeout: Optional[float] = None,
+    timeout: Optional[float] = DEFAULT_SPINDLE_STOP_TIMEOUT,
+    poll_interval: float = DEFAULT_SPINDLE_POLL_INTERVAL,
   ) -> Dict[str, str]:
     """Block until the firmware confirms the rotor is fully stopped.
 
-    Sends a single ``status`` command, which the firmware queues behind any
-    in-progress motion. When that motion completes, the firmware emits the
-    status report and ``OK!`` -- at which point we know the rotor is
-    mechanically stopped from the controller's point of view.
+    The MicroSpin firmware queues ``status`` behind any active motion and
+    only answers once the rotor has spun down, so a single ``status`` is
+    sufficient as a "we are stopped" gate. This method issues ``status``
+    repeatedly with a short per-call timeout until one returns successfully
+    (the rotor stopped) -- or until the overall ``timeout`` budget expires.
+
+    Retrying matters in practice because long decels can take well over a
+    poll interval (a worst-case observed spin was ``spin 1000 100 10 5``
+    taking >17 min to spin down on the slow-decel curve). With a single
+    long timeout, you have to either pick a value that's too short and
+    raise spuriously, or one that's so long it would mask a genuine hang
+    forever. Polling gives you both bounded latency and tolerant patience.
 
     Args:
-      timeout: Override the per-command timeout. Defaults to
-        ``max(self.timeout, 300s)`` which covers a full decel from 3000 ×g
-        on the slow-decel curve.
+      timeout: Total time budget in seconds. ``None`` means "wait
+        indefinitely" (only do this if you're sure the device isn't stuck
+        -- see the low-G hang warning in :meth:`spin`). Defaults to
+        :attr:`DEFAULT_SPINDLE_STOP_TIMEOUT` (30 min).
+      poll_interval: Per-``status`` call timeout in seconds. Each
+        individual ``status`` call may legitimately time out (because the
+        rotor is still moving); the loop catches those and tries again.
+        Defaults to :attr:`DEFAULT_SPINDLE_POLL_INTERVAL` (60 s).
 
     Returns:
-      The parsed status report ({key: value} dict, same as
-      :meth:`get_status`).
+      The parsed status report ({key: value} dict) from the first
+      ``status`` call that succeeds.
+
+    Raises:
+      asyncio.TimeoutError: If the overall ``timeout`` expires before any
+        ``status`` call returns successfully.
+      MicroSpinError: If a ``status`` call returns ``ERROR!`` (this is not
+        retried -- an ``ERROR!`` from ``status`` means the device itself
+        thinks something is wrong, not that motion is still in progress).
     """
-    effective = max(self.timeout, 300.0) if timeout is None else timeout
-    return await self.get_status(timeout=effective)
+    if poll_interval <= 0:
+      raise ValueError(f"poll_interval must be positive, got {poll_interval}")
+
+    loop = asyncio.get_event_loop()
+    deadline: Optional[float] = None if timeout is None else loop.time() + timeout
+
+    attempt = 0
+    while True:
+      attempt += 1
+      remaining = None if deadline is None else max(0.0, deadline - loop.time())
+      if remaining is not None and remaining <= 0:
+        raise asyncio.TimeoutError(
+          f"Spindle did not stop within wait_for_spindle_stopped budget "
+          f"({timeout}s, {attempt - 1} polls)"
+        )
+      this_call_timeout = poll_interval if remaining is None else min(poll_interval, remaining)
+      try:
+        return await self.get_status(timeout=this_call_timeout)
+      except asyncio.TimeoutError:
+        logger.debug(
+          "[microspin] status poll %d timed out after %.1fs; retrying",
+          attempt,
+          this_call_timeout,
+        )
+        # Loop body retries until the overall deadline is reached.
 
   async def get_version(self) -> Dict[str, str]:
     """Return the firmware/library version report as a ``{field: value}`` dict."""

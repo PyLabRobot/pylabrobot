@@ -18,6 +18,7 @@ only cover situations the mock server cannot reasonably reproduce:
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 import warnings
 from typing import List, Tuple
@@ -50,13 +51,21 @@ class _FakeWriter:
 
 
 class _FakeReader:
-  """Yields a queue of lines one ``readline()`` at a time."""
+  """Yields a queue of lines one ``readline()`` at a time.
 
-  def __init__(self, lines: List[bytes]) -> None:
+  When the queue is exhausted, returns ``b""`` (EOF) by default, or hangs
+  indefinitely if ``hang_on_empty=True`` -- the latter is what we want when
+  simulating a slow device whose response never arrives in time.
+  """
+
+  def __init__(self, lines: List[bytes], *, hang_on_empty: bool = False) -> None:
     self._lines: List[bytes] = list(lines)
+    self._hang_on_empty = hang_on_empty
 
   async def readline(self) -> bytes:
     if not self._lines:
+      if self._hang_on_empty:
+        await asyncio.Event().wait()  # never fires
       return b""  # simulate EOF
     return self._lines.pop(0)
 
@@ -107,6 +116,96 @@ class MicroSpinProtocolEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(cm.exception.command_id, 19)
     self.assertEqual(cm.exception.command, "spin 0 0 0 1")
     self.assertEqual(cm.exception.error_lines, ["Error 1: (00:00:01) -12: bad params"])
+
+
+class MicroSpinStreamResyncTests(unittest.IsolatedAsyncioTestCase):
+  """After a cancelled/timed-out command, the next command must transparently
+  drain the stale response and return its own result. Without this the
+  protocol desyncs and every subsequent command reads someone else's data.
+  """
+
+  async def test_stale_response_is_drained_before_next_command(self):
+    # Simulate the buffer state after a `status` was cancelled mid-flight:
+    # the device eventually delivers its full response, then ours arrives.
+    backend, writer = _make_backend(
+      [
+        # Stale response for the previously-cancelled command (cmd-id 5):
+        "ACK! status 5\r\n",
+        "Spindle Position: 9999\r\n",
+        "OK! status 5\r\n",
+        # Our fresh response (cmd-id 6):
+        "ACK! version 6\r\n",
+        "Version: MS-1.3.3\r\n",
+        "OK! version 6\r\n",
+      ]
+    )
+    # Pretend the previous send_command was cancelled after writing "status":
+    backend._pending_terminator_count = 1
+
+    data = await backend.send_command("version")
+    self.assertEqual(data, ["Version: MS-1.3.3"])
+    # And the stale-counter is back to zero.
+    self.assertEqual(backend._pending_terminator_count, 0)
+
+  async def test_partial_stale_response_drained(self):
+    # Cancelled AFTER reading the ACK but before the terminator: the buffer
+    # holds the remaining data + OK, then our response.
+    backend, writer = _make_backend(
+      [
+        # Leftover from a partially-read previous response (cmd-id 5):
+        "Spindle Position: 9999\r\n",  # data line we hadn't read yet
+        "OK! status 5\r\n",  # terminator we hadn't read yet
+        # Our fresh response (cmd-id 6):
+        "ACK! version 6\r\n",
+        "Version: MS-1.3.3\r\n",
+        "OK! version 6\r\n",
+      ]
+    )
+    backend._pending_terminator_count = 1
+
+    data = await backend.send_command("version")
+    self.assertEqual(data, ["Version: MS-1.3.3"])
+    self.assertEqual(backend._pending_terminator_count, 0)
+
+  async def test_multiple_stale_responses_drained(self):
+    backend, writer = _make_backend(
+      [
+        # Two stale responses (cmd-ids 5 and 6):
+        "ACK! status 5\r\n",
+        "Spindle Position: 9999\r\n",
+        "OK! status 5\r\n",
+        "ACK! status 6\r\n",
+        "Spindle Position: 1\r\n",
+        "OK! status 6\r\n",
+        # Our fresh response (cmd-id 7):
+        "ACK! version 7\r\n",
+        "Version: MS-1.3.3\r\n",
+        "OK! version 7\r\n",
+      ]
+    )
+    backend._pending_terminator_count = 2
+
+    data = await backend.send_command("version")
+    self.assertEqual(data, ["Version: MS-1.3.3"])
+    self.assertEqual(backend._pending_terminator_count, 0)
+
+  async def test_send_command_keeps_pending_count_on_cancellation(self):
+    """Verify the bookkeeping that enables the drain.
+
+    If `send_command` is cancelled (e.g. by ``asyncio.wait_for``) mid-read,
+    the in-flight terminator must remain in the pending count so the *next*
+    call can drain it.
+    """
+    backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
+    backend._writer = _FakeWriter()  # type: ignore[assignment]
+    backend._reader = _FakeReader(  # type: ignore[assignment]
+      [b"ACK! home 5\r\n"],  # ACK arrives, but the terminator never does
+      hang_on_empty=True,
+    )
+
+    with self.assertRaises(asyncio.TimeoutError):
+      await asyncio.wait_for(backend.send_command("home"), timeout=0.05)
+    self.assertEqual(backend._pending_terminator_count, 1)
 
 
 class MicroSpinValidationTests(unittest.IsolatedAsyncioTestCase):
@@ -288,7 +387,9 @@ class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
     await backend.abort(timeout=5.0)
     self.assertEqual(seen, [("abort", 5.0)])
 
-  async def test_wait_for_spindle_stopped_uses_extended_default_timeout(self):
+  async def test_wait_for_spindle_stopped_uses_poll_interval_per_call(self):
+    """Each individual ``status`` is bounded by ``poll_interval``, not by
+    the overall ``timeout``."""
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
     seen: list = []
 
@@ -296,13 +397,68 @@ class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
       seen.append((cmd, timeout))
       return []
 
-    backend.send_command = fake_send  # type: ignore[assignment]
+    backend.send_command = fake_send  # type: ignore[method-assign]
+    # Defaults: poll_interval=60, total timeout=1800. First call should
+    # get poll_interval (or min(poll_interval, remaining) which == 60).
     await backend.wait_for_spindle_stopped()
-    self.assertEqual(seen, [("status", 300.0)])
+    self.assertEqual(seen, [("status", 60.0)])
 
     seen.clear()
-    await backend.wait_for_spindle_stopped(timeout=10.0)
-    self.assertEqual(seen, [("status", 10.0)])
+    await backend.wait_for_spindle_stopped(poll_interval=5.0, timeout=100.0)
+    self.assertEqual(seen, [("status", 5.0)])
+
+  async def test_wait_for_spindle_stopped_retries_on_per_call_timeout(self):
+    """If the per-call status times out, we issue another one."""
+    import asyncio as _asyncio
+
+    backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
+    call_count = 0
+
+    async def fake_send(cmd, *, timeout=None):
+      nonlocal call_count
+      call_count += 1
+      if call_count < 3:
+        raise _asyncio.TimeoutError("still spinning")
+      return ["Spindle Position: 1958", "Door Position: -457"]
+
+    backend.send_command = fake_send  # type: ignore[method-assign]
+    result = await backend.wait_for_spindle_stopped(poll_interval=0.01, timeout=10.0)
+    self.assertEqual(call_count, 3)
+    self.assertEqual(result, {"Spindle Position": "1958", "Door Position": "-457"})
+
+  async def test_wait_for_spindle_stopped_raises_when_total_budget_expires(self):
+    """With every poll timing out and a tight overall budget, we raise."""
+    import asyncio as _asyncio
+
+    backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
+
+    async def fake_send(cmd, *, timeout=None):
+      raise _asyncio.TimeoutError("still spinning")
+
+    backend.send_command = fake_send  # type: ignore[method-assign]
+    with self.assertRaises(_asyncio.TimeoutError):
+      await backend.wait_for_spindle_stopped(poll_interval=0.01, timeout=0.05)
+
+  async def test_wait_for_spindle_stopped_propagates_microspin_error(self):
+    """An ERROR! from status is a real device-state error -- don't retry."""
+    backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
+    call_count = 0
+
+    async def fake_send(cmd, *, timeout=None):
+      nonlocal call_count
+      call_count += 1
+      raise MicroSpinError("status", 1, ["Error: spindle wedged"])
+
+    backend.send_command = fake_send  # type: ignore[method-assign]
+    with self.assertRaises(MicroSpinError):
+      await backend.wait_for_spindle_stopped(poll_interval=10.0, timeout=60.0)
+    self.assertEqual(call_count, 1)  # NOT retried
+
+  async def test_wait_for_spindle_stopped_rejects_non_positive_poll_interval(self):
+    backend = MicroSpinBackend(host="ignored", port=0)
+    for bad in (0, -1, -0.001):
+      with self.assertRaises(ValueError):
+        await backend.wait_for_spindle_stopped(poll_interval=bad)
 
 
 class MicroSpinConstructorTests(unittest.IsolatedAsyncioTestCase):
