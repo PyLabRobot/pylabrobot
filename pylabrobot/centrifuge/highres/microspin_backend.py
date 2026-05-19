@@ -13,7 +13,7 @@ exchange has the following shape::
         Error <n>: <text>                      -- (one or more lines after ERROR!)
 
 This module also exposes a small surface of MicroSpin-specific helpers
-(``home``, ``abort``, ``get_status`` ...) in addition to the abstract
+(``home``, ``abort``, ``request_status`` ...) in addition to the abstract
 :class:`~pylabrobot.centrifuge.backend.CentrifugeBackend` interface.
 
 Safety
@@ -38,6 +38,8 @@ import logging
 import re
 import warnings
 from typing import Dict, List, Optional
+
+from pylabrobot.io.socket import Socket
 
 from ..backend import CentrifugeBackend
 
@@ -155,8 +157,13 @@ class MicroSpinBackend(CentrifugeBackend):
     self.port = port
     self.timeout = timeout
 
-    self._reader: Optional[asyncio.StreamReader] = None
-    self._writer: Optional[asyncio.StreamWriter] = None
+    self.io = Socket(
+      human_readable_device_name="HighRes MicroSpin",
+      host=host,
+      port=port,
+      read_timeout=timeout,
+      write_timeout=timeout,
+    )
     self._lock = asyncio.Lock()
     # Number of terminator lines we still need to drain from the socket
     # because previously-issued commands were cancelled (e.g. by
@@ -170,18 +177,11 @@ class MicroSpinBackend(CentrifugeBackend):
   async def setup(self) -> None:
     """Open the TCP connection to the MicroSpin's remote-control server."""
     logger.debug("[microspin] connecting to %s:%d", self.host, self.port)
-    self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
+    await self.io.setup()
 
   async def stop(self) -> None:
     """Close the TCP connection. Safe to call even if never set up."""
-    if self._writer is not None:
-      try:
-        self._writer.close()
-        await self._writer.wait_closed()
-      except Exception:  # noqa: BLE001 -- best-effort close
-        logger.debug("[microspin] error while closing connection", exc_info=True)
-    self._reader = None
-    self._writer = None
+    await self.io.stop()
 
   def serialize(self) -> dict:
     """Return a JSON-serialisable view of this backend's construction args."""
@@ -194,9 +194,8 @@ class MicroSpinBackend(CentrifugeBackend):
 
   # ------------------------------------------------------------------ wire IO
 
-  async def _readline(self) -> str:
-    assert self._reader is not None, "not connected"
-    raw = await self._reader.readline()
+  async def _readline(self, *, timeout: Optional[float] = None) -> str:
+    raw = await self.io.readline(timeout=timeout)
     if not raw:
       raise ConnectionError("MicroSpin closed the connection")
     return raw.rstrip(b"\r\n").decode("ascii", errors="replace")
@@ -222,18 +221,15 @@ class MicroSpinBackend(CentrifugeBackend):
       MicroSpinProtocolError: If the ACK or terminator cannot be parsed.
       asyncio.TimeoutError: If the timeout elapses.
     """
-    if self._writer is None or self._reader is None:
-      raise RuntimeError("MicroSpinBackend is not set up. Call `await backend.setup()` first.")
-
     effective_timeout = self.timeout if timeout is None else timeout
 
     async with self._lock:
       return await asyncio.wait_for(
-        self._send_command_no_lock(command),
+        self._send_command_no_lock(command, effective_timeout=effective_timeout),
         timeout=effective_timeout,
       )
 
-  async def _drain_stale_responses(self) -> None:
+  async def _drain_stale_responses(self, *, timeout: Optional[float] = None) -> None:
     """Consume any leftover lines from previously-cancelled commands.
 
     We track the number of terminators we still owe in
@@ -243,7 +239,7 @@ class MicroSpinBackend(CentrifugeBackend):
     terminators is sufficient to resynchronise the stream.
     """
     while self._pending_terminator_count > 0:
-      line = await self._readline()
+      line = await self._readline(timeout=timeout)
       if _ANY_TERMINATOR_RE.match(line):
         self._pending_terminator_count -= 1
         logger.debug(
@@ -251,14 +247,14 @@ class MicroSpinBackend(CentrifugeBackend):
           self._pending_terminator_count,
         )
 
-  async def _send_command_no_lock(self, command: str) -> List[str]:
-    assert self._writer is not None
+  async def _send_command_no_lock(
+    self, command: str, *, effective_timeout: Optional[float] = None
+  ) -> List[str]:
     # Resynchronise the stream before writing anything new.
-    await self._drain_stale_responses()
+    await self._drain_stale_responses(timeout=effective_timeout)
 
     logger.debug("[microspin] >>> %s", command)
-    self._writer.write((command + "\r\n").encode("ascii"))
-    await self._writer.drain()
+    await self.io.write((command + "\r\n").encode("ascii"), timeout=effective_timeout)
 
     # Speculatively assume our response will become orphaned if we are
     # cancelled mid-read; the count is decremented again iff we successfully
@@ -266,7 +262,7 @@ class MicroSpinBackend(CentrifugeBackend):
     self._pending_terminator_count += 1
 
     # Stage 2: ACK! <echo> <id>
-    ack = await self._readline()
+    ack = await self._readline(timeout=effective_timeout)
     m = _ACK_RE.match(ack)
     if not m:
       raise MicroSpinProtocolError(f"Expected ACK!, got {ack!r}")
@@ -277,7 +273,7 @@ class MicroSpinBackend(CentrifugeBackend):
     end_re = re.compile(rf"^(?P<status>{_END_STATUSES})\s+.*\s+{command_id}\s*$")
     data: List[str] = []
     while True:
-      line = await self._readline()
+      line = await self._readline(timeout=effective_timeout)
       end = end_re.match(line)
       if end:
         self._pending_terminator_count -= 1
@@ -632,7 +628,7 @@ class MicroSpinBackend(CentrifugeBackend):
       up with :meth:`is_homed` (and re-:meth:`home` if needed) before
       issuing the next motion command. The MicroSpin firmware also keeps a
       persistent error stack which is unaffected by reset; use
-      :meth:`get_errors` to inspect it.
+      :meth:`request_errors` to inspect it.
     """
     try:
       await self.abort(timeout=abort_timeout)
@@ -648,7 +644,7 @@ class MicroSpinBackend(CentrifugeBackend):
       return None
     return await self.wait_for_spindle_stopped(timeout=settle_timeout)
 
-  async def get_status(self, *, timeout: Optional[float] = None) -> Dict[str, str]:
+  async def request_status(self, *, timeout: Optional[float] = None) -> Dict[str, str]:
     """Return the device's status report as a ``{field: value}`` dict.
 
     Typical fields include ``Spindle Position`` and ``Door Position``.
@@ -737,7 +733,7 @@ class MicroSpinBackend(CentrifugeBackend):
         )
       this_call_timeout = poll_interval if remaining is None else min(poll_interval, remaining)
       try:
-        return await self.get_status(timeout=this_call_timeout)
+        return await self.request_status(timeout=this_call_timeout)
       except asyncio.TimeoutError:
         logger.debug(
           "[microspin] status poll %d timed out after %.1fs; retrying",
@@ -746,12 +742,12 @@ class MicroSpinBackend(CentrifugeBackend):
         )
         # Loop body retries until the overall deadline is reached.
 
-  async def get_version(self) -> Dict[str, str]:
+  async def request_version(self) -> Dict[str, str]:
     """Return the firmware/library version report as a ``{field: value}`` dict."""
     data = await self.send_command("version")
     return _parse_kv_lines(data)
 
-  async def get_errors(self, n: int = 10) -> List[str]:
+  async def request_errors(self, n: int = 10) -> List[str]:
     """Return the top ``n`` entries from the device's error stack."""
     return await self.send_command(f"errors {int(n)}")
 

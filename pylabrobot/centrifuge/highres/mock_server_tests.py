@@ -97,13 +97,13 @@ class MockServerCommandMappingTests(_MockServerTestBase):
     with self.assertRaises(MicroSpinError):
       await self.backend.send_command("this_command_does_not_exist")
 
-  async def test_get_version_round_trip(self):
-    info = await self.backend.get_version()
+  async def test_request_version_round_trip(self):
+    info = await self.backend.request_version()
     self.assertEqual(info["Product Name"], "RandomServe")
     self.assertEqual(info["Version"], "MS-1.3.3-mock")
 
-  async def test_get_status_returns_dict_with_positions(self):
-    status = await self.backend.get_status()
+  async def test_request_status_returns_dict_with_positions(self):
+    status = await self.backend.request_status()
     self.assertIn("Spindle Position", status)
     self.assertIn("Door Position", status)
 
@@ -118,7 +118,7 @@ class MockServerIntegrationTests(_MockServerTestBase):
   # --- basic protocol round-trips ----------------------------------------
 
   async def test_version_round_trip(self):
-    info = await self.backend.get_version()
+    info = await self.backend.request_version()
     self.assertEqual(info["Product Name"], "RandomServe")
     self.assertEqual(info["Version"], "MS-1.3.3-mock")
 
@@ -128,7 +128,7 @@ class MockServerIntegrationTests(_MockServerTestBase):
   async def test_home_then_status(self):
     await self.backend.home()
     self.assertTrue(await self.backend.is_homed())
-    status = await self.backend.get_status()
+    status = await self.backend.request_status()
     self.assertIn("Spindle Position", status)
     self.assertIn("Door Position", status)
 
@@ -185,7 +185,7 @@ class MockServerIntegrationTests(_MockServerTestBase):
       await asyncio.sleep(0.02)
       # Now ask for status -- this should block until home completes.
       t0 = asyncio.get_event_loop().time()
-      await side.get_status()
+      await side.request_status()
       elapsed = asyncio.get_event_loop().time() - t0
       await home_task
       # status should have waited at least ~0.1s (most of the remaining home dwell)
@@ -251,7 +251,7 @@ class MockServerLowGHangTests(unittest.IsolatedAsyncioTestCase):
     await self.backend.send_command("home")  # populates state.current_motion
     # status would normally answer immediately; in low-G-hang mode it sits.
     with self.assertRaises(asyncio.TimeoutError):
-      await self.backend.get_status()
+      await self.backend.request_status()
 
 
 class MockServerCommandSurfaceTests(_MockServerTestBase):

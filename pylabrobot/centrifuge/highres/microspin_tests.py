@@ -76,8 +76,8 @@ def _make_backend(server_lines: List[str]) -> Tuple[MicroSpinBackend, _FakeWrite
   backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
   writer = _FakeWriter()
   reader = _FakeReader([s.encode("ascii") for s in server_lines])
-  backend._writer = writer  # type: ignore[assignment]
-  backend._reader = reader  # type: ignore[assignment]
+  backend.io._writer = writer  # type: ignore[assignment]
+  backend.io._reader = reader  # type: ignore[assignment]
   return backend, writer
 
 
@@ -219,8 +219,8 @@ class MicroSpinStreamResyncTests(unittest.IsolatedAsyncioTestCase):
     call can drain it.
     """
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
-    backend._writer = _FakeWriter()  # type: ignore[assignment]
-    backend._reader = _FakeReader(  # type: ignore[assignment]
+    backend.io._writer = _FakeWriter()  # type: ignore[assignment]
+    backend.io._reader = _FakeReader(  # type: ignore[assignment]
       [b"ACK! home 5\r\n"],  # ACK arrives, but the terminator never does
       hang_on_empty=True,
     )
@@ -374,7 +374,7 @@ class MicroSpinValidationTests(unittest.IsolatedAsyncioTestCase):
 class MicroSpinHelperEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
   """Helper behaviour with carefully-shaped responses we don't get from the mock."""
 
-  async def test_get_errors_returns_lines_verbatim(self):
+  async def test_request_errors_returns_lines_verbatim(self):
     backend, _ = _make_backend(
       [
         "ACK! errors 3 4\r\n",
@@ -385,7 +385,7 @@ class MicroSpinHelperEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
       ]
     )
     self.assertEqual(
-      await backend.get_errors(3),
+      await backend.request_errors(3),
       ["Error 1: foo", "Error 2: bar", "Error 3: baz"],
     )
 
