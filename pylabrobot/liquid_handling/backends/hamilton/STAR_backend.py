@@ -10519,14 +10519,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       raise ValueError(f"Invalid rotation drive orientation: {orientation}")
 
-  async def iswap_rotation_drive_rotate_to_angle(
+  async def _iswap_rotation_drive_rotate_to_angle(
     self,
     angle: Union[RotationDriveOrientation, float],
     speed: int = 25_000,
     acceleration: int = 170,
     current_limit: int = 5,
   ) -> None:
-    """Rotate the iSWAP rotation drive (Joint 1) to an absolute angle or named stop.
+    """Rotate only the iSWAP rotation drive (Joint 1) to an absolute angle.
+
+    Internal single-axis variant kept for troubleshooting direct one-joint
+    motion. The public entry point is `iswap_rotate_to_angles`, which covers
+    this case via `rotation_angle=X, wrist_angle=None` and also drives both
+    joints together when both are supplied.
 
     Passing a `RotationDriveOrientation` (LEFT / FRONT / RIGHT / PARKED_RIGHT)
     sends the drive to the exact EEPROM-stored increment for that stop. Passing
@@ -10660,8 +10665,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     with small per-machine drift from the factory defaults. Callers that
     need an exact named-stop landing should pass the `WristDriveOrientation`
-    member to `iswap_wrist_drive_rotate_to_angle` rather than a float -- the
-    enum path uses the calibrated EEPROM increment directly.
+    member to `iswap_rotate_to_angles` rather than a float -- the enum path
+    uses the calibrated EEPROM increment directly.
     """
     return increments * STARBackend.iswap_wrist_drive_deg_per_increment
 
@@ -10766,22 +10771,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tp=orientation.value,
     )
 
-  async def iswap_wrist_drive_rotate_to_angle(
+  async def _iswap_wrist_drive_rotate_to_angle(
     self,
     angle: Union[WristDriveOrientation, float],
     speed: int = 20_000,
     acceleration: int = 145,
     current_limit: int = 5,
   ) -> None:
-    """Rotate the iSWAP wrist drive (Joint 2) to an absolute angle or named stop.
+    """Rotate only the iSWAP wrist drive (Joint 2) to an absolute angle.
+
+    Internal single-axis variant kept for troubleshooting direct one-joint
+    motion. The public entry point is `iswap_rotate_to_angles`, which covers
+    this case via `wrist_angle=X, rotation_angle=None` and also drives both
+    joints together when both are supplied.
 
     Passing a `WristDriveOrientation` (RIGHT / STRAIGHT / LEFT / REVERSE) sends
-    the drive to the exact EEPROM-stored increment for that stop -- use this
-    when you need a calibrated landing. Passing a float interprets it as
-    degrees signed from motor zero (0 deg = 0 incr), via the linear
-    `deg_per_increment` conversion. Achievable range is ~+/-152 deg (the
-    +/-30000 incr hardware limits). The rotation drive is held at its
-    current position.
+    the drive to the exact EEPROM-stored increment for that stop. Passing a
+    float interprets it as degrees signed from motor zero (0 deg = 0 incr),
+    via the linear `deg_per_increment` conversion. Achievable range is
+    ~+/-152 deg (the +/-30000 incr hardware limits). The rotation drive is
+    held at its current position.
 
     Args:
       angle: either a `WristDriveOrientation` member (uses EEPROM stop), or
