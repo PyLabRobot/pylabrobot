@@ -459,8 +459,12 @@ class MicroSpinMockServer:
       raise _MockError([f"Error: duration too short: {duration}"])
     self._require_homed()
     self._require_not_aborted()
-    if self.state.door_position > 0:  # door not closed
-      raise _MockError(["Error: door must be closed before spin"])
+
+    # Real-device behaviour: `spin` (and `home`) close the door automatically
+    # before doing anything else. We mirror that here -- if the door is open
+    # when spin is issued, we close it as the first step of the spin motion
+    # rather than rejecting the command.
+    door_was_open = self.state.door_position > 0
 
     # Compute a simulated dwell that scales with duration but is short by
     # default so tests don't sleep for a minute. Tests can override.
@@ -469,6 +473,10 @@ class MicroSpinMockServer:
     async def do_spin():
       self.state.spinning = True
       try:
+        if door_was_open:
+          await asyncio.sleep(self.motion_dwell["cd"])
+          self.state.door_position = -258
+          self.state.at_bucket = None
         await asyncio.sleep(dwell)
       finally:
         self.state.spinning = False

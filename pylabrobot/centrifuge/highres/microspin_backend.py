@@ -251,14 +251,6 @@ class MicroSpinBackend(CentrifugeBackend):
 
   # ------------------------------ CentrifugeBackend abstract methods --------
 
-  async def open_door(self) -> None:
-    """Open the plate-loading door. Sends the firmware ``od`` command."""
-    await self.send_command("od")
-
-  async def close_door(self) -> None:
-    """Close the plate-loading door. Sends the firmware ``cd`` command."""
-    await self.send_command("cd")
-
   async def go_to_bucket1(self) -> None:
     """Present bucket 1 at the load position.
 
@@ -272,15 +264,63 @@ class MicroSpinBackend(CentrifugeBackend):
     """Present bucket 2 at the load position (also opens the door)."""
     await self.send_command("open 2", timeout=max(self.timeout, 60.0))
 
-  # The four lock/unlock primitives below are declared abstract by
+  # The six door/lock primitives below are declared abstract by
   # CentrifugeBackend, but on the MicroSpin they are firmware-internal
   # maintenance commands (see manual §6.7) that the higher-level commands
-  # (``open <bucket>``, ``spin``, ``home``) already handle automatically. We
-  # deliberately do NOT forward them to the wire so callers can't put the
-  # device into a half-managed state by issuing them out-of-band. If you
-  # really need to drive the underlying ``lockdoor`` / ``unlockdoor`` /
-  # ``locknest`` / ``unlocknest`` commands (e.g. for service), use
-  # :meth:`send_command` directly.
+  # (``open <bucket>``, ``spin``, ``home``) already handle automatically:
+  #
+  # * ``open_door`` / ``close_door`` -- on the MicroSpin there is no
+  #   "open the door without choosing a bucket" workflow; door opening
+  #   happens as a side effect of ``open <bucket>``, and door closing
+  #   happens automatically at the start of ``spin`` and ``home``.
+  # * ``lock_door`` / ``unlock_door`` -- pneumatic door lock, driven by
+  #   the firmware during ``spin``.
+  # * ``lock_bucket`` / ``unlock_bucket`` -- nest-lock pin, driven by
+  #   the firmware during ``open <bucket>``.
+  #
+  # We deliberately do NOT forward them to the wire so callers can't put
+  # the device into a half-managed state by issuing them out-of-band. If
+  # you really need to drive the underlying maintenance commands
+  # (``od`` / ``cd`` / ``lockdoor`` / ``unlockdoor`` / ``locknest`` /
+  # ``unlocknest``) directly -- e.g. for service -- use
+  # :meth:`send_command`.
+
+  async def open_door(self) -> None:  # pragma: no cover -- always raises
+    """Not supported on the MicroSpin: there is no door-only open workflow.
+
+    Always raises :class:`NotImplementedError`. The MicroSpin's
+    ``open <bucket>`` firmware command opens the door *and* presents the
+    requested bucket in one shot, which is what callers actually want
+    99% of the time -- see :meth:`go_to_bucket1` / :meth:`go_to_bucket2`.
+    The standalone ``od`` wire command is documented as maintenance-only
+    in manual §6.7 and is deliberately not exposed here. If you really
+    need to drive it (e.g. for service), use
+    ``backend.send_command("od")`` directly.
+    """
+    raise NotImplementedError(
+      "There is no standalone door-open workflow on the MicroSpin. Use "
+      "`go_to_bucket1()` / `go_to_bucket2()` to open the door and present "
+      "a bucket in one step. The underlying `od` command is a "
+      "maintenance primitive (manual §6.7); if you really need it, use "
+      "`backend.send_command('od')`."
+    )
+
+  async def close_door(self) -> None:  # pragma: no cover -- always raises
+    """Not supported on the MicroSpin: door closing is firmware-managed.
+
+    Always raises :class:`NotImplementedError`. The MicroSpin firmware
+    closes the door automatically at the start of :meth:`spin` and
+    :meth:`home`, so application code never needs to issue an explicit
+    close. The standalone ``cd`` wire command is documented as
+    maintenance-only in manual §6.7 and is deliberately not exposed here.
+    If you really need it, use ``backend.send_command("cd")`` directly.
+    """
+    raise NotImplementedError(
+      "Door closing on the MicroSpin happens automatically as part of "
+      "`spin` and `home`. The underlying `cd` command is a maintenance "
+      "primitive (manual §6.7); if you really need it, use "
+      "`backend.send_command('cd')`."
+    )
 
   async def lock_door(self) -> None:  # pragma: no cover -- always raises
     """Not supported on the MicroSpin: door locking is firmware-managed.

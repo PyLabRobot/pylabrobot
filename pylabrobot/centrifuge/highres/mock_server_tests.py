@@ -41,16 +41,6 @@ class MockServerCommandMappingTests(_MockServerTestBase):
   server gives us higher confidence the wire format and ordering are right.
   """
 
-  async def test_open_door_emits_od(self):
-    self.assertLess(self.server.state.door_position, 0)
-    await self.backend.open_door()
-    self.assertGreater(self.server.state.door_position, 0)
-
-  async def test_close_door_emits_cd(self):
-    await self.backend.open_door()
-    await self.backend.close_door()
-    self.assertLess(self.server.state.door_position, 0)
-
   async def test_go_to_bucket1_after_home_lands_at_bucket_1(self):
     await self.backend.home()
     await self.backend.go_to_bucket1()
@@ -150,18 +140,25 @@ class MockServerIntegrationTests(_MockServerTestBase):
     await self.backend.go_to_bucket1()
     self.assertEqual(self.server.state.at_bucket, 1)
 
-  async def test_spin_requires_homed_and_door_closed(self):
+  async def test_spin_requires_homed(self):
     # not homed -> error
     with self.assertRaises(MicroSpinError):
       await self.backend.spin(g=100, duration=1)
-    # home, then leave door open via go_to_bucket1
+    # home -> spin works
+    await self.backend.home()
+    await self.backend.spin(g=100, duration=1)
+
+  async def test_spin_auto_closes_open_door(self):
+    """`spin` should close the door automatically -- callers never have to."""
     await self.backend.home()
     await self.backend.go_to_bucket1()
-    with self.assertRaises(MicroSpinError):
-      await self.backend.spin(g=100, duration=1)
-    # close door -> spin works
-    await self.backend.close_door()
+    # Sanity: bucket is now presented and door is open
+    self.assertEqual(self.server.state.at_bucket, 1)
+    self.assertGreater(self.server.state.door_position, 0)
+    # Spin succeeds despite the open door; afterwards the door is closed.
     await self.backend.spin(g=100, duration=1)
+    self.assertLess(self.server.state.door_position, 0)
+    self.assertIsNone(self.server.state.at_bucket)
 
   async def test_unknown_command_errors(self):
     with self.assertRaises(MicroSpinError):

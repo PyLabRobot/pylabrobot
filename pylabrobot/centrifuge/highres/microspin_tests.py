@@ -276,9 +276,21 @@ class MicroSpinValidationTests(unittest.IsolatedAsyncioTestCase):
     ]
     self.assertEqual(low_g_warnings, [])
 
-  async def test_maintenance_lock_methods_raise_not_implemented(self):
+  async def test_maintenance_door_and_lock_methods_raise_not_implemented(self):
+    """open_door / close_door / the four lock primitives are maintenance-only
+    on the MicroSpin (manual §6.7). They must raise rather than silently
+    sending bytes; the firmware handles door + lock state internally as
+    part of `open <bucket>`, `spin`, and `home`.
+    """
     backend, writer = _make_backend([])
-    for method_name in ("lock_door", "unlock_door", "lock_bucket", "unlock_bucket"):
+    for method_name in (
+      "open_door",
+      "close_door",
+      "lock_door",
+      "unlock_door",
+      "lock_bucket",
+      "unlock_bucket",
+    ):
       with self.assertRaises(NotImplementedError):
         await getattr(backend, method_name)()
     self.assertEqual(_sent_commands(writer), [])
