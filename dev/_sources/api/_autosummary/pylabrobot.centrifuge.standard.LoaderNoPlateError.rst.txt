@@ -1,0 +1,6 @@
+﻿pylabrobot.centrifuge.standard.LoaderNoPlateError
+=================================================
+
+.. currentmodule:: pylabrobot.centrifuge.standard
+
+.. autoexception:: LoaderNoPlateError

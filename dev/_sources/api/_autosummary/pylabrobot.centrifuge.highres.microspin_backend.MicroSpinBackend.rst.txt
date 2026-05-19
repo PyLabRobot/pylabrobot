@@ -1,0 +1,60 @@
+﻿:orphan:
+
+pylabrobot.centrifuge.highres.microspin\_backend.MicroSpinBackend
+=================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.highres.microspin_backend
+
+.. autoclass:: MicroSpinBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MicroSpinBackend.DEFAULT_PORT
+      ~MicroSpinBackend.DEFAULT_SPINDLE_POLL_INTERVAL
+      ~MicroSpinBackend.DEFAULT_SPINDLE_STOP_TIMEOUT
+      ~MicroSpinBackend.LOW_G_WARNING_THRESHOLD
+      ~MicroSpinBackend.MAX_G_FORCE
+      ~MicroSpinBackend.SLOW_DECEL_WARNING_THRESHOLD
+      ~MicroSpinBackend.STUCK_DECEL_WARNING_THRESHOLD
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MicroSpinBackend.__init__
+      ~MicroSpinBackend.abort
+      ~MicroSpinBackend.clear_button_abort
+      ~MicroSpinBackend.close_door
+      ~MicroSpinBackend.deserialize
+      ~MicroSpinBackend.get_all_instances
+      ~MicroSpinBackend.go_to_bucket1
+      ~MicroSpinBackend.go_to_bucket2
+      ~MicroSpinBackend.home
+      ~MicroSpinBackend.is_homed
+      ~MicroSpinBackend.lock_bucket
+      ~MicroSpinBackend.lock_door
+      ~MicroSpinBackend.open_door
+      ~MicroSpinBackend.request_errors
+      ~MicroSpinBackend.request_status
+      ~MicroSpinBackend.request_version
+      ~MicroSpinBackend.reset
+      ~MicroSpinBackend.send_command
+      ~MicroSpinBackend.serialize
+      ~MicroSpinBackend.setup
+      ~MicroSpinBackend.spin
+      ~MicroSpinBackend.stop
+      ~MicroSpinBackend.unlock_bucket
+      ~MicroSpinBackend.unlock_door
+      ~MicroSpinBackend.wait_for_spindle_stopped
+   
+   

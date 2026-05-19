@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Loader.get\_resource
+=====================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Loader.get_resource

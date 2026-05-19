@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Loader.serialize\_state
+========================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Loader.serialize_state

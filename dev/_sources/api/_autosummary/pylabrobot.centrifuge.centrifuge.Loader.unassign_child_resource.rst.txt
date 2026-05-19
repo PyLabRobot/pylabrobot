@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Loader.unassign\_child\_resource
+=================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Loader.unassign_child_resource

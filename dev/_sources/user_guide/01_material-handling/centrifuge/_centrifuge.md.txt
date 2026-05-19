@@ -21,4 +21,5 @@ PLR supports the following centrifuges:
 :maxdepth: 1
 
 agilent_vspin
+highres_microspin
 ```

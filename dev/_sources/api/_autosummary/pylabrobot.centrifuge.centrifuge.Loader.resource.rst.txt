@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Loader.resource
+================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoproperty:: Loader.resource

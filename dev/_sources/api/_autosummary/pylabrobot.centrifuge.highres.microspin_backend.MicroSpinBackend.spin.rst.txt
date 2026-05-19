@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.highres.microspin\_backend.MicroSpinBackend.spin
+======================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.highres.microspin_backend
+
+.. automethod:: MicroSpinBackend.spin

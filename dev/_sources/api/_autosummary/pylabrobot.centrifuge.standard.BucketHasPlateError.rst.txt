@@ -1,0 +1,6 @@
+﻿pylabrobot.centrifuge.standard.BucketHasPlateError
+==================================================
+
+.. currentmodule:: pylabrobot.centrifuge.standard
+
+.. autoexception:: BucketHasPlateError

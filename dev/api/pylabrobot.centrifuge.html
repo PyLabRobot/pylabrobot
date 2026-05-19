@@ -577,6 +577,9 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.html#pylabrobot.centrifuge.centrifuge.Centrifuge" title="pylabrobot.centrifuge.centrifuge.Centrifuge"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centrifuge.Centrifuge</span></code></a></p></td>
 <td><p>The front end for centrifuges.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.centrifuge.Loader.html#pylabrobot.centrifuge.centrifuge.Loader" title="pylabrobot.centrifuge.centrifuge.Loader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centrifuge.Loader</span></code></a></p></td>
+<td><p>The front end for centrifuge loaders.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -586,6 +589,38 @@
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.vspin_backend.VSpinBackend.html#pylabrobot.centrifuge.vspin_backend.VSpinBackend" title="pylabrobot.centrifuge.vspin_backend.VSpinBackend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vspin_backend.VSpinBackend</span></code></a></p></td>
 <td><p>Backend for the Agilent Centrifuge.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinBackend</span></code></a></p></td>
+<td><p>Asynchronous backend for the HighRes Biosolutions MicroSpin centrifuge.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="errors">
+<h2>Errors<a class="headerlink" href="#errors" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.standard.BucketHasPlateError.html#pylabrobot.centrifuge.standard.BucketHasPlateError" title="pylabrobot.centrifuge.standard.BucketHasPlateError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">standard.BucketHasPlateError</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.standard.BucketNoPlateError.html#pylabrobot.centrifuge.standard.BucketNoPlateError" title="pylabrobot.centrifuge.standard.BucketNoPlateError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">standard.BucketNoPlateError</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.standard.CentrifugeDoorError.html#pylabrobot.centrifuge.standard.CentrifugeDoorError" title="pylabrobot.centrifuge.standard.CentrifugeDoorError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">standard.CentrifugeDoorError</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.standard.LoaderNoPlateError.html#pylabrobot.centrifuge.standard.LoaderNoPlateError" title="pylabrobot.centrifuge.standard.LoaderNoPlateError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">standard.LoaderNoPlateError</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.standard.NotAtBucketError.html#pylabrobot.centrifuge.standard.NotAtBucketError" title="pylabrobot.centrifuge.standard.NotAtBucketError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">standard.NotAtBucketError</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinError</span></code></a></p></td>
+<td><p>Raised when the MicroSpin responds with <code class="docutils literal notranslate"><span class="pre">ERROR!</span></code> to a command.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinProtocolError</span></code></a></p></td>
+<td><p>Raised when the MicroSpin emits a response we cannot parse.</p></td>
 </tr>
 </tbody>
 </table>
@@ -641,6 +676,7 @@
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#backends">Backends</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#errors">Errors</a></li>
 </ul>
   </nav></div>
 

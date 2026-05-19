@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Loader.load\_all\_state
+========================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Loader.load_all_state

@@ -1,0 +1,388 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "f5b94f96",
+   "metadata": {},
+   "source": [
+    "# HighRes Biosolutions MicroSpin\n",
+    "\n",
+    "The MicroSpin is a sealed automated microplate centrifuge from HighRes Biosolutions. It has two swing-out buckets (1 SBS plate per bucket), spins up to 3000 ×g (4729 RPM), and is driven over TCP/IP -- there is no separate USB driver or FTDI library needed.\n",
+    "\n",
+    "It is controlled by the {class}`~pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend` class and the {func}`~pylabrobot.centrifuge.highres.microspin.MicroSpin` factory.\n",
+    "\n",
+    "Reference: HighRes Biosolutions, MicroSpin User Manual (document 1058675).\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b3f4d99d",
+   "metadata": {},
+   "source": [
+    "## 1. Network configuration\n",
+    "\n",
+    "The MicroSpin ships with a static IP address printed on the product label (factory default `192.168.127.60`, mask `255.255.255.0`). To talk to it you need to put your computer on the same subnet, or change the device's IP to one that fits your network.\n",
+    "\n",
+    "There are two ways to find/change the IP:\n",
+    "\n",
+    "1. **Direct-attached (Ethernet point-to-point).** Connect the MicroSpin to a wired NIC on your computer (e.g. via a USB-to-Ethernet adapter). Configure that NIC with a static address such as `192.168.127.10 / 255.255.255.0`. Then open `http://<microspin-ip>/network.html` in a browser, and either:\n",
+    "   - switch the device to **DHCP** (recommended for lab networks with a DHCP server), or\n",
+    "   - enter a **static IP** in your lab's subnet plus the appropriate gateway.\n",
+    "\n",
+    "   The same page also exposes a **Server Port** setting (factory default 1000); change it here if 1000 conflicts with something else on your network, and remember to pass the matching `port=...` when constructing `MicroSpin(...)` in Python.\n",
+    "\n",
+    "   After saving, wait ~30 seconds, then reboot the MicroSpin (back-panel power switch).\n",
+    "\n",
+    "2. **Plug into the lab network directly.** If the device is already DHCP-enabled, find its lease on your DHCP server using the MAC address printed on the product label (the OUI is `00:d0:69`, assigned to Technologic Systems, who make the embedded controller inside the MicroSpin).\n",
+    "\n",
+    "Once you know the IP, you can verify connectivity with a simple `ping` before going any further.\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "102ad3dc",
+   "metadata": {},
+   "source": [
+    "## 2. Connecting from PLR\n",
+    "\n",
+    "The {func}`~pylabrobot.centrifuge.highres.microspin.MicroSpin` factory returns a fully configured {class}`~pylabrobot.centrifuge.centrifuge.Centrifuge`. Unlike the VSpin + Access2 combo, no separate `Loader` is needed: an integration arm (or a human) places plates directly into the presented bucket.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d6079238",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.centrifuge import MicroSpin\n",
+    "\n",
+    "# Default: port 1000 (the MicroSpin's factory default).\n",
+    "cf = MicroSpin(name=\"microspin\", host=\"192.168.127.60\")\n",
+    "\n",
+    "# If your device has been reconfigured (Server Port setting on /network.html),\n",
+    "# pass the matching port explicitly:\n",
+    "# cf = MicroSpin(name=\"microspin\", host=\"192.168.127.60\", port=2300)\n",
+    "\n",
+    "await cf.setup()  # opens a TCP connection to the configured port\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "924995f5",
+   "metadata": {},
+   "source": [
+    "## 3. Homing\n",
+    "\n",
+    "The MicroSpin needs to be homed once after every power-cycle before bucket or spin commands are accepted. The backend exposes `home()` and `is_homed()` for this:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "91c23cb3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if not await cf.backend.is_homed():\n",
+    "    await cf.backend.home()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "58d6e7ac",
+   "metadata": {},
+   "source": [
+    "## 4. Reading status & version\n",
+    "\n",
+    "Two read-only helpers are convenient for diagnostics:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d30ab739",
+   "metadata": {},
+   "outputs": [],
+   "source": "await cf.backend.request_version()\n# {'Product Name': 'RandomServe', 'Serial Number': 'HRB-...',\n#  'Version': 'MS-1.3.3', 'Firmware Build': '...'}\n"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6984b371",
+   "metadata": {},
+   "outputs": [],
+   "source": "await cf.backend.request_status()\n# {'Spindle Position': '1958', 'Door Position': '-457'}\n"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7fb071d2",
+   "metadata": {},
+   "source": [
+    "## 5. Positioning buckets\n",
+    "\n",
+    "The MicroSpin's `open <bucket>` firmware command both opens the door and rotates the chosen bucket into the load position; PLR exposes this as `go_to_bucket1()` / `go_to_bucket2()`. There is no separate \"open the door without a bucket\" workflow.\n",
+    "\n",
+    "Door closing is handled automatically by the firmware at the start of `spin` and `home`, so application code never has to issue a close. The pneumatic door lock and the nest-pin that holds plates during loading are likewise managed by the firmware as part of `open <bucket>` and `spin` -- none of these primitives (`od`, `cd`, `lockdoor`, `unlockdoor`, `locknest`, `unlocknest`) are exposed as standalone calls on the MicroSpin backend; the manual classifies them all as maintenance commands (§6.7).\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "935d0e90",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Open the door and present bucket 1 in one step\n",
+    "await cf.go_to_bucket1()\n",
+    "\n",
+    "# Or bucket 2\n",
+    "# await cf.go_to_bucket2()\n",
+    "\n",
+    "# The next spin or home will close the door automatically; no explicit\n",
+    "# close call is needed (and is in fact disabled on this backend).\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "32fe9d83",
+   "metadata": {},
+   "source": [
+    "## 6. Spinning\n",
+    "\n",
+    "```{warning}\n",
+    "**Pre-spin checklist (manual §§5.3, 7, 8):**\n",
+    "\n",
+    "- The device must be homed (see step 3).\n",
+    "- The shipping tie-wraps that hold the buckets to the rotor MUST be removed -- starting a spin with them in place will damage the buckets.\n",
+    "- Both buckets must be properly seated on the rotor pins, swing freely, and the bucket pivot pins must not protrude.\n",
+    "- The payload must be balanced (max 15 g imbalance at full speed, up to 75 g at lower speeds).\n",
+    "- The chamber must be free of debris.\n",
+    "- Compressed air must be supplied at 70-135 psi.\n",
+    "\n",
+    "(The door is closed automatically by the firmware at the start of `spin` / `home`, so it does not need to be closed by the caller.)\n",
+    "\n",
+    "The MicroSpin does not have biosafety seals -- do not centrifuge hazardous, flammable, or corrosive materials.\n",
+    "```\n",
+    "\n",
+    "PLR's `spin()` takes:\n",
+    "\n",
+    "- `g`: G-force in ×g (valid range 1-3000)\n",
+    "- `duration`: time at speed in seconds (≥ 1)\n",
+    "- `acceleration`: ramp-up rate as a fraction (0, 1]\n",
+    "- `deceleration`: ramp-down rate as a fraction (0, 1]\n",
+    "\n",
+    "The backend converts the 0-1 fractions to the integer 0-100 percentages the firmware expects.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "997c455e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await cf.spin(\n",
+    "    g=500,\n",
+    "    duration=60,        # seconds\n",
+    "    acceleration=1.0,   # 0-1 fraction of max\n",
+    "    deceleration=1.0,   # 0-1 fraction of max\n",
+    ")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e3a6810c",
+   "metadata": {},
+   "source": [
+    "```{warning}\n",
+    "**Slow / stuck deceleration:** Low `deceleration` values cause noticeably long spin-downs, and very low ones can hang the firmware entirely. The backend emits a `UserWarning` at two tiers:\n",
+    "\n",
+    "* `deceleration < 0.40` (40 %) -- \"long spin-down expected\". A tested `spin 1000 100 20 10` (decel = 0.20) took ~7 minutes from full speed to stopped. Make sure your `wait_for_spindle_stopped` budget covers this.\n",
+    "* `deceleration < 0.20` (20 %) -- \"possible firmware hang\". A tested `spin 1000 100 10 10` (decel = 0.10) ran for >30 minutes without ever reporting spin-down. Recovery is the same as for the low-G hang below.\n",
+    "```\n",
+    "\n",
+    "```{warning}\n",
+    "**Low-G hang:** Spinning at less than ~30 ×g is known to occasionally hang the firmware. The spindle \"stopped\" sensor sometimes fails to latch when the rotor decelerates from a very low speed, so no `OK!` completion line is emitted and every subsequent command times out. The backend will emit a `UserWarning` if you call `spin()` with `g < 30`. If you hit the hang, the recovery path is:\n",
+    "\n",
+    "```python\n",
+    "await cf.backend.abort()\n",
+    "await cf.backend.clear_button_abort()\n",
+    "```\n",
+    "\n",
+    "If the device still won't respond, power-cycle it from the back-panel switch.\n",
+    "```\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "988b0cdd",
+   "metadata": {},
+   "source": [
+    "## 7. Recovering from a stuck or aborted state\n",
+    "\n",
+    "`abort()` requests a decel + stop. After an abort the firmware enters a latched abort state that must be cleared before any further motion commands will run.\n",
+    "\n",
+    "A subtlety: `abort` and `clearbuttonabort` both return `OK!` **as soon as the firmware accepts the request** -- they do *not* wait for the rotor to actually spin down. The real \"we are stopped\" gate is the `status` command: while motion is in progress, the firmware queues `status` behind it and only answers once motion has completed. The MicroSpin backend uses this property in `reset()`, which is therefore the canonical \"really, fully back to idle\" call:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ad40dddd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Sends abort, then clearbuttonabort, then status (which blocks until\n",
+    "# the spindle has actually stopped). Returns the final status report.\n",
+    "final_status = await cf.backend.reset()\n",
+    "print(final_status)\n",
+    "# {'Spindle Position': '...', 'Door Position': '...'}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8441c6c3",
+   "metadata": {},
+   "source": [
+    "`reset()` swallows errors from the `abort` step by default (it's common for the firmware to reject abort if there's nothing to abort), so it's safe as a generic \"get me back to a known state\" routine. The arguments let you tune each phase:\n",
+    "\n",
+    "- `swallow_abort_errors=False` -- propagate any error from the abort step instead of ignoring it\n",
+    "- `wait_for_settle=False` -- skip the final `status` gate (just clear the abort latch, don't wait for the rotor)\n",
+    "- `abort_timeout=...` / `settle_timeout=...` -- override the per-step timeouts\n",
+    "\n",
+    "If you only want the \"wait for actual stop\" gate without changing any state, use `wait_for_spindle_stopped()` -- it sends a single `status` with a generous timeout and returns the parsed result:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f5029b27",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Block until the firmware confirms the rotor is fully stopped.\n",
+    "status = await cf.backend.wait_for_spindle_stopped()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "68e263c4",
+   "metadata": {},
+   "source": [
+    "You can of course still call the two primitives directly if you need finer control. Remember that without the `status` step, you do NOT have confirmation that the rotor has actually spun down -- just that the abort latch was set/cleared:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "93c2434b",
+   "metadata": {},
+   "outputs": [],
+   "source": "await cf.backend.abort()              # request OK; rotor may still be spinning\nawait cf.backend.clear_button_abort() # latch cleared; rotor may still be spinning\nstatus = await cf.backend.request_status() # NOW we know we're really stopped\n"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b76bed47",
+   "metadata": {},
+   "source": "## 8. Error stack\n\nThe MicroSpin maintains an internal error stack. `request_errors(n)` returns the top `n` lines (default 10):\n"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "94eac76d",
+   "metadata": {},
+   "outputs": [],
+   "source": "await cf.backend.request_errors(10)\n"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2ff390d5",
+   "metadata": {},
+   "source": [
+    "## 9. Sending raw commands\n",
+    "\n",
+    "For advanced use, `send_command()` exposes the underlying ASCII protocol. It returns the data lines emitted between `ACK!` and `OK!`, and raises {class}`~pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError` on `ERROR!`. See manual §6.6 for the protocol; use `list` and `info` to enumerate commands the device supports:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0bc961a5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await cf.backend.send_command(\"list\")     # public commands\n",
+    "# await cf.backend.send_command(\"list all\") # includes maintenance commands\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "bfcb2439",
+   "metadata": {},
+   "source": [
+    "## 10. Developing without a real device\n",
+    "\n",
+    "Bringing a 43 kg centrifuge into your apartment for testing is suboptimal. PLR ships an in-process mock TCP server that speaks the MicroSpin command protocol faithfully enough for the `MicroSpinBackend` to drive it end-to-end. Use it from Python:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "43c67d77",
+   "metadata": {},
+   "outputs": [],
+   "source": "import asyncio\nfrom pylabrobot.centrifuge import MicroSpin\nfrom pylabrobot.centrifuge.highres.mock_server import MicroSpinMockServer\n\nasync def demo():\n    async with MicroSpinMockServer() as srv:\n        cf = MicroSpin(name=\"mock-microspin\", host=srv.host, port=srv.port)\n        await cf.setup()\n        await cf.backend.home()\n        print(await cf.backend.request_version())\n        # The mock implements `status`-blocks-during-motion, so reset(), abort\n        # recovery, and the low-G hang are all reproducible in tests.\n        await cf.stop()\n\n# await demo()  # uncomment to run from a notebook\n"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "314c2e82",
+   "metadata": {},
+   "source": [
+    "Or hand-drive it with `nc` / `telnet` after starting it as a script -- handy when you want to poke at the wire protocol directly:\n",
+    "\n",
+    "```bash\n",
+    "python -m pylabrobot.centrifuge.highres.mock_server --port 1000\n",
+    "# then, in another terminal:\n",
+    "nc 127.0.0.1 1000\n",
+    "```\n",
+    "\n",
+    "A few capabilities worth knowing about for tests:\n",
+    "\n",
+    "- `srv.motion_dwell[\"home\"] = 0.5` -- slow down motions to race against them.\n",
+    "- `srv.state.simulate_low_g_hang = True` -- reproduce the firmware bug where `status` never returns after a spin (see [§6 Spinning](#6-spinning)).\n",
+    "- Inspect `srv.state.homed`, `srv.state.at_bucket`, etc. directly from your test code.\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1ed4571a",
+   "metadata": {},
+   "source": [
+    "## 11. Cleaning up\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d3aba74b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await cf.stop()  # closes the TCP connection\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

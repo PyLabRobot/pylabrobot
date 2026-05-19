@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Loader.save\_state\_to\_file
+=============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Loader.save_state_to_file

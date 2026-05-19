@@ -1,0 +1,84 @@
+﻿:orphan:
+
+pylabrobot.centrifuge.centrifuge.Loader
+=======================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoclass:: Loader
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Loader.name
+      ~Loader.resource
+      ~Loader.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Loader.__init__
+      ~Loader.assign_child_by_anchor
+      ~Loader.assign_child_resource
+      ~Loader.at
+      ~Loader.center
+      ~Loader.centers
+      ~Loader.check_can_drop_resource_here
+      ~Loader.copy
+      ~Loader.deregister_did_assign_resource_callback
+      ~Loader.deregister_did_unassign_resource_callback
+      ~Loader.deregister_state_update_callback
+      ~Loader.deregister_will_assign_resource_callback
+      ~Loader.deregister_will_unassign_resource_callback
+      ~Loader.deserialize
+      ~Loader.get_absolute_location
+      ~Loader.get_absolute_rotation
+      ~Loader.get_absolute_size_x
+      ~Loader.get_absolute_size_y
+      ~Loader.get_absolute_size_z
+      ~Loader.get_all_children
+      ~Loader.get_anchor
+      ~Loader.get_default_child_location
+      ~Loader.get_highest_known_point
+      ~Loader.get_location_wrt
+      ~Loader.get_resource
+      ~Loader.get_root
+      ~Loader.get_size_x
+      ~Loader.get_size_y
+      ~Loader.get_size_z
+      ~Loader.is_in_subtree_of
+      ~Loader.load
+      ~Loader.load_all_state
+      ~Loader.load_from_json_file
+      ~Loader.load_state
+      ~Loader.load_state_from_file
+      ~Loader.named
+      ~Loader.register_did_assign_resource_callback
+      ~Loader.register_did_unassign_resource_callback
+      ~Loader.register_state_update_callback
+      ~Loader.register_will_assign_resource_callback
+      ~Loader.register_will_unassign_resource_callback
+      ~Loader.rotate
+      ~Loader.rotated
+      ~Loader.save
+      ~Loader.save_state_to_file
+      ~Loader.serialize
+      ~Loader.serialize_all_state
+      ~Loader.serialize_state
+      ~Loader.setup
+      ~Loader.stop
+      ~Loader.unassign
+      ~Loader.unassign_child_resource
+      ~Loader.unload
+   
+   
