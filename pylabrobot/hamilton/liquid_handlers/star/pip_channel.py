@@ -299,7 +299,6 @@ class PIPChannel:
 
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm
-  DEFAULT_TIP_FITTING_DEPTH = 8  # mm
 
   async def move_tool_z(self, z: float):
     """Move this channel in the Z direction, referenced to the tip/tool end (mm).
@@ -319,8 +318,8 @@ class PIPChannel:
 
     tip_len = await self.request_tip_length()
 
-    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
+    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
 
     if not (min_tip_z <= z <= max_tip_z):
       raise ValueError(
@@ -346,6 +345,30 @@ class PIPChannel:
     """
     assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
     return await self.driver.left_x_arm.request_position()
+
+  async def move_x(self, x: float):
+    """Move this channel in the X direction (mm).
+
+    All PIP channels share the X arm, so this delegates to ``STARXArm.move_to``.
+    Enforces the left-side-panel minimum X when applicable.
+    """
+    assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
+    return await self.driver.left_x_arm.move_to(x)
+
+  async def move_x_relative(self, distance: float):
+    """Move this channel in the X direction by a relative amount (mm)."""
+    current_x = await self.request_x_pos()
+    await self.move_x(current_x + distance)
+
+  async def move_y_relative(self, distance: float):
+    """Move this channel in the Y direction by a relative amount (mm)."""
+    current_y = await self.request_y_pos()
+    await self.move_y(current_y + distance)
+
+  async def move_tool_z_relative(self, distance: float):
+    """Move this channel in the Z direction (tool-end reference) by a relative amount (mm)."""
+    current_z = await self.request_tip_bottom_z_position()
+    await self.move_tool_z(current_z + distance)
 
   # -- C0:RB  request Y position ------------------------------------------------
 

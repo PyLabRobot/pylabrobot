@@ -801,7 +801,7 @@ def star_firmware_string_to_error(
         int(error_code_str),
         int(trace_information_str),
       )
-      if error_code == 0:  # No error
+      if error_code == 0 and trace_information == 0:  # No error
         continue
       error_class = error_code_to_exception(error_code)
     elif module_id == "I0" and error == "36":

@@ -612,19 +612,39 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   async def move_gripper(
     self,
-    width: float,
+    width: Optional[float] = None,
     force_sensing: bool = False,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move the iSWAP gripper jaws.
 
     Args:
-      width: Target jaw width [mm]. Must be between 0 and 999.9.
+      width: Target jaw width [mm]. Must be between 0 and 999.9. If None and
+        ``force_sensing=False``, the iSWAP-version-appropriate default open
+        position is used (91.0 mm for iSWAP firmware before 2020, 132.0 mm
+        otherwise — matches the legacy ``iswap_open_gripper`` default).
       force_sensing: If True, close with force feedback (C0 GC) and stop on
         contact. If False, drive the jaws to ``width`` without sensing (C0 GF).
       backend_params: iSWAP.GripParams. Only valid when ``force_sensing=True``;
         passing it with ``force_sensing=False`` raises ``ValueError``.
     """
+    if width is None:
+      if force_sensing:
+        raise ValueError("width is required when force_sensing=True")
+      # Pick the open default based on iSWAP firmware vintage.
+      fw_version = getattr(self, "_version", None)
+      width = 91.0
+      try:
+        if fw_version and fw_version != "chatterbox":
+          # Hamilton iSWAP 4 firmware (≥ 2020-01-01) opens wider by default.
+          import re as _re
+
+          m = _re.search(r"\b(20\d{2})\b", str(fw_version))
+          if m and int(m.group(1)) >= 2020:
+            width = 132.0
+      except Exception:
+        pass
+
     if not 0 <= width <= 999.9:
       raise ValueError("width must be between 0 and 999.9")
 
@@ -871,7 +891,8 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
     Args:
       minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
-        Must be between 0 and 360.0. Default 360.0.
+        Must be between 0 and 360.0. Default 280.0 (matches the iSWAP default
+        `traversal_height`).
       collision_control_level: Collision control level (0 = low, 1 = high). Must be
         0 or 1. Default 1.
       acceleration_index_high_acc: Acceleration index for high acceleration phases.
@@ -880,7 +901,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
         Must be between 0 and 4. Default 1.
     """
 
-    minimum_traverse_height: float = 360.0
+    minimum_traverse_height: float = 280.0
     collision_control_level: int = 1
     acceleration_index_high_acc: int = 4
     acceleration_index_low_acc: int = 1

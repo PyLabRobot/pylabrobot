@@ -69,14 +69,18 @@ class CoreGripper(GripperArmBackend):
     open_gripper_position = resource_width + 3.0
     plate_width = resource_width - 3.0
 
-    if not 0 <= abs(location.x) <= 3000.0:
+    if not -3000.0 <= location.x <= 3000.0:
       raise ValueError("x_position must be between -3000.0 and 3000.0")
-    if not 0 <= abs(location.y) <= 650.0:
-      raise ValueError("y_position must be between -650.0 and 650.0")
-    if not 0 <= abs(location.z) <= 360.0:
-      raise ValueError("z_position must be between -360.0 and 360.0")
+    if not 0 <= location.y <= 650.0:
+      raise ValueError("y_position must be between 0 and 650.0")
+    if not 0 <= location.z <= 360.0:
+      raise ValueError("z_position must be between 0 and 360.0")
     if not 0 <= backend_params.grip_strength <= 99:
       raise ValueError("grip_strength must be between 0 and 99")
+    if not 0 <= backend_params.y_gripping_speed <= 160.0:
+      raise ValueError("y_gripping_speed must be between 0 and 160.0 mm/s")
+    if not 0 <= backend_params.z_speed <= 160.0:
+      raise ValueError("z_speed must be between 0 and 160.0 mm/s")
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
     if not 0 <= backend_params.z_position_at_end <= 360.0:
@@ -87,9 +91,9 @@ class CoreGripper(GripperArmBackend):
       command="ZP",
       xs=f"{abs(round(location.x * 10)):05}",
       xd=int(location.x < 0),
-      yj=f"{abs(round(location.y * 10)):04}",
+      yj=f"{round(location.y * 10):04}",
       yv=f"{round(backend_params.y_gripping_speed * 10):04}",
-      zj=f"{abs(round(location.z * 10)):04}",
+      zj=f"{round(location.z * 10):04}",
       zy=f"{round(backend_params.z_speed * 10):04}",
       yo=f"{round(open_gripper_position * 10):04}",
       yg=f"{round(plate_width * 10):04}",
@@ -135,12 +139,16 @@ class CoreGripper(GripperArmBackend):
 
     open_gripper_position = resource_width + 3.0
 
-    if not 0 <= abs(location.x) <= 3000.0:
+    if not -3000.0 <= location.x <= 3000.0:
       raise ValueError("x_position must be between -3000.0 and 3000.0")
-    if not 0 <= abs(location.y) <= 650.0:
-      raise ValueError("y_position must be between -650.0 and 650.0")
-    if not 0 <= abs(location.z) <= 360.0:
-      raise ValueError("z_position must be between -360.0 and 360.0")
+    if not 0 <= location.y <= 650.0:
+      raise ValueError("y_position must be between 0 and 650.0")
+    if not 0 <= location.z <= 360.0:
+      raise ValueError("z_position must be between 0 and 360.0")
+    if not 0 <= backend_params.z_press_on_distance <= 5.0:
+      raise ValueError("z_press_on_distance must be between 0 and 5.0 mm")
+    if not 0 <= backend_params.z_speed <= 160.0:
+      raise ValueError("z_speed must be between 0 and 160.0 mm/s")
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
     if not 0 <= backend_params.z_position_at_end <= 360.0:
@@ -151,8 +159,8 @@ class CoreGripper(GripperArmBackend):
       command="ZR",
       xs=f"{abs(round(location.x * 10)):05}",
       xd=int(location.x < 0),
-      yj=f"{abs(round(location.y * 10)):04}",
-      zj=f"{abs(round(location.z * 10)):04}",
+      yj=f"{round(location.y * 10):04}",
+      zj=f"{round(location.z * 10):04}",
       zi=f"{round(backend_params.z_press_on_distance * 10):03}",
       zy=f"{round(backend_params.z_speed * 10):04}",
       yo=f"{round(open_gripper_position * 10):04}",
@@ -190,12 +198,16 @@ class CoreGripper(GripperArmBackend):
     if not isinstance(backend_params, CoreGripper.MoveToLocationParams):
       backend_params = CoreGripper.MoveToLocationParams()
 
-    if not 0 <= abs(location.x) <= 3000.0:
+    if not -3000.0 <= location.x <= 3000.0:
       raise ValueError("x_position must be between -3000.0 and 3000.0")
-    if not 0 <= abs(location.y) <= 650.0:
-      raise ValueError("y_position must be between -650.0 and 650.0")
-    if not 0 <= abs(location.z) <= 360.0:
-      raise ValueError("z_position must be between -360.0 and 360.0")
+    if not 0 <= location.y <= 650.0:
+      raise ValueError("y_position must be between 0 and 650.0")
+    if not 0 <= location.z <= 360.0:
+      raise ValueError("z_position must be between 0 and 360.0")
+    if not 0 <= backend_params.acceleration_index <= 4:
+      raise ValueError("acceleration_index must be between 0 and 4")
+    if not 0 <= backend_params.z_speed <= 160.0:
+      raise ValueError("z_speed must be between 0 and 160.0 mm/s")
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
 
@@ -205,8 +217,8 @@ class CoreGripper(GripperArmBackend):
       xs=f"{abs(round(location.x * 10)):05}",
       xd=int(location.x < 0),
       xg=backend_params.acceleration_index,
-      yj=f"{abs(round(location.y * 10)):04}",
-      zj=f"{abs(round(location.z * 10)):04}",
+      yj=f"{round(location.y * 10):04}",
+      zj=f"{round(location.z * 10):04}",
       zy=f"{round(backend_params.z_speed * 10):04}",
       th=f"{round(backend_params.minimum_traverse_height * 10):04}",
     )
@@ -246,3 +258,50 @@ class CoreGripper(GripperArmBackend):
     raise NotImplementedError(
       "CoreGripper does not support park. Tool management is handled by the STAR backend."
     )
+
+  async def check_resource_exists_at_location_center(
+    self,
+    location: Coordinate,
+    resource_size_y: float,
+    gripper_y_margin: float = 0.5,
+    minimum_traverse_height: float = 275.0,
+    z_position_at_end: float = 275.0,
+  ) -> bool:
+    """Check that a resource is present at the given center location.
+
+    Performs a "Get plate" CoRe-gripper bump at ``location``: if the firmware
+    reports a "resource present" trace (information code 62) the bump was
+    blocked by the resource and we return True. Any other firmware-error trace
+    is re-raised. If the CoRe-gripper bump completes without error, the
+    resource was not present and we return False.
+
+    Args:
+      location: Target center position [mm] of the resource to probe.
+      resource_size_y: The Y-extent of the expected resource [mm].
+      gripper_y_margin: Margin between gripper jaws and resource walls [mm].
+      minimum_traverse_height: Traversal height at start [mm].
+      z_position_at_end: Z position at end [mm].
+    """
+    # Lazy import to avoid a cycle (errors imports nothing from this module).
+    from .errors import STARFirmwareError
+
+    y_width_to_gripper_bump = resource_size_y - gripper_y_margin * 2
+
+    try:
+      await self.pick_up_at_location(
+        location=location,
+        resource_width=y_width_to_gripper_bump,
+        backend_params=CoreGripper.PickUpParams(
+          y_gripping_speed=50.0,
+          z_speed=60.0,
+          grip_strength=20,
+          minimum_traverse_height=minimum_traverse_height,
+          z_position_at_end=z_position_at_end,
+        ),
+      )
+    except STARFirmwareError as exc:
+      for module_error in exc.errors.values():
+        if module_error.trace_information == 62:
+          return True
+      raise
+    return False

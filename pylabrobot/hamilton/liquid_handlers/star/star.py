@@ -35,34 +35,52 @@ class _HamiltonSTAR(Device):
     self.head96: Optional[Head96] = None  # set in setup() if installed
     self.iswap: Optional[OrientableGripperArm] = None  # set in setup() if installed
 
-  async def setup(self, backend_params: Optional[BackendParams] = None):
+  async def setup(
+    self,
+    backend_params: Optional[BackendParams] = None,
+    *,
+    skip_pip: bool = False,
+    skip_iswap: bool = False,
+    skip_core96_head: bool = False,
+    skip_autoload: bool = False,
+  ):
+    """Set up the STAR. Optional skip flags mirror the legacy backend.
+
+    Args:
+      backend_params: forwarded to the driver setup.
+      skip_pip: if True, do not initialize the PIP capability.
+      skip_iswap: if True, do not initialize the iSWAP capability.
+      skip_core96_head: if True, do not initialize the 96-head capability.
+      skip_autoload: if True, do not initialize the autoload.
+    """
     await self.driver.setup(backend_params=backend_params)
 
     # PIP is always present.
     self.pip = PIP(backend=self.driver.pip, deck=self.deck)
     self._capabilities = [self.pip]
 
-    # Head96 only if the hardware has a 96-head installed.
-    if self.driver.head96 is not None:
+    # Head96 only if the hardware has a 96-head installed and the user did not opt out.
+    if self.driver.head96 is not None and not skip_core96_head:
       self.head96 = Head96(backend=self.driver.head96, deck=self.deck)
       self._capabilities.append(self.head96)
 
-    # iSWAP only if installed.
-    if self.driver.iswap is not None:
+    # iSWAP only if installed and the user did not opt out.
+    if self.driver.iswap is not None and not skip_iswap:
       self.iswap = OrientableGripperArm(backend=self.driver.iswap, reference_resource=self.deck)
       self._capabilities.append(self.iswap)
 
     # Matches legacy: autoload runs in parallel with arm modules.
     # Arm modules run sequentially (pip → iswap → head96) because they share the left x-arm.
     async def setup_arm_modules():
-      await self.pip._on_setup()
-      if self.iswap is not None:
+      if not skip_pip:
+        await self.pip._on_setup()
+      if self.iswap is not None and not skip_iswap:
         await self.iswap._on_setup()
-      if self.head96 is not None:
+      if self.head96 is not None and not skip_core96_head:
         await self.head96._on_setup()
 
     async def setup_autoload():
-      if self.driver.autoload is not None:
+      if self.driver.autoload is not None and not skip_autoload:
         await self.driver.autoload._on_setup()
 
     await asyncio.gather(setup_autoload(), setup_arm_modules())
@@ -75,6 +93,50 @@ class _HamiltonSTAR(Device):
     self._setup_finished = False
     self.head96 = None
     self.iswap = None
+
+  # -- traversal-height convenience aliases ----------------------------------
+  #
+  # Mirror the top-level API from the legacy STARBackend: `set_minimum_channel_
+  # traversal_height` updates the PIP backend's traversal height, and
+  # `set_minimum_iswap_traversal_height` / `iswap_minimum_traversal_height`
+  # update / context-scope the iSWAP backend's traversal height.
+
+  def set_minimum_channel_traversal_height(self, traversal_height: float) -> None:
+    """Set the minimum traversal height (mm) for all PIP-channel operations."""
+    if not 0 < traversal_height < 285:
+      raise ValueError("Traversal height must be between 0 and 285 mm")
+    pip = getattr(self.driver, "pip", None)
+    if pip is None:
+      raise RuntimeError("STAR has not been set up yet; call setup() first.")
+    pip.traversal_height = traversal_height
+    if self.driver.head96 is not None:
+      self.driver.head96.traversal_height = traversal_height
+
+  def set_minimum_iswap_traversal_height(self, traversal_height: float) -> None:
+    """Set the minimum traversal height (mm) for iSWAP plate movements."""
+    if self.driver.iswap is None:
+      raise RuntimeError(
+        "iSWAP is not installed or STAR has not been set up; cannot set its traversal height."
+      )
+    if not 0 < traversal_height < 285:
+      raise ValueError("Traversal height must be between 0 and 285 mm")
+    self.driver.iswap.traversal_height = traversal_height
+
+  def set_minimum_traversal_height(self, traversal_height: float) -> None:
+    """Deprecated: use ``set_minimum_channel_traversal_height`` /
+    ``set_minimum_iswap_traversal_height`` instead."""
+    raise NotImplementedError(
+      "set_minimum_traversal_height is deprecated. Use "
+      "set_minimum_channel_traversal_height or set_minimum_iswap_traversal_height instead."
+    )
+
+  @asynccontextmanager
+  async def iswap_minimum_traversal_height(self, traversal_height: float):
+    """Context-manage the iSWAP traversal height for the duration of the block."""
+    if self.driver.iswap is None:
+      raise RuntimeError("iSWAP is not installed; cannot set its traversal height.")
+    with self.driver.iswap.use_traversal_height(traversal_height):
+      yield
 
   # -- CoRe grippers ---------------------------------------------------------
 
@@ -108,6 +170,17 @@ class _HamiltonSTAR(Device):
     back_y = int(loc.y + core_grippers_resource.back_channel_y_center + back_offset.y)
     front_y = int(loc.y + core_grippers_resource.front_channel_y_center + front_offset.y)
     z_offset = front_offset.z
+
+    if back_y <= front_y:
+      raise ValueError(
+        f"back_channel_y ({back_y}) must be > front_channel_y ({front_y}) for CoRe gripper pickup"
+      )
+    ext = self.driver.extended_conf
+    if front_y < ext.left_arm_min_y_position:
+      raise ValueError(
+        f"front_channel_y ({front_y}) is below the left arm's minimum y "
+        f"position ({ext.left_arm_min_y_position})"
+      )
 
     await self.driver.pick_up_core_gripper_tools(
       x_position=xs,
