@@ -161,7 +161,7 @@ class ExperimentalSparkBackend(PlateReaderBackend):
   async def _setup_fluorescence(
     self,
     ex_wavelength: Union[int, str],
-    em_wavelength: int,
+    em_wavelength: Union[int, str],
     bandwidth: int,
     num_reads: int,
     gain: int,
@@ -324,7 +324,7 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       for wl, data_matrix in sorted(spectrum_data.items())
     ]
 
-  async def experimental_read_fluorescence_spectrum(
+  async def experimental_read_fluorescence_excitation_spectrum(
     self,
     plate: Plate,
     wells: List[Well],
@@ -392,6 +392,76 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         "data": data_matrix,
       }
       for ex_wl, data_matrix in sorted(spectrum_data.items())
+    ]
+
+  async def experimental_read_fluorescence_emission_spectrum(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    excitation_wavelength: int,
+    emission_wavelength_start: int,
+    emission_wavelength_end: int,
+    emission_wavelength_step: int = 10,
+    focal_height: float = 20000,
+    bandwidth: int = 200,
+    num_reads: int = 30,
+    gain: int = 100,
+  ) -> List[Dict[str, object]]:
+    """Read fluorescence across a range of emission wavelengths (emission spectrum scan).
+
+    The excitation wavelength is fixed, and the emission wavelength sweeps across
+    the range. The Spark firmware handles the sweep natively.
+
+    Args:
+      plate: The plate resource.
+      wells: Wells to scan.
+      excitation_wavelength: Fixed excitation wavelength in nm.
+      emission_wavelength_start: Start emission wavelength in nm.
+      emission_wavelength_end: End emission wavelength in nm.
+      emission_wavelength_step: Step size in nm (default 10).
+      focal_height: Z focal height in device units (default 20000).
+      bandwidth: Monochromator bandwidth in deci-tenths of nm (default 200 = 20nm).
+      num_reads: Number of reads per wavelength step (default 30).
+      gain: Signal gain (default 100).
+
+    Returns:
+      A list of dicts, one per emission wavelength step. Each contains:
+        ``ex_wavelength`` (int), ``em_wavelength`` (float), ``time`` (float),
+        ``temperature`` (float), ``data`` (List[List[float]]).
+    """
+
+    if SparkDevice.FLUORESCENCE not in self.reader.devices:
+      raise RuntimeError(
+        "FLUORESCENCE device is not connected. Cannot perform fluorescence emission spectrum scan."
+      )
+
+    if emission_wavelength_start >= emission_wavelength_end:
+      raise ValueError("emission_wavelength_start must be less than emission_wavelength_end")
+    if emission_wavelength_step <= 0:
+      raise ValueError("emission_wavelength_step must be positive")
+
+    # Firmware range syntax for emission sweep
+    em_range = (
+      f"{emission_wavelength_start * 10}~"
+      f"{emission_wavelength_end * 10}:{emission_wavelength_step * 10}"
+    )
+
+    await self._setup_fluorescence(excitation_wavelength * 10, em_range, bandwidth, num_reads, gain)
+    results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
+    measurement_time = time.time()
+
+    spectrum_data = process_fluorescence_spectrum(results)
+    avg_temp = await self.get_average_temperature()
+
+    return [
+      {
+        "ex_wavelength": excitation_wavelength,
+        "em_wavelength": em_wl,
+        "time": measurement_time,
+        "temperature": avg_temp if avg_temp is not None else 0.0,
+        "data": data_matrix,
+      }
+      for em_wl, data_matrix in sorted(spectrum_data.items())
     ]
 
   async def read_luminescence(
