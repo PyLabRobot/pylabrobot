@@ -195,7 +195,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
         plate, None, wavelength_start=500, wavelength_end=550, wavelength_step=0
       )
 
-  async def test_experimental_read_fluorescence_spectrum(self) -> None:
+  async def test_experimental_read_fluorescence_excitation_spectrum(self) -> None:
     # Mock background read
     stop_event = MagicMock()
     bg_task: "asyncio.Future[None]" = asyncio.Future()
@@ -225,7 +225,7 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
 
       plate.get_item.return_value = well
 
-      results = await self.backend.experimental_read_fluorescence_spectrum(
+      results = await self.backend.experimental_read_fluorescence_excitation_spectrum(
         plate,
         [well],
         excitation_wavelength_start=440,
@@ -241,12 +241,12 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[1]["ex_wavelength"], 450.0)
     self.assertEqual(results[1]["data"], [[200.0]])
 
-  async def test_experimental_read_fluorescence_spectrum_validation(self) -> None:
+  async def test_experimental_read_fluorescence_excitation_spectrum_validation(self) -> None:
     plate = MagicMock(spec=Plate)
     well = MagicMock(spec=Well)
 
     with self.assertRaises(ValueError):
-      await self.backend.experimental_read_fluorescence_spectrum(
+      await self.backend.experimental_read_fluorescence_excitation_spectrum(
         plate,
         [well],
         excitation_wavelength_start=480,
@@ -255,13 +255,82 @@ class TestExperimentalSparkBackend(unittest.IsolatedAsyncioTestCase):
       )
 
     with self.assertRaises(ValueError):
-      await self.backend.experimental_read_fluorescence_spectrum(
+      await self.backend.experimental_read_fluorescence_excitation_spectrum(
         plate,
         [well],
         excitation_wavelength_start=440,
         excitation_wavelength_end=480,
         emission_wavelength=545,
         excitation_wavelength_step=-1,
+      )
+
+  async def test_experimental_read_fluorescence_emission_spectrum(self) -> None:
+    # Mock background read
+    stop_event = MagicMock()
+    bg_task: "asyncio.Future[None]" = asyncio.Future()
+    bg_task.set_result(None)
+    self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
+
+    # Patch process_fluorescence_spectrum
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.process_fluorescence_spectrum"
+    ) as mock_proc:
+      mock_proc.return_value = {550.0: [[100.0]], 560.0: [[200.0]]}
+
+      plate = MagicMock(spec=Plate)
+      plate.num_items_x = 12
+      plate.num_items_y = 8
+      plate.get_size_y.return_value = 100
+
+      well = MagicMock(spec=Well)
+      well.parent = plate
+      well.get_row.return_value = 0
+      well.get_column.return_value = 0
+      well.location = MagicMock()
+      well.location.x = 0
+      well.location.y = 0
+      well.location.z = 0
+      well.get_anchor.return_value = MagicMock()
+
+      plate.get_item.return_value = well
+
+      results = await self.backend.experimental_read_fluorescence_emission_spectrum(
+        plate,
+        [well],
+        excitation_wavelength=440,
+        emission_wavelength_start=550,
+        emission_wavelength_end=600,
+        emission_wavelength_step=10,
+      )
+
+    self.assertEqual(len(results), 2)
+    self.assertEqual(results[0]["em_wavelength"], 550.0)
+    self.assertEqual(results[0]["ex_wavelength"], 440)
+    self.assertEqual(results[0]["data"], [[100.0]])
+    self.assertEqual(results[1]["em_wavelength"], 560.0)
+    self.assertEqual(results[1]["data"], [[200.0]])
+
+  async def test_experimental_read_fluorescence_emission_spectrum_validation(self) -> None:
+    plate = MagicMock(spec=Plate)
+    well = MagicMock(spec=Well)
+
+    with self.assertRaises(ValueError):
+      await self.backend.experimental_read_fluorescence_emission_spectrum(
+        plate,
+        [well],
+        excitation_wavelength=440,
+        emission_wavelength_start=600,
+        emission_wavelength_end=550,
+      )
+
+    with self.assertRaises(ValueError):
+      await self.backend.experimental_read_fluorescence_emission_spectrum(
+        plate,
+        [well],
+        excitation_wavelength=440,
+        emission_wavelength_start=550,
+        emission_wavelength_end=600,
+        emission_wavelength_step=-1,
       )
 
 
