@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pylabrobot.micronic import MicronicCodeReader, SaneScanner, TwainScanner
 from pylabrobot.micronic.code_reader.driver import (
   DecodeResult,
-  MicronicDriver,
+  MicronicCodeReaderDriver,
   MicronicError,
 )
-from pylabrobot.micronic.code_reader.rack_reading_backend import MicronicRackReadingBackend
+from pylabrobot.micronic.code_reader.rack_reading_backend import (
+  MicronicCodeReaderRackReadingBackend,
+)
 from pylabrobot.resources.tube_rack import TubeRack
 
 
@@ -102,82 +104,25 @@ class TestScannerClasses(unittest.IsolatedAsyncioTestCase):
       )
 
 
-class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
-  async def test_scan_rack_populates_standard_rack_result(self):
+class TestMicronicCodeReaderDriver(unittest.IsolatedAsyncioTestCase):
+  def test_acquire_image_runs_scanner_and_tracks_metadata(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
-      driver = MicronicDriver(
+      driver = MicronicCodeReaderDriver(
         scanner=scanner,
         serial_port="/dev/ttyUSB0",
         image_dir=image_dir,
         keep_images=True,
       )
-      decoded = {
-        "A1": DecodeResult(tube_id="1111111111", method="test"),
-        "A2": DecodeResult(tube_id="2222222222", method="test"),
-      }
-      with (
-        patch.object(driver.io, "setup", AsyncMock()),
-        patch.object(driver.io, "stop", AsyncMock()),
-        patch.object(
-          driver, "scan_rack_id", AsyncMock(return_value="9500017722")
-        ) as scan_rack_id_mock,
-        patch(
-          "pylabrobot.micronic.code_reader.driver.decode_image",
-          return_value=(decoded, {"decodedWells": 2}),
-        ) as decode_image_mock,
-      ):
-        await driver.setup()
-        result = await driver.scan_rack(_rack(num_items=2))
+      image_path = driver.acquire_image()
 
-      self.assertEqual(result.rack_id, "9500017722")
-      self.assertIsNotNone(result.rack_barcode)
-      self.assertEqual(result.rack_barcode.data, "9500017722")
-      self.assertEqual(result.rack_barcode.symbology, "Code 128 (Subset B and C)")
-      self.assertEqual(result.entries[0].position, "A1")
-      self.assertEqual(result.entries[0].tube_id, "1111111111")
-      self.assertIsNotNone(result.entries[0].barcode)
-      self.assertEqual(result.entries[0].barcode.data, "1111111111")
-      self.assertEqual(result.entries[0].barcode.symbology, "DataMatrix")
-      self.assertEqual(result.entries[1].tube_id, "2222222222")
+      self.assertEqual(driver.last_image_path, image_path)
       self.assertEqual(driver.last_scan_metadata, {"source": "test"})
-      self.assertEqual(driver.last_decode_metadata, {"decodedWells": 2})
       scanner.acquire.assert_called_once()
-      scan_rack_id_mock.assert_awaited_once()
-      decode_image_mock.assert_called_once()
+      self.assertTrue(image_path.name.startswith("micronic_"))
+      self.assertEqual(image_path.suffix, ".bmp")
 
-  async def test_reader_can_scan_twice(self):
-    with tempfile.TemporaryDirectory() as image_dir:
-      scanner = _mock_scanner()
-      reader = MicronicCodeReader(
-        scanner=scanner,
-        serial_port="/dev/ttyUSB0",
-        image_dir=image_dir,
-        keep_images=True,
-      )
-      decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
-      with (
-        patch.object(reader.driver.io, "setup", AsyncMock()),
-        patch.object(reader.driver.io, "stop", AsyncMock()),
-        patch.object(reader.driver, "scan_rack_id", AsyncMock(return_value="9500017722")),
-        patch(
-          "pylabrobot.micronic.code_reader.driver.decode_image",
-          return_value=(decoded, {"decodedWells": 1}),
-        ),
-      ):
-        await reader.setup()
-        first = await reader.rack_reading.scan_rack(
-          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.0
-        )
-        second = await reader.rack_reading.scan_rack(
-          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.0
-        )
-
-      self.assertEqual(first.rack_id, "9500017722")
-      self.assertEqual(second.rack_id, "9500017722")
-      self.assertEqual(scanner.acquire.call_count, 2)
-
-  async def test_driver_scan_rack_id_uses_plr_serial(self):
+  async def test_read_barcode_uses_plr_serial(self):
     instances: list[object] = []
 
     class FakeSerial:
@@ -204,10 +149,10 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
         self.calls.append("stop")
 
     with patch("pylabrobot.micronic.code_reader.driver.Serial", FakeSerial):
-      driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+      driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
       await driver.setup()
       try:
-        rack_id = await driver.scan_rack_id()
+        rack_id = await driver.read_barcode()
       finally:
         await driver.stop()
 
@@ -222,41 +167,97 @@ class TestMicronicDriver(unittest.IsolatedAsyncioTestCase):
     self.assertIn("write:b'<t>\\r\\n'", fake_serial.calls)
     self.assertEqual(fake_serial.calls[-1], "stop")
 
-  async def test_driver_rejects_mismatched_rack_shape(self):
-    driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
-    with self.assertRaises(MicronicError):
-      await driver.scan_rack(_rack(num_items_x=6, num_items_y=4))
 
-  async def test_driver_rejects_concurrent_scan(self):
-    driver = MicronicDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
-    await driver._scan_lock.acquire()
+class TestMicronicCodeReaderRackReadingBackend(unittest.IsolatedAsyncioTestCase):
+  async def test_scan_rack_populates_standard_rack_result(self):
+    with tempfile.TemporaryDirectory() as image_dir:
+      scanner = _mock_scanner()
+      driver = MicronicCodeReaderDriver(
+        scanner=scanner,
+        serial_port="/dev/ttyUSB0",
+        image_dir=image_dir,
+        keep_images=True,
+      )
+      backend = MicronicCodeReaderRackReadingBackend(driver=driver)
+      decoded = {
+        "A1": DecodeResult(tube_id="1111111111", method="test"),
+        "A2": DecodeResult(tube_id="2222222222", method="test"),
+      }
+      with (
+        patch.object(driver, "read_barcode", AsyncMock(return_value="9500017722")) as read_barcode,
+        patch(
+          "pylabrobot.micronic.code_reader.rack_reading_backend.decode_image",
+          return_value=(decoded, {"decodedWells": 2}),
+        ) as decode_image_mock,
+      ):
+        result = await backend.scan_rack(_rack(num_items=2), timeout=1.0, poll_interval=0.0)
+
+      self.assertEqual(result.rack_id, "9500017722")
+      self.assertIsNotNone(result.rack_barcode)
+      self.assertEqual(result.rack_barcode.data, "9500017722")
+      self.assertEqual(result.rack_barcode.symbology, "Code 128 (Subset B and C)")
+      self.assertEqual(result.entries[0].position, "A1")
+      self.assertEqual(result.entries[0].tube_id, "1111111111")
+      self.assertIsNotNone(result.entries[0].barcode)
+      self.assertEqual(result.entries[0].barcode.data, "1111111111")
+      self.assertEqual(result.entries[0].barcode.symbology, "DataMatrix")
+      self.assertEqual(result.entries[1].tube_id, "2222222222")
+      self.assertEqual(driver.last_scan_metadata, {"source": "test"})
+      self.assertEqual(driver.last_decode_metadata, {"decodedWells": 2})
+      scanner.acquire.assert_called_once()
+      read_barcode.assert_awaited_once()
+      decode_image_mock.assert_called_once()
+
+  async def test_reader_can_scan_twice(self):
+    with tempfile.TemporaryDirectory() as image_dir:
+      scanner = _mock_scanner()
+      reader = MicronicCodeReader(
+        scanner=scanner,
+        serial_port="/dev/ttyUSB0",
+        image_dir=image_dir,
+        keep_images=True,
+      )
+      decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
+      with (
+        patch.object(reader.driver.io, "setup", AsyncMock()),
+        patch.object(reader.driver.io, "stop", AsyncMock()),
+        patch.object(reader.driver, "read_barcode", AsyncMock(return_value="9500017722")),
+        patch(
+          "pylabrobot.micronic.code_reader.rack_reading_backend.decode_image",
+          return_value=(decoded, {"decodedWells": 1}),
+        ),
+      ):
+        await reader.setup()
+        first = await reader.rack_reading.scan_rack(
+          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.0
+        )
+        second = await reader.rack_reading.scan_rack(
+          rack=_rack(num_items=1), timeout=1.0, poll_interval=0.0
+        )
+
+      self.assertEqual(first.rack_id, "9500017722")
+      self.assertEqual(second.rack_id, "9500017722")
+      self.assertEqual(scanner.acquire.call_count, 2)
+
+  async def test_backend_rejects_mismatched_rack_shape(self):
+    driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    backend = MicronicCodeReaderRackReadingBackend(driver=driver)
+    with self.assertRaises(MicronicError):
+      await backend.scan_rack(_rack(num_items_x=6, num_items_y=4), timeout=1.0, poll_interval=0.0)
+
+  async def test_backend_rejects_concurrent_scan(self):
+    driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    backend = MicronicCodeReaderRackReadingBackend(driver=driver)
+    await backend._scan_lock.acquire()
     try:
       with self.assertRaises(MicronicError):
-        await driver.scan_rack(_rack())
+        await backend.scan_rack(_rack(), timeout=1.0, poll_interval=0.0)
     finally:
-      driver._scan_lock.release()
-
-
-class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
-  def _backend_with_mocked_driver(self) -> tuple[MicronicRackReadingBackend, MagicMock]:
-    driver = MagicMock(spec=MicronicDriver)
-    driver.scan_rack = AsyncMock()
-    driver.scan_rack_id = AsyncMock()
-    return MicronicRackReadingBackend(driver=driver), driver
-
-  async def test_scan_rack_delegates_to_driver(self):
-    backend, driver = self._backend_with_mocked_driver()
-    expected = MagicMock()
-    driver.scan_rack.return_value = expected
-    rack = _rack()
-
-    result = await backend.scan_rack(rack=rack, timeout=1.0, poll_interval=0.0)
-
-    self.assertIs(result, expected)
-    driver.scan_rack.assert_awaited_once_with(rack)
+      backend._scan_lock.release()
 
   async def test_scan_rack_times_out(self):
-    backend, driver = self._backend_with_mocked_driver()
+    driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    backend = MicronicCodeReaderRackReadingBackend(driver=driver)
 
     async def slow(rack):
       del rack
@@ -265,28 +266,26 @@ class TestMicronicRackReadingBackend(unittest.IsolatedAsyncioTestCase):
       await asyncio.sleep(1)
       return MagicMock()
 
-    driver.scan_rack.side_effect = slow
+    with patch.object(backend, "_scan_rack", slow):
+      with self.assertRaises(TimeoutError):
+        await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
 
-    with self.assertRaises(TimeoutError):
-      await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
-
-  async def test_scan_rack_propagates_driver_micronic_error(self):
-    backend, driver = self._backend_with_mocked_driver()
-    driver.scan_rack.side_effect = MicronicError("rack shape mismatch")
-
+  async def test_scan_rack_propagates_micronic_error(self):
+    driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    backend = MicronicCodeReaderRackReadingBackend(driver=driver)
     with self.assertRaises(MicronicError):
       await backend.scan_rack(
         rack=_rack(num_items_x=6, num_items_y=4), timeout=1.0, poll_interval=0.0
       )
 
-  async def test_scan_rack_id_delegates_to_driver(self):
-    backend, driver = self._backend_with_mocked_driver()
-    driver.scan_rack_id.return_value = "9500017722"
+  async def test_scan_rack_id_reads_barcode(self):
+    driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    backend = MicronicCodeReaderRackReadingBackend(driver=driver)
+    with patch.object(driver, "read_barcode", AsyncMock(return_value="9500017722")) as read_barcode:
+      rack_id = await backend.scan_rack_id(timeout=5.0, poll_interval=0.5)
 
-    rack_id = await backend.scan_rack_id(timeout=5.0, poll_interval=0.5)
-
-    self.assertEqual(rack_id, "9500017722")
-    driver.scan_rack_id.assert_awaited_once_with(timeout=5.0, poll_interval=0.5)
+      self.assertEqual(rack_id, "9500017722")
+      read_barcode.assert_awaited_once_with()
 
 
 class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
@@ -325,7 +324,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       scanner=_mock_scanner(),
       serial_port="/dev/ttyUSB0",
     )
-    self.assertIsInstance(reader.driver, MicronicDriver)
+    self.assertIsInstance(reader.driver, MicronicCodeReaderDriver)
     self.assertFalse(hasattr(reader, "barcode_scanning"))
 
 

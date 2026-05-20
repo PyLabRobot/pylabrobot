@@ -28,7 +28,7 @@ Driver
   :nosignatures:
   :recursive:
 
-    MicronicDriver
+    MicronicCodeReaderDriver
 
 .. currentmodule:: pylabrobot.micronic.code_reader.errors
 
@@ -65,4 +65,4 @@ Capabilities
   :nosignatures:
   :recursive:
 
-    MicronicRackReadingBackend
+    MicronicCodeReaderRackReadingBackend
