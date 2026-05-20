@@ -588,11 +588,38 @@
 <h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-move-iswap-y" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">move_iswap_y</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y" title="Link to this definition">#</a></dt>
-<dd><p>Move iSWAP Y to absolute position</p>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">move_iswap_y</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">220.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">acceleration_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_protection_limiter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">7</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_y" title="Link to this definition">#</a></dt>
+<dd><p>Move the iSWAP gripper center to absolute Y position (deck coordinates).</p>
+<p>The rotation drive Y carriage and the gripper translate rigidly together
+in Y, so the gripper-Y delta equals the rotation-drive-Y delta. Read the
+current gripper Y from FK, translate the rotation drive by the delta,
+and the gripper lands at <code class="code docutils literal notranslate"><span class="pre">y_position</span></code> via a single smooth <code class="code docutils literal notranslate"><span class="pre">R0</span> <span class="pre">YA</span></code> move.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>y_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>[</strong><strong>mm</strong><strong>]</strong> (<em>y_position</em>) – target gripper Y in deck coordinates. The achievable
+range depends on channel configuration and current arm pose; in
+unobstructed conditions the absolute envelope is approximately
+-270..+648 mm at factory link lengths.</p></li>
+<li><p><strong>[</strong><strong>mm/sec</strong><strong>]</strong> (<em>speed</em>) – max linear velocity, 2.4..370.</p></li>
+<li><p><strong>acceleration_level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – acceleration index, 1 or 2.</p></li>
+<li><p><strong>current_protection_limiter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – motor current limit, 0..7.</p></li>
+<li><p><strong>make_space</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – if True, reposition pipetting channels when channel 0 is
+in the way and can be cleared. If False, raise so the caller decides.</p></li>
+<li><p><strong>y_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>speed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – if iSWAP is not installed, or if <code class="code docutils literal notranslate"><span class="pre">setup()</span></code> has not
+    populated <code class="code docutils literal notranslate"><span class="pre">iswap_information</span></code>.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if <code class="code docutils literal notranslate"><span class="pre">y_position</span></code> is outside the Y hardware range; if the
+    target requires channel 0 to be moved and <code class="code docutils literal notranslate"><span class="pre">make_space=False</span></code>; if
+    the move is unreachable even with channel repositioning; or if
+    <code class="code docutils literal notranslate"><span class="pre">speed</span></code>, <code class="code docutils literal notranslate"><span class="pre">acceleration_level</span></code>, or <code class="code docutils literal notranslate"><span class="pre">current_protection_limiter</span></code> is
+    outside its valid range.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
