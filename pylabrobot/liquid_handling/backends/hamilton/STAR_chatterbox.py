@@ -318,7 +318,14 @@ class STARChatterboxBackend(STARBackend):
   async def move_iswap_x(self, x_position: float):
     print("moving iswap x to", x_position)
 
-  async def move_iswap_y(self, y_position: float):
+  async def move_iswap_y(
+    self,
+    y_position: float,
+    speed: float = 220.0,
+    acceleration_level: int = 2,
+    current_protection_limiter: int = 7,
+    make_space: bool = False,
+  ):
     print("moving iswap y to", y_position)
 
   async def move_iswap_z(self, z_position: float):
