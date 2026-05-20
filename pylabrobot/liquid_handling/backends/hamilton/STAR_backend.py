@@ -10031,7 +10031,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="R0", command="RZ", fmt="rz##### (n)")
     iswap_z_pos_increments = resp["rz"][1]  # 0 = FW counter, 1 = HW counter
     finger_plane_z = STARBackend.iswap_z_drive_increment_to_mm(iswap_z_pos_increments)
-    return finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+    return round(finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm, 1)
 
   async def iswap_rotation_drive_request_position(self) -> Coordinate:
     """Position of the iSWAP rotation drive (joint 1) in deck coordinates, mm."""
