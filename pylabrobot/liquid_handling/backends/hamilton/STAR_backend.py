@@ -9899,8 +9899,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     and the gripper lands at `y_position` via a single smooth `R0 YA` move.
 
     Args:
-      y_position [mm]: target gripper Y in deck coordinates.
-      speed [mm/sec]: max linear velocity.
+      y_position [mm]: target gripper Y in deck coordinates. The achievable
+        range depends on channel configuration and current arm pose; in
+        unobstructed conditions the absolute envelope is approximately
+        -270..+648 mm at factory link lengths.
+      speed [mm/sec]: max linear velocity, 2.4..370.
       acceleration_level: acceleration index, 1 or 2.
       current_protection_limiter: motor current limit, 0..7.
       make_space: if True, reposition pipetting channels when channel 0 is
