@@ -25,6 +25,7 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.rack_reading import RackScanEntry, RackScanResult
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.tube_rack import TubeRack
 
 from .errors import MicronicError
@@ -162,6 +163,15 @@ class MicronicDriver(Driver):
         position=position,
         tube_id=decoded[position].tube_id if position in decoded else None,
         status="OK" if position in decoded else "NOREAD",
+        barcode=(
+          Barcode(
+            data=decoded[position].tube_id,
+            symbology="DataMatrix",
+            position_on_resource="bottom",
+          )
+          if position in decoded
+          else None
+        ),
       )
       for position in iter_positions()
     ]
@@ -173,7 +183,17 @@ class MicronicDriver(Driver):
       except OSError:
         pass
 
-    return RackScanResult(rack_id=rack_id, entries=entries)
+    return RackScanResult(
+      rack_id=rack_id,
+      entries=entries,
+      rack_barcode=Barcode(
+        data=rack_id,
+        symbology="Code 128 (Subset B and C)",
+        position_on_resource="right",
+      )
+      if rack_id != "NOREAD"
+      else None,
+    )
 
 
 def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, object]]:
