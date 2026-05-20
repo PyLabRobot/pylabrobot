@@ -7,15 +7,15 @@ from typing import Optional
 from pylabrobot.capabilities.rack_reading import RackReader
 from pylabrobot.device import Device
 
-from .driver import MicronicDriver
-from .rack_reading_backend import MicronicRackReadingBackend
+from .driver import MicronicCodeReaderDriver
+from .rack_reading_backend import MicronicCodeReaderRackReadingBackend
 from .scanner import Scanner
 
 
 class MicronicCodeReader(Device):
   """Micronic rack reader device.
 
-  The rack-reading capability is driven by ``MicronicDriver``.
+  The rack-reading capability is driven by ``MicronicCodeReaderDriver``.
   """
 
   def __init__(
@@ -27,7 +27,7 @@ class MicronicCodeReader(Device):
     serial_timeout_ms: int = 2500,
     keep_images: bool = False,
   ):
-    driver = MicronicDriver(
+    driver = MicronicCodeReaderDriver(
       scanner=scanner,
       serial_port=serial_port,
       image_dir=image_dir,
@@ -36,6 +36,6 @@ class MicronicCodeReader(Device):
       keep_images=keep_images,
     )
     super().__init__(driver=driver)
-    self.driver: MicronicDriver = driver
-    self.rack_reading = RackReader(backend=MicronicRackReadingBackend(driver))
+    self.driver: MicronicCodeReaderDriver = driver
+    self.rack_reading = RackReader(backend=MicronicCodeReaderRackReadingBackend(driver))
     self._capabilities = [self.rack_reading]

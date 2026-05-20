@@ -4,15 +4,12 @@ This driver does not call Micronic Code Reader or IO Monitor. It owns the local
 scanner path directly:
 
 - acquire a rack image through a caller-supplied :class:`Scanner`,
-- read the rack ID through the side serial barcode reader,
-- decode tube DataMatrix codes locally, and
-- return the standard PLR rack-reading result.
+- read barcodes through the side serial barcode reader, and
+- expose acquisition metadata for the rack-reading backend.
 """
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import re
 import tempfile
 import time
@@ -22,16 +19,11 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.rack_reading import RackScanEntry, RackScanResult
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
-from pylabrobot.resources.barcode import Barcode
-from pylabrobot.resources.tube_rack import TubeRack
 
 from .errors import MicronicError
 from .scanner import Scanner
-
-logger = logging.getLogger(__name__)
 
 ROWS = "ABCDEFGH"
 COLS = 12
@@ -45,7 +37,7 @@ class DecodeResult:
   method: str
 
 
-class MicronicDriver(Driver):
+class MicronicCodeReaderDriver(Driver):
   """Driver that controls the Micronic scanner without the OEM app."""
 
   def __init__(
@@ -78,7 +70,6 @@ class MicronicDriver(Driver):
     self.last_image_path: Optional[Path] = None
     self.last_scan_metadata: dict[str, object] = {}
     self.last_decode_metadata: dict[str, object] = {}
-    self._scan_lock = asyncio.Lock()
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     del backend_params
@@ -97,16 +88,7 @@ class MicronicDriver(Driver):
       "keep_images": self.keep_images,
     }
 
-  @staticmethod
-  def _validate_rack(rack: TubeRack) -> None:
-    if rack.num_items_x != RACK_COLS or rack.num_items_y != RACK_ROWS:
-      raise MicronicError(
-        f"Micronic driver only supports {RACK_ROWS}x{RACK_COLS} racks; "
-        f"got {rack.num_items_y}x{rack.num_items_x}."
-      )
-
-  async def scan_rack_id(self, timeout: float = 0, poll_interval: float = 0) -> str:
-    del timeout, poll_interval
+  async def read_barcode(self) -> str:
     deadline = time.monotonic() + self.serial_timeout_ms / 1000
     chunks: list[bytes] = []
     try:
@@ -128,72 +110,23 @@ class MicronicDriver(Driver):
     match = re.search(r"\d{6,}", text)
     return match.group(0) if match else "NOREAD"
 
-  async def scan_rack(self, rack: TubeRack) -> RackScanResult:
-    self._validate_rack(rack)
-    if self._scan_lock.locked():
-      raise MicronicError("Micronic rack scan is already in progress.")
-    async with self._scan_lock:
-      rack_id = await self.scan_rack_id()
-      loop = asyncio.get_running_loop()
-      return await loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
-
-  def _scan_rack_blocking(self, rack_id: str, expected_well_count: int) -> RackScanResult:
+  def acquire_image(self) -> Path:
     self.image_dir.mkdir(parents=True, exist_ok=True)
     image_path = (
       self.image_dir
       / f"micronic_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.{self.scanner.image_extension}"
     )
-
     self.last_scan_metadata = self.scanner.acquire(image_path, self.scanner_timeout_ms)
     self.last_image_path = image_path
+    return image_path
 
-    decoded, self.last_decode_metadata = decode_image(image_path)
-    if len(decoded) < expected_well_count:
-      missing = ", ".join(position for position in iter_positions() if position not in decoded)
-      raise MicronicError(
-        f"Micronic decode found {len(decoded)} wells; expected at least "
-        f"{expected_well_count}. Missing: {missing}"
-      )
-
-    for position, result in decoded.items():
-      logger.debug("Micronic decoded %s via %s", position, result.method)
-
-    entries = [
-      RackScanEntry(
-        position=position,
-        tube_id=decoded[position].tube_id if position in decoded else None,
-        status="OK" if position in decoded else "NOREAD",
-        barcode=(
-          Barcode(
-            data=decoded[position].tube_id,
-            symbology="DataMatrix",
-            position_on_resource="bottom",
-          )
-          if position in decoded
-          else None
-        ),
-      )
-      for position in iter_positions()
-    ]
-
+  def release_image(self, image_path: Path) -> None:
     if not self.keep_images:
       try:
         image_path.unlink()
         self.last_image_path = None
       except OSError:
         pass
-
-    return RackScanResult(
-      rack_id=rack_id,
-      entries=entries,
-      rack_barcode=Barcode(
-        data=rack_id,
-        symbology="Code 128 (Subset B and C)",
-        position_on_resource="right",
-      )
-      if rack_id != "NOREAD"
-      else None,
-    )
 
 
 def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, object]]:
