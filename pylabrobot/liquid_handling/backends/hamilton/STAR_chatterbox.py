@@ -315,7 +315,12 @@ class STARChatterboxBackend(STARBackend):
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
 
-  async def move_iswap_x(self, x_position: float):
+  async def move_iswap_x(
+    self,
+    x_position: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
     print("moving iswap x to", x_position)
 
   async def move_iswap_y(
@@ -328,7 +333,13 @@ class STARChatterboxBackend(STARBackend):
   ):
     print("moving iswap y to", y_position)
 
-  async def move_iswap_z(self, z_position: float):
+  async def move_iswap_z(
+    self,
+    z_position: float,
+    speed: float = 118.0,
+    acceleration: float = 643.66,
+    current_protection_limiter: int = 6,
+  ):
     print("moving iswap z to", z_position)
 
   @asynccontextmanager
