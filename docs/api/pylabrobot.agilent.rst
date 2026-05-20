@@ -140,3 +140,22 @@ VSpin
 
 .. autoclass:: pylabrobot.agilent.vspin.VSpinCentrifugeBackend.SpinParams
    :members:
+
+
+PlateLoc
+--------
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PlateLoc
+    PlateLocSealer
+    PlateLocSealerBackend
+    PlateLocDriver
+    PlateLocSerialProfile
+    PlateLocStatus
+    PlateLocError
