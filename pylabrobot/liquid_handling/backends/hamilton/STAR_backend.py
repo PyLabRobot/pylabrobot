@@ -9936,13 +9936,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ),
     ).location.y
 
-    await self.iswap_rotation_drive_move_y(
-      y=current_rotation_drive_y + (y_position - current_gripper_y),
-      speed=speed,
-      acceleration_level=acceleration_level,
-      current_protection_limiter=current_protection_limiter,
-      make_space=make_space,
-    )
+    target_rotation_drive_y = current_rotation_drive_y + (y_position - current_gripper_y)
+    try:
+      await self.iswap_rotation_drive_move_y(
+        y=target_rotation_drive_y,
+        speed=speed,
+        acceleration_level=acceleration_level,
+        current_protection_limiter=current_protection_limiter,
+        make_space=make_space,
+      )
+    except ValueError as e:
+      raise ValueError(
+        f"move_iswap_y(y_position={y_position}) resolved to rotation drive "
+        f"target y={target_rotation_drive_y:.2f}: {e}"
+      ) from e
 
   async def move_iswap_z(self, z_position: float):  # TODO: by convention should be just 'z' in v1
     """Move iSWAP Z to absolute position"""
