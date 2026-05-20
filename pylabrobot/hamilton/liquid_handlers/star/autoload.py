@@ -379,6 +379,36 @@ class STARAutoload:
 
     self._default_1d_symbology = barcode_symbology
 
+  async def set_barcode_type(
+    self,
+    ISBT_Standard: bool = True,
+    code128: bool = True,
+    code39: bool = True,
+    codebar: bool = True,
+    code2_5: bool = True,
+    UPC_AE: bool = True,
+    EAN8: bool = True,
+  ):
+    """Deprecated: use :meth:`set_1d_barcode_type` instead.
+
+    Backwards-compat shim for the legacy 7-bool symbology API. Encodes the
+    flags into the same ``bt`` hex bitmask that the firmware ``C0:CB`` command
+    expects.
+    """
+    import warnings as _warnings
+
+    _warnings.warn(
+      "set_barcode_type is deprecated; use set_1d_barcode_type with a "
+      "Barcode1DSymbology instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    bt = ""
+    for flag in (ISBT_Standard, code128, code39, codebar, code2_5, UPC_AE, EAN8, True):
+      bt += "1" if flag else "0"
+    bt_hex = hex(int(bt, base=2))
+    await self.driver.send_command(module="C0", command="CB", bt=bt_hex)
+
   async def load_carrier_from_tray_and_scan_carrier_barcode(
     self,
     carrier_end_rail: int,

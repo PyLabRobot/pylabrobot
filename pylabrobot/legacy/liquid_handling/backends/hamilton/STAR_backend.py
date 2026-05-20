@@ -619,7 +619,13 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_pip_channel_version(self, channel: int) -> str:
     """Deprecated: use ``star.pip.backend.channels[n].request_firmware_version()``."""
-    return await self._pip_channels[channel].request_firmware_version()
+    pip_channel = self._pip_channels[channel]
+    resp = await pip_channel.send_command(
+      module=pip_channel.module_id,
+      command="RF",
+      fmt="rf" + "&" * 17,
+    )
+    return str(resp["rf"])
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -6923,7 +6929,7 @@ class STARBackend(HamiltonLiquidHandler):
 
     assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self._iswap.open_gripper(gripper_width=open_position)
+    return await self._iswap.move_gripper(width=open_position, force_sensing=False)
 
   async def iswap_close_gripper(
     self,
@@ -6950,9 +6956,10 @@ class STARBackend(HamiltonLiquidHandler):
 
     from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
 
-    return await self._iswap.close_gripper(
-      gripper_width=plate_width,
-      backend_params=iSWAPBackend.CloseGripperParams(
+    return await self._iswap.move_gripper(
+      width=plate_width,
+      force_sensing=True,
+      backend_params=iSWAPBackend.GripParams(
         grip_strength=grip_strength,
         plate_width_tolerance=plate_width_tolerance,
       ),
@@ -7384,7 +7391,7 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_iswap_position(self) -> Coordinate:
     """Deprecated: use ``star.iswap.get_gripper_location()``."""
-    return (await self._iswap.request_gripper_location()).location
+    return (await self._iswap.request_gripper_pose()).location
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Deprecated: use ``star.iswap.rotation_drive_request_y()``."""

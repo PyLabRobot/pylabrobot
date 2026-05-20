@@ -394,10 +394,10 @@ class STARPIPBackend(PIPBackend):
       else round((max_z + max_tip_length) * 10)
     )
 
-    minimum_traverse_height_at_beginning_of_a_command = round(
-      (backend_params.minimum_traverse_height_at_beginning_of_a_command or self.traversal_height)
-      * 10
-    )
+    th_mm = backend_params.minimum_traverse_height_at_beginning_of_a_command
+    if th_mm is None:
+      th_mm = self.traversal_height
+    minimum_traverse_height_at_beginning_of_a_command = round(th_mm * 10)
 
     pickup_method = backend_params.pickup_method or ham_tip.pickup_method
 
@@ -509,13 +509,14 @@ class STARPIPBackend(PIPBackend):
       max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
       end_tip_deposit_process = round((max_z + max_tip_length) * 10)
 
-    minimum_traverse_height_at_beginning_of_a_command = round(
-      (backend_params.minimum_traverse_height_at_beginning_of_a_command or self.traversal_height)
-      * 10
-    )
-    z_position_at_end_of_a_command = round(
-      (backend_params.z_position_at_end_of_a_command or self.traversal_height) * 10
-    )
+    th_mm = backend_params.minimum_traverse_height_at_beginning_of_a_command
+    if th_mm is None:
+      th_mm = self.traversal_height
+    minimum_traverse_height_at_beginning_of_a_command = round(th_mm * 10)
+    ze_mm = backend_params.z_position_at_end_of_a_command
+    if ze_mm is None:
+      ze_mm = self.traversal_height
+    z_position_at_end_of_a_command = round(ze_mm * 10)
 
     # Range validation (matches legacy discard_tip assertions).
     _assert_range(x_positions, 0, 25000, "x_positions")
@@ -1443,6 +1444,14 @@ class STARPIPBackend(PIPBackend):
       return False
     return True
 
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    """Return the firmware-reported minimum Y spacings for the given channels (mm).
+
+    Indices are 0-based, sorted ascending.
+    """
+    spacings = self.driver._channels_minimum_y_spacing
+    return [spacings[ch] for ch in sorted(use_channels)]
+
   # -- multi-channel PIP operations ------------------------------------------
 
   async def spread_pip_channels(self):
@@ -1730,12 +1739,20 @@ class STARPIPBackend(PIPBackend):
 
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm (= z-drive increment 31_200)
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm (= z-drive increment 9_320)
-  DEFAULT_TIP_FITTING_DEPTH = 8  # mm, for 10, 50, 300, 1000 uL Hamilton tips
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Measure tip presence on all channels using their sleeve sensors."""
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
     return [bool(v) for v in resp.get("rt")]
+
+  async def request_tadm_status(self) -> List[int]:
+    """Request TADM enable/disable status across all PIP channels.
+
+    Returns:
+      A list of 0/1 ints, one per channel: 0 = TADM off, 1 = TADM on.
+    """
+    resp = await self.send_command(module="C0", command="QS", fmt="qs# (n)")
+    return [int(v) for v in resp.get("qs", [])]
 
   async def prepare_for_manual_channel_operation(self, channel: int):
     """Prepare for manual channel operation by moving all other channels out of the way (C0:JP).

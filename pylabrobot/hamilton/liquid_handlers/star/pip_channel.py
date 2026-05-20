@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import enum
-import re
 from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple
 
 from .errors import STARFirmwareError
+from .fw_parsing import parse_star_firmware_version_date
 
 if TYPE_CHECKING:
   from .driver import STARDriver
@@ -101,14 +102,14 @@ class PIPChannel:
 
   # -- Px:RF  firmware version ------------------------------------------------
 
-  async def request_firmware_version(self) -> str:
+  async def request_firmware_version(self) -> datetime.date:
     """Query the firmware version of this channel (Px:RF)."""
     resp = await self.send_command(
       module=self.module_id,
       command="RF",
       fmt="rf" + "&" * 17,
     )
-    return str(resp["rf"])
+    return parse_star_firmware_version_date(str(resp["rf"]))
 
   # -- Px:RV  cycle counts ----------------------------------------------------
 
@@ -298,7 +299,6 @@ class PIPChannel:
 
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm
-  DEFAULT_TIP_FITTING_DEPTH = 8  # mm
 
   async def move_tool_z(self, z: float):
     """Move this channel in the Z direction, referenced to the tip/tool end (mm).
@@ -318,8 +318,8 @@ class PIPChannel:
 
     tip_len = await self.request_tip_length()
 
-    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
+    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
 
     if not (min_tip_z <= z <= max_tip_z):
       raise ValueError(
@@ -334,20 +334,41 @@ class PIPChannel:
       zj=f"{round(z * 10):04}",
     )
 
-  # -- C0:RA  request X position ------------------------------------------------
-
+  # -- delegate to left_x_arm (C0 RX) — channels share the X carriage ----------
+  # TODO: we assume `C0RX` references the center of the x-arm, figure out what it
+  # references for half-arms (see issue 822 and new Fluid Motion STAR)
+  
   async def request_x_pos(self) -> float:
     """Request current X-position of this channel (mm).
 
     All PIP channels share the same X arm, so this returns the arm position.
     """
-    resp = await self.driver.send_command(
-      module="C0",
-      command="RA",
-      fmt="ra#####",
-      pn=f"{self.index + 1:02}",
-    )
-    return float(resp["ra"] / 10)
+    assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
+    return await self.driver.left_x_arm.request_position()
+
+  async def move_x(self, x: float):
+    """Move this channel in the X direction (mm).
+
+    All PIP channels share the X arm, so this delegates to ``STARXArm.move_to``.
+    Enforces the left-side-panel minimum X when applicable.
+    """
+    assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
+    return await self.driver.left_x_arm.move_to(x)
+
+  async def move_x_relative(self, distance: float):
+    """Move this channel in the X direction by a relative amount (mm)."""
+    current_x = await self.request_x_pos()
+    await self.move_x(current_x + distance)
+
+  async def move_y_relative(self, distance: float):
+    """Move this channel in the Y direction by a relative amount (mm)."""
+    current_y = await self.request_y_pos()
+    await self.move_y(current_y + distance)
+
+  async def move_tool_z_relative(self, distance: float):
+    """Move this channel in the Z direction (tool-end reference) by a relative amount (mm)."""
+    current_z = await self.request_tip_bottom_z_position()
+    await self.move_tool_z(current_z + distance)
 
   # -- C0:RB  request Y position ------------------------------------------------
 
@@ -1123,14 +1144,11 @@ class PIPChannel:
     assert self.backend is not None, "backend reference required for ztouch_probe_z_height"
 
     version = await self.request_firmware_version()
-    year_matches = re.search(r"\b\d{4}\b", version)
-    if year_matches is not None:
-      year = int(year_matches.group())
-      if year < 2022:
-        raise ValueError(
-          "Z-touch probing is not supported for PIP versions predating 2022, "
-          f"found version '{version}'"
-        )
+    if version.year < 2022:
+      raise ValueError(
+        "Z-touch probing is not supported for PIP versions predating 2022, "
+        f"found version '{version}'"
+      )
 
     if tip_len is None:
       tip_len = await self.request_tip_length()

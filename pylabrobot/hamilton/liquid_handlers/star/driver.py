@@ -7,7 +7,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
@@ -18,7 +18,7 @@ from .cover import STARCover
 from .errors import (
   star_firmware_string_to_error,
 )
-from .fw_parsing import parse_star_fw_string
+from .fw_parsing import parse_star_firmware_version_date, parse_star_fw_string
 from .head96_backend import STARHead96Backend
 from .iswap import iSWAPBackend
 from .pip_backend import STARPIPBackend
@@ -148,7 +148,9 @@ class STARDriver(HamiltonLiquidHandler):
     # Populated during setup().
     self.machine_conf: Optional[MachineConfiguration] = None
     self.extended_conf: Optional[ExtendedConfiguration] = None
-    self._channels_minimum_y_spacing: List[float] = []
+    # Default to 8-channel uniform 9 mm spacing pre-setup (matches main's behaviour).
+    # Overwritten during setup() once the firmware-reported spacings come back.
+    self._channels_minimum_y_spacing: List[float] = [9.0] * 8
     self.pip: STARPIPBackend  # set in setup()
     self.head96: Optional[STARHead96Backend] = None  # set in setup() if installed
     self.iswap: Optional["iSWAPBackend"] = None  # set in setup() if installed
@@ -158,6 +160,10 @@ class STARDriver(HamiltonLiquidHandler):
     self.cover: Optional["STARCover"] = None  # set in setup()
     self.wash_station: Optional["STARWashStation"] = None  # set in setup()
 
+    # Authoritative channel count discovered during setup via RT (request_tip_presence).
+    # Falls back to machine_conf.num_pip_channels until populated.
+    self._num_channels: Optional[int] = None
+
   # -- HamiltonLiquidHandler abstract methods --------------------------------
 
   @property
@@ -166,6 +172,8 @@ class STARDriver(HamiltonLiquidHandler):
 
   @property
   def num_channels(self) -> int:
+    if self._num_channels is not None:
+      return self._num_channels
     if self.machine_conf is None:
       raise RuntimeError("Driver not set up — call setup() first.")
     return self.machine_conf.num_pip_channels
@@ -281,6 +289,14 @@ class STARDriver(HamiltonLiquidHandler):
     # Create backends based on discovered config.
     self.pip = STARPIPBackend(self)
 
+    # Cache the channel count from `RT` (request_tip_presence) — authoritative
+    # vs the `kp` field of the RM response which may not reflect hardware.
+    try:
+      tip_presence = await self.pip.request_tip_presence()
+      self._num_channels = len(tip_presence)
+    except Exception:  # pragma: no cover - chatterbox/no-hardware paths
+      self._num_channels = self.machine_conf.num_pip_channels
+
     self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
@@ -341,7 +357,7 @@ class STARDriver(HamiltonLiquidHandler):
     await super().stop()
     self.machine_conf = None
     self.extended_conf = None
-    self._channels_minimum_y_spacing = []
+    self._channels_minimum_y_spacing = [9.0] * 8
     self.head96 = None
     self.iswap = None
     self.autoload = None
@@ -353,13 +369,98 @@ class STARDriver(HamiltonLiquidHandler):
   # -- liquid level probing ---------------------------------------------------
 
   async def probe_liquid_heights(
-    self, containers, use_channels, resource_offsets=None, move_to_z_safety_after=True, **kwargs
-  ):
-    """Probe liquid heights using cLLD. Override in subclasses with real implementation."""
-    raise NotImplementedError(
-      "probe_liquid_heights is not implemented on STARDriver. "
-      "Use STARBackend (legacy) or implement probing on your driver subclass."
+    self,
+    containers,
+    use_channels: List[int],
+    resource_offsets: Optional[List[Any]] = None,
+    move_to_z_safety_after: bool = True,
+    **kwargs,
+  ) -> List[float]:
+    """Probe liquid heights using cLLD.
+
+    Drives one cLLD scan per (container, channel) pairing using
+    :meth:`PIPChannel.clld_probe_z_height`, then optionally returns the channel
+    to its traversal height. Returns the detected liquid surface Z (mm) for
+    each container, in the same order as ``containers`` / ``use_channels``.
+    """
+    if len(containers) != len(use_channels):
+      raise ValueError("containers and use_channels must have the same length")
+    if resource_offsets is None:
+      resource_offsets = [None] * len(containers)
+    if len(resource_offsets) != len(containers):
+      raise ValueError("resource_offsets must align with containers")
+
+    pip = getattr(self, "pip", None)
+    if pip is None:
+      raise RuntimeError("Driver not set up — call setup() first.")
+
+    detected_heights: List[float] = []
+    for container, channel_idx, offset in zip(containers, use_channels, resource_offsets):
+      channel = pip.channels[channel_idx]
+      # Center the channel over the container in X/Y.
+      loc = container.get_absolute_location(x="c", y="c", z="b")
+      if offset is not None:
+        loc = loc + offset
+      await channel.move_x(loc.x)
+      await channel.move_y(loc.y)
+      # Probe Z (single-channel cLLD).
+      detected_heights.append(await channel.clld_probe_z_height())
+
+    if move_to_z_safety_after:
+      for channel_idx in use_channels:
+        channel = pip.channels[channel_idx]
+        await channel.move_stop_disk_z(pip.traversal_height)
+
+    return detected_heights
+
+  async def probe_liquid_volumes(
+    self,
+    containers,
+    use_channels: List[int],
+    resource_offsets: Optional[List[Any]] = None,
+    move_to_z_safety_after: bool = True,
+    **kwargs,
+  ) -> List[float]:
+    """Probe liquid volumes by measuring heights and converting via container geometry.
+
+    Convenience wrapper around :meth:`probe_liquid_heights`. Each container must
+    support :meth:`Container.compute_volume_from_height` (i.e. have a known
+    geometric model).
+    """
+    if any(not c.supports_compute_height_volume_functions() for c in containers):
+      raise ValueError(
+        "probe_liquid_volumes can only be used with containers that support "
+        "height<->volume conversion."
+      )
+
+    liquid_heights = await self.probe_liquid_heights(
+      containers=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      move_to_z_safety_after=move_to_z_safety_after,
+      **kwargs,
     )
+
+    volumes: List[float] = []
+    for container, height in zip(containers, liquid_heights):
+      surface_above_bottom = height - container.get_absolute_location(z="b").z
+      volumes.append(container.compute_volume_from_height(max(0.0, surface_above_bottom)))
+    return volumes
+
+  async def empty_tips(self) -> None:
+    """Empty the dispensing drive on every channel that currently has a tip.
+
+    Auto-discovers tip presence via :meth:`STARPIPBackend.request_tip_presence`
+    then issues per-channel :meth:`PIPChannel.empty_tip` in parallel.
+    """
+    pip = getattr(self, "pip", None)
+    if pip is None:
+      raise RuntimeError("Driver not set up — call setup() first.")
+    presence = await pip.request_tip_presence()
+    occupied = [i for i, p in enumerate(presence) if p]
+    if not occupied:
+      return
+    await asyncio.gather(*(pip.channels[i].empty_tip() for i in occupied))
 
   # -- core gripper tool management ------------------------------------------
 
@@ -412,6 +513,76 @@ class STARDriver(HamiltonLiquidHandler):
       th=round(traversal_height * 10),
       te=round(traversal_height * 10),
     )
+
+  async def core_read_barcode(
+    self,
+    rails: int,
+    reading_direction: str = "horizontal",
+    minimal_z_position: float = 220.0,
+    traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_speed: float = 128.7,
+    allow_manual_input: bool = False,
+    labware_description: Optional[str] = None,
+  ):
+    """Read a 1D barcode using the CoRe gripper scanner (C0 ZB).
+
+    Requires the CoRe grippers to be picked up (use ``STAR.core_grippers()``).
+    Returns a :class:`Barcode` or raises ``ValueError`` if none was read.
+    """
+    from pylabrobot.resources.barcode import Barcode
+
+    if not 1 <= rails <= 54:
+      raise ValueError("rails must be between 1 and 54")
+    if not 0 <= minimal_z_position * 10 <= 3600:
+      raise ValueError("minimal_z_position must be between 0 and 360.0 mm")
+    if not 0 <= traverse_height_at_beginning_of_a_command * 10 <= 3600:
+      raise ValueError("traverse_height_at_beginning_of_a_command must be between 0 and 360.0 mm")
+    if not 0 <= z_speed * 10 <= 1287:
+      raise ValueError("z_speed must be between 0 and 128.7 mm/s")
+    try:
+      reading_direction_int = {"vertical": 0, "horizontal": 1, "free": 2}[reading_direction]
+    except KeyError as e:
+      raise ValueError(
+        "reading_direction must be 'vertical', 'horizontal', or 'free'"
+      ) from e
+
+    resp = await self.send_command(
+      module="C0",
+      command="ZB",
+      cp=f"{rails:02}",
+      zb=f"{round(minimal_z_position * 10):04}",
+      th=f"{round(traverse_height_at_beginning_of_a_command * 10):04}",
+      zy=f"{round(z_speed * 10):04}",
+      bd=reading_direction_int,
+      ma="0250 2100 0860 0200",
+      mr=0,
+      mo="000 000 000 000 000 000 000",
+    )
+    if resp is None:
+      raise RuntimeError("No response received from CoRe barcode read command.")
+    s = str(resp).strip()
+    bb_index = s.find("bb/")
+    if bb_index == -1 or len(s) < bb_index + 5:
+      raise ValueError(f"Unexpected CoRe barcode response format: {s}")
+    try:
+      bb_len = int(s[bb_index + 3 : bb_index + 5])
+    except ValueError as e:
+      raise ValueError(f"Invalid CoRe barcode length field: {s}") from e
+    barcode_str = s[bb_index + 5 :].strip()
+    if bb_len == 0:
+      if allow_manual_input:
+        prompt = "No barcode read by CoRe scanner."
+        if labware_description is not None:
+          prompt += f" Labware: {labware_description}."
+        prompt += " Enter barcode manually (blank to abort): "
+        user_barcode = input(prompt).strip()
+        if not user_barcode:
+          raise ValueError("No barcode read by CoRe scanner and no manual barcode provided.")
+        return Barcode(data=user_barcode, symbology="code128", position_on_resource="front")
+      raise ValueError("No barcode read by CoRe scanner.")
+    if len(barcode_str) > bb_len:
+      barcode_str = barcode_str[:bb_len]
+    return Barcode(data=barcode_str, symbology="code128", position_on_resource="front")
 
   # -- machine configuration ------------------------------------------------
 
@@ -516,10 +687,54 @@ class STARDriver(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="RE")
 
-  async def request_firmware_version(self):
+  async def request_firmware_version(self) -> datetime.date:
     """Request firmware version (C0:RF)."""
 
-    return await self.send_command(module="C0", command="RF")
+    resp = await self.send_command(module="C0", command="RF")
+    return parse_star_firmware_version_date(str(resp))
+
+  async def x_arm_request_firmware_version(self) -> Tuple[str, datetime.date]:
+    """Request the X-arm firmware version and build date (X0:RF).
+
+    Returns:
+      A tuple of ``(version_string, build_date)``, e.g. ``("1.0S", date(2009, 6, 24))``.
+    """
+
+    resp = await self.send_command(module="X0", command="RF")
+    resp_str = str(resp)
+    version = resp_str.split("rf")[-1].split(" ")[0]
+    build_date = parse_star_firmware_version_date(resp_str)
+    return version, build_date
+
+  async def experimental_x_arm_move(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the X-arm to an absolute X position with specified acceleration (X0:XP).
+
+    Args:
+      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+    if not 90.0 <= x <= 1350.0:
+      raise ValueError(f"x must be between 90.0 and 1350.0 mm, is {x}")
+    if not 1 <= acceleration_level <= 5:
+      raise ValueError(f"acceleration_level must be between 1 and 5, is {acceleration_level}")
+    if not 0 <= current_protection_limiter <= 7:
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, is {current_protection_limiter}"
+      )
+
+    return await self.send_command(
+      module="X0",
+      command="XP",
+      la=f"{round(x * 10):05}",
+      lr=str(acceleration_level),
+      lw=str(current_protection_limiter),
+    )
 
   async def request_parameter_value(self):
     """Request parameter value (C0:RA)."""
@@ -1068,7 +1283,7 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- PIP channel helpers ---------------------------------------------------
 
-  y_drive_mm_per_increment = 0.046302082
+  y_drive_mm_per_increment = 0.046302083
 
   @staticmethod
   def channel_id(channel_idx: int) -> str:

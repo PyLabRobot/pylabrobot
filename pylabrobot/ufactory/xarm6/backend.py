@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from pylabrobot.capabilities.arms.backend import (
   ArticulatedGripperArmBackend,
   CanFreedrive,
   HasJoints,
 )
-from pylabrobot.capabilities.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -123,17 +123,26 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   # -- CanGrip ---------------------------------------------------------------
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Open the bio-gripper to the specified width (mm)."""
-    await self._set_gripper_units(self._mm_to_gripper_units(gripper_width))
+  @property
+  def min_gripper_width(self) -> float:
+    return self.gripper_min_mm
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  @property
+  def max_gripper_width(self) -> float:
+    return self.gripper_max_mm
+
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
-    """Close the bio-gripper to the specified width (mm)."""
-    await self._set_gripper_units(self._mm_to_gripper_units(gripper_width))
+    """Move the bio-gripper jaws to ``width`` mm.
+
+    The xArm bio-gripper is position-controlled; ``force_sensing`` has no
+    effect on the SDK call.
+    """
+    await self._set_gripper_units(self._mm_to_gripper_units(width))
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Return True if the gripper width is at or below ``closed_threshold_mm``."""
@@ -166,12 +175,12 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
       num_retries=1,
     )
 
-  async def request_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     """Get the current gripper location and rotation."""
     pose = await self._driver._call_sdk(self._driver._arm.get_position, op="get_position")
-    return GripperLocation(
+    return CartesianPose(
       location=Coordinate(x=pose[0], y=pose[1], z=pose[2]),
       rotation=Rotation(x=pose[3], y=pose[4], z=pose[5]),
     )
@@ -209,7 +218,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Move to ``location`` and close the gripper to ``resource_width``."""
     await self.move_to_location(location, rotation, backend_params=backend_params)
-    await self.close_gripper(resource_width)
+    await self.move_gripper(width=resource_width, force_sensing=True)
 
   async def drop_at_location(
     self,
@@ -225,7 +234,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   # -- HasJoints -------------------------------------------------------------
 
   async def move_to_joint_position(
-    self, position: Dict[int, float], backend_params: Optional[BackendParams] = None
+    self, position: JointPose, backend_params: Optional[BackendParams] = None
   ) -> None:
     """Move to the specified joint angles.
 
@@ -249,24 +258,24 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   async def request_joint_position(
     self, backend_params: Optional[BackendParams] = None
-  ) -> Dict[int, float]:
+  ) -> JointPose:
     """Get current joint angles as ``{1: j1_deg, 2: j2_deg, ...}``."""
     angles = await self._driver._call_sdk(self._driver._arm.get_servo_angle, op="get_servo_angle")
     return {i + 1: angles[i] for i in range(6)}
 
   async def pick_up_at_joint_position(
     self,
-    position: Dict[int, float],
+    position: JointPose,
     resource_width: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
     """Move to the joint target and close the gripper to ``resource_width``."""
     await self.move_to_joint_position(position, backend_params=backend_params)
-    await self.close_gripper(resource_width)
+    await self.move_gripper(width=resource_width, force_sensing=True)
 
   async def drop_at_joint_position(
     self,
-    position: Dict[int, float],
+    position: JointPose,
     resource_width: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
@@ -281,8 +290,8 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Enter freedrive (manual teaching) mode.
 
-    The xArm SDK only supports freeing all axes at once, so ``free_axes`` is
-    accepted for interface compatibility but ignored.
+    The xArm SDK only supports freeing all axes at once, so ``free_axes`` has
+    no effect.
     """
     await self._driver._call_sdk(self._driver._arm.set_mode, 2, op="set_mode")
     await self._driver._call_sdk(self._driver._arm.set_state, 0, op="set_state")

@@ -1,9 +1,10 @@
 import logging
+from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union, cast
 
-from pylabrobot.capabilities.arms.backend import GripperArmBackend, _BaseArmBackend
-from pylabrobot.capabilities.arms.standard import GripDirection, GripperLocation
+from pylabrobot.capabilities.arms.backend import CanGrip, GripperArmBackend, _BaseArmBackend
+from pylabrobot.capabilities.arms.standard import CartesianPose, GripperDirection
 from pylabrobot.capabilities.capability import BackendParams, Capability
 from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
@@ -20,7 +21,7 @@ from pylabrobot.resources.rotation import Rotation
 
 logger = logging.getLogger(__name__)
 
-GripOrientation = Union[GripDirection, float]
+GripperOrientation = Union[GripperDirection, float]
 
 
 @dataclass
@@ -72,11 +73,11 @@ class _BaseArm(Capability):
     """Park the arm to its default position."""
     return await self.backend.park(backend_params=backend_params)
 
-  async def request_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     """Get the current location and rotation of the gripper."""
-    return await self.backend.request_gripper_location(backend_params=backend_params)
+    return await self.backend.request_gripper_pose(backend_params=backend_params)
 
   # -- holding state -----------------------------------------------------------
 
@@ -170,7 +171,9 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: float,
   ) -> Coordinate:
-    return to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
+    return (
+      to + resource.get_anchor("c", "c", "b") + Coordinate(z=pickup_distance_from_bottom) + offset
+    )
 
   def _resolve_pickup_distance(
     self, resource: Resource, pickup_distance_from_bottom: Optional[float]
@@ -264,7 +267,9 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: Optional[float],
   ) -> Tuple[Coordinate, float]:
-    pickup_distance_from_bottom = self._resolve_pickup_distance(resource, pickup_distance_from_bottom)
+    pickup_distance_from_bottom = self._resolve_pickup_distance(
+      resource, pickup_distance_from_bottom
+    )
     assert resource.get_absolute_rotation().x == 0 and resource.get_absolute_rotation().y == 0
     assert resource.get_absolute_rotation().z % 90 == 0
     location = self._pickup_location(resource, offset, pickup_distance_from_bottom)
@@ -293,7 +298,112 @@ class _BaseArm(Capability):
 
 
 class GripperArm(_BaseArm):
-  """A gripper arm without rotation capability. E.g. Hamilton core grippers."""
+  """Abstract base for arms with a gripper.
+
+  Owns the gripper-width controls (:meth:`move_gripper`, :meth:`open_gripper`,
+  :meth:`close_gripper`, :meth:`is_gripper_closed`) shared by all gripper
+  arms.
+
+  Do not instantiate this class directly. Pick/drop/move signatures differ
+  between fixed-axis, orientable, and articulated arms, so subclass one of:
+
+  - :class:`FixedAxisGripperArm` — grips along a single deck-fixed axis
+    (e.g. Hamilton core grippers).
+  - :class:`OrientableGripperArm` — grip direction is a yaw angle
+    (e.g. Hamilton iSWAP, PreciseFlex).
+  - :class:`ArticulatedGripperArm` — full 3D rotation
+    (e.g. UFACTORY xArm 6).
+  """
+
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Move the gripper jaws.
+
+    Args:
+      width: Target jaw width in mm. Must lie within the backend's advertised
+        ``[min_gripper_width, max_gripper_width]`` range; either bound declared
+        as ``None`` is treated as unbounded on that side.
+      force_sensing: If ``True``, close toward ``width`` with force feedback and
+        stop on contact (final width may be larger than ``width``). If
+        ``False``, drive to exactly ``width`` without feedback.
+      backend_params: Optional backend-specific parameters.
+
+    Raises:
+      ValueError: If ``width`` falls outside the advertised range.
+    """
+    backend = cast(CanGrip, self.backend)
+    min_w = backend.min_gripper_width
+    max_w = backend.max_gripper_width
+    if min_w is not None and width < min_w:
+      raise ValueError(
+        f"width {width} mm is below {type(self.backend).__name__}.min_gripper_width ({min_w} mm)."
+      )
+    if max_w is not None and width > max_w:
+      raise ValueError(
+        f"width {width} mm is above {type(self.backend).__name__}.max_gripper_width ({max_w} mm)."
+      )
+    return await backend.move_gripper(
+      width=width, force_sensing=force_sensing, backend_params=backend_params
+    )
+
+  async def open_gripper(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Drive the gripper to its full open width.
+
+    Calls :meth:`move_gripper` with ``width=max_gripper_width`` and
+    ``force_sensing=False``. Raises :class:`NotImplementedError` if the backend
+    does not declare ``max_gripper_width``.
+    """
+    width = self.backend.max_gripper_width
+    if width is None:
+      raise NotImplementedError(
+        f"{type(self.backend).__name__} does not support open_gripper (max_gripper_width is None)."
+      )
+    return await self.backend.move_gripper(
+      width=width, force_sensing=False, backend_params=backend_params
+    )
+
+  async def close_gripper(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Drive the gripper closed with force feedback.
+
+    Calls :meth:`move_gripper` with ``width=min_gripper_width`` and
+    ``force_sensing=True``. Raises :class:`NotImplementedError` if the backend
+    does not declare ``min_gripper_width``.
+    """
+    width = self.backend.min_gripper_width
+    if width is None:
+      raise NotImplementedError(
+        f"{type(self.backend).__name__} does not support close_gripper (min_gripper_width is None)."
+      )
+    return await self.backend.move_gripper(
+      width=width, force_sensing=True, backend_params=backend_params
+    )
+
+  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
+    """Return whether the gripper is currently in the closed state."""
+    return await self.backend.is_gripper_closed(backend_params=backend_params)
+
+  @abstractmethod
+  async def pick_up_resource(self, resource: Resource, *args, **kwargs) -> None:
+    """Pick up a resource. Concrete subclasses define the full signature."""
+
+  @abstractmethod
+  async def drop_resource(self, destination, *args, **kwargs) -> None:
+    """Drop the held resource at a destination. Subclasses define the signature."""
+
+  @abstractmethod
+  async def move_resource(self, resource: Resource, to, *args, **kwargs) -> None:
+    """Pick up, optionally pass through waypoints, and drop. Subclass-defined signature."""
+
+
+class FixedAxisGripperArm(GripperArm):
+  """A gripper arm without rotation capability. E.g. Hamilton core grippers.
+
+  Grips along a single deck-fixed axis chosen at construction time.
+  """
 
   def __init__(
     self,
@@ -304,23 +414,6 @@ class GripperArm(_BaseArm):
     super().__init__(backend=backend, reference_resource=reference_resource)
     self.backend: GripperArmBackend = backend
     self._grip_axis = grip_axis
-
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    return await self.backend.open_gripper(
-      gripper_width=gripper_width, backend_params=backend_params
-    )
-
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    return await self.backend.close_gripper(
-      gripper_width=gripper_width, backend_params=backend_params
-    )
-
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   def _resource_width(self, resource: Resource) -> float:
     if self._grip_axis == "y":

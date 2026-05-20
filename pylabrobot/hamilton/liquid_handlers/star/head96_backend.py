@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 from contextlib import contextmanager
@@ -21,6 +22,7 @@ from pylabrobot.capabilities.liquid_handling.standard import (
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 
+from .errors import CommandSyntaxError, HardwareError, STARFirmwareError
 from .pip_backend import _dispensing_mode_for_op  # noqa: F401
 
 if TYPE_CHECKING:
@@ -97,6 +99,52 @@ class STARHead96Backend(Head96Backend):
       logger.warning("Failed to park 96-head during stop", exc_info=True)
 
   # ---------------------------------------------------------------------------
+  # Slow-op slave-timeout recovery
+  # ---------------------------------------------------------------------------
+
+  def _is_slave_timeout(self, error: STARFirmwareError) -> bool:
+    """Detect the master's "slave command time out" forwarded to the H0 module.
+
+    The firmware master has an internal ~5 minute timeout for slave commands. For slow liquid
+    handling operations (e.g. large volumes at low flow rates), the master may report a timeout
+    error even though the CoRe 96 head is still working and will finish successfully. The
+    error looks like ``C0EAid####er99/00 H002/11`` — H0 error_code=02 (HardwareError),
+    trace_information=11 (master's "Slave command time out" forwarded to H0).
+    """
+    h0_error = error.errors.get("CoRe 96 Head")
+    return (
+      h0_error is not None
+      and isinstance(h0_error, HardwareError)
+      and h0_error.trace_information == 11
+    )
+
+  async def _wait_for_idle(self, timeout: float = 600, poll_interval: float = 5):
+    """Poll the CoRe 96 head until it finishes its current operation.
+
+    Sends ``C0 EV`` (move to Z safety). If the head is busy the firmware rejects with H0
+    CommandSyntaxError trace 40 ("No parallel processes permitted"). When the head finishes,
+    EV succeeds and harmlessly ensures the Z axis is at the safe position.
+    """
+    start = asyncio.get_event_loop().time()
+    while asyncio.get_event_loop().time() - start < timeout:
+      await asyncio.sleep(poll_interval)
+      try:
+        await self.driver.send_command(module="C0", command="EV", read_timeout=10)
+        logger.info("CoRe 96 head finished (EV succeeded)")
+        return
+      except STARFirmwareError as e:
+        h0_error = e.errors.get("CoRe 96 Head")
+        if (
+          h0_error is not None
+          and isinstance(h0_error, CommandSyntaxError)
+          and h0_error.trace_information == 40
+        ):
+          logger.debug("CoRe 96 head still busy, waiting...")
+          continue
+        raise
+    raise TimeoutError("CoRe 96 head did not become idle within timeout")
+
+  # ---------------------------------------------------------------------------
   # Initialization & status
   # ---------------------------------------------------------------------------
 
@@ -107,9 +155,6 @@ class STARHead96Backend(Head96Backend):
     )
 
     resp = await self.driver.send_command(module="H0", command="RF")
-    if resp is None:
-      # Chatterbox / simulation: return a sensible default
-      return datetime.date(2024, 1, 1)
     return parse_star_firmware_version_date(str(resp))
 
   async def request_initialization_status(self) -> bool:
@@ -523,6 +568,7 @@ class STARHead96Backend(Head96Backend):
 
     pickup_position = alignment_tipspot.get_absolute_location(x="c", y="c") + pickup.offset
     pickup_position.z = round(z_pickup_position, 2)
+    self._check_96_position_legal(pickup_position, skip_z=True)
 
     traversal = self.traversal_height
 
@@ -598,9 +644,19 @@ class STARHead96Backend(Head96Backend):
       if tip_rack is None:
         raise ValueError("Tip spot parent (tip rack) must not be None")
       position.z = tip_rack.get_absolute_location().z + 1.45
+      # Sanity check: z should be ≈ 216.4 mm above the deck for a standard rack
+      # (legacy STARBackend.drop_tips96 asserted exactly 216.4).
+      if not abs(position.z - 216.4) < 5.0:
+        logger.warning(
+          "drop_tips96 z=%.3f mm is not within 5 mm of the expected 216.4 mm; "
+          "verify the tip rack location.",
+          position.z,
+        )
     else:
       # Drop into trash or other resource: center the head in the resource.
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
+
+    self._check_96_position_legal(position, skip_z=True)
 
     traversal = self.traversal_height
 
@@ -727,6 +783,7 @@ class STARHead96Backend(Head96Backend):
         + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
       )
+    self._check_96_position_legal(position, skip_z=True)
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -749,43 +806,51 @@ class STARHead96Backend(Head96Backend):
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
 
-    await self.driver.send_command(
-      module="C0",
-      command="EA",
-      aa=backend_params.aspiration_type,
-      xs=f"{abs(round(position.x * 10)):05}",
-      xd=0 if position.x >= 0 else 1,
-      yh=f"{round(position.y * 10):04}",
-      zh=f"{round((backend_params.minimum_traverse_height_at_beginning_of_a_command or traversal) * 10):04}",
-      ze=f"{round((backend_params.min_z_endpos or traversal) * 10):04}",
-      lz=f"{round(backend_params.lld_search_height * 10):04}",
-      zt=f"{round(liquid_height * 10):04}",
-      pp=f"{round(backend_params.pull_out_distance_transport_air * 10):04}",
-      zm=f"{round((backend_params.minimum_height or position.z) * 10):04}",
-      zv=f"{round(backend_params.second_section_height * 10):04}",
-      zq=f"{round(backend_params.second_section_ratio * 10):05}",
-      iw=f"{round(abs(immersion_depth) * 10):03}",
-      ix=immersion_depth_direction,
-      fh=f"{round(backend_params.surface_following_distance * 10):03}",
-      af=f"{round(volume * 10):05}",
-      ag=f"{round(flow_rate * 10):04}",
-      vt=f"{round(backend_params.transport_air_volume * 10):03}",
-      bv=f"{round(blow_out_air_volume * 10):05}",
-      wv=f"{round(backend_params.pre_wetting_volume * 10):05}",
-      cm=int(backend_params.use_lld),
-      cs=backend_params.gamma_lld_sensitivity,
-      bs=f"{round(backend_params.swap_speed * 10):04}",
-      wh=f"{round(backend_params.settling_time * 10):02}",
-      hv=f"{round(aspiration.mix.volume * 10):05}" if aspiration.mix is not None else "00000",
-      hc=f"{aspiration.mix.repetitions:02}" if aspiration.mix is not None else "00",
-      hp=f"{round(backend_params.mix_position_from_liquid_surface * 10):03}",
-      mj=f"{round(backend_params.mix_surface_following_distance * 10):03}",
-      hs=f"{round(aspiration.mix.flow_rate * 10):04}" if aspiration.mix is not None else "1200",
-      cw=_channel_pattern_to_hex([True] * 96),
-      cr=f"{backend_params.limit_curve_index:03}",
-      cj=backend_params.tadm_algorithm,
-      cx=backend_params.recording_mode,
-    )
+    try:
+      await self.driver.send_command(
+        module="C0",
+        command="EA",
+        read_timeout=max(300, self.driver.read_timeout),
+        aa=backend_params.aspiration_type,
+        xs=f"{abs(round(position.x * 10)):05}",
+        xd=0 if position.x >= 0 else 1,
+        yh=f"{round(position.y * 10):04}",
+        zh=f"{round((backend_params.minimum_traverse_height_at_beginning_of_a_command or traversal) * 10):04}",
+        ze=f"{round((backend_params.min_z_endpos or traversal) * 10):04}",
+        lz=f"{round(backend_params.lld_search_height * 10):04}",
+        zt=f"{round(liquid_height * 10):04}",
+        pp=f"{round(backend_params.pull_out_distance_transport_air * 10):04}",
+        zm=f"{round((backend_params.minimum_height or position.z) * 10):04}",
+        zv=f"{round(backend_params.second_section_height * 10):04}",
+        zq=f"{round(backend_params.second_section_ratio * 10):05}",
+        iw=f"{round(abs(immersion_depth) * 10):03}",
+        ix=immersion_depth_direction,
+        fh=f"{round(backend_params.surface_following_distance * 10):03}",
+        af=f"{round(volume * 10):05}",
+        ag=f"{round(flow_rate * 10):04}",
+        vt=f"{round(backend_params.transport_air_volume * 10):03}",
+        bv=f"{round(blow_out_air_volume * 10):05}",
+        wv=f"{round(backend_params.pre_wetting_volume * 10):05}",
+        cm=int(backend_params.use_lld),
+        cs=backend_params.gamma_lld_sensitivity,
+        bs=f"{round(backend_params.swap_speed * 10):04}",
+        wh=f"{round(backend_params.settling_time * 10):02}",
+        hv=f"{round(aspiration.mix.volume * 10):05}" if aspiration.mix is not None else "00000",
+        hc=f"{aspiration.mix.repetitions:02}" if aspiration.mix is not None else "00",
+        hp=f"{round(backend_params.mix_position_from_liquid_surface * 10):03}",
+        mj=f"{round(backend_params.mix_surface_following_distance * 10):03}",
+        hs=f"{round(aspiration.mix.flow_rate * 10):04}" if aspiration.mix is not None else "1200",
+        cw=_channel_pattern_to_hex([True] * 96),
+        cr=f"{backend_params.limit_curve_index:03}",
+        cj=backend_params.tadm_algorithm,
+        cx=backend_params.recording_mode,
+      )
+    except STARFirmwareError as e:
+      if self._is_slave_timeout(e):
+        logger.warning("Firmware slave timeout during aspirate96, polling for completion")
+        await self._wait_for_idle()
+      else:
+        raise
 
   # ---------------------------------------------------------------------------
   # Dispense
@@ -908,6 +973,7 @@ class STARHead96Backend(Head96Backend):
         + Coordinate(x=x_position, y=y_position)
         + dispense.offset
       )
+    self._check_96_position_legal(position, skip_z=True)
 
     liquid_height = position.z + (dispense.liquid_height or 0)
 
@@ -936,45 +1002,53 @@ class STARHead96Backend(Head96Backend):
     immersion_depth = backend_params.immersion_depth
     immersion_depth_direction = 0 if immersion_depth >= 0 else 1
 
-    await self.driver.send_command(
-      module="C0",
-      command="ED",
-      da=dispense_mode,
-      xs=f"{abs(round(position.x * 10)):05}",
-      xd=0 if position.x >= 0 else 1,
-      yh=f"{round(position.y * 10):04}",
-      zm=f"{round((backend_params.minimum_height or position.z) * 10):04}",
-      zv=f"{round(backend_params.second_section_height * 10):04}",
-      zq=f"{round(backend_params.second_section_ratio * 10):05}",
-      lz=f"{round(backend_params.lld_search_height * 10):04}",
-      zt=f"{round(liquid_height * 10):04}",
-      pp=f"{round(backend_params.pull_out_distance_transport_air * 10):04}",
-      iw=f"{round(abs(immersion_depth) * 10):03}",
-      ix=immersion_depth_direction,
-      fh=f"{round(backend_params.surface_following_distance * 10):03}",
-      zh=f"{round((backend_params.minimum_traverse_height_at_beginning_of_a_command or traversal) * 10):04}",
-      ze=f"{round((backend_params.min_z_endpos or traversal) * 10):04}",
-      df=f"{round(volume * 10):05}",
-      dg=f"{round(flow_rate * 10):04}",
-      es=f"{round(backend_params.cut_off_speed * 10):04}",
-      ev=f"{round(backend_params.stop_back_volume * 10):03}",
-      vt=f"{round(backend_params.transport_air_volume * 10):03}",
-      bv=f"{round(blow_out_air_volume * 10):05}",
-      cm=int(backend_params.use_lld),
-      cs=backend_params.gamma_lld_sensitivity,
-      ej=f"{backend_params.side_touch_off_distance:02}",
-      bs=f"{round(backend_params.swap_speed * 10):04}",
-      wh=f"{round(backend_params.settling_time * 10):02}",
-      hv=f"{round(dispense.mix.volume * 10):05}" if dispense.mix is not None else "00000",
-      hc=f"{dispense.mix.repetitions:02}" if dispense.mix is not None else "00",
-      hp=f"{round(backend_params.mix_position_from_liquid_surface * 10):03}",
-      mj=f"{round(backend_params.mix_surface_following_distance * 10):03}",
-      hs=f"{round(dispense.mix.flow_rate * 10):04}" if dispense.mix is not None else "1200",
-      cw=_channel_pattern_to_hex([True] * 96),
-      cr=f"{backend_params.limit_curve_index:03}",
-      cj=backend_params.tadm_algorithm,
-      cx=backend_params.recording_mode,
-    )
+    try:
+      await self.driver.send_command(
+        module="C0",
+        command="ED",
+        read_timeout=max(300, self.driver.read_timeout),
+        da=dispense_mode,
+        xs=f"{abs(round(position.x * 10)):05}",
+        xd=0 if position.x >= 0 else 1,
+        yh=f"{round(position.y * 10):04}",
+        zm=f"{round((backend_params.minimum_height or position.z) * 10):04}",
+        zv=f"{round(backend_params.second_section_height * 10):04}",
+        zq=f"{round(backend_params.second_section_ratio * 10):05}",
+        lz=f"{round(backend_params.lld_search_height * 10):04}",
+        zt=f"{round(liquid_height * 10):04}",
+        pp=f"{round(backend_params.pull_out_distance_transport_air * 10):04}",
+        iw=f"{round(abs(immersion_depth) * 10):03}",
+        ix=immersion_depth_direction,
+        fh=f"{round(backend_params.surface_following_distance * 10):03}",
+        zh=f"{round((backend_params.minimum_traverse_height_at_beginning_of_a_command or traversal) * 10):04}",
+        ze=f"{round((backend_params.min_z_endpos or traversal) * 10):04}",
+        df=f"{round(volume * 10):05}",
+        dg=f"{round(flow_rate * 10):04}",
+        es=f"{round(backend_params.cut_off_speed * 10):04}",
+        ev=f"{round(backend_params.stop_back_volume * 10):03}",
+        vt=f"{round(backend_params.transport_air_volume * 10):03}",
+        bv=f"{round(blow_out_air_volume * 10):05}",
+        cm=int(backend_params.use_lld),
+        cs=backend_params.gamma_lld_sensitivity,
+        ej=f"{backend_params.side_touch_off_distance:02}",
+        bs=f"{round(backend_params.swap_speed * 10):04}",
+        wh=f"{round(backend_params.settling_time * 10):02}",
+        hv=f"{round(dispense.mix.volume * 10):05}" if dispense.mix is not None else "00000",
+        hc=f"{dispense.mix.repetitions:02}" if dispense.mix is not None else "00",
+        hp=f"{round(backend_params.mix_position_from_liquid_surface * 10):03}",
+        mj=f"{round(backend_params.mix_surface_following_distance * 10):03}",
+        hs=f"{round(dispense.mix.flow_rate * 10):04}" if dispense.mix is not None else "1200",
+        cw=_channel_pattern_to_hex([True] * 96),
+        cr=f"{backend_params.limit_curve_index:03}",
+        cj=backend_params.tadm_algorithm,
+        cx=backend_params.recording_mode,
+      )
+    except STARFirmwareError as e:
+      if self._is_slave_timeout(e):
+        logger.warning("Firmware slave timeout during dispense96, polling for completion")
+        await self._wait_for_idle()
+      else:
+        raise
 
   # ---------------------------------------------------------------------------
   # Helpers
@@ -990,3 +1064,33 @@ class STARHead96Backend(Head96Backend):
     loc.x += (resource.get_size_x() - head_size_x) / 2 + channel_size / 2
     loc.y += (resource.get_size_y() - head_size_y) / 2 + channel_size / 2
     return loc
+
+  def _check_96_position_legal(self, c: Coordinate, skip_z: bool = False) -> None:
+    """Validate that a coordinate is within the allowed range for the 96 head.
+
+    Args:
+      c: The coordinate of the A1 position of the head.
+      skip_z: If True, the z coordinate is not checked. This is useful for commands that handle
+        the z coordinate separately.
+
+    Raises:
+      ValueError: If one or more components are out of range.
+    """
+    x_min = (
+      self.driver.HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL
+      if self.driver.left_side_panel_installed
+      else -271.0
+    )
+    errors = []
+    if not (x_min <= c.x <= 974.0):
+      errors.append(f"x={c.x}")
+    if not (108.0 <= c.y <= 560.0):
+      errors.append(f"y={c.y}")
+    if not skip_z and not (180.5 <= c.z <= 342.5):
+      errors.append(f"z={c.z}")
+    if errors:
+      raise ValueError(
+        "Illegal 96 head position: "
+        + ", ".join(errors)
+        + f" (allowed ranges: x [{x_min}, 974], y [108, 560], z [180.5, 342.5])"
+      )

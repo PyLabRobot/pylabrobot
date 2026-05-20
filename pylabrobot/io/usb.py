@@ -106,7 +106,7 @@ class USB(IOBase):
 
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the device.
@@ -118,7 +118,7 @@ class USB(IOBase):
     """
 
     if self.dev is None or self.read_endpoint is None:
-      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.write_timeout
@@ -128,7 +128,7 @@ class USB(IOBase):
     write_endpoint = self.write_endpoint
     dev = self.dev
     if self._executor is None or dev is None or write_endpoint is None:
-      raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for USB device '{self.human_readable_device_name}'.")
     await loop.run_in_executor(
       self._executor,
       lambda: dev.write(
@@ -169,7 +169,7 @@ class USB(IOBase):
     """
 
     if self.dev is None or self.read_endpoint is None:
-      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
 
     ep = endpoint if endpoint is not None else self.read_endpoint
     if ep is None:
@@ -221,7 +221,7 @@ class USB(IOBase):
     """
 
     if self.dev is None or self.read_endpoint is None:
-      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.read_timeout
@@ -261,12 +261,12 @@ class USB(IOBase):
         return resp
 
       raise TimeoutError(
-        f"Timeout while reading from USB device '{self._human_readable_device_name}'."
+        f"Timeout while reading from USB device '{self.human_readable_device_name}'."
       )
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self.dev is None:
-      raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for USB device '{self.human_readable_device_name}'.")
     return await loop.run_in_executor(self._executor, read_or_timeout)
 
   def get_available_devices(self) -> List["usb.core.Device"]:
@@ -283,7 +283,7 @@ class USB(IOBase):
       if self._device_address is not None:
         if dev.address is None:
           raise RuntimeError(
-            f"A device address was specified for '{self._human_readable_device_name}', but the backend used for PyUSB does "
+            f"A device address was specified for '{self.human_readable_device_name}', but the backend used for PyUSB does "
             "not support device addresses."
           )
 
@@ -293,7 +293,7 @@ class USB(IOBase):
       if self._serial_number is not None:
         if dev._serial_number is None:
           raise RuntimeError(
-            f"A serial number was specified for '{self._human_readable_device_name}', but the device does not have a serial number."
+            f"A serial number was specified for '{self.human_readable_device_name}', but the device does not have a serial number."
           )
 
         if dev.serial_number != self._serial_number:
@@ -331,7 +331,7 @@ class USB(IOBase):
     timeout: Optional[int] = None,
   ) -> bytearray:
     if self.dev is None:
-      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.read_timeout
@@ -467,7 +467,7 @@ class USB(IOBase):
 
     d = {
       **super().serialize(),
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "id_vendor": self._id_vendor,
       "id_product": self._id_product,
       "device_address": self._device_address,

@@ -51,7 +51,7 @@ class Serial(IOBase):
     dsrdtr: bool = False,
     xonxoff: bool = False,
   ):
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self._port = port
     self._vid = vid
     self._pid = pid
@@ -202,7 +202,7 @@ class Serial(IOBase):
 
     except serial.SerialException as e:
       logger.error(
-        f"Could not connect to device '{self._human_readable_device_name}', is it in use by a different notebook/process?"
+        f"Could not connect to device '{self.human_readable_device_name}', is it in use by a different notebook/process?"
       )
       if self._executor is not None:
         self._executor.shutdown(wait=True)
@@ -220,7 +220,7 @@ class Serial(IOBase):
       loop = asyncio.get_running_loop()
 
       if self._executor is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       await loop.run_in_executor(self._executor, self._ser.close)
 
     if self._executor is not None:
@@ -232,7 +232,7 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     await loop.run_in_executor(self._executor, self._ser.write, data)
 
@@ -246,7 +246,7 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     data = await loop.run_in_executor(self._executor, self._ser.read, num_bytes)
 
@@ -263,7 +263,7 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     data = await loop.run_in_executor(self._executor, self._ser.readline)
 
@@ -280,7 +280,7 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     def _send_break(ser, duration: float) -> None:
       """Send a break condition for the specified duration."""
@@ -294,7 +294,7 @@ class Serial(IOBase):
   async def reset_input_buffer(self):
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_input_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
     capturer.record(SerialCommand(device_id=self.port, action="reset_input_buffer", data=""))
@@ -302,7 +302,7 @@ class Serial(IOBase):
   async def reset_output_buffer(self):
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_output_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
     capturer.record(SerialCommand(device_id=self.port, action="reset_output_buffer", data=""))
@@ -341,7 +341,7 @@ class Serial(IOBase):
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "port": self._port,
       "baudrate": self.baudrate,
       "bytesize": self.bytesize,
