@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from pylabrobot.resources.barcode import Barcode
+
 
 @dataclass
 class RackScanEntry:
@@ -11,6 +13,7 @@ class RackScanEntry:
   position: str
   tube_id: Optional[str]
   status: Literal["OK", "NOREAD"]
+  barcode: Optional[Barcode] = None
 
 
 @dataclass
@@ -19,3 +22,4 @@ class RackScanResult:
 
   rack_id: str
   entries: list[RackScanEntry]
+  rack_barcode: Optional[Barcode] = None
