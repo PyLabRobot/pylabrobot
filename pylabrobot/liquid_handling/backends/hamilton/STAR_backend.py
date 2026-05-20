@@ -9918,24 +9918,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         `speed`, `acceleration_level`, or `current_protection_limiter` is
         outside its valid range.
     """
-    # Read the full joint state once so the current rotation-drive Y and the
-    # FK-derived current gripper Y come from the same snapshot - avoids the
-    # redundant R0 RY read and any race window between the two values.
-    joints = {
-      STARBackend.iSWAPAxis(k): v for k, v in (await self.iswap_request_joint_state()).items()
-    }
-    current_rotation_drive_y = joints[STARBackend.iSWAPAxis.Y]
-    current_gripper_y = STARBackend._iswap_fk(
-      joints=joints,
-      link_1_length=self.iswap_information.link_1_length,
-      link_2_length=self.iswap_information.link_2_length,
-      wrist_straight_angle=STARBackend._iswap_wrist_drive_increments_to_angle(
-        self.iswap_information.wrist_drive_predefined_increments[
-          STARBackend.WristDriveOrientation.STRAIGHT
-        ]
-      ),
-    ).location.y
-
+    current_gripper_y = (await self.iswap_request_pose()).location.y
+    current_rotation_drive_y = await self.iswap_rotation_drive_request_y()
     target_rotation_drive_y = current_rotation_drive_y + (y_position - current_gripper_y)
     try:
       await self.iswap_rotation_drive_move_y(
