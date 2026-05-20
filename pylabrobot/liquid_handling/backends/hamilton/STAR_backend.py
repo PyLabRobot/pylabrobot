@@ -10023,11 +10023,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Request iSWAP rotation-drive-bottom Z (deck coordinates), in mm.
 
     Returns the Z of the rotation drive's lowest physical point, which sits
-    13 mm above the gripper finger plane that C0 QG reports.
+    `iswap_rotation_drive_z_offset_above_finger_mm` above the gripper finger
+    plane that R0 RZ reports.
     """
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
-    finger_plane_z = (await self.request_iswap_position()).z
+    resp = await self.send_command(module="R0", command="RZ", fmt="rz##### (n)")
+    iswap_z_pos_increments = resp["rz"][1]  # 0 = FW counter, 1 = HW counter
+    finger_plane_z = STARBackend.iswap_z_drive_increment_to_mm(iswap_z_pos_increments)
     return finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
 
   async def iswap_rotation_drive_request_position(self) -> Coordinate:
