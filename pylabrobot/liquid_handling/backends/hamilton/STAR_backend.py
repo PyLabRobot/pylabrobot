@@ -11017,56 +11017,44 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     rotation_angle: Optional[Union[RotationDriveOrientation, float]] = None,
     wrist_angle: Optional[Union[WristDriveOrientation, float]] = None,
-    rotation_speed: float = 77.4048,
-    rotation_acceleration: float = 526.3524,
+    rotation_speed: float = 75.0,
+    rotation_acceleration: float = 500.0,
     rotation_current_limit: int = 5,
-    wrist_speed: float = 101.5938,
-    wrist_acceleration: float = 736.5548,
+    wrist_speed: float = 100.0,
+    wrist_acceleration: float = 725.0,
     wrist_current_limit: int = 5,
   ) -> None:
     """Rotate one or both iSWAP joints to absolute angles in a single motion.
 
     Public deg-based wrapper around `_iswap_rotate_increments`. When both
     angles are supplied, both joints arrive together under a single motion
-    plan so the gripper sweeps a straight joint-space path; calling the move
-    twice (rotation then wrist) instead would pass through an intermediate
-    (W_target, T_now) pose, which is not what an IK-driven trajectory wants.
+    plan so the gripper sweeps a straight joint-space path; enables IK-driven
+    trajectory execution.
 
-    When only one angle is supplied, the other drive is read from firmware
-    and pinned to its current position - so this method also covers the
-    single-axis rotation case. At least one of `rotation_angle` /
-    `wrist_angle` must be provided.
+    When only one angle is supplied, the other drive is requested from device
+    (i.e. single-axis rotation is covered as well).
+    At least one of `rotation_angle` or `wrist_angle` must be provided.
 
-    Each angle accepts either the enum stop (calibrated EEPROM increment) or
-    a float (degrees). Position conversions go through the calibrated path:
-    rotation floats use piecewise-linear interpolation between the LEFT /
-    FRONT / RIGHT EEPROM stops via `_iswap_rotation_drive_angle_to_increments`;
-    wrist floats use the linear `iswap_wrist_drive_deg_per_increment` factor
-    anchored on motor zero. Speed / acceleration are rate conversions and use
-    the linear `deg_per_increment` factor for both drives.
+    Each angle is either the enum stop (lands on the EEPROM increment) or a
+    float in degrees: rotation floats interpolate piecewise-linearly between
+    the LEFT / FRONT / RIGHT EEPROM stops, wrist floats are linear from motor
+    zero. Speed and acceleration convert linearly for both drives.
 
-    Snap-to-stop guarantee for float inputs: if the float angle matches any
-    calibrated stop's reported deg-form to within one increment of precision,
-    the call lands on that stop's exact stored increment instead of the
-    rounded conversion result. This means a value read via
-    `iswap_rotation_drive_request_angle` or
-    `iswap_wrist_drive_request_angle` always round-trips back to the same
-    motor increment.
+    Snap-to-stop: float angles within one motor increment of a calibrated
+    stop's deg-form land on the exact stored increment, so values read via
+    `iswap_*_drive_request_angle` round-trip bit-exact.
 
     Args:
-      rotation_angle: `RotationDriveOrientation` member, degrees signed from
-        the calibrated FRONT stop, or None to hold the rotation drive at its
-        current position.
-      wrist_angle: `WristDriveOrientation` member, degrees signed from motor
-        zero, or None to hold the wrist drive at its current position.
-      rotation_speed: rotation drive max angular velocity in deg/sec.
-      rotation_acceleration: rotation drive max angular acceleration in deg/sec^2.
-      rotation_current_limit: rotation drive motor current protection limiter,
-        range 0..7.
-      wrist_speed: wrist drive max angular velocity in deg/sec.
-      wrist_acceleration: wrist drive max angular acceleration in deg/sec^2.
-      wrist_current_limit: wrist drive motor current protection limiter,
-        range 0..7.
+      rotation_angle [deg]: predefined `RotationDriveOrientation` enum, or float
+        signed from FRONT (+/-90), or None to hold current.
+      wrist_angle [deg]: predefined `WristDriveOrientation` enum, or float signed
+        from motor zero (+/-152), or None to hold current.
+      rotation_speed [deg/sec]: max angular velocity, 0.1..230.
+      rotation_acceleration [deg/sec^2]: max angular acceleration, 16..619.
+      rotation_current_limit: motor current protection limiter, 0..7.
+      wrist_speed [deg/sec]: max angular velocity, 0.2..330.
+      wrist_acceleration [deg/sec^2]: max angular acceleration, 26..1015.
+      wrist_current_limit: motor current protection limiter, 0..7.
 
     Raises:
       RuntimeError: if iSWAP is not installed or if `setup()` has not populated
