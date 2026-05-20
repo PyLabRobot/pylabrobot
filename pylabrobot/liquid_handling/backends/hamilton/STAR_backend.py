@@ -9875,7 +9875,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
     )
 
-  async def move_iswap_x(self, x_position: float):
+  async def move_iswap_x(self, x_position: float):  # TODO: by convention should be just 'x' in v1
     """Move iSWAP X to absolute position"""
     loc = await self.request_iswap_position()
     await self.move_iswap_x_relative(
@@ -9883,15 +9883,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       allow_splitting=True,
     )
 
-  async def move_iswap_y(self, y_position: float):
-    """Move iSWAP Y to absolute position"""
-    loc = await self.request_iswap_position()
-    await self.move_iswap_y_relative(
-      step_size=y_position - loc.y,
-      allow_splitting=True,
-    )
+  async def move_iswap_y(
+    self,
+    y_position: float,  # TODO: by convention should be just 'y' in v1
+    speed: float = 220.0,
+    acceleration_level: int = 2,
+    current_protection_limiter: int = 7,
+    make_space: bool = False,
+  ):
+    """Move the iSWAP gripper center to absolute Y position (deck coordinates).
 
-  async def move_iswap_z(self, z_position: float):
+    The rotation drive Y carriage and the gripper translate rigidly together
+    in Y, so the gripper-Y delta equals the rotation-drive-Y delta. Read the
+    current gripper Y from FK, translate the rotation drive by the delta,
+    and the gripper lands at `y_position` via a single smooth `R0 YA` move.
+
+    Args:
+      y_position [mm]: target gripper Y in deck coordinates. The achievable
+        range depends on channel configuration and current arm pose; in
+        unobstructed conditions the absolute envelope is approximately
+        -270..+648 mm at factory link lengths.
+      speed [mm/sec]: max linear velocity, 2.4..370.
+      acceleration_level: acceleration index, 1 or 2.
+      current_protection_limiter: motor current limit, 0..7.
+      make_space: if True, reposition pipetting channels when channel 0 is
+        in the way and can be cleared. If False, raise so the caller decides.
+
+    Raises:
+      RuntimeError: if iSWAP is not installed, or if `setup()` has not
+        populated `iswap_information`.
+      ValueError: if `y_position` is outside the Y hardware range; if the
+        target requires channel 0 to be moved and `make_space=False`; if
+        the move is unreachable even with channel repositioning; or if
+        `speed`, `acceleration_level`, or `current_protection_limiter` is
+        outside its valid range.
+    """
+    current_gripper_y = (await self.iswap_request_pose()).location.y
+    current_rotation_drive_y = await self.iswap_rotation_drive_request_y()
+    target_rotation_drive_y = current_rotation_drive_y + (y_position - current_gripper_y)
+    try:
+      await self.iswap_rotation_drive_move_y(
+        y=target_rotation_drive_y,
+        speed=speed,
+        acceleration_level=acceleration_level,
+        current_protection_limiter=current_protection_limiter,
+        make_space=make_space,
+      )
+    except ValueError as e:
+      raise ValueError(
+        f"move_iswap_y(y_position={y_position}) resolved to rotation drive "
+        f"target y={target_rotation_drive_y:.2f}: {e}"
+      ) from e
+
+  async def move_iswap_z(self, z_position: float):  # TODO: by convention should be just 'z' in v1
     """Move iSWAP Z to absolute position"""
     loc = await self.request_iswap_position()
     await self.move_iswap_z_relative(
