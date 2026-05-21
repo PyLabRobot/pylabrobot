@@ -9875,13 +9875,44 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
     )
 
-  async def move_iswap_x(self, x_position: float):  # TODO: by convention should be just 'x' in v1
-    """Move iSWAP X to absolute position"""
-    loc = await self.request_iswap_position()
-    await self.move_iswap_x_relative(
-      step_size=x_position - loc.x,
-      allow_splitting=True,
-    )
+  async def move_iswap_x(
+    self,
+    x_position: float,  # TODO: by convention should be just 'x' in v1
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the iSWAP gripper center to absolute X position (deck coordinates).
+
+    The X-arm carriage and the gripper translate rigidly together in X, so
+    the gripper-X delta equals the rotation-drive-X delta. Read the current
+    gripper X from FK, translate the X-arm by the delta, and the gripper
+    lands at `x_position` via a single smooth motion plan.
+
+    Args:
+      x_position [mm]: target gripper X in deck coordinates.
+      acceleration_level: X-arm acceleration index, 1..5.
+      current_protection_limiter: motor current limit, 0..7.
+
+    Raises:
+      RuntimeError: if iSWAP is not installed, or if `setup()` has not
+        populated `iswap_information`.
+      ValueError: if the resolved rotation drive X is outside the X-arm
+        hardware range, or if any arg is outside its valid range.
+    """
+    current_gripper_x = (await self.iswap_request_pose()).location.x
+    current_rotation_drive_x = await self.iswap_rotation_drive_request_x()
+    target_rotation_drive_x = current_rotation_drive_x + (x_position - current_gripper_x)
+    try:
+      await self.experimental_iswap_rotation_drive_move_x(
+        x=target_rotation_drive_x,
+        acceleration_level=acceleration_level,
+        current_protection_limiter=current_protection_limiter,
+      )
+    except ValueError as e:
+      raise ValueError(
+        f"move_iswap_x(x_position={x_position}) resolved to rotation drive "
+        f"target x={target_rotation_drive_x:.2f}: {e}"
+      ) from e
 
   async def move_iswap_y(
     self,
@@ -9935,13 +9966,49 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"target y={target_rotation_drive_y:.2f}: {e}"
       ) from e
 
-  async def move_iswap_z(self, z_position: float):  # TODO: by convention should be just 'z' in v1
-    """Move iSWAP Z to absolute position"""
-    loc = await self.request_iswap_position()
-    await self.move_iswap_z_relative(
-      step_size=z_position - loc.z,
-      allow_splitting=True,
-    )
+  async def move_iswap_z(
+    self,
+    z_position: float,  # TODO: by convention should be just 'z' in v1
+    speed: float = 118.0,
+    acceleration: float = 643.66,
+    current_protection_limiter: int = 6,
+  ):
+    """Move the iSWAP gripper finger plane to absolute Z position (deck coordinates).
+
+    The Z carriage and the gripper translate rigidly together in Z (with a
+    fixed 13 mm offset between the rotation-drive-bottom Z and the
+    finger-plane Z), so the gripper-Z delta equals the rotation-drive-Z
+    delta. Read the current gripper finger-plane Z from FK, translate the
+    rotation drive by the delta, and the gripper lands at `z_position` via
+    a single smooth `R0 ZA` move.
+
+    Args:
+      z_position [mm]: target gripper finger-plane Z in deck coordinates.
+      speed [mm/sec]: max linear velocity.
+      acceleration [mm/sec^2]: max linear acceleration.
+      current_protection_limiter: motor current limit, 0..7.
+
+    Raises:
+      RuntimeError: if iSWAP is not installed, or if `setup()` has not
+        populated `iswap_information`.
+      ValueError: if the resolved rotation drive Z is outside the Z
+        hardware range, or if any arg is outside its valid range.
+    """
+    current_gripper_z = (await self.iswap_request_pose()).location.z
+    current_rotation_drive_z = await self.iswap_rotation_drive_request_z()
+    target_rotation_drive_z = current_rotation_drive_z + (z_position - current_gripper_z)
+    try:
+      await self.iswap_rotation_drive_move_z(
+        z=target_rotation_drive_z,
+        speed=speed,
+        acceleration=acceleration,
+        current_protection_limiter=current_protection_limiter,
+      )
+    except ValueError as e:
+      raise ValueError(
+        f"move_iswap_z(z_position={z_position}) resolved to rotation drive "
+        f"target z={target_rotation_drive_z:.2f}: {e}"
+      ) from e
 
   # -----------------------------------------------------------------------
   # iSWAP: SCARA Geometry
