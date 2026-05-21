@@ -10361,12 +10361,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       yw=f"{int(current_protection_limiter)}",
     )
 
-  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, float]:
+  async def iswap_rotation_drive_request_predefined_y_positions(
+    self, y_mm_per_increment: float = iSWAPInformation.y_mm_per_increment
+  ) -> Dict[str, float]:
     """Read iSWAP rotation-drive Y predefined-position table from EEPROM, in mm.
 
     Sends R0 RA ra=py. Firmware returns 10 signed-integer slots; all 10 are
     positions (no length slot, unlike pw/pt). Slots beyond the documented
     semantic roles are extra slots addressable via R0 YP yp5..yp9.
+
+    ``y_mm_per_increment`` defaults to the class constant rather than
+    ``self.iswap_information`` because this method runs during ``setup()`` to
+    compute ``rotation_drive_y_max`` -- i.e. before ``iswap_information`` exists.
 
     Keys (mm):
       "home"         py[0]  - home position
@@ -10399,7 +10405,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_4",
       "extra_5",
     )
-    y_mm_per_increment = self.iswap_information.y_mm_per_increment
     return {
       k: STARBackend.iswap_y_drive_increment_to_mm(py[i], y_mm_per_increment)
       for i, k in enumerate(keys)
@@ -11439,7 +11444,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if open_position is None:
       open_position = 91.0 if (await self.get_iswap_version()).startswith("3") else 132.0
 
-    assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
+    gripper_mm_per_increment = self.iswap_information.gripper_mm_per_increment
+    min_incr, max_incr = self.iswap_information.gripper_increment_range
+    min_width = STARBackend.iswap_gripper_drive_increment_to_mm(min_incr, gripper_mm_per_increment)
+    max_width = STARBackend.iswap_gripper_drive_increment_to_mm(max_incr, gripper_mm_per_increment)
+    if not (min_width <= open_position <= max_width):
+      raise ValueError(
+        f"open_position must be between {min_width} and {max_width} mm, got {open_position}"
+      )
 
     return await self.send_command(module="C0", command="GF", go=f"{round(open_position * 10):04}")
 
@@ -11461,7 +11473,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
-    assert 76.0 < plate_width <= 999.9, "plate_width must be between 76.0 and 999.9"
+    # Lower bound 76.0 is the firmware minimum (min position + stop ramp + grip
+    # tolerance, per the docstring), stricter than the physical jaw minimum. Upper
+    # bound is the physical jaw maximum derived from gripper_increment_range.
+    max_incr = self.iswap_information.gripper_increment_range[1]
+    max_width = STARBackend.iswap_gripper_drive_increment_to_mm(
+      max_incr, self.iswap_information.gripper_mm_per_increment
+    )
+    if not (76.0 < plate_width <= max_width):
+      raise ValueError(f"plate_width must be between 76.0 and {max_width} mm, got {plate_width}")
     assert 0.5 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0.5 and 9.9"
 
     return await self.send_command(
