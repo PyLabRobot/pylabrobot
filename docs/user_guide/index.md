@@ -7,10 +7,11 @@
 :caption: Getting started
 :hidden:
 
-getting-started/installation
-getting-started/rpi
-getting-started/units
+_getting-started/installation
+How PLR Works <_getting-started/plr-architecture>
+_getting-started/rpi
 ```
+
 
 ```{toctree}
 :maxdepth: 1
@@ -20,6 +21,8 @@ getting-started/units
 machines
 definitions
 00_liquid-handling/_liquid-handling
+01_material-handling/_material-handling
+02_analytical/_analytical
 ```
 
 ```{toctree}
@@ -29,21 +32,17 @@ definitions
 
 agilent/index
 azenta/index
-big_bear/index
+bmg_labtech/index
 brooks/index
 byonoy/index
-cole_parmer/index
-curiox/index
 hamilton/index
-high_res/index
 inheco/index
-kbioscience/index
-kbiosystems/index
+liconic/index
 mettler_toledo/index
 molecular_devices/index
 micronic/index
+opentrons/index
 qinstruments/index
-sartorius/index
 thermo_fisher/index
 ufactory/index
 ```
@@ -55,12 +54,19 @@ ufactory/index
 
 machine-agnostic-features/using-the-visualizer
 machine-agnostic-features/using-trackers
-machine-agnostic-features/event-bus
 machine-agnostic-features/writing-robot-agnostic-protocols
 machine-agnostic-features/tip-spot-generators
 machine-agnostic-features/logging-and-validation/logging-and-validation
 machine-agnostic-features/error-handling-general
 machine-agnostic-features/sila-discovery
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Capabilities
+:hidden:
+
+capabilities/index
 ```
 
 ```{toctree}
@@ -82,4 +88,95 @@ The guide is divided into three parts:
 
 - **Machine-Agnostic Features** – Discover powerful tools that work across all devices, like the visualizer, trackers, reusable protocol patterns, validation tools, and error handling.
 
-Check out [the list of supported machines](/user_guide/machines.md).
+Check out [the list of supported machines](/user_guide/machines).
+
+<hr>
+
+
+<style>
+  .machine_classification {
+    border: 3px solid black;
+    border-collapse: collapse;
+    background-color: #FAF3DD;
+    margin-left: 5px;
+  }
+
+  .machine_classification td {
+    font-family: "Fira Code", monospace;
+    font-size: 15px;
+    font-weight: bold;
+    line-height: 1.2;
+    padding: 0 10px;
+    border: none;
+    white-space: pre;
+  }
+</style>
+
+<table class="machine_classification">
+  <tr><td>Machines</td></tr>
+
+  <!-- Liquid Handling -->
+  <tr><td>├── Liquid Handling</td></tr>
+  <tr><td>│   ├── Pipetting Robots</td></tr>
+  <tr><td>│   ├── Plate Washers</td></tr>
+  <tr><td>│   └── Reagent Dispensers</td></tr>
+
+  <!-- Material Handling -->
+  <tr><td>├── ⚙️ Material Handling</td></tr>
+  <tr><td>│   ├── Transport Systems</td></tr>
+  <tr><td>│   │   ├── Conveyors</td></tr>
+  <tr><td>│   │   ├── Robotic Arms</td></tr>
+  <tr><td>│   │   └── Smart Storage (e.g. carousels)</td></tr>
+  <tr><td>│   ├── Consumable Manipulation</td></tr>
+  <tr><td>│   │   ├── Cappers & Decappers</td></tr>
+  <tr><td>│   │   └── Sealers & Peelers</td></tr>
+  <tr><td>│   └── Identification</td></tr>
+  <tr><td>│       └── Barcode Labellers And Readers</td></tr>
+
+  <!-- Environmental Control -->
+  <tr><td>├── Environmental Control</td></tr>
+  <tr><td>│   ├── Temperature And Motion Control</td></tr>
+  <tr><td>│   │   ├── Automated Freezers/Fridges</td></tr>
+  <tr><td>│   │   ├── Automated Incubators</td></tr>
+  <tr><td>│   │   ├── Heated Cooled Blocks</td></tr>
+  <tr><td>│   │   ├── Incubated Shakers</td></tr>
+  <tr><td>│   │   ├── Shakers</td></tr>
+  <tr><td>│   │   ├── Thermal Shakers</td></tr>
+  <tr><td>│   │   └── Thermocyclers</td></tr>
+  <tr><td>│   └── Airflow & Contamination Control</td></tr>
+  <tr><td>│       ├── Air Circulation Fans</td></tr>
+  <!-- <tr><td>│       ├── Gas Controlled Chambers</td></tr> -->
+  <tr><td>│       ├── HEPA Filtration Modules</td></tr>
+  <!-- <tr><td>│       ├── Laminar Flow Hoods</td></tr> -->
+  <tr><td>│       └── UV-C Decontamination Units</td></tr>
+
+  <!-- Sample Preparation And Processing -->
+  <tr><td>├── Sample Preparation And Processing</td></tr>
+  <tr><td>│   ├── Automated Centrifuges</td></tr>
+  <tr><td>│   ├── Chromatography Systems</td></tr>
+  <tr><td>│   ├── Colony Pickers</td></tr>
+  <!-- <tr><td>│   ├── Filtration Units</td></tr> -->
+  <!-- <tr><td>│   ├── Liquid Extractors</td></tr> -->
+  <!-- <tr><td>│   ├── Lysis Modules</td></tr> -->
+  <!-- <tr><td>│   ├── Magnetic Bead Purifiers</td></tr> -->
+  <!-- <tr><td>│   ├── Pre-PCR Prep Stations</td></tr> -->
+  <!-- <tr><td>│   ├── Sonicators</td></tr> -->
+  <tr><td>│   └── Tissue Homogenizers</td></tr>
+
+  <!-- Analytical And Detection -->
+  <tr><td>└── 🔬 Analytical And Detection</td></tr>
+  <tr><td>    ├── Balances / Scales</td></tr>
+  <tr><td>    ├── Optical Detection</td></tr>
+  <tr><td>    │   ├── Automated Microscopes</td></tr>
+  <!-- <tr><td>        ├── Colony Counters</td></tr> -->
+  <tr><td>    │   ├── Flow Cytometers</td></tr>
+  <!-- <tr><td>        ├── Gel Imagers</td></tr> -->
+  <!-- <tr><td>        ├── Microarray Scanners</td></tr> -->
+  <tr><td>    │   ├── Plate Readers</td></tr>
+  <!-- <tr><td>        ├── qPCR Machines</td></tr> -->
+  <!-- <tr><td>        ├── Sequencers (DNA / RNA / Protein)</td></tr> -->
+  <tr><td>    │   └── Spectrophotometers</td></tr>
+  <tr><td>    └── pH Meters</td></tr>
+</table>
+
+<hr>
