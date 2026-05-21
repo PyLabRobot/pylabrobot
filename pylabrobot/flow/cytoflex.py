@@ -12,7 +12,11 @@ from pylabrobot.machines.backend import MachineBackend
 # === Wire format for bulk-IN event packets (internal; not public API). =========
 # Each event is 33 little-endian int32s (132 bytes). Bytes 0..14 are H-channel
 # ADC readings, byte 15 is unused, bytes 16..30 are A-channel readings (paired
-# with byte n-16), byte 31 is unused, byte 32 is a 50 kHz tick counter.
+# with byte n-16), byte 31 is unused, and byte 32 is the 50 kHz tick of the
+# *next* event in the same packet. The first event's tick lives in the 20-byte
+# packet preamble at offset 16..19 (LE u32); the last event in each packet has
+# undefined garbage in its slot 32. `_decode_raw_events` shifts these so that
+# each event's own slot 32 carries its own tick.
 # Verified bit-exact (≤1 LSB) against FCS files produced by CytExpert across
 # 14 wells.
 
@@ -100,21 +104,40 @@ def _decode_raw_events(flow_packets: List[bytes]) -> np.ndarray:
   until new events arrive, so this function deduplicates byte-identical rows
   while preserving the order in which each row first appeared.
 
+  Slot 32 on the wire holds the *next* event's tick. After dedup, we overwrite
+  slot 32 of each kept event with that event's own tick: for the first kept
+  event of each packet, from the preamble at offset 16..19; for later events,
+  from the previous kept event's wire slot 32.
+
   Not part of the public API; exported for test access.
   """
-  rows: List[Tuple[int, ...]] = []
-  for packet in flow_packets:
+  wires: List[Tuple[int, ...]] = []
+  meta: List[Tuple[int, int]] = []  # (packet_idx, position-in-packet)
+  for pi, packet in enumerate(flow_packets):
+    if len(packet) < 20:
+      continue
     body = packet[20:]
     for k in range(len(body) // 132):
       section = body[k * 132 : (k + 1) * 132]
       if not any(section):
         continue
-      rows.append(struct.unpack("<33i", section))
-  raw = np.asarray(rows, dtype=np.int64)
-  if not len(raw):
-    return raw
+      wires.append(struct.unpack("<33i", section))
+      meta.append((pi, k))
+  if not wires:
+    return np.zeros((0, 33), dtype=np.int64)
+  raw = np.asarray(wires, dtype=np.int64)
   _, first_idx = np.unique(raw, axis=0, return_index=True)
-  return raw[np.sort(first_idx)]
+  keep = np.sort(first_idx)
+  kept = raw[keep].copy()
+  kept_packet_idx = [meta[i][0] for i in keep]
+  ticks = []
+  for j, pi in enumerate(kept_packet_idx):
+    if j == 0 or kept_packet_idx[j - 1] != pi:
+      ticks.append(struct.unpack_from("<i", flow_packets[pi], 16)[0])
+    else:
+      ticks.append(int(kept[j - 1, 32]))
+  kept[:, 32] = ticks
+  return kept
 
 
 def _events_from_raw(raw: np.ndarray) -> np.ndarray:
@@ -122,8 +145,10 @@ def _events_from_raw(raw: np.ndarray) -> np.ndarray:
   FCS PnN column order, with H/A gains applied, FSC-Width derived from
   FSC-A/FSC-H, and Time expressed in seconds (raw tick × $TIMESTEP).
 
-  Warmup events at the start of the stream carry non-monotonic tick values;
-  callers are expected to filter them upstream.
+  The decoder emits more events than CytExpert keeps (the first 100-300 are
+  pre-trigger warmup, varying per run); callers are expected to filter them
+  upstream — the tick stream is monotonic across the whole range, so the cut
+  point is not derivable from Time alone.
 
   Not part of the public API; exported for test access.
   """
