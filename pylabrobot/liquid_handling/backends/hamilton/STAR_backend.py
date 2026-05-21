@@ -10104,19 +10104,49 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pt = cast(List[int], resp["pt"])
     return round(pt[9] / 10, 1)
 
+  # =======================================================================
+  # iSWAP drive constants superseded by `iSWAPInformation` - REMOVE IN v1.
+  #
+  # Every value below now lives canonically in `iSWAPInformation` (per-drive
+  # area-of-operation ranges + encoder resolutions); all internal usage reads
+  # from there. Kept only for backward compatibility with external code and as
+  # an audit anchor for the prior literals. Delete this whole block at v1.
+  # Ordered to match iSWAPInformation: Y, Z, rotation drive, wrist drive,
+  # gripper (no X-axis constant is vestigial).
+  # =======================================================================
+  # Y carriage (commanded via the rotation drive)
+  iswap_y_drive_mm_per_increment = 0.046302083
+  iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
+
+  # Z carriage (increments in finger-plane coords, the R0 ZA reference)
+  iswap_rotation_drive_z_min_increment = -187
+  iswap_rotation_drive_z_max_increment = 26_661
+  iswap_z_drive_mm_per_increment = 0.01072765
+  iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
+  iswap_rotation_drive_z_acceleration_increment_range = (5, 999)
+
+  # rotation drive (W)
+  iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
+  iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
+  iswap_rotation_drive_deg_per_increment = 0.00309619077
+
+  # wrist drive (T)
+  iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
+  iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
+  iswap_wrist_drive_deg_per_increment = 0.00507968798
+
+  # gripper (G)
+  iswap_gripper_drive_min_increment = 12780  # ~ 71 mm
+  iswap_gripper_drive_max_increment = 24120  # ~ 134 mm
+  iswap_gripper_drive_mm_per_increment = 0.00554337
+  # =======================================================================
+
   # -----------------------------------------------------------------------
   # iSWAP: "Rotation Drive" (Joint 1)
   # -----------------------------------------------------------------------
 
-  iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
-  iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
-  iswap_rotation_drive_deg_per_increment = 0.00309619077
-  iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
   iswap_rotation_drive_diameter = 30.5
   iswap_rotation_drive_safety_radius = 90.0
-
-  iswap_y_drive_mm_per_increment = 0.046302083
-  iswap_z_drive_mm_per_increment = 0.01072765
 
   @staticmethod
   def iswap_y_drive_mm_to_increment(
@@ -10202,14 +10232,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # point) and the gripper finger plane. R0 RZ is calibrated to the finger
   # plane; the rotation drive's bottom sits 13 mm above it.
   iswap_rotation_drive_z_offset_above_finger_mm = 13.0
-
-  # Z increment ranges below are in finger-plane coords (the R0 ZA reference).
-  # `iswap_rotation_drive_move_z` and `iswap_rotation_drive_request_z` apply
-  # the 13 mm offset internally to translate between deck and finger-plane Z.
-  iswap_rotation_drive_z_min_increment = -187
-  iswap_rotation_drive_z_max_increment = 26_661
-  iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
-  iswap_rotation_drive_z_acceleration_increment_range = (5, 999)
 
   async def iswap_rotation_drive_request_z(self) -> float:
     """Request iSWAP rotation-drive-bottom Z (deck coordinates), in mm.
@@ -10801,10 +10823,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # iSWAP: "Wrist Drive" (Joint 2)
   # -----------------------------------------------------------------------
 
-  iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
-  iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
-  iswap_wrist_drive_deg_per_increment = 0.00507968798
-
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
     STRAIGHT = 2
@@ -11344,11 +11362,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -----------------------------------------------------------------------
   # iSWAP: Gripper
   # -----------------------------------------------------------------------
-
-  iswap_gripper_drive_min_increment = 12780  # ~ 71 mm
-  iswap_gripper_drive_max_increment = 24120  # ~ 134 mm
-
-  iswap_gripper_drive_mm_per_increment = 0.00554337
 
   @staticmethod
   def iswap_gripper_drive_increment_to_mm(
