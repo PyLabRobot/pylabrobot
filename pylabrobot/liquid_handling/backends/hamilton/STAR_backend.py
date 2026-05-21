@@ -10119,20 +10119,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   iswap_z_drive_mm_per_increment = 0.01072765
 
   @staticmethod
-  def iswap_y_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.iswap_y_drive_mm_per_increment)
+  def iswap_y_drive_mm_to_increment(
+    value_mm: float, mm_per_increment: float = iSWAPInformation.y_mm_per_increment
+  ) -> int:
+    return round(value_mm / mm_per_increment)
 
   @staticmethod
-  def iswap_y_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_y_drive_mm_per_increment, 2)
+  def iswap_y_drive_increment_to_mm(
+    value_increments: int, mm_per_increment: float = iSWAPInformation.y_mm_per_increment
+  ) -> float:
+    return round(value_increments * mm_per_increment, 2)
 
   @staticmethod
-  def iswap_z_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.iswap_z_drive_mm_per_increment)
+  def iswap_z_drive_mm_to_increment(
+    value_mm: float, mm_per_increment: float = iSWAPInformation.z_mm_per_increment
+  ) -> int:
+    return round(value_mm / mm_per_increment)
 
   @staticmethod
-  def iswap_z_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_z_drive_mm_per_increment, 2)
+  def iswap_z_drive_increment_to_mm(
+    value_increments: int, mm_per_increment: float = iSWAPInformation.z_mm_per_increment
+  ) -> float:
+    return round(value_increments * mm_per_increment, 2)
 
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
@@ -10586,6 +10594,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _iswap_rotation_drive_resolve_to_increments(
     angle: Union["STARBackend.RotationDriveOrientation", float],
     predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+    deg_per_increment: float = iSWAPInformation.rotation_deg_per_increment,
   ) -> int:
     """Resolve a rotation-drive target (enum or float deg) to motor increments.
 
@@ -10602,7 +10611,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       stop_angle = STARBackend._iswap_rotation_drive_increments_to_angle(
         stop_incr, predefined_increments
       )
-      if abs(angle - stop_angle) <= STARBackend.iswap_rotation_drive_deg_per_increment:
+      if abs(angle - stop_angle) <= deg_per_increment:
         return stop_incr
     return STARBackend._iswap_rotation_drive_angle_to_increments(angle, predefined_increments)
 
@@ -10829,7 +10838,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
 
   @staticmethod
-  def _iswap_wrist_drive_increments_to_angle(increments: int) -> float:
+  def _iswap_wrist_drive_increments_to_angle(
+    increments: int, deg_per_increment: float = iSWAPInformation.wrist_deg_per_increment
+  ) -> float:
     """Linear map encoder increments -> degrees, anchored on motor zero (0 incr = 0 deg).
 
     Symmetric around the motor's raw zero, so the achievable range is
@@ -10846,17 +10857,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     member to `iswap_rotate_to_angles` rather than a float -- the enum path
     uses the calibrated EEPROM increment directly.
     """
-    return increments * STARBackend.iswap_wrist_drive_deg_per_increment
+    return increments * deg_per_increment
 
   @staticmethod
-  def _iswap_wrist_drive_angle_to_increments(angle: float) -> int:
+  def _iswap_wrist_drive_angle_to_increments(
+    angle: float, deg_per_increment: float = iSWAPInformation.wrist_deg_per_increment
+  ) -> int:
     """Inverse of `_iswap_wrist_drive_increments_to_angle`; rounds to nearest int."""
-    return round(angle / STARBackend.iswap_wrist_drive_deg_per_increment)
+    return round(angle / deg_per_increment)
 
   @staticmethod
   def _iswap_wrist_drive_resolve_to_increments(
     angle: Union["STARBackend.WristDriveOrientation", float],
     predefined_increments: Dict["STARBackend.WristDriveOrientation", int],
+    deg_per_increment: float = iSWAPInformation.wrist_deg_per_increment,
   ) -> int:
     """Resolve a wrist-drive target (enum or float deg) to motor increments.
 
@@ -10868,10 +10882,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if isinstance(angle, STARBackend.WristDriveOrientation):
       return predefined_increments[angle]
     for stop_incr in predefined_increments.values():
-      stop_angle = STARBackend._iswap_wrist_drive_increments_to_angle(stop_incr)
-      if abs(angle - stop_angle) <= STARBackend.iswap_wrist_drive_deg_per_increment:
+      stop_angle = STARBackend._iswap_wrist_drive_increments_to_angle(stop_incr, deg_per_increment)
+      if abs(angle - stop_angle) <= deg_per_increment:
         return stop_incr
-    return STARBackend._iswap_wrist_drive_angle_to_increments(angle)
+    return STARBackend._iswap_wrist_drive_angle_to_increments(angle, deg_per_increment)
 
   async def iswap_wrist_drive_request_angle(self) -> float:
     """Query the iSWAP wrist drive angle in degrees (signed, 0 deg = motor zero).
@@ -11307,12 +11321,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   iswap_gripper_drive_mm_per_increment = 0.00554337
 
   @staticmethod
-  def iswap_gripper_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_gripper_drive_mm_per_increment, 1)
+  def iswap_gripper_drive_increment_to_mm(
+    value_increments: int, mm_per_increment: float = iSWAPInformation.gripper_mm_per_increment
+  ) -> float:
+    return round(value_increments * mm_per_increment, 1)
 
   @staticmethod
-  def iswap_gripper_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.iswap_gripper_drive_mm_per_increment)
+  def iswap_gripper_drive_mm_to_increment(
+    value_mm: float, mm_per_increment: float = iSWAPInformation.gripper_mm_per_increment
+  ) -> int:
+    return round(value_mm / mm_per_increment)
 
   async def iswap_gripper_request_width(self) -> float:
     """Request the current iSWAP gripper jaw opening width, in mm.
