@@ -364,6 +364,23 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
       _ = cb.iswap_information
 
 
+class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):
+  """`_iswap_rotation_drive_request_y_max` runs during setup, before
+  `iswap_information` exists, so it must not read it (regression: it used to,
+  raising "iSWAP information not loaded" mid-`set_up_iswap`)."""
+
+  async def test_y_max_works_before_iswap_information_set(self):
+    b = STARBackend()
+    b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    # Leave _iswap_information unset, exactly as it is during set_up_iswap().
+    self.assertIsNone(b._iswap_information)
+    b.send_command = unittest.mock.AsyncMock(return_value={"py": [0] * 10})
+
+    # The regression was a raise ("iSWAP information not loaded"); a clean return
+    # is the assertion.
+    await b._iswap_rotation_drive_request_y_max()
+
+
 class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   """Test that USB data is parsed correctly."""
 

@@ -1322,47 +1322,98 @@ class Head96Information:
 
 @dataclass
 class iSWAPInformation:
-  """Information about the installed iSWAP, loaded from firmware/EEPROM at setup.
+  """Device parameters for the installed iSWAP, loaded or resolved at setup.
 
   Populated once by `STARBackend._set_up_iswap` when the iSWAP is installed
-  (`extended_conf.left_x_drive.iswap_installed`). All fields are calibrated,
-  per-machine values from EEPROM - they do not change at runtime, so the
-  record is treated as immutable post-setup.
+  (`extended_conf.left_x_drive.iswap_installed`). Holds two kinds of data:
+  per-machine calibration read from EEPROM (link lengths, calibrated stops,
+  offsets), and firmware/hardware-version-dependent device facts (per-drive
+  area-of-operation ranges and encoder resolutions). Neither changes at
+  runtime, so the record is treated as immutable post-setup.
   """
 
+  # Two tiers (dataclasses require non-default fields before defaulted fields):
+  # per-machine calibration read from EEPROM, then defaulted device facts.
+  # Each tier is ordered by axis/drive (X, Y, Z, rotation, wrist, gripper).
+
+  # === Per-machine calibration (read from EEPROM at setup; no defaults) ======
   fw_version: str
   """iSWAP firmware version string (R0 RF response)."""
 
+  # -- X --
   rotation_drive_x_offset: float
   """Deck X distance from the X-arm carriage center to the rotation drive
   (mm). Stored in master EEPROM as parameter `kg`. Hamilton factory default
   is 34.0 mm."""
 
+  # -- Y --
   rotation_drive_y_max: float
   """Upper Y-axis bound of the iSWAP carriage (mm). Parking sits at this Y;
   anything past it is in the mechanical-stop region."""
 
-  link_1_length: float
-  """Distance from the rotation joint (joint 1) to the wrist joint (joint 2),
-  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
-  `iswap_request_link_1_length` (R0 RA ra=pw, slot 9)."""
-
-  link_2_length: float
-  """Distance from the wrist joint (joint 2) to the gripper finger center,
-  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
-  `iswap_request_link_2_length` (R0 RA ra=pt, slot 9)."""
-
+  # -- rotation drive --
   rotation_drive_predefined_increments: Dict["STARBackend.RotationDriveOrientation", int]
   """Calibrated motor-increment positions for the rotation drive's named
   stops (LEFT / FRONT / RIGHT / PARKED_RIGHT), read from EEPROM `pw[0..4]`.
   Used as anchor points for angle <-> increment conversion in
   `_iswap_rotation_drive_increments_to_angle`."""
 
+  link_1_length: float
+  """Distance from the rotation joint (joint 1) to the wrist joint (joint 2),
+  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
+  `iswap_request_link_1_length` (R0 RA ra=pw, slot 9)."""
+
+  # -- wrist drive --
   wrist_drive_predefined_increments: Dict["STARBackend.WristDriveOrientation", int]
   """Calibrated motor-increment positions for the wrist drive's named stops
   (RIGHT / STRAIGHT / LEFT / REVERSE), read from EEPROM `pt[1..4]`. Used to
   determine the per-machine STRAIGHT angle, which anchors forward kinematics
   (link-2 angle is measured relative to STRAIGHT)."""
+
+  link_2_length: float
+  """Distance from the wrist joint (joint 2) to the gripper finger center,
+  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
+  `iswap_request_link_2_length` (R0 RA ra=pt, slot 9)."""
+
+  # === Firmware/hardware-version-dependent device facts (4th-generation iSWAP,
+  # the only generation currently supported): per-drive area-of-operation
+  # ranges and encoder resolutions. Defaulted (same across units of a
+  # generation), so setup construction is unchanged. Defaults mirror the
+  # STARBackend class constants tagged `# TODO: remove in v1`. ===============
+
+  # -- Y --
+  y_increment_range: Tuple[int, int] = (0, 14_000)
+  """Y-carriage position range accepted by the YA command, in motor increments
+  (the mechanical area of operation ends earlier; the per-machine parking bound
+  is `rotation_drive_y_max`)."""
+
+  y_mm_per_increment: float = 0.046302083
+
+  y_speed_increment_range: Tuple[int, int] = (50, 8_000)  # unit: increments/sec
+
+  # -- Z --
+  z_increment_range: Tuple[int, int] = (-187, 26_661)
+
+  z_mm_per_increment: float = 0.01072765
+
+  z_speed_increment_range: Tuple[int, int] = (50, 15_000)  # unit: increments/sec
+
+  z_acceleration_increment_range: Tuple[int, int] = (5, 999)  # unit: 1000 increments/sec^2
+
+  # -- rotation drive (joint 1, W) --
+  rotation_increment_range: Tuple[int, int] = (-30_032, 30_032)
+
+  rotation_deg_per_increment: float = 0.00309619077
+
+  # -- wrist drive (joint 2, T) --
+  wrist_increment_range: Tuple[int, int] = (-30_000, 30_000)
+
+  wrist_deg_per_increment: float = 0.00507968798
+
+  # -- gripper (G) --
+  gripper_increment_range: Tuple[int, int] = (12_780, 24_120)  # jaw width
+
+  gripper_mm_per_increment: float = 0.00554337
 
 
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
@@ -10036,35 +10087,73 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pt = cast(List[int], resp["pt"])
     return round(pt[9] / 10, 1)
 
+  # =======================================================================
+  # TODO: remove in v1 - iSWAP drive constants superseded by `iSWAPInformation`.
+  #
+  # Every value below now lives canonically in `iSWAPInformation` (per-drive
+  # area-of-operation ranges + encoder resolutions); all internal usage reads
+  # from there. Kept only for backward compatibility with external code and as
+  # an audit anchor for the prior literals.
+  # Ordered to match iSWAPInformation: Y, Z, rotation drive, wrist drive,
+  # gripper (no X-axis constant is vestigial).
+  # =======================================================================
+  # Y carriage (commanded via the rotation drive)
+  iswap_y_drive_mm_per_increment = 0.046302083
+  iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
+
+  # Z carriage (increments in finger-plane coords, the R0 ZA reference)
+  iswap_rotation_drive_z_min_increment = -187
+  iswap_rotation_drive_z_max_increment = 26_661
+  iswap_z_drive_mm_per_increment = 0.01072765
+  iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
+  iswap_rotation_drive_z_acceleration_increment_range = (5, 999)
+
+  # rotation drive (W)
+  iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
+  iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
+  iswap_rotation_drive_deg_per_increment = 0.00309619077
+
+  # wrist drive (T)
+  iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
+  iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
+  iswap_wrist_drive_deg_per_increment = 0.00507968798
+
+  # gripper (G)
+  iswap_gripper_drive_min_increment = 12780  # ~ 71 mm
+  iswap_gripper_drive_max_increment = 24120  # ~ 134 mm
+  iswap_gripper_drive_mm_per_increment = 0.00554337
+  # =======================================================================
+
   # -----------------------------------------------------------------------
   # iSWAP: "Rotation Drive" (Joint 1)
   # -----------------------------------------------------------------------
 
-  iswap_rotation_drive_min_increment = -30032  # ~ -93 deg
-  iswap_rotation_drive_max_increment = 30032  # ~ +93 deg
-  iswap_rotation_drive_deg_per_increment = 0.00309619077
-  iswap_rotation_drive_y_speed_increment_range = (50, 8_000)
   iswap_rotation_drive_diameter = 30.5
   iswap_rotation_drive_safety_radius = 90.0
 
-  iswap_y_drive_mm_per_increment = 0.046302083
-  iswap_z_drive_mm_per_increment = 0.01072765
+  @staticmethod
+  def iswap_y_drive_mm_to_increment(
+    value_mm: float, mm_per_increment: float = iSWAPInformation.y_mm_per_increment
+  ) -> int:
+    return round(value_mm / mm_per_increment)
 
   @staticmethod
-  def iswap_y_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.iswap_y_drive_mm_per_increment)
+  def iswap_y_drive_increment_to_mm(
+    value_increments: int, mm_per_increment: float = iSWAPInformation.y_mm_per_increment
+  ) -> float:
+    return round(value_increments * mm_per_increment, 2)
 
   @staticmethod
-  def iswap_y_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_y_drive_mm_per_increment, 2)
+  def iswap_z_drive_mm_to_increment(
+    value_mm: float, mm_per_increment: float = iSWAPInformation.z_mm_per_increment
+  ) -> int:
+    return round(value_mm / mm_per_increment)
 
   @staticmethod
-  def iswap_z_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.iswap_z_drive_mm_per_increment)
-
-  @staticmethod
-  def iswap_z_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_z_drive_mm_per_increment, 2)
+  def iswap_z_drive_increment_to_mm(
+    value_increments: int, mm_per_increment: float = iSWAPInformation.z_mm_per_increment
+  ) -> float:
+    return round(value_increments * mm_per_increment, 2)
 
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
@@ -10115,20 +10204,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return round(STARBackend.iswap_y_drive_increment_to_mm(iswap_y_pos), 1)
+    return round(
+      STARBackend.iswap_y_drive_increment_to_mm(
+        iswap_y_pos, self.iswap_information.y_mm_per_increment
+      ),
+      1,
+    )
 
   # Vertical offset between the rotation drive's bottom (its lowest physical
   # point) and the gripper finger plane. R0 RZ is calibrated to the finger
   # plane; the rotation drive's bottom sits 13 mm above it.
   iswap_rotation_drive_z_offset_above_finger_mm = 13.0
-
-  # Z increment ranges below are in finger-plane coords (the R0 ZA reference).
-  # `iswap_rotation_drive_move_z` and `iswap_rotation_drive_request_z` apply
-  # the 13 mm offset internally to translate between deck and finger-plane Z.
-  iswap_rotation_drive_z_min_increment = -187
-  iswap_rotation_drive_z_max_increment = 26_661
-  iswap_rotation_drive_z_speed_increment_range = (50, 15_000)
-  iswap_rotation_drive_z_acceleration_increment_range = (5, 999)
 
   async def iswap_rotation_drive_request_z(self) -> float:
     """Request iSWAP rotation-drive-bottom Z (deck coordinates), in mm.
@@ -10141,7 +10227,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RZ", fmt="rz##### (n)")
     iswap_z_pos_increments = resp["rz"][1]  # 0 = FW counter, 1 = HW counter
-    finger_plane_z = STARBackend.iswap_z_drive_increment_to_mm(iswap_z_pos_increments)
+    finger_plane_z = STARBackend.iswap_z_drive_increment_to_mm(
+      iswap_z_pos_increments, self.iswap_information.z_mm_per_increment
+    )
     return round(finger_plane_z + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm, 1)
 
   async def iswap_rotation_drive_request_position(self) -> Coordinate:
@@ -10245,13 +10333,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.move_all_channels_in_z_safety()
       await self.position_channels_in_y_direction({0: target_channel_0_y}, make_space=True)
 
-    speed_increments = STARBackend.iswap_y_drive_mm_to_increment(speed)
-    speed_min, speed_max = STARBackend.iswap_rotation_drive_y_speed_increment_range
+    y_mm_per_increment = self.iswap_information.y_mm_per_increment
+    speed_increments = STARBackend.iswap_y_drive_mm_to_increment(speed, y_mm_per_increment)
+    speed_min, speed_max = self.iswap_information.y_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
-        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_min)} and "
-        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_min, y_mm_per_increment)} and "
+        f"{STARBackend.iswap_y_drive_increment_to_mm(speed_max, y_mm_per_increment)} mm/sec, "
         f"got {speed} mm/sec"
       )
 
@@ -10266,18 +10355,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.send_command(
       module="R0",
       command="YA",
-      ya=f"{round(STARBackend.iswap_y_drive_mm_to_increment(y)):05}",
+      ya=f"{round(STARBackend.iswap_y_drive_mm_to_increment(y, y_mm_per_increment)):05}",
       yv=f"{round(speed_increments):04}",
       yr=f"{int(acceleration_level)}",
       yw=f"{int(current_protection_limiter)}",
     )
 
-  async def iswap_rotation_drive_request_predefined_y_positions(self) -> Dict[str, float]:
+  async def iswap_rotation_drive_request_predefined_y_positions(
+    self, y_mm_per_increment: float = iSWAPInformation.y_mm_per_increment
+  ) -> Dict[str, float]:
     """Read iSWAP rotation-drive Y predefined-position table from EEPROM, in mm.
 
     Sends R0 RA ra=py. Firmware returns 10 signed-integer slots; all 10 are
     positions (no length slot, unlike pw/pt). Slots beyond the documented
     semantic roles are extra slots addressable via R0 YP yp5..yp9.
+
+    ``y_mm_per_increment`` defaults to the class constant rather than
+    ``self.iswap_information`` because this method runs during ``setup()`` to
+    compute ``rotation_drive_y_max`` -- i.e. before ``iswap_information`` exists.
 
     Keys (mm):
       "home"         py[0]  - home position
@@ -10310,7 +10405,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_4",
       "extra_5",
     )
-    return {k: STARBackend.iswap_y_drive_increment_to_mm(py[i]) for i, k in enumerate(keys)}
+    return {
+      k: STARBackend.iswap_y_drive_increment_to_mm(py[i], y_mm_per_increment)
+      for i, k in enumerate(keys)
+    }
 
   async def iswap_rotation_drive_move_z(
     self,
@@ -10339,39 +10437,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    z_min_incr = STARBackend.iswap_rotation_drive_z_min_increment
-    z_max_incr = STARBackend.iswap_rotation_drive_z_max_increment
+    z_mm_per_increment = self.iswap_information.z_mm_per_increment
+    z_min_incr, z_max_incr = self.iswap_information.z_increment_range
     absolute_min_z = (
-      STARBackend.iswap_z_drive_increment_to_mm(z_min_incr)
+      STARBackend.iswap_z_drive_increment_to_mm(z_min_incr, z_mm_per_increment)
       + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
     )
     absolute_max_z = (
-      STARBackend.iswap_z_drive_increment_to_mm(z_max_incr)
+      STARBackend.iswap_z_drive_increment_to_mm(z_max_incr, z_mm_per_increment)
       + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
     )
     if not (absolute_min_z <= z <= absolute_max_z):
       raise ValueError(f"z must be between {absolute_min_z} and {absolute_max_z} mm, is {z}")
 
     finger_plane_z = z - STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
-    z_increments = STARBackend.iswap_z_drive_mm_to_increment(finger_plane_z)
+    z_increments = STARBackend.iswap_z_drive_mm_to_increment(finger_plane_z, z_mm_per_increment)
 
-    speed_increments = STARBackend.iswap_z_drive_mm_to_increment(speed)
-    speed_min, speed_max = STARBackend.iswap_rotation_drive_z_speed_increment_range
+    speed_increments = STARBackend.iswap_z_drive_mm_to_increment(speed, z_mm_per_increment)
+    speed_min, speed_max = self.iswap_information.z_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
-        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_min)} and "
-        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_max)} mm/sec, "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_min, z_mm_per_increment)} and "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(speed_max, z_mm_per_increment)} mm/sec, "
         f"is {speed}"
       )
 
-    acceleration_increments = STARBackend.iswap_z_drive_mm_to_increment(acceleration / 1000)
-    accel_min, accel_max = STARBackend.iswap_rotation_drive_z_acceleration_increment_range
+    acceleration_increments = STARBackend.iswap_z_drive_mm_to_increment(
+      acceleration / 1000, z_mm_per_increment
+    )
+    accel_min, accel_max = self.iswap_information.z_acceleration_increment_range
     if not (accel_min <= acceleration_increments <= accel_max):
       raise ValueError(
         f"acceleration must be between "
-        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_min * 1000)} and "
-        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_max * 1000)} mm/sec^2, "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_min * 1000, z_mm_per_increment)} and "
+        f"{STARBackend.iswap_z_drive_increment_to_mm(accel_max * 1000, z_mm_per_increment)} mm/sec^2, "
         f"is {acceleration}"
       )
 
@@ -10433,8 +10533,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "extra_7",
       "extra_8",
     )
+    z_mm_per_increment = self.iswap_information.z_mm_per_increment
     return {
-      k: STARBackend.iswap_z_drive_increment_to_mm(pz[i]) + offset for i, k in enumerate(keys)
+      k: STARBackend.iswap_z_drive_increment_to_mm(pz[i], z_mm_per_increment) + offset
+      for i, k in enumerate(keys)
     }
 
   async def _iswap_rotation_drive_request_predefined_increments(self) -> Dict[str, int]:
@@ -10519,6 +10621,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _iswap_rotation_drive_resolve_to_increments(
     angle: Union["STARBackend.RotationDriveOrientation", float],
     predefined_increments: Dict["STARBackend.RotationDriveOrientation", int],
+    deg_per_increment: float = iSWAPInformation.rotation_deg_per_increment,
   ) -> int:
     """Resolve a rotation-drive target (enum or float deg) to motor increments.
 
@@ -10535,7 +10638,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       stop_angle = STARBackend._iswap_rotation_drive_increments_to_angle(
         stop_incr, predefined_increments
       )
-      if abs(angle - stop_angle) <= STARBackend.iswap_rotation_drive_deg_per_increment:
+      if abs(angle - stop_angle) <= deg_per_increment:
         return stop_incr
     return STARBackend._iswap_rotation_drive_angle_to_increments(angle, predefined_increments)
 
@@ -10602,7 +10705,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if offset > tolerance_incr:
       raise ValueError(
         f"Unknown rotation orientation: {motor_position_increments} incr is "
-        f"{offset} incr (~{offset * STARBackend.iswap_rotation_drive_deg_per_increment:.2f} deg) "
+        f"{offset} incr (~{offset * self.iswap_information.rotation_deg_per_increment:.2f} deg) "
         f"from the nearest predefined "
         f"stop ({orientation.name} at {predefined_increments[orientation]}). "
         "Is the rotation drive in transit or mis-calibrated?"
@@ -10677,14 +10780,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the resulting target increment is outside the hardware range.
     """
     predefined_increments = self.iswap_information.rotation_drive_predefined_increments
+    rotation_min, rotation_max = self.iswap_information.rotation_increment_range
     rotation_position_increments = STARBackend._iswap_rotation_drive_resolve_to_increments(
-      angle, predefined_increments
+      angle, predefined_increments, self.iswap_information.rotation_deg_per_increment
     )
-    if not (
-      STARBackend.iswap_rotation_drive_min_increment
-      <= rotation_position_increments
-      <= STARBackend.iswap_rotation_drive_max_increment
-    ):
+    if not (rotation_min <= rotation_position_increments <= rotation_max):
       rotation_position_deg = STARBackend._iswap_rotation_drive_increments_to_angle(
         rotation_position_increments, predefined_increments
       )
@@ -10694,8 +10794,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"{predefined_increments[STARBackend.RotationDriveOrientation.LEFT]}/"
         f"{predefined_increments[STARBackend.RotationDriveOrientation.FRONT]}/"
         f"{predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]}), "
-        f"outside hardware range [{STARBackend.iswap_rotation_drive_min_increment}, "
-        f"{STARBackend.iswap_rotation_drive_max_increment}]"
+        f"outside hardware range [{rotation_min}, "
+        f"{rotation_max}]"
       )
     wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
 
@@ -10710,10 +10810,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -----------------------------------------------------------------------
   # iSWAP: "Wrist Drive" (Joint 2)
   # -----------------------------------------------------------------------
-
-  iswap_wrist_drive_min_increment = -30000  # ~ -152 deg
-  iswap_wrist_drive_max_increment = 30000  # ~ +152 deg
-  iswap_wrist_drive_deg_per_increment = 0.00507968798
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
@@ -10765,7 +10861,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
 
   @staticmethod
-  def _iswap_wrist_drive_increments_to_angle(increments: int) -> float:
+  def _iswap_wrist_drive_increments_to_angle(
+    increments: int, deg_per_increment: float = iSWAPInformation.wrist_deg_per_increment
+  ) -> float:
     """Linear map encoder increments -> degrees, anchored on motor zero (0 incr = 0 deg).
 
     Symmetric around the motor's raw zero, so the achievable range is
@@ -10782,17 +10880,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     member to `iswap_rotate_to_angles` rather than a float -- the enum path
     uses the calibrated EEPROM increment directly.
     """
-    return increments * STARBackend.iswap_wrist_drive_deg_per_increment
+    return increments * deg_per_increment
 
   @staticmethod
-  def _iswap_wrist_drive_angle_to_increments(angle: float) -> int:
+  def _iswap_wrist_drive_angle_to_increments(
+    angle: float, deg_per_increment: float = iSWAPInformation.wrist_deg_per_increment
+  ) -> int:
     """Inverse of `_iswap_wrist_drive_increments_to_angle`; rounds to nearest int."""
-    return round(angle / STARBackend.iswap_wrist_drive_deg_per_increment)
+    return round(angle / deg_per_increment)
 
   @staticmethod
   def _iswap_wrist_drive_resolve_to_increments(
     angle: Union["STARBackend.WristDriveOrientation", float],
     predefined_increments: Dict["STARBackend.WristDriveOrientation", int],
+    deg_per_increment: float = iSWAPInformation.wrist_deg_per_increment,
   ) -> int:
     """Resolve a wrist-drive target (enum or float deg) to motor increments.
 
@@ -10804,10 +10905,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if isinstance(angle, STARBackend.WristDriveOrientation):
       return predefined_increments[angle]
     for stop_incr in predefined_increments.values():
-      stop_angle = STARBackend._iswap_wrist_drive_increments_to_angle(stop_incr)
-      if abs(angle - stop_angle) <= STARBackend.iswap_wrist_drive_deg_per_increment:
+      stop_angle = STARBackend._iswap_wrist_drive_increments_to_angle(stop_incr, deg_per_increment)
+      if abs(angle - stop_angle) <= deg_per_increment:
         return stop_incr
-    return STARBackend._iswap_wrist_drive_angle_to_increments(angle)
+    return STARBackend._iswap_wrist_drive_angle_to_increments(angle, deg_per_increment)
 
   async def iswap_wrist_drive_request_angle(self) -> float:
     """Query the iSWAP wrist drive angle in degrees (signed, 0 deg = motor zero).
@@ -10817,7 +10918,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     the achievable range symmetric (~+/-152 deg).
     """
     increments = await self._request_iswap_wrist_drive_position_increments()
-    return STARBackend._iswap_wrist_drive_increments_to_angle(increments)
+    return STARBackend._iswap_wrist_drive_increments_to_angle(
+      increments, self.iswap_information.wrist_deg_per_increment
+    )
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """Request the iSWAP wrist drive orientation (relative to the rotation drive).
@@ -10858,7 +10961,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         predefined stop (drive is in transit or drifted).
     """
     predefined_increments = self.iswap_information.wrist_drive_predefined_increments
-    tolerance_incr = round(5.0 / STARBackend.iswap_wrist_drive_deg_per_increment)  # ~1000
+    wrist_deg_per_increment = self.iswap_information.wrist_deg_per_increment
+    tolerance_incr = round(5.0 / wrist_deg_per_increment)  # ~1000
 
     motor_position_increments = await self._request_iswap_wrist_drive_position_increments()
 
@@ -10869,7 +10973,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if offset > tolerance_incr:
       raise ValueError(
         f"Unknown wrist orientation: {motor_position_increments} incr is "
-        f"{offset} incr (~{offset * STARBackend.iswap_wrist_drive_deg_per_increment:.2f} deg) "
+        f"{offset} incr (~{offset * wrist_deg_per_increment:.2f} deg) "
         f"from the nearest predefined "
         f"stop ({orientation.name} at {predefined_increments[orientation]}). "
         "Is the wrist drive in transit or mis-calibrated?"
@@ -10919,22 +11023,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the resulting target increment is outside the hardware range.
     """
     predefined_increments = self.iswap_information.wrist_drive_predefined_increments
+    wrist_deg_per_increment = self.iswap_information.wrist_deg_per_increment
+    wrist_min, wrist_max = self.iswap_information.wrist_increment_range
     wrist_position_increments = STARBackend._iswap_wrist_drive_resolve_to_increments(
-      angle, predefined_increments
+      angle, predefined_increments, wrist_deg_per_increment
     )
-    if not (
-      STARBackend.iswap_wrist_drive_min_increment
-      <= wrist_position_increments
-      <= STARBackend.iswap_wrist_drive_max_increment
-    ):
+    if not (wrist_min <= wrist_position_increments <= wrist_max):
       wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-        wrist_position_increments
+        wrist_position_increments, wrist_deg_per_increment
       )
       min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-        STARBackend.iswap_wrist_drive_min_increment
+        wrist_min, wrist_deg_per_increment
       )
       max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-        STARBackend.iswap_wrist_drive_max_increment
+        wrist_max, wrist_deg_per_increment
       )
       raise ValueError(
         f"angle {angle} ({wrist_position_deg:+.2f} deg) is outside the hardware "
@@ -11040,7 +11142,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       STARBackend.WristDriveOrientation.STRAIGHT
     ]
     wrist_straight_angle = STARBackend._iswap_wrist_drive_increments_to_angle(
-      wrist_straight_increments
+      wrist_straight_increments, self.iswap_information.wrist_deg_per_increment
     )
 
     joints = {
@@ -11084,17 +11186,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    if abs(rotation_position_increments) > STARBackend.iswap_rotation_drive_max_increment:
+    rotation_min, rotation_max = self.iswap_information.rotation_increment_range
+    wrist_min, wrist_max = self.iswap_information.wrist_increment_range
+    if not (rotation_min <= rotation_position_increments <= rotation_max):
       raise ValueError(
         f"rotation_position_increments must be between "
-        f"{-STARBackend.iswap_rotation_drive_max_increment} and "
-        f"{STARBackend.iswap_rotation_drive_max_increment}; got {rotation_position_increments}"
+        f"{rotation_min} and "
+        f"{rotation_max}; got {rotation_position_increments}"
       )
-    if abs(wrist_position_increments) > STARBackend.iswap_wrist_drive_max_increment:
+    if not (wrist_min <= wrist_position_increments <= wrist_max):
       raise ValueError(
         f"wrist_position_increments must be between "
-        f"{-STARBackend.iswap_wrist_drive_max_increment} and "
-        f"{STARBackend.iswap_wrist_drive_max_increment}; got {wrist_position_increments}"
+        f"{wrist_min} and "
+        f"{wrist_max}; got {wrist_position_increments}"
       )
 
     if not 20 <= rotation_speed <= 75000:
@@ -11186,14 +11290,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
     else:
       rot_predefined = self.iswap_information.rotation_drive_predefined_increments
+      rotation_min, rotation_max = self.iswap_information.rotation_increment_range
       rotation_position_increments = STARBackend._iswap_rotation_drive_resolve_to_increments(
-        rotation_angle, rot_predefined
+        rotation_angle, rot_predefined, self.iswap_information.rotation_deg_per_increment
       )
-      if not (
-        STARBackend.iswap_rotation_drive_min_increment
-        <= rotation_position_increments
-        <= STARBackend.iswap_rotation_drive_max_increment
-      ):
+      if not (rotation_min <= rotation_position_increments <= rotation_max):
         rotation_position_deg = STARBackend._iswap_rotation_drive_increments_to_angle(
           rotation_position_increments, rot_predefined
         )
@@ -11203,30 +11304,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"{rot_predefined[STARBackend.RotationDriveOrientation.LEFT]}/"
           f"{rot_predefined[STARBackend.RotationDriveOrientation.FRONT]}/"
           f"{rot_predefined[STARBackend.RotationDriveOrientation.RIGHT]}), "
-          f"outside hardware range [{STARBackend.iswap_rotation_drive_min_increment}, "
-          f"{STARBackend.iswap_rotation_drive_max_increment}]"
+          f"outside hardware range [{rotation_min}, "
+          f"{rotation_max}]"
         )
 
     if wrist_angle is None:
       wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
     else:
       wrist_predefined = self.iswap_information.wrist_drive_predefined_increments
+      wrist_deg_per_increment = self.iswap_information.wrist_deg_per_increment
+      wrist_min, wrist_max = self.iswap_information.wrist_increment_range
       wrist_position_increments = STARBackend._iswap_wrist_drive_resolve_to_increments(
-        wrist_angle, wrist_predefined
+        wrist_angle, wrist_predefined, wrist_deg_per_increment
       )
-      if not (
-        STARBackend.iswap_wrist_drive_min_increment
-        <= wrist_position_increments
-        <= STARBackend.iswap_wrist_drive_max_increment
-      ):
+      if not (wrist_min <= wrist_position_increments <= wrist_max):
         wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-          wrist_position_increments
+          wrist_position_increments, wrist_deg_per_increment
         )
         min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-          STARBackend.iswap_wrist_drive_min_increment
+          wrist_min, wrist_deg_per_increment
         )
         max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-          STARBackend.iswap_wrist_drive_max_increment
+          wrist_max, wrist_deg_per_increment
         )
         raise ValueError(
           f"wrist_angle {wrist_angle} ({wrist_position_deg:+.2f} deg) is outside "
@@ -11236,14 +11335,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self._iswap_rotate_increments(
       rotation_position_increments=rotation_position_increments,
       wrist_position_increments=wrist_position_increments,
-      rotation_speed=round(rotation_speed / STARBackend.iswap_rotation_drive_deg_per_increment),
+      rotation_speed=round(rotation_speed / self.iswap_information.rotation_deg_per_increment),
       rotation_acceleration=round(
-        rotation_acceleration / STARBackend.iswap_rotation_drive_deg_per_increment / 1000
+        rotation_acceleration / self.iswap_information.rotation_deg_per_increment / 1000
       ),
       rotation_current_limit=rotation_current_limit,
-      wrist_speed=round(wrist_speed / STARBackend.iswap_wrist_drive_deg_per_increment),
+      wrist_speed=round(wrist_speed / self.iswap_information.wrist_deg_per_increment),
       wrist_acceleration=round(
-        wrist_acceleration / STARBackend.iswap_wrist_drive_deg_per_increment / 1000
+        wrist_acceleration / self.iswap_information.wrist_deg_per_increment / 1000
       ),
       wrist_current_limit=wrist_current_limit,
     )
@@ -11252,18 +11351,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # iSWAP: Gripper
   # -----------------------------------------------------------------------
 
-  iswap_gripper_drive_min_increment = 12780  # ~ 71 mm
-  iswap_gripper_drive_max_increment = 24120  # ~ 134 mm
-
-  iswap_gripper_drive_mm_per_increment = 0.00554337
+  @staticmethod
+  def iswap_gripper_drive_increment_to_mm(
+    value_increments: int, mm_per_increment: float = iSWAPInformation.gripper_mm_per_increment
+  ) -> float:
+    return round(value_increments * mm_per_increment, 1)
 
   @staticmethod
-  def iswap_gripper_drive_increment_to_mm(value_increments: int) -> float:
-    return round(value_increments * STARBackend.iswap_gripper_drive_mm_per_increment, 1)
-
-  @staticmethod
-  def iswap_gripper_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.iswap_gripper_drive_mm_per_increment)
+  def iswap_gripper_drive_mm_to_increment(
+    value_mm: float, mm_per_increment: float = iSWAPInformation.gripper_mm_per_increment
+  ) -> int:
+    return round(value_mm / mm_per_increment)
 
   async def iswap_gripper_request_width(self) -> float:
     """Request the current iSWAP gripper jaw opening width, in mm.
@@ -11276,7 +11374,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="R0", command="RG", fmt="rg##### (n)")
     actual_increments = resp["rg"][1]  # rg returns [target, actual]; we want actual
 
-    return STARBackend.iswap_gripper_drive_increment_to_mm(actual_increments)
+    return STARBackend.iswap_gripper_drive_increment_to_mm(
+      actual_increments, self.iswap_information.gripper_mm_per_increment
+    )
 
   async def iswap_gripper_request_predefined_positions(self) -> Dict[str, int]:
     """Read the iSWAP gripper drive (G) predefined-position table.
@@ -11344,7 +11444,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if open_position is None:
       open_position = 91.0 if (await self.get_iswap_version()).startswith("3") else 132.0
 
-    assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
+    gripper_mm_per_increment = self.iswap_information.gripper_mm_per_increment
+    min_incr, max_incr = self.iswap_information.gripper_increment_range
+    min_width = STARBackend.iswap_gripper_drive_increment_to_mm(min_incr, gripper_mm_per_increment)
+    max_width = STARBackend.iswap_gripper_drive_increment_to_mm(max_incr, gripper_mm_per_increment)
+    if not (min_width <= open_position <= max_width):
+      raise ValueError(
+        f"open_position must be between {min_width} and {max_width} mm, got {open_position}"
+      )
 
     return await self.send_command(module="C0", command="GF", go=f"{round(open_position * 10):04}")
 
@@ -11366,7 +11473,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
-    assert 76.0 < plate_width <= 999.9, "plate_width must be between 76.0 and 999.9"
+    # Lower bound 76.0 is the firmware minimum (min position + stop ramp + grip
+    # tolerance, per the docstring), stricter than the physical jaw minimum. Upper
+    # bound is the physical jaw maximum derived from gripper_increment_range.
+    max_incr = self.iswap_information.gripper_increment_range[1]
+    max_width = STARBackend.iswap_gripper_drive_increment_to_mm(
+      max_incr, self.iswap_information.gripper_mm_per_increment
+    )
+    if not (76.0 < plate_width <= max_width):
+      raise ValueError(f"plate_width must be between 76.0 and {max_width} mm, got {plate_width}")
     assert 0.5 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0.5 and 9.9"
 
     return await self.send_command(
