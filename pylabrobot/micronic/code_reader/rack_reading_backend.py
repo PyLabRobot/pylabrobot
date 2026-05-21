@@ -43,10 +43,32 @@ class MicronicCodeReaderRackReadingBackend(RackReaderBackend):
     self._validate_rack(rack)
     if self._scan_lock.locked():
       raise MicronicError("Micronic rack scan is already in progress.")
-    async with self._scan_lock:
+    await self._scan_lock.acquire()
+    release_lock = True
+    try:
       rack_id = await self.driver.read_barcode()
       loop = asyncio.get_running_loop()
-      return await loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
+      scan_future = loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
+      try:
+        return await asyncio.shield(scan_future)
+      except asyncio.CancelledError:
+        release_lock = False
+        scan_future.add_done_callback(self._finish_cancelled_scan)
+        raise
+    finally:
+      if release_lock:
+        self._release_scan_lock()
+
+  def _finish_cancelled_scan(self, future) -> None:
+    try:
+      future.exception()
+    except asyncio.CancelledError:
+      pass
+    self._release_scan_lock()
+
+  def _release_scan_lock(self) -> None:
+    if self._scan_lock.locked():
+      self._scan_lock.release()
 
   def _scan_rack_blocking(self, rack_id: str, expected_well_count: int) -> RackScanResult:
     image_path = self.driver.acquire_image()

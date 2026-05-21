@@ -270,6 +270,31 @@ class TestMicronicCodeReaderRackReadingBackend(unittest.IsolatedAsyncioTestCase)
       with self.assertRaises(TimeoutError):
         await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
 
+  async def test_timeout_keeps_scan_lock_until_blocking_scan_finishes(self):
+    driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    backend = MicronicCodeReaderRackReadingBackend(driver=driver)
+
+    def slow_blocking_scan(rack_id, expected_well_count):
+      del rack_id, expected_well_count
+      import time
+
+      time.sleep(0.05)
+      return MagicMock()
+
+    with (
+      patch.object(driver, "read_barcode", AsyncMock(return_value="9500017722")),
+      patch.object(backend, "_scan_rack_blocking", side_effect=slow_blocking_scan),
+    ):
+      with self.assertRaises(TimeoutError):
+        await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
+      with self.assertRaises(MicronicError):
+        await backend.scan_rack(rack=_rack(), timeout=0.01, poll_interval=0.0)
+
+      import asyncio
+
+      await asyncio.sleep(0.08)
+      self.assertFalse(backend._scan_lock.locked())
+
   async def test_scan_rack_propagates_micronic_error(self):
     driver = MicronicCodeReaderDriver(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     backend = MicronicCodeReaderRackReadingBackend(driver=driver)
