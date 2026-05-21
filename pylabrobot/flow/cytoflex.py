@@ -1,12 +1,150 @@
 import array
 import asyncio
 import struct
+from typing import List, Tuple
 
 import flowkit as fk
 import numpy as np
 
 from pylabrobot.io.usb import USB
 from pylabrobot.machines.backend import MachineBackend
+
+# === Wire format for bulk-IN event packets (internal; not public API). =========
+# Each event is 33 little-endian int32s (132 bytes). Bytes 0..14 are H-channel
+# ADC readings, byte 15 is unused, bytes 16..30 are A-channel readings (paired
+# with byte n-16), byte 31 is unused, byte 32 is a 50 kHz tick counter.
+# Verified bit-exact (≤1 LSB) against FCS files produced by CytExpert across
+# 14 wells.
+
+# FCS column index -> byte index inside each 33-int event.
+_H_BYTE_FOR_FCS = {
+  0: 14,
+  2: 11,
+  4: 12,
+  6: 13,
+  8: 8,
+  10: 9,
+  12: 10,
+  14: 0,
+  16: 1,
+  18: 2,
+  20: 3,
+  22: 5,
+  24: 4,
+  26: 6,
+  28: 7,
+}
+_A_BYTE_FOR_FCS = {
+  1: 30,
+  3: 27,
+  5: 28,
+  7: 29,
+  9: 24,
+  11: 25,
+  13: 26,
+  15: 16,
+  17: 17,
+  19: 18,
+  21: 19,
+  23: 21,
+  25: 20,
+  27: 22,
+  29: 23,
+}
+_H_GAIN = 8.0
+_A_GAIN = 0.5
+_TIMESTEP_SEC = 2e-5  # device tick period (= FCS $TIMESTEP)
+
+# FCS PnN order. FSC-Width is derived from FSC-A / FSC-H; Time is the byte-32 tick.
+FCS_CHANNEL_NAMES: List[str] = [
+  "FSC-H",
+  "FSC-A",
+  "SSC-H",
+  "SSC-A",
+  "FL5-H",
+  "FL5-A",
+  "FL6-H",
+  "FL6-A",
+  "FL11-H",
+  "FL11-A",
+  "FL12-H",
+  "FL12-A",
+  "FL13-H",
+  "FL13-A",
+  "FL1-H",
+  "FL1-A",
+  "FL2-H",
+  "FL2-A",
+  "FL3-H",
+  "FL3-A",
+  "FL4-H",
+  "FL4-A",
+  "FL7-H",
+  "FL7-A",
+  "FL8-H",
+  "FL8-A",
+  "FL9-H",
+  "FL9-A",
+  "FL10-H",
+  "FL10-A",
+  "FSC-Width",
+  "Time",
+]
+
+
+def _decode_raw_events(flow_packets: List[bytes]) -> np.ndarray:
+  """Return an (N, 33) int64 array of unique raw events parsed from bulk-IN packets.
+
+  Each packet starts with a 20-byte preamble (55 55 55 55 ff ff ...) followed
+  by a stream of 132-byte event records. The device retransmits its buffer
+  until new events arrive, so this function deduplicates byte-identical rows
+  while preserving the order in which each row first appeared.
+
+  Not part of the public API; exported for test access.
+  """
+  rows: List[Tuple[int, ...]] = []
+  for packet in flow_packets:
+    body = packet[20:]
+    for k in range(len(body) // 132):
+      section = body[k * 132 : (k + 1) * 132]
+      if not any(section):
+        continue
+      rows.append(struct.unpack("<33i", section))
+  raw = np.asarray(rows, dtype=np.int64)
+  if not len(raw):
+    return raw
+  _, first_idx = np.unique(raw, axis=0, return_index=True)
+  return raw[np.sort(first_idx)]
+
+
+def _events_from_raw(raw: np.ndarray) -> np.ndarray:
+  """Transform an (N, 33) raw-int array into an (N, 32) float64 array in
+  FCS PnN column order, with H/A gains applied, FSC-Width derived from
+  FSC-A/FSC-H, and Time expressed in seconds (raw tick × $TIMESTEP).
+
+  Warmup events at the start of the stream carry non-monotonic tick values;
+  callers are expected to filter them upstream.
+
+  Not part of the public API; exported for test access.
+  """
+  n = len(raw)
+  events = np.zeros((n, len(FCS_CHANNEL_NAMES)), dtype=np.float64)
+  if not n:
+    return events
+  for fci, byte_i in _H_BYTE_FOR_FCS.items():
+    events[:, fci] = _H_GAIN * raw[:, byte_i]
+  for fci, byte_i in _A_BYTE_FOR_FCS.items():
+    events[:, fci] = _A_GAIN * raw[:, byte_i]
+  with np.errstate(divide="ignore", invalid="ignore"):
+    events[:, 30] = np.where(events[:, 0] != 0, events[:, 1] / events[:, 0] * 1024.0, 0.0)
+  events[:, 31] = raw[:, 32] * _TIMESTEP_SEC
+  return events
+
+
+def _decode_flow_packets(flow_packets: List[bytes]) -> Tuple[np.ndarray, np.ndarray]:
+  """Convenience wrapper: returns (raw_int_array, events_in_fcs_order)."""
+  raw = _decode_raw_events(flow_packets)
+  return raw, _events_from_raw(raw)
 
 
 class CytoFlex(MachineBackend):
@@ -1190,117 +1328,11 @@ class CytoFlex(MachineBackend):
     sample = None
 
     try:
-      columns_names = [
-        x[0]
-        for x in [
-          ("FSC-H", "FSC-H"),
-          ("FSC-A", "FSC-A"),
-          ("SSC-H", "SSC-H"),
-          ("SSC-A", "SSC-A"),
-          ("FL5-H", "FITC-H"),
-          ("FL5-A", "FITC-A"),
-          ("FL6-H", "PerCP-H"),
-          ("FL6-A", "PerCP-A"),
-          ("FL11-H", "APC-H"),
-          ("FL11-A", "APC-A"),
-          ("FL12-H", "APC-A700-H"),
-          ("FL12-A", "APC-A700-A"),
-          ("FL13-H", "APC-A750-H"),
-          ("FL13-A", "APC-A750-A"),
-          ("FL1-H", "PB450-H"),
-          ("FL1-A", "PB450-A"),
-          ("FL2-H", "KO525-H"),
-          ("FL2-A", "KO525-A"),
-          ("FL3-H", "Violet610-H"),
-          ("FL3-A", "Violet610-A"),
-          ("FL4-H", "Violet660-H"),
-          ("FL4-A", "Violet660-A"),
-          ("FL7-H", "PE-H"),
-          ("FL7-A", "PE-A"),
-          ("FL8-H", "ECD-H"),
-          ("FL8-A", "ECD-A"),
-          ("FL9-H", "PC5.5-H"),
-          ("FL9-A", "PC5.5-A"),
-          ("FL10-H", "PC7-H"),
-          ("FL10-A", "PC7-A"),
-          ("FSC-Width", "FSC-Width"),
-          ("Time", "Time"),
-        ]
-      ]
-
-      # parse flow data
-      flow_data = []
-      for packet in flow_packets:
-        # remove first 20 bytes
-        packet = packet[20:]
-        # loop over in 132 byte sections
-        for i in range(0, len(packet), 132):
-          # get 132 byte section
-          section = packet[i : i + 132]
-          # check if section is 132 bytes
-          if len(section) != 132:
-            continue
-          # check if section is all 0s
-          if all(b == 0 for b in section):
-            continue
-
-          # decode integers
-          integers = [struct.unpack("i", packet[i : i + 4])[0] for i in range(0, len(section), 4)]
-          # add to flow data
-          column2index = {  # fcs column name : index into byte array
-            14: 0,  # r2=0.99
-            16: 1,  # r2=0.99
-            18: 2,  # r2=1.00
-            20: 3,  # r2=1.00
-            24: 4,  # r2=0.97
-            22: 5,  # r2=0.96
-            26: 6,  # r2=0.98
-            28: 7,  # r2=0.96
-            8: 8,  # r2=0.92
-            10: 9,  # r2=0.99
-            12: 10,  # r2=0.99
-            2: 11,  # r2=0.99
-            4: 12,  # r2=0.97
-            6: 13,  # r2=0.99
-            0: 14,  # r2=0.99
-            # 31: 15, # r2=0.93
-            15: 16,  # r2=1.00
-            17: 17,  # r2=1.00
-            19: 18,  # r2=1.00
-            21: 19,  # r2=1.00
-            25: 20,  # r2=0.97
-            23: 21,  # r2=0.96
-            27: 22,  # r2=0.98
-            29: 23,  # r2=0.96
-            9: 24,  # r2=0.94
-            11: 25,  # r2=0.99
-            13: 26,  # r2=0.99
-            3: 27,  # r2=0.99
-            5: 28,  # r2=0.96
-            7: 29,  # r2=0.99
-            1: 30,  # r2=1.00
-            # 18: 32,  # r2=0.70
-            # not so good:
-            30: 30,  # fsc-w, also column 1 (fsc-a)
-            31: 31,  # r2=0.88
-            # not used
-            # index 15: poor correlation
-            # index 33: there are only 32 channels in the fcs file.
-            # column 1 and 30 from the fcs file point to the same index (30)
-            # columns 15 and 32 from the byte array are not used.
-            # could the combination of 15 and 32 be channel 1 or 30?
-            # width is very likely, since it's the only width channel.
-            # index 31 should also be considered, since its correlation with fcs 31 is weak (and fcs 31 is time)
-          }
-          # can possibly done faster when we convert to numpy array
-          events = [integers[column2index[i]] for i in range(len(columns_names))]
-          flow_data.append(events)
-
-      flow_data = np.array(flow_data)
+      _, events = _decode_flow_packets(flow_packets)
       sample = fk.Sample(
-        fcs_path_or_data=flow_data,
-        channel_labels=columns_names,
-        sample_id="sample id",  # arbitrary?
+        fcs_path_or_data=events,
+        channel_labels=FCS_CHANNEL_NAMES,
+        sample_id="sample id",
       )
     except Exception as e:
       print("error", e)
