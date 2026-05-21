@@ -588,11 +588,28 @@
 <h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-move-iswap-x" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">move_iswap_x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x" title="Link to this definition">#</a></dt>
-<dd><p>Move iSWAP X to absolute position</p>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">move_iswap_x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">acceleration_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_protection_limiter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">7</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.move_iswap_x" title="Link to this definition">#</a></dt>
+<dd><p>Move the iSWAP gripper center to absolute X position (deck coordinates).</p>
+<p>The X-arm carriage and the gripper translate rigidly together in X, so
+the gripper-X delta equals the rotation-drive-X delta. Read the current
+gripper X from FK, translate the X-arm by the delta, and the gripper
+lands at <code class="code docutils literal notranslate"><span class="pre">x_position</span></code> via a single smooth motion plan.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>x_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>[</strong><strong>mm</strong><strong>]</strong> (<em>x_position</em>) – target gripper X in deck coordinates.</p></li>
+<li><p><strong>acceleration_level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – X-arm acceleration index, 1..5.</p></li>
+<li><p><strong>current_protection_limiter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – motor current limit, 0..7.</p></li>
+<li><p><strong>x_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – if iSWAP is not installed, or if <code class="code docutils literal notranslate"><span class="pre">setup()</span></code> has not
+    populated <code class="code docutils literal notranslate"><span class="pre">iswap_information</span></code>.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if the resolved rotation drive X is outside the X-arm
+    hardware range, or if any arg is outside its valid range.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
