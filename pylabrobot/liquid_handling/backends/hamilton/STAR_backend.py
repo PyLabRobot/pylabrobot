@@ -11181,18 +11181,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    _, rotation_max = self.iswap_information.rotation_increment_range
-    _, wrist_max = self.iswap_information.wrist_increment_range
-    if abs(rotation_position_increments) > rotation_max:
+    rotation_min, rotation_max = self.iswap_information.rotation_increment_range
+    wrist_min, wrist_max = self.iswap_information.wrist_increment_range
+    if not (rotation_min <= rotation_position_increments <= rotation_max):
       raise ValueError(
         f"rotation_position_increments must be between "
-        f"{-rotation_max} and "
+        f"{rotation_min} and "
         f"{rotation_max}; got {rotation_position_increments}"
       )
-    if abs(wrist_position_increments) > wrist_max:
+    if not (wrist_min <= wrist_position_increments <= wrist_max):
       raise ValueError(
         f"wrist_position_increments must be between "
-        f"{-wrist_max} and "
+        f"{wrist_min} and "
         f"{wrist_max}; got {wrist_position_increments}"
       )
 
