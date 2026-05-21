@@ -1332,12 +1332,9 @@ class iSWAPInformation:
   runtime, so the record is treated as immutable post-setup.
   """
 
-  # Fields are grouped by axis/drive (X, Y, Z, rotation drive, wrist drive,
-  # gripper). The grouping is split into two tiers because Python <3.10
-  # dataclasses require fields without defaults to precede fields with
-  # defaults: first the per-machine calibration read from EEPROM at setup (no
-  # defaults), then the firmware/hardware-version-dependent device facts
-  # (defaulted). Within each tier the axis order is the same.
+  # Two tiers (Python <3.10 dataclasses require non-default fields first):
+  # per-machine calibration read from EEPROM, then defaulted device facts.
+  # Each tier is ordered by axis/drive (X, Y, Z, rotation, wrist, gripper).
 
   # === Per-machine calibration (read from EEPROM at setup; no defaults) ======
   fw_version: str
@@ -1382,8 +1379,7 @@ class iSWAPInformation:
   # the only generation currently supported): per-drive area-of-operation
   # ranges and encoder resolutions. Defaulted (same across units of a
   # generation), so setup construction is unchanged. Defaults mirror the
-  # STARBackend class constants tagged `# remove in v1`; every (lo, hi) range
-  # is a Tuple[int, int], unpacked at the use site. =========================
+  # STARBackend class constants tagged `# remove in v1`. =====================
 
   # -- Y --
   y_increment_range: Tuple[int, int] = (0, 14_000)
@@ -1392,45 +1388,32 @@ class iSWAPInformation:
   is `rotation_drive_y_max`)."""
 
   y_mm_per_increment: float = 0.046302083
-  """Y-carriage encoder resolution: mm per motor increment."""
 
-  rotation_y_speed_increment_range: Tuple[int, int] = (50, 8_000)
-  """Y-carriage speed command range, in increments/sec (the iSWAP Y drive sits
-  beneath the rotation drive)."""
+  y_speed_increment_range: Tuple[int, int] = (50, 8_000)  # unit: increments/sec
 
   # -- Z --
   z_increment_range: Tuple[int, int] = (-187, 26_661)
-  """Z-carriage absolute position range, in motor increments."""
 
   z_mm_per_increment: float = 0.01072765
-  """Z-carriage encoder resolution: mm per motor increment."""
 
-  z_speed_increment_range: Tuple[int, int] = (50, 15_000)
-  """Z-carriage speed command range, in increments/sec."""
+  z_speed_increment_range: Tuple[int, int] = (50, 15_000)  # unit: increments/sec
 
-  z_acceleration_increment_range: Tuple[int, int] = (5, 999)
-  """Z-carriage acceleration command range, in 1000 increments/sec^2."""
+  z_acceleration_increment_range: Tuple[int, int] = (5, 999)  # unit: 1000 increments/sec^2
 
-  # -- rotation drive --
+  # -- rotation drive (joint 1, W) --
   rotation_increment_range: Tuple[int, int] = (-30_032, 30_032)
-  """Rotation drive (joint 1, W) absolute position range, in motor increments."""
 
   rotation_deg_per_increment: float = 0.00309619077
-  """Rotation drive encoder resolution: degrees per motor increment."""
 
-  # -- wrist drive --
+  # -- wrist drive (joint 2, T) --
   wrist_increment_range: Tuple[int, int] = (-30_000, 30_000)
-  """Wrist drive (joint 2, T) absolute position range, in motor increments."""
 
   wrist_deg_per_increment: float = 0.00507968798
-  """Wrist drive encoder resolution: degrees per motor increment."""
 
-  # -- gripper --
-  gripper_increment_range: Tuple[int, int] = (12_780, 24_120)
-  """Gripper drive (G) jaw-width range, in motor increments."""
+  # -- gripper (G) --
+  gripper_increment_range: Tuple[int, int] = (12_780, 24_120)  # jaw width
 
   gripper_mm_per_increment: float = 0.00554337
-  """Gripper drive encoder resolution: mm per motor increment."""
 
 
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
@@ -10352,7 +10335,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     y_mm_per_increment = self.iswap_information.y_mm_per_increment
     speed_increments = STARBackend.iswap_y_drive_mm_to_increment(speed, y_mm_per_increment)
-    speed_min, speed_max = self.iswap_information.rotation_y_speed_increment_range
+    speed_min, speed_max = self.iswap_information.y_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
