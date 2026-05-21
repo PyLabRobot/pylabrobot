@@ -80,19 +80,20 @@ class CytoFlex(MachineBackend):
     await self._do_b55()
     return data
 
-  _DONE_OPCODE = 0x3B
-  _DONE_BUSY = b"\x5a\x5a\x5a\x5a"
-  _DONE_READY = b"\xa5\xa5\x5a\x5a"
+  # Status word at response[10:12]: 5a5a = pending, a5a5 = ready.
+  # Convention shared across opcodes 0x36, 0x38, 0x39, 0x3a, 0x3b.
+  _STATUS_PENDING = b"\x5a\x5a"
+  _STATUS_READY = b"\xa5\xa5"
 
   async def get_is_done(self) -> bool:
-    body = bytes.fromhex("5555000020000000") + bytes([self._DONE_OPCODE, 0x00]) + bytes(52)
+    body = bytes.fromhex("5555000020000000") + b"\x3b\x00" + bytes(52)
     response = await self.send_command(body + self._checksum(body))
-    payload = response[10:14]
-    if payload == self._DONE_BUSY:
+    status = response[10:12]
+    if status == self._STATUS_PENDING:
       return False
-    if payload == self._DONE_READY:
+    if status == self._STATUS_READY:
       return True
-    raise ValueError(f"Unexpected done-poll response: {response.hex()}")
+    raise ValueError(f"Unexpected status word {status.hex()} in: {response.hex()}")
 
   async def _wait_for_done(self, timeout: float = 30.0, poll_interval: float = 0.1):
     deadline = asyncio.get_event_loop().time() + timeout
