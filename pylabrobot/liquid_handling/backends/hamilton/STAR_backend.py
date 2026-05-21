@@ -1322,47 +1322,115 @@ class Head96Information:
 
 @dataclass
 class iSWAPInformation:
-  """Information about the installed iSWAP, loaded from firmware/EEPROM at setup.
+  """Device parameters for the installed iSWAP, loaded or resolved at setup.
 
   Populated once by `STARBackend._set_up_iswap` when the iSWAP is installed
-  (`extended_conf.left_x_drive.iswap_installed`). All fields are calibrated,
-  per-machine values from EEPROM - they do not change at runtime, so the
-  record is treated as immutable post-setup.
+  (`extended_conf.left_x_drive.iswap_installed`). Holds two kinds of data:
+  per-machine calibration read from EEPROM (link lengths, calibrated stops,
+  offsets), and firmware/hardware-version-dependent device facts (per-drive
+  area-of-operation ranges and encoder resolutions). Neither changes at
+  runtime, so the record is treated as immutable post-setup.
   """
 
+  # Fields are grouped by axis/drive (X, Y, Z, rotation drive, wrist drive,
+  # gripper). The grouping is split into two tiers because Python <3.10
+  # dataclasses require fields without defaults to precede fields with
+  # defaults: first the per-machine calibration read from EEPROM at setup (no
+  # defaults), then the firmware/hardware-version-dependent device facts
+  # (defaulted). Within each tier the axis order is the same.
+
+  # === Per-machine calibration (read from EEPROM at setup; no defaults) ======
   fw_version: str
   """iSWAP firmware version string (R0 RF response)."""
 
+  # -- X --
   rotation_drive_x_offset: float
   """Deck X distance from the X-arm carriage center to the rotation drive
   (mm). Stored in master EEPROM as parameter `kg`. Hamilton factory default
   is 34.0 mm."""
 
+  # -- Y --
   rotation_drive_y_max: float
   """Upper Y-axis bound of the iSWAP carriage (mm). Parking sits at this Y;
   anything past it is in the mechanical-stop region."""
 
-  link_1_length: float
-  """Distance from the rotation joint (joint 1) to the wrist joint (joint 2),
-  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
-  `iswap_request_link_1_length` (R0 RA ra=pw, slot 9)."""
-
-  link_2_length: float
-  """Distance from the wrist joint (joint 2) to the gripper finger center,
-  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
-  `iswap_request_link_2_length` (R0 RA ra=pt, slot 9)."""
-
+  # -- rotation drive --
   rotation_drive_predefined_increments: Dict["STARBackend.RotationDriveOrientation", int]
   """Calibrated motor-increment positions for the rotation drive's named
   stops (LEFT / FRONT / RIGHT / PARKED_RIGHT), read from EEPROM `pw[0..4]`.
   Used as anchor points for angle <-> increment conversion in
   `_iswap_rotation_drive_increments_to_angle`."""
 
+  link_1_length: float
+  """Distance from the rotation joint (joint 1) to the wrist joint (joint 2),
+  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
+  `iswap_request_link_1_length` (R0 RA ra=pw, slot 9)."""
+
+  # -- wrist drive --
   wrist_drive_predefined_increments: Dict["STARBackend.WristDriveOrientation", int]
   """Calibrated motor-increment positions for the wrist drive's named stops
   (RIGHT / STRAIGHT / LEFT / REVERSE), read from EEPROM `pt[1..4]`. Used to
   determine the per-machine STRAIGHT angle, which anchors forward kinematics
   (link-2 angle is measured relative to STRAIGHT)."""
+
+  link_2_length: float
+  """Distance from the wrist joint (joint 2) to the gripper finger center,
+  in mm. Hamilton factory default is 138.0 mm; queried from EEPROM via
+  `iswap_request_link_2_length` (R0 RA ra=pt, slot 9)."""
+
+  # === Firmware/hardware-version-dependent device facts (4th-generation iSWAP,
+  # the only generation currently supported): per-drive area-of-operation
+  # ranges and encoder resolutions. Defaulted (same across units of a
+  # generation), so setup construction is unchanged. Defaults mirror the
+  # STARBackend class constants tagged `# remove in v1`; every (lo, hi) range
+  # is a Tuple[int, int], unpacked at the use site. =========================
+
+  # -- Y --
+  y_increment_range: Tuple[int, int] = (0, 14_000)
+  """Y-carriage position range accepted by the YA command, in motor increments
+  (the mechanical area of operation ends earlier; the per-machine parking bound
+  is `rotation_drive_y_max`)."""
+
+  y_mm_per_increment: float = 0.046302083
+  """Y-carriage encoder resolution: mm per motor increment."""
+
+  rotation_y_speed_increment_range: Tuple[int, int] = (50, 8_000)
+  """Y-carriage speed command range, in increments/sec (the iSWAP Y drive sits
+  beneath the rotation drive)."""
+
+  # -- Z --
+  z_increment_range: Tuple[int, int] = (-187, 26_661)
+  """Z-carriage absolute position range, in motor increments."""
+
+  z_mm_per_increment: float = 0.01072765
+  """Z-carriage encoder resolution: mm per motor increment."""
+
+  z_speed_increment_range: Tuple[int, int] = (50, 15_000)
+  """Z-carriage speed command range, in increments/sec."""
+
+  z_acceleration_increment_range: Tuple[int, int] = (5, 999)
+  """Z-carriage acceleration command range, in 1000 increments/sec^2."""
+
+  # -- rotation drive --
+  rotation_increment_range: Tuple[int, int] = (-30_032, 30_032)
+  """Rotation drive (joint 1, W) absolute position range, in motor increments."""
+
+  rotation_deg_per_increment: float = 0.00309619077
+  """Rotation drive encoder resolution: degrees per motor increment."""
+
+  # -- wrist drive --
+  wrist_increment_range: Tuple[int, int] = (-30_000, 30_000)
+  """Wrist drive (joint 2, T) absolute position range, in motor increments."""
+
+  wrist_deg_per_increment: float = 0.00507968798
+  """Wrist drive encoder resolution: degrees per motor increment."""
+
+  # -- gripper --
+  gripper_increment_range: Tuple[int, int] = (12_780, 24_120)
+  """Gripper drive (G) jaw-width range, in motor increments."""
+
+  gripper_mm_per_increment: float = 0.00554337
+  """Gripper drive encoder resolution: mm per motor increment."""
 
 
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
