@@ -1379,7 +1379,7 @@ class iSWAPInformation:
   # the only generation currently supported): per-drive area-of-operation
   # ranges and encoder resolutions. Defaulted (same across units of a
   # generation), so setup construction is unchanged. Defaults mirror the
-  # STARBackend class constants tagged `# remove in v1`. =====================
+  # STARBackend class constants tagged `# TODO: remove in v1`. ===============
 
   # -- Y --
   y_increment_range: Tuple[int, int] = (0, 14_000)
@@ -10088,12 +10088,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return round(pt[9] / 10, 1)
 
   # =======================================================================
-  # iSWAP drive constants superseded by `iSWAPInformation` - REMOVE IN v1.
+  # TODO: remove in v1 - iSWAP drive constants superseded by `iSWAPInformation`.
   #
   # Every value below now lives canonically in `iSWAPInformation` (per-drive
   # area-of-operation ranges + encoder resolutions); all internal usage reads
   # from there. Kept only for backward compatibility with external code and as
-  # an audit anchor for the prior literals. Delete this whole block at v1.
+  # an audit anchor for the prior literals.
   # Ordered to match iSWAPInformation: Y, Z, rotation drive, wrist drive,
   # gripper (no X-axis constant is vestigial).
   # =======================================================================
