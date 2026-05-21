@@ -80,14 +80,16 @@ class CytoFlex(MachineBackend):
     await self._do_b55()
     return data
 
+  async def send_frame(self, opcode: int, payload: bytes = b"", flag: int = 0x00):
+    return await self.send_command(self._frame(opcode, payload, flag))
+
   # Status word at response[10:12]: 5a5a = pending, a5a5 = ready.
   # Convention shared across opcodes 0x36, 0x38, 0x39, 0x3a, 0x3b.
   _STATUS_PENDING = b"\x5a\x5a"
   _STATUS_READY = b"\xa5\xa5"
 
   async def get_is_done(self) -> bool:
-    body = bytes.fromhex("5555000020000000") + b"\x3b\x00" + bytes(52)
-    response = await self.send_command(body + self._checksum(body))
+    response = await self.send_frame(0x3B)
     status = response[10:12]
     if status == self._STATUS_PENDING:
       return False
@@ -324,66 +326,18 @@ class CytoFlex(MachineBackend):
 
     await self.get_status()
 
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007b55"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000003000200000000ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007ad4"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000003000200010000ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007bd4"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008055"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000003000700000000ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fd4"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000003000700010000ff0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080d4"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e32f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e32f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e32f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089d5"
-      )
-    )
+    await self.send_frame(0x04, bytes.fromhex("02"))
+    await self.send_frame(0x03, bytes.fromhex("0200000000ff"), flag=0x80)
+    await self.send_frame(0x03, bytes.fromhex("0200010000ff"), flag=0x80)
+    await self.send_frame(0x04, bytes.fromhex("07"))
+    await self.send_frame(0x03, bytes.fromhex("0700000000ff"), flag=0x80)
+    await self.send_frame(0x03, bytes.fromhex("0700010000ff"), flag=0x80)
+    await self.send_frame(0x14, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x14, b"", flag=0x80)
+    await self.send_frame(0x14, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x14, b"", flag=0x80)
+    await self.send_frame(0x14, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x14, b"", flag=0x80)
 
     data = await self._read(wValue=0x1, wIndex=0x0)
 
@@ -399,11 +353,7 @@ class CytoFlex(MachineBackend):
 
     await self.get_status()
 
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400010000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008255"
-      )
-    )
+    await self.send_frame(0x04, bytes.fromhex("0100000008"))
 
     await self.write_at_address(
       bytes.fromhex(
@@ -531,209 +481,57 @@ class CytoFlex(MachineBackend):
     await self.write_at_address(bytes.fromhex("000000004000000e"), wIndex=0x1000)
     await self.write_at_address(bytes.fromhex("0000000008000000"), wIndex=0x1100)
 
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000025005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f42f"
-      )
+    await self.send_frame(0x25, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x04, bytes.fromhex("0100000108"))
+    await self.send_frame(0x26)
+    await self.send_frame(0x04, bytes.fromhex("0100000108"))
+    await self.send_frame(0x26)
+    await self.send_frame(0x12, b"", flag=0x80)
+    await self.send_frame(0x13, b"", flag=0x80)
+    await self.send_frame(0x19, b"", flag=0x80)
+    await self.send_frame(0x1B, b"", flag=0x80)
+    await self.send_frame(0x0F, b"", flag=0x80)
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000000008"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400010000010800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008256"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000002600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009b55"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400010000010800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008256"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000002600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009b55"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000087d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000013000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000088d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ed5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000076dd"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fd5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000081d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000082d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000086d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000085d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000091d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000030005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ff2f"
-      )
-    )
+    await self.send_frame(0x0A, b"", flag=0x80)
+    await self.send_frame(0x0C, b"", flag=0x80)
+    await self.send_frame(0x0E, b"", flag=0x80)
+    await self.send_frame(0x0D, b"", flag=0x80)
+    await self.send_frame(0x0B, b"", flag=0x80)
+    await self.send_frame(0x11, b"", flag=0x80)
+    await self.send_frame(0x10, b"", flag=0x80)
+    await self.send_frame(0x1C, b"", flag=0x80)
+    await self.send_frame(0x30, bytes.fromhex("5a5a"), flag=0x80)
 
     await self._wait_for_done()
 
   async def _initialize(self):
     await self.get_status()
 
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400010000010800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008256"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000002600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009b55"
-      )
-    )
+    await self.send_frame(0x04, bytes.fromhex("0100000108"))
+    await self.send_frame(0x26)
     await self.get_status()
 
-    await self.send_command(
-      bytes.fromhex(
-        "5555008020000000030002000100550100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d0d6"
-      )
+    await self.send_frame(0x03, bytes.fromhex("020001005501"), flag=0x80)
+    await self.send_frame(0x03, bytes.fromhex("020000005afa"), flag=0x80)
+    await self.send_frame(0x03, bytes.fromhex("070001009287"), flag=0x80)
+    await self.send_frame(0x03, bytes.fromhex("070000006bfa"), flag=0x80)
+    await self.send_frame(0x0D, b"", flag=0x80)
+    await self.send_frame(0x11, b"", flag=0x80)
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000000008"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000300020000005afa00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d4cf"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "5555008020000000030007000100928700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000125d"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000300070000006bfa00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000eacf"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000082d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000086d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000076dd"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fd5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000085d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000f005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000de2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000c005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000db2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000b005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000da2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000012005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e12f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000013005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e22f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001b005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ea2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000019005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e82f"
-      )
-    )
+    await self.send_frame(0x0A, b"", flag=0x80)
+    await self.send_frame(0x10, b"", flag=0x80)
+    await self.send_frame(0x0F, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x0E, b"", flag=0x80)
+    await self.send_frame(0x0C, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x0B, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x12, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x13, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x1B, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x19, bytes.fromhex("5a5a"), flag=0x80)
 
     await self.write_at_address(bytes.fromhex("02"), wIndex=0x4100)
     await self.write_at_address(bytes.fromhex("42"), wIndex=0x4000)
@@ -855,21 +653,9 @@ class CytoFlex(MachineBackend):
     await self.write_at_address(bytes.fromhex("000000004000000e"), wIndex=0x1000)
     await self.write_at_address(bytes.fromhex("0000000008000000"), wIndex=0x1100)
 
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000015005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e42f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ad5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089d5"
-      )
-    )
+    await self.send_frame(0x15, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x15, b"", flag=0x80)
+    await self.send_frame(0x14, b"", flag=0x80)
 
     await self.write_at_address(bytes.fromhex("000000004000000e"), wIndex=0x1000)
     await self.write_at_address(bytes.fromhex("0000000008000000"), wIndex=0x1100)
@@ -881,101 +667,35 @@ class CytoFlex(MachineBackend):
     self._running = True
 
   async def _deinitialize(self):
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000087d5"
-      )
+    await self.send_frame(0x12, b"", flag=0x80)
+    await self.send_frame(0x13, b"", flag=0x80)
+    await self.send_frame(0x19, b"", flag=0x80)
+    await self.send_frame(0x1B, b"", flag=0x80)
+    await self.send_frame(0x0F, b"", flag=0x80)
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000000008"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000013000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000088d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ed5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000076dd"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fd5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000081d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000082d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000086d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000085d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000091d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000030005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ff2f"
-      )
-    )
+    await self.send_frame(0x0A, b"", flag=0x80)
+    await self.send_frame(0x0C, b"", flag=0x80)
+    await self.send_frame(0x0E, b"", flag=0x80)
+    await self.send_frame(0x0D, b"", flag=0x80)
+    await self.send_frame(0x0B, b"", flag=0x80)
+    await self.send_frame(0x11, b"", flag=0x80)
+    await self.send_frame(0x10, b"", flag=0x80)
+    await self.send_frame(0x1C, b"", flag=0x80)
+    await self.send_frame(0x30, bytes.fromhex("5a5a"), flag=0x80)
 
     self._running = False
 
   async def get_status(self):
-    return await self.send_command(
-      bytes.fromhex(
-        "55550000200000000500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007a55"
-      )
-    )
+    return await self.send_frame(0x05)
 
   async def get_location(self):
     """
     Return (x, y, z) tuple in internal unit. x is positive to the right, y is positive towards the back, z is positive downwards.
     """
 
-    resp = await self.send_command(
-      bytes.fromhex(
-        "55550000200000003a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000af55"
-      )
-    )
+    resp = await self.send_frame(0x3A)
     return (
       struct.unpack("h", resp[14:16]),
       struct.unpack("h", resp[12:14]),
@@ -984,31 +704,15 @@ class CytoFlex(MachineBackend):
 
   async def open(self):
     # TODO: it's just move_y
-    data = await self.send_command(
-      bytes.fromhex(
-        "555500802000000036005a5a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000530"
-      )
-    )
+    data = await self.send_frame(0x36, bytes.fromhex("5a5a"), flag=0x80)
     await self._wait_for_done()
 
   async def close(self):
-    data = await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400010000010800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008256"
-      )
-    )
-    data = await self.send_command(
-      bytes.fromhex(
-        "55550000200000002600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009b55"
-      )
-    )
+    data = await self.send_frame(0x04, bytes.fromhex("0100000108"))
+    data = await self.send_frame(0x26)
 
     # TODO: it's just move_y
-    data = await self.send_command(
-      bytes.fromhex(
-        "55550080200000003600a5a50000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000507b"
-      )
-    )
+    data = await self.send_frame(0x36, bytes.fromhex("a5a5"), flag=0x80)
     await self._wait_for_done()
 
   @staticmethod
@@ -1016,11 +720,22 @@ class CytoFlex(MachineBackend):
     s = sum(int.from_bytes(body[i : i + 2], "little") for i in range(0, len(body), 2)) & 0xFFFF
     return s.to_bytes(2, "little")
 
-  async def _move_axis(self, cmd: int, value: int):
+  @classmethod
+  def _frame(cls, opcode: int, payload: bytes = b"", flag: int = 0x00) -> bytes:
+    """Build a 64-byte frame: sync + flag + length + opcode + payload + checksum."""
+    if len(payload) > 52:
+      raise ValueError(f"payload {len(payload)}B exceeds 52B limit")
     body = (
-      bytes.fromhex("5555008020000000") + bytes([cmd, 0x00]) + struct.pack("<h", value) + bytes(50)
+      b"\x55\x55"
+      + bytes([0x00, flag])
+      + b"\x20\x00\x00\x00"
+      + bytes([opcode, 0x00])
+      + payload.ljust(52, b"\x00")
     )
-    await self.send_command(body + self._checksum(body))
+    return body + cls._checksum(body)
+
+  async def _move_axis(self, opcode: int, value: int):
+    await self.send_frame(opcode, struct.pack("<h", value), flag=0x80)
     await self._wait_for_done()
 
   async def move_x(self, x: int):
@@ -1036,38 +751,18 @@ class CytoFlex(MachineBackend):
     await self._move_axis(0x34, z)
 
   async def start_stirring(self):
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001c005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000eb2f"
-      )
-    )
+    await self.send_frame(0x1C, bytes.fromhex("5a5a"), flag=0x80)
 
   async def stop_stirring(self):
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000001c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000091d5"
-      )
-    )
+    await self.send_frame(0x1C, b"", flag=0x80)
 
   async def run_flow(self, path: str, row: int, col: int, n=4):  # 0-indexed
     if not self._running:
       raise RuntimeError("Not running.")
 
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000000400010000010800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008256"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550000200000002600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009b55"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e32f"
-      )
-    )
+    await self.send_frame(0x04, bytes.fromhex("0100000108"))
+    await self.send_frame(0x26)
+    await self.send_frame(0x14, bytes.fromhex("5a5a"), flag=0x80)
 
     # move
     await self.move_x(0x24 + 0x6B * col)
@@ -1089,25 +784,17 @@ class CytoFlex(MachineBackend):
     )  # 5555008020000000340005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000aed5
 
     # start sipping
-    await self.send_command(
-      bytes.fromhex(
-        "5555008020000000010000000000000000000000000000000000000100f8000000000000000000000000000000000000000000000000000000000000000076ce"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("00000000000000000000000000000000000100f8"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000100000000000000000000000000000000000001409c0000000000000000000000000000000000000000000000000000000000000000b672"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("000000000000000000000000000000000001409c"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000100000000000000000000000000000000000001204e00000000000000000000000000000000000000000000000000000000000000009624"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("000000000000000000000000000000000001204e"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000076dd"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000000008"), flag=0x80
     )
 
     await self.write_at_address(bytes.fromhex("02"), wIndex=0x4100)
@@ -1440,16 +1127,10 @@ class CytoFlex(MachineBackend):
     await self.write_at_address(bytes.fromhex("23690000"), wIndex=0x400, verify=False)
     await self.write_at_address(bytes.fromhex("5a7a0000"), wIndex=0x400, verify=False)
 
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000017f1b0000000000000000000000000000000000000000000000000000000000000000f5f1"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000017f1b"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e32f"
-      )
-    )
+    await self.send_frame(0x14, bytes.fromhex("5a5a"), flag=0x80)
     await self.write_at_address(bytes.fromhex("ffff0000"), wIndex=0x1500, verify=False)
     await self.write_at_address(bytes.fromhex("e003"), wIndex=0x1600, verify=False)
     await self.write_at_address(bytes.fromhex("01"), wIndex=0x1700)
@@ -1634,80 +1315,30 @@ class CytoFlex(MachineBackend):
   async def _stop_flow(self):
     # stop sipping
     await self.write_at_address(bytes.fromhex("00"), wIndex=0x1700)
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000007f1b0000000000000000000000000000000000000000000000000000000000000000f5f0"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000007f1b"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000f005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000de2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000c005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000db2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000b005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000da2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000010005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000df2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000e005a5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000dd2f"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000039005a5a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000830"
-      )
-    )
+    await self.send_frame(0x14, b"", flag=0x80)
+    await self.send_frame(0x0F, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x0C, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x0B, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x10, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x0E, bytes.fromhex("5a5a"), flag=0x80)
+    await self.send_frame(0x39, bytes.fromhex("5a5a"), flag=0x80)
     await self._wait_for_done()
 
-    await self.send_command(
-      bytes.fromhex(
-        "5555008020000000010000000000000000000000000000000000010100f8000000000000000000000000000000000000000000000000000000000000000077ce"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("00000000000000000000000000000000010100f8"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000001000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000076dd"
-      )
+    await self.send_frame(
+      0x01, bytes.fromhex("0000000000000000000000000000000000000008"), flag=0x80
     )
-    await self.send_command(
-      bytes.fromhex(
-        "55550080200000000e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000085d5"
-      )
-    )
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000038005a5a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000730"
-      )
-    )
+    await self.send_frame(0x0E, b"", flag=0x80)
+    await self.send_frame(0x10, b"", flag=0x80)
+    await self.send_frame(0x38, bytes.fromhex("5a5a"), flag=0x80)
     await self._wait_for_done()
 
-    await self.send_command(
-      bytes.fromhex(
-        "555500802000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089d5"
-      )
-    )
+    await self.send_frame(0x14, b"", flag=0x80)
 
     await self._wait_for_done()
 
