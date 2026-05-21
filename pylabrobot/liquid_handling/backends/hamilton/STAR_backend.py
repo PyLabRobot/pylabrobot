@@ -10314,7 +10314,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.position_channels_in_y_direction({0: target_channel_0_y}, make_space=True)
 
     speed_increments = STARBackend.iswap_y_drive_mm_to_increment(speed)
-    speed_min, speed_max = STARBackend.iswap_rotation_drive_y_speed_increment_range
+    speed_min, speed_max = self.iswap_information.rotation_y_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
@@ -10407,8 +10407,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    z_min_incr = STARBackend.iswap_rotation_drive_z_min_increment
-    z_max_incr = STARBackend.iswap_rotation_drive_z_max_increment
+    z_min_incr, z_max_incr = self.iswap_information.z_increment_range
     absolute_min_z = (
       STARBackend.iswap_z_drive_increment_to_mm(z_min_incr)
       + STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
@@ -10424,7 +10423,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_increments = STARBackend.iswap_z_drive_mm_to_increment(finger_plane_z)
 
     speed_increments = STARBackend.iswap_z_drive_mm_to_increment(speed)
-    speed_min, speed_max = STARBackend.iswap_rotation_drive_z_speed_increment_range
+    speed_min, speed_max = self.iswap_information.z_speed_increment_range
     if not (speed_min <= speed_increments <= speed_max):
       raise ValueError(
         f"speed must be between "
@@ -10434,7 +10433,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     acceleration_increments = STARBackend.iswap_z_drive_mm_to_increment(acceleration / 1000)
-    accel_min, accel_max = STARBackend.iswap_rotation_drive_z_acceleration_increment_range
+    accel_min, accel_max = self.iswap_information.z_acceleration_increment_range
     if not (accel_min <= acceleration_increments <= accel_max):
       raise ValueError(
         f"acceleration must be between "
@@ -10745,14 +10744,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the resulting target increment is outside the hardware range.
     """
     predefined_increments = self.iswap_information.rotation_drive_predefined_increments
+    rotation_min, rotation_max = self.iswap_information.rotation_increment_range
     rotation_position_increments = STARBackend._iswap_rotation_drive_resolve_to_increments(
       angle, predefined_increments
     )
-    if not (
-      STARBackend.iswap_rotation_drive_min_increment
-      <= rotation_position_increments
-      <= STARBackend.iswap_rotation_drive_max_increment
-    ):
+    if not (rotation_min <= rotation_position_increments <= rotation_max):
       rotation_position_deg = STARBackend._iswap_rotation_drive_increments_to_angle(
         rotation_position_increments, predefined_increments
       )
@@ -10762,8 +10758,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"{predefined_increments[STARBackend.RotationDriveOrientation.LEFT]}/"
         f"{predefined_increments[STARBackend.RotationDriveOrientation.FRONT]}/"
         f"{predefined_increments[STARBackend.RotationDriveOrientation.RIGHT]}), "
-        f"outside hardware range [{STARBackend.iswap_rotation_drive_min_increment}, "
-        f"{STARBackend.iswap_rotation_drive_max_increment}]"
+        f"outside hardware range [{rotation_min}, "
+        f"{rotation_max}]"
       )
     wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
 
@@ -10987,23 +10983,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: if the resulting target increment is outside the hardware range.
     """
     predefined_increments = self.iswap_information.wrist_drive_predefined_increments
+    wrist_min, wrist_max = self.iswap_information.wrist_increment_range
     wrist_position_increments = STARBackend._iswap_wrist_drive_resolve_to_increments(
       angle, predefined_increments
     )
-    if not (
-      STARBackend.iswap_wrist_drive_min_increment
-      <= wrist_position_increments
-      <= STARBackend.iswap_wrist_drive_max_increment
-    ):
+    if not (wrist_min <= wrist_position_increments <= wrist_max):
       wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
         wrist_position_increments
       )
-      min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-        STARBackend.iswap_wrist_drive_min_increment
-      )
-      max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-        STARBackend.iswap_wrist_drive_max_increment
-      )
+      min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(wrist_min)
+      max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(wrist_max)
       raise ValueError(
         f"angle {angle} ({wrist_position_deg:+.2f} deg) is outside the hardware "
         f"range [{min_deg:+.2f}, {max_deg:+.2f}] deg"
@@ -11152,17 +11141,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
 
-    if abs(rotation_position_increments) > STARBackend.iswap_rotation_drive_max_increment:
+    _, rotation_max = self.iswap_information.rotation_increment_range
+    _, wrist_max = self.iswap_information.wrist_increment_range
+    if abs(rotation_position_increments) > rotation_max:
       raise ValueError(
         f"rotation_position_increments must be between "
-        f"{-STARBackend.iswap_rotation_drive_max_increment} and "
-        f"{STARBackend.iswap_rotation_drive_max_increment}; got {rotation_position_increments}"
+        f"{-rotation_max} and "
+        f"{rotation_max}; got {rotation_position_increments}"
       )
-    if abs(wrist_position_increments) > STARBackend.iswap_wrist_drive_max_increment:
+    if abs(wrist_position_increments) > wrist_max:
       raise ValueError(
         f"wrist_position_increments must be between "
-        f"{-STARBackend.iswap_wrist_drive_max_increment} and "
-        f"{STARBackend.iswap_wrist_drive_max_increment}; got {wrist_position_increments}"
+        f"{-wrist_max} and "
+        f"{wrist_max}; got {wrist_position_increments}"
       )
 
     if not 20 <= rotation_speed <= 75000:
@@ -11254,14 +11245,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       rotation_position_increments = await self._request_iswap_rotation_drive_position_increments()
     else:
       rot_predefined = self.iswap_information.rotation_drive_predefined_increments
+      rotation_min, rotation_max = self.iswap_information.rotation_increment_range
       rotation_position_increments = STARBackend._iswap_rotation_drive_resolve_to_increments(
         rotation_angle, rot_predefined
       )
-      if not (
-        STARBackend.iswap_rotation_drive_min_increment
-        <= rotation_position_increments
-        <= STARBackend.iswap_rotation_drive_max_increment
-      ):
+      if not (rotation_min <= rotation_position_increments <= rotation_max):
         rotation_position_deg = STARBackend._iswap_rotation_drive_increments_to_angle(
           rotation_position_increments, rot_predefined
         )
@@ -11271,31 +11259,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"{rot_predefined[STARBackend.RotationDriveOrientation.LEFT]}/"
           f"{rot_predefined[STARBackend.RotationDriveOrientation.FRONT]}/"
           f"{rot_predefined[STARBackend.RotationDriveOrientation.RIGHT]}), "
-          f"outside hardware range [{STARBackend.iswap_rotation_drive_min_increment}, "
-          f"{STARBackend.iswap_rotation_drive_max_increment}]"
+          f"outside hardware range [{rotation_min}, "
+          f"{rotation_max}]"
         )
 
     if wrist_angle is None:
       wrist_position_increments = await self._request_iswap_wrist_drive_position_increments()
     else:
       wrist_predefined = self.iswap_information.wrist_drive_predefined_increments
+      wrist_min, wrist_max = self.iswap_information.wrist_increment_range
       wrist_position_increments = STARBackend._iswap_wrist_drive_resolve_to_increments(
         wrist_angle, wrist_predefined
       )
-      if not (
-        STARBackend.iswap_wrist_drive_min_increment
-        <= wrist_position_increments
-        <= STARBackend.iswap_wrist_drive_max_increment
-      ):
+      if not (wrist_min <= wrist_position_increments <= wrist_max):
         wrist_position_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
           wrist_position_increments
         )
-        min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-          STARBackend.iswap_wrist_drive_min_increment
-        )
-        max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(
-          STARBackend.iswap_wrist_drive_max_increment
-        )
+        min_deg = STARBackend._iswap_wrist_drive_increments_to_angle(wrist_min)
+        max_deg = STARBackend._iswap_wrist_drive_increments_to_angle(wrist_max)
         raise ValueError(
           f"wrist_angle {wrist_angle} ({wrist_position_deg:+.2f} deg) is outside "
           f"the hardware range [{min_deg:+.2f}, {max_deg:+.2f}] deg"
