@@ -1332,7 +1332,7 @@ class iSWAPInformation:
   runtime, so the record is treated as immutable post-setup.
   """
 
-  # Two tiers (Python <3.10 dataclasses require non-default fields first):
+  # Two tiers (dataclasses require non-default fields before defaulted fields):
   # per-machine calibration read from EEPROM, then defaulted device facts.
   # Each tier is ordered by axis/drive (X, Y, Z, rotation, wrist, gripper).
 
