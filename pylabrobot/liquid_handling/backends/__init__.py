@@ -1,3 +1,4 @@
+from .agilent import AgilentBravoBackend
 from .backend import LiquidHandlerBackend
 from .chatterbox import LiquidHandlerChatterboxBackend
 from .chatterbox_backend import ChatterBoxBackend
