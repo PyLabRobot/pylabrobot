@@ -13104,6 +13104,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp_tip_mm
 
+  # TODO(v1): rename to request_stop_disk_z_position for consistency with
+  # move_channel_stop_disk_z and channels_request_stop_disk_z_positions.
   async def request_probe_z_position(self, channel_idx: int) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
     resp = await self.send_command(
