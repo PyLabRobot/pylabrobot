@@ -7330,7 +7330,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Y-position (mm) per channel, ordered by channel index (0 = backmost).
     """
     resp = await self.send_command(module="C0", command="RY", fmt="ry#### (n)")
-    return [v / 10 for v in cast(List[int], resp["ry"])]
+    return [v / 10 for v in resp["ry"]]
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
