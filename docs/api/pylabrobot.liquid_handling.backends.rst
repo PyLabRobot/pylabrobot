@@ -24,6 +24,7 @@ Hardware
   :nosignatures:
   :recursive:
 
+    backends.agilent.bravo_backend.AgilentBravoBackend
     backends.hamilton.base.HamiltonLiquidHandler
     backends.hamilton.STAR_backend.STAR
     backends.hamilton.vantage_backend.Vantage

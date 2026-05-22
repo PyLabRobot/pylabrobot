@@ -69,14 +69,9 @@ from pylabrobot.liquid_handling.backends.agilent.bravo.controllers.simulation im
 from pylabrobot.liquid_handling.backends.agilent.bravo.darwin.controller import DarwinController
 from pylabrobot.liquid_handling.backends.agilent.bravo.types import Axis
 
-# controller_type -> controller class. Mirrors OpenBravo's Bravo.connect() factory.
-_CONTROLLERS = {
-  "agile": AgileController,
-  "agile_7612": Agile7612Controller,
-  "agile_srt": AgileSrtController,
-  "darwin": DarwinController,
-  "simulation": SimulationController,
-}
+# Hardware protocols this backend can drive. Mirrors OpenBravo's
+# Bravo.connect() controller factory (see _make_controller).
+_CONTROLLER_TYPES = ("agile", "agile_7612", "agile_srt", "darwin", "simulation")
 
 
 @dataclass
@@ -148,9 +143,9 @@ class AgilentBravoBackend(LiquidHandlerBackend):
       home_on_setup: Home all axes during :meth:`setup`.
     """
     super().__init__()
-    if controller_type not in _CONTROLLERS:
+    if controller_type not in _CONTROLLER_TYPES:
       raise ValueError(
-        f"Unknown controller_type {controller_type!r}; expected one of {sorted(_CONTROLLERS)}"
+        f"Unknown controller_type {controller_type!r}; expected one of {sorted(_CONTROLLER_TYPES)}"
       )
     self._controller_type = controller_type
     self._address = address
@@ -168,12 +163,15 @@ class AgilentBravoBackend(LiquidHandlerBackend):
 
   def _make_controller(self) -> BravoController:
     """Construct the concrete controller for the configured hardware."""
-    cls = _CONTROLLERS[self._controller_type]
-    if self._controller_type in ("agile_7612", "agile_srt"):
-      return cls(profile=self._profile)
+    if self._controller_type == "agile":
+      return AgileController()
+    if self._controller_type == "agile_7612":
+      return Agile7612Controller(profile=self._profile)
+    if self._controller_type == "agile_srt":
+      return AgileSrtController(profile=self._profile)
     if self._controller_type == "darwin":
-      return cls(profile=self._profile, address=self._address)
-    return cls()
+      return DarwinController(profile=self._profile, address=self._address)
+    return SimulationController()
 
   def _open(self, controller: BravoController) -> None:
     """Open the hardware connection (runs in a worker thread)."""
@@ -298,7 +296,13 @@ class AgilentBravoBackend(LiquidHandlerBackend):
     depth, moves the W (plunger) axis by the requested volume, and retracts.
     The W axis is commanded in µL; the controller converts to motor units.
     """
-    resource: Resource = op.wells[0].parent if hasattr(op, "wells") else op.container  # type: ignore[attr-defined]
+    resource: Optional[Resource]
+    if isinstance(op, (MultiHeadAspirationPlate, MultiHeadDispensePlate)):
+      resource = op.wells[0].parent
+    else:
+      resource = op.container
+    if resource is None:
+      raise ValueError("96-head operation references a well with no parent plate")
     ref = self._reference(resource, self.deck, op.offset)
     x, y, z_bottom = self._calibration.to_axes(ref)
     z_pipette = z_bottom - self._motion.aspirate_clearance * self._calibration.z_sign

@@ -74,9 +74,7 @@ class BravoDeckCalibrationTests(unittest.TestCase):
     self.assertEqual(cal.to_axes(Coordinate(10.0, 20.0, 30.0)), (10.0, 20.0, -30.0))
 
   def test_offsets_and_signs(self):
-    cal = BravoDeckCalibration(
-      x_origin=100.0, y_origin=50.0, z_origin=5.0, x_sign=-1.0, z_sign=1.0
-    )
+    cal = BravoDeckCalibration(x_origin=100.0, y_origin=50.0, z_origin=5.0, x_sign=-1.0, z_sign=1.0)
     self.assertEqual(cal.to_axes(Coordinate(10.0, 20.0, 30.0)), (90.0, 70.0, 35.0))
 
 
