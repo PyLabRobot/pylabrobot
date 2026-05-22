@@ -7326,9 +7326,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def channels_request_y_positions(self) -> List[float]:
     """Request the Y-positions of all pipetting channels in one command.
 
-    One firmware round-trip for the whole column, versus a `request_y_pos_channel_n`
-    call per channel.
-
     Returns:
       Y-position (mm) per channel, ordered by channel index (0 = backmost).
     """
