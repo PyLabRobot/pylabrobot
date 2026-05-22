@@ -12,6 +12,12 @@ operations (``aspirate96`` / ``dispense96`` / ``pick_up_tips96`` /
 ``drop_tips96``); the per-channel methods raise :class:`NotImplementedError`.
 The integrated gripper maps to the resource-move methods.
 
+384-channel heads: the backend and control core are channel-count agnostic
+(pass ``num_channels=384``), but PyLabRobot's ``LiquidHandler`` front-end
+currently models a fixed 96-channel multi-head — ``aspirate96`` and friends
+require 96-well plates. End-to-end 384-well operation awaits an upstream
+N-channel generalization of PyLabRobot core.
+
 The control core is synchronous (blocking sockets); this adapter wraps
 controller calls in :func:`asyncio.to_thread` to fit PyLabRobot's async model.
 
@@ -134,7 +140,9 @@ class AgilentBravoBackend(LiquidHandlerBackend):
         ``agile_7612``, ``agile_srt``, ``darwin``, ``simulation``.
       address: TCP address of the robot (Ethernet models).
       serial_port: Serial port (legacy ``agile`` over RS-232).
-      num_channels: 96 or 384, matching the installed head.
+      num_channels: 96 or 384, matching the installed head. PyLabRobot's
+        96-head operations currently require 96-well plates — see the module
+        docstring on 384 support.
       profile: Optional Bravo calibration profile (axis ranges, homing
         offsets, speeds). Required by the Agile 7612 / SRT / Darwin
         controllers for correct motion.
