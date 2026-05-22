@@ -7332,7 +7332,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="RY", fmt="ry#### (n)")
     return [v / 10 for v in resp["ry"]]
 
-  # TODO:(command:RZ): Request Z-Positions of all pipetting channels
+  async def channels_request_stop_disk_z_positions(self) -> List[float]:
+    """Request the stop-disk Z-position of every channel, excluding any mounted tip.
+
+    Returns:
+      Stop-disk Z (mm) per channel, ordered by channel index (0 = backmost).
+    """
+    return [await self.request_probe_z_position(i) for i in range(self.num_channels)]
 
   async def request_z_pos_channel_n(self, pipetting_channel_index: int) -> float:
     warnings.warn(
