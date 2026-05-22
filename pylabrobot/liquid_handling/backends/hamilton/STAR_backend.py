@@ -7292,8 +7292,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.5.7 PIP query --------------
 
-  # TODO:(command:RY): Request Y-Positions of all pipetting channels
-
   async def request_x_pos_channel_n(self, pipetting_channel_index: int = 0) -> float:
     """Request X-Position of Pipetting channel n (in mm)"""
 
@@ -7324,6 +7322,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     # Extract y-coordinate and convert to mm
     return float(y_pos_query["rb"] / 10)
+
+  async def channels_request_y_positions(self) -> List[float]:
+    """Request the Y-positions of all pipetting channels in one command.
+
+    One firmware round-trip for the whole column, versus a `request_y_pos_channel_n`
+    call per channel.
+
+    Returns:
+      Y-position (mm) per channel, ordered by channel index (0 = backmost).
+    """
+    resp = await self.send_command(module="C0", command="RY", fmt="ry#### (n)")
+    return [v / 10 for v in cast(List[int], resp["ry"])]
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
