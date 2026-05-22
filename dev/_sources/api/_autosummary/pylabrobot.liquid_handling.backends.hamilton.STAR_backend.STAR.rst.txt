@@ -90,6 +90,7 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.channel_request_cycle_counts
       ~STAR.channel_request_y_minimum_spacing
       ~STAR.channels_request_cycle_counts
+      ~STAR.channels_request_stop_disk_z_positions
       ~STAR.channels_request_y_minimum_spacing
       ~STAR.channels_request_y_positions
       ~STAR.channels_sense_tip_presence
