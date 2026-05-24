@@ -8,7 +8,9 @@ import pytest
 # Configure logging to avoid pollution during tests
 from pylabrobot.plate_reading.tecan.spark20m.spark_processor import (
   process_absorbance,
+  process_absorbance_spectrum,
   process_fluorescence,
+  process_fluorescence_spectrum,
 )
 
 logging.basicConfig(level=logging.CRITICAL)
@@ -362,3 +364,145 @@ class TestProcessFluorescence(unittest.TestCase):
     assert len(proc) == len(res)
     for proc_row, res_row in zip(proc, res):
       assert proc_row == pytest.approx(res_row)
+
+
+class TestProcessAbsorbanceSpectrum(unittest.TestCase):
+  def test_process_empty_data(self) -> None:
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data", return_value={}
+    ):
+      results = process_absorbance_spectrum([])
+    self.assertEqual(results, {})
+
+  def test_process_missing_reference(self) -> None:
+    parsed_data = {"SEQ_MEAS": [{"type": "standalone", "block": {"measurements": []}}]}
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_absorbance_spectrum([])
+    self.assertEqual(results, {})
+
+  def test_process_multi_wavelength(self) -> None:
+    # Dark block with per-wavelength dark values
+    dark_pairs = [
+      {"x10U16RWL_0": 500.0, "U16RD_DARK_1": 100, "U16MD_DARK_2": 50},
+      {"x10U16RWL_0": 510.0, "U16RD_DARK_1": 100, "U16MD_DARK_2": 50},
+    ]
+
+    # Reference block with wavelength-tagged pairs
+    ref_pairs = [
+      {"x10U16RWL_0": 500.0, "U16GAIN_1": 23, "U16MGAIN_2": 11, "U16RD_3": 1000, "U16MD_4": 500},
+      {"x10U16RWL_0": 510.0, "U16GAIN_1": 23, "U16MGAIN_2": 11, "U16RD_3": 1000, "U16MD_4": 500},
+    ]
+
+    # Measurement with flat rd_md_pairs (matching hardware structure)
+    parsed_data = {
+      "SEQ_REF": [
+        {"type": "grouped", "blocks": [{"rd_md_pairs": dark_pairs}, {"rd_md_pairs": ref_pairs}]}
+      ],
+      "SEQ_MEAS": [
+        {
+          "type": "standalone",
+          "block": {
+            "rd_md_pairs": [
+              {"x10U16RWL_0": 500.0, "U16RD_1": 2000, "U16MD_2": 250},
+              {"x10U16RWL_0": 510.0, "U16RD_1": 2000, "U16MD_2": 300},
+            ]
+          },
+        }
+      ],
+    }
+
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_absorbance_spectrum([])
+
+    # Should have two wavelengths
+    self.assertEqual(len(results), 2)
+    self.assertIn(500.0, results)
+    self.assertIn(510.0, results)
+
+    # Each wavelength should have data
+    self.assertEqual(len(results[500.0]), 1)  # 1 measurement sequence = 1 row
+    self.assertEqual(len(results[500.0][0]), 1)  # 1 well
+
+
+class TestProcessFluorescenceSpectrum(unittest.TestCase):
+  def test_process_empty_data(self) -> None:
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data", return_value={}
+    ):
+      results = process_fluorescence_spectrum([])
+    self.assertEqual(results, {})
+
+  def test_process_missing_calibration(self) -> None:
+    parsed_data = {
+      "SEQ_MEAS": [
+        {"type": "standalone", "block": {"structure_type": "nested_mult", "measurements": []}}
+      ]
+    }
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_fluorescence_spectrum([])
+    self.assertEqual(results, {})
+
+  def test_process_multi_wavelength(self) -> None:
+    # Calibration sequence
+    dark_block = {
+      "header_types": ["U16RD_DARK", "U16MD_DARK"],
+      "rd_md_pairs": [{"U16MD_DARK_1": 50, "U16RD_DARK_0": 100}],
+    }
+    bright_block = {"rd_md_pairs": [{"U16RD_0": 50000}]}
+
+    # Measurement with wavelength at measurement level (nested_mult structure).
+    # Each measurement = one wavelength, inner_loops = reads at that wavelength.
+    meas_block = {
+      "structure_type": "nested_mult",
+      "measurements": [
+        {
+          "outer_index": 0,
+          "x10U16RWL_1": 440.0,
+          "inner_loops": [
+            {"U16MD_1": 20000, "U16RD_0": 30000},
+            {"U16MD_1": 21000, "U16RD_0": 30000},
+          ],
+        },
+        {
+          "outer_index": 1,
+          "x10U16RWL_1": 450.0,
+          "inner_loops": [
+            {"U16MD_1": 22000, "U16RD_0": 30000},
+            {"U16MD_1": 23000, "U16RD_0": 30000},
+          ],
+        },
+      ],
+    }
+
+    parsed_data = {
+      "SEQ_CAL": [{"type": "grouped", "count": 2, "blocks": [dark_block, bright_block]}],
+      "SEQ_MEAS": [{"type": "standalone", "block": meas_block}],
+    }
+
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_fluorescence_spectrum([])
+
+    # Should have two excitation wavelengths
+    self.assertEqual(len(results), 2)
+    self.assertIn(440.0, results)
+    self.assertIn(450.0, results)
+
+    # Each wavelength should have data
+    self.assertEqual(len(results[440.0]), 1)  # 1 measurement sequence = 1 row
+    self.assertEqual(len(results[440.0][0]), 1)  # 1 well
+
+
+if __name__ == "__main__":
+  unittest.main()

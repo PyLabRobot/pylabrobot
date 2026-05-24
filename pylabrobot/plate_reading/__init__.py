@@ -30,6 +30,7 @@ from .molecular_devices import (
   MolecularDevicesNVRAMError,
   MolecularDevicesSettings,
   MolecularDevicesSpectraMax384PlusBackend,
+  MolecularDevicesSpectraMaxGeminiEMBackend,
   MolecularDevicesSpectraMaxM5Backend,
   MolecularDevicesUnrecognizedCommandError,
   PmtGain,

@@ -136,10 +136,10 @@ def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
 
 
 def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  """
-  AGenBio Catalog No. RES-190-F
-  - Material: Polypropylene
-  - Max. volume: 190 mL
+  """AGenBio single-well reagent reservoir, 190 mL, flat-bottom (ANSI/SLAS footprint).
+
+  cat. no.: RES-190-F
+  Material: polypropylene
   """
   INNER_WELL_WIDTH = 107.2  # measured
   INNER_WELL_HEIGHT = 70.9  # measured
@@ -147,7 +147,8 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
   well_kwargs = {
     "size_x": INNER_WELL_WIDTH,  # measured
     "size_y": INNER_WELL_HEIGHT,  # measured
-    "size_z": 24.76,  # measured to bottom of well
+    "size_z": 44.2 - 5.88,  # well cavity reaches the plate top (plate size_z 44.2 - dz 5.88)
+    "max_volume": 190_000,  # spec rating; size_z reaches the rim so the box volume would overstate capacity
     "bottom_type": WellBottomType.FLAT,
     "cross_section_type": CrossSectionType.RECTANGLE,
     "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_rectangle(
@@ -185,10 +186,10 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
 
 
 def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  """
-  AGenBio Catalog No. RES-100-F
-  - Material: Polypropylene
-  - Max. volume: 100 mL
+  """AGenBio single-well reagent reservoir, 100 mL, flat-bottom (ANSI/SLAS footprint).
+
+  cat. no.: RES-100-F
+  Material: polypropylene
   """
   INNER_WELL_WIDTH = 107.2  # measured
   INNER_WELL_HEIGHT = 70.9  # measured
@@ -196,11 +197,17 @@ def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
   well_kwargs = {
     "size_x": INNER_WELL_WIDTH,  # measured
     "size_y": INNER_WELL_HEIGHT,  # measured
-    "size_z": 13,  # measured to bottom of well
+    "size_z": 31.4 - 5.88,  # well cavity reaches the plate top (plate size_z 31.4 - dz 5.88)
+    "max_volume": 100_000,  # spec rating; size_z reaches the rim so the box volume would overstate capacity
     "bottom_type": WellBottomType.FLAT,
     "cross_section_type": CrossSectionType.RECTANGLE,
     "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_rectangle(
       liquid_volume,
+      INNER_WELL_HEIGHT,
+      INNER_WELL_WIDTH,
+    ),
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_rectangle(
+      liquid_height,
       INNER_WELL_HEIGHT,
       INNER_WELL_WIDTH,
     ),

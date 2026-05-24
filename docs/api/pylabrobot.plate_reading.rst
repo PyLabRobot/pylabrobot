@@ -27,3 +27,4 @@ Backends
     bmg_labtech.clario_star_backend.CLARIOstarBackend
     agilent.biotek_cytation_backend.CytationBackend
     agilent.biotek_synergyh1_backend.SynergyH1Backend
+    molecular_devices.spectramax_gemini_em_backend.MolecularDevicesSpectraMaxGeminiEMBackend

@@ -1,10 +1,12 @@
 # mypy: disable-error-code="attr-defined,method-assign"
 
 import contextlib
+import copy
 import unittest
 import unittest.mock
 from typing import Literal, cast
 
+from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
@@ -42,11 +44,14 @@ from .STAR_backend import (
   STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
+  iSWAPInformation,
   parse_star_fw_string,
 )
 from .STAR_chatterbox import (
   _DEFAULT_EXTENDED_CONFIGURATION,
+  _DEFAULT_ISWAP_INFORMATION,
   _DEFAULT_MACHINE_CONFIGURATION,
+  STARChatterboxBackend,
 )
 
 
@@ -148,6 +153,238 @@ def _any_write_and_read_command_call(cmd):
     read_timeout=unittest.mock.ANY,
     wait=unittest.mock.ANY,
   )
+
+
+class TestiSWAPForwardKinematics(unittest.TestCase):
+  """Geometry of `STARBackend._iswap_fk` (pure FK, no I/O).
+
+  Verifies the canonical (W, T) configurations against the docstring examples
+  in `request_iswap_wrist_drive_orientation`:
+    - W=FRONT (0)  + T=STRAIGHT  -> arm extends in -y (front of deck)
+    - W=LEFT (-90) + T=STRAIGHT  -> arm extends in -x (left of deck)
+    - W=RIGHT(+90) + T=STRAIGHT  -> arm extends in +x (right of deck)
+    - W=FRONT (0)  + T=RIGHT     -> arm tip ends up to the left (-x) of rot. drive
+  Uses factory-default link lengths (138 mm each) and the factory-default
+  STRAIGHT angle (~-45 deg). Asserts only on the public pose contract
+  (`location` + `rotation.z`).
+  """
+
+  L1 = 138.0
+  L2 = 138.0
+  T_STRAIGHT = -45.0  # factory-default STRAIGHT calibration (EEPROM-dependent in practice)
+  Z_OFFSET = STARBackend.iswap_rotation_drive_z_offset_above_finger_mm
+  BASE_X, BASE_Y, BASE_Z = 100.0, 500.0, 200.0
+  # Gripper jaw width: hardware range ~71-134 mm (drive min/max increments).
+  # FK doesn't read this axis, but the joint dict represents full state, so
+  # use a realistic mid-range plate-grip value.
+  GRIPPER_WIDTH = 90.0
+
+  def _fk(self, w: float, t: float) -> CartesianCoords:
+    joints = {
+      STARBackend.iSWAPAxis.X: self.BASE_X,
+      STARBackend.iSWAPAxis.Y: self.BASE_Y,
+      STARBackend.iSWAPAxis.Z: self.BASE_Z,
+      STARBackend.iSWAPAxis.ROTATION: w,
+      STARBackend.iSWAPAxis.WRIST: t,
+      STARBackend.iSWAPAxis.GRIPPER: self.GRIPPER_WIDTH,
+    }
+    return STARBackend._iswap_fk(
+      joints=joints,
+      link_1_length=self.L1,
+      link_2_length=self.L2,
+      wrist_straight_angle=self.T_STRAIGHT,
+    )
+
+  def test_front_straight_extends_in_minus_y(self):
+    pose = self._fk(w=0.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y - (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.z, self.BASE_Z - self.Z_OFFSET, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -90.0, places=6)
+
+  def test_left_straight_extends_in_minus_x(self):
+    pose = self._fk(w=-90.0, t=self.T_STRAIGHT)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X - (self.L1 + self.L2), places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -180.0, places=6)
+
+  def test_front_right_extends_in_minus_x(self):
+    """W=FRONT + T=RIGHT (-135 deg motor) -> gripper points to deck-left."""
+    pose = self._fk(w=0.0, t=-135.0)
+    # Link 1 points -y from base; link 2 is bent right (CW by 90 deg) -> points -x.
+    self.assertAlmostEqual(pose.location.x, self.BASE_X - self.L2, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y - self.L1, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -180.0, places=6)
+
+  def test_reverse_folds_arm_back_onto_base_xy(self):
+    """T=REVERSE (+135) folds link 2 back 180 deg from link 1 -> tip XY = base XY."""
+    pose = self._fk(w=0.0, t=+135.0)
+    self.assertAlmostEqual(pose.location.x, self.BASE_X, places=6)
+    self.assertAlmostEqual(pose.location.y, self.BASE_Y, places=6)
+
+
+class TestiSWAPAxisPredicates(unittest.TestCase):
+  """Predicates on `STARBackend.iSWAPAxis` classify axes by kinematic role / unit."""
+
+  def test_is_in_kinematic_chain(self):
+    Axis = STARBackend.iSWAPAxis
+    for a in (Axis.X, Axis.Y, Axis.Z, Axis.ROTATION, Axis.WRIST):
+      self.assertTrue(a.is_in_kinematic_chain, f"{a.name} should be in the chain")
+    self.assertFalse(Axis.GRIPPER.is_in_kinematic_chain, "GRIPPER should NOT be in the chain")
+
+
+class TestiSWAPRequestJointState(AnyioTestBase):
+  """`iswap_request_joint_state` composes the per-axis request methods into one dict."""
+
+  def _make_backend(self) -> STARBackend:
+    b = STARBackend()
+    b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    b.iswap_rotation_drive_request_x = unittest.mock.AsyncMock(return_value=100.0)
+    b.iswap_rotation_drive_request_y = unittest.mock.AsyncMock(return_value=500.0)
+    b.iswap_rotation_drive_request_z = unittest.mock.AsyncMock(return_value=200.0)
+    b.iswap_rotation_drive_request_angle = unittest.mock.AsyncMock(return_value=0.0)
+    b.iswap_wrist_drive_request_angle = unittest.mock.AsyncMock(return_value=-45.0)
+    b.iswap_gripper_request_width = unittest.mock.AsyncMock(return_value=90.0)
+    return b
+
+  async def test_returns_full_axis_dict(self):
+    b = self._make_backend()
+    joints = await b.iswap_request_joint_state()
+    Axis = STARBackend.iSWAPAxis
+    self.assertEqual(
+      joints,
+      {
+        Axis.X: 100.0,
+        Axis.Y: 500.0,
+        Axis.Z: 200.0,
+        Axis.ROTATION: 0.0,
+        Axis.WRIST: -45.0,
+        Axis.GRIPPER: 90.0,
+      },
+    )
+
+
+class TestiSWAPRequestPose(AnyioTestBase):
+  """`iswap_request_pose` reads joints + runs FK against the cached link lengths."""
+
+  def _make_backend(self) -> STARBackend:
+    b = STARBackend()
+    b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    b._iswap_information = _DEFAULT_ISWAP_INFORMATION
+    b.iswap_rotation_drive_request_x = unittest.mock.AsyncMock(return_value=100.0)
+    b.iswap_rotation_drive_request_y = unittest.mock.AsyncMock(return_value=500.0)
+    b.iswap_rotation_drive_request_z = unittest.mock.AsyncMock(return_value=200.0)
+    b.iswap_rotation_drive_request_angle = unittest.mock.AsyncMock(return_value=0.0)
+    b.iswap_wrist_drive_request_angle = unittest.mock.AsyncMock(return_value=-45.0)
+    b.iswap_gripper_request_width = unittest.mock.AsyncMock(return_value=90.0)
+    return b
+
+  async def test_front_straight_pose(self):
+    """Canonical W=0 / T=-45 / base=(100, 500, 200) -> grip ~ (100, 224, 187), yaw ~ -90°.
+
+    Verifies the full I/O path (per-axis reads -> joint state -> FK -> pose). EEPROM
+    STRAIGHT (-8859 incr) maps to ~-45.0007 deg, so the canonical -90° yaw lands at
+    -89.999° and grip x picks up a ~0.002 mm offset - this is intentional per-machine
+    calibration drift, not an FK bug.
+    """
+    b = self._make_backend()
+    pose = await b.iswap_request_pose()
+    self.assertIsInstance(pose, CartesianCoords)
+    self.assertAlmostEqual(pose.location.x, 100.0, places=2)
+    self.assertAlmostEqual(pose.location.y, 224.0, places=3)
+    self.assertAlmostEqual(pose.location.z, 187.0, places=6)
+    self.assertAlmostEqual(pose.rotation.z, -90.0, places=2)
+    # rotation.x / y are always 0 - the gripper plane stays parallel to the deck.
+    self.assertEqual(pose.rotation.x, 0.0)
+    self.assertEqual(pose.rotation.y, 0.0)
+
+
+class TestiSWAPInformationGuard(unittest.TestCase):
+  """The `iswap_information` property raises before setup populates it."""
+
+  def test_raises_before_setup(self):
+    b = STARBackend()
+    self.assertIsNone(b._iswap_information)
+    with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
+      _ = b.iswap_information
+
+  def test_returns_record_when_set(self):
+    b = STARBackend()
+    b._iswap_information = _DEFAULT_ISWAP_INFORMATION
+    self.assertIs(b.iswap_information, _DEFAULT_ISWAP_INFORMATION)
+
+
+class TestChatterboxiSWAPSetup(AnyioTestBase):
+  """`STARChatterboxBackend.setup()` populates `_iswap_information` from the
+  default record (or a constructor override) when the iSWAP is installed."""
+
+  def assertIs(self, first, second, msg=None):
+    assert first is second, msg or f"{first} is not {second}"
+
+  @staticmethod
+  def _make_chatterbox(**kwargs) -> STARChatterboxBackend:
+    cb = STARChatterboxBackend(**kwargs)
+    cb.set_deck(STARLetDeck())
+    return cb
+
+  async def test_default_record_assigned_when_iswap_installed(self):
+    cb = self._make_chatterbox()
+    async with cb:
+      self.assertIs(cb.iswap_information, _DEFAULT_ISWAP_INFORMATION)
+
+  async def test_constructor_override_takes_precedence(self):
+    custom = iSWAPInformation(
+      fw_version="custom-test",
+      rotation_drive_x_offset=50.0,
+      rotation_drive_y_max=700.0,
+      link_1_length=140.0,
+      link_2_length=140.0,
+      rotation_drive_predefined_increments={
+        STARBackend.RotationDriveOrientation.LEFT: -29000,
+        STARBackend.RotationDriveOrientation.FRONT: 0,
+        STARBackend.RotationDriveOrientation.RIGHT: 29000,
+        STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,
+      },
+      wrist_drive_predefined_increments={
+        STARBackend.WristDriveOrientation.RIGHT: -26000,
+        STARBackend.WristDriveOrientation.STRAIGHT: -8800,
+        STARBackend.WristDriveOrientation.LEFT: 8800,
+        STARBackend.WristDriveOrientation.REVERSE: 26000,
+      },
+    )
+    cb = self._make_chatterbox(iswap_information=custom)
+    async with cb:
+      self.assertIs(cb.iswap_information, custom)
+      self.assertEqual(cb.iswap_information.fw_version, "custom-test")
+      self.assertEqual(cb.iswap_information.link_1_length, 140.0)
+
+  async def test_skipped_when_iswap_not_installed(self):
+    # Build an extended_conf with iSWAP NOT installed.
+    no_iswap_conf = copy.deepcopy(_DEFAULT_EXTENDED_CONFIGURATION)
+    no_iswap_conf.left_x_drive = copy.deepcopy(no_iswap_conf.left_x_drive)
+    no_iswap_conf.left_x_drive.iswap_installed = False
+    cb = self._make_chatterbox(extended_configuration=no_iswap_conf)
+    async with cb:
+      self.assertIsNone(cb._iswap_information)
+      with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
+        _ = cb.iswap_information
+
+
+class TestiSWAPYMaxBootstrap(AnyioTestBase):
+  """`_iswap_rotation_drive_request_y_max` runs during setup, before
+  `iswap_information` exists, so it must not read it (regression: it used to,
+  raising "iSWAP information not loaded" mid-`set_up_iswap`)."""
+
+  async def test_y_max_works_before_iswap_information_set(self):
+    b = STARBackend()
+    b._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    # Leave _iswap_information unset, exactly as it is during set_up_iswap().
+    self.assertIsNone(b._iswap_information)
+    b.send_command = unittest.mock.AsyncMock(return_value={"py": [0] * 10})
+
+    # The regression was a raise ("iSWAP information not loaded"); a clean return
+    # is the assertion.
+    await b._iswap_rotation_drive_request_y_max()
 
 
 class TestSTARUSBComms(AnyioTestBase):

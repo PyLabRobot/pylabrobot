@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   DriveConfiguration,
   ExtendedConfiguration,
   Head96Information,
   MachineConfiguration,
   STARBackend,
+  iSWAPInformation,
 )
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.well import Well
@@ -33,6 +35,30 @@ _DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
   max_iswap_collision_free_position=600.0,
 )
 
+# Hamilton factory defaults. Per-machine EEPROM calibration will differ
+# slightly (e.g., L1=137.8, L2=137.7, STRAIGHT=-45.01 on one tested machine);
+# these defaults are accurate enough for simulation but not for
+# calibration-sensitive applications.
+_DEFAULT_ISWAP_INFORMATION = iSWAPInformation(
+  fw_version="simulated",
+  rotation_drive_x_offset=34.0,
+  rotation_drive_y_max=627.4,
+  link_1_length=138.0,
+  link_2_length=138.0,
+  rotation_drive_predefined_increments={
+    STARBackend.RotationDriveOrientation.LEFT: -29068,  # ~-90 deg
+    STARBackend.RotationDriveOrientation.FRONT: 0,  # ~+0 deg
+    STARBackend.RotationDriveOrientation.RIGHT: 29068,  # ~+90 deg
+    STARBackend.RotationDriveOrientation.PARKED_RIGHT: 29500,  # ~+91 deg
+  },
+  wrist_drive_predefined_increments={
+    STARBackend.WristDriveOrientation.RIGHT: -26577,  # ~-135 deg
+    STARBackend.WristDriveOrientation.STRAIGHT: -8859,  # ~-45 deg
+    STARBackend.WristDriveOrientation.LEFT: 8859,  # ~+45 deg
+    STARBackend.WristDriveOrientation.REVERSE: 26577,  # ~+135 deg
+  },
+)
+
 
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
@@ -42,6 +68,7 @@ class STARChatterboxBackend(STARBackend):
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONFIGURATION,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
+    iswap_information: Optional[iSWAPInformation] = None,
     channels_minimum_y_spacing: Optional[List[float]] = None,
     # deprecated parameters
     core96_head_installed: Optional[bool] = None,
@@ -53,6 +80,10 @@ class STARChatterboxBackend(STARBackend):
       num_channels: Number of pipetting channels (default: 8)
       machine_configuration: Machine configuration to return from `request_machine_configuration`.
       extended_configuration: Extended configuration to return from `request_extended_configuration`.
+      iswap_information: Optional override for the simulated iSWAP setup state
+        (link lengths, EEPROM-calibrated stops, fw version). None means use
+        `_DEFAULT_ISWAP_INFORMATION` (Hamilton factory defaults). Only used
+        when the extended configuration reports iSWAP as installed.
       channels_minimum_y_spacing: Per-channel minimum Y spacing in mm. If None, defaults to
         `extended_configuration.min_raster_pitch_pip_channels` for all channels.
       core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive
@@ -63,6 +94,7 @@ class STARChatterboxBackend(STARBackend):
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
+    self._sim_iswap_information = iswap_information  # None means use default at setup
 
     if core96_head_installed is not None or iswap_installed is not None:
       extended_configuration = copy.deepcopy(extended_configuration)
@@ -119,14 +151,7 @@ class STARChatterboxBackend(STARBackend):
       skip_iswap: If True, skip initializing the iSWAP module, if applicable.
       skip_core96_head: If True, skip initializing the CoRe 96 head module, if applicable.
     """
-    await super()._enter_lifespan(
-      stack,
-      skip_instrument_initialization=skip_instrument_initialization,
-      skip_pip=skip_pip,
-      skip_autoload=skip_autoload,
-      skip_iswap=skip_iswap,
-      skip_core96_head=skip_core96_head,
-    )
+    await LiquidHandlerBackend._enter_lifespan(self, stack)
 
     self.id_ = 0
 
@@ -146,6 +171,20 @@ class STARChatterboxBackend(STARBackend):
     else:
       self._head96_information = None
 
+    # Mock iSWAP setup state if installed. One assignment - constructor override
+    # (if given) takes precedence over the factory-default record.
+    if self.extended_conf.left_x_drive.iswap_installed and not skip_iswap:
+      self._iswap_information = self._sim_iswap_information or _DEFAULT_ISWAP_INFORMATION
+    else:
+      self._iswap_information = None
+
+    self._core_parked = True
+    self._iswap_parked = True
+    self._setup_done = True
+
+    @stack.callback
+    def exit():
+      self._setup_done = False
   # # # # # # # # Low-level command sending/receiving # # # # # # # #
 
   async def _write_and_read_command(
@@ -282,13 +321,31 @@ class STARChatterboxBackend(STARBackend):
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
 
-  async def move_iswap_x(self, x_position: float):
+  async def move_iswap_x(
+    self,
+    x_position: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
     print("moving iswap x to", x_position)
 
-  async def move_iswap_y(self, y_position: float):
+  async def move_iswap_y(
+    self,
+    y_position: float,
+    speed: float = 220.0,
+    acceleration_level: int = 2,
+    current_protection_limiter: int = 7,
+    make_space: bool = False,
+  ):
     print("moving iswap y to", y_position)
 
-  async def move_iswap_z(self, z_position: float):
+  async def move_iswap_z(
+    self,
+    z_position: float,
+    speed: float = 118.0,
+    acceleration: float = 643.66,
+    current_protection_limiter: int = 6,
+  ):
     print("moving iswap z to", z_position)
 
   @asynccontextmanager
