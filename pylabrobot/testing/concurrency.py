@@ -51,8 +51,10 @@ class AnyioTestBase(_AsyncResourceBase):
   """
 
   def __init_subclass__(cls):
+    backends = getattr(cls, "_anyio_backends", ["asyncio", "trio"])
+
     def wrap(wrapped):
-      @pytest.mark.parametrize("backend", ["asyncio", "trio"])
+      @pytest.mark.parametrize("backend", backends)
       def sync_wrapper(self, backend, *args, **kwargs):
         lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
 

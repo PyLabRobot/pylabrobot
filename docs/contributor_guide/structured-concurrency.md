@@ -60,25 +60,42 @@ Most machines seem to turn off any ongoing actions and go back to some form of "
 - Tecan EVO has a number of arms that one could park; currently, we don't.
 
 
-## TODOs in the refactor
+## Structured concurrency checklist
+When refactoring code to structured concurrency, go through each of the following points to check for code smells.
 
 ### References to `setup`
- - Developer docs
- - Many error messages
- - `.setup_done()` calls
+ - No class should implement `setup` - instead, they should inherit from `AsyncResource`
+ - Developer docs mentioning `setup` should mention the resource lifespan instead
+ - Same with error messages
+ - `.setup_done()` calls should be replaced with something like `.within_lifespan`
+
+### References to `asyncio`
+ - Avoid raw `asyncio` APIs, should all be converted to `anyio` or something else that is loop-agnostic.
+ - `asyncio.sleep` -> `anyio.sleep`; though be wary of manual timeout loops, these should
+   use anyio timeout context managers instead.
+
+### References to `threading`
+ - `threading` is for CPU bound concurrency. This project shouldn't have any, it's all I/O bound.
+ - Use anyio task groups instead.
+ - To wrap a sync API, use `anyio.to_thread.sync`, but with minimally feasible sync functions:
+   No state synchronisation except function input/output.
 
 ### References to `unittest`
  - Async tests now *require* pytest - let's remove all calls to `unittest.main()`
 
-### Check for other signs that are frowned upon with structured concurrency:
- - Anything involving `time.time()` or `time.monotonic()` - should at least be `anyio.current_time()`, but often is a sign for a busy-loop or manual timeout handling.
- - Check for use of `threading`.
- - Check for use of `asyncio` - avoid raw `asyncio` APIs, should all be converted to `anyio` or something else that is loop-agnostic.
+### References to `time.time` or `time.monotonic()`
+ - Usually, should at least be `anyio.current_time()`, but often is a sign for a busy-loop or manual timeout handling.
+ - Use of anyio timeout context managers is preferred
+ - The exception are `time.time` calls that are API-facing; IMHO, that's an unfortunate API choice (should be datetime.datetime)
+   instead, but refactoring these API is out of scope for the structurec-concurrency refactor.
 
-### Verification checks for changes already made
- - `_enter_lifespan` extra arguments other than `stack` should be *keyword-only*!
+### `_enter_lifespan`
+ - extra arguments other than `stack` should be *keyword-only*!
  - Have a look at all `stack.push_async_callback`, especially for `cleanup()` functions - these could often in fact be sync.
  - Verify that all cleanup logic has cancellation-shielding in place where necessary.
 
-### Things to watch out for
+### Cleanup actions
+ - Verify if cancellation shielding is necessary: All asnyc cleanup in general needs cancellation shielding
+
+### Catching cancellations:
 - We never ever catch a cancellation without re-raising. In basic `asyncio`, that might be ok, but in structured concurrency, it never is.

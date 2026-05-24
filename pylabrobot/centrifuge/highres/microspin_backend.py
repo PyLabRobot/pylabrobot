@@ -39,6 +39,9 @@ import re
 import warnings
 from typing import Dict, List, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.socket import Socket
 
 from ..backend import CentrifugeBackend
@@ -174,14 +177,11 @@ class MicroSpinBackend(CentrifugeBackend):
 
   # ------------------------------------------------------------------ lifecycle
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the TCP connection to the MicroSpin's remote-control server."""
     logger.debug("[microspin] connecting to %s:%d", self.host, self.port)
-    await self.io.setup()
-
-  async def stop(self) -> None:
-    """Close the TCP connection. Safe to call even if never set up."""
-    await self.io.stop()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
   def serialize(self) -> dict:
     """Return a JSON-serialisable view of this backend's construction args."""
@@ -224,10 +224,8 @@ class MicroSpinBackend(CentrifugeBackend):
     effective_timeout = self.timeout if timeout is None else timeout
 
     async with self._lock:
-      return await asyncio.wait_for(
-        self._send_command_no_lock(command, effective_timeout=effective_timeout),
-        timeout=effective_timeout,
-      )
+      with anyio.fail_after(effective_timeout):
+        return await self._send_command_no_lock(command, effective_timeout=effective_timeout)
 
   async def _drain_stale_responses(self, *, timeout: Optional[float] = None) -> None:
     """Consume any leftover lines from previously-cancelled commands.
@@ -719,13 +717,12 @@ class MicroSpinBackend(CentrifugeBackend):
     if poll_interval <= 0:
       raise ValueError(f"poll_interval must be positive, got {poll_interval}")
 
-    loop = asyncio.get_event_loop()
-    deadline: Optional[float] = None if timeout is None else loop.time() + timeout
+    deadline: Optional[float] = None if timeout is None else anyio.current_time() + timeout
 
     attempt = 0
     while True:
       attempt += 1
-      remaining = None if deadline is None else max(0.0, deadline - loop.time())
+      remaining = None if deadline is None else max(0.0, deadline - anyio.current_time())
       if remaining is not None and remaining <= 0:
         raise asyncio.TimeoutError(
           f"Spindle did not stop within wait_for_spindle_stopped budget "
