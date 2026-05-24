@@ -53,7 +53,7 @@ namespaces = false
 exclude = ["tools*", "docs*"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "version.txt"]
+pylabrobot = ["visualizer/*", "visualizer/img/*", "version.txt"]
 
 [tool.ruff]
 line-length = 100
