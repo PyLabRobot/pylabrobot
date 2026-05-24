@@ -10,8 +10,6 @@ physical MicroSpin.
 
 from __future__ import annotations
 
-import unittest
-
 import anyio
 
 from pylabrobot.centrifuge.highres.microspin_backend import (

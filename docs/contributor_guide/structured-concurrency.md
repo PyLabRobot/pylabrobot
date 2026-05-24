@@ -10,9 +10,9 @@ Unless that is specified by the API for a specific resource, you should not rely
 ### Implementing `AsyncResource`
 
 When implementing `AsyncResource` for a new class, you should not write `__aenter__` and `__aexit__` directly, as this is difficult to get right.
-Instead, you should implement the `_lifespan` async context manager.
+Instead, you should implement the `lifespan` async context manager.
 It is often most convenient to do so in terms of a `contextlib.AsyncExitStack`,
-so the default implementation of `_lifespan` does that and delegates to a `_enter_lifespan(stack)` coroutine.
+so the default implementation of `lifespan` does that and delegates to a `_enter_lifespan(stack)` coroutine.
 There is no `_exit_lifespan` (because separate enter and exit calls are the antithesis of structured concurrency),
 instead, all cleanup is registered with the `stack`.
 
@@ -32,7 +32,7 @@ Instead, we provide `pylabrobot.testing.concurrency.AnyioTestBase`.
 This is *not* a `unittest.TestCase` on purpose, in order not to trigger `pytest`'s
 `unittest` compatibility mode. It *does* however reimplement the asserts from `unittest`,
 as to streamline test conversion.
-Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTearDown` logic needs to be replaced by a `_lifespan` or `_enter_lifespan` implementation (it is a `AsyncResource` itself).
+Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTearDown` logic needs to be replaced by a `lifespan` or `_enter_lifespan` implementation (it is a `AsyncResource` itself).
 
 ### Gotchas:
 - `unittest.AsyncMock` creates `async` methods that do never yield.
@@ -95,7 +95,7 @@ When refactoring code to structured concurrency, go through each of the followin
  - Verify that all cleanup logic has cancellation-shielding in place where necessary.
 
 ### Cleanup actions
- - Verify if cancellation shielding is necessary: All asnyc cleanup in general needs cancellation shielding
+ - Verify if cancellation shielding is necessary: All async cleanup in general needs cancellation shielding
 
 ### Catching cancellations:
 - We never ever catch a cancellation without re-raising. In basic `asyncio`, that might be ok, but in structured concurrency, it never is.

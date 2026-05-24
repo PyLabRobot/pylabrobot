@@ -216,7 +216,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells)
     measurement_time = time.time()
 
-
     data_matrix = process_absorbance(results)
     avg_temp = await self.get_average_temperature()
 
@@ -252,7 +251,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     )
     results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
     measurement_time = time.time()
-
 
     data_matrix = process_fluorescence(results)
     avg_temp = await self.get_average_temperature()

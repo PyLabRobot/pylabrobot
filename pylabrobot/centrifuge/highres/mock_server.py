@@ -370,7 +370,11 @@ class MicroSpinMockServer(AsyncResource):
 
     listener = await anyio.create_tcp_listener(local_host=self.host, local_port=self.port)
     self._listener = await stack.enter_async_context(listener)
-    self.host, self.port = self._listener.extra(anyio.abc.SocketAttribute.local_address)[:2]
+
+    local_address = listener.extra(anyio.abc.SocketAttribute.local_address)
+    assert isinstance(local_address, tuple)
+    self.host = str(local_address[0])
+    self.port = int(local_address[1])
     logger.debug("[mock] listening on %s:%d", self.host, self.port)
 
     self._tg_context = anyio.create_task_group()
@@ -378,6 +382,7 @@ class MicroSpinMockServer(AsyncResource):
 
     # Register task group cancellation callback so all server/client tasks are cancelled before exit!
     def cancel_tg():
+      assert self._tg is not None
       self._tg.cancel_scope.cancel()
 
     stack.callback(cancel_tg)
@@ -390,7 +395,7 @@ class MicroSpinMockServer(AsyncResource):
     stack.callback(cancel_motion)
 
     async def serve_loop():
-      await self._listener.serve(self._handle_client_stream)
+      await listener.serve(self._handle_client_stream)
 
     self._tg.start_soon(serve_loop)
 

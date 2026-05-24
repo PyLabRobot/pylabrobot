@@ -185,6 +185,7 @@ class STARChatterboxBackend(STARBackend):
     @stack.callback
     def exit():
       self._setup_done = False
+
   # # # # # # # # Low-level command sending/receiving # # # # # # # #
 
   async def _write_and_read_command(

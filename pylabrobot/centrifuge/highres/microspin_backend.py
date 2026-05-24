@@ -33,7 +33,6 @@ full pre-spin checklist, and to §11 for environmental specifications.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import warnings
@@ -114,7 +113,7 @@ class MicroSpinBackend(CentrifugeBackend):
   """Asynchronous backend for the HighRes Biosolutions MicroSpin centrifuge.
 
   Communicates over a single persistent TCP connection. Commands are serialised
-  with an :class:`asyncio.Lock` so the front-end can safely interleave callers.
+  with an :class:`anyio.Lock` so the front-end can safely interleave callers.
   """
 
   #: Factory-default TCP port for the MicroSpin's remote-control server
@@ -167,10 +166,10 @@ class MicroSpinBackend(CentrifugeBackend):
       read_timeout=timeout,
       write_timeout=timeout,
     )
-    self._lock = asyncio.Lock()
+    self._lock = anyio.Lock()
     # Number of terminator lines we still need to drain from the socket
     # because previously-issued commands were cancelled (e.g. by
-    # `asyncio.wait_for`) before their response fully arrived. Each new
+    # `anyio.fail_after`) before their response fully arrived. Each new
     # `send_command` first drains this many terminators before reading its
     # own response, preventing protocol desync after timeouts.
     self._pending_terminator_count: int = 0
@@ -219,7 +218,7 @@ class MicroSpinBackend(CentrifugeBackend):
     Raises:
       MicroSpinError: If the device terminates with ``ERROR!``.
       MicroSpinProtocolError: If the ACK or terminator cannot be parsed.
-      asyncio.TimeoutError: If the timeout elapses.
+      TimeoutError: If the timeout elapses.
     """
     effective_timeout = self.timeout if timeout is None else timeout
 
@@ -618,7 +617,7 @@ class MicroSpinBackend(CentrifugeBackend):
         ``status`` poll returns ``ERROR!``. Either case indicates the
         device is in a state that the normal recovery sequence can't get
         out of -- a power-cycle is usually required at that point.
-      asyncio.TimeoutError: If the rotor doesn't stop within
+      TimeoutError: If the rotor doesn't stop within
         ``settle_timeout`` (i.e. the spindle is genuinely stuck).
 
     Note:
@@ -708,7 +707,7 @@ class MicroSpinBackend(CentrifugeBackend):
       ``status`` call that succeeds.
 
     Raises:
-      asyncio.TimeoutError: If the overall ``timeout`` expires before any
+      TimeoutError: If the overall ``timeout`` expires before any
         ``status`` call returns successfully.
       MicroSpinError: If a ``status`` call returns ``ERROR!`` (this is not
         retried -- an ``ERROR!`` from ``status`` means the device itself
@@ -724,14 +723,14 @@ class MicroSpinBackend(CentrifugeBackend):
       attempt += 1
       remaining = None if deadline is None else max(0.0, deadline - anyio.current_time())
       if remaining is not None and remaining <= 0:
-        raise asyncio.TimeoutError(
+        raise TimeoutError(
           f"Spindle did not stop within wait_for_spindle_stopped budget "
           f"({timeout}s, {attempt - 1} polls)"
         )
       this_call_timeout = poll_interval if remaining is None else min(poll_interval, remaining)
       try:
         return await self.request_status(timeout=this_call_timeout)
-      except asyncio.TimeoutError:
+      except TimeoutError:
         logger.debug(
           "[microspin] status poll %d timed out after %.1fs; retrying",
           attempt,

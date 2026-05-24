@@ -47,26 +47,27 @@ class _AsyncResourceBase:
   """Implementation of `AsyncResource`, but without any `__new__` to implement ABC checking."""
 
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
-    """Helper for the _lifespan implementation; override this instead of _lifespan.
+    """Helper for the lifespan implementation; override this instead of lifespan.
 
-    Note, child classes may add keyword-only arguments to the signature, as _lifespan
+    Note, child classes may add keyword-only arguments to the signature, as lifespan
     forwards those.
     """
-    raise NotImplementedError("Subclasses must override _enter_lifespan or _lifespan.")
+    raise NotImplementedError("Subclasses must override _enter_lifespan or lifespan.")
 
   @contextlib.asynccontextmanager
-  async def _lifespan(self, **kwargs):
+  async def lifespan(self, **kwargs):
     """The resource's lifespan.
 
     Subclasses should override this method to provide their own lifespan.
     Alternatively, they can provide `_enter_lifespan(stack)` which gets called with an `AsyncExitStack`.
     """
+
     # double-entry checking, using _active_lifespan as signalling mechanism.
     # this double-entry checking here isn't strictly necessary, since usually,
     # we always enter through __aenter__.
     active_lifespan = getattr(self, "_active_lifespan", None)
     if active_lifespan is None:
-      # This is a direct call to _lifespan, not going through __aenter__.
+      # This is a direct call to lifespan, not going through __aenter__.
       # we don't have access to the context manager, so we just store a tag.
       self._active_lifespan = AnonymousLifespan
     elif active_lifespan is not LifespanEntering:
@@ -87,14 +88,14 @@ class _AsyncResourceBase:
     """Enter the resource's lifespan.
     This method should not be overridden by subclasses;
     separate `__aenter__` and `__aexit__` calls are difficult to implement correctly,
-    implement `_lifespan` or `_enter_lifespan` instead.
+    implement `lifespan` or `_enter_lifespan` instead.
     """
     if getattr(self, "_active_lifespan", None) is not None:
       raise RuntimeError(f"lifespan of {type(self).__name__} is already entered")
 
     try:
       self._active_lifespan = LifespanEntering
-      active_lifespan = self._lifespan()
+      active_lifespan = self.lifespan()
       await active_lifespan.__aenter__()
       self._active_lifespan = active_lifespan  # type: ignore[assignment]
     except:
@@ -122,11 +123,11 @@ class AsyncResource(_AsyncResourceBase, abc.ABC):
     # Check if both methods are still the base implementations
     if (
       cls._enter_lifespan is AsyncResource._enter_lifespan
-      and cls._lifespan is _AsyncResourceBase._lifespan
+      and cls.lifespan is _AsyncResourceBase.lifespan
     ):
       raise TypeError(
         f"Can't instantiate abstract class {cls.__name__} "
-        "without an implementation for either '_enter_lifespan' or '_lifespan'"
+        "without an implementation for either '_enter_lifespan' or 'lifespan'"
       )
 
     return super().__new__(cls)

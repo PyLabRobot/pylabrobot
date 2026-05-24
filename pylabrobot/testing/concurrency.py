@@ -29,7 +29,7 @@ class AnyioTestBase(_AsyncResourceBase):
 
   To convert a test case from `unittest.IsolatedAsyncioTestCase` to `AnyioTestBase`,
   you need to replace all `setUp`/`asyncSetUp`/`asyncTearDown`/`tearDown` methods
-  with a single `_lifespan` context manager method instead.
+  with a single `lifespan` context manager method instead.
   Then, the test cases themselves can remain unchanged.
 
   Example
@@ -40,7 +40,7 @@ class AnyioTestBase(_AsyncResourceBase):
 
     class TestMyClass(AnyioTestBase):
       @asynccontextmanager
-      async def _lifespan(self):
+      async def lifespan(self):
         self.lh = LiquidHandler(...)
         async with self.lh:
           yield
@@ -59,7 +59,7 @@ class AnyioTestBase(_AsyncResourceBase):
         lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
 
         async def async_wrapper():
-          async with self._lifespan(**lifespan_kwargs):
+          async with self.lifespan(**lifespan_kwargs):
             if inspect.iscoroutinefunction(wrapped):
               return await wrapped(self, *args, **kwargs)
             else:
@@ -73,15 +73,15 @@ class AnyioTestBase(_AsyncResourceBase):
     for name, value in list(vars(cls).items()):
       if name in {"setUp", "asyncSetUp", "tearDown", "asyncTearDown"}:
         raise TypeError(
-          f"Class {cls.__name__} should not have {name} method, use _lifespan or _enter_lifespan instead."
+          f"Class {cls.__name__} should not have {name} method, use lifespan or _enter_lifespan instead."
         )
       if name.startswith("test_"):
         setattr(cls, name, wrap(value))
 
   async def _enter_lifespan(self, stack):
-    """Helper for the _lifespan implementation; override this instead of _lifespan.
+    """Helper for the lifespan implementation; override this instead of lifespan.
 
-    Note, child classes may add keyword-only arguments to the signature, as _lifespan
+    Note, child classes may add keyword-only arguments to the signature, as lifespan
     forwards those.
     """
     pass

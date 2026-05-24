@@ -18,9 +18,8 @@ only cover situations the mock server cannot reasonably reproduce:
 
 from __future__ import annotations
 
-import asyncio
 import warnings
-from typing import List, Tuple
+from typing import Any, List, Tuple, cast
 
 import anyio
 
@@ -83,7 +82,7 @@ class FakeSocket(Socket):
     )
     self.writer = writer
     self.reader = reader
-    self._stream = object()  # non-None to bypass is None checks
+    self._stream = cast(Any, object())  # non-None to bypass is None checks
 
   async def write(self, data: bytes, timeout=None):
     self.writer.write(data)
@@ -515,8 +514,6 @@ class TestMicroSpinTimeoutExtension(AnyioTestBase):
 
   async def test_wait_for_spindle_stopped_retries_on_per_call_timeout(self):
     """If the per-call status times out, we issue another one."""
-    import asyncio as _asyncio
-
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
     call_count = 0
 
@@ -524,7 +521,7 @@ class TestMicroSpinTimeoutExtension(AnyioTestBase):
       nonlocal call_count
       call_count += 1
       if call_count < 3:
-        raise _asyncio.TimeoutError("still spinning")
+        raise TimeoutError("still spinning")
       return ["Spindle Position: 1958", "Door Position: -457"]
 
     backend.send_command = fake_send  # type: ignore[method-assign]
@@ -534,15 +531,13 @@ class TestMicroSpinTimeoutExtension(AnyioTestBase):
 
   async def test_wait_for_spindle_stopped_raises_when_total_budget_expires(self):
     """With every poll timing out and a tight overall budget, we raise."""
-    import asyncio as _asyncio
-
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
 
     async def fake_send(cmd, *, timeout=None):
-      raise _asyncio.TimeoutError("still spinning")
+      raise TimeoutError("still spinning")
 
     backend.send_command = fake_send  # type: ignore[method-assign]
-    with self.assertRaises(_asyncio.TimeoutError):
+    with self.assertRaises(TimeoutError):
       await backend.wait_for_spindle_stopped(poll_interval=0.01, timeout=0.05)
 
   async def test_wait_for_spindle_stopped_propagates_microspin_error(self):
