@@ -593,6 +593,9 @@ class Resource(SerializableMixin):
     self.rotation.x = (self.rotation.x + x) % 360
     self.rotation.y = (self.rotation.y + y) % 360
     self.rotation.z = (self.rotation.z + z) % 360
+    # Rotation is part of the resource's state; notify subscribers (e.g. the
+    # Visualizer) so they can re-render.
+    self._state_updated()
 
   def copy(self) -> Self:
     resource_copy = self.__class__.deserialize(self.serialize(), allow_marshal=True)
@@ -837,8 +840,13 @@ class Resource(SerializableMixin):
 
     Use :meth:`pylabrobot.resources.resource.Resource.serialize_all_state` to serialize the state of
     this resource and all children.
+
+    The base implementation includes ``"rotation"`` so that subscribers
+    (e.g. the Visualizer) are notified of orientation changes through the
+    standard state channel. Subclasses overriding this method should merge
+    in ``super().serialize_state()``.
     """
-    return {}
+    return {"rotation": self.rotation.serialize()}
 
   # Developer note: you probably don't need to override this method. Instead, override
   # `serialize_state`.
@@ -861,8 +869,13 @@ class Resource(SerializableMixin):
   # Developer note: this method deserializes the state of this resource only. If you want to
   # deserialize a custom state for a resource, override this method in the subclass.
   def load_state(self, state: Dict[str, Any]) -> None:
-    """Load state for this resource only."""
-    # no state to load by default
+    """Load state for this resource only.
+
+    The base implementation reads ``"rotation"`` if present. Subclasses
+    overriding this method should call ``super().load_state(state)``.
+    """
+    if "rotation" in state:
+      self.rotation = Rotation.deserialize(state["rotation"])
 
   # Developer note: you probably don't need to override this method. Instead, override `load_state`.
   def load_all_state(self, state: Dict[str, Dict[str, Any]]) -> None:
