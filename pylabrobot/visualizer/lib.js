@@ -509,6 +509,34 @@ function getResourceWorldLocation(resource) {
 // { x, y, z, zNA } where `zNA` is true when "cavity_bottom" was requested on
 // a resource without `material_z_thickness` (matches the existing readout
 // convention).
+// World-frame axis-aligned bounding box of the resource's footprint, accounting
+// for self + ancestor z-rotation. Useful for viewport-fit calculations on
+// rotated resources (the bbox of a 45-degree-rotated rectangle is sqrt(2) times
+// larger than the rectangle's own size).
+function getResourceWorldAABB(resource) {
+  var world = getResourceWorldLocation(resource);
+  var totalRotRad = getResourceTotalRotationZ(resource) * Math.PI / 180;
+  var c = Math.cos(totalRotRad);
+  var s = Math.sin(totalRotRad);
+  var corners = [
+    [0, 0],
+    [resource.size_x, 0],
+    [resource.size_x, resource.size_y],
+    [0, resource.size_y],
+  ];
+  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (var i = 0; i < corners.length; i++) {
+    var lx = corners[i][0], ly = corners[i][1];
+    var wx = world.x + lx * c - ly * s;
+    var wy = world.y + lx * s + ly * c;
+    if (wx < minX) minX = wx;
+    if (wx > maxX) maxX = wx;
+    if (wy < minY) minY = wy;
+    if (wy > maxY) maxY = wy;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 function getResourceWorldReferencePoint(resource, xRefStr, yRefStr, zRefStr) {
   // Match the original callsites' conditional exactly: missing or "left"/"front"
   // -> 0; "center" -> size/2; anything else -> size (i.e. right/back). This keeps
@@ -825,7 +853,6 @@ class Resource {
     if (this.mainShape !== undefined) {
       this.mainShape.resource = this;
       this.mainShape.on("mouseover", () => {
-        const { x, y } = this.getAbsoluteLocation();
         if (tooltip !== undefined) {
           tooltip.destroy();
         }
@@ -867,9 +894,10 @@ class Resource {
         } else {
           labelText = this.tooltipLabel();
         }
+        const tipCenter = getResourceWorldReferencePoint(this, "center", "center");
         tooltip = new Konva.Label({
-          x: x + this.size_x / 2,
-          y: y + this.size_y / 2 + (activeTool === "coords" ? this.size_y * 0.25 : 0),
+          x: tipCenter.x,
+          y: tipCenter.y + (activeTool === "coords" ? this.size_y * 0.25 : 0),
           opacity: 0.75,
           listening: false,
         });
@@ -3900,13 +3928,15 @@ function focusOnResource(resourceName) {
   var resource = resources[resourceName];
   if (!resource || !stage) return;
 
-  var absPos = resource.getAbsoluteLocation();
+  // Use the rotated world AABB so the viewport fits and centres on what the
+  // user actually sees, not on the un-rotated footprint of an inert plate def.
+  var aabb = getResourceWorldAABB(resource);
   var padding = 60;
   var stageW = stage.width();
   var stageH = stage.height();
   var viewW = stageW - padding * 2;
   var viewH = stageH - padding * 2;
-  var fitScale = Math.min(viewW / resource.size_x, viewH / resource.size_y);
+  var fitScale = Math.min(viewW / aabb.width, viewH / aabb.height);
 
   // Adaptive max zoom based on resource size (smaller resources get more zoom)
   var resourceArea = resource.size_x * resource.size_y;
@@ -3920,9 +3950,11 @@ function focusOnResource(resourceName) {
   stage.scaleX(fitScale);
   stage.scaleY(-fitScale);
 
-  // Center the resource in the viewport
-  var centerX = (stageW - resource.size_x * fitScale) / 2 - absPos.x * fitScale;
-  var centerY = (stageH + resource.size_y * fitScale) / 2 + absPos.y * fitScale - stageH * fitScale;
+  // Centre the (rotated) AABB in the viewport.
+  var aabbCx = aabb.x + aabb.width / 2;
+  var aabbCy = aabb.y + aabb.height / 2;
+  var centerX = stageW / 2 - aabbCx * fitScale;
+  var centerY = stageH / 2 + aabbCy * fitScale - stageH * fitScale;
   stage.x(centerX);
   stage.y(centerY);
 
@@ -4474,7 +4506,9 @@ function getUmlAttributes(resource) {
   if (resource.model) {
     attrs.push({ key: "model", value: resource.model });
   }
-  var abs = resource.getAbsoluteLocation();
+  // Rotation-aware: matches Python's get_absolute_location() rather than the
+  // legacy rotation-blind JS sum, so the readout agrees with the deck math.
+  var abs = getResourceWorldLocation(resource);
   attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
   if (resource.rotation) {
     attrs.push({ key: "rotation", value: "(" + resource.rotation.x + ", " + resource.rotation.y + ", " + resource.rotation.z + ")" });
