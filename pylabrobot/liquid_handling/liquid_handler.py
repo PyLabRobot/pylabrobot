@@ -199,12 +199,18 @@ class LiquidHandler(Resource, Machine):
       }
     else:
       arm_state = None
-    return {"head_state": head_state, "head96_state": head96_state, "arm_state": arm_state}
+    return {
+      **super().serialize_state(),
+      "head_state": head_state,
+      "head96_state": head96_state,
+      "arm_state": arm_state,
+    }
 
   def load_state(self, state: Dict[str, Any]):
     """Load the liquid handler state from a file. Use :meth:`~Resource.load_all_state` to load the
     state of the liquid handler and all children (the deck)."""
 
+    super().load_state(state)
     head_state = state["head_state"]
     if head_state and self.head == {}:
       # we haven't connected with a backend yet, so we don't know the number of channels.

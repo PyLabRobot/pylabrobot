@@ -147,10 +147,14 @@ class Container(Resource):
     }
 
   def serialize_state(self) -> Dict[str, Any]:
-    return self.tracker.serialize()
+    return {**super().serialize_state(), **self.tracker.serialize()}
 
   def load_state(self, state: Dict[str, Any]):
-    self.tracker.load_state(state)
+    super().load_state(state)
+    # The tracker only consumes its own keys; extras (e.g. "rotation") are
+    # already handled by ``super().load_state``.
+    tracker_state = {k: v for k, v in state.items() if k != "rotation"}
+    self.tracker.load_state(tracker_state)
 
   def supports_compute_height_volume_functions(self) -> bool:
     return (
