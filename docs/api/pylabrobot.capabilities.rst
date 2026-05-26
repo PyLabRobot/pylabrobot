@@ -326,7 +326,7 @@ Devices
 Bulk Dispensing - Peristaltic
 -----------------------------
 
-.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.peristaltic8
 
 .. autosummary::
   :toctree: _autosummary
@@ -335,7 +335,7 @@ Bulk Dispensing - Peristaltic
 
     PeristalticDispensing8
 
-.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.backend
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.peristaltic.backend8
 
 .. autosummary::
   :toctree: _autosummary
@@ -348,7 +348,7 @@ Bulk Dispensing - Peristaltic
 Bulk Dispensing - Syringe
 -------------------------
 
-.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.syringe
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.syringe8
 
 .. autosummary::
   :toctree: _autosummary
@@ -357,7 +357,7 @@ Bulk Dispensing - Syringe
 
     SyringeDispensing8
 
-.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.backend
+.. currentmodule:: pylabrobot.capabilities.bulk_dispensers.syringe.backend8
 
 .. autosummary::
   :toctree: _autosummary
