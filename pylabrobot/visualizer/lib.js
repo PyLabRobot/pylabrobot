@@ -310,19 +310,27 @@ function drawDeltaLines(resource) {
   var wrtName = wrtRef ? wrtRef.value : null;
   var wrtRes = wrtName ? resources[wrtName] : null;
   if (!wrtRes) return;
-  var wrtAbs = wrtRes.getAbsoluteLocation();
-  var wrtOff = getWrtAnchorOffset(wrtRes);
-  var wx = wrtAbs.x + wrtOff.x;
-  var wy = wrtAbs.y + wrtOff.y;
+  // wrt endpoint - rotation-aware world position of the chosen wrt anchor.
+  var wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+  var wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+  var wrtPoint = getResourceWorldReferencePoint(
+    wrtRes,
+    wrtXRefEl ? wrtXRefEl.value : null,
+    wrtYRefEl ? wrtYRefEl.value : null,
+  );
+  var wx = wrtPoint.x;
+  var wy = wrtPoint.y;
 
-  // Get resource bullseye position
-  var abs = resource.getAbsoluteLocation();
+  // resource endpoint - rotation-aware world position of the chosen anchor.
   var xRef = document.getElementById("coords-x-ref");
   var yRef = document.getElementById("coords-y-ref");
-  var xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? resource.size_x / 2 : resource.size_x;
-  var yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? resource.size_y / 2 : resource.size_y;
-  var rx = abs.x + xOff;
-  var ry = abs.y + yOff;
+  var refPoint = getResourceWorldReferencePoint(
+    resource,
+    xRef ? xRef.value : null,
+    yRef ? yRef.value : null,
+  );
+  var rx = refPoint.x;
+  var ry = refPoint.y;
 
   var dx = rx - wx;
   var dy = ry - wy;
@@ -427,10 +435,15 @@ function updateWrtHighlight() {
   var wrtName = wrtRef ? wrtRef.value : null;
   var wrtRes = wrtName ? resources[wrtName] : null;
   if (!wrtRes) return;
-  var wrtAbs = wrtRes.getAbsoluteLocation();
-  var wrtOff = getWrtAnchorOffset(wrtRes);
-  var cx = wrtAbs.x + wrtOff.x;
-  var cy = wrtAbs.y + wrtOff.y;
+  var wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+  var wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+  var wrtPoint = getResourceWorldReferencePoint(
+    wrtRes,
+    wrtXRefEl ? wrtXRefEl.value : null,
+    wrtYRefEl ? wrtYRefEl.value : null,
+  );
+  var cx = wrtPoint.x;
+  var cy = wrtPoint.y;
   var r = 9.2;
   var barH = r * 1.0125;
   var wrtHaloColor = "#DDDDDD";
@@ -516,13 +529,15 @@ function updateBullseyeScale() {
 function showResHighlightBullseye(resource) {
   if (resHighlightBullseye) { resHighlightBullseye.destroy(); resHighlightBullseye = undefined; }
   if (!resource) return;
-  var abs = resource.getAbsoluteLocation();
   var xRef = document.getElementById("coords-x-ref");
   var yRef = document.getElementById("coords-y-ref");
-  var xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? resource.size_x / 2 : resource.size_x;
-  var yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? resource.size_y / 2 : resource.size_y;
-  var cx = abs.x + xOff;
-  var cy = abs.y + yOff;
+  var refPoint = getResourceWorldReferencePoint(
+    resource,
+    xRef ? xRef.value : null,
+    yRef ? yRef.value : null,
+  );
+  var cx = refPoint.x;
+  var cy = refPoint.y;
   var r = 9.2;
   var barH = r * 1.0125;
   var color = "#99DDFF";
@@ -617,43 +632,108 @@ function getAncestorAtDepth(resource, depth) {
   return null;
 }
 
-function getWrtAnchorOffset(wrtResource) {
-  var xRef = document.getElementById("coords-wrt-x-ref");
-  var yRef = document.getElementById("coords-wrt-y-ref");
-  var zRef = document.getElementById("coords-wrt-z-ref");
+// --- Rotation-aware position helpers ---------------------------------------
+// The base Resource.getAbsoluteLocation() is rotation-blind for backwards
+// compatibility. The helpers below mirror Python's Resource.get_absolute_*
+// semantics for the 2D top-down case (z-only rotation): they apply every
+// ancestor's rotation to its child's location vector and rotate the chosen
+// anchor offset by the resource's accumulated z-rotation. Use them anywhere a
+// visual marker has to land on the actual rendered geometry.
 
-  var xOff = 0;
-  if (xRef && xRef.value === "center") xOff = wrtResource.size_x / 2;
-  else if (xRef && xRef.value === "right") xOff = wrtResource.size_x;
-
-  var yOff = 0;
-  if (yRef && yRef.value === "center") yOff = wrtResource.size_y / 2;
-  else if (yRef && yRef.value === "back") yOff = wrtResource.size_y;
-
-  var zOff = 0;
-  if (zRef) {
-    if (zRef.value === "center") zOff = wrtResource.size_z / 2;
-    else if (zRef.value === "top") zOff = wrtResource.size_z;
-    else if (zRef.value === "cavity_bottom") {
-      if (wrtResource instanceof Container && wrtResource.material_z_thickness != null) {
-        zOff = wrtResource.material_z_thickness;
-      }
-    }
+// Sum of `rotation.z` (degrees) up the parent chain.
+function getResourceTotalRotationZ(resource) {
+  var z = 0;
+  for (var r = resource; r; r = r.parent) {
+    if (r.rotation && typeof r.rotation.z === "number") z += r.rotation.z;
   }
-
-  return { x: xOff, y: yOff, z: zOff };
+  return z;
 }
 
-function getLocationWrt(resource, wrtName) {
-  var wrtResource = resources[wrtName];
-  if (!wrtResource) return resource.getAbsoluteLocation();
-  var abs = resource.getAbsoluteLocation();
-  var wrtAbs = wrtResource.getAbsoluteLocation();
-  var wrtOff = getWrtAnchorOffset(wrtResource);
+// World-frame position of `resource.location` itself (the resource's origin),
+// applying each parent's accumulated rotation to its child's location vector.
+function getResourceWorldLocation(resource) {
+  if (!resource.parent || !resource.parent.location) {
+    return {
+      x: resource.location.x,
+      y: resource.location.y,
+      z: resource.location.z,
+    };
+  }
+  var parentWorld = getResourceWorldLocation(resource.parent);
+  var parentRotRad = getResourceTotalRotationZ(resource.parent) * Math.PI / 180;
+  var c = Math.cos(parentRotRad);
+  var s = Math.sin(parentRotRad);
   return {
-    x: abs.x - (wrtAbs.x + wrtOff.x),
-    y: abs.y - (wrtAbs.y + wrtOff.y),
-    z: (abs.z || 0) - ((wrtAbs.z || 0) + wrtOff.z),
+    x: parentWorld.x + resource.location.x * c - resource.location.y * s,
+    y: parentWorld.y + resource.location.x * s + resource.location.y * c,
+    z: (parentWorld.z || 0) + (resource.location.z || 0),
+  };
+}
+
+// World-frame position of a chosen anchor point on `resource`. Reference
+// strings follow PLR convention:
+//   xRefStr: "left" | "center" | "right"
+//   yRefStr: "front" | "center" | "back"
+//   zRefStr: "bottom" | "center" | "top" | "cavity_bottom"  (optional)
+// The (x, y) offset is rotated by the resource's accumulated z-rotation so
+// the returned point coincides with the visually-rendered anchor. Returns
+// { x, y, z, zNA } where `zNA` is true when "cavity_bottom" was requested on
+// a resource without `material_z_thickness` (matches the existing readout
+// convention).
+// World-frame axis-aligned bounding box of the resource's footprint, accounting
+// for self + ancestor z-rotation. Useful for viewport-fit calculations on
+// rotated resources (the bbox of a 45-degree-rotated rectangle is sqrt(2) times
+// larger than the rectangle's own size).
+function getResourceWorldAABB(resource) {
+  var world = getResourceWorldLocation(resource);
+  var totalRotRad = getResourceTotalRotationZ(resource) * Math.PI / 180;
+  var c = Math.cos(totalRotRad);
+  var s = Math.sin(totalRotRad);
+  var corners = [
+    [0, 0],
+    [resource.size_x, 0],
+    [resource.size_x, resource.size_y],
+    [0, resource.size_y],
+  ];
+  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (var i = 0; i < corners.length; i++) {
+    var lx = corners[i][0], ly = corners[i][1];
+    var wx = world.x + lx * c - ly * s;
+    var wy = world.y + lx * s + ly * c;
+    if (wx < minX) minX = wx;
+    if (wx > maxX) maxX = wx;
+    if (wy < minY) minY = wy;
+    if (wy > maxY) maxY = wy;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function getResourceWorldReferencePoint(resource, xRefStr, yRefStr, zRefStr) {
+  // Match the original callsites' conditional exactly: missing or "left"/"front"
+  // -> 0; "center" -> size/2; anything else -> size (i.e. right/back). This keeps
+  // the unrotated path byte-equivalent to the legacy code.
+  var xOff = !xRefStr || xRefStr === "left" ? 0 : xRefStr === "center" ? resource.size_x / 2 : resource.size_x;
+  var yOff = !yRefStr || yRefStr === "front" ? 0 : yRefStr === "center" ? resource.size_y / 2 : resource.size_y;
+  var zOff = 0;
+  var zNA = false;
+  if (zRefStr === "center") zOff = resource.size_z / 2;
+  else if (zRefStr === "top") zOff = resource.size_z;
+  else if (zRefStr === "cavity_bottom") {
+    if (resource instanceof Container && resource.material_z_thickness != null) {
+      zOff = resource.material_z_thickness;
+    } else {
+      zNA = true;
+    }
+  }
+  var world = getResourceWorldLocation(resource);
+  var totalRotRad = getResourceTotalRotationZ(resource) * Math.PI / 180;
+  var c = Math.cos(totalRotRad);
+  var s = Math.sin(totalRotRad);
+  return {
+    x: world.x + xOff * c - yOff * s,
+    y: world.y + xOff * s + yOff * c,
+    z: (world.z || 0) + zOff,
+    zNA: zNA,
   };
 }
 
@@ -922,6 +1002,7 @@ class Resource {
     this.group = new Konva.Group({
       x: this.location.x,
       y: this.location.y,
+      rotation: this.rotation ? this.rotation.z : 0,
       draggable: this.draggable,
     });
     // Re-apply the tree eye-toggle state; draw() runs on every redraw (volume
@@ -948,7 +1029,6 @@ class Resource {
     if (this.mainShape !== undefined) {
       this.mainShape.resource = this;
       this.mainShape.on("mouseover", () => {
-        const { x, y } = this.getAbsoluteLocation();
         if (tooltip !== undefined) {
           tooltip.destroy();
         }
@@ -959,34 +1039,41 @@ class Resource {
           const zRef = document.getElementById("coords-z-ref");
           const wrtRef = document.getElementById("coords-wrt-ref");
           const wrtName = wrtRef ? wrtRef.value : "root";
-          const base = getLocationWrt(this, wrtName);
-          const xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? this.size_x / 2 : this.size_x;
-          const yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? this.size_y / 2 : this.size_y;
-          var zOff = 0;
-          var zNA = false;
-          if (zRef) {
-            if (zRef.value === "center") zOff = this.size_z / 2;
-            else if (zRef.value === "top") zOff = this.size_z;
-            else if (zRef.value === "cavity_bottom") {
-              if (this instanceof Container && this.material_z_thickness != null) {
-                zOff = this.material_z_thickness;
-              } else {
-                zNA = true;
-              }
-            }
+          const selfPoint = getResourceWorldReferencePoint(
+            this,
+            xRef ? xRef.value : null,
+            yRef ? yRef.value : null,
+            zRef ? zRef.value : null,
+          );
+          let cx = selfPoint.x;
+          let cy = selfPoint.y;
+          let cz = selfPoint.z;
+          const zNA = selfPoint.zNA;
+          const wrtResource = resources[wrtName];
+          if (wrtResource) {
+            const wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+            const wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+            const wrtZRefEl = document.getElementById("coords-wrt-z-ref");
+            const wrtPoint = getResourceWorldReferencePoint(
+              wrtResource,
+              wrtXRefEl ? wrtXRefEl.value : null,
+              wrtYRefEl ? wrtYRefEl.value : null,
+              wrtZRefEl ? wrtZRefEl.value : null,
+            );
+            cx -= wrtPoint.x;
+            cy -= wrtPoint.y;
+            if (!zNA) cz -= wrtPoint.z;
           }
-          const cx = base.x + xOff;
-          const cy = base.y + yOff;
-          const cz = (base.z || 0) + zOff;
           const czStr = zNA ? "na" : cz.toFixed(1);
           const wrtLabel = "wrt " + wrtName;
           labelText = `${this.name}\n${wrtLabel}: (${cx.toFixed(1)}, ${cy.toFixed(1)}, ${czStr}) mm`;
         } else {
           labelText = this.tooltipLabel();
         }
+        const tipCenter = getResourceWorldReferencePoint(this, "center", "center");
         tooltip = new Konva.Label({
-          x: x + this.size_x / 2,
-          y: y + this.size_y / 2 + (activeTool === "coords" ? this.size_y * 0.25 : 0),
+          x: tipCenter.x,
+          y: tipCenter.y + (activeTool === "coords" ? this.size_y * 0.25 : 0),
           opacity: 0.75,
           listening: false,
         });
@@ -1032,25 +1119,31 @@ class Resource {
           const zRef = document.getElementById("coords-z-ref");
           const wrtRef = document.getElementById("coords-wrt-ref");
           const wrtName = wrtRef ? wrtRef.value : "root";
-          const base = getLocationWrt(this, wrtName);
-          const xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? this.size_x / 2 : this.size_x;
-          const yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? this.size_y / 2 : this.size_y;
-          var zOff = 0;
-          var zNA = false;
-          if (zRef) {
-            if (zRef.value === "center") zOff = this.size_z / 2;
-            else if (zRef.value === "top") zOff = this.size_z;
-            else if (zRef.value === "cavity_bottom") {
-              if (this instanceof Container && this.material_z_thickness != null) {
-                zOff = this.material_z_thickness;
-              } else {
-                zNA = true;
-              }
-            }
+          const selfPoint = getResourceWorldReferencePoint(
+            this,
+            xRef ? xRef.value : null,
+            yRef ? yRef.value : null,
+            zRef ? zRef.value : null,
+          );
+          let cx = selfPoint.x;
+          let cy = selfPoint.y;
+          let cz = selfPoint.z;
+          const zNA = selfPoint.zNA;
+          const wrtResource = resources[wrtName];
+          if (wrtResource) {
+            const wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+            const wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+            const wrtZRefEl = document.getElementById("coords-wrt-z-ref");
+            const wrtPoint = getResourceWorldReferencePoint(
+              wrtResource,
+              wrtXRefEl ? wrtXRefEl.value : null,
+              wrtYRefEl ? wrtYRefEl.value : null,
+              wrtZRefEl ? wrtZRefEl.value : null,
+            );
+            cx -= wrtPoint.x;
+            cy -= wrtPoint.y;
+            if (!zNA) cz -= wrtPoint.z;
           }
-          const cx = base.x + xOff;
-          const cy = base.y + yOff;
-          const cz = (base.z || 0) + zOff;
           const czStr = zNA ? "na" : cz.toFixed(1);
           const container = document.getElementById("coords-measurements");
           if (container) {
@@ -1240,7 +1333,17 @@ class Resource {
     // GIF frame capture is now driven by _recordingTimer (setInterval)
   }
 
-  setState() {}
+  setState(state) {
+    // Rotation is shipped as part of every resource's state so that
+    // `Resource.rotate(...)` (which fires `_state_updated`) propagates to the
+    // visualizer through the existing `set_state` channel.
+    if (state && state.rotation !== undefined && state.rotation !== null) {
+      this.rotation = state.rotation;
+      if (this.group !== undefined) {
+        this.group.rotation(this.rotation.z || 0);
+      }
+    }
+  }
 }
 
 class Deck extends Resource {
@@ -1643,6 +1746,7 @@ class Container extends Resource {
   }
 
   setState(state) {
+    super.setState(state);
     this.setVolume(state.volume);
   }
 
@@ -1806,6 +1910,7 @@ class TipSpot extends Resource {
   }
 
   setState(state) {
+    super.setState(state);
     this.has_tip = state.tip !== null;
     // Fast path: recolor the existing tip circle in place instead of rebuilding
     // the whole group. Fall back to a full draw() if not yet drawn.
@@ -2935,6 +3040,7 @@ class LiquidHandler extends Resource {
   }
 
   setState(state) {
+    super.setState(state);
     if (state.head_state) {
       this.headState = state.head_state;
       this.numHeads = Object.keys(state.head_state).length;
@@ -4073,11 +4179,14 @@ function showHoverHighlight(resourceName) {
   clearHoverHighlight();
   const resource = resources[resourceName];
   if (!resource || !resource.group) return;
-  const absPos = resource.getAbsoluteLocation();
+  // Draw both highlight rects inside the resource's Konva.Group so they inherit
+  // its transform (location + rotation, chained through any rotated parents).
+  // Drawing on resourceLayer with the un-rotated absolute location leaves them
+  // axis-aligned over rotated resources.
   // Outer glow rect (turquoise shadow, no fill)
   sidepanelHoverGlow = new Konva.Rect({
-    x: absPos.x,
-    y: absPos.y,
+    x: 0,
+    y: 0,
     width: resource.size_x,
     height: resource.size_y,
     stroke: "rgba(0, 220, 220, 0.7)",
@@ -4090,15 +4199,15 @@ function showHoverHighlight(resourceName) {
   });
   // Inner fill rect (yellow, no shadow)
   sidepanelHoverRect = new Konva.Rect({
-    x: absPos.x,
-    y: absPos.y,
+    x: 0,
+    y: 0,
     width: resource.size_x,
     height: resource.size_y,
     fill: "rgba(255, 230, 0, 0.25)",
     listening: false,
   });
-  resourceLayer.add(sidepanelHoverGlow);
-  resourceLayer.add(sidepanelHoverRect);
+  resource.group.add(sidepanelHoverGlow);
+  resource.group.add(sidepanelHoverRect);
   resourceLayer.draw();
 }
 
@@ -4181,13 +4290,13 @@ function highlightResourceOnCanvas(resourceName) {
 
   if (!resource.group) return;
 
-  // Get absolute position on the canvas
-  const absPos = resource.getAbsoluteLocation();
-
-  // Draw a highlight rectangle on the resource layer
+  // Draw the highlight inside the resource's Konva.Group so it inherits the
+  // same transform (location + rotation, chained through any rotated parents)
+  // as the resource itself. Drawing it on resourceLayer with the un-rotated
+  // absolute location would leave it axis-aligned over rotated resources.
   sidepanelHighlightRect = new Konva.Rect({
-    x: absPos.x - 2,
-    y: absPos.y - 2,
+    x: -2,
+    y: -2,
     width: resource.size_x + 4,
     height: resource.size_y + 4,
     stroke: "#0d6efd",
@@ -4195,7 +4304,7 @@ function highlightResourceOnCanvas(resourceName) {
     dash: [6, 3],
     listening: false,
   });
-  resourceLayer.add(sidepanelHighlightRect);
+  resource.group.add(sidepanelHighlightRect);
   resourceLayer.draw();
 
   // Auto-remove highlight after 2 seconds
@@ -4212,13 +4321,15 @@ function focusOnResource(resourceName) {
   var resource = resources[resourceName];
   if (!resource || !stage) return;
 
-  var absPos = resource.getAbsoluteLocation();
+  // Use the rotated world AABB so the viewport fits and centres on what the
+  // user actually sees, not on the un-rotated footprint of an inert plate def.
+  var aabb = getResourceWorldAABB(resource);
   var padding = 60;
   var stageW = stage.width();
   var stageH = stage.height();
   var viewW = stageW - padding * 2;
   var viewH = stageH - padding * 2;
-  var fitScale = Math.min(viewW / resource.size_x, viewH / resource.size_y);
+  var fitScale = Math.min(viewW / aabb.width, viewH / aabb.height);
 
   // Adaptive max zoom based on resource size (smaller resources get more zoom)
   var resourceArea = resource.size_x * resource.size_y;
@@ -4232,9 +4343,11 @@ function focusOnResource(resourceName) {
   stage.scaleX(fitScale);
   stage.scaleY(-fitScale);
 
-  // Center the resource in the viewport
-  var centerX = (stageW - resource.size_x * fitScale) / 2 - absPos.x * fitScale;
-  var centerY = (stageH + resource.size_y * fitScale) / 2 + absPos.y * fitScale - stageH * fitScale;
+  // Centre the (rotated) AABB in the viewport.
+  var aabbCx = aabb.x + aabb.width / 2;
+  var aabbCy = aabb.y + aabb.height / 2;
+  var centerX = stageW / 2 - aabbCx * fitScale;
+  var centerY = stageH / 2 + aabbCy * fitScale - stageH * fitScale;
   stage.x(centerX);
   stage.y(centerY);
 
@@ -4782,7 +4895,9 @@ function getUmlAttributes(resource) {
   if (resource.model) {
     attrs.push({ key: "model", value: resource.model });
   }
-  var abs = resource.getAbsoluteLocation();
+  // Rotation-aware: matches Python's get_absolute_location() rather than the
+  // legacy rotation-blind JS sum, so the readout agrees with the deck math.
+  var abs = getResourceWorldLocation(resource);
   attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
   if (resource.rotation) {
     attrs.push({ key: "rotation", value: "(" + resource.rotation.x + ", " + resource.rotation.y + ", " + resource.rotation.z + ")" });
