@@ -128,6 +128,36 @@ function updateDeltaLinesScale() {
   resourceLayer.draw();
 }
 
+// Scale bar update: picks a round mm value that fits ~80-120px on screen.
+function updateScaleBar() {
+  if (!stage) return;
+  var scale = stage.scaleX(); // CSS pixels per mm
+  // Choose a nice round distance whose bar width falls near 100px
+  var niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  var bestMM = niceSteps[0];
+  for (var i = 0; i < niceSteps.length; i++) {
+    if (niceSteps[i] * scale >= 60) {
+      bestMM = niceSteps[i];
+      break;
+    }
+    bestMM = niceSteps[i];
+  }
+  var barPx = bestMM * scale;
+  var barLine = document.getElementById("scale-bar-line");
+  var barLabel = document.getElementById("scale-bar-label");
+  if (barLine) barLine.style.width = barPx + "px";
+  if (barLabel) barLabel.textContent = bestMM + " mm";
+}
+
+// Call from any code path that changes stage scale or position.
+function refreshScaleOverlays() {
+  updateScaleBar();
+  updateBullseyeScale();
+  updateWrtBullseyeScale();
+  updateTooltipScale();
+  updateDeltaLinesScale();
+}
+
 function drawDeltaLines(resource) {
   if (deltaLinesGroup) { deltaLinesGroup.destroy(); deltaLinesGroup = null; }
   if (!resource || activeTool !== "coords") return;
@@ -520,11 +550,7 @@ function fitToViewport() {
   stage.x(centerX);
   stage.y(centerY);
 
-  if (typeof updateScaleBar === "function") updateScaleBar();
-  updateBullseyeScale();
-  updateWrtBullseyeScale();
-  updateTooltipScale();
-  updateDeltaLinesScale();
+  refreshScaleOverlays();
 }
 
 let trash;
@@ -2867,26 +2893,6 @@ window.addEventListener("load", function () {
 
   layer.add(background);
 
-  // Scale bar update: picks a round mm value that fits ~80-120px on screen.
-  function updateScaleBar() {
-    const scale = stage.scaleX(); // CSS pixels per mm
-    // Choose a nice round distance whose bar width falls near 100px
-    const niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-    let bestMM = niceSteps[0];
-    for (let i = 0; i < niceSteps.length; i++) {
-      if (niceSteps[i] * scale >= 60) {
-        bestMM = niceSteps[i];
-        break;
-      }
-      bestMM = niceSteps[i];
-    }
-    const barPx = bestMM * scale;
-    const barLine = document.getElementById("scale-bar-line");
-    const barLabel = document.getElementById("scale-bar-label");
-    if (barLine) barLine.style.width = barPx + "px";
-    if (barLabel) barLabel.textContent = bestMM + " mm";
-  }
-
   // Mouse wheel zoom
   const scaleBy = 1.1;
   stage.on("wheel", function (e) {
@@ -2914,11 +2920,7 @@ window.addEventListener("load", function () {
       y: pointer.y - mousePointTo.y * (-clampedScale),
     };
     stage.position(newPos);
-    updateScaleBar();
-    updateBullseyeScale();
-    updateWrtBullseyeScale();
-    updateTooltipScale();
-    updateDeltaLinesScale();
+    refreshScaleOverlays();
   });
 
   updateScaleBar();
@@ -2961,11 +2963,7 @@ window.addEventListener("load", function () {
       x: center.x - mousePointTo.x * newScale,
       y: center.y - mousePointTo.y * (-newScale),
     });
-    if (typeof updateScaleBar === "function") updateScaleBar();
-    updateBullseyeScale();
-    updateWrtBullseyeScale();
-    updateTooltipScale();
-    updateDeltaLinesScale();
+    refreshScaleOverlays();
   }
 
   var zoomInBtn = document.getElementById("zoom-in-btn");
@@ -3857,11 +3855,7 @@ function focusOnResource(resourceName) {
   stage.x(centerX);
   stage.y(centerY);
 
-  if (typeof updateScaleBar === "function") updateScaleBar();
-  updateBullseyeScale();
-  updateWrtBullseyeScale();
-  updateTooltipScale();
-  updateDeltaLinesScale();
+  refreshScaleOverlays();
   stage.batchDraw();
 
   // Also highlight the resource
