@@ -36,6 +36,7 @@ Manufacturers
     pylabrobot.azenta
     pylabrobot.bmg_labtech
     pylabrobot.brooks
+    pylabrobot.btx
     pylabrobot.byonoy
     pylabrobot.hamilton
     pylabrobot.inheco
