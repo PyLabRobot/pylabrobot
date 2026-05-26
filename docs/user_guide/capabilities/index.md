@@ -57,6 +57,7 @@ weighing
 barcode-scanning
 microscopy
 automated-retrieval
+electroporation
 absorbance
 fluorescence
 luminescence

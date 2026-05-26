@@ -220,6 +220,45 @@ Automated Retrieval
     AutomatedRetrievalBackend
 
 
+Electroporation
+---------------
+
+.. currentmodule:: pylabrobot.capabilities.electroporation.electroporation
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    Electroporation
+
+.. currentmodule:: pylabrobot.capabilities.electroporation.backend
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    ElectroporationBackend
+
+.. currentmodule:: pylabrobot.capabilities.electroporation.standard
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    ElectroporationProtocol
+    PreparedElectroporationRun
+    ElectroporationRunResult
+    ElectroporationCancellationResult
+    ElectroporationPreparationDetails
+    ElectroporationExecutionDetails
+    ElectroporationCancellationDetails
+    ElectroporationLogCapture
+    ElectroporationCleanup
+
+
 Plate Reading - Absorbance
 --------------------------
 
