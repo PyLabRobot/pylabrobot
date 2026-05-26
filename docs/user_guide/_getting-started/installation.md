@@ -47,6 +47,7 @@ Different machines use different communication modes. Replace `[usb]` with one o
 | `usb` | pyusb, libusb-package | USB devices: e.g. Hamilton STAR/STARlet, Tecan EVO (firmware) |
 | `ftdi` | pylibftdi, pyusb | FTDI devices: e.g. BioTek Synergy H1 plate reader |
 | `hid` | hid | HID devices: e.g. Inheco Incubator/Shaker (HID mode) |
+| `btx` | pyserial, numpy, Pillow | BTX Gemini X2 electroporator |
 | `modbus` | pymodbus | Modbus devices: e.g. Agrow Pump Array |
 | `opentrons` | opentrons-http-api-client | e.g. Opentrons backend |
 | `cytation-microscopy` | numpy (1.26), opencv-python | Cytation imager |
@@ -170,6 +171,19 @@ If you ever wish to switch back from firmware command to use `pyhamilton` or pla
 If you get a `usb.core.NoBackendError: No backend available` error: [this](https://github.com/pyusb/pyusb/blob/master/docs/faq.rst#how-do-i-fix-no-backend-available-errors) may be helpful.
 
 If you are still having trouble, please reach out on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
+
+## BTX Gemini X2
+
+The BTX Gemini X2 support uses serial communication and GhostTouch screenshot OCR. First, install
+the Python dependencies:
+
+```bash
+pip install "pylabrobot[btx]"
+```
+
+GhostTouch also requires the external [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
+executable. Install Tesseract for your operating system and make sure the `tesseract` command is
+available on `PATH`.
 
 ## Cytation imager
 

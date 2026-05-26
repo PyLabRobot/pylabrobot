@@ -442,6 +442,16 @@
     "oem": "https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s"
   },
   {
+    "vendor": "BTX",
+    "name": "Gemini X2",
+    "capabilities": [
+      "electroporation"
+    ],
+    "status": "Mostly",
+    "docs": "/user_guide/btx/gemini_x2/hello-world.html",
+    "oem": "https://support.btxonline.com/hc/en-us/articles/6215664757907-Gemini-Twin-Wave-Electroporators-Manual-and-Quick-Start-guide"
+  },
+  {
     "vendor": "Opentrons",
     "name": "Thermocycler",
     "capabilities": [
