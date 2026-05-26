@@ -32,6 +32,7 @@ agilent/index
 azenta/index
 big_bear/index
 brooks/index
+btx/index
 byonoy/index
 cole_parmer/index
 curiox/index
