@@ -1320,7 +1320,7 @@ class Head96Information:
   head_type: HeadType
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class iSWAPInformation:
   """Device parameters for the installed iSWAP, loaded or resolved at setup.
 
