@@ -2866,9 +2866,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be >= 1, got {n_replicates}.")
     if inter_channel_start_delay < 0:
-      raise ValueError(
-        f"inter_channel_start_delay must be >= 0, got {inter_channel_start_delay}."
-      )
+      raise ValueError(f"inter_channel_start_delay must be >= 0, got {inter_channel_start_delay}.")
 
     z_cavity_bottom = [
       r.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z for r in containers
