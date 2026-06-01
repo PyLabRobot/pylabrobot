@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -79,6 +80,7 @@ from .mantis_kinematics import (
   MOTOR_3_CONFIG,
   MantisKinematics,
 )
+from .mantis_chipchanger_config import load_attach_path
 from .mantis_robotarm_config import HomeArgs, MantisHomingConfig
 
 logger = logging.getLogger(__name__)
@@ -125,10 +127,20 @@ class MantisDriver(Driver):
     chip_type_map: Optional[Dict[int, str]] = None,
     robotarm_config_path: Optional[str] = None,
     homing_config: Optional[MantisHomingConfig] = None,
+    install_root: Optional[str] = None,
   ) -> None:
     super().__init__()
     self._serial_number = serial_number
     self._chip_type_map = chip_type_map if chip_type_map is not None else DEFAULT_CHIP_TYPE_MAP
+
+    # Vendor install folder (the one containing ``Data/``). Chip-changer dock paths
+    # are read from it; if a RobotArm.config path is given but no install_root, derive it.
+    self._install_root = install_root
+    if self._install_root is None and robotarm_config_path is not None:
+      # .../Data/Device/Configs/RobotArm.config -> install root
+      self._install_root = os.path.dirname(robotarm_config_path)
+      for _ in range(3):
+        self._install_root = os.path.dirname(self._install_root)
 
     self._robotarm_config_path = robotarm_config_path
     if homing_config is not None:
@@ -141,6 +153,9 @@ class MantisDriver(Driver):
     self._fmlx: Optional[FmlxDriver] = None
     self._current_chip: Optional[int] = None
     self._is_primed = False
+    # Monotonic counter bumped each time the move queue drains (SequenceProgress
+    # in_queue==0) or stops. Used for race-free waits on queued chip moves.
+    self._seq_drain_count = 0
 
   @property
   def fmlx(self) -> FmlxDriver:
@@ -233,8 +248,15 @@ class MantisDriver(Driver):
     return await self._queue_move_xy(XY_READY, vel_acc, wait)
 
   async def attach_chip(self, chip_number: int) -> None:
-    if chip_number not in CHIP_PATHS:
-      raise ValueError(f"Invalid chip number: {chip_number}")
+    """Pick up a chip, exactly as the vendor does (config-driven geometry).
+
+    The dock path is loaded from the vendor install (``ChipChanger.config`` + the
+    ``.seq.txt`` files), NOT hardcoded. The head is pressed to the plunge depth and
+    HELD ``dwell_s`` so the passive magnet captures the chip (no valve/PPI fires —
+    ``AttachDetachStatusEnabled`` is off on this machine). The dwell is a barrier:
+    queue through the plunge → wait for the queue to drain → dwell → queue the lift
+    and retract → drain.
+    """
     if self._current_chip == chip_number:
       logger.info("Chip %d is already attached.", chip_number)
       return
@@ -243,28 +265,63 @@ class MantisDriver(Driver):
         "Detaching current chip %d before attaching %d ...", self._current_chip, chip_number
       )
       await self.detach_chip(self._current_chip)
+    if self._install_root is None:
+      raise RuntimeError(
+        "attach_chip needs the vendor install (pass install_root= or robotarm_config_path=)"
+      )
 
-    logger.info("Attaching chip %d ...", chip_number)
-    await self.execute_ppi_sequence(chip_number, "preattach")
-    sid = await self._execute_path(CHIP_PATHS[chip_number])
-    await self.wait_for_seq_progress(sid)
+    path = load_attach_path(self._install_root, chip_number)
+    logger.info(
+      "Attaching chip %d via %d-waypoint dock (plunge+dwell %.2fs at index %d) ...",
+      chip_number,
+      len(path.waypoints),
+      path.dwell_s,
+      path.dwell_index,
+    )
+    await self._run_dock(path.waypoints, path.dwell_index, path.dwell_s)
     self._current_chip = chip_number
     self._is_primed = False
 
   async def detach_chip(self, chip_number: int, recover_liquid: bool = False) -> None:
+    """Put a chip back, exactly reversing the (config-driven) attach path.
+
+    The vendor detach is ``ReverseSequence`` of the attach: press the chip back
+    onto the nest, hold ``dwell_s`` so the nest's magnet recaptures it, then lift
+    away. Verified against the chip-3 detach in homethenprime.pcap."""
     if self._current_chip != chip_number:
       logger.warning(
         "Requested to detach chip %d but current chip is %s", chip_number, self._current_chip
       )
       return
-    logger.info("Detaching chip %d ...", chip_number)
-    await self.execute_ppi_sequence(chip_number, "predetach")
-    sid = await self._execute_path(reversed(CHIP_PATHS[chip_number]))
-    await self.wait_for_seq_progress(sid)
-    if recover_liquid:
-      await self.execute_ppi_sequence(chip_number, "detachrecovery")
+    if self._install_root is None:
+      raise RuntimeError("detach_chip needs the vendor install (install_root=)")
+
+    path = load_attach_path(self._install_root, chip_number)
+    rev = list(reversed(path.waypoints))
+    # Dwell at the plunge (deepest Z) on the way to releasing — last waypoint at
+    # the max plunge depth before the lift.
+    max_z = max(z for _, _, z in rev)
+    dwell_index = max(i for i, (_, _, z) in enumerate(rev) if abs(z - max_z) < 1e-6)
+    logger.info("Detaching chip %d (reverse dock, dwell %.2fs at index %d) ...",
+                chip_number, path.dwell_s, dwell_index)
+    await self._run_dock(rev, dwell_index, path.dwell_s)
     self._current_chip = None
     self._is_primed = False
+
+  async def _run_dock(self, waypoints, dwell_index: int, dwell_s: float) -> None:
+    """Run a chip dock path as two pipelined batches with a hold at the plunge:
+    queue through the plunge → wait for the queue to drain → dwell → queue the
+    rest → drain. (Chip moves go through the sequencer, op68 QueueMoveItem.)"""
+
+    async def _batch(wps) -> None:
+      baseline = self._seq_drain_count
+      for wp in wps:
+        await self._queue_move_xy(wp)
+      await self._wait_queue_drained(baseline)
+
+    await _batch(waypoints[: dwell_index + 1])
+    await asyncio.sleep(dwell_s)
+    await _batch(waypoints[dwell_index + 1 :])
 
   async def prime_chip(self, chip_number: int, volume: float = 20.0) -> None:
     logger.info("Priming chip %d ...", chip_number)
@@ -310,13 +367,37 @@ class MantisDriver(Driver):
     except asyncio.TimeoutError as exc:
       raise TimeoutError(f"Sequencer timed out waiting for seq_id {seq_id}") from exc
 
+  async def _wait_queue_drained(self, baseline: int, timeout: float = 60.0) -> None:
+    """Wait until the move queue drains AFTER the batch you just queued.
+
+    Snapshot ``self._seq_drain_count`` BEFORE queuing a batch, queue it, then call
+    this. Because the counter is bumped synchronously in the event handler, a drain
+    that lands between queuing and this call is not missed (the contributor's
+    edge-triggered ``wait_for_event`` could hang on fast moves)."""
+    deadline = time.time() + timeout
+    while self._seq_drain_count <= baseline:
+      remaining = deadline - time.time()
+      if remaining <= 0:
+        raise TimeoutError(f"Sequencer queue did not drain within {timeout}s")
+      try:
+        await self.fmlx.wait_for_event(
+          lambda e: (e["event"] == "SequenceProgress" and e.get("in_queue") == 0)
+          or e["event"] == "SequenceStopped",
+          timeout=min(0.5, remaining),
+        )
+      except asyncio.TimeoutError:
+        pass  # re-check the counter (covers a missed event)
+
   # -- internal helpers --
 
   def _event_handler(self, evt: Dict[str, Any]) -> None:
-    if evt["event"] != "SequenceProgress":
+    name = evt["event"]
+    if name != "SequenceProgress":
       logger.debug("[EVENT] %s", evt)
-    if evt["event"] in ("MotorErrorOccured", "SequenceStopped"):
-      logger.error("[ALERT] %s: %s", evt["event"], evt)
+    if (name == "SequenceProgress" and evt.get("in_queue") == 0) or name == "SequenceStopped":
+      self._seq_drain_count += 1
+    if name in ("MotorErrorOccured", "SequenceStopped"):
+      logger.error("[ALERT] %s: %s", name, evt)
 
   async def _queue_move_xy(
     self,
