@@ -35,6 +35,15 @@ class MotorStatusCode(IntFlag):
       | cls.UNSTABLE_CURRENT
     )
 
+  @classmethod
+  def critical_error_mask(cls) -> "MotorStatusCode":
+    """Errors that should abort a homing/cold-servo move. Excludes the
+    following-error bits (and ABORTED), which the vendor deliberately tolerates
+    throughout homing — the pre-home retract intentionally stalls the motor, and
+    cold-servo moves routinely trip transient following-errors while still
+    reaching their target."""
+    return cls.OVER_CURRENT | cls.ENCODER_ERROR | cls.UNSTABLE_CURRENT
+
 
 class PressureControlStatus(IntEnum):
   """Status codes for the pressure controller."""

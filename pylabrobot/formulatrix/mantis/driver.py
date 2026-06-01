@@ -79,6 +79,7 @@ from .mantis_kinematics import (
   MOTOR_3_CONFIG,
   MantisKinematics,
 )
+from .mantis_robotarm_config import HomeArgs, MantisHomingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,19 @@ DEFAULT_CHIP_TYPE_MAP: Dict[int, str] = {
   5: "high_volume",
 }
 
+# All per-machine homing calibration (offsets, directions, velocities, the
+# pre-home retract/enforce steps, the post-home ready walk, the concurrent-home
+# delay) is loaded from the vendor RobotArm.config via
+# :class:`MantisHomingConfig`. The only genuinely machine-independent knob is how
+# many retract passes to attempt while seeking the hard stop.
+#
+# The pre-home is position-ROBUST: each arm motor is retracted into a hard stop
+# (the expected following-error is tolerated as the stall signal), then nudged one
+# EnforceStep off the stop. The enforce is a RELATIVE move
+# (MoveAbsolute(step + live_position)), so it self-corrects from any start pose —
+# a hardcoded absolute enforce is what crashed intermittently on warm starts.
+_PREHOME_MAX_PASSES = 8  # retract passes before giving up seeking the hard stop
+
 
 class MantisDriver(Driver):
   """Hardware driver for the Formulatrix Mantis.
@@ -97,16 +111,32 @@ class MantisDriver(Driver):
     serial_number: FTDI serial number of the Mantis device (e.g. ``"M-000438"``).
     chip_type_map: Mapping from chip number (1-6) to chip type string (key in
       ``PPI_SEQUENCES``). Defaults to chips 3-5 as ``"high_volume"``.
+    robotarm_config_path: Path to this machine's vendor ``RobotArm.config``. The
+      per-machine homing calibration (offsets, directions, velocities, pre-home
+      retract/enforce, post-home walk, concurrent-home delay) is read from it. If
+      omitted, the validated reference-machine fallback values are used.
+    homing_config: A pre-built :class:`MantisHomingConfig` (takes precedence over
+      ``robotarm_config_path``); mainly for tests.
   """
 
   def __init__(
     self,
     serial_number: Optional[str] = None,
     chip_type_map: Optional[Dict[int, str]] = None,
+    robotarm_config_path: Optional[str] = None,
+    homing_config: Optional[MantisHomingConfig] = None,
   ) -> None:
     super().__init__()
     self._serial_number = serial_number
     self._chip_type_map = chip_type_map if chip_type_map is not None else DEFAULT_CHIP_TYPE_MAP
+
+    self._robotarm_config_path = robotarm_config_path
+    if homing_config is not None:
+      self._homing = homing_config
+    elif robotarm_config_path is not None:
+      self._homing = MantisHomingConfig.from_robotarm_config(robotarm_config_path)
+    else:
+      self._homing = MantisHomingConfig()
 
     self._fmlx: Optional[FmlxDriver] = None
     self._current_chip: Optional[int] = None
@@ -140,6 +170,7 @@ class MantisDriver(Driver):
       **super().serialize(),
       "serial_number": self._serial_number,
       "chip_type_map": self._chip_type_map,
+      "robotarm_config_path": self._robotarm_config_path,
     }
 
   # -- Driver interface --
@@ -326,8 +357,13 @@ class MantisDriver(Driver):
     return sid
 
   async def _wait_for_motor_idle(
-    self, motor_id: int, timeout: float = 30.0, raise_on_error: bool = True
+    self,
+    motor_id: int,
+    timeout: float = 30.0,
+    raise_on_error: bool = True,
+    error_mask: Optional[int] = None,
   ) -> int:
+    mask = MotorStatusCode.error_mask() if error_mask is None else error_mask
     start_time = time.time()
     last_status = 0
     while time.time() - start_time < timeout:
@@ -337,7 +373,7 @@ class MantisDriver(Driver):
 
       is_busy = (status & (MotorStatusCode.IS_MOVING | MotorStatusCode.IS_HOMING)) != 0
       if not is_busy:
-        if (status & MotorStatusCode.error_mask()) and raise_on_error:
+        if (status & mask) and raise_on_error:
           raise RuntimeError(f"Motor {motor_id} stopped with error status: 0x{status:04X}")
         return int(status)
       await asyncio.sleep(0.1)
@@ -346,10 +382,13 @@ class MantisDriver(Driver):
       f"Motor {motor_id} failed to settle within {timeout}s. Last status: 0x{last_status:04X}"
     )
 
-  async def _verify_motor_status(self, motor_id: int, must_be_homed: bool = False) -> int:
+  async def _verify_motor_status(
+    self, motor_id: int, must_be_homed: bool = False, error_mask: Optional[int] = None
+  ) -> int:
+    mask = MotorStatusCode.error_mask() if error_mask is None else error_mask
     res = await self.fmlx.send_command(cmd_get_motor_status(motor_id))
     status = res.get("status", 0)
-    if status & MotorStatusCode.error_mask():
+    if status & mask:
       raise RuntimeError(f"Motor {motor_id} CRITICAL STATUS: 0x{status:04X} (errors detected)")
     if must_be_homed and not (status & MotorStatusCode.IS_HOMED):
       raise RuntimeError(
@@ -400,8 +439,141 @@ class MantisDriver(Driver):
     await self.fmlx.send_command(cmd_p_set_pump_on(False))
     await self._wait_for_pump(False)
 
+    crit = MotorStatusCode.critical_error_mask()
     for m in (0, 1, 2):
-      await self._verify_motor_status(m)
+      await self._verify_motor_status(m, error_mask=crit)
+
+  # -- homing primitives (mirror the vendor StandardHoming / PreHomeMotors) --
+
+  async def _motor_skipped(self, motor_id: int) -> bool:
+    """A motor has stalled ('skipped') against the hard stop when it trips a
+    following-error. This is the expected, tolerated signal the vendor uses to
+    end the retract loop."""
+    res = await self.fmlx.send_command(cmd_get_motor_status(motor_id))
+    status = res.get("status", 0)
+    return bool(
+      status
+      & (
+        MotorStatusCode.FOLLOWING_ERROR_MOVING
+        | MotorStatusCode.FOLLOWING_ERROR_IDLE
+        | MotorStatusCode.ABORTED
+      )
+    )
+
+  async def _prehome_arm_motors(self, motor_ids: Tuple[int, ...] = (0, 1)) -> None:
+    """Vendor ``PreHomeMotors``: retract each arm motor into its hard stop
+    (re-zeroing each pass, tolerating the expected following-error), then nudge
+    one ``EnforceStep`` off the stop.
+
+    The retract and enforce are RELATIVE moves: the enforce target on the wire is
+    ``EnforceStep + live_position`` (read fresh from the controller), so it is
+    correct from ANY start pose (cold, warm, or wherever the last run parked the
+    arm). This is what makes homing deterministic instead of intermittent.
+    """
+    fmlx = self.fmlx
+    for m in motor_ids:
+      await fmlx.send_command(cmd_clear_motor_faults(m))
+
+    # Retract toward the hard stop until the motor stalls (skips). Faithful to the
+    # vendor loop `while (!CheckIsSkipped() || firstTime)`: the `first_time` flag
+    # forces an extra clear-faults-and-reseat pass the FIRST time a stall is seen,
+    # so both arm motors are firmly seated (the vendor's warm runs show 2 retract
+    # passes for this reason). Skip = any motor tripped a following-error.
+    first_time = True
+    seated = False
+    for _ in range(_PREHOME_MAX_PASSES):
+      skipped = any([await self._motor_skipped(m) for m in motor_ids])
+      if skipped and not first_time:
+        seated = True
+        break
+      if skipped and first_time:
+        # First stall detected: clear it and do one more firm seating pass.
+        for m in motor_ids:
+          await fmlx.send_command(cmd_clear_motor_faults(m))
+        first_time = False
+      for m in motor_ids:
+        await fmlx.send_command(cmd_set_motor_position(m, 0.0))
+      for m in motor_ids:
+        await fmlx.send_command(
+          cmd_move_absolute(m, self._homing.retract, self._homing.jog_vel, self._homing.jog_acc)
+        )
+      for m in motor_ids:
+        await self._wait_for_motor_idle(m, raise_on_error=False)
+    if not seated:
+      logger.warning(
+        "Pre-home: arm motors %s did not seat against the hard stop in %d passes",
+        motor_ids,
+        _PREHOME_MAX_PASSES,
+      )
+
+    # Enforce: one relative step off the stop, computed from the LIVE position.
+    for m in motor_ids:
+      await fmlx.send_command(cmd_clear_motor_faults(m))
+    for m in motor_ids:
+      res = await fmlx.send_command(cmd_get_motor_position(m))
+      current = res.get("demand_pos", 0.0)
+      await fmlx.send_command(
+        cmd_move_absolute(
+          m, self._homing.enforce + current, self._homing.jog_vel, self._homing.jog_acc
+        )
+      )
+    for m in motor_ids:
+      await self._wait_for_motor_idle(m, raise_on_error=False)
+    for m in motor_ids:
+      await fmlx.send_command(cmd_set_motor_position(m, 0.0))
+
+  async def _home_motor(self, motor_id: int, args: HomeArgs) -> None:
+    """Clear faults, issue the firmware Home, wait, and verify the axis homed.
+    Following-errors are tolerated (the seek routinely trips them); only critical
+    faults abort."""
+    crit = MotorStatusCode.critical_error_mask()
+    await self.fmlx.send_command(cmd_clear_motor_faults(motor_id))
+    await self.fmlx.send_command(
+      cmd_home(motor_id, args.method, args.pos_edge, args.pos_dir, args.slow, args.fast, args.acc)
+    )
+    await self._wait_for_motor_idle(motor_id, raise_on_error=True, error_mask=crit)
+    await self._verify_motor_status(motor_id, must_be_homed=True, error_mask=crit)
+
+  async def _home_arm_motors(self) -> None:
+    """Vendor ``HomeMotorsStandard``: home both arm motors CONCURRENTLY in reverse
+    order (m1 then m0), starting each ``MotorXYHomingDelay`` apart, then wait for
+    both to finish. Homing them together keeps the two-arm geometry coordinated;
+    homing one while the other holds still sweeps the head through the tubing."""
+    crit = MotorStatusCode.critical_error_mask()
+    for m in (1, 0):
+      args = self._homing.home_args[m]
+      await self.fmlx.send_command(cmd_clear_motor_faults(m))
+      await self.fmlx.send_command(
+        cmd_home(m, args.method, args.pos_edge, args.pos_dir, args.slow, args.fast, args.acc)
+      )
+      await asyncio.sleep(self._homing.xy_homing_delay_s)
+    for m in (1, 0):
+      await self._wait_for_motor_idle(m, raise_on_error=True, error_mask=crit)
+    for m in (1, 0):
+      await self._verify_motor_status(m, must_be_homed=True, error_mask=crit)
+
+  async def _override_home_position(self, motor_id: int, position_n: float) -> None:
+    """Vendor ``OverrideHomePosition``: settle to 0, then DEFINE the position
+    counter to the calibrated home angle (HomingPositionN)."""
+    await self.fmlx.send_command(cmd_move_absolute(motor_id, 0.0, 500.0, 100.0))
+    await self._wait_for_motor_idle(motor_id, raise_on_error=False)
+    await self.fmlx.send_command(cmd_set_motor_position(motor_id, position_n))
+
+  async def _post_home_walk(self) -> None:
+    """Vendor ``MoveToPostHomingPosition``: the 3-step Z-then-XY ready walk.
+    Targets are constant across all captured runs (cold and warm identical)."""
+    fmlx = self.fmlx
+    crit = MotorStatusCode.critical_error_mask()
+    h = self._homing
+    for a0, a1 in h.walk:
+      await fmlx.send_command(
+        cmd_move_absolute(2, h.z_reset_pos, h.z_reset_vel, h.z_reset_acc)
+      )
+      await self._wait_for_motor_idle(2, raise_on_error=True, error_mask=crit)
+      await fmlx.send_command(cmd_move_absolute(0, a0, h.walk_vel, h.walk_acc))
+      await fmlx.send_command(cmd_move_absolute(1, a1, h.walk_vel, h.walk_acc))
+      await self._wait_for_motor_idle(0, raise_on_error=True, error_mask=crit)
+      await self._wait_for_motor_idle(1, raise_on_error=True, error_mask=crit)
 
   async def _run_init_sequence(self) -> None:
     """Execute the full Mantis initialisation sequence."""
@@ -425,207 +597,42 @@ class MantisDriver(Driver):
         await fmlx.send_command(cmd_get_following_error_config(m))
         await self._verify_motor_status(m)
 
-    # PHASE 3: Zeroing & forced error recovery
-    logger.info("[PHASE 3] Zeroing & Forced Error Recovery")
-    await self._verify_motor_status(0)
-    await fmlx.send_command(cmd_set_motor_position(0, 0.0))
-    await self._verify_motor_status(1)
-    await fmlx.send_command(cmd_set_motor_position(1, 0.0))
+    # PHASE 3: Position-robust homing (vendor StandardHoming).
+    #
+    # Pre-home seats both arm motors against their hard stops and nudges them one
+    # EnforceStep off, COMPUTED FROM THE LIVE POSITION so it works from any start
+    # pose. Then home Z, re-pre-home, home Z again, then home the arm motors in
+    # reverse order (m1, m0) — matching the vendor exactly.
+    logger.info("[PHASE 3] Pre-homing arm motors (pass 1)")
+    await self._prehome_arm_motors((0, 1))
 
-    await fmlx.send_command(cmd_get_motor_position(0))
-    await fmlx.send_command(cmd_move_absolute(0, -27.77777777777778, 5555.56, 833.33))
-    await fmlx.send_command(cmd_get_motor_position(1))
-    await fmlx.send_command(cmd_move_absolute(1, -27.77777777777778, 5555.56, 833.33))
-
-    await self._wait_for_motor_idle(0, raise_on_error=False)
-    await self._wait_for_motor_idle(1, raise_on_error=False)
-
-    await fmlx.send_command(cmd_get_following_error_config(0))
-    await fmlx.send_command(cmd_get_motor_status(0))
-    await fmlx.send_command(cmd_get_following_error_config(0))
-    await fmlx.send_command(cmd_get_motor_status(0))
-
-    await fmlx.send_command(cmd_clear_motor_faults(0))
-    await fmlx.send_command(cmd_clear_motor_faults(1))
-
-    await self._verify_motor_status(0)
-    await fmlx.send_command(cmd_set_motor_position(0, 0.0))
-    await self._verify_motor_status(1)
-    await fmlx.send_command(cmd_set_motor_position(1, 0.0))
-
-    # PHASE 4: Calibration cycles
-    logger.info("[PHASE 4] Calibration Cycles")
-    await fmlx.send_command(cmd_move_absolute(0, -27.77777777777778, 5555.56, 833.33))
-    await fmlx.send_command(cmd_move_absolute(1, -27.77777777777778, 5555.56, 833.33))
-    await self._wait_for_motor_idle(0, raise_on_error=False)
-    await self._wait_for_motor_idle(1, raise_on_error=False)
-
-    await fmlx.send_command(cmd_get_following_error_config(0))
-    await fmlx.send_command(cmd_get_motor_status(0))
-    await fmlx.send_command(cmd_clear_motor_faults(0))
-    await fmlx.send_command(cmd_clear_motor_faults(1))
-
-    # PHASE 5: Successful positioning
-    logger.info("[PHASE 5] Successful Positioning")
-    await fmlx.send_command(cmd_move_absolute(0, 30.861095852322048, 5555.56, 833.33))
-    await fmlx.send_command(cmd_move_absolute(1, -12.63888888888889, 5555.56, 833.33))
-    await self._wait_for_motor_idle(0, raise_on_error=True)
-    await self._wait_for_motor_idle(1, raise_on_error=True)
-    await fmlx.send_command(cmd_set_motor_position(0, 0.0))
-    await fmlx.send_command(cmd_set_motor_position(1, 0.0))
-
-    # PHASE 6: Homing Z
-    logger.info("[PHASE 6] Homing Z")
-    for m in (0, 1, 2):
-      await fmlx.send_command(cmd_get_following_error_config(m))
-      await self._verify_motor_status(m)
-
-    await fmlx.send_command(cmd_clear_motor_faults(2))
-    await fmlx.send_command(
-      cmd_home(2, 0, True, False, 59.05561811023622, 590.5561811023622, 15748.03649606299)
-    )
-    await self._wait_for_motor_idle(2, raise_on_error=True)
-    await self._verify_motor_status(2, must_be_homed=True)
-    await self._verify_motor_status(2, must_be_homed=True)
+    logger.info("[PHASE 4] Homing Z")
+    await self._home_motor(2, self._homing.home_args[2])
 
     await fmlx.send_command(cmd_is_sensor_enabled(SENSOR_VACUUM))
     await fmlx.send_command(cmd_is_sensor_enabled(SENSOR_PRESSURE))
     await fmlx.send_command(cmd_get_sensor_limits(SENSOR_VACUUM))
     await fmlx.send_command(cmd_get_sensor_limits(SENSOR_PRESSURE))
 
-    # PHASE 7: Re-verify & calibration
-    logger.info("[PHASE 7] Re-Verify & Calibration")
-    await fmlx.send_command(cmd_get_version())
-    for m in (0, 1, 2):
-      if m != 0:
-        await fmlx.send_command(cmd_get_version())
-      await fmlx.send_command(cmd_get_motor_limits(m))
+    logger.info("[PHASE 5] Pre-homing arm motors (pass 2)")
+    await self._prehome_arm_motors((0, 1))
+    await self._home_motor(2, self._homing.home_args[2])
 
-    await fmlx.send_command(cmd_clear_motor_faults(0))
-    await fmlx.send_command(cmd_clear_motor_faults(1))
+    logger.info("[PHASE 6] Homing arm motors concurrently (m1, m0)")
+    await self._home_arm_motors()
 
-    for _ in range(2):
-      for m in (0, 1, 2):
-        await fmlx.send_command(cmd_get_following_error_config(m))
-        await self._verify_motor_status(m)
+    # PHASE 7: Define the homed coordinate frame at the calibrated home angles.
+    logger.info("[PHASE 7] Setting home frame (offsets %s)", self._homing.home_offset)
+    await self._override_home_position(0, self._homing.home_offset[0])
+    await self._override_home_position(1, self._homing.home_offset[1])
 
-    await self._verify_motor_status(0)
-    await fmlx.send_command(cmd_set_motor_position(0, 0.0))
-    await self._verify_motor_status(1)
-    await fmlx.send_command(cmd_set_motor_position(1, 0.0))
-
-    for _ in range(2):
-      await fmlx.send_command(cmd_move_absolute(0, -27.77777777777778, 5555.56, 833.33))
-      await fmlx.send_command(cmd_move_absolute(1, -27.77777777777778, 5555.56, 833.33))
-      await self._wait_for_motor_idle(0, raise_on_error=False)
-      await self._wait_for_motor_idle(1, raise_on_error=False)
-      await fmlx.send_command(cmd_clear_motor_faults(0))
-      await fmlx.send_command(cmd_clear_motor_faults(1))
-      await fmlx.send_command(cmd_set_motor_position(0, 0.0))
-      await fmlx.send_command(cmd_set_motor_position(1, 0.0))
-
-    await fmlx.send_command(cmd_move_absolute(0, 10.61111111111111, 5555.56, 833.33))
-    await fmlx.send_command(cmd_move_absolute(1, 12.11111111111111, 5555.56, 833.33))
-    await self._wait_for_motor_idle(0, raise_on_error=True)
-    await self._wait_for_motor_idle(1, raise_on_error=True)
-    await fmlx.send_command(cmd_set_motor_position(0, 0.0))
-    await fmlx.send_command(cmd_set_motor_position(1, 0.0))
-
-    # PHASE 8: Final homing sequence
-    logger.info("[PHASE 8] Final Homing Sequence")
-    for m in (0, 1, 2):
-      await fmlx.send_command(cmd_get_following_error_config(m))
-      await self._verify_motor_status(m)
-
-    await fmlx.send_command(cmd_clear_motor_faults(2))
-    await fmlx.send_command(
-      cmd_home(2, 0, True, False, 59.05561811023622, 590.5561811023622, 15748.03649606299)
-    )
-    await self._wait_for_motor_idle(2, raise_on_error=True)
-    await self._verify_motor_status(2, must_be_homed=True)
-    await self._verify_motor_status(2, must_be_homed=True)
-
-    for m in (0, 1, 2):
-      await fmlx.send_command(cmd_get_following_error_config(m))
-      await self._verify_motor_status(m)
-
-    await fmlx.send_command(cmd_clear_motor_faults(0))
-    await fmlx.send_command(cmd_clear_motor_faults(1))
-    await fmlx.send_command(
-      cmd_home(0, 3, True, False, 5.556055555555556, 55.56055555555556, 1388.893888888889)
-    )
-    await fmlx.send_command(
-      cmd_home(1, 3, True, True, 5.556055555555556, 55.56055555555556, 1388.893888888889)
-    )
-    await self._wait_for_motor_idle(0, raise_on_error=True)
-    await self._wait_for_motor_idle(1, raise_on_error=True)
-
-    for m in (0, 1):
-      await self._verify_motor_status(m, must_be_homed=True)
-      await self._verify_motor_status(m, must_be_homed=True)
-
-    # PHASE 9: Post-home positioning
-    logger.info("[PHASE 9] Post-Home Positioning")
-    await fmlx.send_command(cmd_move_absolute(0, 0.0, 500.0, 100.0))
-    await self._wait_for_motor_idle(0, raise_on_error=True)
-    await self._verify_motor_status(0)
-    await fmlx.send_command(cmd_set_motor_position(0, -52.2))
-
-    await fmlx.send_command(cmd_move_absolute(1, 0.0, 500.0, 100.0))
-    await self._wait_for_motor_idle(1, raise_on_error=True)
-    await self._verify_motor_status(1)
-    await fmlx.send_command(cmd_set_motor_position(1, 121.23))
-
-    await fmlx.send_command(cmd_move_absolute(2, 0.0, 3937.012874015748, 15748.03649606299))
-    await self._wait_for_motor_idle(2, raise_on_error=True)
-
-    logger.info("Executing coordinated move sequence ...")
-
-    coord_moves = [
-      (0, -52.19948822707371, 55.56055555555556, 1388.893888888889),
-      (1, 48.927484449958044, 55.56055555555556, 1388.893888888889),
-    ]
-    for mid, p, v, a in coord_moves:
-      await fmlx.send_command(cmd_move_absolute(mid, p, v, a))
-      if mid == 1:
-        await fmlx.send_command(cmd_get_motor_status(1))
-        await self._verify_motor_status(0)
-      await self._wait_for_motor_idle(mid, raise_on_error=True)
-      await self._verify_motor_status(mid)
-
-    await self._verify_motor_status(2)
-    await fmlx.send_command(cmd_move_absolute(2, 0.0, 3937.012874015748, 15748.03649606299))
-    await self._wait_for_motor_idle(2, raise_on_error=True)
+    # PHASE 8: Walk to the ready pose.
+    logger.info("[PHASE 8] Post-home ready walk")
+    await self._post_home_walk()
     await self._verify_motor_status(2)
 
-    coord_moves_2 = [
-      (0, -19.341858780286216, 55.56055555555556, 1388.893888888889),
-      (1, 46.4985830283458, 55.56055555555556, 1388.893888888889),
-    ]
-    for mid, p, v, a in coord_moves_2:
-      await fmlx.send_command(cmd_move_absolute(mid, p, v, a))
-      if mid == 1:
-        await fmlx.send_command(cmd_get_motor_status(1))
-        await self._verify_motor_status(0)
-      await self._wait_for_motor_idle(mid, raise_on_error=True)
-      await self._verify_motor_status(mid)
-
-    await self._verify_motor_status(2)
-    await fmlx.send_command(cmd_move_absolute(2, 0.0, 3937.012874015748, 15748.03649606299))
-    await self._wait_for_motor_idle(2, raise_on_error=True)
-    await self._verify_motor_status(2)
-
-    for mid in (0, 1):
-      await fmlx.send_command(
-        cmd_move_absolute(mid, 4.3180815265170873e-05, 55.56055555555556, 1388.893888888889)
-      )
-      if mid == 1:
-        await fmlx.send_command(cmd_get_motor_status(1))
-        await self._verify_motor_status(0)
-      await self._wait_for_motor_idle(mid, raise_on_error=True)
-      await self._verify_motor_status(mid)
-
-    await self._verify_motor_status(2)
+    # PHASE 9: Pressure controller initialisation.
+    logger.info("[PHASE 9] Pressure init")
 
     for pid in (0, 1):
       await fmlx.send_command(cmd_p_set_controller_enabled(pid, False))
