@@ -80,7 +80,7 @@ from .mantis_kinematics import (
   MOTOR_3_CONFIG,
   MantisKinematics,
 )
-from .mantis_chipchanger_config import load_attach_path
+from .mantis_chipchanger_config import load_attach_path, load_waste_path
 from .mantis_robotarm_config import HomeArgs, MantisHomingConfig
 
 logger = logging.getLogger(__name__)
@@ -323,28 +323,54 @@ class MantisDriver(Driver):
     await asyncio.sleep(dwell_s)
     await _batch(waypoints[dwell_index + 1 :])
 
-  async def prime_chip(self, chip_number: int, volume: float = 20.0) -> None:
-    logger.info("Priming chip %d ...", chip_number)
+  async def _run_move_path(self, waypoints) -> None:
+    """Queue a list of XYZ waypoints as one pipelined batch and wait for the move
+    queue to drain (race-free)."""
+    baseline = self._seq_drain_count
+    for wp in waypoints:
+      await self._queue_move_xy(wp)
+    await self._wait_queue_drained(baseline)
+
+  async def prime_chip(self, chip_number: int, cycles: int = 2) -> None:
+    """Prime a chip the way the vendor does: pick it up, travel to the waste
+    station, run the PPI prime pulses there, return, and put the chip back.
+
+    All geometry is config-driven — the chip dock and the waste-travel path load
+    from the vendor install. The PPI ``primepump`` sequence matches the pcap, run
+    ``cycles`` times (homethenprime uses 2 per chip) plus the closing pulse. Prime
+    pressures: vacuum (sensor 2) −12.5, dispense (sensor 1) 12.0.
+    """
+    if self._install_root is None:
+      raise RuntimeError("prime_chip needs the vendor install (install_root=)")
+    logger.info("Priming chip %d (%d cycles) ...", chip_number, cycles)
+
     await self.attach_chip(chip_number)
 
-    for xy_tuple in XY_WASTE_PATH:
-      await self._queue_move_xy(*xy_tuple)
+    # Prime pressures, let the dispense side settle.
+    await self.fmlx.send_command(cmd_p_set_target_pressure(2, -12.5))
+    await self.fmlx.send_command(cmd_p_set_target_pressure(1, 12.0))
+    try:
+      await self._wait_for_pressure_settled(1, timeout=4.0)
+    except TimeoutError:
+      pass
 
+    # Travel to the waste station (loaded path, with its center via-point).
+    waste = load_waste_path(self._install_root)
+    await self._run_move_path(waste)
+
+    # Prime pulses at the waste station, then the closing pulse (pcap: dur136 v17).
     c_type = self.get_chip_type(chip_number)
-    vol_per_cycle = 0.5 if "low_volume" in c_type else 5.0
-    cycles = max(1, int(volume / vol_per_cycle))
-
+    primepump = PPI_SEQUENCES[c_type]["primepump"]
+    baseline = self._seq_drain_count
     for _ in range(cycles):
-      await self.execute_ppi_sequence(chip_number, "primepump")
+      for dur, addr, vals in primepump:
+        await self.fmlx.queue_write_ppi(dur, addr, vals)
+    await self.fmlx.queue_write_ppi(136, 40, [17])
+    await self._wait_queue_drained(baseline)
 
-    await self.execute_ppi_sequence(chip_number, "postprime")
-
-    for i in range(len(XY_WASTE_PATH) - 1, -1, -1):
-      await self._queue_move_xy(*XY_WASTE_PATH[i])
-
-    await self.move_to_home()
-    sid = await self.move_to_ready()
-    await self.wait_for_seq_progress(sid)
+    # Return from the waste station, then put the chip back.
+    await self._run_move_path(list(reversed(waste)))
+    await self.detach_chip(chip_number)
     self._is_primed = True
 
   async def execute_ppi_sequence(self, chip_number: int, sequence_name: str) -> None:

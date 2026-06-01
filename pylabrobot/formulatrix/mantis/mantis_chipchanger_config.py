@@ -92,7 +92,7 @@ def _parse_seq(path: str, start: Waypoint) -> Tuple[List[Waypoint], Waypoint]:
         elif axis == "dZ":
           z += v
       wps.append((x, y, z))
-  return wps, (x, y, z)
+  return _dedup(wps), (x, y, z)
 
 
 def load_attach_path(
@@ -117,8 +117,61 @@ def load_attach_path(
 
   if not waypoints:
     raise ValueError(f"No chip-changer sequences found for chip {chip_number} in {install_root}")
-  return ChipAttachPath(
-    chip_number=chip_number,
-    waypoints=waypoints,
-    dwell_index=dwell_index if dwell_index is not None else len(waypoints) - 1,
-  )
+  # Drop consecutive-identical waypoints (no-op moves to where the head already
+  # is — the vendor files list the plunge twice, etc.). The dwell goes at the
+  # plunge, the deepest-Z waypoint.
+  waypoints = _dedup(waypoints)
+  max_z = max(z for _, _, z in waypoints)
+  dwell_index = max(i for i, (_, _, z) in enumerate(waypoints) if abs(z - max_z) < 1e-6)
+  return ChipAttachPath(chip_number=chip_number, waypoints=waypoints, dwell_index=dwell_index)
+
+
+def _dedup(wps: List[Waypoint]) -> List[Waypoint]:
+  """Remove consecutive-identical waypoints (harmless no-op moves)."""
+  out: List[Waypoint] = []
+  for w in wps:
+    if not out or any(abs(a - b) > 1e-6 for a, b in zip(w, out[-1])):
+      out.append(w)
+  return out
+
+
+# The Mantis idle / ready XY. A waste-station MoveSequenceItem that specifies only
+# Z (no X/Y) returns the arm to idle XY (verified against homethenprime.pcap: this
+# is the center via-point that keeps the long waste swing clear of the tubing).
+_IDLE_XY: Tuple[float, float] = (15.0, 31.17)
+_WASTE_REL = os.path.join("Data", "System", "Sequences", "Common", "MoveToWasteStation.seq.txt")
+
+
+def load_waste_path(install_root: str) -> List[Waypoint]:
+  """Load the move-to-waste-station path (the prime travel route) from the vendor
+  ``MoveToWasteStation.seq.txt``. Z-only lines return to idle XY (a safe center
+  via-point). Verified byte-exact against homethenprime.pcap."""
+  path = os.path.join(install_root, _WASTE_REL)
+  x, y, z = _IDLE_XY[0], _IDLE_XY[1], 0.0
+  wps: List[Waypoint] = []
+  with open(path, encoding="utf-8-sig") as fh:
+    for line in fh:
+      line = line.strip()
+      if not line.startswith("MoveSequenceItem"):
+        continue
+      pairs = _AXIS.findall(line)
+      if not pairs:
+        continue
+      if not any(a in ("X", "Y", "dX", "dY") for a, _ in pairs):
+        x, y = _IDLE_XY  # Z-only -> return to idle XY (center via-point)
+      for axis, val in pairs:
+        v = float(val)
+        if axis == "X":
+          x = v
+        elif axis == "Y":
+          y = v
+        elif axis == "Z":
+          z = v
+        elif axis == "dX":
+          x += v
+        elif axis == "dY":
+          y += v
+        elif axis == "dZ":
+          z += v
+      wps.append((x, y, z))
+  return _dedup(wps)
