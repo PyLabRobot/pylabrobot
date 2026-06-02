@@ -25,6 +25,7 @@ use, so it travels with each call as part of ``BackendParams``.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -128,6 +129,7 @@ class MantisDriver(Driver):
     robotarm_config_path: Optional[str] = None,
     homing_config: Optional[MantisHomingConfig] = None,
     install_root: Optional[str] = None,
+    chip_state_path: Optional[str] = None,
   ) -> None:
     super().__init__()
     self._serial_number = serial_number
@@ -151,11 +153,24 @@ class MantisDriver(Driver):
       self._homing = MantisHomingConfig()
 
     self._fmlx: Optional[FmlxDriver] = None
-    self._current_chip: Optional[int] = None
     self._is_primed = False
     # Monotonic counter bumped each time the move queue drains (SequenceProgress
     # in_queue==0) or stops. Used for race-free waits on queued chip moves.
     self._seq_drain_count = 0
+
+    # PERSISTENT chip state: which chip is physically on the head, saved to disk so
+    # a NEW process knows (the FTDI/controller has no chip sensor). Without this, a
+    # fresh driver thinks the head is empty and blindly re-docks a chip that's
+    # already attached -> collision. Written pessimistically (at attach start) so an
+    # interrupted attach still records "possibly on head".
+    self._chip_state_path = chip_state_path or os.path.expanduser("~/.mantis_chip_state.json")
+    self._current_chip: Optional[int] = self._read_chip_state()
+    if self._current_chip is not None:
+      logger.warning(
+        "Persistent state says chip %d is on the head (from a prior run). It will NOT be "
+        "re-docked; detach/return it before attaching.",
+        self._current_chip,
+      )
 
   @property
   def fmlx(self) -> FmlxDriver:
@@ -170,6 +185,40 @@ class MantisDriver(Driver):
   @property
   def is_primed(self) -> bool:
     return self._is_primed
+
+  # -- persistent chip state (survives process exit / crash) --
+
+  def _read_chip_state(self) -> Optional[int]:
+    try:
+      with open(self._chip_state_path) as fh:
+        return json.load(fh).get("chip_on_head")
+    except (OSError, ValueError):
+      return None
+
+  def _set_current_chip(self, chip: Optional[int]) -> None:
+    self._current_chip = chip
+    try:
+      with open(self._chip_state_path, "w") as fh:
+        json.dump({"chip_on_head": chip}, fh)
+    except OSError as exc:  # noqa: BLE001
+      logger.warning("Could not persist chip state to %s: %s", self._chip_state_path, exc)
+
+  async def return_chip_if_attached(self) -> None:
+    """Safety: if a chip is recorded on the head, lift Z clear and put it back in
+    its nest. Call from shutdown / error handlers so a chip is never left dangling
+    (which would make the next run's attach collide)."""
+    if self._current_chip is None or self._fmlx is None:
+      return
+    chip = self._current_chip
+    logger.warning("Auto-returning chip %d to its nest ...", chip)
+    try:
+      await self._clear_arm_faults()
+      # Lift Z to a clearly-safe height (head up) before any XY motion.
+      await self.fmlx.send_command(cmd_move_absolute(2, -59.06, 2165.0, 7874.0))
+      await self._wait_for_motor_idle(2, raise_on_error=False)
+      await self.detach_chip(chip)
+    except Exception as exc:  # noqa: BLE001
+      logger.error("Auto-return of chip %d FAILED: %s", chip, exc)
 
   def get_chip_type(self, chip_number: int) -> str:
     return self._chip_type_map.get(chip_number, "high_volume")
@@ -190,9 +239,19 @@ class MantisDriver(Driver):
 
   # -- Driver interface --
 
-  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
-    """Connect to the Mantis, home all axes, and initialise pressure."""
-    logger.info("Setting up Mantis (serial=%s) ...", self._serial_number)
+  async def setup(
+    self, backend_params: Optional[BackendParams] = None, home: bool = True
+  ) -> None:
+    """Connect to the Mantis, (optionally) home all axes, and initialise pressure.
+
+    Args:
+      home: If True (default), home all axes. If False, SKIP homing to save time
+        when the controller is already homed (it retains its homed state across
+        USB disconnect). If ``home=False`` but the motors do not report homed
+        (e.g. after a power cycle), homing runs anyway — you can never operate
+        un-homed.
+    """
+    logger.info("Setting up Mantis (serial=%s, home=%s) ...", self._serial_number, home)
 
     ftdi = FTDI(
       human_readable_device_name="Formulatrix Mantis",
@@ -205,7 +264,7 @@ class MantisDriver(Driver):
     self._fmlx.on_event = self._event_handler
 
     await self._fmlx.connect()
-    await self._run_init_sequence()
+    await self._run_init_sequence(home=home)
     logger.info("Mantis setup complete.")
 
   async def stop(self) -> None:
@@ -278,8 +337,10 @@ class MantisDriver(Driver):
       path.dwell_s,
       path.dwell_index,
     )
+    # Record BEFORE docking (pessimistic): if the dock is interrupted, the next
+    # process still knows a chip may be on the head and won't blindly re-dock.
+    self._set_current_chip(chip_number)
     await self._run_dock(path.waypoints, path.dwell_index, path.dwell_s)
-    self._current_chip = chip_number
     self._is_primed = False
 
   async def detach_chip(self, chip_number: int, recover_liquid: bool = False) -> None:
@@ -305,7 +366,7 @@ class MantisDriver(Driver):
     logger.info("Detaching chip %d (reverse dock, dwell %.2fs at index %d) ...",
                 chip_number, path.dwell_s, dwell_index)
     await self._run_dock(rev, dwell_index, path.dwell_s)
-    self._current_chip = None
+    self._set_current_chip(None)
     self._is_primed = False
 
   async def _run_dock(self, waypoints, dwell_index: int, dwell_s: float) -> None:
@@ -314,6 +375,7 @@ class MantisDriver(Driver):
     rest → drain. (Chip moves go through the sequencer, op68 QueueMoveItem.)"""
 
     async def _batch(wps) -> None:
+      await self._clear_arm_faults()
       baseline = self._seq_drain_count
       for wp in wps:
         await self._queue_move_xy(wp)
@@ -323,9 +385,24 @@ class MantisDriver(Driver):
     await asyncio.sleep(dwell_s)
     await _batch(waypoints[dwell_index + 1 :])
 
+  async def _clear_arm_faults(self) -> None:
+    """Clear benign latched faults (cold-servo following-errors) on the motors so
+    the controller doesn't REJECT the next queued move. Homing tolerates
+    following-errors, so it can finish with one latched — which silently blocks
+    chip/plate moves until cleared. Aborts if a CRITICAL fault (over-current /
+    encoder / unstable) is present; those must not be masked."""
+    crit = MotorStatusCode.critical_error_mask()
+    for m in (0, 1, 2):
+      st = (await self.fmlx.send_command(cmd_get_motor_status(m))).get("status", 0)
+      if st & crit:
+        raise RuntimeError(f"Motor {m} has a critical fault 0x{st:04X}; refusing to move")
+    for m in (0, 1, 2):
+      await self.fmlx.send_command(cmd_clear_motor_faults(m))
+
   async def _run_move_path(self, waypoints) -> None:
     """Queue a list of XYZ waypoints as one pipelined batch and wait for the move
     queue to drain (race-free)."""
+    await self._clear_arm_faults()
     baseline = self._seq_drain_count
     for wp in waypoints:
       await self._queue_move_xy(wp)
@@ -682,8 +759,41 @@ class MantisDriver(Driver):
       await self._wait_for_motor_idle(0, raise_on_error=True, error_mask=crit)
       await self._wait_for_motor_idle(1, raise_on_error=True, error_mask=crit)
 
-  async def _run_init_sequence(self) -> None:
-    """Execute the full Mantis initialisation sequence."""
+  async def _home_all_axes(self) -> None:
+    """Phases 3-8: position-robust homing (vendor StandardHoming). Pre-home seats
+    both arm motors against their hard stops and nudges them one EnforceStep off
+    (computed from the live position, so it works from any start pose); home Z,
+    re-pre-home, home Z again, home the arm motors concurrently in reverse order
+    (m1, m0); set the calibrated home frame; walk to the ready pose."""
+    fmlx = self.fmlx
+    logger.info("[PHASE 3] Pre-homing arm motors (pass 1)")
+    await self._prehome_arm_motors((0, 1))
+
+    logger.info("[PHASE 4] Homing Z")
+    await self._home_motor(2, self._homing.home_args[2])
+
+    await fmlx.send_command(cmd_is_sensor_enabled(SENSOR_VACUUM))
+    await fmlx.send_command(cmd_is_sensor_enabled(SENSOR_PRESSURE))
+    await fmlx.send_command(cmd_get_sensor_limits(SENSOR_VACUUM))
+    await fmlx.send_command(cmd_get_sensor_limits(SENSOR_PRESSURE))
+
+    logger.info("[PHASE 5] Pre-homing arm motors (pass 2)")
+    await self._prehome_arm_motors((0, 1))
+    await self._home_motor(2, self._homing.home_args[2])
+
+    logger.info("[PHASE 6] Homing arm motors concurrently (m1, m0)")
+    await self._home_arm_motors()
+
+    logger.info("[PHASE 7] Setting home frame (offsets %s)", self._homing.home_offset)
+    await self._override_home_position(0, self._homing.home_offset[0])
+    await self._override_home_position(1, self._homing.home_offset[1])
+
+    logger.info("[PHASE 8] Post-home ready walk")
+    await self._post_home_walk()
+    await self._verify_motor_status(2)
+
+  async def _run_init_sequence(self, home: bool = True) -> None:
+    """Execute the Mantis initialisation sequence (homing optional via ``home``)."""
     fmlx = self.fmlx
 
     # PHASE 1: Handshake & limits
@@ -704,39 +814,27 @@ class MantisDriver(Driver):
         await fmlx.send_command(cmd_get_following_error_config(m))
         await self._verify_motor_status(m)
 
-    # PHASE 3: Position-robust homing (vendor StandardHoming).
-    #
-    # Pre-home seats both arm motors against their hard stops and nudges them one
-    # EnforceStep off, COMPUTED FROM THE LIVE POSITION so it works from any start
-    # pose. Then home Z, re-pre-home, home Z again, then home the arm motors in
-    # reverse order (m1, m0) — matching the vendor exactly.
-    logger.info("[PHASE 3] Pre-homing arm motors (pass 1)")
-    await self._prehome_arm_motors((0, 1))
-
-    logger.info("[PHASE 4] Homing Z")
-    await self._home_motor(2, self._homing.home_args[2])
-
-    await fmlx.send_command(cmd_is_sensor_enabled(SENSOR_VACUUM))
-    await fmlx.send_command(cmd_is_sensor_enabled(SENSOR_PRESSURE))
-    await fmlx.send_command(cmd_get_sensor_limits(SENSOR_VACUUM))
-    await fmlx.send_command(cmd_get_sensor_limits(SENSOR_PRESSURE))
-
-    logger.info("[PHASE 5] Pre-homing arm motors (pass 2)")
-    await self._prehome_arm_motors((0, 1))
-    await self._home_motor(2, self._homing.home_args[2])
-
-    logger.info("[PHASE 6] Homing arm motors concurrently (m1, m0)")
-    await self._home_arm_motors()
-
-    # PHASE 7: Define the homed coordinate frame at the calibrated home angles.
-    logger.info("[PHASE 7] Setting home frame (offsets %s)", self._homing.home_offset)
-    await self._override_home_position(0, self._homing.home_offset[0])
-    await self._override_home_position(1, self._homing.home_offset[1])
-
-    # PHASE 8: Walk to the ready pose.
-    logger.info("[PHASE 8] Post-home ready walk")
-    await self._post_home_walk()
-    await self._verify_motor_status(2)
+    # PHASE 3-8: Home all axes — unless home=False AND every axis already reports
+    # homed (the controller keeps its homed state across a USB disconnect, so a
+    # warm reconnect can skip the ~20-30s homing). Never operate un-homed: if any
+    # axis isn't homed, home anyway.
+    should_home = home
+    if not home:
+      not_homed = [
+        m
+        for m in (0, 1, 2)
+        if not (
+          (await fmlx.send_command(cmd_get_motor_status(m))).get("status", 0)
+          & MotorStatusCode.IS_HOMED
+        )
+      ]
+      if not_homed:
+        logger.warning("home=False but motors %s not homed — homing anyway.", not_homed)
+        should_home = True
+      else:
+        logger.info("Skipping homing — all axes already homed.")
+    if should_home:
+      await self._home_all_axes()
 
     # PHASE 9: Pressure controller initialisation.
     logger.info("[PHASE 9] Pressure init")
