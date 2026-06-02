@@ -1,5 +1,6 @@
 import inspect
 from contextlib import contextmanager
+from typing import Any, Optional, Union
 
 import anyio
 import pytest
@@ -50,33 +51,76 @@ class AnyioTestBase(_AsyncResourceBase):
   ```
   """
 
+  @staticmethod
+  def _wrap_async_test(
+    wrapped, backends: Union[list[str], dict[str, Optional[dict[str, Any]]], None] = None
+  ):
+    if backends is None:
+      backends = ["asyncio", "trio"]
+    if isinstance(backends, list):
+      backends = {backend: None for backend in backends}
+    if not isinstance(backends, dict):
+      raise TypeError(
+        "backends argument must either be a list of backend names or a dictionary mapping backend names to keyword arguments"
+      )
+
+    @pytest.mark.parametrize("backend", list(backends))
+    def sync_wrapper(self, backend, *args, **kwargs):
+      lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
+
+      async def async_wrapper():
+        async with self.lifespan(**lifespan_kwargs):
+          if inspect.iscoroutinefunction(wrapped):
+            return await wrapped(self, *args, **kwargs)
+          else:
+            return wrapped(self, *args, **kwargs)
+
+      backend_options = backends.get(backend) or {}
+      if backend == "trio":
+        import trio
+
+        # `asyncio.run` currently doesn't pass backend options
+        # correctly to trio:
+        # https://github.com/agronholm/anyio/issues/643
+        # https://github.com/agronholm/anyio/issues/1162
+        return trio.run(async_wrapper, **backend_options)
+      else:
+        return anyio.run(async_wrapper, backend=backend, backend_options=backend_options)
+
+    sync_wrapper.original_func = wrapped
+    return sync_wrapper
+
   def __init_subclass__(cls):
-    backends = getattr(cls, "_anyio_backends", ["asyncio", "trio"])
-
-    def wrap(wrapped):
-      @pytest.mark.parametrize("backend", backends)
-      def sync_wrapper(self, backend, *args, **kwargs):
-        lifespan_kwargs = getattr(wrapped, "_lifespan_kwargs", {})
-
-        async def async_wrapper():
-          async with self.lifespan(**lifespan_kwargs):
-            if inspect.iscoroutinefunction(wrapped):
-              return await wrapped(self, *args, **kwargs)
-            else:
-              return wrapped(self, *args, **kwargs)
-
-        return anyio.run(async_wrapper, backend=backend)
-
-      sync_wrapper.original_func = wrapped
-      return sync_wrapper
+    backends = getattr(cls, "_anyio_backends", None)
 
     for name, value in list(vars(cls).items()):
       if name in {"setUp", "asyncSetUp", "tearDown", "asyncTearDown"}:
         raise TypeError(
-          f"Class {cls.__name__} should not have {name} method, use lifespan or _enter_lifespan instead."
+          f"Class {cls.__name__} should not have {name} method, use lifespan"
+          " or _enter_lifespan instead."
         )
       if name.startswith("test_"):
-        setattr(cls, name, wrap(value))
+        setattr(
+          cls,
+          name,
+          cls._wrap_async_test(value, backends=backends),
+        )
+
+    if "_anyio_backends" in vars(cls):
+      # re-wrap all inherited tests with the new backend specification
+      for name in dir(cls):
+        if name.startswith("test_") and name not in vars(cls):
+          attr = getattr(cls, name)
+          if hasattr(attr, "original_func"):
+            original_func = attr.original_func
+            setattr(
+              cls,
+              name,
+              cls._wrap_async_test(
+                original_func,
+                backends=backends,
+              ),
+            )
 
   async def _enter_lifespan(self, stack):
     """Helper for the lifespan implementation; override this instead of lifespan.
