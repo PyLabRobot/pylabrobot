@@ -374,6 +374,22 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await super()._on_setup(backend_params=backend_params)
     await self.stop_freedrive_mode()
+    # Read the gripper-axis soft limits so width validation reflects this arm
+    # rather than the hardcoded defaults (the servo gripper's real range differs).
+    try:
+      soft_min = [float(v) for v in (await self.request_parameter(16078)).split(",")]
+      soft_max = [float(v) for v in (await self.request_parameter(16077)).split(",")]
+      gripper_index = int(Axis.GRIPPER) - 1
+      self._gripper_soft_min = soft_min[gripper_index]
+      self._gripper_soft_max = soft_max[gripper_index]
+      self.min_gripper_width = soft_min[gripper_index]
+      self.max_gripper_width = soft_max[gripper_index]
+    except Exception as exc:  # best-effort; fall back to the class defaults
+      logger.warning(
+        "[PreciseFlex %s] could not read gripper soft limits, using defaults: %s",
+        self.driver.io._host,
+        exc,
+      )
 
   async def _request_state(
     self,
@@ -418,9 +434,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Get the current speed percentage of the arm's movement."""
     return await self.request_profile_speed(self.profile_index)
 
-  # Physical jaw range for the PF400 servoed gripper.
+  # Physical jaw range for the PF400 servoed gripper. Overridden at setup from the
+  # gripper-axis soft limits when readable; these are the fallback defaults.
   min_gripper_width: float = 60.0
   max_gripper_width: float = 145.0
+  # Gripper-axis soft limits in firmware units, read at setup; None until then.
+  _gripper_soft_min: Optional[float] = None
+  _gripper_soft_max: Optional[float] = None
 
   def _mm_to_firmware_units(self, width_mm: float) -> float:
     """Convert a jaw width (mm) to the firmware's native position unit.
@@ -449,6 +469,14 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       force_sensing,
     )
     units = self._mm_to_firmware_units(width)
+    if self._gripper_soft_min is not None and not (
+      self._gripper_soft_min <= units <= self._gripper_soft_max
+    ):
+      raise ValueError(
+        f"gripper width {width} mm maps to firmware units {units:.1f}, outside the "
+        f"gripper-axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - "
+        f"check closed_gripper_position (currently {self.closed_gripper_position})."
+      )
     if force_sensing:
       await self._set_grip_close_pos(units)
       await self.driver.send_command("gripper 2")
@@ -750,13 +778,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     Args:
       free_axes: List of joint indices to free. Use [0] for all axes.
     """
-    for axis in free_axes or [
-      Axis.BASE,
-      Axis.SHOULDER,
-      Axis.ELBOW,
-      Axis.WRIST,
-      Axis.RAIL,
-    ]:
+    if free_axes is None:
+      # Free the always-present positioning axes; add the rail only when fitted -
+      # freemode on an absent axis returns -2800 on a no-rail arm.
+      free_axes = [Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST]
+      if self._has_rail:
+        free_axes.append(Axis.RAIL)
+    for axis in free_axes:
       await self.driver.send_command(f"freemode {axis}")
 
   async def stop_freedrive_mode(self, backend_params=None) -> None:
