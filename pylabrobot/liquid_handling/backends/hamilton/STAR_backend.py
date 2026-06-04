@@ -1693,16 +1693,48 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"(channel {channel} firmware date: {pip_fw.isoformat()})."
       )
     resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
+    return self._parse_pip_channel_information(resp)
+
+  @staticmethod
+  def _parse_pip_channel_information(resp: str) -> PipChannelInformation:
+    """Parse a VW (pip channel hardware-configuration) firmware response.
+
+    The number of fields in a VW reply varies by firmware. The full form is
+    4 fields (channel_type, head_type, stop_disc_type, pressure_adc), but some
+    firmwares -- including post-2016 ones that pass the year gate in
+    `_pip_channel_request_configuration` -- return a 2-field short form such as
+    ``vw0 0``. Missing trailing fields fall back to their baseline ("code 0")
+    value rather than raising, since the cached information is descriptive
+    metadata and is not consulted by pipetting logic. This is distinct from the
+    firmware-year gate in `_pip_channel_request_configuration`, which decides
+    whether VW is queried at all.
+
+    Behavior for fields that ARE present is identical to the historical parser;
+    only absent fields are newly defaulted. A reply with zero fields is treated
+    as a malformed/communication failure and raises, so it is distinguishable
+    from a known short layout.
+
+    Args:
+      resp: Raw VW firmware response (e.g. ``"P1VWid0001vw0 0"``).
+
+    Returns:
+      Parsed `PipChannelInformation`.
+
+    Raises:
+      ValueError: If the response contains no hardware-configuration fields.
+    """
     hw_tokens = resp.split("vw")[-1].strip().split()
+    if not hw_tokens:
+      raise ValueError(f"Unparsable VW (pip channel configuration) response: {resp!r}")
+
+    def tok(i: int) -> Optional[str]:
+      return hw_tokens[i] if i < len(hw_tokens) else None
+
     return PipChannelInformation(
-      channel_type="ML_STAR_RPC" if hw_tokens[0] == "1" else "ML_STAR",
-      head_type="ML_STAR_PLE"
-      if hw_tokens[1] == "1"
-      else "ML_STAR_RPC"
-      if hw_tokens[1] == "2"
-      else "ML_STAR",
-      stop_disc_type="core_i" if hw_tokens[2] == "0" else "core_ii",
-      pressure_adc="Analog_Devices_AD5263" if hw_tokens[3] == "1" else "Renesas_X9268",
+      channel_type="ML_STAR_RPC" if tok(0) == "1" else "ML_STAR",
+      head_type="ML_STAR_PLE" if tok(1) == "1" else "ML_STAR_RPC" if tok(1) == "2" else "ML_STAR",
+      stop_disc_type="core_i" if tok(2) in ("0", None) else "core_ii",
+      pressure_adc="Analog_Devices_AD5263" if tok(3) == "1" else "Renesas_X9268",
     )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:

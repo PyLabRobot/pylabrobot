@@ -37,6 +37,7 @@ from .STAR_backend import (
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
+  PipChannelInformation,
   STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
@@ -150,6 +151,88 @@ def _any_write_and_read_command_call(cmd):
     read_timeout=unittest.mock.ANY,
     wait=unittest.mock.ANY,
   )
+
+
+class TestPipChannelInformationParsing(unittest.TestCase):
+  """VW (pip channel hardware-configuration) response parsing.
+
+  Regression coverage for the IndexError on short-form VW replies
+  (e.g. ``vw0 0``) returned by some post-2016 firmwares.
+  """
+
+  def test_short_form_two_fields_does_not_raise(self):
+    """Short 2-field reply (the captured `vw0 0`) should parse to baseline defaults, not raise."""
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw0 0")
+    self.assertEqual(
+      result,
+      PipChannelInformation(
+        channel_type="ML_STAR",
+        head_type="ML_STAR",
+        stop_disc_type="core_i",
+        pressure_adc="Renesas_X9268",
+      ),
+    )
+
+  def test_full_form_four_fields(self):
+    """Full 4-field reply should parse each non-baseline code to its mapped value."""
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw1 1 1 1")
+    self.assertEqual(
+      result,
+      PipChannelInformation(
+        channel_type="ML_STAR_RPC",
+        head_type="ML_STAR_PLE",
+        stop_disc_type="core_ii",
+        pressure_adc="Analog_Devices_AD5263",
+      ),
+    )
+
+  def test_head_type_code_two_maps_to_rpc(self):
+    """head_type code `2` should map to ML_STAR_RPC (the otherwise-uncovered branch)."""
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw0 2 0 0")
+    self.assertEqual(result.head_type, "ML_STAR_RPC")
+
+  def test_three_fields_defaults_only_the_missing_trailing_field(self):
+    """Present tokens should be honored; only the absent trailing field should default.
+
+    stop_disc_type is present (-> core_ii); pressure_adc is absent (-> default Renesas).
+    """
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw1 1 1")
+    self.assertEqual(
+      result,
+      PipChannelInformation(
+        channel_type="ML_STAR_RPC",
+        head_type="ML_STAR_PLE",
+        stop_disc_type="core_ii",
+        pressure_adc="Renesas_X9268",
+      ),
+    )
+
+  def test_empty_field_list_raises_value_error(self):
+    """Zero fields should raise ValueError -- a malformed reply, distinct from a known short form."""
+    with self.assertRaises(ValueError):
+      STARBackend._parse_pip_channel_information("P1VWid0001vw")
+
+  def test_full_form_parity_across_all_combinations(self):
+    """Every 4-field reply should parse identically to the historical logic.
+
+    Only absent fields are newly defaulted; present fields are unchanged. `legacy`
+    below is the genuine pre-fix implementation, so this is a real parity oracle.
+    """
+    import itertools
+
+    def legacy(resp: str) -> PipChannelInformation:
+      hw = resp.split("vw")[-1].strip().split()
+      return PipChannelInformation(
+        channel_type="ML_STAR_RPC" if hw[0] == "1" else "ML_STAR",
+        head_type="ML_STAR_PLE" if hw[1] == "1" else "ML_STAR_RPC" if hw[1] == "2" else "ML_STAR",
+        stop_disc_type="core_i" if hw[2] == "0" else "core_ii",
+        pressure_adc="Analog_Devices_AD5263" if hw[3] == "1" else "Renesas_X9268",
+      )
+
+    for a, b, c, d in itertools.product(["0", "1", "2"], repeat=4):
+      resp = f"P1VWid0001vw{a} {b} {c} {d}"
+      with self.subTest(resp=resp):
+        self.assertEqual(STARBackend._parse_pip_channel_information(resp), legacy(resp))
 
 
 class TestiSWAPForwardKinematics(unittest.TestCase):
