@@ -43,11 +43,148 @@ class Axis(IntEnum):
   RAIL = 6
 
 
+class DataID(IntEnum):
+  """Controller parameter-database items, read via ``request_parameter`` (``pd``).
+
+  Named so configuration reads are self-describing rather than bare numbers. Each
+  item's reply shape is noted below: a single value, descriptive text, or an
+  array with one element per axis (parse with ``_parse_per_axis``).
+  """
+
+  # Identity / state - single value or descriptive text.
+  MANUFACTURER = 100
+  CONTROLLER_MODEL = 101
+  HARDWARE_VERSION = 102
+  GPL_VERSION = 103
+  CONTROLLER_SERIAL = 110
+  ROBOT_TYPE = 116
+  POWER_STATE = 234
+  NUM_AXES = 2000
+  ROBOT_NAME = 2002
+  AXIS_MASK = 2003
+  EXTRA_AXES = 2004
+  # Per-axis arrays - one value per joint (e.g. speed differs J1..J5).
+  REFERENCE_SPEED = 2700
+  REFERENCE_ACCEL = 2702
+  HARD_LIMIT_MAX = 16075
+  HARD_LIMIT_MIN = 16076
+  SOFT_LIMIT_MAX = 16077
+  SOFT_LIMIT_MIN = 16078
+  # Kinematic geometry. LINK_LENGTHS is per-axis (l1 at the shoulder, l2 at the
+  # elbow); TOOL_OFFSET is a wrist-frame (x, y, z) transform, z = wrist->TCP.
+  LINK_LENGTHS = 16050
+  TOOL_OFFSET = 16051
+  # Cartesian reference - (translation, rotation, ...), not per-joint.
+  REFERENCE_CARTESIAN_SPEED = 2701
+  REFERENCE_CARTESIAN_ACCEL = 2703
+  # Global motion caps - one percentage applied to the whole profile (all joints
+  # the same); per-joint maxima come from REFERENCE_* x these.
+  MAX_SPEED_PERCENT = 2704
+  MAX_ACCEL_PERCENT = 2705
+  MAX_DECEL_PERCENT = 2706
+
+
 @dataclass
 class PreciseFlexCartesianPose(CartesianPose):
   rail_position: Optional[float] = None
   orientation: Optional[ElbowOrientation] = None
   wrist: Optional[Wrist] = None
+
+
+@dataclass(frozen=True)
+class WorkingVolume:
+  """Reachable tool-tip envelope: an annulus about the shoulder, over a Z range (mm)."""
+
+  inner: float
+  outer: float
+  zmin: float
+  zmax: float
+
+
+@dataclass(frozen=True)
+class PreciseFlexConfiguration:
+  """Device configuration resolved once at setup; immutable afterwards.
+
+  The identity/limit/envelope fields are read from the controller (`pd <DataID>`
+  via ``request_parameter`` and the ``version`` command). The kinematics/flags
+  tier is supplied at construction or derived: link lengths are not on the arm,
+  ``has_rail`` comes from the joint set, ``is_dual_gripper`` from the axis_mask
+  ``&H80`` bit, and ``is_vision_gripper``/``reach_class`` from the model name.
+  """
+
+  # --- identity / version (DataIDs 100-110, 2002, 116; version command) ---
+  manufacturer: str
+  controller_model: str
+  hardware_version: str
+  gpl_version: str
+  controller_serial: str
+  robot_name: str
+  robot_type: int
+  tcs_version: str
+  modules: tuple
+  # --- axes / limits / motion envelope ---
+  num_axes: int
+  extra_axes: int
+  axis_mask: int
+  soft_limits: Dict[Axis, tuple]
+  hard_limits: Dict[Axis, tuple]
+  # Effective per-joint maxima (reference x the global percent cap, already applied).
+  max_joint_speed: Dict[Axis, float]
+  max_joint_accel: Dict[Axis, float]
+  max_joint_decel: Dict[Axis, float]
+  max_cartesian_speed: float
+  max_cartesian_accel: float
+  power_state: int
+  # --- supplied / derived ---
+  kinematics: "kinematics.PF400Params" = dataclasses.field(default_factory=kinematics.PF400Params)
+  kinematics_source: Literal["device", "provided", "default"] = "default"
+  has_rail: bool = False
+  is_dual_gripper: bool = False
+  is_vision_gripper: bool = False
+  reach_class: Literal["standard", "extended"] = "standard"
+
+  @property
+  def gripper_width_range(self) -> tuple:
+    return self.soft_limits[Axis.GRIPPER]
+
+  @property
+  def z_range(self) -> tuple:
+    return self.soft_limits[Axis.BASE]
+
+  @property
+  def working_volume(self) -> WorkingVolume:
+    """Reachable tool-tip annulus, swept from the shoulder/elbow soft limits.
+
+    Sweeps the two planar joints across their soft-limit range (Z held constant -
+    it is an independent axis on a SCARA), takes the base->wrist radius at each
+    sample, and brackets it by +/- the tool length (the wrist can orient the tool
+    radially either way). This respects the joint limits rather than assuming full
+    extension, so the outer radius is the real reach, not l1 + l2 + tool.
+    """
+    wrist_only = dataclasses.replace(self.kinematics, gripper_length=0.0)
+    tool = self.kinematics.gripper_length
+    sh_lo, sh_hi = self.soft_limits[Axis.SHOULDER]
+    el_lo, el_hi = self.soft_limits[Axis.ELBOW]
+    steps = 60
+    outer, inner = 0.0, float("inf")
+    for i in range(steps + 1):
+      shoulder = sh_lo + (sh_hi - sh_lo) * i / steps
+      for j in range(steps + 1):
+        elbow = el_lo + (el_hi - el_lo) * j / steps
+        joints = {
+          Axis.BASE: 0.0,
+          Axis.SHOULDER: shoulder,
+          Axis.ELBOW: elbow,
+          Axis.WRIST: 0.0,
+          Axis.GRIPPER: 0.0,
+          Axis.RAIL: 0.0,
+        }
+        wrist = kinematics.fk(joints, wrist_only).location
+        radius = (wrist.x * wrist.x + wrist.y * wrist.y) ** 0.5
+        outer = max(outer, radius + tool)
+        inner = min(inner, abs(radius - tool))
+    zmin, zmax = self.z_range
+    return WorkingVolume(inner=inner, outer=outer, zmin=zmin, zmax=zmax)
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +457,28 @@ def _snap_to_current(ik_joints: JointPose, current: JointPose, wrist: Wrist) -> 
   return out
 
 
+def _parse_scalar(response: str) -> float:
+  """Parse the first numeric field of a DataID reply.
+
+  Some scalar DataIDs come back zero-padded (e.g. robot type as ``12, 0, 0, ...``)
+  and Cartesian references carry several components; take the leading value.
+  """
+  return float(response.split(",")[0])
+
+
+def _parse_per_axis(response: str) -> Dict[Axis, float]:
+  """Parse a comma-separated per-axis DataID reply into an {Axis: value} map."""
+  values = [float(v) for v in response.split(",")]
+  return {Axis(i + 1): values[i] for i in range(min(len(values), len(Axis)))}
+
+
+def _zip_axis_ranges(
+  low: Dict[Axis, float], high: Dict[Axis, float]
+) -> Dict[Axis, tuple[float, float]]:
+  """Combine min and max per-axis maps into an {Axis: (min, max)} map."""
+  return {axis: (low[axis], high[axis]) for axis in low.keys() & high.keys()}
+
+
 class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, ABC):
   """Backend for the PreciseFlex robotic arm.
 
@@ -338,15 +497,21 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     closed_gripper_position: float,
     is_dual_gripper: bool = False,
     has_rail: bool = False,
+    read_kinematics_from_device: bool = True,
   ) -> None:
     """
     Args:
-      gripper_length: wrist-axis → TCP distance in mm. Depends on the mounted
-        gripper; the concrete Device wrapper supplies a model-appropriate default
-        (e.g. 162 mm for the stock single gripper on the PF400).
+      gripper_length: wrist-axis → TCP distance in mm. Used as the fallback /
+        override; when ``read_kinematics_from_device`` is True (the default) the
+        link lengths and tool length are read from the controller at setup and
+        this value is only used if that read fails.
       gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
         Depends on the mounted gripper; the concrete Device wrapper supplies a
-        model-appropriate default.
+        model-appropriate default. Always taken from here (not on the controller).
+      read_kinematics_from_device: when True, read l1/l2 and the tool length from
+        the controller at setup and use them for kinematics; the constructor's
+        ``gripper_length`` then acts only as a fallback. Set False to force the
+        constructor values regardless of what the controller reports.
       closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
         ``GripOpenPos``) at which the jaws are at :attr:`min_gripper_width`.
         Depends on the mounted gripper. The conversion mm → firmware units is
@@ -366,6 +531,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self._kinematics_params = kinematics.PF400Params(
       gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
     )
+    self._read_kinematics_from_device = read_kinematics_from_device
+    # Device configuration, resolved once at setup; None until then.
+    self._configuration: Optional[PreciseFlexConfiguration] = None
     if is_dual_gripper:
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
@@ -374,19 +542,24 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await super()._on_setup(backend_params=backend_params)
     await self.stop_freedrive_mode()
-    # Read the gripper-axis soft limits so width validation reflects this arm
-    # rather than the hardcoded defaults (the servo gripper's real range differs).
+    # Resolve the device configuration once (identity, axes, limits, envelope) and
+    # cache it. The fixes below read from it instead of re-querying or hardcoding:
+    # the gripper width limits come from the gripper-axis soft limits, and the
+    # freedrive default axis set follows the installed axes (rail only when fitted).
     try:
-      soft_min = [float(v) for v in (await self.request_parameter(16078)).split(",")]
-      soft_max = [float(v) for v in (await self.request_parameter(16077)).split(",")]
-      gripper_index = int(Axis.GRIPPER) - 1
-      self._gripper_soft_min = soft_min[gripper_index]
-      self._gripper_soft_max = soft_max[gripper_index]
-      self.min_gripper_width = soft_min[gripper_index]
-      self.max_gripper_width = soft_max[gripper_index]
-    except Exception as exc:  # best-effort; fall back to the class defaults
+      self._configuration = await self._request_configuration()
+      gmin, gmax = self._configuration.gripper_width_range
+      self._gripper_soft_min, self._gripper_soft_max = gmin, gmax
+      self.min_gripper_width, self.max_gripper_width = gmin, gmax
+      # Adopt the discovered geometry and topology as the source of truth: IK/FK
+      # use the device link lengths, and the rail / dual-gripper command paths
+      # follow what the controller actually reports.
+      self._kinematics_params = self._configuration.kinematics
+      self._has_rail = self._configuration.has_rail
+      self._is_dual_gripper = self._configuration.is_dual_gripper
+    except Exception as exc:  # discovery is best-effort; fall back to the class defaults
       logger.warning(
-        "[PreciseFlex %s] could not read gripper soft limits, using defaults: %s",
+        "[PreciseFlex %s] could not read configuration, using defaults: %s",
         self.driver.io._host,
         exc,
       )
@@ -435,10 +608,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     return await self.request_profile_speed(self.profile_index)
 
   # Physical jaw range for the PF400 servoed gripper. Overridden at setup from the
-  # gripper-axis soft limits when readable; these are the fallback defaults.
+  # gripper-axis soft limits (DataIDs 16078/16077, Axis.GRIPPER) when discoverable.
   min_gripper_width: float = 60.0
   max_gripper_width: float = 145.0
-  # Gripper-axis soft limits in firmware units, read at setup; None until then.
+  # Gripper-axis soft limits (GripOpenPos/GripClosePos units), read at setup; None until then.
   _gripper_soft_min: Optional[float] = None
   _gripper_soft_max: Optional[float] = None
 
@@ -473,9 +646,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       self._gripper_soft_min <= units <= self._gripper_soft_max
     ):
       raise ValueError(
-        f"gripper width {width} mm maps to firmware units {units:.1f}, outside the "
-        f"gripper-axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - "
-        f"check closed_gripper_position (currently {self.closed_gripper_position})."
+        f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
+        f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
+        f"closed_gripper_position (currently {self.closed_gripper_position})."
       )
     if force_sensing:
       await self._set_grip_close_pos(units)
@@ -779,10 +952,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       free_axes: List of joint indices to free. Use [0] for all axes.
     """
     if free_axes is None:
-      # Free the always-present positioning axes; add the rail only when fitted -
-      # freemode on an absent axis returns -2800 on a no-rail arm.
+      # Default to the positioning axes that exist; include the rail only when
+      # fitted - freemode on an absent axis returns -2800 on a no-rail arm. The
+      # cached configuration is the source of truth for the installed axes; fall
+      # back to the constructor hint before setup has resolved it.
+      has_rail = self._configuration.has_rail if self._configuration is not None else self._has_rail
       free_axes = [Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST]
-      if self._has_rail:
+      if has_rail:
         free_axes.append(Axis.RAIL)
     for axis in free_axes:
       await self.driver.send_command(f"freemode {axis}")
@@ -980,6 +1156,189 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     else:
       response = await self.driver.send_command(f"pd {data_id}")
     return response
+
+  @property
+  def configuration(self) -> "PreciseFlexConfiguration":
+    """The device configuration resolved at setup. Raises before setup()."""
+    if self._configuration is None:
+      raise RuntimeError("Configuration is not available until setup() has run.")
+    return self._configuration
+
+  async def request_joint_limits(self, hard: bool = False) -> Dict[Axis, tuple[float, float]]:
+    """Per-axis travel limits as {Axis: (min, max)}.
+
+    Returns the soft limits by default; pass ``hard=True`` for the hard limits.
+    """
+    min_id = DataID.HARD_LIMIT_MIN if hard else DataID.SOFT_LIMIT_MIN
+    max_id = DataID.HARD_LIMIT_MAX if hard else DataID.SOFT_LIMIT_MAX
+    return _zip_axis_ranges(
+      _parse_per_axis(await self.request_parameter(min_id)),
+      _parse_per_axis(await self.request_parameter(max_id)),
+    )
+
+  async def request_reference_speed(self) -> Dict[Axis, float]:
+    """Per-axis rated speed at 100%; J1/J5 in mm/s, J2-J4 in deg/s."""
+    return _parse_per_axis(await self.request_parameter(DataID.REFERENCE_SPEED))
+
+  async def request_reference_accel(self) -> Dict[Axis, float]:
+    """Per-axis rated acceleration at 100%."""
+    return _parse_per_axis(await self.request_parameter(DataID.REFERENCE_ACCEL))
+
+  async def request_link_lengths(self) -> tuple[float, float]:
+    """(l1, l2) SCARA link lengths in mm: shoulder->elbow, elbow->wrist."""
+    per_axis = _parse_per_axis(await self.request_parameter(DataID.LINK_LENGTHS))
+    return per_axis[Axis.SHOULDER], per_axis[Axis.ELBOW]
+
+  async def request_tool_length(self) -> float:
+    """Wrist->TCP distance in mm (z of the tool-offset transform)."""
+    values = [float(v) for v in (await self.request_parameter(DataID.TOOL_OFFSET)).split(",")]
+    return values[2]
+
+  async def request_kinematics(self) -> "kinematics.PF400Params":
+    """Build PF400Params from the controller's stored geometry.
+
+    Link lengths and tool length come from the device; gripper_z_offset is not on
+    the controller, so it is carried over from the constructor params.
+    """
+    l1, l2 = await self.request_link_lengths()
+    return dataclasses.replace(
+      self._kinematics_params,
+      l1=l1,
+      l2=l2,
+      gripper_length=await self.request_tool_length(),
+    )
+
+  async def request_reference_cartesian_speed(self) -> float:
+    """Rated Cartesian (translational) speed at 100%, in mm/s."""
+    return _parse_scalar(await self.request_parameter(DataID.REFERENCE_CARTESIAN_SPEED))
+
+  async def request_reference_cartesian_accel(self) -> float:
+    """Rated Cartesian (translational) acceleration at 100%, in mm/s^2."""
+    return _parse_scalar(await self.request_parameter(DataID.REFERENCE_CARTESIAN_ACCEL))
+
+  async def request_max_speed_percent(self) -> float:
+    """Global cap on the speed percentage (one value, applies to all joints)."""
+    return _parse_scalar(await self.request_parameter(DataID.MAX_SPEED_PERCENT))
+
+  async def request_max_accel_percent(self) -> float:
+    """Global cap on the acceleration percentage (one value, applies to all joints)."""
+    return _parse_scalar(await self.request_parameter(DataID.MAX_ACCEL_PERCENT))
+
+  async def request_max_decel_percent(self) -> float:
+    """Global cap on the deceleration percentage (one value, applies to all joints)."""
+    return _parse_scalar(await self.request_parameter(DataID.MAX_DECEL_PERCENT))
+
+  async def request_manufacturer(self) -> str:
+    return (await self.request_parameter(DataID.MANUFACTURER)).strip()
+
+  async def request_controller_model(self) -> str:
+    return (await self.request_parameter(DataID.CONTROLLER_MODEL)).strip()
+
+  async def request_hardware_version(self) -> str:
+    return (await self.request_parameter(DataID.HARDWARE_VERSION)).strip()
+
+  async def request_gpl_version(self) -> str:
+    """Controller firmware/runtime version (distinct from ``request_version``, the TCS app)."""
+    return (await self.request_parameter(DataID.GPL_VERSION)).strip()
+
+  async def request_controller_serial(self) -> str:
+    return (await self.request_parameter(DataID.CONTROLLER_SERIAL)).strip()
+
+  async def request_robot_name(self) -> str:
+    return (await self.request_parameter(DataID.ROBOT_NAME)).strip()
+
+  async def request_robot_type(self) -> int:
+    """Built-in kinematic model id (PF400 = 12)."""
+    return int(_parse_scalar(await self.request_parameter(DataID.ROBOT_TYPE)))
+
+  async def request_axis_count(self) -> int:
+    """Number of servoed axes."""
+    return int(_parse_scalar(await self.request_parameter(DataID.NUM_AXES)))
+
+  async def request_extra_axis_count(self) -> int:
+    """Number of non-servoed (extra) axes."""
+    return int(_parse_scalar(await self.request_parameter(DataID.EXTRA_AXES)))
+
+  async def request_axis_mask(self) -> int:
+    """Capability/option bit field (rail, dual gripper, ...)."""
+    return int(_parse_scalar(await self.request_parameter(DataID.AXIS_MASK)))
+
+  async def request_power_state(self) -> int:
+    """Power / auto-execute state word."""
+    return int(_parse_scalar(await self.request_parameter(DataID.POWER_STATE)))
+
+  async def _request_configuration(self) -> "PreciseFlexConfiguration":
+    """Read the controller's identity, axes, limits, kinematics, and envelope.
+
+    Read-only (no motion, no homing required), so it is safe to call at setup.
+    Link lengths and tool length are read from the controller; per-arm flags are
+    derived from the joint set, the axis mask, and the model name.
+    """
+    soft_limits = await self.request_joint_limits()
+    axis_mask = await self.request_axis_mask()
+    robot_name = await self.request_robot_name()
+    name_tokens = robot_name.split()
+    suffix = name_tokens[-1].upper().lstrip("0123456789") if name_tokens else ""
+    # The version command reports the TCS app version then its loaded modules.
+    tcs_version, *modules = (seg.strip() for seg in (await self.request_version()).split(","))
+
+    # Combine the per-axis 100% references with the global percent caps into the
+    # effective per-joint maxima, so consumers get usable limits, not raw factors.
+    reference_speed = await self.request_reference_speed()
+    reference_accel = await self.request_reference_accel()
+    speed_pct = await self.request_max_speed_percent()
+    accel_pct = await self.request_max_accel_percent()
+    decel_pct = await self.request_max_decel_percent()
+
+    # Kinematics: read the link/tool geometry from the controller by default, so
+    # the driver is correct for whichever 400 variant is plugged in; fall back to
+    # the constructor params if the read fails or the override is set.
+    if self._read_kinematics_from_device:
+      try:
+        kinematic_params = await self.request_kinematics()
+        kinematics_source = "device"
+      except Exception as exc:
+        logger.warning(
+          "[PreciseFlex %s] could not read kinematics, using constructor params: %s",
+          self.driver.io._host,
+          exc,
+        )
+        kinematic_params = self._kinematics_params
+        kinematics_source = "default"
+    else:
+      kinematic_params = self._kinematics_params
+      kinematics_source = "provided"
+    # Classify by reach: the standard 400 has l1+l2 ~= 435 mm, the extended ~= 591.
+    reach_class = "extended" if (kinematic_params.l1 + kinematic_params.l2) >= 513 else "standard"
+
+    return PreciseFlexConfiguration(
+      manufacturer=await self.request_manufacturer(),
+      controller_model=await self.request_controller_model(),
+      hardware_version=await self.request_hardware_version(),
+      gpl_version=await self.request_gpl_version(),
+      controller_serial=await self.request_controller_serial(),
+      robot_name=robot_name,
+      robot_type=await self.request_robot_type(),
+      tcs_version=tcs_version,
+      modules=tuple(modules),
+      num_axes=await self.request_axis_count(),
+      extra_axes=await self.request_extra_axis_count(),
+      axis_mask=axis_mask,
+      soft_limits=soft_limits,
+      hard_limits=await self.request_joint_limits(hard=True),
+      max_joint_speed={a: v * speed_pct / 100 for a, v in reference_speed.items()},
+      max_joint_accel={a: v * accel_pct / 100 for a, v in reference_accel.items()},
+      max_joint_decel={a: v * decel_pct / 100 for a, v in reference_accel.items()},
+      max_cartesian_speed=(await self.request_reference_cartesian_speed()) * speed_pct / 100,
+      max_cartesian_accel=(await self.request_reference_cartesian_accel()) * accel_pct / 100,
+      power_state=await self.request_power_state(),
+      kinematics=kinematic_params,
+      kinematics_source=kinematics_source,
+      has_rail=Axis.RAIL in soft_limits,
+      is_dual_gripper=bool(axis_mask & 0x80),
+      is_vision_gripper=suffix[:1] == "V",
+      reach_class=reach_class,
+    )
 
   async def reset(self, robot_number: int) -> None:
     """Reset the threads associated with the specified robot.
